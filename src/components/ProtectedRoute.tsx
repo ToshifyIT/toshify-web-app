@@ -1,13 +1,18 @@
 // src/components/ProtectedRoute.tsx
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { usePermissions } from '../contexts/PermissionsContext'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
+  requireAdmin?: boolean
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading } = useAuth()
+export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
+  const { user, loading: authLoading } = useAuth()
+  const { isAdmin, loading: permsLoading } = usePermissions()
+
+  const loading = authLoading || permsLoading
 
   if (loading) {
     return (
@@ -15,7 +20,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        fontFamily: 'system-ui'
       }}>
         <div>Cargando...</div>
       </div>
@@ -24,6 +30,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  // Si la ruta requiere admin y el usuario no es admin, redirigir al dashboard
+  if (requireAdmin && !isAdmin()) {
+    console.log('⚠️ Acceso denegado: se requiere rol admin')
+    return <Navigate to="/dashboard" replace />
   }
 
   return <>{children}</>

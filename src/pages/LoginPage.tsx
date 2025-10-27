@@ -157,6 +157,20 @@ export function LoginPage() {
           </button>
         </form>
 
+        <div style={{
+          marginTop: '24px',
+          padding: '16px',
+          background: '#F9FAFB',
+          borderRadius: '8px',
+          fontSize: '12px',
+          color: '#6B7280'
+        }}>
+          <strong>Usuarios de prueba:</strong><br />
+          Admin: admin@toshify.com / Admin123!<br />
+          Supervisor: supervisor@toshify.com / Supervisor123!<br />
+          Operador: operador@toshify.com / Operador123!<br />
+          Lectura: lectura@toshify.com / Lectura123!
+        </div>
       </div>
     </div>
   )

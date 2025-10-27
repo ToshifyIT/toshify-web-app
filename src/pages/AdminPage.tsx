@@ -6,12 +6,17 @@ import { useNavigate } from 'react-router-dom'
 import { UserManagement } from '../components/admin/UserManagement'
 import { RoleManagement } from '../components/admin/RoleManagement'
 import { PermissionMatrix } from '../components/admin/PermissionMatrix'
+import { VehicleManagement } from '../components/admin/VehicleManagement'
+import { UserMenuPermissionsManager } from '../components/admin/UserMenuPermissionsManager'
+import { RoleMenuPermissionsManager } from '../components/admin/RoleMenuPermissionsManager'
+import { MenuHierarchyManager } from '../components/admin/MenuHierarchyManager'
 
 export function AdminPage() {
   const { profile, signOut } = useAuth()
-  const { isAdmin } = usePermissions()
+  const { isAdmin, canRead } = usePermissions()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'permissions'>('users')
+  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'permissions' | 'vehicles' | 'menu-permissions' | 'role-menu-permissions' | 'menu-manager'>('vehicles')
+  const [securityMenuOpen, setSecurityMenuOpen] = useState(true)
 
   const handleSignOut = async () => {
     await signOut()
@@ -108,8 +113,72 @@ export function AdminPage() {
           color: white;
         }
 
+        .nav-item:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .nav-item:disabled:hover {
+          background: none;
+          color: #9CA3AF;
+        }
+
         .nav-icon {
           font-size: 18px;
+        }
+
+        .nav-section {
+          margin-bottom: 8px;
+        }
+
+        .nav-section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 16px;
+          color: #9CA3AF;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-size: 14px;
+          font-weight: 600;
+          border: none;
+          background: none;
+          width: 100%;
+          text-align: left;
+        }
+
+        .nav-section-header:hover {
+          background: #374151;
+          color: white;
+        }
+
+        .nav-section-title {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+        }
+
+        .nav-section-arrow {
+          font-size: 12px;
+          transition: transform 0.2s;
+        }
+
+        .nav-section-arrow.open {
+          transform: rotate(90deg);
+        }
+
+        .nav-section-items {
+          margin-left: 16px;
+          margin-top: 4px;
+          border-left: 2px solid #374151;
+          padding-left: 8px;
+        }
+
+        .nav-section-items.collapsed {
+          display: none;
         }
 
         .sidebar-footer {
@@ -245,7 +314,8 @@ export function AdminPage() {
           }
           .sidebar-logo-text,
           .nav-label,
-          .user-info {
+          .user-info,
+          .nav-section-arrow {
             display: none;
           }
           .sidebar-header {
@@ -259,6 +329,15 @@ export function AdminPage() {
           .nav-item {
             padding: 12px;
             justify-content: center;
+          }
+          .nav-section-header {
+            padding: 12px;
+            justify-content: center;
+          }
+          .nav-section-items {
+            margin-left: 0;
+            border-left: none;
+            padding-left: 0;
           }
           .user-card {
             padding: 12px;
@@ -330,27 +409,75 @@ export function AdminPage() {
           </div>
 
           <nav className="sidebar-nav">
+            {/* Vehículos - Item individual */}
             <button
-              className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
-              onClick={() => setActiveTab('users')}
+              className={`nav-item ${activeTab === 'vehicles' ? 'active' : ''}`}
+              onClick={() => setActiveTab('vehicles')}
+              disabled={!canRead('vehiculos')}
+              title={!canRead('vehiculos') ? 'No tienes permisos para ver vehículos' : ''}
             >
-              <span className="nav-icon">👥</span>
-              <span className="nav-label">Usuarios</span>
+              <span className="nav-icon">🚗</span>
+              <span className="nav-label">Vehículos</span>
             </button>
-            <button
-              className={`nav-item ${activeTab === 'roles' ? 'active' : ''}`}
-              onClick={() => setActiveTab('roles')}
-            >
-              <span className="nav-icon">🔑</span>
-              <span className="nav-label">Roles</span>
-            </button>
-            <button
-              className={`nav-item ${activeTab === 'permissions' ? 'active' : ''}`}
-              onClick={() => setActiveTab('permissions')}
-            >
-              <span className="nav-icon">⚙️</span>
-              <span className="nav-label">Permisos</span>
-            </button>
+
+            {/* Seguridad - Menú con submenús */}
+            <div className="nav-section">
+              <button
+                className="nav-section-header"
+                onClick={() => setSecurityMenuOpen(!securityMenuOpen)}
+              >
+                <div className="nav-section-title">
+                  <span className="nav-icon">🔒</span>
+                  <span className="nav-label">Seguridad</span>
+                </div>
+                <span className={`nav-section-arrow ${securityMenuOpen ? 'open' : ''}`}>▶</span>
+              </button>
+
+              <div className={`nav-section-items ${!securityMenuOpen ? 'collapsed' : ''}`}>
+                <button
+                  className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('users')}
+                >
+                  <span className="nav-icon">👥</span>
+                  <span className="nav-label">Usuarios</span>
+                </button>
+                <button
+                  className={`nav-item ${activeTab === 'roles' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('roles')}
+                >
+                  <span className="nav-icon">🔑</span>
+                  <span className="nav-label">Roles</span>
+                </button>
+                <button
+                  className={`nav-item ${activeTab === 'permissions' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('permissions')}
+                >
+                  <span className="nav-icon">⚙️</span>
+                  <span className="nav-label">Permisos</span>
+                </button>
+                <button
+                  className={`nav-item ${activeTab === 'role-menu-permissions' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('role-menu-permissions')}
+                >
+                  <span className="nav-icon">🎯</span>
+                  <span className="nav-label">Permisos Menú (Rol)</span>
+                </button>
+                <button
+                  className={`nav-item ${activeTab === 'menu-permissions' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('menu-permissions')}
+                >
+                  <span className="nav-icon">👤</span>
+                  <span className="nav-label">Permisos Menú (Usuario)</span>
+                </button>
+                <button
+                  className={`nav-item ${activeTab === 'menu-manager' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('menu-manager')}
+                >
+                  <span className="nav-icon">🗂️</span>
+                  <span className="nav-label">Gestor Menús</span>
+                </button>
+              </div>
+            </div>
           </nav>
 
           <div className="sidebar-footer">
@@ -372,9 +499,13 @@ export function AdminPage() {
         <main className="main-content">
           <div className="topbar">
             <h1 className="topbar-title">
+              {activeTab === 'vehicles' && 'Gestión de Vehículos'}
               {activeTab === 'users' && 'Gestión de Usuarios'}
               {activeTab === 'roles' && 'Gestión de Roles'}
               {activeTab === 'permissions' && 'Matriz de Permisos'}
+              {activeTab === 'role-menu-permissions' && 'Permisos de Menú por Rol'}
+              {activeTab === 'menu-permissions' && 'Permisos de Menú por Usuario'}
+              {activeTab === 'menu-manager' && 'Gestor de Menús Jerárquicos'}
             </h1>
             <button className="btn-logout" onClick={handleSignOut}>
               Cerrar Sesión
@@ -383,9 +514,13 @@ export function AdminPage() {
 
           <div className="content-area">
             <div className="content-card">
+              {activeTab === 'vehicles' && <VehicleManagement />}
               {activeTab === 'users' && <UserManagement />}
               {activeTab === 'roles' && <RoleManagement />}
               {activeTab === 'permissions' && <PermissionMatrix />}
+              {activeTab === 'role-menu-permissions' && <RoleMenuPermissionsManager />}
+              {activeTab === 'menu-permissions' && <UserMenuPermissionsManager />}
+              {activeTab === 'menu-manager' && <MenuHierarchyManager />}
             </div>
           </div>
         </main>
