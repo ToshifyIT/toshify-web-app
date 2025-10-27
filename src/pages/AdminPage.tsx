@@ -416,8 +416,7 @@ export function AdminPage() {
               disabled={!canRead('vehiculos')}
               title={!canRead('vehiculos') ? 'No tienes permisos para ver vehículos' : ''}
             >
-              <span className="nav-icon">🚗</span>
-              <span className="nav-label">Vehículos</span>
+              Vehículos
             </button>
 
             {/* Seguridad - Menú con submenús */}
@@ -427,10 +426,8 @@ export function AdminPage() {
                 onClick={() => setSecurityMenuOpen(!securityMenuOpen)}
               >
                 <div className="nav-section-title">
-                  <span className="nav-icon">🔒</span>
-                  <span className="nav-label">Seguridad</span>
+                  Seguridad
                 </div>
-                <span className={`nav-section-arrow ${securityMenuOpen ? 'open' : ''}`}>▶</span>
               </button>
 
               <div className={`nav-section-items ${!securityMenuOpen ? 'collapsed' : ''}`}>
@@ -438,43 +435,37 @@ export function AdminPage() {
                   className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
                   onClick={() => setActiveTab('users')}
                 >
-                  <span className="nav-icon">👥</span>
-                  <span className="nav-label">Usuarios</span>
+                  Usuarios
                 </button>
                 <button
                   className={`nav-item ${activeTab === 'roles' ? 'active' : ''}`}
                   onClick={() => setActiveTab('roles')}
                 >
-                  <span className="nav-icon">🔑</span>
-                  <span className="nav-label">Roles</span>
+                  Roles
                 </button>
                 <button
                   className={`nav-item ${activeTab === 'permissions' ? 'active' : ''}`}
                   onClick={() => setActiveTab('permissions')}
                 >
-                  <span className="nav-icon">⚙️</span>
-                  <span className="nav-label">Permisos</span>
+                  Permisos
                 </button>
                 <button
                   className={`nav-item ${activeTab === 'role-menu-permissions' ? 'active' : ''}`}
                   onClick={() => setActiveTab('role-menu-permissions')}
                 >
-                  <span className="nav-icon">🎯</span>
-                  <span className="nav-label">Permisos Menú (Rol)</span>
+                  Permisos Menú (Rol)
                 </button>
                 <button
                   className={`nav-item ${activeTab === 'menu-permissions' ? 'active' : ''}`}
                   onClick={() => setActiveTab('menu-permissions')}
                 >
-                  <span className="nav-icon">👤</span>
-                  <span className="nav-label">Permisos Menú (Usuario)</span>
+                  Permisos Menú (Usuario)
                 </button>
                 <button
                   className={`nav-item ${activeTab === 'menu-manager' ? 'active' : ''}`}
                   onClick={() => setActiveTab('menu-manager')}
                 >
-                  <span className="nav-icon">🗂️</span>
-                  <span className="nav-label">Gestor Menús</span>
+                  Gestor Menús
                 </button>
               </div>
             </div>

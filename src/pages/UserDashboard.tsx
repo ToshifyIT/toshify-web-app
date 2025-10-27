@@ -50,21 +50,19 @@ export function UserDashboard() {
           display: flex;
           height: 100vh;
           overflow: hidden;
-          background: #F9FAFB;
         }
 
         .sidebar {
           width: 260px;
           background: #1F2937;
-          color: white;
           display: flex;
           flex-direction: column;
-          overflow-y: auto;
+          border-right: 1px solid #374151;
         }
 
         .sidebar-header {
-          padding: 20px;
-          border-bottom: 1px solid rgba(255,255,255,0.1);
+          padding: 24px;
+          border-bottom: 1px solid #374151;
         }
 
         .sidebar-logo {
@@ -74,85 +72,97 @@ export function UserDashboard() {
         }
 
         .sidebar-logo-icon {
-          width: 36px;
-          height: 36px;
+          width: 40px;
+          height: 40px;
           background: #E63946;
           border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
+          color: white;
+          font-size: 18px;
           font-weight: bold;
-          font-size: 16px;
         }
 
         .sidebar-logo-text h2 {
-          font-size: 16px;
+          color: white;
+          font-size: 18px;
           font-weight: 700;
         }
 
         .sidebar-logo-text p {
-          font-size: 11px;
           color: #9CA3AF;
+          font-size: 12px;
           margin-top: 2px;
         }
 
         .sidebar-nav {
           flex: 1;
-          padding: 12px;
+          padding: 16px;
+          overflow-y: auto;
         }
 
         .nav-menu {
-          margin-bottom: 8px;
+          margin-bottom: 4px;
         }
 
         .nav-menu-button {
-          width: 100%;
-          padding: 12px 16px;
-          background: transparent;
-          border: none;
-          color: white;
-          text-align: left;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 500;
           display: flex;
           align-items: center;
           gap: 12px;
-          transition: background 0.2s;
+          padding: 12px 16px;
+          color: #9CA3AF;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-size: 14px;
+          font-weight: 500;
+          border: none;
+          background: none;
+          width: 100%;
+          text-align: left;
         }
 
         .nav-menu-button:hover {
-          background: rgba(255,255,255,0.1);
+          background: #374151;
+          color: white;
         }
 
         .nav-menu-button.active {
           background: #E63946;
+          color: white;
+        }
+
+        .nav-icon {
+          font-size: 18px;
         }
 
         .nav-submenu {
-          margin-left: 28px;
+          margin-left: 16px;
           margin-top: 4px;
+          border-left: 2px solid #374151;
+          padding-left: 8px;
         }
 
         .nav-submenu-button {
-          width: 100%;
-          padding: 8px 16px;
-          background: transparent;
-          border: none;
-          color: #D1D5DB;
-          text-align: left;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 13px;
-          transition: all 0.2s;
           display: flex;
           align-items: center;
           gap: 8px;
+          padding: 8px 16px;
+          color: #9CA3AF;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-size: 13px;
+          font-weight: 500;
+          border: none;
+          background: none;
+          width: 100%;
+          text-align: left;
         }
 
         .nav-submenu-button:hover {
-          background: rgba(255,255,255,0.05);
+          background: #374151;
           color: white;
         }
 
@@ -160,6 +170,7 @@ export function UserDashboard() {
           flex: 1;
           display: flex;
           flex-direction: column;
+          overflow: hidden;
         }
 
         .topbar {
@@ -170,6 +181,12 @@ export function UserDashboard() {
           align-items: center;
           justify-content: space-between;
           padding: 0 32px;
+        }
+
+        .topbar-title {
+          font-size: 24px;
+          font-weight: 700;
+          color: #1F2937;
         }
 
         .topbar-left {
@@ -214,9 +231,10 @@ export function UserDashboard() {
           color: white;
         }
 
-        .main-content {
+        .content-area {
           flex: 1;
           overflow-y: auto;
+          background: #F9FAFB;
           padding: 32px;
         }
 
@@ -382,13 +400,7 @@ export function UserDashboard() {
                         }
                       }}
                     >
-                      <span>🚗</span>
-                      <span>{menu.menu_label}</span>
-                      {hasSubmenus && (
-                        <span style={{ marginLeft: 'auto' }}>
-                          {isOpen ? '▼' : '▶'}
-                        </span>
-                      )}
+                      {menu.menu_label}
                     </button>
 
                     {hasSubmenus && isOpen && (
@@ -399,8 +411,7 @@ export function UserDashboard() {
                             className="nav-submenu-button"
                             onClick={() => handleNavigation(`/dashboard/${menu.menu_name}/${submenu.submenu_name}`)}
                           >
-                            <span>•</span>
-                            <span>{submenu.submenu_label}</span>
+                            {submenu.submenu_label}
                           </button>
                         ))}
                       </div>
@@ -419,25 +430,13 @@ export function UserDashboard() {
         {/* Main Content */}
         <div className="dashboard-content">
           <div className="topbar">
-            <div className="topbar-left">
-              <div className="user-avatar" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
-                {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '14px' }}>
-                  {profile?.full_name || 'Usuario'}
-                </div>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                  {profile?.roles?.name || 'Sin rol'}
-                </div>
-              </div>
-            </div>
+            <h1 className="topbar-title">Panel de Usuario</h1>
             <button className="btn-logout" onClick={handleSignOut}>
               Cerrar Sesión
             </button>
           </div>
 
-          <div className="main-content">
+          <div className="content-area">
             <Routes>
               <Route path="/" element={
                 <div className="welcome-card">
