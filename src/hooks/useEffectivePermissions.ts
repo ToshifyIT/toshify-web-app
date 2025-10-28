@@ -1,5 +1,5 @@
 // src/hooks/useEffectivePermissions.ts
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
@@ -95,8 +95,8 @@ export function useEffectivePermissions() {
           console.log('📊 Cantidad de menús:', allMenus?.length)
 
           // Verificar si hay duplicados
-          const duplicates = allMenus?.filter((menu, index, self) =>
-            self.findIndex(m => m.name === menu.name) !== index
+          const duplicates = (allMenus || []).filter((menu: DBMenu, index: number, self: DBMenu[]) =>
+            self.findIndex((m: DBMenu) => m.name === menu.name) !== index
           )
           if (duplicates && duplicates.length > 0) {
             console.warn('⚠️ Menús duplicados encontrados:', duplicates)
