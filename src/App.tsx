@@ -5,7 +5,6 @@ import { PermissionsProvider } from './contexts/PermissionsContext'
 import { LoginPage } from './pages/LoginPage'
 import { HomePage } from './pages/HomePage'
 import { AdminPage } from './pages/AdminPage'
-import { UserDashboard } from './pages/UserDashboard'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
@@ -26,21 +25,11 @@ function App() {
               }
             />
 
-            {/* Dashboard de usuario normal - con subrutas */}
-            <Route
-              path="/dashboard/*"
-              element={
-                <ProtectedRoute>
-                  <UserDashboard />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* HomePage como layout principal con todas las rutas anidadas */}
+            {/* HomePage como layout principal para todos los usuarios autenticados */}
             <Route
               path="/*"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute>
                   <HomePage />
                 </ProtectedRoute>
               }

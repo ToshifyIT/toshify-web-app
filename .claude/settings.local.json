@@ -4,7 +4,8 @@
       "Bash(tree:*)",
       "Bash(npm run build:*)",
       "Bash(dir:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Read(//c/Users/dev/Documents/**)"
     ],
     "deny": [],
     "ask": []

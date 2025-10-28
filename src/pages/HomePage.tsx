@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
 import { useNavigate, Routes, Route, useLocation } from 'react-router-dom'
+import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
 
 // Importar páginas
 import { UsuariosPage } from './usuarios/UsuariosPage'
@@ -24,40 +25,60 @@ import { GestorMenusPage } from './administracion/GestorMenusPage'
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
-  const { isAdmin, canRead } = usePermissions()
+  const { isAdmin } = usePermissions()
   const navigate = useNavigate()
   const location = useLocation()
-  const [administracionMenuOpen, setAdministracionMenuOpen] = useState(false)
-  const [integracionesMenuOpen, setIntegracionesMenuOpen] = useState(false)
+  const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
 
   const handleSignOut = async () => {
     await signOut()
     navigate('/login')
   }
 
+  const toggleMenu = (menuName: string) => {
+    setOpenMenus(prev => ({ ...prev, [menuName]: !prev[menuName] }))
+  }
+
   const isActiveRoute = (path: string) => {
     return location.pathname === path
   }
 
+  const visibleMenus = getVisibleMenus()
+
   const getPageTitle = () => {
-    const path = location.pathname
-    if (path.includes('/usuarios')) return 'Gestión de Usuarios'
-    if (path.includes('/vehiculos')) return 'Flota de Vehículos'
-    if (path.includes('/conductores')) return 'Conductores'
-    if (path.includes('/siniestros')) return 'Siniestros y Seguros'
-    if (path.includes('/incidencias')) return 'Incidencias'
-    if (path.includes('/informes')) return 'Informes Operativos'
-    if (path.includes('/asignaciones')) return 'Control de Asignaciones'
-    if (path.includes('/uss')) return 'Integración USS'
-    if (path.includes('/cabify')) return 'Integración Cabify'
-    if (path.includes('/reportes')) return 'Diseño de Reportes'
-    if (path.includes('/roles')) return 'Gestión de Roles'
-    if (path.includes('/permisos')) return 'Matriz de Permisos'
-    if (path.includes('/gestion-usuarios')) return 'Administración de Usuarios'
-    if (path.includes('/menu-por-rol')) return 'Permisos de Menú por Rol'
-    if (path.includes('/menu-por-usuario')) return 'Permisos de Menú por Usuario'
-    if (path.includes('/gestor-menus')) return 'Gestor de Menús Jerárquicos'
-    return 'Panel de Administración'
+    const currentPath = location.pathname
+
+    // Buscar en menús principales
+    for (const menu of visibleMenus) {
+      if (menu.menu_route === currentPath) {
+        return menu.menu_label
+      }
+
+      // Buscar en submenús
+      const submenus = getVisibleSubmenusForMenu(menu.menu_id)
+      for (const submenu of submenus) {
+        if (submenu.submenu_route === currentPath) {
+          return submenu.submenu_label
+        }
+      }
+    }
+
+    return isAdmin() ? 'Panel de Administración' : 'Panel de Usuario'
+  }
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        fontFamily: 'system-ui'
+      }}>
+        Cargando...
+      </div>
+    )
   }
 
   return (
@@ -457,171 +478,60 @@ export function HomePage() {
           </div>
 
           <nav className="sidebar-nav">
-            {/* Módulos principales */}
-            <button
-              className={`nav-item ${isActiveRoute('/usuarios') ? 'active' : ''}`}
-              onClick={() => navigate('/usuarios')}
-              disabled={!canRead('usuarios')}
-              title={!canRead('usuarios') ? 'No tienes permisos' : 'Gestión de Usuarios'}
-            >
-              <span className="nav-icon">👥</span>
-              <span className="nav-label">Usuarios</span>
-            </button>
+            {visibleMenus.length > 0 ? (
+              visibleMenus.map((menu) => {
+                const submenus = getVisibleSubmenusForMenu(menu.menu_id)
+                const hasSubmenus = submenus.length > 0
+                const isMenuOpen = openMenus[menu.menu_name] || false
 
-            <button
-              className={`nav-item ${isActiveRoute('/vehiculos') ? 'active' : ''}`}
-              onClick={() => navigate('/vehiculos')}
-              disabled={!canRead('vehiculos')}
-              title={!canRead('vehiculos') ? 'No tienes permisos' : 'Flota de Vehículos'}
-            >
-              <span className="nav-icon">🚗</span>
-              <span className="nav-label">Vehículos</span>
-            </button>
+                if (hasSubmenus) {
+                  // Menú con submenús
+                  return (
+                    <div key={menu.menu_id} className="nav-section">
+                      <button
+                        className="nav-section-header"
+                        onClick={() => toggleMenu(menu.menu_name)}
+                      >
+                        <div className="nav-section-title">
+                          <span className="nav-icon">{menu.menu_icon || '📁'}</span>
+                          {menu.menu_label}
+                        </div>
+                        <span className={`nav-section-arrow ${isMenuOpen ? 'open' : ''}`}>▸</span>
+                      </button>
 
-            <button
-              className={`nav-item ${isActiveRoute('/conductores') ? 'active' : ''}`}
-              onClick={() => navigate('/conductores')}
-              disabled={!canRead('conductores')}
-              title={!canRead('conductores') ? 'No tienes permisos' : 'Conductores'}
-            >
-              <span className="nav-icon">👨‍✈️</span>
-              <span className="nav-label">Conductores</span>
-            </button>
-
-            <button
-              className={`nav-item ${isActiveRoute('/siniestros') ? 'active' : ''}`}
-              onClick={() => navigate('/siniestros')}
-              disabled={!canRead('siniestros')}
-              title={!canRead('siniestros') ? 'No tienes permisos' : 'Siniestros y Seguros'}
-            >
-              <span className="nav-icon">⚠️</span>
-              <span className="nav-label">Siniestros</span>
-            </button>
-
-            <button
-              className={`nav-item ${isActiveRoute('/incidencias') ? 'active' : ''}`}
-              onClick={() => navigate('/incidencias')}
-              disabled={!canRead('incidencias')}
-              title={!canRead('incidencias') ? 'No tienes permisos' : 'Incidencias'}
-            >
-              <span className="nav-icon">📋</span>
-              <span className="nav-label">Incidencias</span>
-            </button>
-
-            <button
-              className={`nav-item ${isActiveRoute('/informes') ? 'active' : ''}`}
-              onClick={() => navigate('/informes')}
-              disabled={!canRead('informes')}
-              title={!canRead('informes') ? 'No tienes permisos' : 'Informes Operativos'}
-            >
-              <span className="nav-icon">📊</span>
-              <span className="nav-label">Informes</span>
-            </button>
-
-            <button
-              className={`nav-item ${isActiveRoute('/asignaciones') ? 'active' : ''}`}
-              onClick={() => navigate('/asignaciones')}
-              disabled={!canRead('asignaciones')}
-              title={!canRead('asignaciones') ? 'No tienes permisos' : 'Asignaciones'}
-            >
-              <span className="nav-icon">📅</span>
-              <span className="nav-label">Asignaciones</span>
-            </button>
-
-            <div className="nav-divider"></div>
-
-            {/* Integraciones - Menú con submenús */}
-            <div className="nav-section">
-              <button
-                className="nav-section-header"
-                onClick={() => setIntegracionesMenuOpen(!integracionesMenuOpen)}
-              >
-                <div className="nav-section-title">
-                  <span className="nav-icon">🔗</span>
-                  Integraciones
-                </div>
-                <span className={`nav-section-arrow ${integracionesMenuOpen ? 'open' : ''}`}>▸</span>
-              </button>
-
-              <div className={`nav-section-items ${!integracionesMenuOpen ? 'collapsed' : ''}`}>
-                <button
-                  className={`nav-item ${isActiveRoute('/uss') ? 'active' : ''}`}
-                  onClick={() => navigate('/uss')}
-                >
-                  <span className="nav-label">Integración USS</span>
-                </button>
-                <button
-                  className={`nav-item ${isActiveRoute('/cabify') ? 'active' : ''}`}
-                  onClick={() => navigate('/cabify')}
-                >
-                  <span className="nav-label">Integración Cabify</span>
-                </button>
+                      <div className={`nav-section-items ${!isMenuOpen ? 'collapsed' : ''}`}>
+                        {submenus.map((submenu) => (
+                          <button
+                            key={submenu.submenu_id}
+                            className={`nav-item ${isActiveRoute(submenu.submenu_route) ? 'active' : ''}`}
+                            onClick={() => navigate(submenu.submenu_route)}
+                          >
+                            <span className="nav-label">{submenu.submenu_label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                } else {
+                  // Menú simple sin submenús
+                  return (
+                    <button
+                      key={menu.menu_id}
+                      className={`nav-item ${isActiveRoute(menu.menu_route) ? 'active' : ''}`}
+                      onClick={() => navigate(menu.menu_route)}
+                      title={menu.menu_label}
+                    >
+                      <span className="nav-icon">{menu.menu_icon || '📄'}</span>
+                      <span className="nav-label">{menu.menu_label}</span>
+                    </button>
+                  )
+                }
+              })
+            ) : (
+              <div style={{ padding: '20px', color: '#6B7280', fontSize: '13px', textAlign: 'center' }}>
+                No tienes menús disponibles
               </div>
-            </div>
-
-            <button
-              className={`nav-item ${isActiveRoute('/reportes') ? 'active' : ''}`}
-              onClick={() => navigate('/reportes')}
-              title="Diseño de Reportes"
-            >
-              <span className="nav-icon">📄</span>
-              <span className="nav-label">Reportes</span>
-            </button>
-
-            <div className="nav-divider"></div>
-
-            {/* Administración - Menú con submenús */}
-            <div className="nav-section">
-              <button
-                className="nav-section-header"
-                onClick={() => setAdministracionMenuOpen(!administracionMenuOpen)}
-              >
-                <div className="nav-section-title">
-                  <span className="nav-icon">⚙️</span>
-                  Administración
-                </div>
-                <span className={`nav-section-arrow ${administracionMenuOpen ? 'open' : ''}`}>▸</span>
-              </button>
-
-              <div className={`nav-section-items ${!administracionMenuOpen ? 'collapsed' : ''}`}>
-                <button
-                  className={`nav-item ${isActiveRoute('/gestion-usuarios') ? 'active' : ''}`}
-                  onClick={() => navigate('/gestion-usuarios')}
-                >
-                  <span className="nav-label">Usuarios</span>
-                </button>
-                <button
-                  className={`nav-item ${isActiveRoute('/roles') ? 'active' : ''}`}
-                  onClick={() => navigate('/roles')}
-                >
-                  <span className="nav-label">Roles</span>
-                </button>
-                <button
-                  className={`nav-item ${isActiveRoute('/permisos') ? 'active' : ''}`}
-                  onClick={() => navigate('/permisos')}
-                >
-                  <span className="nav-label">Permisos</span>
-                </button>
-                <button
-                  className={`nav-item ${isActiveRoute('/menu-por-rol') ? 'active' : ''}`}
-                  onClick={() => navigate('/menu-por-rol')}
-                >
-                  <span className="nav-label">Menú por Rol</span>
-                </button>
-                <button
-                  className={`nav-item ${isActiveRoute('/menu-por-usuario') ? 'active' : ''}`}
-                  onClick={() => navigate('/menu-por-usuario')}
-                >
-                  <span className="nav-label">Menú por Usuario</span>
-                </button>
-                <button
-                  className={`nav-item ${isActiveRoute('/gestor-menus') ? 'active' : ''}`}
-                  onClick={() => navigate('/gestor-menus')}
-                >
-                  <span className="nav-label">Gestor Menús</span>
-                </button>
-              </div>
-            </div>
+            )}
           </nav>
 
           <div className="sidebar-footer">
