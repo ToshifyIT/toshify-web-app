@@ -52,6 +52,31 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+/* Estilos globales para inputs y selects */
+input,
+select,
+textarea {
+  color: #1F2937 !important;
+  background-color: white !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9CA3AF !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  color: #1F2937 !important;
+}
+
+/* Asegurar que las opciones de select también sean legibles */
+select option {
+  color: #1F2937;
+  background-color: white;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
