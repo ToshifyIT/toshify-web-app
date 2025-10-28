@@ -3,10 +3,10 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
 import { LoginPage } from './pages/LoginPage'
+import { HomePage } from './pages/HomePage'
 import { AdminPage } from './pages/AdminPage'
 import { UserDashboard } from './pages/UserDashboard'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { RoleBasedRedirect } from './components/RoleBasedRedirect'
 
 function App() {
   return (
@@ -16,7 +16,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 
-            {/* Admin panel - solo para admins */}
+            {/* Admin panel - mantener por compatibilidad (deprecado) */}
             <Route
               path="/admin"
               element={
@@ -36,12 +36,12 @@ function App() {
               }
             />
 
-            {/* Ruta raíz - redirige según el rol */}
+            {/* HomePage como layout principal con todas las rutas anidadas */}
             <Route
-              path="/"
+              path="/*"
               element={
-                <ProtectedRoute>
-                  <RoleBasedRedirect />
+                <ProtectedRoute requireAdmin>
+                  <HomePage />
                 </ProtectedRoute>
               }
             />

@@ -7,9 +7,9 @@ export function RoleBasedRedirect() {
 
   console.log('🔀 RoleBasedRedirect - isAdmin:', isAdmin())
 
-  // Si es admin, va al panel de administración
+  // Si es admin, va al panel de administración (primera página disponible)
   if (isAdmin()) {
-    return <Navigate to="/admin" replace />
+    return <Navigate to="/vehiculos" replace />
   }
 
   // Si no es admin, va al dashboard de usuario
