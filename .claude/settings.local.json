@@ -6,7 +6,13 @@
       "Bash(dir:*)",
       "Bash(mkdir:*)",
       "Read(//c/Users/dev/Documents/**)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(del \"c:\\Users\\dev\\Documents\\toshify\\toshify-web-app\\tailwind.config.js\")"
     ],
     "deny": [],
     "ask": []
