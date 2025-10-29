@@ -47,27 +47,6 @@ export function HomePage() {
 
   const visibleMenus = getVisibleMenus()
 
-  const getPageTitle = () => {
-    const currentPath = location.pathname
-
-    // Buscar en menús principales
-    for (const menu of visibleMenus) {
-      if (menu.menu_route === currentPath) {
-        return menu.menu_label
-      }
-
-      // Buscar en submenús
-      const submenus = getVisibleSubmenusForMenu(menu.menu_id)
-      for (const submenu of submenus) {
-        if (submenu.submenu_route === currentPath) {
-          return submenu.submenu_label
-        }
-      }
-    }
-
-    return isAdmin() ? 'Panel de Administración' : 'Panel de Usuario'
-  }
-
   if (loading) {
     return (
       <div style={{

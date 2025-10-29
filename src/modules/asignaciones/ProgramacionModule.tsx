@@ -52,7 +52,7 @@ const VEHICLE_STATUS_CONFIG = {
   maintenance: { label: 'Mantenimiento', color: '#FEE2E2', textColor: '#DC2626' }
 }
 
-const StepIndicator: React.FC<{ currentStep: number; totalSteps: number; onStepClick: (step: number) => void }> = ({ currentStep, totalSteps, onStepClick }) => {
+const StepIndicator: React.FC<{ currentStep: number; totalSteps: number; onStepClick: (step: number) => void }> = ({ currentStep, onStepClick }) => {
   const steps = ['Modalidad', 'Vehículo', 'Conductores']
 
   const getStepStatus = (step: number) => {
