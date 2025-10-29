@@ -22,6 +22,7 @@ import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
 import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
+import { ProgramacionPage } from './asignaciones/ProgramacionPage'
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
@@ -552,52 +553,51 @@ export function HomePage() {
         {/* Main Content */}
         <main className="main-content">
           <div className="topbar">
-            <h1 className="topbar-title">{getPageTitle()}</h1>
+            <div></div>
             <button className="btn-logout" onClick={handleSignOut}>
               Cerrar Sesión
             </button>
           </div>
 
           <div className="content-area">
-            <div className="content-card">
-              <Routes>
-                {/* Módulos principales */}
-                <Route path="/usuarios" element={<UsuariosPage />} />
-                <Route path="/vehiculos" element={<VehiculosPage />} />
-                <Route path="/conductores" element={<ConductoresPage />} />
-                <Route path="/siniestros" element={<SiniestrosPage />} />
-                <Route path="/incidencias" element={<IncidenciasPage />} />
-                <Route path="/informes" element={<InformesPage />} />
-                <Route path="/asignaciones" element={<AsignacionesPage />} />
+            <Routes>
+              {/* Módulos principales */}
+              <Route path="/usuarios" element={<UsuariosPage />} />
+              <Route path="/vehiculos" element={<VehiculosPage />} />
+              <Route path="/conductores" element={<ConductoresPage />} />
+              <Route path="/siniestros" element={<SiniestrosPage />} />
+              <Route path="/incidencias" element={<IncidenciasPage />} />
+              <Route path="/informes" element={<InformesPage />} />
+              <Route path="/asignaciones" element={<AsignacionesPage />} />
+              <Route path="/programacion" element={<ProgramacionPage />} />
 
-                {/* Integraciones */}
-                <Route path="/uss" element={<USSPage />} />
-                <Route path="/cabify" element={<CabifyPage />} />
+              {/* Integraciones */}
+              <Route path="/uss" element={<USSPage />} />
+              <Route path="/cabify" element={<CabifyPage />} />
 
-                {/* Reportes */}
-                <Route path="/reportes" element={<ReportesPage />} />
+              {/* Reportes */}
+              <Route path="/reportes" element={<ReportesPage />} />
 
-                {/* Administración */}
-                <Route path="/gestion-usuarios" element={<GestionUsuariosPage />} />
-                <Route path="/roles" element={<RolesPage />} />
-                <Route path="/permisos" element={<PermisosPage />} />
-                <Route path="/menu-por-rol" element={<MenuPorRolPage />} />
-                <Route path="/menu-por-usuario" element={<MenuPorUsuarioPage />} />
-                <Route path="/gestor-menus" element={<GestorMenusPage />} />
+              {/* Administración */}
+              <Route path="/gestion-usuarios" element={<GestionUsuariosPage />} />
+              <Route path="/roles" element={<RolesPage />} />
+              <Route path="/permisos" element={<PermisosPage />} />
+              <Route path="/menu-por-rol" element={<MenuPorRolPage />} />
+              <Route path="/menu-por-usuario" element={<MenuPorUsuarioPage />} />
+              <Route path="/gestor-menus" element={<GestorMenusPage />} />
 
-                {/* Ruta por defecto */}
-                <Route path="/" element={
-                  <div>
-                    <div className="card-header">
-                      <h2 className="card-title">Bienvenido al Panel de Administración</h2>
-                      <p className="card-description">
-                        Selecciona una opción del menú lateral para comenzar
-                      </p>
-                    </div>
+              {/* Ruta por defecto */}
+              <Route path="/" element={
+                <div className="content-card">
+                  <div className="card-header">
+                    <h2 className="card-title">Bienvenido al Panel de Administración</h2>
+                    <p className="card-description">
+                      Selecciona una opción del menú lateral para comenzar
+                    </p>
                   </div>
-                } />
-              </Routes>
-            </div>
+                </div>
+              } />
+            </Routes>
           </div>
         </main>
       </div>
