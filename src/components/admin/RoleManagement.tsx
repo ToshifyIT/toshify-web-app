@@ -213,22 +213,27 @@ export function RoleManagement() {
         .roles-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 20px;
-          margin-top: 20px;
+          gap: 24px;
+          margin-top: 0;
+          max-width: 1200px;
+          margin-left: auto;
+          margin-right: auto;
         }
 
         .role-card {
           background: white;
           border: 1px solid #E5E7EB;
-          border-radius: 12px;
-          padding: 24px;
-          transition: all 0.2s;
+          border-radius: 16px;
+          padding: 28px;
+          transition: all 0.3s ease;
           position: relative;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
         .role-card:hover {
           border-color: #E63946;
-          box-shadow: 0 4px 12px rgba(230, 57, 70, 0.1);
+          box-shadow: 0 8px 16px rgba(230, 57, 70, 0.15);
+          transform: translateY(-4px);
         }
 
         .role-icon {
@@ -295,19 +300,22 @@ export function RoleManagement() {
         }
 
         .btn-primary {
-          padding: 10px 20px;
+          padding: 12px 28px;
           background: #E63946;
           color: white;
           border: none;
           border-radius: 8px;
-          font-size: 14px;
+          font-size: 15px;
           font-weight: 600;
           cursor: pointer;
-          transition: background 0.2s;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 6px rgba(230, 57, 70, 0.2);
         }
 
         .btn-primary:hover {
           background: #D62828;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 12px rgba(230, 57, 70, 0.3);
         }
 
         .btn-primary:disabled {
@@ -351,12 +359,13 @@ export function RoleManagement() {
 
         .modal-content {
           background: white;
-          padding: 32px;
-          border-radius: 12px;
+          padding: 40px;
+          border-radius: 16px;
           max-width: 500px;
           width: 90%;
           max-height: 90vh;
           overflow-y: auto;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
 
         .form-group {
@@ -480,23 +489,18 @@ export function RoleManagement() {
         }
       `}</style>
 
-      {/* Header con botón crear */}
-      <div style={{
-        marginBottom: '20px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>
-            Roles del Sistema
-          </h3>
-          <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#6B7280' }}>
-            {roles.length} rol{roles.length !== 1 ? 'es' : ''} configurado{roles.length !== 1 ? 's' : ''}
-          </p>
-        </div>
+      {/* Header */}
+      <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
+          Roles del Sistema
+        </h3>
+        <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+          {roles.length} rol{roles.length !== 1 ? 'es' : ''} configurado{roles.length !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      {/* Action Button */}
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
         <button
           className="btn-primary"
           onClick={() => setShowCreateModal(true)}

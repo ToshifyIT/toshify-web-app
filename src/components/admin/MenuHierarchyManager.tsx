@@ -21,6 +21,7 @@ export function MenuHierarchyManager() {
   const [editingSubmenu, setEditingSubmenu] = useState<Submenu | null>(null)
   const [parentSubmenu, setParentSubmenu] = useState<Submenu | null>(null)
   const [saving, setSaving] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const [menuForm, setMenuForm] = useState({
     name: '',
@@ -615,20 +616,44 @@ export function MenuHierarchyManager() {
       `}</style>
 
       <div className="menu-manager">
-        <div className="header-section">
-          <div>
-            <h2 style={{ margin: 0 }}>Gestión de Menús y Submenús</h2>
-            <p style={{ margin: '4px 0 0 0', color: '#6B7280', fontSize: '14px' }}>
-              {menus.length} menú{menus.length !== 1 ? 's' : ''} configurado{menus.length !== 1 ? 's' : ''}
-            </p>
-          </div>
+        {/* Header */}
+        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
+            Gestor de Menús
+          </h3>
+          <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+            Administra la estructura jerárquica de menús y submenús del sistema
+          </p>
+        </div>
+
+        {/* Action Button */}
+        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
           <button className="btn-create" onClick={() => setShowMenuModal(true)}>
             + Crear Menú
           </button>
         </div>
 
+        {/* Buscador */}
+        <div style={{ marginBottom: '24px' }}>
+          <input
+            type="text"
+            className="form-input"
+            placeholder="🔍 Buscar menú o submenú..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ width: '100%' }}
+          />
+        </div>
+
         <div className="menus-grid">
-          {menus.map(menu => (
+          {menus.filter(menu =>
+            menu.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            menu.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (menu.submenus || []).some(sub =>
+              sub.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              sub.name.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+          ).map(menu => (
             <div key={menu.id} className="menu-card">
               <div className="menu-header">
                 <div className="menu-title">

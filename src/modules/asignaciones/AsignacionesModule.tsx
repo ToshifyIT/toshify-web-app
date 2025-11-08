@@ -175,8 +175,9 @@ export function AsignacionesModule() {
         .table-wrapper {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
-          border-radius: 8px;
+          border-radius: 12px;
           border: 1px solid #E5E7EB;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
         .assignments-table {
@@ -277,22 +278,25 @@ export function AsignacionesModule() {
         }
 
         .btn-primary {
-          padding: 10px 20px;
+          padding: 12px 28px;
           background: #E63946;
           color: white;
           border: none;
           border-radius: 8px;
-          font-size: 14px;
+          font-size: 15px;
           font-weight: 600;
           cursor: pointer;
-          transition: background 0.2s;
+          transition: all 0.3s ease;
           display: inline-flex;
           align-items: center;
           gap: 8px;
+          box-shadow: 0 4px 6px rgba(230, 57, 70, 0.2);
         }
 
         .btn-primary:hover {
           background: #D62828;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 12px rgba(230, 57, 70, 0.3);
         }
 
         .status-select {
@@ -324,22 +328,17 @@ export function AsignacionesModule() {
       `}</style>
 
       {/* Header */}
-      <div style={{
-        marginBottom: '20px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>
-            Gestión de Asignaciones
-          </h3>
-          <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#6B7280' }}>
-            {filteredAssignments.length} asignación{filteredAssignments.length !== 1 ? 'es' : ''} encontrada{filteredAssignments.length !== 1 ? 's' : ''}
-          </p>
-        </div>
+      <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
+          Gestión de Asignaciones
+        </h3>
+        <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+          {filteredAssignments.length} asignación{filteredAssignments.length !== 1 ? 'es' : ''} encontrada{filteredAssignments.length !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      {/* Action Button */}
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
         <button className="btn-primary">
           <Plus size={18} />
           Nueva Asignación

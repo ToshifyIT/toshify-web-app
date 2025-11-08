@@ -12,7 +12,9 @@
       "Bash(git push:*)",
       "Bash(npm install:*)",
       "Bash(npm run dev:*)",
-      "Bash(del \"c:\\Users\\dev\\Documents\\toshify\\toshify-web-app\\tailwind.config.js\")"
+      "Bash(del \"c:\\Users\\dev\\Documents\\toshify\\toshify-web-app\\tailwind.config.js\")",
+      "Bash(npx tsx:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []
