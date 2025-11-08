@@ -62,54 +62,75 @@ const StepIndicator: React.FC<{ currentStep: number; totalSteps: number; onStepC
   }
 
   return (
-    <div style={{ marginBottom: '48px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ marginBottom: '48px', maxWidth: '600px', margin: '0 auto 48px auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
+        {/* Líneas conectoras */}
+        <div style={{
+          position: 'absolute',
+          top: '24px',
+          left: '15%',
+          right: '15%',
+          height: '2px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          zIndex: 0
+        }}>
+          <div style={{
+            width: '45%',
+            height: '2px',
+            background: currentStep > 1 ? '#E63946' : '#E5E7EB'
+          }} />
+          <div style={{
+            width: '45%',
+            height: '2px',
+            background: currentStep > 2 ? '#E63946' : '#E5E7EB'
+          }} />
+        </div>
+
         {steps.map((step, index) => {
           const stepNum = index + 1
           const status = getStepStatus(stepNum)
 
           return (
-            <div key={step} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                <button
-                  onClick={() => stepNum < currentStep && onStepClick(stepNum)}
-                  disabled={stepNum >= currentStep}
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 'bold',
-                    fontSize: '18px',
-                    transition: 'all 0.2s',
-                    background: status === 'completed' || status === 'active' ? '#E63946' : '#E5E7EB',
-                    color: status === 'completed' || status === 'active' ? 'white' : '#9CA3AF',
-                    border: status === 'active' ? '4px solid #FEE2E2' : 'none',
-                    cursor: stepNum < currentStep ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  {status === 'completed' ? <Check size={20} /> : stepNum}
-                </button>
-                <span style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  marginTop: '8px',
-                  color: status === 'active' ? '#E63946' : '#6B7280'
-                }}>
-                  {step}
-                </span>
-              </div>
-
-              {stepNum < steps.length && (
-                <div style={{
-                  flex: 1,
-                  height: '2px',
-                  margin: '0 16px',
-                  background: stepNum < currentStep ? '#E63946' : '#E5E7EB'
-                }} />
-              )}
+            <div key={step} style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              flex: 1,
+              position: 'relative',
+              zIndex: 1
+            }}>
+              <button
+                onClick={() => stepNum < currentStep && onStepClick(stepNum)}
+                disabled={stepNum >= currentStep}
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 'bold',
+                  fontSize: '18px',
+                  transition: 'all 0.2s',
+                  background: status === 'completed' || status === 'active' ? '#E63946' : '#E5E7EB',
+                  color: status === 'completed' || status === 'active' ? 'white' : '#9CA3AF',
+                  border: status === 'active' ? '4px solid #FEE2E2' : 'none',
+                  cursor: stepNum < currentStep ? 'pointer' : 'not-allowed'
+                }}
+              >
+                {status === 'completed' ? <Check size={20} /> : stepNum}
+              </button>
+              <span style={{
+                fontSize: '13px',
+                fontWeight: '600',
+                marginTop: '12px',
+                color: status === 'active' ? '#E63946' : '#6B7280',
+                textAlign: 'center',
+                whiteSpace: 'nowrap'
+              }}>
+                {step}
+              </span>
             </div>
           )
         })}
@@ -239,39 +260,50 @@ export function ProgramacionModule() {
       <style>{`
         .wizard-card {
           background: white;
-          border-radius: 8px;
+          border-radius: 12px;
           border: 1px solid #E5E7EB;
-          padding: 32px;
+          padding: 48px;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+          max-width: 1200px;
+          margin: 0 auto;
         }
 
         .modality-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 24px;
-          margin-bottom: 32px;
-          max-width: 800px;
+          gap: 32px;
+          margin-bottom: 48px;
+          max-width: 700px;
           margin-left: auto;
           margin-right: auto;
         }
 
         .modality-option {
-          padding: 32px;
-          border-radius: 8px;
+          padding: 40px 32px;
+          border-radius: 12px;
           border: 2px solid #E5E7EB;
-          transition: all 0.2s;
+          transition: all 0.3s ease;
           text-align: center;
           cursor: pointer;
           background: white;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 220px;
         }
 
         .modality-option:hover {
           border-color: #FCA5A5;
+          transform: translateY(-4px);
+          box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
 
         .modality-option.selected {
           border-color: #E63946;
           background: #FEF2F2;
-          box-shadow: 0 0 0 3px #FEE2E2;
+          box-shadow: 0 0 0 4px #FEE2E2, 0 10px 20px rgba(230, 57, 70, 0.15);
+          transform: translateY(-4px);
         }
 
         .table-wrapper {
@@ -325,39 +357,49 @@ export function ProgramacionModule() {
         }
 
         .btn-primary {
-          padding: 10px 20px;
+          padding: 12px 28px;
           background: #E63946;
           color: white;
           border: none;
-          border-radius: 6px;
-          font-size: 14px;
+          border-radius: 8px;
+          font-size: 15px;
           font-weight: 600;
           cursor: pointer;
-          transition: background 0.2s;
+          transition: all 0.3s ease;
           display: inline-flex;
           align-items: center;
           gap: 8px;
+          box-shadow: 0 4px 6px rgba(230, 57, 70, 0.2);
         }
 
         .btn-primary:hover {
           background: #D62828;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 12px rgba(230, 57, 70, 0.3);
+        }
+
+        .btn-primary:active {
+          transform: translateY(0);
+          box-shadow: 0 2px 4px rgba(230, 57, 70, 0.2);
         }
 
         .btn-primary:disabled {
           background: #D1D5DB;
           cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
         }
 
         .btn-secondary {
-          padding: 10px 20px;
+          padding: 12px 28px;
           background: white;
           color: #6B7280;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          font-size: 14px;
+          border: 2px solid #E5E7EB;
+          border-radius: 8px;
+          font-size: 15px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all 0.3s ease;
           display: inline-flex;
           align-items: center;
           gap: 8px;
@@ -365,6 +407,14 @@ export function ProgramacionModule() {
 
         .btn-secondary:hover {
           background: #F9FAFB;
+          border-color: #D1D5DB;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-secondary:active {
+          transform: translateY(0);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
         }
 
         .driver-card {
@@ -417,11 +467,11 @@ export function ProgramacionModule() {
       `}</style>
 
       {/* Header */}
-      <div style={{ marginBottom: '20px' }}>
-        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>
+      <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
           Asistente de Asignación
         </h3>
-        <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#6B7280' }}>
+        <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
           Guíate paso a paso en la asignación de vehículos
         </p>
       </div>
@@ -435,11 +485,11 @@ export function ProgramacionModule() {
 
         {/* Step 1: Modality */}
         {currentStep === 1 && (
-          <div style={{ textAlign: 'center' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#1F2937', marginBottom: '8px' }}>
+          <div style={{ textAlign: 'center', padding: '0 24px' }}>
+            <h2 style={{ fontSize: '28px', fontWeight: '700', color: '#1F2937', marginBottom: '12px' }}>
               Paso 1: Selecciona la Modalidad
             </h2>
-            <p style={{ color: '#6B7280', marginBottom: '32px' }}>
+            <p style={{ color: '#6B7280', fontSize: '16px', marginBottom: '48px', maxWidth: '600px', marginLeft: 'auto', marginRight: 'auto' }}>
               ¿Deseas asignar un vehículo por turno o a cargo?
             </p>
 
@@ -469,12 +519,12 @@ export function ProgramacionModule() {
               })}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '48px' }}>
               <button onClick={resetForm} className="btn-secondary">
                 Cancelar
               </button>
               <button onClick={handleNextStep} disabled={!modality} className="btn-primary">
-                Siguiente <ChevronRight size={16} />
+                Siguiente <ChevronRight size={18} />
               </button>
             </div>
           </div>

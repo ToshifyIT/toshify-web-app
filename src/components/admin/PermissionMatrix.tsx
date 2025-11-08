@@ -70,8 +70,9 @@ export function PermissionMatrix() {
         .permission-matrix {
           overflow-x: auto;
           background: white;
-          border-radius: 8px;
+          border-radius: 12px;
           border: 1px solid #E5E7EB;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
         .matrix-table {
@@ -187,10 +188,20 @@ export function PermissionMatrix() {
         }
       `}</style>
 
+      {/* Header */}
+      <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
+          Matriz de Permisos
+        </h3>
+        <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+          Gestiona los permisos de cada rol por módulo
+        </p>
+      </div>
+
       <div style={{
         background: '#EFF6FF',
         border: '1px solid #BFDBFE',
-        borderRadius: '8px',
+        borderRadius: '12px',
         padding: '16px',
         marginBottom: '24px',
         fontSize: '14px',

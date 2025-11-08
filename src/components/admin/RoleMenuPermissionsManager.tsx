@@ -34,6 +34,7 @@ export function RoleMenuPermissionsManager() {
   const [submenuPermissions, setSubmenuPermissions] = useState<RoleSubmenuPermission[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     loadData()
@@ -301,35 +302,39 @@ export function RoleMenuPermissionsManager() {
     <div>
       <style>{`
         .permissions-container {
-          max-width: 1200px;
+          max-width: 1000px;
+          margin: 0 auto;
         }
 
         .role-selector {
           margin-bottom: 30px;
-          padding: 20px;
-          background: #F9FAFB;
+          padding: 24px;
+          background: white;
           border-radius: 12px;
+          border: 1px solid #E5E7EB;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
         .select-input {
           width: 100%;
-          padding: 12px;
-          font-size: 14px;
+          padding: 12px 16px;
+          font-size: 15px;
           border: 1px solid #E5E7EB;
           border-radius: 8px;
           background: white;
+          transition: border-color 0.2s;
         }
 
         .select-input:focus {
           outline: none;
           border-color: #E63946;
+          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
         }
 
         .role-info-banner {
-          margin-top: 15px;
-          padding: 15px;
-          background: #FEF3C7;
-          border: 1px solid #FDE68A;
+          margin-top: 16px;
+          padding: 16px;
+          background: #F9FAFB;
           border-radius: 8px;
           display: flex;
           align-items: center;
@@ -346,11 +351,12 @@ export function RoleMenuPermissionsManager() {
           border: 1px solid #E5E7EB;
           border-radius: 12px;
           overflow: hidden;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
         .menu-header {
-          background: #1F2937;
-          color: white;
+          background: #F9FAFB;
+          border-bottom: 2px solid #E5E7EB;
           padding: 16px 20px;
           display: flex;
           align-items: center;
@@ -361,6 +367,7 @@ export function RoleMenuPermissionsManager() {
           margin: 0;
           font-size: 16px;
           font-weight: 600;
+          color: #1F2937;
         }
 
         .permissions-table {
@@ -412,21 +419,22 @@ export function RoleMenuPermissionsManager() {
         }
 
         .perm-checkbox {
-          width: 32px;
-          height: 32px;
-          border: 2px solid #E5E7EB;
-          border-radius: 6px;
+          width: 36px;
+          height: 36px;
+          border: 2px solid #D1D5DB;
+          border-radius: 8px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           transition: all 0.2s;
           background: white;
+          font-size: 16px;
         }
 
         .perm-checkbox:hover {
           border-color: #E63946;
-          transform: scale(1.1);
+          background: #FEF2F2;
         }
 
         .perm-checkbox.checked {
@@ -453,6 +461,16 @@ export function RoleMenuPermissionsManager() {
       `}</style>
 
       <div className="permissions-container">
+        {/* Header */}
+        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
+            Menú por Rol
+          </h3>
+          <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+            Configura los permisos de menús y submenús para cada rol del sistema
+          </p>
+        </div>
+
         <div className="role-selector">
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
             Seleccionar Rol
@@ -472,23 +490,13 @@ export function RoleMenuPermissionsManager() {
 
           {selectedRoleData && (
             <div className="role-info-banner">
-              <div style={{
-                width: '40px',
-                height: '40px',
-                background: '#F59E0B',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'white',
-                fontWeight: 'bold',
-                fontSize: '18px'
-              }}>
-                🔑
-              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
               <div>
-                <div style={{ fontWeight: 600, color: '#1F2937', textTransform: 'capitalize' }}>
-                  Rol: {selectedRoleData.name}
+                <div style={{ fontWeight: 600, color: '#1F2937', fontSize: '14px', textTransform: 'capitalize' }}>
+                  {selectedRoleData.name}
                 </div>
                 <div style={{ fontSize: '13px', color: '#6B7280' }}>
                   {selectedRoleData.description || 'Sin descripción'}
@@ -509,8 +517,26 @@ export function RoleMenuPermissionsManager() {
             </p>
           </div>
         ) : (
-          <div className="permissions-grid">
-            {menus.map(menu => {
+          <>
+            {/* Buscador */}
+            <div style={{ marginBottom: '24px' }}>
+              <input
+                type="text"
+                className="select-input"
+                placeholder="🔍 Buscar menú o submenú..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <div className="permissions-grid">
+            {menus.filter(menu =>
+              menu.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              submenus.some((sm: any) =>
+                sm.menus?.name === menu.name &&
+                sm.label.toLowerCase().includes(searchTerm.toLowerCase())
+              )
+            ).map(menu => {
               const menuSubmenus = submenus.filter((sm: any) =>
                 sm.menus?.name === menu.name
               )
@@ -518,7 +544,12 @@ export function RoleMenuPermissionsManager() {
               return (
                 <div key={menu.id} className="menu-section">
                   <div className="menu-header">
-                    <span style={{ fontSize: '20px' }}>{menu.icon}</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="7" height="7"/>
+                      <rect x="14" y="3" width="7" height="7"/>
+                      <rect x="14" y="14" width="7" height="7"/>
+                      <rect x="3" y="14" width="7" height="7"/>
+                    </svg>
                     <h3>{menu.label}</h3>
                   </div>
 
@@ -618,6 +649,7 @@ export function RoleMenuPermissionsManager() {
               )
             })}
           </div>
+          </>
         )}
       </div>
     </div>
