@@ -1576,7 +1576,7 @@ function ModalEliminar({ selectedConductor, saving, handleDelete, setShowDeleteM
   )
 }
 
-function ModalDetalles({ selectedConductor, setShowDetailsModal, getEstadoBadgeClass, getEstadoLabel }: any) {
+function ModalDetalles({ selectedConductor, setShowDetailsModal, getEstadoBadgeClass: _getEstadoBadgeClass, getEstadoLabel: _getEstadoLabel }: any) {
   return (
     <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>

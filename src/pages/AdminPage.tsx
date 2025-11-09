@@ -27,7 +27,7 @@ type TabType =
 
 export function AdminPage() {
   const { profile, signOut } = useAuth()
-  const { isAdmin, canRead } = usePermissions()
+  const { isAdmin, canViewMenu } = usePermissions()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabType>('vehiculos')
   const [administracionMenuOpen, setAdministracionMenuOpen] = useState(false)
@@ -439,8 +439,8 @@ export function AdminPage() {
             <button
               className={`nav-item ${activeTab === 'usuarios' ? 'active' : ''}`}
               onClick={() => setActiveTab('usuarios')}
-              disabled={!canRead('usuarios')}
-              title={!canRead('usuarios') ? 'No tienes permisos' : 'Gestión de Usuarios'}
+              disabled={!canViewMenu('usuarios')}
+              title={!canViewMenu('usuarios') ? 'No tienes permisos' : 'Gestión de Usuarios'}
             >
               <span className="nav-icon">👥</span>
               <span className="nav-label">Usuarios</span>
@@ -449,8 +449,8 @@ export function AdminPage() {
             <button
               className={`nav-item ${activeTab === 'vehiculos' ? 'active' : ''}`}
               onClick={() => setActiveTab('vehiculos')}
-              disabled={!canRead('vehiculos')}
-              title={!canRead('vehiculos') ? 'No tienes permisos' : 'Flota de Vehículos'}
+              disabled={!canViewMenu('vehiculos')}
+              title={!canViewMenu('vehiculos') ? 'No tienes permisos' : 'Flota de Vehículos'}
             >
               <span className="nav-icon">🚗</span>
               <span className="nav-label">Vehículos</span>
@@ -459,8 +459,8 @@ export function AdminPage() {
             <button
               className={`nav-item ${activeTab === 'conductores' ? 'active' : ''}`}
               onClick={() => setActiveTab('conductores')}
-              disabled={!canRead('conductores')}
-              title={!canRead('conductores') ? 'No tienes permisos' : 'Conductores'}
+              disabled={!canViewMenu('conductores')}
+              title={!canViewMenu('conductores') ? 'No tienes permisos' : 'Conductores'}
             >
               <span className="nav-icon">👨‍✈️</span>
               <span className="nav-label">Conductores</span>
@@ -469,8 +469,8 @@ export function AdminPage() {
             <button
               className={`nav-item ${activeTab === 'siniestros' ? 'active' : ''}`}
               onClick={() => setActiveTab('siniestros')}
-              disabled={!canRead('siniestros')}
-              title={!canRead('siniestros') ? 'No tienes permisos' : 'Siniestros y Seguros'}
+              disabled={!canViewMenu('siniestros')}
+              title={!canViewMenu('siniestros') ? 'No tienes permisos' : 'Siniestros y Seguros'}
             >
               <span className="nav-icon">⚠️</span>
               <span className="nav-label">Siniestros</span>
@@ -479,8 +479,8 @@ export function AdminPage() {
             <button
               className={`nav-item ${activeTab === 'incidencias' ? 'active' : ''}`}
               onClick={() => setActiveTab('incidencias')}
-              disabled={!canRead('incidencias')}
-              title={!canRead('incidencias') ? 'No tienes permisos' : 'Incidencias'}
+              disabled={!canViewMenu('incidencias')}
+              title={!canViewMenu('incidencias') ? 'No tienes permisos' : 'Incidencias'}
             >
               <span className="nav-icon">📋</span>
               <span className="nav-label">Incidencias</span>
@@ -489,8 +489,8 @@ export function AdminPage() {
             <button
               className={`nav-item ${activeTab === 'informes' ? 'active' : ''}`}
               onClick={() => setActiveTab('informes')}
-              disabled={!canRead('informes')}
-              title={!canRead('informes') ? 'No tienes permisos' : 'Informes Operativos'}
+              disabled={!canViewMenu('informes')}
+              title={!canViewMenu('informes') ? 'No tienes permisos' : 'Informes Operativos'}
             >
               <span className="nav-icon">📊</span>
               <span className="nav-label">Informes</span>
@@ -499,8 +499,8 @@ export function AdminPage() {
             <button
               className={`nav-item ${activeTab === 'asignaciones' ? 'active' : ''}`}
               onClick={() => setActiveTab('asignaciones')}
-              disabled={!canRead('asignaciones')}
-              title={!canRead('asignaciones') ? 'No tienes permisos' : 'Asignaciones'}
+              disabled={!canViewMenu('asignaciones')}
+              title={!canViewMenu('asignaciones') ? 'No tienes permisos' : 'Asignaciones'}
             >
               <span className="nav-icon">📅</span>
               <span className="nav-label">Asignaciones</span>

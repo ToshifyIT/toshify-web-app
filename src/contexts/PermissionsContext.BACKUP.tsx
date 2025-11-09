@@ -23,8 +23,7 @@ interface SubmenuPermission {
   name: string
   label: string
   route: string
-  menu_id?: string // Deprecated: usar parent_menu_id
-  parent_menu_id?: string
+  menu_id: string
   permissions: {
     can_view: boolean
     can_create: boolean
@@ -116,16 +115,17 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
       if (!response.ok) {
         console.warn('⚠️ Edge function no disponible, usando fallback')
+        // Fallback: cargar usuario y rol básico
         await loadPermissionsFallback()
         return
       }
 
       const data: UserPermissionsResponse = await response.json()
-      console.log('✅ Permisos cargados desde edge function:', data)
       setUserPermissions(data)
     } catch (error) {
       console.error('Error cargando permisos:', error)
       console.warn('⚠️ Usando modo fallback')
+      // Fallback en caso de error
       await loadPermissionsFallback()
     } finally {
       setLoading(false)
@@ -299,26 +299,22 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   }
 
   // Funciones de compatibilidad (deprecadas)
-  // Retornan true si el usuario tiene AL MENOS UN permiso de ese tipo
   const canCreate = (): boolean => {
     if (!userPermissions) return false
-    const hasMenuCreate = userPermissions.menus.some(m => m.permissions.can_create)
-    const hasSubmenuCreate = userPermissions.submenus.some(s => s.permissions.can_create)
-    return hasMenuCreate || hasSubmenuCreate
+    return userPermissions.menus.some(m => m.permissions.can_create) ||
+           userPermissions.submenus.some(s => s.permissions.can_create)
   }
 
   const canUpdate = (): boolean => {
     if (!userPermissions) return false
-    const hasMenuEdit = userPermissions.menus.some(m => m.permissions.can_edit)
-    const hasSubmenuEdit = userPermissions.submenus.some(s => s.permissions.can_edit)
-    return hasMenuEdit || hasSubmenuEdit
+    return userPermissions.menus.some(m => m.permissions.can_edit) ||
+           userPermissions.submenus.some(s => s.permissions.can_edit)
   }
 
   const canDelete = (): boolean => {
     if (!userPermissions) return false
-    const hasMenuDelete = userPermissions.menus.some(m => m.permissions.can_delete)
-    const hasSubmenuDelete = userPermissions.submenus.some(s => s.permissions.can_delete)
-    return hasMenuDelete || hasSubmenuDelete
+    return userPermissions.menus.some(m => m.permissions.can_delete) ||
+           userPermissions.submenus.some(s => s.permissions.can_delete)
   }
 
   const value = {
