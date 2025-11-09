@@ -409,32 +409,6 @@ export function VehicleManagement() {
     })
   }
 
-  const getEstadoBadgeClass = (estado: string) => {
-    switch (estado) {
-      case 'disponible':
-        return 'badge-available'
-      case 'en_uso':
-        return 'badge-in-use'
-      case 'mantenimiento':
-        return 'badge-maintenance'
-      default:
-        return 'badge-inactive'
-    }
-  }
-
-  const getEstadoLabel = (estado: string) => {
-    switch (estado) {
-      case 'disponible':
-        return 'Disponible'
-      case 'en_uso':
-        return 'En Uso'
-      case 'mantenimiento':
-        return 'Mantenimiento'
-      default:
-        return estado
-    }
-  }
-
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<VehiculoWithRelations>[]>(
     () => [
