@@ -46,7 +46,12 @@ export function ConductoresModule() {
   const [estadosLicencia, setEstadosLicencia] = useState<LicenciaEstado[]>([])
   const [tiposLicencia, setTiposLicencia] = useState<LicenciaTipo[]>([])
 
-  const { canCreate, canUpdate, canDelete } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+
+  // Permisos específicos para el menú de conductores
+  const canCreate = canCreateInMenu('conductores')
+  const canUpdate = canEditInMenu('conductores')
+  const canDelete = canDeleteInMenu('conductores')
 
   const [formData, setFormData] = useState({
     nombres: '',
@@ -179,7 +184,7 @@ export function ConductoresModule() {
   }
 
   const handleCreate = async () => {
-    if (!canCreate('conductores')) {
+    if (!canCreate) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -261,7 +266,7 @@ export function ConductoresModule() {
   }
 
   const handleUpdate = async () => {
-    if (!canUpdate('conductores')) {
+    if (!canUpdate) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -335,7 +340,7 @@ export function ConductoresModule() {
   }
 
   const handleDelete = async () => {
-    if (!canDelete('conductores')) {
+    if (!canDelete) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -561,16 +566,16 @@ export function ConductoresModule() {
             <button
               className="btn-action btn-edit"
               onClick={() => openEditModal(row.original)}
-              disabled={!canUpdate('conductores')}
-              title={!canUpdate('conductores') ? 'No tienes permisos para editar' : 'Editar conductor'}
+              disabled={!canUpdate}
+              title={!canUpdate ? 'No tienes permisos para editar' : 'Editar conductor'}
             >
               ✏️ Editar
             </button>
             <button
               className="btn-action btn-delete"
               onClick={() => openDeleteModal(row.original)}
-              disabled={!canDelete('conductores')}
-              title={!canDelete('conductores') ? 'No tienes permisos para eliminar' : 'Eliminar conductor'}
+              disabled={!canDelete}
+              title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar conductor'}
             >
               🗑️ Eliminar
             </button>
@@ -1013,8 +1018,8 @@ export function ConductoresModule() {
           <button
             className="btn-primary"
             onClick={() => setShowCreateModal(true)}
-            disabled={!canCreate('conductores')}
-            title={!canCreate('conductores') ? 'No tienes permisos para crear conductores' : ''}
+            disabled={!canCreate}
+            title={!canCreate ? 'No tienes permisos para crear conductores' : ''}
           >
             + Crear Conductor
           </button>
@@ -1148,7 +1153,7 @@ export function ConductoresModule() {
               No hay conductores registrados
             </h3>
             <p style={{ margin: 0, fontSize: '14px' }}>
-              {canCreate('conductores') ? 'Crea el primero usando el botón "+ Crear Conductor".' : ''}
+              {canCreate ? 'Crea el primero usando el botón "+ Crear Conductor".' : ''}
             </p>
           </div>
         )}

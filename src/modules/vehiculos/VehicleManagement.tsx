@@ -42,7 +42,12 @@ export function VehicleManagement() {
   const [combustiblesTipos, setCombustiblesTipos] = useState<CombustibleTipo[]>([])
   const [gpsTipos, setGpsTipos] = useState<GpsTipo[]>([])
 
-  const { canCreate, canUpdate, canDelete } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+
+  // Permisos específicos para el menú de vehículos
+  const canCreate = canCreateInMenu('vehiculos')
+  const canUpdate = canEditInMenu('vehiculos')
+  const canDelete = canDeleteInMenu('vehiculos')
 
   const [formData, setFormData] = useState({
     patente: '',
@@ -153,7 +158,7 @@ export function VehicleManagement() {
   }
 
   const handleCreate = async () => {
-    if (!canCreate('vehiculos')) {
+    if (!canCreate) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -231,7 +236,7 @@ export function VehicleManagement() {
   }
 
   const handleUpdate = async () => {
-    if (!canUpdate('vehiculos')) {
+    if (!canUpdate) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -301,7 +306,7 @@ export function VehicleManagement() {
   }
 
   const handleDelete = async () => {
-    if (!canDelete('vehiculos')) {
+    if (!canDelete) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -499,16 +504,16 @@ export function VehicleManagement() {
             <button
               className="btn-action btn-edit"
               onClick={() => openEditModal(row.original)}
-              disabled={!canUpdate('vehiculos')}
-              title={!canUpdate('vehiculos') ? 'No tienes permisos para editar' : 'Editar vehículo'}
+              disabled={!canUpdate}
+              title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehículo'}
             >
               ✏️ Editar
             </button>
             <button
               className="btn-action btn-delete"
               onClick={() => openDeleteModal(row.original)}
-              disabled={!canDelete('vehiculos')}
-              title={!canDelete('vehiculos') ? 'No tienes permisos para eliminar' : 'Eliminar vehículo'}
+              disabled={!canDelete}
+              title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehículo'}
             >
               🗑️ Eliminar
             </button>
@@ -938,7 +943,7 @@ export function VehicleManagement() {
           </p>
         </div>
 
-        {!canCreate('vehiculos') && (
+        {!canCreate && (
           <div className="no-permission-msg">
             ℹ️ No tienes permisos para crear vehículos. Solo puedes ver la lista.
           </div>
@@ -949,8 +954,8 @@ export function VehicleManagement() {
           <button
             className="btn-primary"
             onClick={() => setShowCreateModal(true)}
-            disabled={!canCreate('vehiculos')}
-            title={!canCreate('vehiculos') ? 'No tienes permisos para crear vehículos' : ''}
+            disabled={!canCreate}
+            title={!canCreate ? 'No tienes permisos para crear vehículos' : ''}
           >
             + Crear Vehículo
           </button>
@@ -1084,7 +1089,7 @@ export function VehicleManagement() {
               No hay vehículos registrados
             </h3>
             <p style={{ margin: 0, fontSize: '14px' }}>
-              {canCreate('vehiculos') ? 'Crea el primero usando el botón "+ Crear Vehículo".' : ''}
+              {canCreate ? 'Crea el primero usando el botón "+ Crear Vehículo".' : ''}
             </p>
           </div>
         )}

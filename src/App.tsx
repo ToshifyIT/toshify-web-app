@@ -5,6 +5,8 @@ import { PermissionsProvider } from './contexts/PermissionsContext'
 import { LoginPage } from './pages/LoginPage'
 import { HomePage } from './pages/HomePage'
 import { AdminPage } from './pages/AdminPage'
+import { UnauthorizedPage } from './pages/UnauthorizedPage'
+import PermissionsDebugPage from './pages/PermissionsDebugPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
@@ -14,6 +16,17 @@ function App() {
         <PermissionsProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+            {/* Debug de permisos (solo desarrollo) */}
+            <Route
+              path="/debug/permisos"
+              element={
+                <ProtectedRoute>
+                  <PermissionsDebugPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Admin panel - mantener por compatibilidad (deprecado) */}
             <Route

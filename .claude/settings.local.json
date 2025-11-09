@@ -14,7 +14,11 @@
       "Bash(npm run dev:*)",
       "Bash(del \"c:\\Users\\dev\\Documents\\toshify\\toshify-web-app\\tailwind.config.js\")",
       "Bash(npx tsx:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npx prettier:*)",
+      "Bash(cp:*)",
+      "Bash(nul)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []
