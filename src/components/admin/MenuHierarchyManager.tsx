@@ -1,32 +1,45 @@
 // src/components/admin/MenuHierarchyManager.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { Menu, Submenu } from '../../types/database.types'
+import Swal from 'sweetalert2'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table'
 
-interface MenuWithSubmenus extends Menu {
-  submenus?: SubmenuNode[]
-}
-
-interface SubmenuNode extends Submenu {
-  children?: SubmenuNode[]
+interface MenuRow {
+  id: string
+  type: 'menu' | 'submenu'
+  name: string
+  label: string
+  route: string | null
+  order_index: number
+  menu_id?: string
+  data: Menu | Submenu
 }
 
 export function MenuHierarchyManager() {
-  const [menus, setMenus] = useState<MenuWithSubmenus[]>([])
-  const [selectedMenu, setSelectedMenu] = useState<Menu | null>(null)
+  const [menus, setMenus] = useState<Menu[]>([])
+  const [submenus, setSubmenus] = useState<Submenu[]>([])
   const [loading, setLoading] = useState(true)
   const [showMenuModal, setShowMenuModal] = useState(false)
   const [showSubmenuModal, setShowSubmenuModal] = useState(false)
   const [editingMenu, setEditingMenu] = useState<Menu | null>(null)
   const [editingSubmenu, setEditingSubmenu] = useState<Submenu | null>(null)
-  const [parentSubmenu, setParentSubmenu] = useState<Submenu | null>(null)
   const [saving, setSaving] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [sorting, setSorting] = useState<SortingState>([])
 
   const [menuForm, setMenuForm] = useState({
     name: '',
     label: '',
-    icon: '',
     route: '',
     order_index: 0
   })
@@ -34,17 +47,16 @@ export function MenuHierarchyManager() {
   const [submenuForm, setSubmenuForm] = useState({
     name: '',
     label: '',
-    icon: '',
     route: '',
     order_index: 0,
-    parent_id: null as string | null
+    menu_id: ''
   })
 
   useEffect(() => {
-    loadMenus()
+    loadData()
   }, [])
 
-  const loadMenus = async () => {
+  const loadData = async () => {
     setLoading(true)
     try {
       const { data: menusData, error: menusError } = await supabase
@@ -57,37 +69,22 @@ export function MenuHierarchyManager() {
       const { data: submenusData, error: submenusError } = await supabase
         .from('submenus')
         .select('*')
-        .order('level, order_index')
+        .order('order_index')
 
       if (submenusError) throw submenusError
 
-      // Construir árbol jerárquico
-      const menusWithTree = (menusData as Menu[]).map(menu => ({
-        ...menu,
-        submenus: buildSubmenuTree((submenusData as Submenu[]).filter(s => s.menu_id === menu.id))
-      }))
-
-      setMenus(menusWithTree)
+      setMenus(menusData || [])
+      setSubmenus(submenusData || [])
     } catch (err) {
-      console.error('Error cargando menús:', err)
+      console.error('Error cargando datos:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  const buildSubmenuTree = (submenus: Submenu[], parentId: string | null = null): SubmenuNode[] => {
-    return submenus
-      .filter(s => s.parent_id === parentId)
-      .map(submenu => ({
-        ...submenu,
-        children: buildSubmenuTree(submenus, submenu.id)
-      }))
-      .sort((a, b) => a.order_index - b.order_index)
-  }
-
   const handleCreateMenu = async () => {
     if (!menuForm.name || !menuForm.label) {
-      alert('Nombre y etiqueta son requeridos')
+      Swal.fire('Error', 'Nombre y etiqueta son requeridos', 'error')
       return
     }
 
@@ -100,12 +97,12 @@ export function MenuHierarchyManager() {
 
       if (error) throw error
 
-      alert('✅ Menú creado exitosamente')
+      Swal.fire('¡Éxito!', 'Menú creado exitosamente', 'success')
       setShowMenuModal(false)
       resetMenuForm()
-      await loadMenus()
+      await loadData()
     } catch (err: any) {
-      alert('❌ Error: ' + err.message)
+      Swal.fire('Error', err.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -124,20 +121,31 @@ export function MenuHierarchyManager() {
 
       if (error) throw error
 
-      alert('✅ Menú actualizado exitosamente')
+      Swal.fire('¡Éxito!', 'Menú actualizado exitosamente', 'success')
       setShowMenuModal(false)
       setEditingMenu(null)
       resetMenuForm()
-      await loadMenus()
+      await loadData()
     } catch (err: any) {
-      alert('❌ Error: ' + err.message)
+      Swal.fire('Error', err.message, 'error')
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeleteMenu = async (menu: Menu) => {
-    if (!confirm(`¿Eliminar menú "${menu.label}" y todos sus submenús?`)) return
+    const result = await Swal.fire({
+      title: '¿Eliminar menú?',
+      text: `Se eliminará "${menu.label}" y todos sus submenús`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#E63946',
+      cancelButtonColor: '#6B7280',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
 
     try {
       const { error } = await supabase
@@ -147,51 +155,34 @@ export function MenuHierarchyManager() {
 
       if (error) throw error
 
-      alert('✅ Menú eliminado')
-      await loadMenus()
+      Swal.fire('¡Eliminado!', 'Menú eliminado exitosamente', 'success')
+      await loadData()
     } catch (err: any) {
-      alert('❌ Error: ' + err.message)
+      Swal.fire('Error', err.message, 'error')
     }
   }
 
   const handleCreateSubmenu = async () => {
-    if (!selectedMenu || !submenuForm.name || !submenuForm.label) {
-      alert('Selecciona un menú y completa los campos requeridos')
+    if (!submenuForm.name || !submenuForm.label || !submenuForm.menu_id) {
+      Swal.fire('Error', 'Completa todos los campos requeridos', 'error')
       return
     }
 
     setSaving(true)
     try {
-      // Calcular el nivel basado en el parent
-      let level = 1
-      if (submenuForm.parent_id) {
-        const { data: parent } = await supabase
-          .from('submenus')
-          .select('level')
-          .eq('id', submenuForm.parent_id)
-          .single()
-
-        level = ((parent as Submenu | null)?.level || 0) + 1
-      }
-
       const { error } = await supabase
         .from('submenus')
         // @ts-expect-error - Tipo generado incorrectamente
-        .insert([{
-          ...submenuForm,
-          menu_id: selectedMenu.id,
-          level
-        }])
+        .insert([{ ...submenuForm, level: 1, parent_id: null }])
 
       if (error) throw error
 
-      alert('✅ Submenú creado exitosamente')
+      Swal.fire('¡Éxito!', 'Submenú creado exitosamente', 'success')
       setShowSubmenuModal(false)
-      setParentSubmenu(null)
       resetSubmenuForm()
-      await loadMenus()
+      await loadData()
     } catch (err: any) {
-      alert('❌ Error: ' + err.message)
+      Swal.fire('Error', err.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -208,7 +199,6 @@ export function MenuHierarchyManager() {
         .update({
           name: submenuForm.name,
           label: submenuForm.label,
-          icon: submenuForm.icon,
           route: submenuForm.route,
           order_index: submenuForm.order_index
         })
@@ -216,20 +206,31 @@ export function MenuHierarchyManager() {
 
       if (error) throw error
 
-      alert('✅ Submenú actualizado')
+      Swal.fire('¡Éxito!', 'Submenú actualizado exitosamente', 'success')
       setShowSubmenuModal(false)
       setEditingSubmenu(null)
       resetSubmenuForm()
-      await loadMenus()
+      await loadData()
     } catch (err: any) {
-      alert('❌ Error: ' + err.message)
+      Swal.fire('Error', err.message, 'error')
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeleteSubmenu = async (submenu: Submenu) => {
-    if (!confirm(`¿Eliminar "${submenu.label}" y todos sus hijos?`)) return
+    const result = await Swal.fire({
+      title: '¿Eliminar submenú?',
+      text: `Se eliminará "${submenu.label}"`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#E63946',
+      cancelButtonColor: '#6B7280',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
 
     try {
       const { error } = await supabase
@@ -239,293 +240,374 @@ export function MenuHierarchyManager() {
 
       if (error) throw error
 
-      alert('✅ Submenú eliminado')
-      await loadMenus()
+      Swal.fire('¡Eliminado!', 'Submenú eliminado exitosamente', 'success')
+      await loadData()
     } catch (err: any) {
-      alert('❌ Error: ' + err.message)
+      Swal.fire('Error', err.message, 'error')
     }
   }
 
-  const openCreateSubmenuModal = (menu: Menu, parent: Submenu | null = null) => {
-    setSelectedMenu(menu)
-    setParentSubmenu(parent)
-    setSubmenuForm({
-      ...submenuForm,
-      parent_id: parent?.id || null
-    })
-    setShowSubmenuModal(true)
-  }
-
-  const openEditMenuModal = (menu: Menu) => {
-    setEditingMenu(menu)
-    setMenuForm({
-      name: menu.name,
-      label: menu.label,
-      icon: menu.icon || '',
-      route: menu.route || '',
-      order_index: menu.order_index
-    })
-    setShowMenuModal(true)
-  }
-
-  const openEditSubmenuModal = (submenu: Submenu) => {
-    setEditingSubmenu(submenu)
-    setSubmenuForm({
-      name: submenu.name,
-      label: submenu.label,
-      icon: submenu.icon || '',
-      route: submenu.route || '',
-      order_index: submenu.order_index,
-      parent_id: submenu.parent_id
-    })
-    setShowSubmenuModal(true)
-  }
-
   const resetMenuForm = () => {
-    setMenuForm({
-      name: '',
-      label: '',
-      icon: '',
-      route: '',
-      order_index: 0
-    })
+    setMenuForm({ name: '', label: '', route: '', order_index: 0 })
   }
 
   const resetSubmenuForm = () => {
-    setSubmenuForm({
-      name: '',
-      label: '',
-      icon: '',
-      route: '',
-      order_index: 0,
-      parent_id: null
-    })
+    setSubmenuForm({ name: '', label: '', route: '', order_index: 0, menu_id: '' })
   }
 
-  const renderSubmenuTree = (submenus: SubmenuNode[], depth = 0) => {
-    return submenus.map(submenu => (
-      <div key={submenu.id}>
-        <div
-          className="submenu-item"
-          style={{ marginLeft: `${depth * 24}px` }}
-        >
-          <div className="submenu-info">
-            <span className="submenu-level">L{submenu.level}</span>
-            {submenu.icon && <span>{submenu.icon}</span>}
-            <strong>{submenu.label}</strong>
-            <span className="submenu-name">({submenu.name})</span>
-            {submenu.route && (
-              <span className="submenu-route">{submenu.route}</span>
-            )}
-          </div>
-          <div className="submenu-actions">
+  // Construir datos para la tabla
+  const tableData = useMemo<MenuRow[]>(() => {
+    const rows: MenuRow[] = []
+    menus.forEach(menu => {
+      rows.push({
+        id: menu.id,
+        type: 'menu',
+        name: menu.name,
+        label: menu.label,
+        route: menu.route,
+        order_index: menu.order_index,
+        data: menu
+      })
+
+      submenus
+        .filter(sub => sub.menu_id === menu.id)
+        .forEach(submenu => {
+          rows.push({
+            id: submenu.id,
+            type: 'submenu',
+            name: submenu.name,
+            label: submenu.label,
+            route: submenu.route,
+            order_index: submenu.order_index,
+            menu_id: menu.id,
+            data: submenu
+          })
+        })
+    })
+    return rows
+  }, [menus, submenus])
+
+  // Definir columnas
+  const columns = useMemo<ColumnDef<MenuRow>[]>(
+    () => [
+      {
+        accessorKey: 'type',
+        header: 'Tipo',
+        cell: ({ getValue }) => {
+          const type = getValue() as 'menu' | 'submenu'
+          return (
+            <span className={`type-badge ${type === 'menu' ? 'type-menu' : 'type-submenu'}`}>
+              {type === 'menu' ? 'Menú' : 'Submenú'}
+            </span>
+          )
+        },
+        size: 100
+      },
+      {
+        accessorKey: 'name',
+        header: 'Nombre',
+        cell: ({ row, getValue }) => (
+          <>
+            {row.original.type === 'submenu' && <span style={{ color: '#9CA3AF', marginRight: '8px' }}>↳</span>}
+            <strong>{getValue() as string}</strong>
+          </>
+        )
+      },
+      {
+        accessorKey: 'label',
+        header: 'Etiqueta'
+      },
+      {
+        accessorKey: 'route',
+        header: 'Ruta',
+        cell: ({ getValue }) => (
+          <code style={{ fontSize: '12px', color: '#6B7280' }}>
+            {getValue() as string || '-'}
+          </code>
+        )
+      },
+      {
+        accessorKey: 'order_index',
+        header: 'Orden',
+        size: 80
+      },
+      {
+        id: 'actions',
+        header: 'Acciones',
+        cell: ({ row }) => (
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
             <button
-              className="btn-action btn-add"
-              onClick={() => openCreateSubmenuModal(selectedMenu!, submenu)}
-              title="Agregar hijo"
+              className="btn-action"
+              onClick={() => {
+                if (row.original.type === 'menu') {
+                  setEditingMenu(row.original.data as Menu)
+                  setMenuForm({
+                    name: row.original.name,
+                    label: row.original.label,
+                    route: row.original.route || '',
+                    order_index: row.original.order_index
+                  })
+                  setShowMenuModal(true)
+                } else {
+                  setEditingSubmenu(row.original.data as Submenu)
+                  setSubmenuForm({
+                    name: row.original.name,
+                    label: row.original.label,
+                    route: row.original.route || '',
+                    order_index: row.original.order_index,
+                    menu_id: row.original.menu_id || ''
+                  })
+                  setShowSubmenuModal(true)
+                }
+              }}
             >
-              ➕
-            </button>
-            <button
-              className="btn-action btn-edit"
-              onClick={() => openEditSubmenuModal(submenu)}
-            >
-              ✏️
+              Editar
             </button>
             <button
               className="btn-action btn-delete"
-              onClick={() => handleDeleteSubmenu(submenu)}
+              onClick={() => {
+                if (row.original.type === 'menu') {
+                  handleDeleteMenu(row.original.data as Menu)
+                } else {
+                  handleDeleteSubmenu(row.original.data as Submenu)
+                }
+              }}
             >
-              🗑️
+              Eliminar
             </button>
           </div>
-        </div>
-        {submenu.children && submenu.children.length > 0 && (
-          <div className="submenu-children">
-            {renderSubmenuTree(submenu.children, depth + 1)}
-          </div>
-        )}
-      </div>
-    ))
-  }
+        ),
+        size: 140
+      }
+    ],
+    []
+  )
+
+  const table = useReactTable({
+    data: tableData,
+    columns,
+    state: {
+      sorting,
+      globalFilter
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10
+      }
+    }
+  })
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>
+    return <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>Cargando...</div>
   }
 
   return (
     <div>
       <style>{`
-        .menu-manager {
+        .manager-container {
           max-width: 1200px;
+          margin: 0 auto;
         }
 
-        .header-section {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+        .search-bar {
           margin-bottom: 24px;
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+
+        .search-input {
+          flex: 1;
+          padding: 12px 16px;
+          border: 1px solid #E5E7EB;
+          border-radius: 8px;
+          font-size: 15px;
+          transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+          outline: none;
+          border-color: #E63946;
+          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
         }
 
         .btn-create {
-          padding: 10px 20px;
+          padding: 12px 24px;
           background: #E63946;
           color: white;
           border: none;
           border-radius: 8px;
+          font-size: 14px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 6px rgba(230, 57, 70, 0.2);
+          white-space: nowrap;
         }
 
         .btn-create:hover {
           background: #D62828;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 12px rgba(230, 57, 70, 0.3);
         }
 
-        .menus-grid {
-          display: grid;
-          gap: 20px;
-        }
-
-        .menu-card {
+        .table-wrapper {
           background: white;
-          border: 1px solid #E5E7EB;
           border-radius: 12px;
+          border: 1px solid #E5E7EB;
           overflow: hidden;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
-        .menu-header {
-          background: linear-gradient(135deg, #1F2937 0%, #374151 100%);
-          color: white;
-          padding: 20px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+        .data-table {
+          width: 100%;
+          border-collapse: collapse;
         }
 
-        .menu-title {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .menu-title h3 {
-          margin: 0;
-          font-size: 18px;
-        }
-
-        .menu-meta {
-          font-size: 12px;
-          opacity: 0.8;
-          margin-top: 4px;
-        }
-
-        .menu-actions {
-          display: flex;
-          gap: 8px;
-        }
-
-        .btn-action {
-          width: 36px;
-          height: 36px;
-          border: none;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 16px;
-          transition: all 0.2s;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .btn-action.btn-add {
-          background: #10B981;
-          color: white;
-        }
-
-        .btn-action.btn-add:hover {
-          background: #059669;
-        }
-
-        .btn-action.btn-edit {
-          background: #3B82F6;
-          color: white;
-        }
-
-        .btn-action.btn-edit:hover {
-          background: #2563EB;
-        }
-
-        .btn-action.btn-delete {
-          background: #EF4444;
-          color: white;
-        }
-
-        .btn-action.btn-delete:hover {
-          background: #DC2626;
-        }
-
-        .menu-body {
-          padding: 20px;
-        }
-
-        .submenu-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 12px;
-          border-bottom: 1px solid #F3F4F6;
-          transition: all 0.2s;
-        }
-
-        .submenu-item:hover {
+        .data-table thead {
           background: #F9FAFB;
+          border-bottom: 2px solid #E5E7EB;
         }
 
-        .submenu-info {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex: 1;
-        }
-
-        .submenu-level {
-          background: #E63946;
-          color: white;
-          padding: 2px 8px;
-          border-radius: 4px;
-          font-size: 11px;
-          font-weight: bold;
-        }
-
-        .submenu-name {
-          color: #9CA3AF;
-          font-size: 13px;
-          font-family: monospace;
-        }
-
-        .submenu-route {
-          color: #6B7280;
+        .data-table th {
+          padding: 14px 16px;
+          text-align: left;
           font-size: 12px;
-          font-family: monospace;
-          margin-left: auto;
+          font-weight: 600;
+          color: #6B7280;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          cursor: pointer;
+          user-select: none;
         }
 
-        .submenu-actions {
-          display: flex;
-          gap: 4px;
+        .data-table th:hover {
+          background: #F3F4F6;
         }
 
-        .submenu-actions .btn-action {
-          width: 32px;
-          height: 32px;
+        .data-table th.sortable {
+          position: relative;
+        }
+
+        .sort-indicator {
+          margin-left: 8px;
+          font-size: 10px;
+          color: #9CA3AF;
+        }
+
+        .data-table td {
+          padding: 14px 16px;
+          border-bottom: 1px solid #F3F4F6;
+          color: #1F2937;
           font-size: 14px;
         }
 
-        .empty-state {
-          padding: 40px;
-          text-align: center;
-          color: #9CA3AF;
+        .data-table tbody tr:hover {
+          background: #F9FAFB;
+        }
+
+        .data-table tbody tr:last-child td {
+          border-bottom: none;
+        }
+
+        .type-badge {
+          display: inline-block;
+          padding: 4px 10px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .type-menu {
+          background: #DBEAFE;
+          color: #1E40AF;
+        }
+
+        .type-submenu {
+          background: #F3E8FF;
+          color: #6B21A8;
+        }
+
+        .btn-action {
+          padding: 6px 12px;
+          border: 1px solid #E5E7EB;
+          border-radius: 6px;
+          background: white;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-size: 12px;
+          font-weight: 500;
+          color: #6B7280;
+        }
+
+        .btn-action:hover {
+          border-color: #3B82F6;
+          color: #3B82F6;
+          background: #EFF6FF;
+        }
+
+        .btn-action.btn-delete:hover {
+          border-color: #E63946;
+          color: #E63946;
+          background: #FEE2E2;
+        }
+
+        .pagination {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          background: #F9FAFB;
+          border-top: 1px solid #E5E7EB;
+        }
+
+        .pagination-info {
+          font-size: 14px;
+          color: #6B7280;
+        }
+
+        .pagination-controls {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .pagination button {
+          padding: 8px 12px;
+          border: 1px solid #E5E7EB;
+          border-radius: 6px;
+          background: white;
+          cursor: pointer;
+          font-size: 14px;
+          color: #6B7280;
+          transition: all 0.2s;
+        }
+
+        .pagination button:hover:not(:disabled) {
+          border-color: #E63946;
+          color: #E63946;
+          background: #FEF2F2;
+        }
+
+        .pagination button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .pagination select {
+          padding: 6px 10px;
+          border: 1px solid #E5E7EB;
+          border-radius: 6px;
+          font-size: 14px;
+          color: #6B7280;
+          background: white;
+          cursor: pointer;
         }
 
         .modal-overlay {
@@ -544,15 +626,16 @@ export function MenuHierarchyManager() {
         .modal-content {
           background: white;
           padding: 32px;
-          border-radius: 12px;
+          border-radius: 16px;
           max-width: 600px;
           width: 90%;
           max-height: 90vh;
           overflow-y: auto;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
 
         .form-group {
-          margin-bottom: 16px;
+          margin-bottom: 20px;
         }
 
         .form-label {
@@ -565,22 +648,17 @@ export function MenuHierarchyManager() {
 
         .form-input {
           width: 100%;
-          padding: 10px 12px;
+          padding: 10px 14px;
           border: 1px solid #E5E7EB;
-          border-radius: 6px;
+          border-radius: 8px;
           font-size: 14px;
-          font-family: inherit;
+          transition: border-color 0.2s;
         }
 
         .form-input:focus {
           outline: none;
           border-color: #E63946;
-        }
-
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
+          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
         }
 
         .modal-actions {
@@ -591,127 +669,167 @@ export function MenuHierarchyManager() {
         }
 
         .btn-secondary {
-          padding: 10px 20px;
+          padding: 10px 24px;
           background: white;
           color: #6B7280;
           border: 1px solid #E5E7EB;
           border-radius: 8px;
+          font-size: 14px;
           font-weight: 600;
           cursor: pointer;
+          transition: all 0.2s;
         }
 
         .btn-secondary:hover {
           background: #F9FAFB;
         }
 
-        .info-banner {
-          background: #EFF6FF;
-          border: 1px solid #BFDBFE;
+        .btn-primary {
+          padding: 10px 24px;
+          background: #E63946;
+          color: white;
+          border: none;
           border-radius: 8px;
-          padding: 12px;
-          margin-bottom: 16px;
-          font-size: 13px;
-          color: #1E40AF;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+          background: #D62828;
+        }
+
+        .btn-primary:disabled {
+          background: #9CA3AF;
+          cursor: not-allowed;
         }
       `}</style>
 
-      <div className="menu-manager">
+      <div className="manager-container">
         {/* Header */}
         <div style={{ marginBottom: '32px', textAlign: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
             Gestor de Menús
           </h3>
           <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
-            Administra la estructura jerárquica de menús y submenús del sistema
+            Administra la estructura de navegación del sistema
           </p>
         </div>
 
-        {/* Action Button */}
-        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+        {/* Search Bar & Actions */}
+        <div className="search-bar">
+          <input
+            type="text"
+            className="search-input"
+            placeholder="🔍 Buscar en todos los campos..."
+            value={globalFilter ?? ''}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+          />
           <button className="btn-create" onClick={() => setShowMenuModal(true)}>
-            + Crear Menú
+            + Menú
+          </button>
+          <button className="btn-create" onClick={() => setShowSubmenuModal(true)}>
+            + Submenú
           </button>
         </div>
 
-        {/* Buscador */}
-        <div style={{ marginBottom: '24px' }}>
-          <input
-            type="text"
-            className="form-input"
-            placeholder="🔍 Buscar menú o submenú..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ width: '100%' }}
-          />
-        </div>
-
-        <div className="menus-grid">
-          {menus.filter(menu =>
-            menu.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            menu.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (menu.submenus || []).some(sub =>
-              sub.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              sub.name.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-          ).map(menu => (
-            <div key={menu.id} className="menu-card">
-              <div className="menu-header">
-                <div className="menu-title">
-                  {menu.icon && <span style={{ fontSize: '24px' }}>{menu.icon}</span>}
-                  <div>
-                    <h3>{menu.label}</h3>
-                    <div className="menu-meta">
-                      {menu.name} {menu.route && `• ${menu.route}`}
-                    </div>
-                  </div>
-                </div>
-                <div className="menu-actions">
-                  <button
-                    className="btn-action btn-add"
-                    onClick={() => openCreateSubmenuModal(menu)}
-                    title="Agregar submenú"
-                  >
-                    ➕
-                  </button>
-                  <button
-                    className="btn-action btn-edit"
-                    onClick={() => openEditMenuModal(menu)}
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    className="btn-action btn-delete"
-                    onClick={() => handleDeleteMenu(menu)}
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </div>
-
-              <div className="menu-body">
-                {menu.submenus && menu.submenus.length > 0 ? (
-                  renderSubmenuTree(menu.submenus)
-                ) : (
-                  <div className="empty-state">
-                    <p>No hay submenús</p>
-                    <button
-                      className="btn-create"
-                      onClick={() => openCreateSubmenuModal(menu)}
+        {/* Table */}
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              {table.getHeaderGroups().map(headerGroup => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map(header => (
+                    <th
+                      key={header.id}
+                      onClick={header.column.getToggleSortingHandler()}
+                      className={header.column.getCanSort() ? 'sortable' : ''}
+                      style={{ width: header.getSize() }}
                     >
-                      + Agregar Primer Submenú
-                    </button>
-                  </div>
-                )}
-              </div>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getCanSort() && (
+                          <span className="sort-indicator">
+                            {{
+                              asc: ' ↑',
+                              desc: ' ↓',
+                            }[header.column.getIsSorted() as string] ?? ' ↕'}
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody>
+              {table.getRowModel().rows.map(row => (
+                <tr key={row.id}>
+                  {row.getVisibleCells().map(cell => (
+                    <td key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Pagination */}
+          <div className="pagination">
+            <div className="pagination-info">
+              Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
+              {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, table.getFilteredRowModel().rows.length)}{' '}
+              de {table.getFilteredRowModel().rows.length} registros
             </div>
-          ))}
+            <div className="pagination-controls">
+              <button
+                onClick={() => table.setPageIndex(0)}
+                disabled={!table.getCanPreviousPage()}
+              >
+                {'<<'}
+              </button>
+              <button
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+              >
+                {'<'}
+              </button>
+              <span style={{ padding: '0 12px', fontSize: '14px', color: '#6B7280' }}>
+                Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
+              </span>
+              <button
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+              >
+                {'>'}
+              </button>
+              <button
+                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+                disabled={!table.getCanNextPage()}
+              >
+                {'>>'}
+              </button>
+              <select
+                value={table.getState().pagination.pageSize}
+                onChange={e => table.setPageSize(Number(e.target.value))}
+              >
+                {[10, 20, 30, 50].map(pageSize => (
+                  <option key={pageSize} value={pageSize}>
+                    {pageSize} por página
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Modal Menú */}
         {showMenuModal && (
           <div className="modal-overlay" onClick={() => !saving && setShowMenuModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2 style={{ marginTop: 0 }}>
+              <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700' }}>
                 {editingMenu ? 'Editar Menú' : 'Crear Nuevo Menú'}
               </h2>
 
@@ -721,9 +839,9 @@ export function MenuHierarchyManager() {
                   type="text"
                   className="form-input"
                   value={menuForm.name}
-                  onChange={(e) => setMenuForm({ ...menuForm, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                  onChange={(e) => setMenuForm({ ...menuForm, name: e.target.value })}
                   placeholder="vehiculos"
-                  disabled={saving || !!editingMenu}
+                  disabled={saving}
                 />
               </div>
 
@@ -739,39 +857,25 @@ export function MenuHierarchyManager() {
                 />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Icono (Emoji)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={menuForm.icon}
-                    onChange={(e) => setMenuForm({ ...menuForm, icon: e.target.value })}
-                    placeholder="🚗"
-                    disabled={saving}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Orden</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={menuForm.order_index}
-                    onChange={(e) => setMenuForm({ ...menuForm, order_index: parseInt(e.target.value) })}
-                    disabled={saving}
-                  />
-                </div>
-              </div>
-
               <div className="form-group">
-                <label className="form-label">Ruta (Opcional)</label>
+                <label className="form-label">Ruta</label>
                 <input
                   type="text"
                   className="form-input"
                   value={menuForm.route}
                   onChange={(e) => setMenuForm({ ...menuForm, route: e.target.value })}
-                  placeholder="/admin/vehiculos"
+                  placeholder="/vehiculos"
+                  disabled={saving}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Orden</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={menuForm.order_index}
+                  onChange={(e) => setMenuForm({ ...menuForm, order_index: parseInt(e.target.value) })}
                   disabled={saving}
                 />
               </div>
@@ -789,7 +893,7 @@ export function MenuHierarchyManager() {
                   Cancelar
                 </button>
                 <button
-                  className="btn-create"
+                  className="btn-primary"
                   onClick={editingMenu ? handleUpdateMenu : handleCreateMenu}
                   disabled={saving}
                 >
@@ -804,15 +908,24 @@ export function MenuHierarchyManager() {
         {showSubmenuModal && (
           <div className="modal-overlay" onClick={() => !saving && setShowSubmenuModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2 style={{ marginTop: 0 }}>
+              <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700' }}>
                 {editingSubmenu ? 'Editar Submenú' : 'Crear Nuevo Submenú'}
               </h2>
 
-              {parentSubmenu && (
-                <div className="info-banner">
-                  ℹ️ Se creará como hijo de: <strong>{parentSubmenu.label}</strong>
-                </div>
-              )}
+              <div className="form-group">
+                <label className="form-label">Menú Padre *</label>
+                <select
+                  className="form-input"
+                  value={submenuForm.menu_id}
+                  onChange={(e) => setSubmenuForm({ ...submenuForm, menu_id: e.target.value })}
+                  disabled={saving || !!editingSubmenu}
+                >
+                  <option value="">Seleccionar menú...</option>
+                  {menus.map(menu => (
+                    <option key={menu.id} value={menu.id}>{menu.label}</option>
+                  ))}
+                </select>
+              </div>
 
               <div className="form-group">
                 <label className="form-label">Nombre (ID) *</label>
@@ -820,9 +933,9 @@ export function MenuHierarchyManager() {
                   type="text"
                   className="form-input"
                   value={submenuForm.name}
-                  onChange={(e) => setSubmenuForm({ ...submenuForm, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                  placeholder="listado"
-                  disabled={saving || !!editingSubmenu}
+                  onChange={(e) => setSubmenuForm({ ...submenuForm, name: e.target.value })}
+                  placeholder="gestion-conductores"
+                  disabled={saving}
                 />
               </div>
 
@@ -833,34 +946,9 @@ export function MenuHierarchyManager() {
                   className="form-input"
                   value={submenuForm.label}
                   onChange={(e) => setSubmenuForm({ ...submenuForm, label: e.target.value })}
-                  placeholder="Listado de Vehículos"
+                  placeholder="Gestión de Conductores"
                   disabled={saving}
                 />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Icono (Emoji)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={submenuForm.icon}
-                    onChange={(e) => setSubmenuForm({ ...submenuForm, icon: e.target.value })}
-                    placeholder="📋"
-                    disabled={saving}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Orden</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={submenuForm.order_index}
-                    onChange={(e) => setSubmenuForm({ ...submenuForm, order_index: parseInt(e.target.value) })}
-                    disabled={saving}
-                  />
-                </div>
               </div>
 
               <div className="form-group">
@@ -870,12 +958,20 @@ export function MenuHierarchyManager() {
                   className="form-input"
                   value={submenuForm.route}
                   onChange={(e) => setSubmenuForm({ ...submenuForm, route: e.target.value })}
-                  placeholder="/admin/vehiculos/listado"
+                  placeholder="/vehiculos/conductores"
                   disabled={saving}
                 />
-                <small style={{ color: '#6B7280', fontSize: '12px' }}>
-                  Dejar vacío si tendrá sub-submenús
-                </small>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Orden</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={submenuForm.order_index}
+                  onChange={(e) => setSubmenuForm({ ...submenuForm, order_index: parseInt(e.target.value) })}
+                  disabled={saving}
+                />
               </div>
 
               <div className="modal-actions">
@@ -884,7 +980,6 @@ export function MenuHierarchyManager() {
                   onClick={() => {
                     setShowSubmenuModal(false)
                     setEditingSubmenu(null)
-                    setParentSubmenu(null)
                     resetSubmenuForm()
                   }}
                   disabled={saving}
@@ -892,7 +987,7 @@ export function MenuHierarchyManager() {
                   Cancelar
                 </button>
                 <button
-                  className="btn-create"
+                  className="btn-primary"
                   onClick={editingSubmenu ? handleUpdateSubmenu : handleCreateSubmenu}
                   disabled={saving}
                 >

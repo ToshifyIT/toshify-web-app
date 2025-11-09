@@ -1,7 +1,17 @@
 // src/components/admin/UserMenuPermissionsManager.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { UserWithRole, Menu, Submenu } from '../../types/database.types'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table'
 
 interface MenuPermission {
   menu_id: string
@@ -24,6 +34,20 @@ interface SubmenuPermission {
   can_delete: boolean
 }
 
+interface PermissionRow {
+  id: string
+  type: 'menu' | 'submenu'
+  name: string
+  label: string
+  parentLabel?: string
+  can_view: boolean
+  can_create: boolean
+  can_edit: boolean
+  can_delete: boolean
+  menu_id?: string
+  submenu_id?: string
+}
+
 export function UserMenuPermissionsManager() {
   const [users, setUsers] = useState<UserWithRole[]>([])
   const [menus, setMenus] = useState<Menu[]>([])
@@ -33,7 +57,10 @@ export function UserMenuPermissionsManager() {
   const [submenuPermissions, setSubmenuPermissions] = useState<SubmenuPermission[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [sorting, setSorting] = useState<SortingState>([])
+  const [userSearchTerm, setUserSearchTerm] = useState('')
+  const [showUserDropdown, setShowUserDropdown] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -290,18 +317,222 @@ export function UserMenuPermissionsManager() {
     return perm ? perm[field] : false
   }
 
+  // Crear estructura de datos plana para la tabla
+  const tableData = useMemo<PermissionRow[]>(() => {
+    const rows: PermissionRow[] = []
+
+    menus.forEach(menu => {
+      // Agregar fila del menú
+      rows.push({
+        id: menu.id,
+        type: 'menu',
+        name: menu.name,
+        label: menu.label,
+        can_view: getMenuPermission(menu.id, 'can_view') as boolean,
+        can_create: getMenuPermission(menu.id, 'can_create') as boolean,
+        can_edit: getMenuPermission(menu.id, 'can_edit') as boolean,
+        can_delete: getMenuPermission(menu.id, 'can_delete') as boolean,
+        menu_id: menu.id
+      })
+
+      // Agregar filas de submenús
+      const menuSubmenus = submenus.filter((sm: any) => sm.menus?.name === menu.name)
+      menuSubmenus.forEach((submenu: any) => {
+        rows.push({
+          id: submenu.id,
+          type: 'submenu',
+          name: submenu.name,
+          label: submenu.label,
+          parentLabel: menu.label,
+          can_view: getSubmenuPermission(submenu.id, 'can_view') as boolean,
+          can_create: getSubmenuPermission(submenu.id, 'can_create') as boolean,
+          can_edit: getSubmenuPermission(submenu.id, 'can_edit') as boolean,
+          can_delete: getSubmenuPermission(submenu.id, 'can_delete') as boolean,
+          submenu_id: submenu.id
+        })
+      })
+    })
+
+    return rows
+  }, [menus, submenus, menuPermissions, submenuPermissions])
+
+  // Definir columnas
+  const columns = useMemo<ColumnDef<PermissionRow>[]>(
+    () => [
+      {
+        accessorKey: 'type',
+        header: 'Tipo',
+        cell: ({ getValue }) => {
+          const type = getValue() as string
+          return (
+            <span
+              style={{
+                display: 'inline-block',
+                padding: '4px 12px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 600,
+                background: type === 'menu' ? '#DBEAFE' : '#E9D5FF',
+                color: type === 'menu' ? '#1E40AF' : '#6B21A8',
+              }}
+            >
+              {type === 'menu' ? 'Menú' : 'Submenú'}
+            </span>
+          )
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'label',
+        header: 'Elemento',
+        cell: ({ row }) => {
+          const isSubmenu = row.original.type === 'submenu'
+          return (
+            <div>
+              {isSubmenu && (
+                <div style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '2px' }}>
+                  {row.original.parentLabel}
+                </div>
+              )}
+              <div
+                style={{
+                  fontWeight: isSubmenu ? 400 : 600,
+                  color: isSubmenu ? '#6B7280' : '#1F2937',
+                  paddingLeft: isSubmenu ? '20px' : '0',
+                }}
+              >
+                {isSubmenu && '↳ '}
+                {row.original.label}
+              </div>
+            </div>
+          )
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'can_view',
+        header: 'Ver',
+        cell: ({ row }) => (
+          <div
+            className={`perm-checkbox ${row.original.can_view ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
+            onClick={() => {
+              if (saving) return
+              if (row.original.type === 'menu' && row.original.menu_id) {
+                toggleMenuPermission(row.original.menu_id, 'can_view')
+              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                toggleSubmenuPermission(row.original.submenu_id, 'can_view')
+              }
+            }}
+          >
+            {row.original.can_view && '✓'}
+          </div>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'can_create',
+        header: 'Crear',
+        cell: ({ row }) => (
+          <div
+            className={`perm-checkbox ${row.original.can_create ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
+            onClick={() => {
+              if (saving) return
+              if (row.original.type === 'menu' && row.original.menu_id) {
+                toggleMenuPermission(row.original.menu_id, 'can_create')
+              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                toggleSubmenuPermission(row.original.submenu_id, 'can_create')
+              }
+            }}
+          >
+            {row.original.can_create && '✓'}
+          </div>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'can_edit',
+        header: 'Editar',
+        cell: ({ row }) => (
+          <div
+            className={`perm-checkbox ${row.original.can_edit ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
+            onClick={() => {
+              if (saving) return
+              if (row.original.type === 'menu' && row.original.menu_id) {
+                toggleMenuPermission(row.original.menu_id, 'can_edit')
+              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                toggleSubmenuPermission(row.original.submenu_id, 'can_edit')
+              }
+            }}
+          >
+            {row.original.can_edit && '✓'}
+          </div>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'can_delete',
+        header: 'Eliminar',
+        cell: ({ row }) => (
+          <div
+            className={`perm-checkbox ${row.original.can_delete ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
+            onClick={() => {
+              if (saving) return
+              if (row.original.type === 'menu' && row.original.menu_id) {
+                toggleMenuPermission(row.original.menu_id, 'can_delete')
+              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                toggleSubmenuPermission(row.original.submenu_id, 'can_delete')
+              }
+            }}
+          >
+            {row.original.can_delete && '✓'}
+          </div>
+        ),
+        enableSorting: true,
+      },
+    ],
+    [menuPermissions, submenuPermissions, saving]
+  )
+
+  // Configurar TanStack Table
+  const table = useReactTable({
+    data: tableData,
+    columns,
+    state: {
+      sorting,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  })
+
+  const selectedUserData = users.find(u => u.id === selectedUser)
+
+  // Filtrar usuarios según búsqueda
+  const filteredUsers = users.filter(user =>
+    (user.full_name && user.full_name.toLowerCase().includes(userSearchTerm.toLowerCase())) ||
+    (user.roles?.name && user.roles.name.toLowerCase().includes(userSearchTerm.toLowerCase()))
+  )
+
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>
   }
-
-  const selectedUserData = users.find(u => u.id === selectedUser)
 
   return (
     <div>
       <style>{`
         .permissions-container {
-          max-width: 1000px;
+          max-width: 1200px;
           margin: 0 auto;
+          padding: 20px;
         }
 
         .user-selector {
@@ -313,6 +544,10 @@ export function UserMenuPermissionsManager() {
           box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
+        .user-search-container {
+          position: relative;
+        }
+
         .select-input {
           width: 100%;
           padding: 12px 16px;
@@ -321,12 +556,49 @@ export function UserMenuPermissionsManager() {
           border-radius: 8px;
           background: white;
           transition: border-color 0.2s;
+          cursor: pointer;
         }
 
         .select-input:focus {
           outline: none;
           border-color: #E63946;
           box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+        }
+
+        .user-dropdown {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          margin-top: 4px;
+          background: white;
+          border: 1px solid #E5E7EB;
+          border-radius: 8px;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          max-height: 300px;
+          overflow-y: auto;
+          z-index: 1000;
+        }
+
+        .user-option {
+          padding: 12px 16px;
+          cursor: pointer;
+          transition: background 0.2s;
+          border-bottom: 1px solid #F3F4F6;
+        }
+
+        .user-option:last-child {
+          border-bottom: none;
+        }
+
+        .user-option:hover {
+          background: #F9FAFB;
+        }
+
+        .user-option.selected {
+          background: #FEF2F2;
+          color: #E63946;
+          font-weight: 600;
         }
 
         .user-info-banner {
@@ -339,12 +611,27 @@ export function UserMenuPermissionsManager() {
           gap: 12px;
         }
 
-        .permissions-grid {
-          display: grid;
-          gap: 24px;
+        .search-filter-container {
+          margin-bottom: 20px;
         }
 
-        .menu-section {
+        .search-input {
+          width: 100%;
+          padding: 12px 16px 12px 42px;
+          font-size: 15px;
+          border: 1px solid #E5E7EB;
+          border-radius: 8px;
+          background: white;
+          transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+          outline: none;
+          border-color: #E63946;
+          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+        }
+
+        .table-container {
           background: white;
           border: 1px solid #E5E7EB;
           border-radius: 12px;
@@ -352,68 +639,61 @@ export function UserMenuPermissionsManager() {
           box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
-        .menu-header {
-          background: #F9FAFB;
-          border-bottom: 2px solid #E5E7EB;
-          padding: 16px 20px;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .menu-header h3 {
-          margin: 0;
-          font-size: 16px;
-          font-weight: 600;
-          color: #1F2937;
-        }
-
-        .permissions-table {
+        .data-table {
           width: 100%;
           border-collapse: collapse;
         }
 
-        .permissions-table th {
+        .data-table th {
           background: #F9FAFB;
-          padding: 12px;
+          padding: 14px 16px;
           text-align: left;
           font-size: 12px;
           font-weight: 600;
           color: #6B7280;
           text-transform: uppercase;
-          border-bottom: 1px solid #E5E7EB;
+          border-bottom: 2px solid #E5E7EB;
+          cursor: pointer;
+          user-select: none;
         }
 
-        .permissions-table th:first-child {
-          width: 40%;
+        .data-table th.sortable:hover {
+          background: #F3F4F6;
         }
 
-        .permissions-table th:not(:first-child) {
+        .data-table th:nth-child(3),
+        .data-table th:nth-child(4),
+        .data-table th:nth-child(5),
+        .data-table th:nth-child(6) {
           text-align: center;
-          width: 15%;
+          width: 100px;
         }
 
-        .permissions-table td {
-          padding: 12px;
+        .data-table td {
+          padding: 12px 16px;
           border-bottom: 1px solid #F3F4F6;
+          color: #1F2937;
         }
 
-        .permissions-table tr:last-child td {
-          border-bottom: none;
-        }
-
-        .permissions-table td:not(:first-child) {
+        .data-table td:nth-child(3),
+        .data-table td:nth-child(4),
+        .data-table td:nth-child(5),
+        .data-table td:nth-child(6) {
           text-align: center;
         }
 
-        .submenu-row {
-          background: #FAFAFA;
+        .data-table tbody tr {
+          transition: background 0.2s;
         }
 
-        .submenu-label {
-          padding-left: 30px;
-          color: #6B7280;
-          font-size: 13px;
+        .data-table tbody tr:hover {
+          background: #F9FAFB;
+        }
+
+        .sort-indicator {
+          margin-left: 8px;
+          color: #9CA3AF;
+          font-size: 14px;
         }
 
         .perm-checkbox {
@@ -446,14 +726,66 @@ export function UserMenuPermissionsManager() {
           cursor: not-allowed;
         }
 
+        .pagination {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          border-top: 1px solid #E5E7EB;
+          background: #FAFAFA;
+        }
+
+        .pagination-info {
+          font-size: 14px;
+          color: #6B7280;
+        }
+
+        .pagination-controls {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .pagination-controls button {
+          padding: 8px 12px;
+          border: 1px solid #E5E7EB;
+          background: white;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          color: #374151;
+          transition: all 0.2s;
+        }
+
+        .pagination-controls button:hover:not(:disabled) {
+          background: #F9FAFB;
+          border-color: #E63946;
+          color: #E63946;
+        }
+
+        .pagination-controls button:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+
+        .pagination-controls select {
+          padding: 8px 12px;
+          border: 1px solid #E5E7EB;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+          cursor: pointer;
+        }
+
         .empty-state {
-          padding: 60px 20px;
+          padding: 80px 20px;
           text-align: center;
           color: #9CA3AF;
         }
 
         .empty-state-icon {
-          font-size: 48px;
+          font-size: 64px;
           margin-bottom: 16px;
         }
       `}</style>
@@ -469,22 +801,50 @@ export function UserMenuPermissionsManager() {
           </p>
         </div>
 
+        {/* User Selector with Search */}
         <div className="user-selector">
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: '#374151' }}>
             Seleccionar Usuario
           </label>
-          <select
-            className="select-input"
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-          >
-            <option value="">-- Seleccione un usuario --</option>
-            {users.map(user => (
-              <option key={user.id} value={user.id}>
-                {user.full_name || 'Sin nombre'} ({user.roles?.name || 'Sin rol'})
-              </option>
-            ))}
-          </select>
+          <div className="user-search-container">
+            <input
+              type="text"
+              className="select-input"
+              placeholder={selectedUserData ? `${selectedUserData.full_name || 'Sin nombre'} (${selectedUserData.roles?.name || 'Sin rol'})` : 'Buscar y seleccionar usuario...'}
+              value={userSearchTerm}
+              onChange={(e) => setUserSearchTerm(e.target.value)}
+              onFocus={() => setShowUserDropdown(true)}
+              onBlur={() => setTimeout(() => setShowUserDropdown(false), 200)}
+            />
+            {showUserDropdown && (
+              <div className="user-dropdown">
+                {filteredUsers.length === 0 ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#9CA3AF' }}>
+                    No se encontraron usuarios
+                  </div>
+                ) : (
+                  filteredUsers.map(user => (
+                    <div
+                      key={user.id}
+                      className={`user-option ${selectedUser === user.id ? 'selected' : ''}`}
+                      onClick={() => {
+                        setSelectedUser(user.id)
+                        setUserSearchTerm('')
+                        setShowUserDropdown(false)
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, marginBottom: '2px' }}>
+                        {user.full_name || 'Sin nombre'}
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                        {user.roles?.name || 'Sin rol'}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
 
           {selectedUserData && (
             <div className="user-info-banner">
@@ -506,8 +866,13 @@ export function UserMenuPermissionsManager() {
 
         {!selectedUser ? (
           <div className="empty-state">
-            <div className="empty-state-icon">👆</div>
-            <h3 style={{ margin: '0 0 8px 0', color: '#6B7280' }}>
+            <div className="empty-state-icon">
+              <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ margin: '0 auto' }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <h3 style={{ margin: '0 0 8px 0', color: '#6B7280', fontSize: '18px' }}>
               Selecciona un usuario
             </h3>
             <p style={{ margin: 0, fontSize: '14px' }}>
@@ -516,137 +881,121 @@ export function UserMenuPermissionsManager() {
           </div>
         ) : (
           <>
-            {/* Buscador */}
-            <div style={{ marginBottom: '24px' }}>
-              <input
-                type="text"
-                className="select-input"
-                placeholder="🔍 Buscar menú o submenú..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            {/* Search Filter */}
+            <div className="search-filter-container">
+              <div style={{ position: 'relative' }}>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#9CA3AF"
+                  strokeWidth="2"
+                  style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}
+                >
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Buscar menú o submenú..."
+                  value={globalFilter}
+                  onChange={(e) => setGlobalFilter(e.target.value)}
+                />
+              </div>
             </div>
 
-            <div className="permissions-grid">
-            {menus.filter(menu =>
-              menu.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              submenus.some((sm: any) =>
-                sm.menus?.name === menu.name &&
-                sm.label.toLowerCase().includes(searchTerm.toLowerCase())
-              )
-            ).map(menu => {
-              const menuSubmenus = submenus.filter((sm: any) =>
-                sm.menus?.name === menu.name
-              )
-
-              return (
-                <div key={menu.id} className="menu-section">
-                  <div className="menu-header">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="7" height="7"/>
-                      <rect x="14" y="3" width="7" height="7"/>
-                      <rect x="14" y="14" width="7" height="7"/>
-                      <rect x="3" y="14" width="7" height="7"/>
-                    </svg>
-                    <h3>{menu.label}</h3>
-                  </div>
-
-                  <table className="permissions-table">
-                    <thead>
-                      <tr>
-                        <th>Elemento</th>
-                        <th>Ver</th>
-                        <th>Crear</th>
-                        <th>Editar</th>
-                        <th>Eliminar</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Fila del menú principal */}
-                      <tr>
-                        <td>
-                          <strong>{menu.label}</strong>
-                        </td>
-                        <td>
-                          <div
-                            className={`perm-checkbox ${getMenuPermission(menu.id, 'can_view') ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-                            onClick={() => !saving && toggleMenuPermission(menu.id, 'can_view')}
-                          >
-                            {getMenuPermission(menu.id, 'can_view') && '✓'}
+            {/* Table */}
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  {table.getHeaderGroups().map(headerGroup => (
+                    <tr key={headerGroup.id}>
+                      {headerGroup.headers.map(header => (
+                        <th
+                          key={header.id}
+                          onClick={header.column.getToggleSortingHandler()}
+                          className={header.column.getCanSort() ? 'sortable' : ''}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: header.index > 1 ? 'center' : 'flex-start' }}>
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {header.column.getCanSort() && (
+                              <span className="sort-indicator">
+                                {{
+                                  asc: ' ↑',
+                                  desc: ' ↓',
+                                }[header.column.getIsSorted() as string] ?? ' ↕'}
+                              </span>
+                            )}
                           </div>
-                        </td>
-                        <td>
-                          <div
-                            className={`perm-checkbox ${getMenuPermission(menu.id, 'can_create') ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-                            onClick={() => !saving && toggleMenuPermission(menu.id, 'can_create')}
-                          >
-                            {getMenuPermission(menu.id, 'can_create') && '✓'}
-                          </div>
-                        </td>
-                        <td>
-                          <div
-                            className={`perm-checkbox ${getMenuPermission(menu.id, 'can_edit') ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-                            onClick={() => !saving && toggleMenuPermission(menu.id, 'can_edit')}
-                          >
-                            {getMenuPermission(menu.id, 'can_edit') && '✓'}
-                          </div>
-                        </td>
-                        <td>
-                          <div
-                            className={`perm-checkbox ${getMenuPermission(menu.id, 'can_delete') ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-                            onClick={() => !saving && toggleMenuPermission(menu.id, 'can_delete')}
-                          >
-                            {getMenuPermission(menu.id, 'can_delete') && '✓'}
-                          </div>
-                        </td>
-                      </tr>
-
-                      {/* Filas de submenús */}
-                      {menuSubmenus.map((submenu: any) => (
-                        <tr key={submenu.id} className="submenu-row">
-                          <td className="submenu-label">
-                            ↳ {submenu.label}
-                          </td>
-                          <td>
-                            <div
-                              className={`perm-checkbox ${getSubmenuPermission(submenu.id, 'can_view') ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-                              onClick={() => !saving && toggleSubmenuPermission(submenu.id, 'can_view')}
-                            >
-                              {getSubmenuPermission(submenu.id, 'can_view') && '✓'}
-                            </div>
-                          </td>
-                          <td>
-                            <div
-                              className={`perm-checkbox ${getSubmenuPermission(submenu.id, 'can_create') ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-                              onClick={() => !saving && toggleSubmenuPermission(submenu.id, 'can_create')}
-                            >
-                              {getSubmenuPermission(submenu.id, 'can_create') && '✓'}
-                            </div>
-                          </td>
-                          <td>
-                            <div
-                              className={`perm-checkbox ${getSubmenuPermission(submenu.id, 'can_edit') ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-                              onClick={() => !saving && toggleSubmenuPermission(submenu.id, 'can_edit')}
-                            >
-                              {getSubmenuPermission(submenu.id, 'can_edit') && '✓'}
-                            </div>
-                          </td>
-                          <td>
-                            <div
-                              className={`perm-checkbox ${getSubmenuPermission(submenu.id, 'can_delete') ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-                              onClick={() => !saving && toggleSubmenuPermission(submenu.id, 'can_delete')}
-                            >
-                              {getSubmenuPermission(submenu.id, 'can_delete') && '✓'}
-                            </div>
-                          </td>
-                        </tr>
+                        </th>
                       ))}
-                    </tbody>
-                  </table>
+                    </tr>
+                  ))}
+                </thead>
+                <tbody>
+                  {table.getRowModel().rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                        No se encontraron resultados
+                      </td>
+                    </tr>
+                  ) : (
+                    table.getRowModel().rows.map(row => (
+                      <tr key={row.id}>
+                        {row.getVisibleCells().map(cell => (
+                          <td key={cell.id}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              {/* Pagination */}
+              {table.getRowModel().rows.length > 0 && (
+                <div className="pagination">
+                  <div className="pagination-info">
+                    Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
+                    {Math.min(
+                      (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
+                      table.getFilteredRowModel().rows.length
+                    )}{' '}
+                    de {table.getFilteredRowModel().rows.length} registros
+                  </div>
+                  <div className="pagination-controls">
+                    <button onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}>
+                      {'<<'}
+                    </button>
+                    <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
+                      {'<'}
+                    </button>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>
+                      Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
+                    </span>
+                    <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+                      {'>'}
+                    </button>
+                    <button onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()}>
+                      {'>>'}
+                    </button>
+                    <select
+                      value={table.getState().pagination.pageSize}
+                      onChange={e => table.setPageSize(Number(e.target.value))}
+                    >
+                      {[10, 20, 30, 50].map(pageSize => (
+                        <option key={pageSize} value={pageSize}>
+                          {pageSize} por página
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              )
-            })}
-          </div>
+              )}
+            </div>
           </>
         )}
       </div>

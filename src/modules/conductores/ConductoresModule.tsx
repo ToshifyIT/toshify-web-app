@@ -1,5 +1,5 @@
 // src/modules/conductores/ConductoresModule.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -12,6 +12,16 @@ import type {
   LicenciaEstado,
   LicenciaTipo
 } from '../../types/database.types'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table'
 
 export function ConductoresModule() {
   const [conductores, setConductores] = useState<ConductorWithRelations[]>([])
@@ -23,6 +33,10 @@ export function ConductoresModule() {
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedConductor, setSelectedConductor] = useState<ConductorWithRelations | null>(null)
+
+  // TanStack Table states
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [sorting, setSorting] = useState<SortingState>([])
 
   // Catalog states
   const [estadosCiviles, setEstadosCiviles] = useState<EstadoCivil[]>([])
@@ -460,6 +474,135 @@ export function ConductoresModule() {
     }
   }
 
+  // Definir columnas para TanStack Table
+  const columns = useMemo<ColumnDef<ConductorWithRelations>[]>(
+    () => [
+      {
+        accessorKey: 'nombres',
+        header: 'Nombre',
+        cell: ({ row }) => (
+          <strong>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'numero_dni',
+        header: 'DNI',
+        cell: ({ getValue }) => (getValue() as string) || 'N/A',
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'numero_licencia',
+        header: 'Licencia',
+        cell: ({ getValue }) => (getValue() as string) || 'N/A',
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'licencias_categorias.descripcion',
+        header: 'Categoría',
+        cell: ({ row }) => (
+          <span style={{
+            background: '#DBEAFE',
+            color: '#1E40AF',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: '600'
+          }}>
+            {row.original.licencias_categorias?.descripcion || 'N/A'}
+          </span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'licencia_vencimiento',
+        header: 'Vencimiento',
+        cell: ({ getValue }) => new Date(getValue() as string).toLocaleDateString('es-AR'),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'telefono_contacto',
+        header: 'Teléfono',
+        cell: ({ getValue }) => (getValue() as string) || 'N/A',
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'conductores_estados.descripcion',
+        header: 'Estado',
+        cell: ({ row }) => (
+          <span className="badge" style={{
+            backgroundColor: '#3B82F6',
+            color: 'white',
+            padding: '4px 12px',
+            borderRadius: '12px',
+            fontSize: '12px',
+            fontWeight: '600'
+          }}>
+            {row.original.conductores_estados?.descripcion || 'N/A'}
+          </span>
+        ),
+        enableSorting: true,
+      },
+      {
+        id: 'acciones',
+        header: 'Acciones',
+        cell: ({ row }) => (
+          <div>
+            <button
+              className="btn-action btn-view"
+              onClick={() => {
+                setSelectedConductor(row.original)
+                setShowDetailsModal(true)
+              }}
+              title="Ver detalles"
+            >
+              👁️ Ver
+            </button>
+            <button
+              className="btn-action btn-edit"
+              onClick={() => openEditModal(row.original)}
+              disabled={!canUpdate('conductores')}
+              title={!canUpdate('conductores') ? 'No tienes permisos para editar' : 'Editar conductor'}
+            >
+              ✏️ Editar
+            </button>
+            <button
+              className="btn-action btn-delete"
+              onClick={() => openDeleteModal(row.original)}
+              disabled={!canDelete('conductores')}
+              title={!canDelete('conductores') ? 'No tienes permisos para eliminar' : 'Eliminar conductor'}
+            >
+              🗑️ Eliminar
+            </button>
+          </div>
+        ),
+        enableSorting: false,
+      },
+    ],
+    [canUpdate, canDelete]
+  )
+
+  // Configurar TanStack Table
+  const table = useReactTable({
+    data: conductores,
+    columns,
+    state: {
+      sorting,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  })
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>
@@ -484,53 +627,88 @@ export function ConductoresModule() {
   return (
     <div>
       <style>{`
-        .table-wrapper {
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          border-radius: 12px;
+        .conductores-container {
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+
+        .search-filter-container {
+          margin-bottom: 20px;
+        }
+
+        .search-input {
+          width: 100%;
+          padding: 12px 16px 12px 42px;
+          font-size: 15px;
           border: 1px solid #E5E7EB;
+          border-radius: 8px;
+          background: white;
+          transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+          outline: none;
+          border-color: #E63946;
+          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+        }
+
+        .table-container {
+          background: white;
+          border: 1px solid #E5E7EB;
+          border-radius: 12px;
+          overflow: hidden;
           box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
-        .conductores-table {
+        .data-table {
           width: 100%;
           border-collapse: collapse;
-          background: white;
-          min-width: 1200px;
         }
 
-        .conductores-table th {
-          text-align: left;
-          padding: 12px;
+        .data-table th {
           background: #F9FAFB;
+          padding: 14px 16px;
+          text-align: left;
           font-size: 12px;
           font-weight: 600;
           color: #6B7280;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
-          border-bottom: 1px solid #E5E7EB;
-          white-space: nowrap;
+          border-bottom: 2px solid #E5E7EB;
+          cursor: pointer;
+          user-select: none;
         }
 
-        .conductores-table th:last-child {
-          min-width: 200px;
+        .data-table th.sortable:hover {
+          background: #F3F4F6;
+        }
+
+        .data-table th:last-child {
           text-align: center;
         }
 
-        .conductores-table td {
-          padding: 16px 12px;
-          border-bottom: 1px solid #E5E7EB;
+        .data-table td {
+          padding: 12px 16px;
+          border-bottom: 1px solid #F3F4F6;
           color: #1F2937;
-          font-size: 14px;
         }
 
-        .conductores-table td:last-child {
+        .data-table td:last-child {
           text-align: center;
-          min-width: 200px;
         }
 
-        .conductores-table tr:hover {
+        .data-table tbody tr {
+          transition: background 0.2s;
+        }
+
+        .data-table tbody tr:hover {
           background: #F9FAFB;
+        }
+
+        .sort-indicator {
+          margin-left: 8px;
+          color: #9CA3AF;
+          font-size: 14px;
         }
 
         .badge {
@@ -630,6 +808,64 @@ export function ConductoresModule() {
 
         .btn-secondary:hover {
           background: #F9FAFB;
+        }
+
+        .pagination {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          border-top: 1px solid #E5E7EB;
+          background: #FAFAFA;
+        }
+
+        .pagination-info {
+          font-size: 14px;
+          color: #6B7280;
+        }
+
+        .pagination-controls {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .pagination-controls button {
+          padding: 8px 12px;
+          border: 1px solid #E5E7EB;
+          background: white;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          color: #374151;
+          transition: all 0.2s;
+        }
+
+        .pagination-controls button:hover:not(:disabled) {
+          background: #F9FAFB;
+          border-color: #E63946;
+          color: #E63946;
+        }
+
+        .pagination-controls button:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+
+        .pagination-controls select {
+          padding: 8px 12px;
+          border: 1px solid #E5E7EB;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+          cursor: pointer;
+        }
+
+        .empty-state {
+          padding: 80px 20px;
+          text-align: center;
+          color: #9CA3AF;
         }
 
         .modal-overlay {
@@ -755,125 +991,168 @@ export function ConductoresModule() {
         }
 
         @media (max-width: 768px) {
-          .conductores-table {
-            min-width: 1000px;
-          }
           .form-row, .form-row-3, .details-grid {
             grid-template-columns: 1fr;
           }
         }
       `}</style>
 
-      {/* Header */}
-      <div style={{ marginBottom: '32px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
-          Gestión de Conductores
-        </h3>
-        <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
-          {conductores.length} conductor{conductores.length !== 1 ? 'es' : ''} registrado{conductores.length !== 1 ? 's' : ''}
-        </p>
-      </div>
-
-      {/* Action Button */}
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          className="btn-primary"
-          onClick={() => setShowCreateModal(true)}
-          disabled={!canCreate('conductores')}
-          title={!canCreate('conductores') ? 'No tienes permisos para crear conductores' : ''}
-        >
-          + Crear Conductor
-        </button>
-      </div>
-
-      {/* Tabla de conductores */}
-      <div className="table-wrapper">
-        <table className="conductores-table">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>DNI</th>
-              <th>Licencia</th>
-              <th>Categoría</th>
-              <th>Vencimiento</th>
-              <th>Teléfono</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {conductores.map((conductor) => (
-              <tr key={conductor.id}>
-                <td>
-                  <strong>{`${conductor.nombres} ${conductor.apellidos}`}</strong>
-                </td>
-                <td>{conductor.numero_dni || 'N/A'}</td>
-                <td>{conductor.numero_licencia || 'N/A'}</td>
-                <td>
-                  <span style={{
-                    background: '#DBEAFE',
-                    color: '#1E40AF',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    fontWeight: '600'
-                  }}>
-                    {conductor.licencias_categorias?.descripcion || 'N/A'}
-                  </span>
-                </td>
-                <td>{new Date(conductor.licencia_vencimiento).toLocaleDateString('es-AR')}</td>
-                <td>{conductor.telefono_contacto || 'N/A'}</td>
-                <td>
-                  <span className={`badge`} style={{
-                    backgroundColor: '#3B82F6',
-                    color: 'white',
-                    padding: '4px 12px',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: '600'
-                  }}>
-                    {conductor.conductores_estados?.descripcion || 'N/A'}
-                  </span>
-                </td>
-                <td>
-                  <button
-                    className="btn-action btn-view"
-                    onClick={() => {
-                      setSelectedConductor(conductor)
-                      setShowDetailsModal(true)
-                    }}
-                    title="Ver detalles"
-                  >
-                    👁️ Ver
-                  </button>
-                  <button
-                    className="btn-action btn-edit"
-                    onClick={() => openEditModal(conductor)}
-                    disabled={!canUpdate('conductores')}
-                    title={!canUpdate('conductores') ? 'No tienes permisos para editar' : 'Editar conductor'}
-                  >
-                    ✏️ Editar
-                  </button>
-                  <button
-                    className="btn-action btn-delete"
-                    onClick={() => openDeleteModal(conductor)}
-                    disabled={!canDelete('conductores')}
-                    title={!canDelete('conductores') ? 'No tienes permisos para eliminar' : 'Eliminar conductor'}
-                  >
-                    🗑️ Eliminar
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {conductores.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>
-          No hay conductores registrados. {canCreate('conductores') ? 'Crea el primero usando el botón "+ Crear Conductor".' : ''}
+      <div className="conductores-container">
+        {/* Header */}
+        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
+            Gestión de Conductores
+          </h3>
+          <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+            {conductores.length} conductor{conductores.length !== 1 ? 'es' : ''} registrado{conductores.length !== 1 ? 's' : ''}
+          </p>
         </div>
-      )}
+
+        {/* Action Button */}
+        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            className="btn-primary"
+            onClick={() => setShowCreateModal(true)}
+            disabled={!canCreate('conductores')}
+            title={!canCreate('conductores') ? 'No tienes permisos para crear conductores' : ''}
+          >
+            + Crear Conductor
+          </button>
+        </div>
+
+        {conductores.length > 0 ? (
+          <>
+            {/* Search Filter */}
+            <div className="search-filter-container">
+              <div style={{ position: 'relative' }}>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#9CA3AF"
+                  strokeWidth="2"
+                  style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}
+                >
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Buscar por nombre, DNI, licencia..."
+                  value={globalFilter}
+                  onChange={(e) => setGlobalFilter(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  {table.getHeaderGroups().map(headerGroup => (
+                    <tr key={headerGroup.id}>
+                      {headerGroup.headers.map(header => (
+                        <th
+                          key={header.id}
+                          onClick={header.column.getToggleSortingHandler()}
+                          className={header.column.getCanSort() ? 'sortable' : ''}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: header.id === 'acciones' ? 'center' : 'flex-start' }}>
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {header.column.getCanSort() && (
+                              <span className="sort-indicator">
+                                {{
+                                  asc: ' ↑',
+                                  desc: ' ↓',
+                                }[header.column.getIsSorted() as string] ?? ' ↕'}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody>
+                  {table.getRowModel().rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                        No se encontraron resultados
+                      </td>
+                    </tr>
+                  ) : (
+                    table.getRowModel().rows.map(row => (
+                      <tr key={row.id}>
+                        {row.getVisibleCells().map(cell => (
+                          <td key={cell.id}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              {/* Pagination */}
+              {table.getRowModel().rows.length > 0 && (
+                <div className="pagination">
+                  <div className="pagination-info">
+                    Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
+                    {Math.min(
+                      (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
+                      table.getFilteredRowModel().rows.length
+                    )}{' '}
+                    de {table.getFilteredRowModel().rows.length} registros
+                  </div>
+                  <div className="pagination-controls">
+                    <button onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}>
+                      {'<<'}
+                    </button>
+                    <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
+                      {'<'}
+                    </button>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>
+                      Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
+                    </span>
+                    <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+                      {'>'}
+                    </button>
+                    <button onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()}>
+                      {'>>'}
+                    </button>
+                    <select
+                      value={table.getState().pagination.pageSize}
+                      onChange={e => table.setPageSize(Number(e.target.value))}
+                    >
+                      {[10, 20, 30, 50].map(pageSize => (
+                        <option key={pageSize} value={pageSize}>
+                          {pageSize} por página
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ margin: '0 auto 16px' }}>
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            <h3 style={{ margin: '0 0 8px 0', color: '#6B7280', fontSize: '18px' }}>
+              No hay conductores registrados
+            </h3>
+            <p style={{ margin: 0, fontSize: '14px' }}>
+              {canCreate('conductores') ? 'Crea el primero usando el botón "+ Crear Conductor".' : ''}
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Modales definidos en componente separado para reducir tamaño del archivo */}
       {showCreateModal && <ModalCrear formData={formData} setFormData={setFormData} saving={saving} handleCreate={handleCreate} setShowCreateModal={setShowCreateModal} resetForm={resetForm} estadosCiviles={estadosCiviles} nacionalidades={nacionalidades} categoriasLicencia={categoriasLicencia} estadosConductor={estadosConductor} estadosLicencia={estadosLicencia} tiposLicencia={tiposLicencia} />}
