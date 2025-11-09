@@ -1,7 +1,17 @@
 // src/components/admin/UserManagement.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { UserWithRole, Role } from '../../types/database.types'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table'
 
 export function UserManagement() {
   const [users, setUsers] = useState<UserWithRole[]>([])
@@ -16,6 +26,10 @@ export function UserManagement() {
     fullName: '',
     roleId: ''
   })
+
+  // TanStack Table states
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [sorting, setSorting] = useState<SortingState>([])
 
   useEffect(() => {
     loadData()
@@ -160,6 +174,101 @@ const handleRoleChange = async (userId: string, newRoleId: string) => {
     }
   }
 
+  // Definir columnas para TanStack Table
+  const columns = useMemo<ColumnDef<UserWithRole>[]>(
+    () => [
+      {
+        accessorKey: 'full_name',
+        header: 'Usuario',
+        cell: ({ getValue }) => <strong>{(getValue() as string) || 'Sin nombre'}</strong>,
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'id',
+        header: 'ID',
+        cell: ({ getValue }) => (
+          <span style={{ fontSize: '12px', color: '#6B7280', fontFamily: 'monospace' }}>
+            {(getValue() as string).substring(0, 8)}...
+          </span>
+        ),
+        enableSorting: false,
+      },
+      {
+        accessorKey: 'role_id',
+        header: 'Rol',
+        cell: ({ row }) => (
+          <select
+            className="select-role"
+            value={row.original.role_id || ''}
+            onChange={(e) => handleRoleChange(row.original.id, e.target.value)}
+          >
+            <option value="">Sin rol</option>
+            {roles.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.name}
+              </option>
+            ))}
+          </select>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'is_active',
+        header: 'Estado',
+        cell: ({ getValue }) => {
+          const isActive = getValue() as boolean
+          return (
+            <span className={`badge ${isActive ? 'badge-active' : 'badge-inactive'}`}>
+              {isActive ? 'Activo' : 'Inactivo'}
+            </span>
+          )
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'created_at',
+        header: 'Fecha Registro',
+        cell: ({ getValue }) => new Date(getValue() as string).toLocaleDateString('es-ES'),
+        enableSorting: true,
+      },
+      {
+        id: 'acciones',
+        header: 'Acciones',
+        cell: ({ row }) => (
+          <button
+            className="btn-toggle"
+            onClick={() => toggleUserStatus(row.original.id, row.original.is_active)}
+          >
+            {row.original.is_active ? 'Desactivar' : 'Activar'}
+          </button>
+        ),
+        enableSorting: false,
+      },
+    ],
+    [roles]
+  )
+
+  // Configurar TanStack Table
+  const table = useReactTable({
+    data: users,
+    columns,
+    state: {
+      sorting,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  })
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>
@@ -184,53 +293,88 @@ const handleRoleChange = async (userId: string, newRoleId: string) => {
   return (
     <div>
       <style>{`
-        .table-wrapper {
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          border-radius: 12px;
+        .users-container {
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+
+        .search-filter-container {
+          margin-bottom: 20px;
+        }
+
+        .search-input {
+          width: 100%;
+          padding: 12px 16px 12px 42px;
+          font-size: 15px;
           border: 1px solid #E5E7EB;
+          border-radius: 8px;
+          background: white;
+          transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+          outline: none;
+          border-color: #E63946;
+          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+        }
+
+        .table-container {
+          background: white;
+          border: 1px solid #E5E7EB;
+          border-radius: 12px;
+          overflow: hidden;
           box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
-        .users-table {
+        .data-table {
           width: 100%;
           border-collapse: collapse;
-          background: white;
-          min-width: 800px;
         }
 
-        .users-table th {
-          text-align: left;
-          padding: 12px;
+        .data-table th {
           background: #F9FAFB;
+          padding: 14px 16px;
+          text-align: left;
           font-size: 12px;
           font-weight: 600;
           color: #6B7280;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
-          border-bottom: 1px solid #E5E7EB;
-          white-space: nowrap;
+          border-bottom: 2px solid #E5E7EB;
+          cursor: pointer;
+          user-select: none;
         }
 
-        .users-table th:last-child {
-          min-width: 120px;
+        .data-table th.sortable:hover {
+          background: #F3F4F6;
+        }
+
+        .data-table th:last-child {
           text-align: center;
         }
 
-        .users-table td {
-          padding: 16px 12px;
-          border-bottom: 1px solid #E5E7EB;
+        .data-table td {
+          padding: 12px 16px;
+          border-bottom: 1px solid #F3F4F6;
           color: #1F2937;
-          font-size: 14px;
         }
 
-        .users-table td:last-child {
+        .data-table td:last-child {
           text-align: center;
-          min-width: 120px;
         }
 
-        .users-table tr:hover {
+        .data-table tbody tr {
+          transition: background 0.2s;
+        }
+
+        .data-table tbody tr:hover {
           background: #F9FAFB;
+        }
+
+        .sort-indicator {
+          margin-left: 8px;
+          color: #9CA3AF;
+          font-size: 14px;
         }
 
         .badge {
@@ -373,15 +517,65 @@ const handleRoleChange = async (userId: string, newRoleId: string) => {
           cursor: not-allowed;
         }
 
+        .pagination {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          border-top: 1px solid #E5E7EB;
+          background: #FAFAFA;
+        }
+
+        .pagination-info {
+          font-size: 14px;
+          color: #6B7280;
+        }
+
+        .pagination-controls {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .pagination-controls button {
+          padding: 8px 12px;
+          border: 1px solid #E5E7EB;
+          background: white;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          color: #374151;
+          transition: all 0.2s;
+        }
+
+        .pagination-controls button:hover:not(:disabled) {
+          background: #F9FAFB;
+          border-color: #E63946;
+          color: #E63946;
+        }
+
+        .pagination-controls button:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+
+        .pagination-controls select {
+          padding: 8px 12px;
+          border: 1px solid #E5E7EB;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+          cursor: pointer;
+        }
+
+        .empty-state {
+          padding: 80px 20px;
+          text-align: center;
+          color: #9CA3AF;
+        }
+
         @media (max-width: 768px) {
-          .users-table {
-            min-width: 700px;
-          }
-          .users-table th,
-          .users-table td {
-            padding: 10px 8px;
-            font-size: 12px;
-          }
           .modal-content {
             padding: 24px;
           }
@@ -389,112 +583,163 @@ const handleRoleChange = async (userId: string, newRoleId: string) => {
             margin-bottom: 12px;
           }
         }
-
-        @media (max-width: 480px) {
-          .users-table {
-            min-width: 600px;
-          }
-          .users-table th,
-          .users-table td {
-            padding: 8px 6px;
-            font-size: 11px;
-          }
-          .badge {
-            padding: 3px 8px;
-            font-size: 10px;
-          }
-          .btn-toggle {
-            padding: 4px 8px;
-            font-size: 10px;
-          }
-        }
       `}</style>
 
-      {/* Header */}
-      <div style={{ marginBottom: '32px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
-          Usuarios del Sistema
-        </h3>
-        <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
-          {users.length} usuario{users.length !== 1 ? 's' : ''} registrado{users.length !== 1 ? 's' : ''}
-        </p>
-      </div>
+      <div className="users-container">
 
-      {/* Action Button */}
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          className="btn-primary"
-          onClick={() => setShowCreateModal(true)}
-        >
-          + Crear Usuario
-        </button>
-      </div>
-
-      {/* Tabla de usuarios */}
-      <div className="table-wrapper">
-        <table className="users-table">
-          <thead>
-            <tr>
-              <th>Usuario</th>
-              <th>ID</th>
-              <th>Rol</th>
-              <th>Estado</th>
-              <th>Fecha Registro</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td>
-                  <strong>{user.full_name || 'Sin nombre'}</strong>
-                </td>
-                <td>
-                  <span style={{ fontSize: '12px', color: '#6B7280', fontFamily: 'monospace' }}>
-                    {user.id.substring(0, 8)}...
-                  </span>
-                </td>
-                <td>
-                  <select
-                    className="select-role"
-                    value={user.role_id || ''}
-                    onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                  >
-                    <option value="">Sin rol</option>
-                    {roles.map((role) => (
-                      <option key={role.id} value={role.id}>
-                        {role.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <span className={`badge ${user.is_active ? 'badge-active' : 'badge-inactive'}`}>
-                    {user.is_active ? 'Activo' : 'Inactivo'}
-                  </span>
-                </td>
-                <td>
-                  {new Date(user.created_at).toLocaleDateString('es-ES')}
-                </td>
-                <td>
-                  <button
-                    className="btn-toggle"
-                    onClick={() => toggleUserStatus(user.id, user.is_active)}
-                  >
-                    {user.is_active ? 'Desactivar' : 'Activar'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {users.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>
-          No hay usuarios registrados. Crea el primero usando el botón "+ Crear Usuario".
+        {/* Header */}
+        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
+            Gestión de Usuarios
+          </h3>
+          <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+            {users.length} usuario{users.length !== 1 ? 's' : ''} registrado{users.length !== 1 ? 's' : ''}
+          </p>
         </div>
-      )}
+
+        {/* Action Button */}
+        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            className="btn-primary"
+            onClick={() => setShowCreateModal(true)}
+          >
+            + Crear Usuario
+          </button>
+        </div>
+
+        {users.length > 0 ? (
+          <>
+            {/* Search Filter */}
+            <div className="search-filter-container">
+              <div style={{ position: 'relative' }}>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#9CA3AF"
+                  strokeWidth="2"
+                  style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}
+                >
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Buscar por nombre, email, ID..."
+                  value={globalFilter}
+                  onChange={(e) => setGlobalFilter(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  {table.getHeaderGroups().map(headerGroup => (
+                    <tr key={headerGroup.id}>
+                      {headerGroup.headers.map(header => (
+                        <th
+                          key={header.id}
+                          onClick={header.column.getToggleSortingHandler()}
+                          className={header.column.getCanSort() ? 'sortable' : ''}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: header.id === 'acciones' ? 'center' : 'flex-start' }}>
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {header.column.getCanSort() && (
+                              <span className="sort-indicator">
+                                {{
+                                  asc: ' ↑',
+                                  desc: ' ↓',
+                                }[header.column.getIsSorted() as string] ?? ' ↕'}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody>
+                  {table.getRowModel().rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                        No se encontraron resultados
+                      </td>
+                    </tr>
+                  ) : (
+                    table.getRowModel().rows.map(row => (
+                      <tr key={row.id}>
+                        {row.getVisibleCells().map(cell => (
+                          <td key={cell.id}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              {/* Pagination */}
+              {table.getRowModel().rows.length > 0 && (
+                <div className="pagination">
+                  <div className="pagination-info">
+                    Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
+                    {Math.min(
+                      (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
+                      table.getFilteredRowModel().rows.length
+                    )}{' '}
+                    de {table.getFilteredRowModel().rows.length} registros
+                  </div>
+                  <div className="pagination-controls">
+                    <button onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}>
+                      {'<<'}
+                    </button>
+                    <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
+                      {'<'}
+                    </button>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>
+                      Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
+                    </span>
+                    <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+                      {'>'}
+                    </button>
+                    <button onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()}>
+                      {'>>'}
+                    </button>
+                    <select
+                      value={table.getState().pagination.pageSize}
+                      onChange={e => table.setPageSize(Number(e.target.value))}
+                    >
+                      {[10, 20, 30, 50].map(pageSize => (
+                        <option key={pageSize} value={pageSize}>
+                          {pageSize} por página
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ margin: '0 auto 16px' }}>
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            <h3 style={{ margin: '0 0 8px 0', color: '#6B7280', fontSize: '18px' }}>
+              No hay usuarios registrados
+            </h3>
+            <p style={{ margin: 0, fontSize: '14px' }}>
+              Crea el primero usando el botón "+ Crear Usuario".
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Modal para crear usuario */}
       {showCreateModal && (

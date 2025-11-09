@@ -23,6 +23,7 @@ import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
 import { ProgramacionPage } from './asignaciones/ProgramacionPage'
+import { ProtectedRoute } from '../components/ProtectedRoute'
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
@@ -541,29 +542,97 @@ export function HomePage() {
           <div className="content-area">
             <Routes>
               {/* Módulos principales */}
-              <Route path="/usuarios" element={<UsuariosPage />} />
-              <Route path="/vehiculos" element={<VehiculosPage />} />
-              <Route path="/conductores" element={<ConductoresPage />} />
-              <Route path="/siniestros" element={<SiniestrosPage />} />
-              <Route path="/incidencias" element={<IncidenciasPage />} />
-              <Route path="/informes" element={<InformesPage />} />
-              <Route path="/asignaciones" element={<AsignacionesPage />} />
-              <Route path="/programacion" element={<ProgramacionPage />} />
+              <Route path="/usuarios" element={
+                <ProtectedRoute menuName="usuarios" action="view">
+                  <UsuariosPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/vehiculos" element={
+                <ProtectedRoute menuName="vehiculos" action="view">
+                  <VehiculosPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/conductores" element={
+                <ProtectedRoute menuName="conductores" action="view">
+                  <ConductoresPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/siniestros" element={
+                <ProtectedRoute menuName="siniestros" action="view">
+                  <SiniestrosPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/incidencias" element={
+                <ProtectedRoute menuName="incidencias" action="view">
+                  <IncidenciasPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/informes" element={
+                <ProtectedRoute menuName="informes" action="view">
+                  <InformesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/asignaciones" element={
+                <ProtectedRoute menuName="asignaciones" action="view">
+                  <AsignacionesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/programacion" element={
+                <ProtectedRoute submenuName="programacion" action="view">
+                  <ProgramacionPage />
+                </ProtectedRoute>
+              } />
 
               {/* Integraciones */}
-              <Route path="/uss" element={<USSPage />} />
-              <Route path="/cabify" element={<CabifyPage />} />
+              <Route path="/uss" element={
+                <ProtectedRoute submenuName="uss" action="view">
+                  <USSPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/cabify" element={
+                <ProtectedRoute submenuName="cabify" action="view">
+                  <CabifyPage />
+                </ProtectedRoute>
+              } />
 
               {/* Reportes */}
-              <Route path="/reportes" element={<ReportesPage />} />
+              <Route path="/reportes" element={
+                <ProtectedRoute menuName="reportes" action="view">
+                  <ReportesPage />
+                </ProtectedRoute>
+              } />
 
               {/* Administración */}
-              <Route path="/gestion-usuarios" element={<GestionUsuariosPage />} />
-              <Route path="/roles" element={<RolesPage />} />
-              <Route path="/permisos" element={<PermisosPage />} />
-              <Route path="/menu-por-rol" element={<MenuPorRolPage />} />
-              <Route path="/menu-por-usuario" element={<MenuPorUsuarioPage />} />
-              <Route path="/gestor-menus" element={<GestorMenusPage />} />
+              <Route path="/gestion-usuarios" element={
+                <ProtectedRoute submenuName="gestion-usuarios" action="view">
+                  <GestionUsuariosPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/roles" element={
+                <ProtectedRoute submenuName="roles" action="view">
+                  <RolesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/permisos" element={
+                <ProtectedRoute submenuName="permisos" action="view">
+                  <PermisosPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/menu-por-rol" element={
+                <ProtectedRoute submenuName="menu-por-rol" action="view">
+                  <MenuPorRolPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/menu-por-usuario" element={
+                <ProtectedRoute submenuName="menu-por-usuario" action="view">
+                  <MenuPorUsuarioPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/gestor-menus" element={
+                <ProtectedRoute submenuName="gestor-menus" action="view">
+                  <GestorMenusPage />
+                </ProtectedRoute>
+              } />
 
               {/* Ruta por defecto */}
               <Route path="/" element={

@@ -1,5 +1,5 @@
 // src/components/admin/VehicleManagement.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -10,6 +10,16 @@ import type {
   CombustibleTipo,
   GpsTipo
 } from '../../types/database.types'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table'
 
 export function VehicleManagement() {
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
@@ -22,13 +32,22 @@ export function VehicleManagement() {
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
 
+  // TanStack Table states
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [sorting, setSorting] = useState<SortingState>([])
+
   // Catalog states
   const [vehiculosTipos, setVehiculosTipos] = useState<VehiculoTipo[]>([])
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
   const [combustiblesTipos, setCombustiblesTipos] = useState<CombustibleTipo[]>([])
   const [gpsTipos, setGpsTipos] = useState<GpsTipo[]>([])
 
-  const { canCreate, canUpdate, canDelete } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+
+  // Permisos específicos para el menú de vehículos
+  const canCreate = canCreateInMenu('vehiculos')
+  const canUpdate = canEditInMenu('vehiculos')
+  const canDelete = canDeleteInMenu('vehiculos')
 
   const [formData, setFormData] = useState({
     patente: '',
@@ -139,7 +158,7 @@ export function VehicleManagement() {
   }
 
   const handleCreate = async () => {
-    if (!canCreate('vehiculos')) {
+    if (!canCreate) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -217,7 +236,7 @@ export function VehicleManagement() {
   }
 
   const handleUpdate = async () => {
-    if (!canUpdate('vehiculos')) {
+    if (!canUpdate) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -287,7 +306,7 @@ export function VehicleManagement() {
   }
 
   const handleDelete = async () => {
-    if (!canDelete('vehiculos')) {
+    if (!canDelete) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -416,6 +435,117 @@ export function VehicleManagement() {
     }
   }
 
+  // Definir columnas para TanStack Table
+  const columns = useMemo<ColumnDef<VehiculoWithRelations>[]>(
+    () => [
+      {
+        accessorKey: 'patente',
+        header: 'Patente',
+        cell: ({ getValue }) => (
+          <span className="patente-badge">{getValue() as string}</span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'marca',
+        header: 'Marca',
+        cell: ({ getValue }) => <strong>{getValue() as string}</strong>,
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'modelo',
+        header: 'Modelo',
+        cell: ({ getValue }) => (getValue() as string) || 'N/A',
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'anio',
+        header: 'Año',
+        cell: ({ getValue }) => (getValue() as number) || 'N/A',
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'kilometraje_actual',
+        header: 'Kilometraje',
+        cell: ({ getValue }) => `${(getValue() as number).toLocaleString()} km`,
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'vehiculos_estados.descripcion',
+        header: 'Estado',
+        cell: ({ row }) => (
+          <span
+            className="badge"
+            style={{
+              backgroundColor: '#10B981',
+              color: 'white'
+            }}
+          >
+            {row.original.vehiculos_estados?.descripcion || 'N/A'}
+          </span>
+        ),
+        enableSorting: true,
+      },
+      {
+        id: 'acciones',
+        header: 'Acciones',
+        cell: ({ row }) => (
+          <div>
+            <button
+              className="btn-action btn-view"
+              onClick={() => {
+                setSelectedVehiculo(row.original)
+                setShowDetailsModal(true)
+              }}
+              title="Ver detalles"
+            >
+              👁️ Ver
+            </button>
+            <button
+              className="btn-action btn-edit"
+              onClick={() => openEditModal(row.original)}
+              disabled={!canUpdate}
+              title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehículo'}
+            >
+              ✏️ Editar
+            </button>
+            <button
+              className="btn-action btn-delete"
+              onClick={() => openDeleteModal(row.original)}
+              disabled={!canDelete}
+              title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehículo'}
+            >
+              🗑️ Eliminar
+            </button>
+          </div>
+        ),
+        enableSorting: false,
+      },
+    ],
+    [canUpdate, canDelete]
+  )
+
+  // Configurar TanStack Table
+  const table = useReactTable({
+    data: vehiculos,
+    columns,
+    state: {
+      sorting,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  })
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>
@@ -440,53 +570,88 @@ export function VehicleManagement() {
   return (
     <div>
       <style>{`
-        .table-wrapper {
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          border-radius: 12px;
+        .vehiculos-container {
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+
+        .search-filter-container {
+          margin-bottom: 20px;
+        }
+
+        .search-input {
+          width: 100%;
+          padding: 12px 16px 12px 42px;
+          font-size: 15px;
           border: 1px solid #E5E7EB;
+          border-radius: 8px;
+          background: white;
+          transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+          outline: none;
+          border-color: #E63946;
+          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+        }
+
+        .table-container {
+          background: white;
+          border: 1px solid #E5E7EB;
+          border-radius: 12px;
+          overflow: hidden;
           box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
-        .vehiculos-table {
+        .data-table {
           width: 100%;
           border-collapse: collapse;
-          background: white;
-          min-width: 900px;
         }
 
-        .vehiculos-table th {
-          text-align: left;
-          padding: 12px;
+        .data-table th {
           background: #F9FAFB;
+          padding: 14px 16px;
+          text-align: left;
           font-size: 12px;
           font-weight: 600;
           color: #6B7280;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
-          border-bottom: 1px solid #E5E7EB;
-          white-space: nowrap;
+          border-bottom: 2px solid #E5E7EB;
+          cursor: pointer;
+          user-select: none;
         }
 
-        .vehiculos-table th:last-child {
-          min-width: 150px;
+        .data-table th.sortable:hover {
+          background: #F3F4F6;
+        }
+
+        .data-table th:last-child {
           text-align: center;
         }
 
-        .vehiculos-table td {
-          padding: 16px 12px;
-          border-bottom: 1px solid #E5E7EB;
+        .data-table td {
+          padding: 12px 16px;
+          border-bottom: 1px solid #F3F4F6;
           color: #1F2937;
-          font-size: 14px;
         }
 
-        .vehiculos-table td:last-child {
+        .data-table td:last-child {
           text-align: center;
-          min-width: 150px;
         }
 
-        .vehiculos-table tr:hover {
+        .data-table tbody tr {
+          transition: background 0.2s;
+        }
+
+        .data-table tbody tr:hover {
           background: #F9FAFB;
+        }
+
+        .sort-indicator {
+          margin-left: 8px;
+          color: #9CA3AF;
+          font-size: 14px;
         }
 
         .patente-badge {
@@ -605,6 +770,58 @@ export function VehicleManagement() {
           background: #F9FAFB;
         }
 
+        .pagination {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          border-top: 1px solid #E5E7EB;
+          background: #FAFAFA;
+        }
+
+        .pagination-info {
+          font-size: 14px;
+          color: #6B7280;
+        }
+
+        .pagination-controls {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .pagination-controls button {
+          padding: 8px 12px;
+          border: 1px solid #E5E7EB;
+          background: white;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          color: #374151;
+          transition: all 0.2s;
+        }
+
+        .pagination-controls button:hover:not(:disabled) {
+          background: #F9FAFB;
+          border-color: #E63946;
+          color: #E63946;
+        }
+
+        .pagination-controls button:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+
+        .pagination-controls select {
+          padding: 8px 12px;
+          border: 1px solid #E5E7EB;
+          border-radius: 6px;
+          font-size: 14px;
+          background: white;
+          cursor: pointer;
+        }
+
         .modal-overlay {
           position: fixed;
           top: 0;
@@ -627,6 +844,15 @@ export function VehicleManagement() {
           max-height: 90vh;
           overflow-y: auto;
           box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .section-title {
+          font-weight: 700;
+          font-size: 16px;
+          color: #1F2937;
+          margin: 24px 0 16px 0;
+          padding-bottom: 8px;
+          border-bottom: 2px solid #E5E7EB;
         }
 
         .form-row {
@@ -693,118 +919,183 @@ export function VehicleManagement() {
           font-size: 14px;
         }
 
+        .empty-state {
+          padding: 80px 20px;
+          text-align: center;
+          color: #9CA3AF;
+        }
+
         @media (max-width: 768px) {
-          .vehiculos-table {
-            min-width: 800px;
-          }
           .form-row {
             grid-template-columns: 1fr;
           }
         }
       `}</style>
 
-      {/* Header */}
-      <div style={{ marginBottom: '32px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
-          Gestión de Vehículos
-        </h3>
-        <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
-          {vehiculos.length} vehículo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
-        </p>
-      </div>
-
-      {!canCreate('vehiculos') && (
-        <div className="no-permission-msg">
-          ℹ️ No tienes permisos para crear vehículos. Solo puedes ver la lista.
+      <div className="vehiculos-container">
+        {/* Header */}
+        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
+            Gestión de Vehículos
+          </h3>
+          <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+            {vehiculos.length} vehículo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
+          </p>
         </div>
-      )}
 
-      {/* Action Button */}
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          className="btn-primary"
-          onClick={() => setShowCreateModal(true)}
-          disabled={!canCreate('vehiculos')}
-          title={!canCreate('vehiculos') ? 'No tienes permisos para crear vehículos' : ''}
-        >
-          + Crear Vehículo
-        </button>
-      </div>
+        {!canCreate && (
+          <div className="no-permission-msg">
+            ℹ️ No tienes permisos para crear vehículos. Solo puedes ver la lista.
+          </div>
+        )}
 
-      {/* Tabla de vehículos */}
-      <div className="table-wrapper">
-        <table className="vehiculos-table">
-          <thead>
-            <tr>
-              <th>Patente</th>
-              <th>Marca</th>
-              <th>Modelo</th>
-              <th>Año</th>
-              <th>Kilometraje</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vehiculos.map((vehiculo) => (
-              <tr key={vehiculo.id}>
-                <td>
-                  <span className="patente-badge">{vehiculo.patente}</span>
-                </td>
-                <td>
-                  <strong>{vehiculo.marca}</strong>
-                </td>
-                <td>{vehiculo.modelo || 'N/A'}</td>
-                <td>{vehiculo.anio || 'N/A'}</td>
-                <td>{vehiculo.kilometraje_actual.toLocaleString()} km</td>
-                <td>
-                  <span className={`badge`} style={{
-                    backgroundColor: '#10B981',
-                    color: 'white'
-                  }}>
-                    {vehiculo.vehiculos_estados?.descripcion || 'N/A'}
-                  </span>
-                </td>
-                <td>
-                  <button
-                    className="btn-action btn-view"
-                    onClick={() => {
-                      setSelectedVehiculo(vehiculo)
-                      setShowDetailsModal(true)
-                    }}
-                    title="Ver detalles"
-                  >
-                    👁️ Ver
-                  </button>
-                  <button
-                    className="btn-action btn-edit"
-                    onClick={() => openEditModal(vehiculo)}
-                    disabled={!canUpdate('vehiculos')}
-                    title={!canUpdate('vehiculos') ? 'No tienes permisos para editar' : 'Editar vehículo'}
-                  >
-                    ✏️ Editar
-                  </button>
-                  <button
-                    className="btn-action btn-delete"
-                    onClick={() => openDeleteModal(vehiculo)}
-                    disabled={!canDelete('vehiculos')}
-                    title={!canDelete('vehiculos') ? 'No tienes permisos para eliminar' : 'Eliminar vehículo'}
-                  >
-                    🗑️ Eliminar
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {vehiculos.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>
-          No hay vehículos registrados. {canCreate('vehiculos') ? 'Crea el primero usando el botón "+ Crear Vehículo".' : ''}
+        {/* Action Button */}
+        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            className="btn-primary"
+            onClick={() => setShowCreateModal(true)}
+            disabled={!canCreate}
+            title={!canCreate ? 'No tienes permisos para crear vehículos' : ''}
+          >
+            + Crear Vehículo
+          </button>
         </div>
-      )}
 
+        {vehiculos.length > 0 ? (
+          <>
+            {/* Search Filter */}
+            <div className="search-filter-container">
+              <div style={{ position: 'relative' }}>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#9CA3AF"
+                  strokeWidth="2"
+                  style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}
+                >
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Buscar por patente, marca, modelo..."
+                  value={globalFilter}
+                  onChange={(e) => setGlobalFilter(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  {table.getHeaderGroups().map(headerGroup => (
+                    <tr key={headerGroup.id}>
+                      {headerGroup.headers.map(header => (
+                        <th
+                          key={header.id}
+                          onClick={header.column.getToggleSortingHandler()}
+                          className={header.column.getCanSort() ? 'sortable' : ''}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: header.id === 'acciones' ? 'center' : 'flex-start' }}>
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {header.column.getCanSort() && (
+                              <span className="sort-indicator">
+                                {{
+                                  asc: ' ↑',
+                                  desc: ' ↓',
+                                }[header.column.getIsSorted() as string] ?? ' ↕'}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody>
+                  {table.getRowModel().rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                        No se encontraron resultados
+                      </td>
+                    </tr>
+                  ) : (
+                    table.getRowModel().rows.map(row => (
+                      <tr key={row.id}>
+                        {row.getVisibleCells().map(cell => (
+                          <td key={cell.id}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              {/* Pagination */}
+              {table.getRowModel().rows.length > 0 && (
+                <div className="pagination">
+                  <div className="pagination-info">
+                    Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
+                    {Math.min(
+                      (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
+                      table.getFilteredRowModel().rows.length
+                    )}{' '}
+                    de {table.getFilteredRowModel().rows.length} registros
+                  </div>
+                  <div className="pagination-controls">
+                    <button onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}>
+                      {'<<'}
+                    </button>
+                    <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
+                      {'<'}
+                    </button>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>
+                      Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
+                    </span>
+                    <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+                      {'>'}
+                    </button>
+                    <button onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()}>
+                      {'>>'}
+                    </button>
+                    <select
+                      value={table.getState().pagination.pageSize}
+                      onChange={e => table.setPageSize(Number(e.target.value))}
+                    >
+                      {[10, 20, 30, 50].map(pageSize => (
+                        <option key={pageSize} value={pageSize}>
+                          {pageSize} por página
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ margin: '0 auto 16px' }}>
+              <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/>
+              <polygon points="12 15 17 21 7 21 12 15"/>
+            </svg>
+            <h3 style={{ margin: '0 0 8px 0', color: '#6B7280', fontSize: '18px' }}>
+              No hay vehículos registrados
+            </h3>
+            <p style={{ margin: 0, fontSize: '14px' }}>
+              {canCreate ? 'Crea el primero usando el botón "+ Crear Vehículo".' : ''}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* MODALS - Se mantienen exactamente iguales */}
       {/* Modal Crear */}
       {showCreateModal && (
         <div className="modal-overlay" onClick={() => !saving && setShowCreateModal(false)}>
@@ -1124,7 +1415,7 @@ export function VehicleManagement() {
         </div>
       )}
 
-      {/* Modal Editar */}
+      {/* Modal Editar - Mismo contenido que crear, solo cambia el título y la acción */}
       {showEditModal && selectedVehiculo && (
         <div className="modal-overlay" onClick={() => !saving && setShowEditModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>
@@ -1132,6 +1423,7 @@ export function VehicleManagement() {
               Editar Vehículo
             </h2>
 
+            {/* Mismo formulario que en crear, solo cambia el botón final */}
             <div className="section-title">Información Básica</div>
 
             <div className="form-group">
@@ -1467,8 +1759,8 @@ export function VehicleManagement() {
                 <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
                   ESTADO
                 </label>
-                <span className={`badge ${getEstadoBadgeClass(selectedVehiculo.estado)}`}>
-                  {getEstadoLabel(selectedVehiculo.estado)}
+                <span className="badge" style={{ backgroundColor: '#10B981', color: 'white' }}>
+                  {selectedVehiculo.vehiculos_estados?.descripcion || 'N/A'}
                 </span>
               </div>
 
@@ -1504,7 +1796,7 @@ export function VehicleManagement() {
                   KILOMETRAJE
                 </label>
                 <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {selectedVehiculo.kilometraje.toLocaleString()} km
+                  {selectedVehiculo.kilometraje_actual.toLocaleString()} km
                 </div>
               </div>
 
