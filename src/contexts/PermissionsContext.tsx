@@ -173,6 +173,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           name: menu.name,
           label: menu.label,
           route: menu.route,
+          order_index: menu.order_index || 0,
           permissions: {
             can_view: true,
             can_create: true,
@@ -187,6 +188,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           name: submenu.name,
           label: submenu.label,
           route: submenu.route,
+          order_index: submenu.order_index || 0,
           menu_id: submenu.menu_id,
           permissions: {
             can_view: true,

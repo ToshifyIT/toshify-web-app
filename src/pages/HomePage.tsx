@@ -25,7 +25,6 @@ import { ProtectedRoute } from '../components/ProtectedRoute'
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
-  const { isAdmin } = usePermissions()
   const navigate = useNavigate()
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
