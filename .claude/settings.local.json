@@ -19,7 +19,9 @@
       "Bash(cp:*)",
       "Bash(nul)",
       "Bash(npx tsc:*)",
-      "Bash(del \"C:\\Users\\dev\\Documents\\toshify\\toshify-web-app\\src\\modules\\asignaciones\\ProgramacionModule.tsx\")"
+      "Bash(del \"C:\\Users\\dev\\Documents\\toshify\\toshify-web-app\\src\\modules\\asignaciones\\ProgramacionModule.tsx\")",
+      "Bash(Select-String \"error TS\")",
+      "Bash(Select-Object -First 15)"
     ],
     "deny": [],
     "ask": []

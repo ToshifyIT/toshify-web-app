@@ -198,10 +198,10 @@ export function AsignacionesModule() {
           }
 
           if (estadoDisponible) {
-            const { error: updateError } = await supabase
+            const { error: updateError } = (await (supabase as any)
               .from('vehiculos')
-              .update({ estado_id: estadoDisponible.id } as any)
-              .eq('id', asignacion.vehiculo_id)
+              .update({ estado_id: (estadoDisponible as any).id })
+              .eq('id', asignacion.vehiculo_id))
 
             if (updateError) {
               console.error('Error al actualizar estado del vehículo:', updateError)
@@ -231,10 +231,10 @@ export function AsignacionesModule() {
     }
 
     try {
-      const { error } = await supabase
+      const { error } = (await (supabase as any)
         .from('asignaciones')
-        .update({ estado: newStatus } as any)
-        .eq('id', id)
+        .update({ estado: newStatus })
+        .eq('id', id))
 
       if (error) throw error
 
@@ -253,10 +253,10 @@ export function AsignacionesModule() {
           }
 
           if (estadoDisponible) {
-            const { error: updateError } = await supabase
+            const { error: updateError } = (await (supabase as any)
               .from('vehiculos')
-              .update({ estado_id: estadoDisponible.id } as any)
-              .eq('id', asignacion.vehiculo_id)
+              .update({ estado_id: (estadoDisponible as any).id })
+              .eq('id', asignacion.vehiculo_id))
 
             if (updateError) {
               console.error('Error al actualizar estado del vehículo:', updateError)
@@ -298,14 +298,14 @@ export function AsignacionesModule() {
       const fechaProgramada = selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toISOString().split('T')[0] : null
 
       // 1. Marcar como confirmados los conductores seleccionados
-      const { error: updateConductoresError } = await supabase
+      const { error: updateConductoresError } = (await (supabase as any)
         .from('asignaciones_conductores')
         .update({
           confirmado: true,
           fecha_confirmacion: ahora,
           fecha_inicio: ahora
-        } as any)
-        .in('id', conductoresToConfirm)
+        })
+        .in('id', conductoresToConfirm))
 
       if (updateConductoresError) throw updateConductoresError
 
@@ -317,23 +317,23 @@ export function AsignacionesModule() {
 
       if (conductoresError) throw conductoresError
 
-      const todosConfirmados = allConductores?.every(c => c.confirmado === true) || false
+      const todosConfirmados = (allConductores as any)?.every((c: any) => c.confirmado === true) || false
 
       // 3. Si TODOS confirmaron, cambiar asignación a ACTIVA
       if (todosConfirmados) {
-        const { error: updateAsignacionError } = await supabase
+        const { error: updateAsignacionError } = (await (supabase as any)
           .from('asignaciones')
           .update({
             estado: 'activa',
             fecha_inicio: ahora,
             notas: confirmComentarios ? `${selectedAsignacion.notas || ''}\n\n[CONFIRMACIÓN COMPLETA] ${confirmComentarios}` : selectedAsignacion.notas
-          } as any)
-          .eq('id', selectedAsignacion.id)
+          })
+          .eq('id', selectedAsignacion.id))
 
         if (updateAsignacionError) throw updateAsignacionError
 
         // 4. Insertar registros en vehiculos_turnos_ocupados para todos los conductores
-        const turnosOcupadosData = allConductores?.map((ac: any) => ({
+        const turnosOcupadosData = (allConductores as any)?.map((ac: any) => ({
           vehiculo_id: selectedAsignacion.vehiculo_id,
           fecha: fechaProgramada,
           horario: ac.horario,
@@ -344,7 +344,7 @@ export function AsignacionesModule() {
         if (turnosOcupadosData.length > 0) {
           const { error: turnosError } = await supabase
             .from('vehiculos_turnos_ocupados')
-            .insert(turnosOcupadosData as any)
+            .insert(turnosOcupadosData)
 
           if (turnosError) throw turnosError
         }
@@ -354,7 +354,7 @@ export function AsignacionesModule() {
           .from('vehiculos_turnos_ocupados')
           .select('horario')
           .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-          .eq('fecha', fechaProgramada)
+          .eq('fecha', fechaProgramada as string)
           .eq('estado', 'activo')
 
         if (turnosActivosError) throw turnosActivosError
@@ -379,10 +379,10 @@ export function AsignacionesModule() {
           if (estadoError) throw estadoError
 
           if (estadoEnUso) {
-            const { error: vehiculoError } = await supabase
+            const { error: vehiculoError } = (await (supabase as any)
               .from('vehiculos')
-              .update({ estado_id: estadoEnUso.id } as any)
-              .eq('id', selectedAsignacion.vehiculo_id)
+              .update({ estado_id: (estadoEnUso as any).id })
+              .eq('id', selectedAsignacion.vehiculo_id))
 
             if (vehiculoError) throw vehiculoError
           }
@@ -393,13 +393,13 @@ export function AsignacionesModule() {
         }
       } else {
         // No todos han confirmado, solo actualizar nota
-        const pendientes = allConductores?.filter(c => !c.confirmado).length || 0
-        const { error: updateNotaError } = await supabase
+        const pendientes = (allConductores as any)?.filter((c: any) => !c.confirmado).length || 0
+        const { error: updateNotaError } = (await (supabase as any)
           .from('asignaciones')
           .update({
             notas: confirmComentarios ? `${selectedAsignacion.notas || ''}\n\n[CONFIRMACIÓN PARCIAL] ${confirmComentarios}` : selectedAsignacion.notas
-          } as any)
-          .eq('id', selectedAsignacion.id)
+          })
+          .eq('id', selectedAsignacion.id))
 
         if (updateNotaError) throw updateNotaError
 
@@ -426,24 +426,24 @@ export function AsignacionesModule() {
 
     try {
       // 1. Marcar todos los conductores como no confirmados
-      const { error: conductoresError } = await supabase
+      const { error: conductoresError } = (await (supabase as any)
         .from('asignaciones_conductores')
         .update({
           confirmado: false,
           fecha_confirmacion: null
-        } as any)
-        .eq('asignacion_id', selectedAsignacion.id)
+        })
+        .eq('asignacion_id', selectedAsignacion.id))
 
       if (conductoresError) throw conductoresError
 
       // 2. Actualizar estado de la asignación
-      const { error } = await supabase
+      const { error } = (await (supabase as any)
         .from('asignaciones')
         .update({
           estado: 'cancelada',
           notas: `${selectedAsignacion.notas || ''}\n\n[CANCELADA] Motivo: ${cancelMotivo}`
-        } as any)
-        .eq('id', selectedAsignacion.id)
+        })
+        .eq('id', selectedAsignacion.id))
 
       if (error) throw error
 
@@ -455,9 +455,9 @@ export function AsignacionesModule() {
         .single()
 
       if (!estadoError && estadoDisponible) {
-        await supabase
+        await (supabase as any)
           .from('vehiculos')
-          .update({ estado_id: estadoDisponible.id } as any)
+          .update({ estado_id: (estadoDisponible as any).id })
           .eq('id', selectedAsignacion.vehiculo_id)
       }
 
@@ -475,13 +475,13 @@ export function AsignacionesModule() {
   // Desconfirmar conductor individual (permitir edición)
   const handleUnconfirmConductor = async (conductorAsignacionId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = (await (supabase as any)
         .from('asignaciones_conductores')
         .update({
           confirmado: false,
           fecha_confirmacion: null
-        } as any)
-        .eq('id', conductorAsignacionId)
+        })
+        .eq('id', conductorAsignacionId))
 
       if (error) throw error
 
