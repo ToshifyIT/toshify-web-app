@@ -442,7 +442,6 @@ export function AdminPage() {
               disabled={!canViewMenu('usuarios')}
               title={!canViewMenu('usuarios') ? 'No tienes permisos' : 'Gestión de Usuarios'}
             >
-              <span className="nav-icon">👥</span>
               <span className="nav-label">Usuarios</span>
             </button>
 
@@ -452,7 +451,6 @@ export function AdminPage() {
               disabled={!canViewMenu('vehiculos')}
               title={!canViewMenu('vehiculos') ? 'No tienes permisos' : 'Flota de Vehículos'}
             >
-              <span className="nav-icon">🚗</span>
               <span className="nav-label">Vehículos</span>
             </button>
 
@@ -462,7 +460,6 @@ export function AdminPage() {
               disabled={!canViewMenu('conductores')}
               title={!canViewMenu('conductores') ? 'No tienes permisos' : 'Conductores'}
             >
-              <span className="nav-icon">👨‍✈️</span>
               <span className="nav-label">Conductores</span>
             </button>
 
@@ -472,7 +469,6 @@ export function AdminPage() {
               disabled={!canViewMenu('siniestros')}
               title={!canViewMenu('siniestros') ? 'No tienes permisos' : 'Siniestros y Seguros'}
             >
-              <span className="nav-icon">⚠️</span>
               <span className="nav-label">Siniestros</span>
             </button>
 
@@ -482,7 +478,6 @@ export function AdminPage() {
               disabled={!canViewMenu('incidencias')}
               title={!canViewMenu('incidencias') ? 'No tienes permisos' : 'Incidencias'}
             >
-              <span className="nav-icon">📋</span>
               <span className="nav-label">Incidencias</span>
             </button>
 
@@ -492,7 +487,6 @@ export function AdminPage() {
               disabled={!canViewMenu('informes')}
               title={!canViewMenu('informes') ? 'No tienes permisos' : 'Informes Operativos'}
             >
-              <span className="nav-icon">📊</span>
               <span className="nav-label">Informes</span>
             </button>
 
@@ -502,7 +496,6 @@ export function AdminPage() {
               disabled={!canViewMenu('asignaciones')}
               title={!canViewMenu('asignaciones') ? 'No tienes permisos' : 'Asignaciones'}
             >
-              <span className="nav-icon">📅</span>
               <span className="nav-label">Asignaciones</span>
             </button>
 
@@ -515,7 +508,6 @@ export function AdminPage() {
                 onClick={() => setIntegracionesMenuOpen(!integracionesMenuOpen)}
               >
                 <div className="nav-section-title">
-                  <span className="nav-icon">🔗</span>
                   Integraciones
                 </div>
                 <span className={`nav-section-arrow ${integracionesMenuOpen ? 'open' : ''}`}>▸</span>
@@ -542,7 +534,6 @@ export function AdminPage() {
               onClick={() => setActiveTab('reportes')}
               title="Diseño de Reportes"
             >
-              <span className="nav-icon">📄</span>
               <span className="nav-label">Reportes</span>
             </button>
 
@@ -555,7 +546,6 @@ export function AdminPage() {
                 onClick={() => setAdministracionMenuOpen(!administracionMenuOpen)}
               >
                 <div className="nav-section-title">
-                  <span className="nav-icon">⚙️</span>
                   Administración
                 </div>
                 <span className={`nav-section-arrow ${administracionMenuOpen ? 'open' : ''}`}>▸</span>

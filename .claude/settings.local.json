@@ -18,7 +18,8 @@
       "Bash(npx prettier:*)",
       "Bash(cp:*)",
       "Bash(nul)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(del \"C:\\Users\\dev\\Documents\\toshify\\toshify-web-app\\src\\modules\\asignaciones\\ProgramacionModule.tsx\")"
     ],
     "deny": [],
     "ask": []

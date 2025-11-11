@@ -22,7 +22,6 @@ import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
 import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
-import { ProgramacionPage } from './asignaciones/ProgramacionPage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 
 export function HomePage() {
@@ -474,7 +473,6 @@ export function HomePage() {
                         onClick={() => toggleMenu(menu.menu_name)}
                       >
                         <div className="nav-section-title">
-                          <span className="nav-icon">{menu.menu_icon || '📁'}</span>
                           {menu.menu_label}
                         </div>
                         <span className={`nav-section-arrow ${isMenuOpen ? 'open' : ''}`}>▸</span>
@@ -502,7 +500,6 @@ export function HomePage() {
                       onClick={() => navigate(menu.menu_route)}
                       title={menu.menu_label}
                     >
-                      <span className="nav-icon">{menu.menu_icon || '📄'}</span>
                       <span className="nav-label">{menu.menu_label}</span>
                     </button>
                   )
@@ -575,11 +572,6 @@ export function HomePage() {
               <Route path="/asignaciones" element={
                 <ProtectedRoute menuName="asignaciones" action="view">
                   <AsignacionesPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/programacion" element={
-                <ProtectedRoute submenuName="programacion" action="view">
-                  <ProgramacionPage />
                 </ProtectedRoute>
               } />
 
