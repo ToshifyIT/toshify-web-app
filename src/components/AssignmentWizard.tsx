@@ -52,7 +52,6 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
   const [loading, setLoading] = useState(false)
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
 
   const [formData, setFormData] = useState<AssignmentData>({
     modalidad: '',
@@ -89,9 +88,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         if (error) throw error
 
         // Filtrar solo vehículos con estado DISPONIBLE
-        const vehiculosDisponibles = (data || []).filter(v =>
+        const vehiculosDisponibles = (data || []).filter((v: any) =>
           v.vehiculos_estados?.codigo === 'DISPONIBLE'
-        )
+        ) as Vehicle[]
 
         console.log('📋 Vehículos cargados:', data)
         console.log('✅ Vehículos disponibles:', vehiculosDisponibles)
@@ -128,9 +127,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         if (error) throw error
 
         // Filtrar conductores activos (cualquier variante del código)
-        const conductoresActivos = (data || []).filter(c =>
+        const conductoresActivos = (data || []).filter((c: any) =>
           c.conductores_estados?.codigo?.toLowerCase().includes('activo')
-        )
+        ) as Conductor[]
 
         console.log('👥 Conductores cargados:', data)
         console.log('✅ Conductores activos:', conductoresActivos)
@@ -168,7 +167,6 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   }
 
   const handleSelectVehicle = (vehicle: Vehicle) => {
-    setSelectedVehicle(vehicle)
     setFormData({ ...formData, vehiculo_id: vehicle.id })
   }
 
@@ -259,7 +257,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           notas: formData.notas,
           numero_asignacion: numeroAsignacion,
           created_by: user?.id
-        })
+        } as any)
         .select()
         .single()
 
@@ -267,7 +265,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
       // 4. Crear registros en asignaciones_conductores para cada conductor
       const conductoresData = conductoresIds.map((conductorId) => ({
-        asignacion_id: asignacion.id,
+        asignacion_id: asignacion?.id,
         conductor_id: conductorId,
         fecha_inicio: new Date(formData.fecha_inicio).toISOString(),
         fecha_fin: formData.fecha_fin ? new Date(formData.fecha_fin).toISOString() : null,
