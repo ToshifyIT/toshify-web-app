@@ -13,6 +13,7 @@ interface MenuPermission {
   menu_label: string
   menu_route: string
   menu_icon?: string
+  order_index: number
   can_view: boolean
   can_create: boolean
   can_edit: boolean
@@ -27,6 +28,7 @@ interface SubmenuPermission {
   submenu_label: string
   submenu_route: string
   menu_id: string
+  order_index: number
   can_view: boolean
   can_create: boolean
   can_edit: boolean
@@ -59,6 +61,7 @@ export function useEffectivePermissions() {
     menu_label: menu.label,
     menu_route: menu.route,
     menu_icon: undefined,
+    order_index: menu.order_index,
     can_view: menu.permissions.can_view,
     can_create: menu.permissions.can_create,
     can_edit: menu.permissions.can_edit,
@@ -73,6 +76,7 @@ export function useEffectivePermissions() {
     submenu_label: submenu.label,
     submenu_route: submenu.route,
     menu_id: (submenu as any).parent_menu_id || submenu.menu_id,
+    order_index: submenu.order_index,
     can_view: submenu.permissions.can_view,
     can_create: submenu.permissions.can_create,
     can_edit: submenu.permissions.can_edit,
@@ -108,6 +112,7 @@ export function useEffectivePermissions() {
       menu_label: menu.label,
       menu_route: menu.route,
       menu_icon: undefined,
+      order_index: menu.order_index,
       can_view: menu.permissions.can_view,
       can_create: menu.permissions.can_create,
       can_edit: menu.permissions.can_edit,
@@ -126,6 +131,7 @@ export function useEffectivePermissions() {
         submenu_label: submenu.label,
         submenu_route: submenu.route,
         menu_id: (submenu as any).parent_menu_id || submenu.menu_id,
+        order_index: submenu.order_index,
         can_view: submenu.permissions.can_view,
         can_create: submenu.permissions.can_create,
         can_edit: submenu.permissions.can_edit,

@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect } from 'react'
-import { Eye, Trash2, Plus, Search, Filter, Calendar, User as UserIcon } from 'lucide-react'
+import { Eye, Trash2, Plus, Search, Filter, CheckCircle, XCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
@@ -11,6 +11,7 @@ interface Asignacion {
   numero_asignacion: string
   vehiculo_id: string
   conductor_id: string
+  fecha_programada?: string | null
   fecha_inicio: string
   fecha_fin: string | null
   modalidad: string
@@ -18,6 +19,7 @@ interface Asignacion {
   estado: string
   notas: string | null
   created_at: string
+  created_by?: string | null
   vehiculos?: {
     patente: string
     marca: string
@@ -32,6 +34,9 @@ interface Asignacion {
     id: string
     conductor_id: string
     estado: string
+    horario: string
+    confirmado: boolean
+    fecha_confirmacion?: string | null
     conductores: {
       nombres: string
       apellidos: string
@@ -53,6 +58,17 @@ export function AsignacionesModule() {
   const [showWizard, setShowWizard] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [selectedAsignacion, setSelectedAsignacion] = useState<Asignacion | null>(null)
+  const [confirmComentarios, setConfirmComentarios] = useState('')
+  const [cancelMotivo, setCancelMotivo] = useState('')
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [showViewModal, setShowViewModal] = useState(false)
+  const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
+  const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editAsignacion, setEditAsignacion] = useState<Asignacion | null>(null)
 
   // Cargar asignaciones desde Supabase
   const loadAsignaciones = async () => {
@@ -83,13 +99,16 @@ export function AsignacionesModule() {
       // Cargar conductores asignados por separado
       if (data && data.length > 0) {
         const asignacionesConConductores = await Promise.all(
-          data.map(async (asignacion) => {
+          data.map(async (asignacion: any) => {
             const { data: conductoresAsignados } = await supabase
               .from('asignaciones_conductores')
               .select(`
                 id,
                 conductor_id,
                 estado,
+                horario,
+                confirmado,
+                fecha_confirmacion,
                 conductores (
                   nombres,
                   apellidos,
@@ -118,6 +137,12 @@ export function AsignacionesModule() {
 
   useEffect(() => {
     loadAsignaciones()
+    // Obtener usuario actual
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setCurrentUserId(user?.id || null)
+    }
+    getCurrentUser()
   }, [])
 
   const handleDelete = async (id: string) => {
@@ -177,7 +202,7 @@ export function AsignacionesModule() {
           if (estadoDisponible) {
             const { error: updateError } = await supabase
               .from('vehiculos')
-              .update({ estado_id: estadoDisponible.id })
+              .update({ estado_id: estadoDisponible.id } as any)
               .eq('id', asignacion.vehiculo_id)
 
             if (updateError) {
@@ -210,7 +235,7 @@ export function AsignacionesModule() {
     try {
       const { error } = await supabase
         .from('asignaciones')
-        .update({ estado: newStatus })
+        .update({ estado: newStatus } as any)
         .eq('id', id)
 
       if (error) throw error
@@ -232,7 +257,7 @@ export function AsignacionesModule() {
           if (estadoDisponible) {
             const { error: updateError } = await supabase
               .from('vehiculos')
-              .update({ estado_id: estadoDisponible.id })
+              .update({ estado_id: estadoDisponible.id } as any)
               .eq('id', asignacion.vehiculo_id)
 
             if (updateError) {
@@ -263,8 +288,217 @@ export function AsignacionesModule() {
     return matchesSearch && matchesStatus
   })
 
+  // Confirmar programación (PROGRAMADO → ACTIVA solo cuando TODOS confirman)
+  const handleConfirmProgramacion = async () => {
+    if (!selectedAsignacion || conductoresToConfirm.length === 0) {
+      Swal.fire('Error', 'Debes seleccionar al menos un conductor para confirmar', 'warning')
+      return
+    }
+
+    try {
+      const ahora = new Date().toISOString()
+      const fechaProgramada = selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toISOString().split('T')[0] : null
+
+      // 1. Marcar como confirmados los conductores seleccionados
+      const { error: updateConductoresError } = await supabase
+        .from('asignaciones_conductores')
+        .update({
+          confirmado: true,
+          fecha_confirmacion: ahora,
+          fecha_inicio: ahora
+        } as any)
+        .in('id', conductoresToConfirm)
+
+      if (updateConductoresError) throw updateConductoresError
+
+      // 2. Verificar si TODOS los conductores han confirmado
+      const { data: allConductores, error: conductoresError } = await supabase
+        .from('asignaciones_conductores')
+        .select('id, confirmado, horario')
+        .eq('asignacion_id', selectedAsignacion.id)
+
+      if (conductoresError) throw conductoresError
+
+      const todosConfirmados = allConductores?.every(c => c.confirmado === true) || false
+
+      // 3. Si TODOS confirmaron, cambiar asignación a ACTIVA
+      if (todosConfirmados) {
+        const { error: updateAsignacionError } = await supabase
+          .from('asignaciones')
+          .update({
+            estado: 'activa',
+            fecha_inicio: ahora,
+            notas: confirmComentarios ? `${selectedAsignacion.notas || ''}\n\n[CONFIRMACIÓN COMPLETA] ${confirmComentarios}` : selectedAsignacion.notas
+          } as any)
+          .eq('id', selectedAsignacion.id)
+
+        if (updateAsignacionError) throw updateAsignacionError
+
+        // 4. Insertar registros en vehiculos_turnos_ocupados para todos los conductores
+        const turnosOcupadosData = allConductores?.map((ac: any) => ({
+          vehiculo_id: selectedAsignacion.vehiculo_id,
+          fecha: fechaProgramada,
+          horario: ac.horario,
+          asignacion_conductor_id: ac.id,
+          estado: 'activo'
+        })) || []
+
+        if (turnosOcupadosData.length > 0) {
+          const { error: turnosError } = await supabase
+            .from('vehiculos_turnos_ocupados')
+            .insert(turnosOcupadosData as any)
+
+          if (turnosError) throw turnosError
+        }
+
+        // 5. Determinar si el vehículo debe cambiar a EN_USO
+        const { data: turnosActivos, error: turnosActivosError } = await supabase
+          .from('vehiculos_turnos_ocupados')
+          .select('horario')
+          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+          .eq('fecha', fechaProgramada)
+          .eq('estado', 'activo')
+
+        if (turnosActivosError) throw turnosActivosError
+
+        let debeEstarEnUso = false
+        const tieneTodoDia = turnosActivos?.some((t: any) => t.horario === 'todo_dia')
+        const tieneDiurno = turnosActivos?.some((t: any) => t.horario === 'diurno')
+        const tieneNocturno = turnosActivos?.some((t: any) => t.horario === 'nocturno')
+
+        if (tieneTodoDia || (tieneDiurno && tieneNocturno)) {
+          debeEstarEnUso = true
+        }
+
+        // 6. Actualizar estado del vehículo
+        if (debeEstarEnUso) {
+          const { data: estadoEnUso, error: estadoError } = await supabase
+            .from('vehiculos_estados')
+            .select('id')
+            .eq('codigo', 'EN_USO')
+            .single()
+
+          if (estadoError) throw estadoError
+
+          if (estadoEnUso) {
+            const { error: vehiculoError } = await supabase
+              .from('vehiculos')
+              .update({ estado_id: estadoEnUso.id } as any)
+              .eq('id', selectedAsignacion.vehiculo_id)
+
+            if (vehiculoError) throw vehiculoError
+          }
+
+          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA y el vehículo EN USO.', 'success')
+        } else {
+          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA. El vehículo permanece DISPONIBLE para otros turnos.', 'success')
+        }
+      } else {
+        // No todos han confirmado, solo actualizar nota
+        const pendientes = allConductores?.filter(c => !c.confirmado).length || 0
+        const { error: updateNotaError } = await supabase
+          .from('asignaciones')
+          .update({
+            notas: confirmComentarios ? `${selectedAsignacion.notas || ''}\n\n[CONFIRMACIÓN PARCIAL] ${confirmComentarios}` : selectedAsignacion.notas
+          } as any)
+          .eq('id', selectedAsignacion.id)
+
+        if (updateNotaError) throw updateNotaError
+
+        Swal.fire('Confirmación Parcial', `${conductoresToConfirm.length} conductor(es) confirmado(s). Faltan ${pendientes} por confirmar. La asignación permanece en PROGRAMADO.`, 'info')
+      }
+
+      setShowConfirmModal(false)
+      setConfirmComentarios('')
+      setConductoresToConfirm([])
+      setSelectedAsignacion(null)
+      loadAsignaciones()
+    } catch (error: any) {
+      console.error('Error confirmando programación:', error)
+      Swal.fire('Error', error.message || 'Error al confirmar la programación', 'error')
+    }
+  }
+
+  // Cancelar programación completa
+  const handleCancelProgramacion = async () => {
+    if (!selectedAsignacion || !cancelMotivo.trim()) {
+      Swal.fire('Error', 'Debes ingresar un motivo de cancelación', 'warning')
+      return
+    }
+
+    try {
+      // 1. Marcar todos los conductores como no confirmados
+      const { error: conductoresError } = await supabase
+        .from('asignaciones_conductores')
+        .update({
+          confirmado: false,
+          fecha_confirmacion: null
+        } as any)
+        .eq('asignacion_id', selectedAsignacion.id)
+
+      if (conductoresError) throw conductoresError
+
+      // 2. Actualizar estado de la asignación
+      const { error } = await supabase
+        .from('asignaciones')
+        .update({
+          estado: 'cancelada',
+          notas: `${selectedAsignacion.notas || ''}\n\n[CANCELADA] Motivo: ${cancelMotivo}`
+        } as any)
+        .eq('id', selectedAsignacion.id)
+
+      if (error) throw error
+
+      // 3. Liberar el vehículo
+      const { data: estadoDisponible, error: estadoError } = await supabase
+        .from('vehiculos_estados')
+        .select('id')
+        .eq('codigo', 'DISPONIBLE')
+        .single()
+
+      if (!estadoError && estadoDisponible) {
+        await supabase
+          .from('vehiculos')
+          .update({ estado_id: estadoDisponible.id } as any)
+          .eq('id', selectedAsignacion.vehiculo_id)
+      }
+
+      Swal.fire('Cancelada', 'La programación ha sido cancelada y el vehículo liberado', 'success')
+      setShowCancelModal(false)
+      setCancelMotivo('')
+      setSelectedAsignacion(null)
+      loadAsignaciones()
+    } catch (error: any) {
+      console.error('Error cancelando programación:', error)
+      Swal.fire('Error', error.message || 'Error al cancelar la programación', 'error')
+    }
+  }
+
+  // Desconfirmar conductor individual (permitir edición)
+  const handleUnconfirmConductor = async (conductorAsignacionId: string) => {
+    try {
+      const { error } = await supabase
+        .from('asignaciones_conductores')
+        .update({
+          confirmado: false,
+          fecha_confirmacion: null
+        } as any)
+        .eq('id', conductorAsignacionId)
+
+      if (error) throw error
+
+      Swal.fire('Actualizado', 'El conductor ha sido desconfirmado. Puedes asignar un reemplazo.', 'success')
+      loadAsignaciones()
+    } catch (error: any) {
+      console.error('Error desconfirmando conductor:', error)
+      Swal.fire('Error', error.message || 'Error al desconfirmar conductor', 'error')
+    }
+  }
+
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
+      case 'programado':
+        return 'badge-programado'
       case 'activa':
         return 'badge-active'
       case 'finalizada':
@@ -276,18 +510,6 @@ export function AsignacionesModule() {
     }
   }
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'activa':
-        return 'Activa'
-      case 'finalizada':
-        return 'Finalizada'
-      case 'cancelada':
-        return 'Cancelada'
-      default:
-        return status
-    }
-  }
 
   const getModalityBadgeClass = (modality: string) => {
     switch (modality) {
@@ -456,6 +678,11 @@ export function AsignacionesModule() {
           border-radius: 12px;
           font-size: 12px;
           font-weight: 600;
+        }
+
+        .badge-programado {
+          background: #FEF3C7;
+          color: #92400E;
         }
 
         .badge-active {
@@ -691,7 +918,6 @@ export function AsignacionesModule() {
                   <th>Número</th>
                   <th>Vehículo</th>
                   <th>Modalidad</th>
-                  <th>Horario</th>
                   <th>Conductores</th>
                   <th>Fecha Inicio</th>
                   <th>Fecha Fin</th>
@@ -710,11 +936,6 @@ export function AsignacionesModule() {
                       <br />
                       <span style={{ fontSize: '12px', color: '#6B7280' }}>
                         {asignacion.vehiculos?.marca} {asignacion.vehiculos?.modelo}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${getModalityBadgeClass(asignacion.modalidad)}`}>
-                        {getModalityLabel(asignacion.modalidad)}
                       </span>
                     </td>
                     <td>
@@ -759,23 +980,61 @@ export function AsignacionesModule() {
                         disabled={!canEdit}
                         style={{ border: 'none', cursor: canEdit ? 'pointer' : 'not-allowed' }}
                       >
+                        <option value="programado">Programado</option>
                         <option value="activa">Activa</option>
                         <option value="finalizada">Finalizada</option>
                         <option value="cancelada">Cancelada</option>
                       </select>
                     </td>
                     <td>
+                      {/* Botón Confirmar - solo visible si estado es PROGRAMADO */}
+                      {asignacion.estado === 'programado' && (
+                        <button
+                          onClick={() => {
+                            setSelectedAsignacion(asignacion)
+                            setShowConfirmModal(true)
+                          }}
+                          className="btn-action"
+                          style={{ background: '#10B981', color: 'white' }}
+                          title="Confirmar programación"
+                          disabled={!canEdit}
+                        >
+                          <CheckCircle size={16} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                        </button>
+                      )}
+
+                      {/* Botón Cancelar - solo visible si estado es PROGRAMADO */}
+                      {asignacion.estado === 'programado' && (
+                        <button
+                          onClick={() => {
+                            setSelectedAsignacion(asignacion)
+                            setShowCancelModal(true)
+                          }}
+                          className="btn-action"
+                          style={{ background: '#F59E0B', color: 'white' }}
+                          title="Cancelar programación"
+                          disabled={asignacion.created_by !== currentUserId}
+                        >
+                          <XCircle size={16} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                        </button>
+                      )}
+
                       <button
                         className="btn-action"
                         title="Ver detalles"
+                        onClick={() => {
+                          setViewAsignacion(asignacion)
+                          setShowViewModal(true)
+                        }}
                       >
                         <Eye size={16} style={{ display: 'inline', verticalAlign: 'middle' }} />
                       </button>
+
                       <button
                         onClick={() => handleDelete(asignacion.id)}
                         className="btn-action btn-delete"
                         title="Eliminar"
-                        disabled={!canDelete}
+                        disabled={!canDelete || (asignacion.estado === 'programado' && asignacion.created_by !== currentUserId)}
                       >
                         <Trash2 size={16} style={{ display: 'inline', verticalAlign: 'middle' }} />
                       </button>
@@ -803,6 +1062,476 @@ export function AsignacionesModule() {
             setShowWizard(false)
           }}
         />
+      )}
+
+      {/* Modal de Confirmación */}
+      {showConfirmModal && selectedAsignacion && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          overflowY: 'auto'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '32px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <h2 style={{ marginTop: 0 }}>Confirmar Programación</h2>
+            <p>Vehículo: <strong>{selectedAsignacion.vehiculos?.patente}</strong></p>
+            <p style={{ fontSize: '14px', color: '#6B7280', marginBottom: '16px' }}>
+              Fecha programada: <strong>{selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR') : 'N/A'}</strong>
+            </p>
+
+            {/* Lista de conductores con checkboxes */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '12px', fontWeight: '600', fontSize: '14px' }}>
+                Selecciona los conductores que confirman:
+              </label>
+              {selectedAsignacion.asignaciones_conductores && selectedAsignacion.asignaciones_conductores.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {selectedAsignacion.asignaciones_conductores.map((ac) => (
+                    <label
+                      key={ac.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px',
+                        background: ac.confirmado ? '#D1FAE5' : '#F9FAFB',
+                        border: `2px solid ${ac.confirmado ? '#10B981' : '#E5E7EB'}`,
+                        borderRadius: '8px',
+                        cursor: ac.confirmado ? 'not-allowed' : 'pointer',
+                        opacity: ac.confirmado ? 0.7 : 1
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={ac.confirmado || conductoresToConfirm.includes(ac.id)}
+                        disabled={ac.confirmado}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setConductoresToConfirm([...conductoresToConfirm, ac.id])
+                          } else {
+                            setConductoresToConfirm(conductoresToConfirm.filter(id => id !== ac.id))
+                          }
+                        }}
+                        style={{ width: '18px', height: '18px', cursor: ac.confirmado ? 'not-allowed' : 'pointer' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
+                          {ac.conductores.nombres} {ac.conductores.apellidos}
+                        </p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
+                          Turno: {ac.horario}
+                          {ac.confirmado && <span style={{ color: '#10B981', marginLeft: '8px', fontWeight: '600' }}>✓ Ya confirmado</span>}
+                          {ac.fecha_confirmacion && <span style={{ marginLeft: '8px' }}>el {new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}</span>}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#9CA3AF', fontSize: '14px' }}>No hay conductores asignados</p>
+              )}
+            </div>
+
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '14px' }}>
+              Comentarios (opcional):
+            </label>
+            <textarea
+              value={confirmComentarios}
+              onChange={(e) => setConfirmComentarios(e.target.value)}
+              rows={4}
+              placeholder="Agrega comentarios sobre la confirmación..."
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '2px solid #E5E7EB',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+                marginBottom: '20px'
+              }}
+            />
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowConfirmModal(false)
+                  setConfirmComentarios('')
+                  setConductoresToConfirm([])
+                  setSelectedAsignacion(null)
+                }}
+                style={{
+                  padding: '10px 20px',
+                  border: '2px solid #E5E7EB',
+                  background: 'white',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmProgramacion}
+                disabled={conductoresToConfirm.length === 0}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  background: conductoresToConfirm.length > 0 ? '#10B981' : '#D1D5DB',
+                  color: 'white',
+                  borderRadius: '8px',
+                  cursor: conductoresToConfirm.length > 0 ? 'pointer' : 'not-allowed',
+                  fontWeight: '600'
+                }}
+              >
+                Confirmar Seleccionados
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Cancelación */}
+      {showCancelModal && selectedAsignacion && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%'
+          }}>
+            <h2 style={{ marginTop: 0 }}>Cancelar Programación</h2>
+            <p>¿Estás seguro de cancelar la programación del vehículo <strong>{selectedAsignacion.vehiculos?.patente}</strong>?</p>
+
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '14px', color: '#DC2626' }}>
+              Motivo de cancelación (requerido):
+            </label>
+            <textarea
+              value={cancelMotivo}
+              onChange={(e) => setCancelMotivo(e.target.value)}
+              rows={4}
+              placeholder="Ingresa el motivo de la cancelación..."
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '2px solid #FCA5A5',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+                marginBottom: '20px'
+              }}
+            />
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowCancelModal(false)
+                  setCancelMotivo('')
+                  setSelectedAsignacion(null)
+                }}
+                style={{
+                  padding: '10px 20px',
+                  border: '2px solid #E5E7EB',
+                  background: 'white',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                Volver
+              </button>
+              <button
+                onClick={handleCancelProgramacion}
+                disabled={!cancelMotivo.trim()}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  background: cancelMotivo.trim() ? '#DC2626' : '#D1D5DB',
+                  color: 'white',
+                  borderRadius: '8px',
+                  cursor: cancelMotivo.trim() ? 'pointer' : 'not-allowed',
+                  fontWeight: '600'
+                }}
+              >
+                Cancelar Programación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Visualización */}
+      {showViewModal && viewAsignacion && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          overflowY: 'auto'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '32px',
+            maxWidth: '700px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <h2 style={{ marginTop: 0, marginBottom: '24px', color: '#1F2937' }}>Detalles de Asignación</h2>
+
+            <div style={{ display: 'grid', gap: '20px' }}>
+              {/* Número de Asignación */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                  Número de Asignación
+                </label>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1F2937' }}>
+                  {viewAsignacion.numero_asignacion}
+                </p>
+              </div>
+
+              {/* Vehículo */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                  Vehículo
+                </label>
+                <p style={{ margin: 0, fontSize: '16px', color: '#1F2937' }}>
+                  <strong>{viewAsignacion.vehiculos?.patente}</strong> - {viewAsignacion.vehiculos?.marca} {viewAsignacion.vehiculos?.modelo}
+                </p>
+              </div>
+
+              {/* Conductores */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                  Conductores Asignados
+                </label>
+                {viewAsignacion.asignaciones_conductores && viewAsignacion.asignaciones_conductores.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {viewAsignacion.asignaciones_conductores.map((ac) => (
+                      <div key={ac.id} style={{
+                        padding: '12px',
+                        background: '#F9FAFB',
+                        borderRadius: '8px',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
+                          {ac.conductores.nombres} {ac.conductores.apellidos}
+                        </p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
+                          Licencia: {ac.conductores.numero_licencia}
+                        </p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
+                          Turno: <strong>{ac.horario}</strong>
+                        </p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
+                          Estado: <span className={`badge ${getStatusBadgeClass(ac.estado)}`}>{ac.estado}</span>
+                        </p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {ac.confirmado ? (
+                            <>
+                              <span style={{ color: '#10B981', fontWeight: '600' }}>
+                                ✓ Confirmado {ac.fecha_confirmacion && `el ${new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}`}
+                              </span>
+                              {canEdit && viewAsignacion.estado === 'programado' && (
+                                <button
+                                  onClick={() => {
+                                    Swal.fire({
+                                      title: '¿Desconfirmar conductor?',
+                                      text: 'Esto permitirá reasignar este turno a otro conductor',
+                                      icon: 'warning',
+                                      showCancelButton: true,
+                                      confirmButtonColor: '#E63946',
+                                      cancelButtonColor: '#6B7280',
+                                      confirmButtonText: 'Sí, desconfirmar',
+                                      cancelButtonText: 'Cancelar'
+                                    }).then((result) => {
+                                      if (result.isConfirmed) {
+                                        handleUnconfirmConductor(ac.id)
+                                        setShowViewModal(false)
+                                        setViewAsignacion(null)
+                                      }
+                                    })
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    background: '#F59E0B',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  Desconfirmar
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <span style={{ color: '#F59E0B', fontWeight: '600' }}>
+                              Pendiente de confirmación
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '14px', color: '#9CA3AF' }}>Sin conductores asignados</p>
+                )}
+              </div>
+
+              {/* Modalidad y Horario */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                    Modalidad
+                  </label>
+                  <span className={`badge ${getModalityBadgeClass(viewAsignacion.modalidad)}`}>
+                    {getModalityLabel(viewAsignacion.modalidad)}
+                  </span>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                    Horario
+                  </label>
+                  <span className={`badge ${getHorarioBadgeClass(viewAsignacion.horario)}`}>
+                    {viewAsignacion.horario}
+                  </span>
+                </div>
+              </div>
+
+              {/* Fechas */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                    Fecha Programada
+                  </label>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
+                    {viewAsignacion.fecha_programada
+                      ? new Date(viewAsignacion.fecha_programada).toLocaleDateString('es-ES', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })
+                      : 'N/A'
+                    }
+                  </p>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                    Fecha Inicio
+                  </label>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
+                    {new Date(viewAsignacion.fecha_inicio).toLocaleDateString('es-ES', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                    Fecha Fin
+                  </label>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
+                    {viewAsignacion.fecha_fin
+                      ? new Date(viewAsignacion.fecha_fin).toLocaleDateString('es-ES', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })
+                      : 'Sin definir'
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* Estado */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                  Estado
+                </label>
+                <span className={`badge ${getStatusBadgeClass(viewAsignacion.estado)}`}>
+                  {viewAsignacion.estado}
+                </span>
+              </div>
+
+              {/* Notas */}
+              {viewAsignacion.notas && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                    Notas
+                  </label>
+                  <p style={{
+                    margin: 0,
+                    fontSize: '14px',
+                    color: '#1F2937',
+                    padding: '12px',
+                    background: '#F9FAFB',
+                    borderRadius: '8px',
+                    whiteSpace: 'pre-wrap'
+                  }}>
+                    {viewAsignacion.notas}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowViewModal(false)
+                  setViewAsignacion(null)
+                }}
+                style={{
+                  padding: '10px 24px',
+                  border: '2px solid #E5E7EB',
+                  background: 'white',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px'
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

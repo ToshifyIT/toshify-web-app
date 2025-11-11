@@ -1,5 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from 'react'
+import { Eye, Edit2, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -514,7 +515,7 @@ export function ConductoresModule() {
             fontSize: '12px',
             fontWeight: '600'
           }}>
-            {row.original.licencias_categorias?.descripcion || 'N/A'}
+            {row.original.licencias_categorias?.codigo || 'N/A'}
           </span>
         ),
         enableSorting: true,
@@ -534,18 +535,22 @@ export function ConductoresModule() {
       {
         accessorKey: 'conductores_estados.descripcion',
         header: 'Estado',
-        cell: ({ row }) => (
-          <span className="badge" style={{
-            backgroundColor: '#3B82F6',
-            color: 'white',
-            padding: '4px 12px',
-            borderRadius: '12px',
-            fontSize: '12px',
-            fontWeight: '600'
-          }}>
-            {row.original.conductores_estados?.descripcion || 'N/A'}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const descripcion = row.original.conductores_estados?.descripcion || 'N/A'
+          const esActivo = descripcion.toLowerCase().includes('activo')
+          return (
+            <span className="badge" style={{
+              backgroundColor: '#3B82F6',
+              color: 'white',
+              padding: '4px 12px',
+              borderRadius: '12px',
+              fontSize: '12px',
+              fontWeight: '600'
+            }}>
+              {esActivo ? 'Activo' : descripcion}
+            </span>
+          )
+        },
         enableSorting: true,
       },
       {
@@ -561,7 +566,7 @@ export function ConductoresModule() {
               }}
               title="Ver detalles"
             >
-              👁️ Ver
+              <Eye size={16} />
             </button>
             <button
               className="btn-action btn-edit"
@@ -569,7 +574,7 @@ export function ConductoresModule() {
               disabled={!canUpdate}
               title={!canUpdate ? 'No tienes permisos para editar' : 'Editar conductor'}
             >
-              ✏️ Editar
+              <Edit2 size={16} />
             </button>
             <button
               className="btn-action btn-delete"
@@ -577,7 +582,7 @@ export function ConductoresModule() {
               disabled={!canDelete}
               title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar conductor'}
             >
-              🗑️ Eliminar
+              <Trash2 size={16} />
             </button>
           </div>
         ),

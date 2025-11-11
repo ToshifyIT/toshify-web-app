@@ -17,7 +17,6 @@ import { USSPage } from './integraciones/uss/USSPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
 import { RolesPage } from './administracion/RolesPage'
-import { PermisosPage } from './administracion/PermisosPage'
 import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
 import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
@@ -31,6 +30,7 @@ export function HomePage() {
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleSignOut = async () => {
     await signOut()
@@ -39,6 +39,10 @@ export function HomePage() {
 
   const toggleMenu = (menuName: string) => {
     setOpenMenus(prev => ({ ...prev, [menuName]: !prev[menuName] }))
+  }
+
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen)
   }
 
   const isActiveRoute = (path: string) => {
@@ -290,8 +294,9 @@ export function HomePage() {
           border-bottom: 1px solid #E5E7EB;
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: flex-end;
           padding: 0 32px;
+          gap: 16px;
         }
 
         .topbar-title {
@@ -301,20 +306,25 @@ export function HomePage() {
         }
 
         .btn-logout {
-          padding: 10px 20px;
-          background: white;
-          color: #E63946;
-          border: 1px solid #E63946;
+          padding: 10px 24px;
+          background: #E63946;
+          color: white;
+          border: 2px solid #E63946;
           border-radius: 8px;
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
 
         .btn-logout:hover {
-          background: #E63946;
-          color: white;
+          background: #DC2626;
+          border-color: #DC2626;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 6px rgba(220, 38, 38, 0.2);
         }
 
         .content-area {
@@ -357,40 +367,46 @@ export function HomePage() {
           }
         }
 
+        .menu-toggle {
+          display: none;
+          background: none;
+          border: none;
+          font-size: 24px;
+          cursor: pointer;
+          padding: 8px;
+          color: #1F2937;
+        }
+
+        .sidebar-overlay {
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 999;
+        }
+
+        .sidebar-overlay.show {
+          display: block;
+        }
+
         @media (max-width: 768px) {
+          .menu-toggle {
+            display: block;
+          }
           .sidebar {
-            width: 70px;
+            width: 240px;
+            position: fixed;
+            left: -240px;
+            top: 0;
+            bottom: 0;
+            z-index: 1000;
+            transition: left 0.3s ease;
           }
-          .sidebar-logo-text,
-          .nav-label,
-          .user-info,
-          .nav-section-arrow {
-            display: none;
-          }
-          .sidebar-header {
-            padding: 16px;
-          }
-          .sidebar-logo-icon {
-            width: 38px;
-            height: 38px;
-            font-size: 16px;
-          }
-          .nav-item {
-            padding: 12px;
-            justify-content: center;
-          }
-          .nav-section-header {
-            padding: 12px;
-            justify-content: center;
-          }
-          .nav-section-items {
-            margin-left: 0;
-            border-left: none;
-            padding-left: 0;
-          }
-          .user-card {
-            padding: 12px;
-            justify-content: center;
+          .sidebar.open {
+            left: 0;
           }
           .topbar {
             padding: 0 12px;
@@ -411,20 +427,6 @@ export function HomePage() {
         }
 
         @media (max-width: 480px) {
-          .sidebar {
-            width: 60px;
-          }
-          .sidebar-header {
-            padding: 12px;
-          }
-          .sidebar-logo-icon {
-            width: 36px;
-            height: 36px;
-            font-size: 14px;
-          }
-          .nav-item {
-            padding: 10px;
-          }
           .topbar {
             padding: 0 8px;
           }
@@ -445,8 +447,11 @@ export function HomePage() {
       `}</style>
 
       <div className="app-layout">
+        {/* Overlay for mobile */}
+        <div className={`sidebar-overlay ${sidebarOpen ? 'show' : ''}`} onClick={toggleSidebar}></div>
+
         {/* Sidebar */}
-        <aside className="sidebar">
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="sidebar-header">
             <div className="sidebar-logo">
               <div className="sidebar-logo-icon">T</div>
@@ -520,7 +525,7 @@ export function HomePage() {
               <div className="user-info">
                 <div className="user-name">{profile?.full_name || 'Usuario'}</div>
                 <div className="user-role">
-                  {profile?.roles?.name || 'Sin rol'} {isAdmin() && '👑'}
+                  {profile?.roles?.name || 'Sin rol'}
                 </div>
               </div>
             </div>
@@ -530,7 +535,9 @@ export function HomePage() {
         {/* Main Content */}
         <main className="main-content">
           <div className="topbar">
-            <div></div>
+            <button className="menu-toggle" onClick={toggleSidebar}>
+              ☰
+            </button>
             <button className="btn-logout" onClick={handleSignOut}>
               Cerrar Sesión
             </button>
@@ -603,11 +610,6 @@ export function HomePage() {
               <Route path="/roles" element={
                 <ProtectedRoute submenuName="roles" action="view">
                   <RolesPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/permisos" element={
-                <ProtectedRoute submenuName="permisos" action="view">
-                  <PermisosPage />
                 </ProtectedRoute>
               } />
               <Route path="/menu-por-rol" element={

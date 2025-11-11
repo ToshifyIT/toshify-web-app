@@ -37,8 +37,10 @@ interface AssignmentData {
   conductores_ids: string[]
   conductor_diurno_id: string  // Para modo Turno
   conductor_nocturno_id: string  // Para modo Turno
-  fecha_inicio: string
-  fecha_fin: string
+  fecha_programada: string  // Fecha cuando se entregará el vehículo
+  distancia: string  // Solo para TURNO con ambos conductores
+  documento: 'CONTRATO' | 'ANEXO' | 'N/A' | ''  // Solo para TURNO con ambos conductores
+  ubicacion: string  // Solo para TURNO con ambos conductores
   notas: string
 }
 
@@ -60,8 +62,10 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     conductores_ids: [],
     conductor_diurno_id: '',
     conductor_nocturno_id: '',
-    fecha_inicio: new Date().toISOString().split('T')[0],
-    fecha_fin: '',
+    fecha_programada: new Date().toISOString().split('T')[0],
+    distancia: '',
+    documento: '',
+    ubicacion: '',
     notas: ''
   })
 
@@ -87,15 +91,12 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
         if (error) throw error
 
-        // Filtrar solo vehículos con estado DISPONIBLE
-        const vehiculosDisponibles = (data || []).filter((v: any) =>
-          v.vehiculos_estados?.codigo === 'DISPONIBLE'
-        ) as Vehicle[]
+        // Cargar TODOS los vehículos (sin filtrar por estado)
+        const todosVehiculos = (data || []) as Vehicle[]
 
-        console.log('📋 Vehículos cargados:', data)
-        console.log('✅ Vehículos disponibles:', vehiculosDisponibles)
+        console.log('📋 Todos los vehículos cargados:', todosVehiculos)
 
-        setVehicles(vehiculosDisponibles)
+        setVehicles(todosVehiculos)
       } catch (error) {
         console.error('Error loading vehicles:', error)
       }
@@ -214,9 +215,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         return
       }
     } else {
-      // Modo Turno - requiere ambos conductores
-      if (!formData.conductor_diurno_id || !formData.conductor_nocturno_id) {
-        Swal.fire('Error', 'Debes asignar conductores para ambos turnos (Diurno y Nocturno)', 'error')
+      // Modo Turno - requiere al menos 1 conductor
+      if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
+        Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
         return
       }
     }
@@ -238,22 +239,21 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         conductoresIds = formData.conductores_ids
         conductorPrincipalId = formData.conductores_ids[0]
       } else {
-        // Modo Turno
-        conductoresIds = [formData.conductor_diurno_id, formData.conductor_nocturno_id]
-        conductorPrincipalId = formData.conductor_diurno_id // Diurno como principal
+        // Modo Turno - solo agregar conductores que estén asignados
+        conductoresIds = [formData.conductor_diurno_id, formData.conductor_nocturno_id].filter(id => id)
+        conductorPrincipalId = formData.conductor_diurno_id || formData.conductor_nocturno_id // Diurno como principal, si no hay, nocturno
       }
 
-      // 3. Crear la asignación principal
+      // 3. Crear la asignación principal con estado PROGRAMADO
       const { data: asignacion, error: asignacionError } = await supabase
         .from('asignaciones')
         .insert({
           vehiculo_id: formData.vehiculo_id,
           conductor_id: conductorPrincipalId,
-          fecha_inicio: new Date(formData.fecha_inicio).toISOString(),
-          fecha_fin: formData.fecha_fin ? new Date(formData.fecha_fin).toISOString() : null,
+          fecha_programada: new Date(formData.fecha_programada).toISOString(),
           modalidad: formData.modalidad,
           horario: formData.horario,
-          estado: 'activa',
+          estado: 'programado',  // Estado inicial PROGRAMADO
           notas: formData.notas,
           numero_asignacion: numeroAsignacion,
           created_by: user?.id
@@ -264,52 +264,51 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       if (asignacionError) throw asignacionError
 
       // 4. Crear registros en asignaciones_conductores para cada conductor
-      const conductoresData = conductoresIds.map((conductorId) => ({
-        asignacion_id: asignacion?.id,
-        conductor_id: conductorId,
-        fecha_inicio: new Date(formData.fecha_inicio).toISOString(),
-        fecha_fin: formData.fecha_fin ? new Date(formData.fecha_fin).toISOString() : null,
-        estado: 'asignado',
-        created_by: user?.id
-      }))
+      // Determinar el horario según el modo y el conductor
+      const conductoresData = conductoresIds.map((conductorId) => {
+        let horarioTurno = 'todo_dia' // Por defecto para CARGO
+
+        if (formData.horario === 'TURNO') {
+          // Determinar si es conductor diurno o nocturno
+          if (conductorId === formData.conductor_diurno_id) {
+            horarioTurno = 'diurno'
+          } else if (conductorId === formData.conductor_nocturno_id) {
+            horarioTurno = 'nocturno'
+          }
+        }
+
+        // Preparar datos adicionales
+        const esParejaTurno = formData.horario === 'TURNO' && formData.conductor_diurno_id && formData.conductor_nocturno_id
+        const distanciaValue = esParejaTurno ? parseFloat(formData.distancia) || 0 : 0
+
+        return {
+          asignacion_id: asignacion?.id,
+          conductor_id: conductorId,
+          horario: horarioTurno,
+          distancia: distanciaValue,
+          documento: esParejaTurno ? formData.documento : 'N/A',
+          ubicacion: esParejaTurno ? formData.ubicacion : '',
+          estado: 'asignado',
+          confirmado: false,
+          created_by: user?.id
+        }
+      })
 
       const { error: conductoresError } = await supabase
         .from('asignaciones_conductores')
-        .insert(conductoresData)
+        .insert(conductoresData as any)
 
       if (conductoresError) throw conductoresError
 
-      // 5. Actualizar estado del vehículo a "EN_USO"
-      const { data: estadoEnUso, error: estadoError } = await supabase
-        .from('vehiculos_estados')
-        .select('id')
-        .eq('codigo', 'EN_USO')
-        .single()
-
-      if (estadoError) {
-        console.error('Error al obtener estado EN_USO:', estadoError)
-      }
-
-      if (estadoEnUso) {
-        const { error: updateError } = await supabase
-          .from('vehiculos')
-          .update({ estado_id: estadoEnUso.id })
-          .eq('id', formData.vehiculo_id)
-
-        if (updateError) {
-          console.error('Error al actualizar estado del vehículo:', updateError)
-          throw new Error('No se pudo actualizar el estado del vehículo a EN_USO')
-        }
-
-        console.log('✅ Vehículo actualizado a estado EN_USO')
-      }
+      // NO actualizar estado del vehículo - se mantiene en su estado actual
+      // Solo se actualizará cuando se CONFIRME la programación
 
       Swal.fire({
         icon: 'success',
-        title: '¡Asignación creada!',
-        text: `Número de asignación: ${numeroAsignacion}`,
+        title: '¡Programación creada!',
+        text: `Número de asignación: ${numeroAsignacion}\nEstado: PROGRAMADO para ${new Date(formData.fecha_programada).toLocaleDateString('es-AR')}`,
         showConfirmButton: false,
-        timer: 2000
+        timer: 3000
       })
 
       onSuccess()
@@ -992,8 +991,17 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
             <div className={`step-connector ${step > 2 ? 'completed' : ''}`} />
 
             <div className="step-item">
-              <div className={`step-circle ${step >= 3 ? 'active' : ''}`}>3</div>
-              <span className={`step-label ${step >= 3 ? 'active' : ''}`}>Conductores</span>
+              <div className={`step-circle ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>
+                {step > 3 ? '✓' : '3'}
+              </div>
+              <span className={`step-label ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>Conductores</span>
+            </div>
+
+            <div className={`step-connector ${step > 3 ? 'completed' : ''}`} />
+
+            <div className="step-item">
+              <div className={`step-circle ${step >= 4 ? 'active' : ''}`}>4</div>
+              <span className={`step-label ${step >= 4 ? 'active' : ''}`}>Programación</span>
             </div>
           </div>
 
@@ -1054,7 +1062,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         onClick={() => handleSelectVehicle(vehicle)}
                       >
                         <div className="vehicle-info">
-                          <h4 className="vehicle-patente">{vehicle.patente}</h4>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                            <h4 className="vehicle-patente" style={{ margin: 0 }}>{vehicle.patente}</h4>
+                            <span style={{
+                              background: vehicle.vehiculos_estados?.codigo === 'DISPONIBLE' ? '#10B981' :
+                                         vehicle.vehiculos_estados?.codigo === 'EN_USO' ? '#F59E0B' : '#6B7280',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: '600'
+                            }}>
+                              {vehicle.vehiculos_estados?.descripcion || 'N/A'}
+                            </span>
+                          </div>
                           <p className="vehicle-details">
                             {vehicle.marca} {vehicle.modelo} • {vehicle.anio}
                           </p>
@@ -1075,7 +1096,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   <p>
                     {formData.horario === 'CARGO'
                       ? 'Selecciona el conductor que estará a cargo del vehículo.'
-                      : 'Asigna un conductor para cada turno (Diurno y Nocturno).'}
+                      : 'Asigna conductores para los turnos (al menos uno: Diurno o Nocturno).'}
                   </p>
                 </div>
 
@@ -1274,6 +1295,160 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                 </div>
               </div>
             )}
+
+            {/* Step 4: Programación */}
+            {step === 4 && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 4: Configuración de Programación</h3>
+                  <p>Establece la fecha programada para la entrega del vehículo. La fecha de inicio se completará automáticamente al confirmar la programación.</p>
+                </div>
+
+                <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+                  <div style={{ marginBottom: '24px' }}>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Fecha Programada de Entrega *
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.fecha_programada}
+                      onChange={(e) => setFormData({ ...formData, fecha_programada: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: '2px solid #E5E7EB',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        fontFamily: 'inherit'
+                      }}
+                    />
+                    <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
+                      Fecha en la que se entregará el vehículo al conductor
+                    </p>
+                  </div>
+
+                  {/* Campos adicionales solo para TURNO con ambos conductores */}
+                  {formData.horario === 'TURNO' && formData.conductor_diurno_id && formData.conductor_nocturno_id && (
+                    <>
+                      <div style={{ marginBottom: '24px' }}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          color: '#374151',
+                          marginBottom: '8px'
+                        }}>
+                          Distancia (km) *
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.distancia}
+                          onChange={(e) => setFormData({ ...formData, distancia: e.target.value })}
+                          placeholder="Ingrese la distancia en kilómetros"
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            border: '2px solid #E5E7EB',
+                            borderRadius: '8px',
+                            fontSize: '14px',
+                            fontFamily: 'inherit'
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ marginBottom: '24px' }}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          color: '#374151',
+                          marginBottom: '8px'
+                        }}>
+                          Documento *
+                        </label>
+                        <select
+                          value={formData.documento}
+                          onChange={(e) => setFormData({ ...formData, documento: e.target.value as 'CONTRATO' | 'ANEXO' | 'N/A' | '' })}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            border: '2px solid #E5E7EB',
+                            borderRadius: '8px',
+                            fontSize: '14px',
+                            fontFamily: 'inherit',
+                            background: 'white'
+                          }}
+                        >
+                          <option value="">Seleccione un documento</option>
+                          <option value="CONTRATO">CONTRATO</option>
+                          <option value="ANEXO">ANEXO</option>
+                          <option value="N/A">N/A</option>
+                        </select>
+                      </div>
+
+                      <div style={{ marginBottom: '24px' }}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          color: '#374151',
+                          marginBottom: '8px'
+                        }}>
+                          Ubicación *
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.ubicacion}
+                          onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
+                          placeholder="Ingrese la ubicación"
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            border: '2px solid #E5E7EB',
+                            borderRadius: '8px',
+                            fontSize: '14px',
+                            fontFamily: 'inherit'
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Notas (Opcional)
+                    </label>
+                    <textarea
+                      value={formData.notas}
+                      onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
+                      rows={4}
+                      placeholder="Agrega comentarios o detalles adicionales..."
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: '2px solid #E5E7EB',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        fontFamily: 'inherit',
+                        resize: 'vertical'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
@@ -1285,7 +1460,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
               {step === 1 ? 'Cancelar' : 'Atrás'}
             </button>
 
-            {step < 3 ? (
+            {step < 4 ? (
               <button className="btn btn-primary" onClick={handleNext}>
                 Siguiente <ChevronRight size={18} />
               </button>
@@ -1295,11 +1470,14 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                 onClick={handleSubmit}
                 disabled={
                   loading ||
+                  !formData.fecha_programada ||
                   (formData.horario === 'CARGO' && formData.conductores_ids.length === 0) ||
-                  (isTurnoMode && (!formData.conductor_diurno_id || !formData.conductor_nocturno_id))
+                  (isTurnoMode && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) ||
+                  // Validar campos adicionales para pareja de turno
+                  (isTurnoMode && formData.conductor_diurno_id && formData.conductor_nocturno_id && (!formData.distancia || !formData.documento || !formData.ubicacion))
                 }
               >
-                {loading ? 'Creando...' : 'Finalizar Asignación'}
+                {loading ? 'Creando...' : 'Programar Asignación'}
               </button>
             )}
           </div>

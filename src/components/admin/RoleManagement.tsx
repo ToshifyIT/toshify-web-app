@@ -194,13 +194,8 @@ export function RoleManagement() {
   }
 
   const getRoleIcon = (roleName: string) => {
-    const icons: Record<string, string> = {
-      'admin': '👑',
-      'supervisor': '🔑',
-      'operador': '👤',
-      'solo_lectura': '👁️'
-    }
-    return icons[roleName] || '🔑'
+    // Emojis removidos - retornar cadena vacía
+    return ''
   }
 
   if (loading) {
@@ -222,7 +217,7 @@ export function RoleManagement() {
 
         .role-card {
           background: white;
-          border: 1px solid #E5E7EB;
+          border: none;
           border-radius: 16px;
           padding: 28px;
           transition: all 0.3s ease;
@@ -231,21 +226,12 @@ export function RoleManagement() {
         }
 
         .role-card:hover {
-          border-color: #E63946;
-          box-shadow: 0 8px 16px rgba(230, 57, 70, 0.15);
+          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
           transform: translateY(-4px);
         }
 
         .role-icon {
-          width: 48px;
-          height: 48px;
-          background: linear-gradient(135deg, #E63946 0%, #D62828 100%);
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 24px;
-          margin-bottom: 16px;
+          display: none;
         }
 
         .role-name {
