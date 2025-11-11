@@ -67,8 +67,6 @@ export function AsignacionesModule() {
   const [showViewModal, setShowViewModal] = useState(false)
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
   const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editAsignacion, setEditAsignacion] = useState<Asignacion | null>(null)
 
   // Cargar asignaciones desde Supabase
   const loadAsignaciones = async () => {
