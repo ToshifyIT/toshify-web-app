@@ -9,6 +9,7 @@ interface MenuPermission {
   name: string
   label: string
   route: string
+  order_index: number
   permissions: {
     can_view: boolean
     can_create: boolean
@@ -23,6 +24,7 @@ interface SubmenuPermission {
   name: string
   label: string
   route: string
+  order_index: number
   menu_id?: string // Deprecated: usar parent_menu_id
   parent_menu_id?: string
   permissions: {
@@ -291,11 +293,15 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   }
 
   const getVisibleMenus = (): MenuPermission[] => {
-    return userPermissions?.menus.filter(m => m.permissions.can_view) ?? []
+    return userPermissions?.menus
+      .filter(m => m.permissions.can_view)
+      .sort((a, b) => a.order_index - b.order_index) ?? []
   }
 
   const getVisibleSubmenus = (): SubmenuPermission[] => {
-    return userPermissions?.submenus.filter(s => s.permissions.can_view) ?? []
+    return userPermissions?.submenus
+      .filter(s => s.permissions.can_view)
+      .sort((a, b) => a.order_index - b.order_index) ?? []
   }
 
   // Funciones de compatibilidad (deprecadas)

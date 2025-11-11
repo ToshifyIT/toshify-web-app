@@ -447,17 +447,55 @@ export function VehicleManagement() {
       {
         accessorKey: 'vehiculos_estados.descripcion',
         header: 'Estado',
-        cell: ({ row }) => (
-          <span
-            className="badge"
-            style={{
-              backgroundColor: '#10B981',
-              color: 'white'
-            }}
-          >
-            {row.original.vehiculos_estados?.descripcion || 'N/A'}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const estado = row.original.vehiculos_estados
+          const getEstadoBadgeStyle = (codigo: string) => {
+            switch (codigo) {
+              case 'DISPONIBLE':
+                return { backgroundColor: '#10B981', color: 'white' }
+              case 'EN_USO':
+                return { backgroundColor: '#3B82F6', color: 'white' }
+              case 'MANTENIMIENTO':
+                return { backgroundColor: '#F59E0B', color: 'white' }
+              case 'FUERA_SERVICIO':
+                return { backgroundColor: '#EF4444', color: 'white' }
+              default:
+                return { backgroundColor: '#6B7280', color: 'white' }
+            }
+          }
+
+          const getEstadoLabel = (codigo: string, descripcion: string) => {
+            switch (codigo) {
+              case 'DISPONIBLE':
+                return 'Disponible'
+              case 'EN_USO':
+                return 'En Uso'
+              case 'MANTENIMIENTO':
+                return 'Mantenimiento'
+              case 'FUERA_SERVICIO':
+                return 'Fuera de Servicio'
+              default:
+                return descripcion
+            }
+          }
+
+          return (
+            <span
+              className="badge"
+              style={{
+                ...getEstadoBadgeStyle(estado?.codigo || ''),
+                padding: '4px 12px',
+                fontSize: '12px',
+                fontWeight: '600',
+                borderRadius: '6px',
+                whiteSpace: 'nowrap'
+              }}
+              title={estado?.descripcion || 'N/A'}
+            >
+              {getEstadoLabel(estado?.codigo || '', estado?.descripcion || 'N/A')}
+            </span>
+          )
+        },
         enableSorting: true,
       },
       {
