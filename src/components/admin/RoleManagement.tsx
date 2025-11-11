@@ -193,7 +193,7 @@ export function RoleManagement() {
     setShowDeleteModal(true)
   }
 
-  const getRoleIcon = (roleName: string) => {
+  const getRoleIcon = (_roleName: string) => {
     // Emojis removidos - retornar cadena vacía
     return ''
   }

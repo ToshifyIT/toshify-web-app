@@ -282,7 +282,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         const distanciaValue = esParejaTurno ? parseFloat(formData.distancia) || 0 : 0
 
         return {
-          asignacion_id: asignacion?.id,
+          asignacion_id: (asignacion as any)?.id,
           conductor_id: conductorId,
           horario: horarioTurno,
           distancia: distanciaValue,
@@ -1468,14 +1468,14 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
               <button
                 className="btn btn-primary"
                 onClick={handleSubmit}
-                disabled={
+                disabled={Boolean(
                   loading ||
                   !formData.fecha_programada ||
                   (formData.horario === 'CARGO' && formData.conductores_ids.length === 0) ||
                   (isTurnoMode && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) ||
                   // Validar campos adicionales para pareja de turno
                   (isTurnoMode && formData.conductor_diurno_id && formData.conductor_nocturno_id && (!formData.distancia || !formData.documento || !formData.ubicacion))
-                }
+                )}
               >
                 {loading ? 'Creando...' : 'Programar Asignación'}
               </button>

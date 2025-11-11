@@ -1,7 +1,6 @@
 // src/pages/HomePage.tsx
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { usePermissions } from '../contexts/PermissionsContext'
 import { useNavigate, Routes, Route, useLocation } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
 
