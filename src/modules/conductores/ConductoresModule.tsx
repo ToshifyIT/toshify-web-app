@@ -168,6 +168,29 @@ export function ConductoresModule() {
               relaciones.licencias_tipos = tipoLicencia
             }
 
+            // Obtener vehículo asignado (solo para asignaciones activas)
+            const { data: asignacionActiva } = await supabase
+              .from('asignaciones_conductores')
+              .select(`
+                asignaciones (
+                  estado,
+                  vehiculo_id,
+                  vehiculos (
+                    patente,
+                    marca,
+                    modelo
+                  )
+                )
+              `)
+              .eq('conductor_id', conductor.id)
+              .eq('estado', 'activo')
+              .limit(1)
+              .single()
+
+            if (asignacionActiva?.asignaciones?.vehiculos) {
+              relaciones.vehiculo_asignado = asignacionActiva.asignaciones.vehiculos
+            }
+
             return relaciones
           })
         )
@@ -551,6 +574,26 @@ export function ConductoresModule() {
           )
         },
         enableSorting: true,
+      },
+      {
+        id: 'vehiculo_asignado',
+        header: 'Vehículo Asignado',
+        cell: ({ row }) => {
+          const vehiculo = (row.original as any).vehiculo_asignado
+          if (vehiculo) {
+            return (
+              <div style={{ fontSize: '13px' }}>
+                <strong>{vehiculo.patente}</strong>
+                <br />
+                <span style={{ fontSize: '11px', color: '#6B7280' }}>
+                  {vehiculo.marca} {vehiculo.modelo}
+                </span>
+              </div>
+            )
+          }
+          return <span style={{ color: '#9CA3AF', fontSize: '12px' }}>N/A</span>
+        },
+        enableSorting: false,
       },
       {
         id: 'acciones',
