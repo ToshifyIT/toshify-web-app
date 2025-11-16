@@ -6,9 +6,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import type {
   VehiculoWithRelations,
-  VehiculoTipo,
   VehiculoEstado,
-  CombustibleTipo,
   GpsTipo
 } from '../../types/database.types'
 import {
@@ -38,9 +36,7 @@ export function VehicleManagement() {
   const [sorting, setSorting] = useState<SortingState>([])
 
   // Catalog states
-  const [vehiculosTipos, setVehiculosTipos] = useState<VehiculoTipo[]>([])
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
-  const [combustiblesTipos, setCombustiblesTipos] = useState<CombustibleTipo[]>([])
   const [gpsTipos, setGpsTipos] = useState<GpsTipo[]>([])
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
@@ -56,8 +52,8 @@ export function VehicleManagement() {
     modelo: '',
     anio: new Date().getFullYear(),
     color: '',
-    tipo_id: '',
-    tipo_combustible_id: '',
+    tipo_vehiculo: '',
+    tipo_combustible: '',
     tipo_gps_id: '',
     gps_uss: false,
     numero_motor: '',
@@ -81,23 +77,17 @@ export function VehicleManagement() {
 
   const loadCatalogs = async () => {
     try {
-      const [tiposRes, estadosRes, combustiblesRes, gpsRes] = await Promise.all([
-        supabase.from('vehiculos_tipos').select('*').order('descripcion'),
+      const [estadosRes, gpsRes] = await Promise.all([
         supabase.from('vehiculos_estados').select('*').order('descripcion'),
-        supabase.from('combustibles_tipos').select('*').order('descripcion'),
         supabase.from('gps_tipos').select('*').order('descripcion')
       ])
 
-      console.log('Catálogos cargados:', { tiposRes, estadosRes, combustiblesRes, gpsRes })
+      console.log('Catálogos cargados:', { estadosRes, gpsRes })
 
-      if (tiposRes.data) setVehiculosTipos(tiposRes.data)
       if (estadosRes.data) setVehiculosEstados(estadosRes.data)
-      if (combustiblesRes.data) setCombustiblesTipos(combustiblesRes.data)
       if (gpsRes.data) setGpsTipos(gpsRes.data)
 
-      if (tiposRes.error) console.error('Error vehiculos_tipos:', tiposRes.error)
       if (estadosRes.error) console.error('Error vehiculos_estados:', estadosRes.error)
-      if (combustiblesRes.error) console.error('Error combustibles_tipos:', combustiblesRes.error)
       if (gpsRes.error) console.error('Error gps_tipos:', gpsRes.error)
     } catch (err: any) {
       console.error('Error cargando catálogos:', err)
@@ -122,20 +112,12 @@ export function VehicleManagement() {
           data.map(async (vehiculo: any) => {
             const relaciones: any = { ...vehiculo }
 
-            if (vehiculo.tipo_id) {
-              const { data: tipo } = await supabase.from('vehiculos_tipos').select('id, codigo, descripcion').eq('id', vehiculo.tipo_id).single()
-              relaciones.vehiculos_tipos = tipo
-            }
 
             if (vehiculo.estado_id) {
               const { data: estado } = await supabase.from('vehiculos_estados').select('id, codigo, descripcion').eq('id', vehiculo.estado_id).single()
               relaciones.vehiculos_estados = estado
             }
 
-            if (vehiculo.tipo_combustible_id) {
-              const { data: combustible } = await supabase.from('combustibles_tipos').select('id, codigo, descripcion').eq('id', vehiculo.tipo_combustible_id).single()
-              relaciones.combustibles_tipos = combustible
-            }
 
             if (vehiculo.tipo_gps_id) {
               const { data: gps } = await supabase.from('gps_tipos').select('id, codigo, descripcion').eq('id', vehiculo.tipo_gps_id).single()
@@ -192,8 +174,8 @@ export function VehicleManagement() {
           modelo: formData.modelo || null,
           anio: formData.anio || null,
           color: formData.color || null,
-          tipo_id: formData.tipo_id || null,
-          tipo_combustible_id: formData.tipo_combustible_id || null,
+          tipo_vehiculo: formData.tipo_vehiculo || null,
+          tipo_combustible: formData.tipo_combustible || null,
           tipo_gps_id: formData.tipo_gps_id || null,
           gps_uss: formData.gps_uss,
           numero_motor: formData.numero_motor || null,
@@ -260,8 +242,8 @@ export function VehicleManagement() {
           modelo: formData.modelo || null,
           anio: formData.anio || null,
           color: formData.color || null,
-          tipo_id: formData.tipo_id || null,
-          tipo_combustible_id: formData.tipo_combustible_id || null,
+          tipo_vehiculo: formData.tipo_vehiculo || null,
+          tipo_combustible: formData.tipo_combustible || null,
           tipo_gps_id: formData.tipo_gps_id || null,
           gps_uss: formData.gps_uss,
           numero_motor: formData.numero_motor || null,
@@ -359,8 +341,8 @@ export function VehicleManagement() {
       modelo: vehiculo.modelo || '',
       anio: vehiculo.anio || new Date().getFullYear(),
       color: vehiculo.color || '',
-      tipo_id: vehiculo.tipo_id || '',
-      tipo_combustible_id: vehiculo.tipo_combustible_id || '',
+      tipo_vehiculo: (vehiculo as any).tipo_vehiculo || '',
+      tipo_combustible: (vehiculo as any).tipo_combustible || '',
       tipo_gps_id: vehiculo.tipo_gps_id || '',
       gps_uss: vehiculo.gps_uss,
       numero_motor: vehiculo.numero_motor || '',
@@ -391,8 +373,8 @@ export function VehicleManagement() {
       modelo: '',
       anio: new Date().getFullYear(),
       color: '',
-      tipo_id: '',
-      tipo_combustible_id: '',
+      tipo_vehiculo: '',
+      tipo_combustible: '',
       tipo_gps_id: '',
       gps_uss: false,
       numero_motor: '',
@@ -1176,32 +1158,26 @@ export function VehicleManagement() {
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Tipo</label>
-                <select
+                <input
+                  type="text"
                   className="form-input"
-                  value={formData.tipo_id}
-                  onChange={(e) => setFormData({ ...formData, tipo_id: e.target.value })}
+                  value={formData.tipo_vehiculo}
+                  onChange={(e) => setFormData({ ...formData, tipo_vehiculo: e.target.value })}
                   disabled={saving}
-                >
-                  <option value="">Seleccionar...</option>
-                  {vehiculosTipos.map((tipo: any) => (
-                    <option key={tipo.id} value={tipo.id}>{tipo.descripcion}</option>
-                  ))}
-                </select>
+                  placeholder="Ej: Camion, Auto, Moto, Utilitario..."
+                />
               </div>
 
               <div className="form-group">
                 <label className="form-label">Tipo Combustible</label>
-                <select
+                <input
+                  type="text"
                   className="form-input"
-                  value={formData.tipo_combustible_id}
-                  onChange={(e) => setFormData({ ...formData, tipo_combustible_id: e.target.value })}
+                  value={formData.tipo_combustible}
+                  onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
                   disabled={saving}
-                >
-                  <option value="">Seleccionar...</option>
-                  {combustiblesTipos.map((tipo: any) => (
-                    <option key={tipo.id} value={tipo.id}>{tipo.descripcion}</option>
-                  ))}
-                </select>
+                  placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
+                />
               </div>
             </div>
 
@@ -1492,32 +1468,26 @@ export function VehicleManagement() {
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Tipo</label>
-                <select
+                <input
+                  type="text"
                   className="form-input"
-                  value={formData.tipo_id}
-                  onChange={(e) => setFormData({ ...formData, tipo_id: e.target.value })}
+                  value={formData.tipo_vehiculo}
+                  onChange={(e) => setFormData({ ...formData, tipo_vehiculo: e.target.value })}
                   disabled={saving}
-                >
-                  <option value="">Seleccionar...</option>
-                  {vehiculosTipos.map((tipo: any) => (
-                    <option key={tipo.id} value={tipo.id}>{tipo.descripcion}</option>
-                  ))}
-                </select>
+                  placeholder="Ej: Camion, Auto, Moto, Utilitario..."
+                />
               </div>
 
               <div className="form-group">
                 <label className="form-label">Tipo Combustible</label>
-                <select
+                <input
+                  type="text"
                   className="form-input"
-                  value={formData.tipo_combustible_id}
-                  onChange={(e) => setFormData({ ...formData, tipo_combustible_id: e.target.value })}
+                  value={formData.tipo_combustible}
+                  onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
                   disabled={saving}
-                >
-                  <option value="">Seleccionar...</option>
-                  {combustiblesTipos.map((tipo: any) => (
-                    <option key={tipo.id} value={tipo.id}>{tipo.descripcion}</option>
-                  ))}
-                </select>
+                  placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
+                />
               </div>
             </div>
 
