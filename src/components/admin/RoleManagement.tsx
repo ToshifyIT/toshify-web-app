@@ -1,5 +1,6 @@
 // src/components/admin/RoleManagement.tsx
 import { useState, useEffect } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { Role } from '../../types/database.types'
 
@@ -658,7 +659,9 @@ export function RoleManagement() {
             </h2>
 
             <div className="delete-warning">
-              <div className="delete-warning-title">⚠️ Advertencia</div>
+              <div className="delete-warning-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={20} /> Advertencia
+              </div>
               <div className="delete-warning-text">
                 Estás a punto de eliminar el rol "<strong>{selectedRole.name}</strong>".
                 Esta acción eliminará también todos los permisos asociados y es <strong>irreversible</strong>.

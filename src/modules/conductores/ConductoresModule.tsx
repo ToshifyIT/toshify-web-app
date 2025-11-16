@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Edit2, Trash2 } from 'lucide-react'
+import { Eye, Edit2, Trash2, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -1566,7 +1566,9 @@ function ModalEliminar({ selectedConductor, saving, handleDelete, setShowDeleteM
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700', color: '#DC2626' }}>Eliminar Conductor</h2>
         <div className="delete-warning">
-          <div className="delete-warning-title">⚠️ Advertencia</div>
+          <div className="delete-warning-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={20} /> Advertencia
+          </div>
           <div className="delete-warning-text">
             Estás a punto de eliminar al conductor <strong>{selectedConductor.nombre_completo}</strong> (DNI: {selectedConductor.dni}). Esta acción es <strong>irreversible</strong>.
           </div>

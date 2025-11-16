@@ -1,5 +1,6 @@
 // src/components/admin/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -1852,7 +1853,9 @@ export function VehicleManagement() {
             </h2>
 
             <div className="delete-warning">
-              <div className="delete-warning-title">⚠️ Advertencia</div>
+              <div className="delete-warning-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={20} /> Advertencia
+              </div>
               <div className="delete-warning-text">
                 Estás a punto de eliminar el vehículo <strong>{selectedVehiculo.patente}</strong> ({selectedVehiculo.marca} {selectedVehiculo.modelo}).
                 Esta acción es <strong>irreversible</strong>.
