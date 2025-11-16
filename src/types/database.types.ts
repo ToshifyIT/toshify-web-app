@@ -918,6 +918,160 @@ export interface Database {
           updated_at?: string
         }
       }
+      categorias: {
+        Row: {
+          id: string
+          codigo: string
+          nombre: string
+          descripcion: string | null
+          activo: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          codigo: string
+          nombre: string
+          descripcion?: string | null
+          activo?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          codigo?: string
+          nombre?: string
+          descripcion?: string | null
+          activo?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      unidades_medida: {
+        Row: {
+          id: string
+          codigo: string
+          descripcion: string
+          activo: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          codigo: string
+          descripcion: string
+          activo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          codigo?: string
+          descripcion?: string
+          activo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      productos_estados: {
+        Row: {
+          id: string
+          codigo: string
+          descripcion: string | null
+          activo: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          codigo: string
+          descripcion?: string | null
+          activo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          codigo?: string
+          descripcion?: string | null
+          activo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      productos: {
+        Row: {
+          id: string
+          codigo: string
+          nombre: string
+          descripcion: string | null
+          unidad_medida_id: string
+          stock_actual: number
+          stock_en_uso: number
+          estado_id: string
+          proveedor: string | null
+          modelo: string | null
+          observacion: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          codigo: string
+          nombre: string
+          descripcion?: string | null
+          unidad_medida_id: string
+          stock_actual?: number
+          stock_en_uso?: number
+          estado_id: string
+          proveedor?: string | null
+          modelo?: string | null
+          observacion?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          codigo?: string
+          nombre?: string
+          descripcion?: string | null
+          unidad_medida_id?: string
+          stock_actual?: number
+          stock_en_uso?: number
+          estado_id?: string
+          proveedor?: string | null
+          modelo?: string | null
+          observacion?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      productos_categorias: {
+        Row: {
+          id: string
+          producto_id: string
+          categoria_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          producto_id: string
+          categoria_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          producto_id?: string
+          categoria_id?: string
+          created_at?: string
+        }
+      }
     }
     Views: {}
     Functions: {}
@@ -951,6 +1105,11 @@ export type Asignacion = Database['public']['Tables']['asignaciones']['Row']
 export type AsignacionConductor = Database['public']['Tables']['asignaciones_conductores']['Row']
 export type HorarioConduccion = Database['public']['Tables']['horarios_conduccion']['Row']
 export type VehiculoControl = Database['public']['Tables']['vehiculo_control']['Row']
+export type Categoria = Database['public']['Tables']['categorias']['Row']
+export type UnidadMedida = Database['public']['Tables']['unidades_medida']['Row']
+export type ProductoEstado = Database['public']['Tables']['productos_estados']['Row']
+export type Producto = Database['public']['Tables']['productos']['Row']
+export type ProductoCategoria = Database['public']['Tables']['productos_categorias']['Row']
 
 // Tipo para usuario con rol y permisos
 export interface UserWithRole extends UserProfile {

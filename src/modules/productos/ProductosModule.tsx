@@ -21,7 +21,6 @@ import {
   Tag,
   Scale,
   Info,
-  User,
   Calendar,
   AlertCircle
 } from 'lucide-react'
