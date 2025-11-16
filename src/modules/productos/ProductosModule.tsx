@@ -6,8 +6,8 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   flexRender,
-  SortingState,
-  ColumnDef,
+  type SortingState,
+  type ColumnDef,
 } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
