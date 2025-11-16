@@ -239,62 +239,6 @@ export function AsignacionesModule() {
     }
   }
 
-  // Función temporal - no se usa actualmente pero podría ser útil en el futuro
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleStatusChange = async (id: string, newStatus: string) => {
-    if (!canEdit) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Sin permisos',
-        text: 'No tienes permisos para editar asignaciones'
-      })
-      return
-    }
-
-    try {
-      const { error } = (await (supabase as any)
-        .from('asignaciones')
-        .update({ estado: newStatus })
-        .eq('id', id))
-
-      if (error) throw error
-
-      // Si se finaliza o cancela, actualizar estado del vehículo a DISPONIBLE
-      if (newStatus === 'finalizada' || newStatus === 'cancelada') {
-        const asignacion = asignaciones.find(a => a.id === id)
-        if (asignacion?.vehiculo_id) {
-          const { data: estadoDisponible, error: estadoError } = await supabase
-            .from('vehiculos_estados')
-            .select('id')
-            .eq('codigo', 'DISPONIBLE')
-            .single()
-
-          if (estadoError) {
-            console.error('Error al obtener estado DISPONIBLE:', estadoError)
-          }
-
-          if (estadoDisponible) {
-            const { error: updateError } = (await (supabase as any)
-              .from('vehiculos')
-              .update({ estado_id: (estadoDisponible as any).id })
-              .eq('id', asignacion.vehiculo_id))
-
-            if (updateError) {
-              console.error('Error al actualizar estado del vehículo:', updateError)
-            } else {
-              console.log('✅ Vehículo vuelto a estado DISPONIBLE')
-            }
-          }
-        }
-      }
-
-      loadAsignaciones()
-    } catch (error: any) {
-      console.error('Error updating status:', error)
-      Swal.fire('Error', error.message || 'Error al actualizar el estado', 'error')
-    }
-  }
-
   const filteredAsignaciones = asignaciones.filter(asignacion => {
     const matchesSearch =
       asignacion.numero_asignacion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
