@@ -71,7 +71,14 @@ interface Producto {
 }
 
 export function ProductosModule() {
-  const { canCreate, canEdit, canDelete, canView } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+
+  // Permisos específicos para el menú de productos
+  const canCreate = canCreateInMenu('productos')
+  const canEdit = canEditInMenu('productos')
+  const canDelete = canDeleteInMenu('productos')
+  const canView = true // Si llegó aquí, tiene permiso de ver (validado por ProtectedRoute)
+
   const [productos, setProductos] = useState<Producto[]>([])
   const [unidadesMedida, setUnidadesMedida] = useState<UnidadMedida[]>([])
   const [estados, setEstados] = useState<ProductoEstado[]>([])
@@ -176,7 +183,7 @@ export function ProductosModule() {
   }
 
   const handleCreate = async () => {
-    if (!canCreate('productos')) {
+    if (!canCreate) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -243,7 +250,7 @@ export function ProductosModule() {
   }
 
   const handleEdit = async () => {
-    if (!canEdit('productos') || !selectedProducto) {
+    if (!canEdit || !selectedProducto) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -311,7 +318,7 @@ export function ProductosModule() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!canDelete('productos')) {
+    if (!canDelete) {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
@@ -510,7 +517,7 @@ export function ProductosModule() {
         header: 'Acciones',
         cell: ({ row }) => (
           <div style={{ display: 'flex', gap: '8px' }}>
-            {canView('productos') && (
+            {canView && (
               <button
                 onClick={() => openViewModal(row.original)}
                 style={{
@@ -530,7 +537,7 @@ export function ProductosModule() {
                 Ver
               </button>
             )}
-            {canEdit('productos') && (
+            {canEdit && (
               <button
                 onClick={() => openEditModal(row.original)}
                 style={{
@@ -550,7 +557,7 @@ export function ProductosModule() {
                 Editar
               </button>
             )}
-            {canDelete('productos') && (
+            {canDelete && (
               <button
                 onClick={() => handleDelete(row.original.id)}
                 style={{
@@ -648,7 +655,7 @@ export function ProductosModule() {
           />
         </div>
 
-        {canCreate('productos') && (
+        {canCreate && (
           <button
             onClick={openCreateModal}
             style={{
