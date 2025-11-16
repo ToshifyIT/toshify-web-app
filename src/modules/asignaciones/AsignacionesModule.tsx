@@ -170,10 +170,10 @@ export function AsignacionesModule() {
         const asignacion = asignaciones.find(a => a.id === id)
 
         // 1. Obtener IDs de asignaciones_conductores para eliminar turnos ocupados
-        const { data: conductoresAsignados, error: fetchConductoresError } = await supabase
+        const { data: conductoresAsignados, error: fetchConductoresError } = (await supabase
           .from('asignaciones_conductores')
           .select('id')
-          .eq('asignacion_id', id)
+          .eq('asignacion_id', id)) as { data: { id: string }[] | null; error: any }
 
         if (fetchConductoresError) throw fetchConductoresError
 
@@ -239,6 +239,8 @@ export function AsignacionesModule() {
     }
   }
 
+  // Función temporal - no se usa actualmente pero podría ser útil en el futuro
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleStatusChange = async (id: string, newStatus: string) => {
     if (!canEdit) {
       Swal.fire({
