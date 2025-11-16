@@ -533,11 +533,10 @@ export function ConductoresModule() {
         enableSorting: true,
       },
       {
-        accessorKey: 'conductores_estados.descripcion',
+        accessorKey: 'conductores_estados.codigo',
         header: 'Estado',
         cell: ({ row }) => {
-          const descripcion = row.original.conductores_estados?.descripcion || 'N/A'
-          const esActivo = descripcion.toLowerCase().includes('activo')
+          const codigo = row.original.conductores_estados?.codigo || 'N/A'
           return (
             <span className="badge" style={{
               backgroundColor: '#3B82F6',
@@ -547,7 +546,7 @@ export function ConductoresModule() {
               fontSize: '12px',
               fontWeight: '600'
             }}>
-              {esActivo ? 'Activo' : descripcion}
+              {codigo}
             </span>
           )
         },

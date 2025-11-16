@@ -446,7 +446,7 @@ export function VehicleManagement() {
         enableSorting: true,
       },
       {
-        accessorKey: 'vehiculos_estados.descripcion',
+        accessorKey: 'vehiculos_estados.codigo',
         header: 'Estado',
         cell: ({ row }) => {
           const estado = row.original.vehiculos_estados
@@ -465,21 +465,6 @@ export function VehicleManagement() {
             }
           }
 
-          const getEstadoLabel = (codigo: string, descripcion: string) => {
-            switch (codigo) {
-              case 'DISPONIBLE':
-                return 'Disponible'
-              case 'EN_USO':
-                return 'En Uso'
-              case 'MANTENIMIENTO':
-                return 'Mantenimiento'
-              case 'FUERA_SERVICIO':
-                return 'Fuera de Servicio'
-              default:
-                return descripcion
-            }
-          }
-
           return (
             <span
               className="badge"
@@ -493,7 +478,7 @@ export function VehicleManagement() {
               }}
               title={estado?.descripcion || 'N/A'}
             >
-              {getEstadoLabel(estado?.codigo || '', estado?.descripcion || 'N/A')}
+              {estado?.codigo || 'N/A'}
             </span>
           )
         },
