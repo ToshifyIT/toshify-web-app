@@ -1,5 +1,6 @@
 // src/components/admin/UserMenuPermissionsManager.tsx
 import { useState, useEffect, useMemo } from 'react'
+import { Check } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { UserWithRole, Menu, Submenu } from '../../types/database.types'
 import {
@@ -424,7 +425,7 @@ export function UserMenuPermissionsManager() {
               }
             }}
           >
-            {row.original.can_view && '✓'}
+            {row.original.can_view && <Check size={16} />}
           </div>
         ),
         enableSorting: true,
@@ -444,7 +445,7 @@ export function UserMenuPermissionsManager() {
               }
             }}
           >
-            {row.original.can_create && '✓'}
+            {row.original.can_create && <Check size={16} />}
           </div>
         ),
         enableSorting: true,
@@ -464,7 +465,7 @@ export function UserMenuPermissionsManager() {
               }
             }}
           >
-            {row.original.can_edit && '✓'}
+            {row.original.can_edit && <Check size={16} />}
           </div>
         ),
         enableSorting: true,
@@ -484,7 +485,7 @@ export function UserMenuPermissionsManager() {
               }
             }}
           >
-            {row.original.can_delete && '✓'}
+            {row.original.can_delete && <Check size={16} />}
           </div>
         ),
         enableSorting: true,

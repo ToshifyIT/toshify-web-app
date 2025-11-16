@@ -1,6 +1,6 @@
 // src/components/admin/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2 } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -942,8 +942,9 @@ export function VehicleManagement() {
         </div>
 
         {!canCreate && (
-          <div className="no-permission-msg">
-            ℹ️ No tienes permisos para crear vehículos. Solo puedes ver la lista.
+          <div className="no-permission-msg" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Info size={16} />
+            No tienes permisos para crear vehículos. Solo puedes ver la lista.
           </div>
         )}
 

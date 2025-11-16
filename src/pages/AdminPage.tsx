@@ -1,5 +1,6 @@
 // src/pages/AdminPage.tsx
 import { useState } from 'react'
+import { Crown } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
 import { useNavigate } from 'react-router-dom'
@@ -599,8 +600,8 @@ export function AdminPage() {
               </div>
               <div className="user-info">
                 <div className="user-name">{profile?.full_name || 'Usuario'}</div>
-                <div className="user-role">
-                  {profile?.roles?.name || 'Sin rol'} {isAdmin() && '👑'}
+                <div className="user-role" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {profile?.roles?.name || 'Sin rol'} {isAdmin() && <Crown size={14} />}
                 </div>
               </div>
             </div>

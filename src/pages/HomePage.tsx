@@ -1,5 +1,6 @@
 // src/pages/HomePage.tsx
 import { useState } from 'react'
+import { Menu } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Routes, Route, useLocation } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
@@ -12,6 +13,7 @@ import { SiniestrosPage } from './siniestros/SiniestrosPage'
 import { IncidenciasPage } from './incidencias/IncidenciasPage'
 import { InformesPage } from './informes/InformesPage'
 import { AsignacionesPage } from './asignaciones/AsignacionesPage'
+import { AsignacionesActivasPage } from './asignaciones/AsignacionesActivasPage'
 import { USSPage } from './integraciones/uss/USSPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
@@ -534,7 +536,7 @@ export function HomePage() {
         <main className="main-content">
           <div className="topbar">
             <button className="menu-toggle" onClick={toggleSidebar}>
-              ☰
+              <Menu size={24} />
             </button>
             <button className="btn-logout" onClick={handleSignOut}>
               Cerrar Sesión
@@ -577,6 +579,11 @@ export function HomePage() {
               <Route path="/asignaciones" element={
                 <ProtectedRoute menuName="asignaciones" action="view">
                   <AsignacionesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/asignaciones-activas" element={
+                <ProtectedRoute submenuName="asignaciones-activas" action="view">
+                  <AsignacionesActivasPage />
                 </ProtectedRoute>
               } />
 

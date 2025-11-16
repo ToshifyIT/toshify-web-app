@@ -166,7 +166,29 @@ export function AsignacionesModule() {
 
     if (result.isConfirmed) {
       try {
-        // 1. Eliminar registros de asignaciones_conductores
+        // 0. Obtener la asignación antes de eliminarla (para actualizar vehículo)
+        const asignacion = asignaciones.find(a => a.id === id)
+
+        // 1. Obtener IDs de asignaciones_conductores para eliminar turnos ocupados
+        const { data: conductoresAsignados, error: fetchConductoresError } = await supabase
+          .from('asignaciones_conductores')
+          .select('id')
+          .eq('asignacion_id', id)
+
+        if (fetchConductoresError) throw fetchConductoresError
+
+        // 2. Eliminar registros de vehiculos_turnos_ocupados
+        if (conductoresAsignados && conductoresAsignados.length > 0) {
+          const conductorIds = conductoresAsignados.map(c => c.id)
+          const { error: turnosError } = await supabase
+            .from('vehiculos_turnos_ocupados')
+            .delete()
+            .in('asignacion_conductor_id', conductorIds)
+
+          if (turnosError) throw turnosError
+        }
+
+        // 3. Eliminar registros de asignaciones_conductores
         const { error: conductoresError } = await supabase
           .from('asignaciones_conductores')
           .delete()
@@ -174,10 +196,7 @@ export function AsignacionesModule() {
 
         if (conductoresError) throw conductoresError
 
-        // 2. Obtener la asignación antes de eliminarla (para actualizar vehículo)
-        const asignacion = asignaciones.find(a => a.id === id)
-
-        // 3. Eliminar la asignación
+        // 4. Eliminar la asignación
         const { error: asignacionError } = await supabase
           .from('asignaciones')
           .delete()
@@ -185,7 +204,7 @@ export function AsignacionesModule() {
 
         if (asignacionError) throw asignacionError
 
-        // 4. Actualizar estado del vehículo a "DISPONIBLE"
+        // 5. Actualizar estado del vehículo a "DISPONIBLE"
         if (asignacion?.vehiculo_id) {
           const { data: estadoDisponible, error: estadoError } = await supabase
             .from('vehiculos_estados')
@@ -1024,7 +1043,7 @@ export function AsignacionesModule() {
                         onClick={() => handleDelete(asignacion.id)}
                         className="btn-action btn-delete"
                         title="Eliminar"
-                        disabled={!canDelete || (asignacion.estado === 'programado' && asignacion.created_by !== currentUserId)}
+                        disabled={!canDelete}
                       >
                         <Trash2 size={16} style={{ display: 'inline', verticalAlign: 'middle' }} />
                       </button>
