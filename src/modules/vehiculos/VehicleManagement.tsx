@@ -1,6 +1,6 @@
 // src/components/admin/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -512,7 +512,7 @@ export function VehicleManagement() {
               }}
               title="Ver detalles"
             >
-              👁️ Ver
+              <Eye size={16} />
             </button>
             <button
               className="btn-action btn-edit"
@@ -520,7 +520,7 @@ export function VehicleManagement() {
               disabled={!canUpdate}
               title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehículo'}
             >
-              ✏️ Editar
+              <Edit size={16} />
             </button>
             <button
               className="btn-action btn-delete"
@@ -528,7 +528,7 @@ export function VehicleManagement() {
               disabled={!canDelete}
               title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehículo'}
             >
-              🗑️ Eliminar
+              <Trash2 size={16} />
             </button>
           </div>
         ),
