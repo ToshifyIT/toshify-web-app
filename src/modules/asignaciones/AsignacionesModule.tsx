@@ -639,7 +639,7 @@ export function AsignacionesModule() {
         }
 
         .assignments-table th {
-          text-align: left;
+          text-align: center;
           padding: 12px;
           background: #F9FAFB;
           font-size: 12px;
@@ -660,6 +660,7 @@ export function AsignacionesModule() {
           border-bottom: 1px solid #E5E7EB;
           color: #1F2937;
           font-size: 14px;
+          text-align: center;
         }
 
         .assignments-table td:last-child {
@@ -971,18 +972,9 @@ export function AsignacionesModule() {
                         : 'Sin definir'}
                     </td>
                     <td>
-                      <select
-                        value={asignacion.estado}
-                        onChange={(e) => handleStatusChange(asignacion.id, e.target.value)}
-                        className={`status-select badge ${getStatusBadgeClass(asignacion.estado)}`}
-                        disabled={!canEdit}
-                        style={{ border: 'none', cursor: canEdit ? 'pointer' : 'not-allowed' }}
-                      >
-                        <option value="programado">Programado</option>
-                        <option value="activa">Activa</option>
-                        <option value="finalizada">Finalizada</option>
-                        <option value="cancelada">Cancelada</option>
-                      </select>
+                      <span className={`badge ${getStatusBadgeClass(asignacion.estado)}`}>
+                        {asignacion.estado}
+                      </span>
                     </td>
                     <td>
                       {/* Botón Confirmar - solo visible si estado es PROGRAMADO */}
@@ -1133,7 +1125,7 @@ export function AsignacionesModule() {
                         </p>
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
                           Turno: {ac.horario}
-                          {ac.confirmado && <span style={{ color: '#10B981', marginLeft: '8px', fontWeight: '600' }}>✓ Ya confirmado</span>}
+                          {ac.confirmado && <span style={{ color: '#10B981', marginLeft: '8px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={14} /> Ya confirmado</span>}
                           {ac.fecha_confirmacion && <span style={{ marginLeft: '8px' }}>el {new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}</span>}
                         </p>
                       </div>
@@ -1360,8 +1352,8 @@ export function AsignacionesModule() {
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           {ac.confirmado ? (
                             <>
-                              <span style={{ color: '#10B981', fontWeight: '600' }}>
-                                ✓ Confirmado {ac.fecha_confirmacion && `el ${new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}`}
+                              <span style={{ color: '#10B981', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <CheckCircle size={14} /> Confirmado {ac.fecha_confirmacion && `el ${new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}`}
                               </span>
                               {canEdit && viewAsignacion.estado === 'programado' && (
                                 <button
