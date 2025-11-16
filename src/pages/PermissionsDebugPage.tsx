@@ -2,6 +2,7 @@
 // Página de depuración para verificar el sistema de permisos
 // Acceso: /debug/permisos (solo para desarrollo)
 
+import { Search, User, Check, X, Drama, ClipboardList } from 'lucide-react'
 import { usePermissions } from '../contexts/PermissionsContext'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -24,8 +25,9 @@ export default function PermissionsDebugPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            🔍 Depuración de Permisos
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Search size={32} />
+            Depuración de Permisos
           </h1>
           <p className="mt-2 text-sm text-gray-600">
             Esta página muestra todos los permisos del usuario autenticado
@@ -34,8 +36,9 @@ export default function PermissionsDebugPage() {
 
         {/* Usuario Autenticado */}
         <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            👤 Usuario Autenticado
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <User size={24} />
+            Usuario Autenticado
           </h2>
           <div className="space-y-2">
             <div className="flex items-center">
@@ -52,8 +55,8 @@ export default function PermissionsDebugPage() {
             </div>
             <div className="flex items-center">
               <span className="font-medium text-gray-700 w-32">Es Admin:</span>
-              <span className={`font-semibold ${isAdmin() ? 'text-green-600' : 'text-gray-500'}`}>
-                {isAdmin() ? '✅ Sí' : '❌ No'}
+              <span className={`font-semibold flex items-center gap-1 ${isAdmin() ? 'text-green-600' : 'text-gray-500'}`}>
+                {isAdmin() ? <><Check size={16} /> Sí</> : <><X size={16} /> No</>}
               </span>
             </div>
           </div>
@@ -62,8 +65,9 @@ export default function PermissionsDebugPage() {
         {/* Rol */}
         {userPermissions?.role && (
           <div className="bg-white shadow rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              🎭 Rol Asignado
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Drama size={24} />
+              Rol Asignado
             </h2>
             <div className="space-y-2">
               <div className="flex items-center">
@@ -90,8 +94,9 @@ export default function PermissionsDebugPage() {
 
         {/* Permisos de Menús */}
         <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            📋 Permisos de Menús ({userPermissions?.menus?.length || 0})
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <ClipboardList size={24} />
+            Permisos de Menús ({userPermissions?.menus?.length || 0})
           </h2>
           {!userPermissions?.menus || userPermissions.menus.length === 0 ? (
             <p className="text-gray-500 italic">No hay permisos de menús asignados</p>

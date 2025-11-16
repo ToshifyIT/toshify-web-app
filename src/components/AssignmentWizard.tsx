@@ -1,6 +1,6 @@
 // src/components/AssignmentWizard.tsx
 import { useState, useEffect } from 'react'
-import { X, Calendar, User, ChevronRight } from 'lucide-react'
+import { X, Calendar, User, ChevronRight, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import Swal from 'sweetalert2'
 
@@ -970,7 +970,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           <div className="wizard-stepper">
             <div className="step-item">
               <div className={`step-circle ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
-                {step > 1 ? '✓' : '1'}
+                {step > 1 ? <Check size={16} /> : '1'}
               </div>
               <span className={`step-label ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
                 Modalidad
@@ -981,7 +981,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
             <div className="step-item">
               <div className={`step-circle ${step >= 2 ? 'active' : ''} ${step > 2 ? 'completed' : ''}`}>
-                {step > 2 ? '✓' : '2'}
+                {step > 2 ? <Check size={16} /> : '2'}
               </div>
               <span className={`step-label ${step >= 2 ? 'active' : ''} ${step > 2 ? 'completed' : ''}`}>
                 Vehículo
@@ -992,7 +992,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
             <div className="step-item">
               <div className={`step-circle ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>
-                {step > 3 ? '✓' : '3'}
+                {step > 3 ? <Check size={16} /> : '3'}
               </div>
               <span className={`step-label ${step >= 3 ? 'active' : ''} ${step > 3 ? 'completed' : ''}`}>Conductores</span>
             </div>

@@ -1,5 +1,6 @@
 // src/components/admin/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
+import { AlertTriangle, Eye, Edit, Trash2, Info } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -445,7 +446,7 @@ export function VehicleManagement() {
         enableSorting: true,
       },
       {
-        accessorKey: 'vehiculos_estados.descripcion',
+        accessorKey: 'vehiculos_estados.codigo',
         header: 'Estado',
         cell: ({ row }) => {
           const estado = row.original.vehiculos_estados
@@ -464,21 +465,6 @@ export function VehicleManagement() {
             }
           }
 
-          const getEstadoLabel = (codigo: string, descripcion: string) => {
-            switch (codigo) {
-              case 'DISPONIBLE':
-                return 'Disponible'
-              case 'EN_USO':
-                return 'En Uso'
-              case 'MANTENIMIENTO':
-                return 'Mantenimiento'
-              case 'FUERA_SERVICIO':
-                return 'Fuera de Servicio'
-              default:
-                return descripcion
-            }
-          }
-
           return (
             <span
               className="badge"
@@ -492,7 +478,7 @@ export function VehicleManagement() {
               }}
               title={estado?.descripcion || 'N/A'}
             >
-              {getEstadoLabel(estado?.codigo || '', estado?.descripcion || 'N/A')}
+              {estado?.codigo || 'N/A'}
             </span>
           )
         },
@@ -511,7 +497,7 @@ export function VehicleManagement() {
               }}
               title="Ver detalles"
             >
-              👁️ Ver
+              <Eye size={16} />
             </button>
             <button
               className="btn-action btn-edit"
@@ -519,7 +505,7 @@ export function VehicleManagement() {
               disabled={!canUpdate}
               title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehículo'}
             >
-              ✏️ Editar
+              <Edit size={16} />
             </button>
             <button
               className="btn-action btn-delete"
@@ -527,7 +513,7 @@ export function VehicleManagement() {
               disabled={!canDelete}
               title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehículo'}
             >
-              🗑️ Eliminar
+              <Trash2 size={16} />
             </button>
           </div>
         ),
@@ -956,8 +942,9 @@ export function VehicleManagement() {
         </div>
 
         {!canCreate && (
-          <div className="no-permission-msg">
-            ℹ️ No tienes permisos para crear vehículos. Solo puedes ver la lista.
+          <div className="no-permission-msg" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Info size={16} />
+            No tienes permisos para crear vehículos. Solo puedes ver la lista.
           </div>
         )}
 
@@ -1852,7 +1839,9 @@ export function VehicleManagement() {
             </h2>
 
             <div className="delete-warning">
-              <div className="delete-warning-title">⚠️ Advertencia</div>
+              <div className="delete-warning-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={20} /> Advertencia
+              </div>
               <div className="delete-warning-text">
                 Estás a punto de eliminar el vehículo <strong>{selectedVehiculo.patente}</strong> ({selectedVehiculo.marca} {selectedVehiculo.modelo}).
                 Esta acción es <strong>irreversible</strong>.

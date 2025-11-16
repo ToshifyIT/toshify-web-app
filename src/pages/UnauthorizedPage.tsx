@@ -1,5 +1,6 @@
 // src/pages/UnauthorizedPage.tsx
 import { useNavigate } from 'react-router-dom'
+import { Lock, Lightbulb } from 'lucide-react'
 
 export function UnauthorizedPage() {
   const navigate = useNavigate()
@@ -20,10 +21,11 @@ export function UnauthorizedPage() {
       }}>
         {/* Icono de candado */}
         <div style={{
-          fontSize: '80px',
-          marginBottom: '20px'
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'center'
         }}>
-          🔒
+          <Lock size={80} color="#9CA3AF" strokeWidth={1.5} />
         </div>
 
         {/* Título */}
@@ -114,10 +116,16 @@ export function UnauthorizedPage() {
           borderRadius: '8px',
           color: '#92400E',
           fontSize: '14px',
-          textAlign: 'left'
+          textAlign: 'left',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '8px'
         }}>
-          <strong>💡 Consejo:</strong> Si necesitas acceso a módulos adicionales,
-          solicita al administrador del sistema que actualice tus permisos de usuario.
+          <Lightbulb size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            <strong>Consejo:</strong> Si necesitas acceso a módulos adicionales,
+            solicita al administrador del sistema que actualice tus permisos de usuario.
+          </div>
         </div>
       </div>
     </div>
