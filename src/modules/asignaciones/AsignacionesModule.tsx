@@ -166,7 +166,29 @@ export function AsignacionesModule() {
 
     if (result.isConfirmed) {
       try {
-        // 1. Eliminar registros de asignaciones_conductores
+        // 0. Obtener la asignación antes de eliminarla (para actualizar vehículo)
+        const asignacion = asignaciones.find(a => a.id === id)
+
+        // 1. Obtener IDs de asignaciones_conductores para eliminar turnos ocupados
+        const { data: conductoresAsignados, error: fetchConductoresError } = await supabase
+          .from('asignaciones_conductores')
+          .select('id')
+          .eq('asignacion_id', id)
+
+        if (fetchConductoresError) throw fetchConductoresError
+
+        // 2. Eliminar registros de vehiculos_turnos_ocupados
+        if (conductoresAsignados && conductoresAsignados.length > 0) {
+          const conductorIds = conductoresAsignados.map(c => c.id)
+          const { error: turnosError } = await supabase
+            .from('vehiculos_turnos_ocupados')
+            .delete()
+            .in('asignacion_conductor_id', conductorIds)
+
+          if (turnosError) throw turnosError
+        }
+
+        // 3. Eliminar registros de asignaciones_conductores
         const { error: conductoresError } = await supabase
           .from('asignaciones_conductores')
           .delete()
@@ -174,10 +196,7 @@ export function AsignacionesModule() {
 
         if (conductoresError) throw conductoresError
 
-        // 2. Obtener la asignación antes de eliminarla (para actualizar vehículo)
-        const asignacion = asignaciones.find(a => a.id === id)
-
-        // 3. Eliminar la asignación
+        // 4. Eliminar la asignación
         const { error: asignacionError } = await supabase
           .from('asignaciones')
           .delete()
@@ -185,7 +204,7 @@ export function AsignacionesModule() {
 
         if (asignacionError) throw asignacionError
 
-        // 4. Actualizar estado del vehículo a "DISPONIBLE"
+        // 5. Actualizar estado del vehículo a "DISPONIBLE"
         if (asignacion?.vehiculo_id) {
           const { data: estadoDisponible, error: estadoError } = await supabase
             .from('vehiculos_estados')
@@ -639,7 +658,7 @@ export function AsignacionesModule() {
         }
 
         .assignments-table th {
-          text-align: left;
+          text-align: center;
           padding: 12px;
           background: #F9FAFB;
           font-size: 12px;
@@ -660,6 +679,7 @@ export function AsignacionesModule() {
           border-bottom: 1px solid #E5E7EB;
           color: #1F2937;
           font-size: 14px;
+          text-align: center;
         }
 
         .assignments-table td:last-child {
@@ -971,18 +991,9 @@ export function AsignacionesModule() {
                         : 'Sin definir'}
                     </td>
                     <td>
-                      <select
-                        value={asignacion.estado}
-                        onChange={(e) => handleStatusChange(asignacion.id, e.target.value)}
-                        className={`status-select badge ${getStatusBadgeClass(asignacion.estado)}`}
-                        disabled={!canEdit}
-                        style={{ border: 'none', cursor: canEdit ? 'pointer' : 'not-allowed' }}
-                      >
-                        <option value="programado">Programado</option>
-                        <option value="activa">Activa</option>
-                        <option value="finalizada">Finalizada</option>
-                        <option value="cancelada">Cancelada</option>
-                      </select>
+                      <span className={`badge ${getStatusBadgeClass(asignacion.estado)}`}>
+                        {asignacion.estado}
+                      </span>
                     </td>
                     <td>
                       {/* Botón Confirmar - solo visible si estado es PROGRAMADO */}
@@ -1032,7 +1043,7 @@ export function AsignacionesModule() {
                         onClick={() => handleDelete(asignacion.id)}
                         className="btn-action btn-delete"
                         title="Eliminar"
-                        disabled={!canDelete || (asignacion.estado === 'programado' && asignacion.created_by !== currentUserId)}
+                        disabled={!canDelete}
                       >
                         <Trash2 size={16} style={{ display: 'inline', verticalAlign: 'middle' }} />
                       </button>
@@ -1133,7 +1144,7 @@ export function AsignacionesModule() {
                         </p>
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
                           Turno: {ac.horario}
-                          {ac.confirmado && <span style={{ color: '#10B981', marginLeft: '8px', fontWeight: '600' }}>✓ Ya confirmado</span>}
+                          {ac.confirmado && <span style={{ color: '#10B981', marginLeft: '8px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={14} /> Ya confirmado</span>}
                           {ac.fecha_confirmacion && <span style={{ marginLeft: '8px' }}>el {new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}</span>}
                         </p>
                       </div>
@@ -1360,8 +1371,8 @@ export function AsignacionesModule() {
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           {ac.confirmado ? (
                             <>
-                              <span style={{ color: '#10B981', fontWeight: '600' }}>
-                                ✓ Confirmado {ac.fecha_confirmacion && `el ${new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}`}
+                              <span style={{ color: '#10B981', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <CheckCircle size={14} /> Confirmado {ac.fecha_confirmacion && `el ${new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}`}
                               </span>
                               {canEdit && viewAsignacion.estado === 'programado' && (
                                 <button

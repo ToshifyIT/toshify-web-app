@@ -1,5 +1,6 @@
 // src/components/admin/PermissionMatrix.tsx
 import { useState, useEffect } from 'react'
+import { Lightbulb, Check, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { PermissionWithRole } from '../../types/database.types'
 
@@ -205,9 +206,15 @@ export function PermissionMatrix() {
         padding: '16px',
         marginBottom: '24px',
         fontSize: '14px',
-        color: '#1E40AF'
+        color: '#1E40AF',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '8px'
       }}>
-        <strong>💡 Consejo:</strong> Haz clic en cualquier permiso para activarlo o desactivarlo en tiempo real.
+        <Lightbulb size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+        <div>
+          <strong>Consejo:</strong> Haz clic en cualquier permiso para activarlo o desactivarlo en tiempo real.
+        </div>
       </div>
 
       <div className="permission-matrix">
@@ -236,7 +243,7 @@ export function PermissionMatrix() {
                     className={`permission-icon ${perm.can_create ? 'granted' : 'denied'} ${updating === perm.id ? 'updating' : ''}`}
                     onClick={() => togglePermission(perm.id, 'can_create', perm.can_create)}
                   >
-                    {perm.can_create ? '✓' : '✗'}
+                    {perm.can_create ? <Check size={14} /> : <X size={14} />}
                   </div>
                 </td>
                 <td>
@@ -244,7 +251,7 @@ export function PermissionMatrix() {
                     className={`permission-icon ${perm.can_read ? 'granted' : 'denied'} ${updating === perm.id ? 'updating' : ''}`}
                     onClick={() => togglePermission(perm.id, 'can_read', perm.can_read)}
                   >
-                    {perm.can_read ? '✓' : '✗'}
+                    {perm.can_read ? <Check size={14} /> : <X size={14} />}
                   </div>
                 </td>
                 <td>
@@ -252,7 +259,7 @@ export function PermissionMatrix() {
                     className={`permission-icon ${perm.can_update ? 'granted' : 'denied'} ${updating === perm.id ? 'updating' : ''}`}
                     onClick={() => togglePermission(perm.id, 'can_update', perm.can_update)}
                   >
-                    {perm.can_update ? '✓' : '✗'}
+                    {perm.can_update ? <Check size={14} /> : <X size={14} />}
                   </div>
                 </td>
                 <td>
@@ -260,7 +267,7 @@ export function PermissionMatrix() {
                     className={`permission-icon ${perm.can_delete ? 'granted' : 'denied'} ${updating === perm.id ? 'updating' : ''}`}
                     onClick={() => togglePermission(perm.id, 'can_delete', perm.can_delete)}
                   >
-                    {perm.can_delete ? '✓' : '✗'}
+                    {perm.can_delete ? <Check size={14} /> : <X size={14} />}
                   </div>
                 </td>
               </tr>

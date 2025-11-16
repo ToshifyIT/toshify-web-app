@@ -722,7 +722,7 @@ export function MenuHierarchyManager() {
           <input
             type="text"
             className="search-input"
-            placeholder="🔍 Buscar en todos los campos..."
+            placeholder="Buscar en todos los campos..."
             value={globalFilter ?? ''}
             onChange={(e) => setGlobalFilter(e.target.value)}
           />

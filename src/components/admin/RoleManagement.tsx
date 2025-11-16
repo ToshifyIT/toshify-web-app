@@ -1,5 +1,6 @@
 // src/components/admin/RoleManagement.tsx
 import { useState, useEffect } from 'react'
+import { AlertTriangle, Edit2, Trash2, Info } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { Role } from '../../types/database.types'
 
@@ -16,12 +17,12 @@ export function RoleManagement() {
   const [newRole, setNewRole] = useState({
     name: '',
     description: '',
-    icon: '🔑'
+    icon: ''
   })
   const [editRole, setEditRole] = useState({
     name: '',
     description: '',
-    icon: '🔑'
+    icon: ''
   })
 
   const availableModules = ['vehiculos', 'conductores', 'usuarios', 'reportes']
@@ -85,13 +86,13 @@ export function RoleManagement() {
 
       if (permError) throw permError
 
-      alert('✅ Rol creado exitosamente con permisos por defecto')
+      alert('Rol creado exitosamente con permisos por defecto')
       setShowCreateModal(false)
-      setNewRole({ name: '', description: '', icon: '🔑' })
+      setNewRole({ name: '', description: '', icon: '' })
       await loadRoles()
     } catch (err: any) {
       console.error('Error creando rol:', err)
-      alert('❌ Error: ' + err.message)
+      alert('Error: ' + err.message)
     } finally {
       setCreating(false)
     }
@@ -116,13 +117,13 @@ export function RoleManagement() {
 
       if (error) throw error
 
-      alert('✅ Rol actualizado exitosamente')
+      alert('Rol actualizado exitosamente')
       setShowEditModal(false)
       setSelectedRole(null)
       await loadRoles()
     } catch (err: any) {
       console.error('Error actualizando rol:', err)
-      alert('❌ Error: ' + err.message)
+      alert('Error: ' + err.message)
     } finally {
       setCreating(false)
     }
@@ -143,7 +144,7 @@ export function RoleManagement() {
       if (usersError) throw usersError
 
       if (users && users.length > 0) {
-        alert('❌ No se puede eliminar este rol porque tiene usuarios asignados')
+        alert('No se puede eliminar este rol porque tiene usuarios asignados')
         setShowDeleteModal(false)
         setSelectedRole(null)
         setCreating(false)
@@ -166,13 +167,13 @@ export function RoleManagement() {
 
       if (roleError) throw roleError
 
-      alert('✅ Rol eliminado exitosamente')
+      alert('Rol eliminado exitosamente')
       setShowDeleteModal(false)
       setSelectedRole(null)
       await loadRoles()
     } catch (err: any) {
       console.error('Error eliminando rol:', err)
-      alert('❌ Error: ' + err.message)
+      alert('Error: ' + err.message)
     } finally {
       setCreating(false)
     }
@@ -509,13 +510,13 @@ export function RoleManagement() {
                 className="btn-icon btn-edit"
                 onClick={() => openEditModal(role)}
               >
-                ✏️ Editar
+                <Edit2 size={16} /> Editar
               </button>
               <button
                 className="btn-icon btn-delete"
                 onClick={() => openDeleteModal(role)}
               >
-                🗑️ Eliminar
+                <Trash2 size={16} /> Eliminar
               </button>
             </div>
           </div>
@@ -564,9 +565,15 @@ export function RoleManagement() {
               padding: '12px',
               marginBottom: '16px',
               fontSize: '13px',
-              color: '#1E40AF'
+              color: '#1E40AF',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px'
             }}>
-              <strong>ℹ️ Nota:</strong> Se crearán permisos por defecto (solo lectura) para todos los módulos. Podrás editarlos en la pestaña "Permisos".
+              <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <strong>Nota:</strong> Se crearán permisos por defecto (solo lectura) para todos los módulos. Podrás editarlos en la pestaña "Permisos".
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
@@ -574,7 +581,7 @@ export function RoleManagement() {
                 className="btn-secondary"
                 onClick={() => {
                   setShowCreateModal(false)
-                  setNewRole({ name: '', description: '', icon: '🔑' })
+                  setNewRole({ name: '', description: '', icon: '' })
                 }}
                 disabled={creating}
               >
@@ -658,7 +665,9 @@ export function RoleManagement() {
             </h2>
 
             <div className="delete-warning">
-              <div className="delete-warning-title">⚠️ Advertencia</div>
+              <div className="delete-warning-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={20} /> Advertencia
+              </div>
               <div className="delete-warning-text">
                 Estás a punto de eliminar el rol "<strong>{selectedRole.name}</strong>".
                 Esta acción eliminará también todos los permisos asociados y es <strong>irreversible</strong>.
