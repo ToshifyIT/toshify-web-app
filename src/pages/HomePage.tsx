@@ -14,6 +14,7 @@ import { IncidenciasPage } from './incidencias/IncidenciasPage'
 import { InformesPage } from './informes/InformesPage'
 import { AsignacionesPage } from './asignaciones/AsignacionesPage'
 import { AsignacionesActivasPage } from './asignaciones/AsignacionesActivasPage'
+import { ProductosPage } from './productos/ProductosPage'
 import { USSPage } from './integraciones/uss/USSPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
@@ -559,6 +560,11 @@ export function HomePage() {
               <Route path="/conductores" element={
                 <ProtectedRoute menuName="conductores" action="view">
                   <ConductoresPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/productos" element={
+                <ProtectedRoute menuName="productos" action="view">
+                  <ProductosPage />
                 </ProtectedRoute>
               } />
               <Route path="/siniestros" element={
