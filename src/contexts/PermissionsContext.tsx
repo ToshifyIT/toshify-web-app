@@ -295,32 +295,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   }
 
   const getVisibleMenus = (): MenuPermission[] => {
-    // Orden fijo de menús (hardcoded)
-    const menuOrder = [
-      'asignaciones',
-      'conductores',
-      'vehiculos',
-      'incidencias',
-      'siniestros',
-      'reportes',
-      'integraciones',
-      'administracion'
-    ]
-
-    const visibleMenus = userPermissions?.menus.filter(m => m.permissions.can_view) ?? []
-
-    // Ordenar según el array menuOrder
-    return visibleMenus.sort((a, b) => {
-      const indexA = menuOrder.indexOf(a.name)
-      const indexB = menuOrder.indexOf(b.name)
-
-      // Si un menú no está en menuOrder, ponerlo al final
-      if (indexA === -1 && indexB === -1) return 0
-      if (indexA === -1) return 1
-      if (indexB === -1) return -1
-
-      return indexA - indexB
-    })
+    return userPermissions?.menus
+      .filter(m => m.permissions.can_view)
+      .sort((a, b) => a.order_index - b.order_index) ?? []
   }
 
   const getVisibleSubmenus = (): SubmenuPermission[] => {
