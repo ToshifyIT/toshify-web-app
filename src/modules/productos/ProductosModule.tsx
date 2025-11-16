@@ -9,7 +9,7 @@ import {
   SortingState,
   ColumnDef,
 } from '@tanstack/react-table'
-import { supabase } from '../../services/supabaseClient'
+import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
 import {
   Eye,
