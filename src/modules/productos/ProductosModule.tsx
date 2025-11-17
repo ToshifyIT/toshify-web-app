@@ -215,13 +215,13 @@ export function ProductosModule() {
           created_by: userData.user?.id
         } as any)
         .select()
-        .single()
+        .single() as any
 
       if (error) throw error
 
       // Insertar categorías
       if (formData.categorias_ids.length > 0 && producto) {
-        const categoriasData = formData.categorias_ids.map(cat_id => ({
+        const categoriasData = formData.categorias_ids.map((cat_id: string) => ({
           producto_id: producto.id,
           categoria_id: cat_id
         }))
@@ -277,7 +277,7 @@ export function ProductosModule() {
           modelo: formData.modelo,
           observacion: formData.observacion,
           updated_at: new Date().toISOString()
-        })
+        } as any)
         .eq('id', selectedProducto.id)
 
       if (error) throw error
