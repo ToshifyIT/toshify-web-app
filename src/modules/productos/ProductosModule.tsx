@@ -213,7 +213,7 @@ export function ProductosModule() {
           modelo: formData.modelo,
           observacion: formData.observacion,
           created_by: userData.user?.id
-        })
+        } as any)
         .select()
         .single()
 
@@ -228,7 +228,7 @@ export function ProductosModule() {
 
         const { error: catError } = await supabase
           .from('productos_categorias')
-          .insert(categoriasData)
+          .insert(categoriasData as any)
 
         if (catError) throw catError
       }
@@ -296,7 +296,7 @@ export function ProductosModule() {
 
         const { error: catError } = await supabase
           .from('productos_categorias')
-          .insert(categoriasData)
+          .insert(categoriasData as any)
 
         if (catError) throw catError
       }
