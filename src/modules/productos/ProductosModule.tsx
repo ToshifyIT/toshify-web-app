@@ -199,8 +199,8 @@ export function ProductosModule() {
     try {
       const { data: userData } = await supabase.auth.getUser()
 
-      const { data: producto, error } = await supabase
-        .from('productos')
+      const { data: producto, error } = await (supabase
+        .from('productos') as any)
         .insert({
           codigo: formData.codigo,
           nombre: formData.nombre,
@@ -213,9 +213,9 @@ export function ProductosModule() {
           modelo: formData.modelo,
           observacion: formData.observacion,
           created_by: userData.user?.id
-        } as any)
+        })
         .select()
-        .single() as any
+        .single()
 
       if (error) throw error
 
@@ -226,9 +226,9 @@ export function ProductosModule() {
           categoria_id: cat_id
         }))
 
-        const { error: catError } = await supabase
-          .from('productos_categorias')
-          .insert(categoriasData as any)
+        const { error: catError } = await (supabase
+          .from('productos_categorias') as any)
+          .insert(categoriasData)
 
         if (catError) throw catError
       }
@@ -264,27 +264,29 @@ export function ProductosModule() {
     }
 
     try {
-      const { error } = await supabase
-        .from('productos')
-        .update({
-          codigo: formData.codigo,
-          nombre: formData.nombre,
-          descripcion: formData.descripcion,
-          unidad_medida_id: formData.unidad_medida_id,
-          stock_actual: formData.stock_actual,
-          estado_id: formData.estado_id,
-          proveedor: formData.proveedor,
-          modelo: formData.modelo,
-          observacion: formData.observacion,
-          updated_at: new Date().toISOString()
-        } as any)
+      const updateData: any = {
+        codigo: formData.codigo,
+        nombre: formData.nombre,
+        descripcion: formData.descripcion,
+        unidad_medida_id: formData.unidad_medida_id,
+        stock_actual: formData.stock_actual,
+        estado_id: formData.estado_id,
+        proveedor: formData.proveedor,
+        modelo: formData.modelo,
+        observacion: formData.observacion,
+        updated_at: new Date().toISOString()
+      }
+
+      const { error } = await (supabase
+        .from('productos') as any)
+        .update(updateData)
         .eq('id', selectedProducto.id)
 
       if (error) throw error
 
       // Actualizar categorías
-      await supabase
-        .from('productos_categorias')
+      await (supabase
+        .from('productos_categorias') as any)
         .delete()
         .eq('producto_id', selectedProducto.id)
 
@@ -294,9 +296,9 @@ export function ProductosModule() {
           categoria_id: cat_id
         }))
 
-        const { error: catError } = await supabase
-          .from('productos_categorias')
-          .insert(categoriasData as any)
+        const { error: catError } = await (supabase
+          .from('productos_categorias') as any)
+          .insert(categoriasData)
 
         if (catError) throw catError
       }
@@ -344,8 +346,8 @@ export function ProductosModule() {
 
     if (result.isConfirmed) {
       try {
-        const { error } = await supabase
-          .from('productos')
+        const { error } = await (supabase
+          .from('productos') as any)
           .delete()
           .eq('id', id)
 
