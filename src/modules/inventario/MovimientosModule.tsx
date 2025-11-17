@@ -4,9 +4,9 @@ import Swal from 'sweetalert2'
 import {
   Package,
   RotateCcw,
-  User,
   AlertTriangle,
-  XCircle
+  XCircle,
+  Truck
 } from 'lucide-react'
 
 interface Producto {
@@ -14,12 +14,6 @@ interface Producto {
   codigo: string
   nombre: string
   es_retornable: boolean
-}
-
-interface Conductor {
-  id: string
-  nombres: string
-  apellidos: string
 }
 
 interface Vehiculo {
@@ -33,7 +27,6 @@ type TipoMovimiento = 'entrada' | 'salida' | 'asignacion' | 'devolucion' | 'ajus
 
 export function MovimientosModule() {
   const [productos, setProductos] = useState<Producto[]>([])
-  const [conductores, setConductores] = useState<Conductor[]>([])
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [loading, setLoading] = useState(true)
   const [tipoMovimiento, setTipoMovimiento] = useState<TipoMovimiento>('entrada')
@@ -41,7 +34,6 @@ export function MovimientosModule() {
   // Form data
   const [productoId, setProductoId] = useState('')
   const [cantidad, setCantidad] = useState(1)
-  const [conductorId, setConductorId] = useState('')
   const [vehiculoId, setVehiculoId] = useState('')
   const [estadoDestino, setEstadoDestino] = useState<'disponible' | 'dañado' | 'perdido'>('disponible')
   const [observaciones, setObservaciones] = useState('')
@@ -54,14 +46,12 @@ export function MovimientosModule() {
     try {
       setLoading(true)
 
-      const [prodRes, condRes, vehRes] = await Promise.all([
+      const [prodRes, vehRes] = await Promise.all([
         supabase.from('productos').select('id, codigo, nombre, es_retornable').order('nombre'),
-        supabase.from('conductores').select('id, nombres, apellidos').eq('activo', true).order('apellidos'),
-        supabase.from('vehiculos').select('id, patente, marca, modelo').eq('activo', true).order('patente')
+        supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente')
       ])
 
       if (prodRes.data) setProductos(prodRes.data)
-      if (condRes.data) setConductores(condRes.data)
       if (vehRes.data) setVehiculos(vehRes.data)
     } catch (err: any) {
       console.error('Error cargando datos:', err)
@@ -78,7 +68,6 @@ export function MovimientosModule() {
   const resetForm = () => {
     setProductoId('')
     setCantidad(1)
-    setConductorId('')
     setVehiculoId('')
     setEstadoDestino('disponible')
     setObservaciones('')
@@ -107,11 +96,11 @@ export function MovimientosModule() {
         })
         return
       }
-      if (!conductorId && !vehiculoId) {
+      if (!vehiculoId) {
         Swal.fire({
           icon: 'warning',
           title: 'Datos incompletos',
-          text: 'Selecciona un conductor o vehículo para la asignación'
+          text: 'Debes seleccionar un vehículo para el uso'
         })
         return
       }
@@ -126,11 +115,11 @@ export function MovimientosModule() {
         })
         return
       }
-      if (!conductorId && !vehiculoId) {
+      if (!vehiculoId) {
         Swal.fire({
           icon: 'warning',
           title: 'Datos incompletos',
-          text: 'Selecciona el conductor o vehículo que devuelve'
+          text: 'Debes seleccionar el vehículo que devuelve'
         })
         return
       }
@@ -144,7 +133,7 @@ export function MovimientosModule() {
         p_producto_id: productoId,
         p_tipo_movimiento: tipoMovimiento,
         p_cantidad: cantidad,
-        p_conductor_destino_id: conductorId || null,
+        p_conductor_destino_id: null,
         p_vehiculo_destino_id: vehiculoId || null,
         p_estado_destino: estadoDestino,
         p_usuario_id: userData.user?.id,
@@ -175,7 +164,7 @@ export function MovimientosModule() {
     const labels: Record<TipoMovimiento, string> = {
       entrada: 'Entrada',
       salida: 'Salida',
-      asignacion: 'Asignación',
+      asignacion: 'Uso',
       devolucion: 'Devolución',
       ajuste: 'Ajuste',
       daño: 'Marcar como dañado',
@@ -188,7 +177,7 @@ export function MovimientosModule() {
     const icons: Record<TipoMovimiento, any> = {
       entrada: <Package size={20} />,
       salida: <Package size={20} />,
-      asignacion: <User size={20} />,
+      asignacion: <Truck size={20} />,
       devolucion: <RotateCcw size={20} />,
       ajuste: <Package size={20} />,
       daño: <AlertTriangle size={20} />,
@@ -306,38 +295,11 @@ export function MovimientosModule() {
             />
           </div>
 
-          {/* Conductor (solo para asignación/devolución) */}
-          {(tipoMovimiento === 'asignacion' || tipoMovimiento === 'devolucion') && (
+          {/* Vehículo (solo para USO/asignación) */}
+          {tipoMovimiento === 'asignacion' && (
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
-                Conductor {tipoMovimiento === 'asignacion' ? '*' : ''}
-              </label>
-              <select
-                value={conductorId}
-                onChange={(e) => setConductorId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #D1D5DB',
-                  borderRadius: '8px',
-                  fontSize: '14px'
-                }}
-              >
-                <option value="">Ninguno</option>
-                {conductores.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.apellidos}, {c.nombres}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Vehículo (solo para asignación/devolución) */}
-          {(tipoMovimiento === 'asignacion' || tipoMovimiento === 'devolucion') && (
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
-                Vehículo
+                Vehículo *
               </label>
               <select
                 value={vehiculoId}
@@ -350,13 +312,50 @@ export function MovimientosModule() {
                   fontSize: '14px'
                 }}
               >
-                <option value="">Ninguno</option>
+                <option value="">Seleccionar vehículo...</option>
                 {vehiculos.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.patente} - {v.marca} {v.modelo}
                   </option>
                 ))}
               </select>
+              {vehiculos.length === 0 && (
+                <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px', fontStyle: 'italic' }}>
+                  No hay vehículos activos disponibles
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Vehículo (solo para devolución) */}
+          {tipoMovimiento === 'devolucion' && (
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                Vehículo *
+              </label>
+              <select
+                value={vehiculoId}
+                onChange={(e) => setVehiculoId(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '8px',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="">Seleccionar vehículo...</option>
+                {vehiculos.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.patente} - {v.marca} {v.modelo}
+                  </option>
+                ))}
+              </select>
+              {vehiculos.length === 0 && (
+                <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px', fontStyle: 'italic' }}>
+                  No hay vehículos disponibles
+                </p>
+              )}
             </div>
           )}
 

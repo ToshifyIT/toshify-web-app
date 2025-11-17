@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { User, Package, Calendar } from 'lucide-react'
+import { Truck, Package, Calendar } from 'lucide-react'
 
 interface AsignacionActiva {
-  conductor_id: string
-  conductor: string
+  vehiculo_id: string
+  vehiculo_patente: string
+  vehiculo_marca: string
+  vehiculo_modelo: string
   codigo: string
   producto: string
   cantidad: number
-  ubicacion: string | null
-  observaciones: string | null
   fecha_asignacion: string
 }
 
@@ -25,13 +25,45 @@ export function AsignacionesActivasModule() {
   const loadAsignaciones = async () => {
     try {
       setLoading(true)
+      // Query inventario table for items in_uso assigned to vehicles
       const { data, error } = await supabase
-        .from('v_herramientas_por_conductor')
-        .select('*')
-        .order('conductor')
+        .from('inventario')
+        .select(`
+          id,
+          cantidad,
+          created_at,
+          asignado_a_vehiculo_id,
+          vehiculos:asignado_a_vehiculo_id (
+            id,
+            patente,
+            marca,
+            modelo
+          ),
+          productos (
+            id,
+            codigo,
+            nombre
+          )
+        `)
+        .eq('estado', 'en_uso')
+        .not('asignado_a_vehiculo_id', 'is', null)
+        .order('created_at', { ascending: false })
 
       if (error) throw error
-      setAsignaciones(data || [])
+
+      // Transform data to match AsignacionActiva interface
+      const transformed = (data || []).map((item: any) => ({
+        vehiculo_id: item.vehiculos?.id || '',
+        vehiculo_patente: item.vehiculos?.patente || '',
+        vehiculo_marca: item.vehiculos?.marca || '',
+        vehiculo_modelo: item.vehiculos?.modelo || '',
+        codigo: item.productos?.codigo || '',
+        producto: item.productos?.nombre || '',
+        cantidad: item.cantidad,
+        fecha_asignacion: item.created_at
+      }))
+
+      setAsignaciones(transformed)
     } catch (err: any) {
       console.error('Error cargando asignaciones:', err)
     } finally {
@@ -40,22 +72,26 @@ export function AsignacionesActivasModule() {
   }
 
   const filteredData = asignaciones.filter((item) =>
-    item.conductor.toLowerCase().includes(filter.toLowerCase()) ||
+    item.vehiculo_patente.toLowerCase().includes(filter.toLowerCase()) ||
+    item.vehiculo_marca.toLowerCase().includes(filter.toLowerCase()) ||
+    item.vehiculo_modelo.toLowerCase().includes(filter.toLowerCase()) ||
     item.producto.toLowerCase().includes(filter.toLowerCase()) ||
     item.codigo.toLowerCase().includes(filter.toLowerCase())
   )
 
-  // Agrupar por conductor
-  const porConductor = filteredData.reduce((acc, item) => {
-    if (!acc[item.conductor_id]) {
-      acc[item.conductor_id] = {
-        conductor: item.conductor,
+  // Agrupar por vehículo
+  const porVehiculo = filteredData.reduce((acc, item) => {
+    if (!acc[item.vehiculo_id]) {
+      acc[item.vehiculo_id] = {
+        vehiculo_patente: item.vehiculo_patente,
+        vehiculo_marca: item.vehiculo_marca,
+        vehiculo_modelo: item.vehiculo_modelo,
         herramientas: []
       }
     }
-    acc[item.conductor_id].herramientas.push(item)
+    acc[item.vehiculo_id].herramientas.push(item)
     return acc
-  }, {} as Record<string, { conductor: string, herramientas: AsignacionActiva[] }>)
+  }, {} as Record<string, { vehiculo_patente: string, vehiculo_marca: string, vehiculo_modelo: string, herramientas: AsignacionActiva[] }>)
 
   if (loading) {
     return (
@@ -73,7 +109,7 @@ export function AsignacionesActivasModule() {
           Asignaciones Activas
         </h1>
         <p style={{ color: '#6B7280', fontSize: '14px' }}>
-          Herramientas asignadas a conductores y vehículos
+          Herramientas asignadas a vehículos
         </p>
       </div>
 
@@ -81,7 +117,7 @@ export function AsignacionesActivasModule() {
       <div style={{ marginBottom: '24px' }}>
         <input
           type="text"
-          placeholder="Buscar por conductor o producto..."
+          placeholder="Buscar por vehículo o producto..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           style={{
@@ -114,12 +150,12 @@ export function AsignacionesActivasModule() {
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <User size={24} style={{ color: '#1E40AF' }} />
+              <Truck size={24} style={{ color: '#1E40AF' }} />
             </div>
             <div>
-              <p style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>Conductores con asignaciones</p>
+              <p style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>Vehículos con asignaciones</p>
               <p style={{ fontSize: '24px', fontWeight: 700, color: '#1F2937' }}>
-                {Object.keys(porConductor).length}
+                {Object.keys(porVehiculo).length}
               </p>
             </div>
           </div>
@@ -154,11 +190,11 @@ export function AsignacionesActivasModule() {
         </div>
       </div>
 
-      {/* Lista por Conductor */}
+      {/* Lista por Vehículo */}
       <div style={{ display: 'grid', gap: '20px' }}>
-        {Object.entries(porConductor).map(([conductorId, data]) => (
+        {Object.entries(porVehiculo).map(([vehiculoId, data]) => (
           <div
-            key={conductorId}
+            key={vehiculoId}
             style={{
               background: 'white',
               borderRadius: '12px',
@@ -167,7 +203,7 @@ export function AsignacionesActivasModule() {
               border: '1px solid #E5E7EB'
             }}
           >
-            {/* Header del Conductor */}
+            {/* Header del Vehículo */}
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -180,22 +216,20 @@ export function AsignacionesActivasModule() {
                 width: '40px',
                 height: '40px',
                 background: '#DC2626',
-                borderRadius: '50%',
+                borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'white',
-                fontWeight: 700,
-                fontSize: '16px'
+                color: 'white'
               }}>
-                {data.conductor.charAt(0)}
+                <Truck size={20} />
               </div>
               <div>
                 <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#1F2937', margin: 0 }}>
-                  {data.conductor}
+                  {data.vehiculo_patente}
                 </h3>
                 <p style={{ fontSize: '13px', color: '#6B7280', margin: '4px 0 0 0' }}>
-                  {data.herramientas.length} herramientas asignadas
+                  {data.vehiculo_marca} {data.vehiculo_modelo} • {data.herramientas.length} herramientas asignadas
                 </p>
               </div>
             </div>
@@ -215,9 +249,6 @@ export function AsignacionesActivasModule() {
                       Cantidad
                     </th>
                     <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
-                      Ubicación
-                    </th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
                       Fecha Asignación
                     </th>
                   </tr>
@@ -235,9 +266,6 @@ export function AsignacionesActivasModule() {
                         {item.cantidad}
                       </td>
                       <td style={{ padding: '12px', fontSize: '14px', color: '#6B7280' }}>
-                        {item.ubicacion || '-'}
-                      </td>
-                      <td style={{ padding: '12px', fontSize: '14px', color: '#6B7280' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Calendar size={14} />
                           {new Date(item.fecha_asignacion).toLocaleDateString('es-CL')}
@@ -247,18 +275,6 @@ export function AsignacionesActivasModule() {
                   ))}
                 </tbody>
               </table>
-              {data.herramientas.some(h => h.observaciones) && (
-                <div style={{ marginTop: '12px', padding: '12px', background: '#FEF3C7', borderRadius: '8px' }}>
-                  <p style={{ fontSize: '12px', fontWeight: 600, color: '#92400E', marginBottom: '8px' }}>
-                    Observaciones:
-                  </p>
-                  {data.herramientas.filter(h => h.observaciones).map((item, idx) => (
-                    <p key={idx} style={{ fontSize: '13px', color: '#78350F', margin: '4px 0' }}>
-                      <strong>{item.producto}:</strong> {item.observaciones}
-                    </p>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         ))}
