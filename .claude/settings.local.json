@@ -24,7 +24,9 @@
       "Bash(Select-Object -First 15)",
       "Bash(cat:*)",
       "Bash(Select-Object -First 10)",
-      "Bash(Select-String -Path \"C:\\Users\\dev\\Documents\\toshify\\toshify-web-app\\src\\modules\\asignaciones\\AsignacionesModule.tsx\" -Pattern \"asignaciones_conductores\" -Context 5)"
+      "Bash(Select-String -Path \"C:\\Users\\dev\\Documents\\toshify\\toshify-web-app\\src\\modules\\asignaciones\\AsignacionesModule.tsx\" -Pattern \"asignaciones_conductores\" -Context 5)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "ask": []
