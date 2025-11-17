@@ -112,8 +112,10 @@ export function ProductosModule() {
   }, [])
 
   const loadProductos = async () => {
+    console.log('🔵 loadProductos - INICIO')
     try {
       setLoading(true)
+      console.log('🔵 loadProductos - Consultando supabase...')
       const { data, error } = await supabase
         .from('productos')
         .select(`
@@ -140,16 +142,19 @@ export function ProductosModule() {
         `)
         .order('created_at', { ascending: false })
 
+      console.log('🔵 loadProductos - Respuesta recibida:', { data, error })
       if (error) throw error
       setProductos(data || [])
+      console.log('🟢 loadProductos - SUCCESS')
     } catch (err: any) {
-      console.error('Error cargando productos:', err)
+      console.error('🔴 Error cargando productos:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
         text: 'No se pudieron cargar los productos',
       })
     } finally {
+      console.log('🔵 loadProductos - FINALLY - setLoading(false)')
       setLoading(false)
     }
   }
@@ -607,6 +612,8 @@ export function ProductosModule() {
       pagination: { pageSize: 10 },
     },
   })
+
+  console.log('ProductosModule render - loading:', loading, 'productos:', productos.length)
 
   if (loading) {
     return (

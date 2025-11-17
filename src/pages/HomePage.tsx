@@ -562,11 +562,7 @@ export function HomePage() {
                   <ConductoresPage />
                 </ProtectedRoute>
               } />
-              <Route path="/productos" element={
-                <ProtectedRoute menuName="productos" action="view">
-                  <ProductosPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/productos" element={<ProductosPage />} />
               <Route path="/siniestros" element={
                 <ProtectedRoute menuName="siniestros" action="view">
                   <SiniestrosPage />
