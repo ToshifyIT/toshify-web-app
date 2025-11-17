@@ -15,6 +15,9 @@ import { InformesPage } from './informes/InformesPage'
 import { AsignacionesPage } from './asignaciones/AsignacionesPage'
 import { AsignacionesActivasPage } from './asignaciones/AsignacionesActivasPage'
 import { ProductosPage } from './productos/ProductosPage'
+import { InventarioDashboardPage } from './inventario/InventarioDashboardPage'
+import { MovimientosPage } from './inventario/MovimientosPage'
+import { AsignacionesActivasPage as AsignacionesActivasInventarioPage } from './inventario/AsignacionesActivasPage'
 import { USSPage } from './integraciones/uss/USSPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
@@ -562,7 +565,29 @@ export function HomePage() {
                   <ConductoresPage />
                 </ProtectedRoute>
               } />
-              <Route path="/productos" element={<ProductosPage />} />
+              <Route path="/productos" element={
+                <ProtectedRoute submenuName="productos" action="view">
+                  <ProductosPage />
+                </ProtectedRoute>
+              } />
+
+              {/* Inventario */}
+              <Route path="/inventario/dashboard" element={
+                <ProtectedRoute submenuName="inventario-dashboard" action="view">
+                  <InventarioDashboardPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/inventario/movimientos" element={
+                <ProtectedRoute submenuName="inventario-movimientos" action="view">
+                  <MovimientosPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/inventario/asignaciones-activas" element={
+                <ProtectedRoute submenuName="inventario-asignaciones" action="view">
+                  <AsignacionesActivasInventarioPage />
+                </ProtectedRoute>
+              } />
+
               <Route path="/siniestros" element={
                 <ProtectedRoute menuName="siniestros" action="view">
                   <SiniestrosPage />

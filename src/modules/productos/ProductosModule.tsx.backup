@@ -19,8 +19,10 @@ import {
   Search,
   Package,
   Tag,
+  Scale,
   Info,
-  Calendar
+  Calendar,
+  AlertCircle
 } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 
@@ -49,11 +51,12 @@ interface Producto {
   nombre: string
   descripcion?: string
   unidad_medida_id: string
+  stock_actual: number
+  stock_en_uso: number
   estado_id: string
   categoria_id?: string
-  es_retornable: boolean
-  tipo: 'REPUESTOS' | 'HERRAMIENTAS'
   proveedor?: string
+  modelo?: string
   observacion?: string
   created_at: string
   updated_at: string
@@ -89,10 +92,11 @@ export function ProductosModule() {
     nombre: '',
     descripcion: '',
     unidad_medida_id: '',
+    stock_actual: 0,
     estado_id: '',
     categoria_id: '',
-    tipo: 'REPUESTOS' as 'REPUESTOS' | 'HERRAMIENTAS',
     proveedor: '',
+    modelo: '',
     observacion: ''
   })
 
@@ -195,11 +199,12 @@ export function ProductosModule() {
           nombre: formData.nombre,
           descripcion: formData.descripcion,
           unidad_medida_id: formData.unidad_medida_id,
+          stock_actual: formData.stock_actual,
+          stock_en_uso: 0,
           estado_id: formData.estado_id,
           categoria_id: formData.categoria_id || null,
-          es_retornable: formData.tipo === 'HERRAMIENTAS',
-          tipo: formData.tipo,
           proveedor: formData.proveedor,
+          modelo: formData.modelo,
           observacion: formData.observacion,
           created_by: userData.user?.id
         })
@@ -242,11 +247,11 @@ export function ProductosModule() {
         nombre: formData.nombre,
         descripcion: formData.descripcion,
         unidad_medida_id: formData.unidad_medida_id,
+        stock_actual: formData.stock_actual,
         estado_id: formData.estado_id,
         categoria_id: formData.categoria_id || null,
-        es_retornable: formData.tipo === 'HERRAMIENTAS',
-        tipo: formData.tipo,
         proveedor: formData.proveedor,
+        modelo: formData.modelo,
         observacion: formData.observacion,
         updated_at: new Date().toISOString()
       }
@@ -339,10 +344,11 @@ export function ProductosModule() {
       nombre: producto.nombre,
       descripcion: producto.descripcion || '',
       unidad_medida_id: producto.unidad_medida_id,
+      stock_actual: producto.stock_actual,
       estado_id: producto.estado_id,
       categoria_id: producto.categoria_id || '',
-      tipo: producto.tipo,
       proveedor: producto.proveedor || '',
+      modelo: producto.modelo || '',
       observacion: producto.observacion || ''
     })
     setShowEditModal(true)
@@ -359,10 +365,11 @@ export function ProductosModule() {
       nombre: '',
       descripcion: '',
       unidad_medida_id: '',
+      stock_actual: 0,
       estado_id: '',
       categoria_id: '',
-      tipo: 'REPUESTOS',
       proveedor: '',
+      modelo: '',
       observacion: ''
     })
     setSelectedProducto(null)
@@ -410,36 +417,24 @@ export function ProductosModule() {
         },
       },
       {
-        id: 'tipo',
-        header: 'Tipo',
+        id: 'stock',
+        header: 'Stock',
         cell: ({ row }) => {
-          const tipo = row.original.tipo
-          return tipo === 'HERRAMIENTAS' ? (
-            <span
-              style={{
-                background: '#DBEAFE',
-                color: '#1E40AF',
-                padding: '4px 12px',
-                borderRadius: '12px',
-                fontSize: '12px',
-                fontWeight: 600
-              }}
-            >
-              HERRAMIENTAS
-            </span>
-          ) : (
-            <span
-              style={{
-                background: '#FEF3C7',
-                color: '#92400E',
-                padding: '4px 12px',
-                borderRadius: '12px',
-                fontSize: '12px',
-                fontWeight: 600
-              }}
-            >
-              REPUESTOS
-            </span>
+          const disponible = row.original.stock_actual - row.original.stock_en_uso
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                Total: {row.original.stock_actual}
+              </div>
+              <div style={{ fontSize: '12px', color: '#059669' }}>
+                Disponible: {disponible}
+              </div>
+              {row.original.stock_en_uso > 0 && (
+                <div style={{ fontSize: '12px', color: '#DC2626' }}>
+                  En uso: {row.original.stock_en_uso}
+                </div>
+              )}
+            </div>
           )
         },
       },
@@ -815,28 +810,49 @@ export function ProductosModule() {
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Unidad de Medida *
-                </label>
-                <select
-                  value={formData.unidad_medida_id}
-                  onChange={(e) => setFormData({ ...formData, unidad_medida_id: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #D1D5DB',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                  }}
-                >
-                  <option value="">Seleccionar...</option>
-                  {unidadesMedida.map((um) => (
-                    <option key={um.id} value={um.id}>
-                      {um.descripcion}
-                    </option>
-                  ))}
-                </select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                    Unidad de Medida *
+                  </label>
+                  <select
+                    value={formData.unidad_medida_id}
+                    onChange={(e) => setFormData({ ...formData, unidad_medida_id: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                    }}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {unidadesMedida.map((um) => (
+                      <option key={um.id} value={um.id}>
+                        {um.descripcion}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                    Stock Inicial *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.stock_actual}
+                    onChange={(e) => setFormData({ ...formData, stock_actual: Number(e.target.value) })}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                    }}
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -892,11 +908,12 @@ export function ProductosModule() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Tipo *
+                    Proveedor
                   </label>
-                  <select
-                    value={formData.tipo}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value as 'REPUESTOS' | 'HERRAMIENTAS' })}
+                  <input
+                    type="text"
+                    value={formData.proveedor}
+                    onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -904,20 +921,17 @@ export function ProductosModule() {
                       borderRadius: '6px',
                       fontSize: '14px',
                     }}
-                  >
-                    <option value="REPUESTOS">REPUESTOS</option>
-                    <option value="HERRAMIENTAS">HERRAMIENTAS</option>
-                  </select>
+                  />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Proveedor
+                    Modelo
                   </label>
                   <input
                     type="text"
-                    value={formData.proveedor}
-                    onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                    value={formData.modelo}
+                    onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -1070,28 +1084,49 @@ export function ProductosModule() {
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Unidad de Medida *
-                </label>
-                <select
-                  value={formData.unidad_medida_id}
-                  onChange={(e) => setFormData({ ...formData, unidad_medida_id: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #D1D5DB',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                  }}
-                >
-                  <option value="">Seleccionar...</option>
-                  {unidadesMedida.map((um) => (
-                    <option key={um.id} value={um.id}>
-                      {um.descripcion}
-                    </option>
-                  ))}
-                </select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                    Unidad de Medida *
+                  </label>
+                  <select
+                    value={formData.unidad_medida_id}
+                    onChange={(e) => setFormData({ ...formData, unidad_medida_id: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                    }}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {unidadesMedida.map((um) => (
+                      <option key={um.id} value={um.id}>
+                        {um.descripcion}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                    Stock Actual *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.stock_actual}
+                    onChange={(e) => setFormData({ ...formData, stock_actual: Number(e.target.value) })}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                    }}
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -1147,11 +1182,12 @@ export function ProductosModule() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Tipo *
+                    Proveedor
                   </label>
-                  <select
-                    value={formData.tipo}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value as 'REPUESTOS' | 'HERRAMIENTAS' })}
+                  <input
+                    type="text"
+                    value={formData.proveedor}
+                    onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -1159,20 +1195,17 @@ export function ProductosModule() {
                       borderRadius: '6px',
                       fontSize: '14px',
                     }}
-                  >
-                    <option value="REPUESTOS">REPUESTOS</option>
-                    <option value="HERRAMIENTAS">HERRAMIENTAS</option>
-                  </select>
+                  />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Proveedor
+                    Modelo
                   </label>
                   <input
                     type="text"
-                    value={formData.proveedor}
-                    onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                    value={formData.modelo}
+                    onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -1200,6 +1233,22 @@ export function ProductosModule() {
                     fontSize: '14px',
                   }}
                 />
+              </div>
+
+              <div style={{
+                background: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                borderRadius: '6px',
+                padding: '12px',
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'start'
+              }}>
+                <AlertCircle size={18} style={{ color: '#92400E', flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ fontSize: '13px', color: '#78350F' }}>
+                  <strong>Stock en uso:</strong> {selectedProducto.stock_en_uso}<br />
+                  El stock actual no puede ser menor que el stock en uso.
+                </div>
               </div>
             </div>
 
@@ -1305,7 +1354,7 @@ export function ProductosModule() {
                 </div>
               </div>
 
-              {/* Tipo de Producto */}
+              {/* Stock */}
               <div>
                 <div style={{
                   display: 'flex',
@@ -1315,44 +1364,29 @@ export function ProductosModule() {
                   paddingBottom: '8px',
                   borderBottom: '2px solid #DC2626'
                 }}>
-                  <Tag size={20} style={{ color: '#DC2626' }} />
+                  <Scale size={20} style={{ color: '#DC2626' }} />
                   <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
-                    Tipo de Producto
+                    Inventario
                   </h3>
                 </div>
 
-                <div style={{ display: 'grid', gap: '16px' }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Clasificación</span>
-                    {selectedProducto.tipo === 'HERRAMIENTAS' ? (
-                      <span
-                        style={{
-                          background: '#DBEAFE',
-                          color: '#1E40AF',
-                          padding: '6px 16px',
-                          borderRadius: '12px',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          display: 'inline-block'
-                        }}
-                      >
-                        HERRAMIENTAS (Retornable)
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          background: '#FEF3C7',
-                          color: '#92400E',
-                          padding: '6px 16px',
-                          borderRadius: '12px',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          display: 'inline-block'
-                        }}
-                      >
-                        REPUESTOS (Consumible)
-                      </span>
-                    )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                  <div style={{ background: '#F0FDF4', padding: '16px', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#166534', display: 'block', marginBottom: '4px' }}>Stock Total</span>
+                    <span style={{ fontSize: '24px', fontWeight: 700, color: '#166534' }}>{selectedProducto.stock_actual}</span>
+                    <span style={{ fontSize: '12px', color: '#166534', marginLeft: '4px' }}>
+                      {selectedProducto.unidades_medida?.descripcion}
+                    </span>
+                  </div>
+                  <div style={{ background: '#FEF3C7', padding: '16px', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#92400E', display: 'block', marginBottom: '4px' }}>En Uso</span>
+                    <span style={{ fontSize: '24px', fontWeight: 700, color: '#92400E' }}>{selectedProducto.stock_en_uso}</span>
+                  </div>
+                  <div style={{ background: '#DBEAFE', padding: '16px', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>Disponible</span>
+                    <span style={{ fontSize: '24px', fontWeight: 700, color: '#1E40AF' }}>
+                      {selectedProducto.stock_actual - selectedProducto.stock_en_uso}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1404,26 +1438,16 @@ export function ProductosModule() {
                       </span>
                     </div>
                   )}
-                  <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Tipo</span>
-                    <span
-                      style={{
-                        background: selectedProducto.tipo === 'HERRAMIENTAS' ? '#DBEAFE' : '#FEF3C7',
-                        color: selectedProducto.tipo === 'HERRAMIENTAS' ? '#1E40AF' : '#92400E',
-                        padding: '4px 12px',
-                        borderRadius: '12px',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        display: 'inline-block'
-                      }}
-                    >
-                      {selectedProducto.tipo}
-                    </span>
-                  </div>
                   {selectedProducto.proveedor && (
                     <div>
                       <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Proveedor</span>
                       <span style={{ fontSize: '14px' }}>{selectedProducto.proveedor}</span>
+                    </div>
+                  )}
+                  {selectedProducto.modelo && (
+                    <div>
+                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Modelo</span>
+                      <span style={{ fontSize: '14px' }}>{selectedProducto.modelo}</span>
                     </div>
                   )}
                   {selectedProducto.observacion && (
