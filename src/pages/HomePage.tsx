@@ -18,6 +18,7 @@ import { ProductosPage } from './productos/ProductosPage'
 import { InventarioDashboardPage } from './inventario/InventarioDashboardPage'
 import { MovimientosPage } from './inventario/MovimientosPage'
 import { AsignacionesActivasPage as AsignacionesActivasInventarioPage } from './inventario/AsignacionesActivasPage'
+import { HistorialMovimientosPage } from './inventario/HistorialMovimientosPage'
 import { USSPage } from './integraciones/uss/USSPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
@@ -585,6 +586,11 @@ export function HomePage() {
               <Route path="/inventario/asignaciones-activas" element={
                 <ProtectedRoute submenuName="inventario-asignaciones" action="view">
                   <AsignacionesActivasInventarioPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/inventario/historial" element={
+                <ProtectedRoute submenuName="inventario-historial" action="view">
+                  <HistorialMovimientosPage />
                 </ProtectedRoute>
               } />
 
