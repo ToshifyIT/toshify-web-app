@@ -704,11 +704,21 @@ export function ConductoresModule() {
         header: "Estado",
         cell: ({ row }) => {
           const codigo = row.original.conductores_estados?.codigo || "N/A";
+          const codigoLower = codigo.toLowerCase();
+          
+          // Determinar el color según el estado
+          let backgroundColor = "#3B82F6"; // Color por defecto (azul)
+          if (codigoLower === "baja") {
+            backgroundColor = "#6B7280"; // Gris
+          } else if (codigoLower === "activo") {
+            backgroundColor = "#10B981"; // Verde
+          }
+          
           return (
             <span
               className="badge"
               style={{
-                backgroundColor: "#3B82F6",
+                backgroundColor: backgroundColor,
                 color: "white",
                 padding: "4px 12px",
                 borderRadius: "12px",
@@ -1239,7 +1249,10 @@ export function ConductoresModule() {
         >
           <button
             className="btn-primary"
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              resetForm();
+              setShowCreateModal(true);
+            }}
             disabled={!canCreate}
             title={
               !canCreate ? "No tienes permisos para crear conductores" : ""

@@ -6,8 +6,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import type {
   VehiculoWithRelations,
-  VehiculoEstado,
-  GpsTipo
+  VehiculoEstado
 } from '../../types/database.types'
 import {
   useReactTable,
@@ -37,7 +36,6 @@ export function VehicleManagement() {
 
   // Catalog states
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
-  const [gpsTipos, setGpsTipos] = useState<GpsTipo[]>([])
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
 
@@ -54,7 +52,7 @@ export function VehicleManagement() {
     color: '',
     tipo_vehiculo: '',
     tipo_combustible: '',
-    tipo_gps_id: '',
+    tipo_gps: '',
     gps_uss: false,
     numero_motor: '',
     numero_chasis: '',
@@ -77,18 +75,13 @@ export function VehicleManagement() {
 
   const loadCatalogs = async () => {
     try {
-      const [estadosRes, gpsRes] = await Promise.all([
-        supabase.from('vehiculos_estados').select('*').order('descripcion'),
-        supabase.from('gps_tipos').select('*').order('descripcion')
-      ])
+      const estadosRes = await supabase.from('vehiculos_estados').select('*').order('descripcion')
 
-      console.log('Catálogos cargados:', { estadosRes, gpsRes })
+      console.log('Catálogos cargados:', { estadosRes })
 
       if (estadosRes.data) setVehiculosEstados(estadosRes.data)
-      if (gpsRes.data) setGpsTipos(gpsRes.data)
 
       if (estadosRes.error) console.error('Error vehiculos_estados:', estadosRes.error)
-      if (gpsRes.error) console.error('Error gps_tipos:', gpsRes.error)
     } catch (err: any) {
       console.error('Error cargando catálogos:', err)
     }
@@ -119,10 +112,6 @@ export function VehicleManagement() {
             }
 
 
-            if (vehiculo.tipo_gps_id) {
-              const { data: gps } = await supabase.from('gps_tipos').select('id, codigo, descripcion').eq('id', vehiculo.tipo_gps_id).single()
-              relaciones.gps_tipos = gps
-            }
 
             return relaciones
           })
@@ -176,7 +165,7 @@ export function VehicleManagement() {
           color: formData.color || null,
           tipo_vehiculo: formData.tipo_vehiculo || null,
           tipo_combustible: formData.tipo_combustible || null,
-          tipo_gps_id: formData.tipo_gps_id || null,
+          tipo_gps: formData.tipo_gps || null,
           gps_uss: formData.gps_uss,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
@@ -244,7 +233,7 @@ export function VehicleManagement() {
           color: formData.color || null,
           tipo_vehiculo: formData.tipo_vehiculo || null,
           tipo_combustible: formData.tipo_combustible || null,
-          tipo_gps_id: formData.tipo_gps_id || null,
+          tipo_gps: formData.tipo_gps || null,
           gps_uss: formData.gps_uss,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
@@ -343,7 +332,7 @@ export function VehicleManagement() {
       color: vehiculo.color || '',
       tipo_vehiculo: (vehiculo as any).tipo_vehiculo || '',
       tipo_combustible: (vehiculo as any).tipo_combustible || '',
-      tipo_gps_id: vehiculo.tipo_gps_id || '',
+      tipo_gps: (vehiculo as any).tipo_gps || '',
       gps_uss: vehiculo.gps_uss,
       numero_motor: vehiculo.numero_motor || '',
       numero_chasis: vehiculo.numero_chasis || '',
@@ -375,7 +364,7 @@ export function VehicleManagement() {
       color: '',
       tipo_vehiculo: '',
       tipo_combustible: '',
-      tipo_gps_id: '',
+      tipo_gps: '',
       gps_uss: false,
       numero_motor: '',
       numero_chasis: '',
@@ -934,7 +923,10 @@ export function VehicleManagement() {
         <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
           <button
             className="btn-primary"
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              resetForm();
+              setShowCreateModal(true);
+            }}
             disabled={!canCreate}
             title={!canCreate ? 'No tienes permisos para crear vehículos' : ''}
           >
@@ -1184,17 +1176,14 @@ export function VehicleManagement() {
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Tipo GPS</label>
-                <select
+                <input
+                  type="text"
                   className="form-input"
-                  value={formData.tipo_gps_id}
-                  onChange={(e) => setFormData({ ...formData, tipo_gps_id: e.target.value })}
+                  value={formData.tipo_gps}
+                  onChange={(e) => setFormData({ ...formData, tipo_gps: e.target.value })}
                   disabled={saving}
-                >
-                  <option value="">Seleccionar...</option>
-                  {gpsTipos.map((tipo: any) => (
-                    <option key={tipo.id} value={tipo.id}>{tipo.descripcion}</option>
-                  ))}
-                </select>
+                  placeholder="Ej: GPS Tracker, GPS Satelital, GPS Móvil..."
+                />
               </div>
 
               <div className="form-group">
@@ -1494,17 +1483,14 @@ export function VehicleManagement() {
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Tipo GPS</label>
-                <select
+                <input
+                  type="text"
                   className="form-input"
-                  value={formData.tipo_gps_id}
-                  onChange={(e) => setFormData({ ...formData, tipo_gps_id: e.target.value })}
+                  value={formData.tipo_gps}
+                  onChange={(e) => setFormData({ ...formData, tipo_gps: e.target.value })}
                   disabled={saving}
-                >
-                  <option value="">Seleccionar...</option>
-                  {gpsTipos.map((tipo: any) => (
-                    <option key={tipo.id} value={tipo.id}>{tipo.descripcion}</option>
-                  ))}
-                </select>
+                  placeholder="Ej: GPS Tracker, GPS Satelital, GPS Móvil..."
+                />
               </div>
 
               <div className="form-group">
