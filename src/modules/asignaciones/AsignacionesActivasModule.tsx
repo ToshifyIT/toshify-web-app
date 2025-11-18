@@ -209,10 +209,10 @@ export function AsignacionesActivasModule() {
         enableSorting: false,
       },
       {
-        accessorKey: 'modalidad',
+        accessorKey: 'horario',
         header: 'Modalidad',
         cell: ({ getValue }) => {
-          const modalidad = getValue() as string
+          const horario = getValue() as string
           return (
             <span style={{
               display: 'inline-block',
@@ -220,10 +220,10 @@ export function AsignacionesActivasModule() {
               borderRadius: '6px',
               fontSize: '12px',
               fontWeight: 600,
-              background: modalidad === 'permanente' ? '#DBEAFE' : '#FEF3C7',
-              color: modalidad === 'permanente' ? '#1E40AF' : '#92400E'
+              background: horario === 'CARGO' ? '#E9D5FF' : '#FEF3C7',
+              color: horario === 'CARGO' ? '#6B21A8' : '#92400E'
             }}>
-              {modalidad.charAt(0).toUpperCase() + modalidad.slice(1)}
+              {horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
             </span>
           )
         },
@@ -716,7 +716,7 @@ export function AsignacionesActivasModule() {
                 <div className="detail-item">
                   <span className="detail-label">Modalidad</span>
                   <span className="detail-value">
-                    {selectedAsignacion.modalidad.charAt(0).toUpperCase() + selectedAsignacion.modalidad.slice(1)}
+                    {selectedAsignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
                   </span>
                 </div>
                 <div className="detail-item">
@@ -742,13 +742,6 @@ export function AsignacionesActivasModule() {
                     {selectedAsignacion.fecha_inicio
                       ? new Date(selectedAsignacion.fecha_inicio).toLocaleDateString('es-AR')
                       : 'No activada'}
-                  </span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Horario General</span>
-                  <span className="detail-value">
-                    <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                    {selectedAsignacion.horario || 'No especificado'}
                   </span>
                 </div>
               </div>
@@ -823,13 +816,15 @@ export function AsignacionesActivasModule() {
                           )}
                         </div>
                         <div className="details-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                          <div className="detail-item">
-                            <span className="detail-label">Horario</span>
-                            <span className="detail-value" style={{ fontSize: '14px' }}>
-                              <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                              {asigConductor.horario}
-                            </span>
-                          </div>
+                          {asigConductor.horario !== 'todo_dia' && (
+                            <div className="detail-item">
+                              <span className="detail-label">Turno</span>
+                              <span className="detail-value" style={{ fontSize: '14px' }}>
+                                <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                                {asigConductor.horario}
+                              </span>
+                            </div>
+                          )}
                           <div className="detail-item">
                             <span className="detail-label">Teléfono</span>
                             <span className="detail-value" style={{ fontSize: '14px' }}>

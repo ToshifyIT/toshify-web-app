@@ -510,10 +510,8 @@ export function AsignacionesModule() {
 
   const getHorarioBadgeClass = (horario: string) => {
     switch (horario) {
-      case 'Diurno':
-        return 'badge-diurno'
-      case 'Nocturno':
-        return 'badge-nocturno'
+      case 'TURNO':
+        return 'badge-turno'
       case 'CARGO':
         return 'badge-cargo'
       default:
@@ -689,14 +687,9 @@ export function AsignacionesModule() {
           color: #3730A3;
         }
 
-        .badge-diurno {
+        .badge-turno {
           background: #FEF3C7;
           color: #92400E;
-        }
-
-        .badge-nocturno {
-          background: #DBEAFE;
-          color: #1E3A8A;
         }
 
         .badge-cargo {
@@ -904,7 +897,7 @@ export function AsignacionesModule() {
                     </td>
                     <td>
                       <span className={`badge ${getHorarioBadgeClass(asignacion.horario)}`}>
-                        {asignacion.horario}
+                        {asignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
                       </span>
                     </td>
                     <td>
@@ -1091,7 +1084,7 @@ export function AsignacionesModule() {
                           {ac.conductores.nombres} {ac.conductores.apellidos}
                         </p>
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
-                          Turno: {ac.horario}
+                          {ac.horario !== 'todo_dia' && `Turno: ${ac.horario}`}
                           {ac.confirmado && <span style={{ color: '#10B981', marginLeft: '8px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={14} /> Ya confirmado</span>}
                           {ac.fecha_confirmacion && <span style={{ marginLeft: '8px' }}>el {new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}</span>}
                         </p>
@@ -1310,9 +1303,11 @@ export function AsignacionesModule() {
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
                           Licencia: {ac.conductores.numero_licencia}
                         </p>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
-                          Turno: <strong>{ac.horario}</strong>
-                        </p>
+                        {ac.horario !== 'todo_dia' && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
+                            Turno: <strong>{ac.horario}</strong>
+                          </p>
+                        )}
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
                           Estado: <span className={`badge ${getStatusBadgeClass(ac.estado)}`}>{ac.estado}</span>
                         </p>
