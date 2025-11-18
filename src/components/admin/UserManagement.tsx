@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { UserWithRole, Role } from '../../types/database.types'
+import Swal from 'sweetalert2'
 import {
   useReactTable,
   getCoreRowModel,
@@ -77,14 +78,18 @@ export function UserManagement() {
 
   const handleCreateUser = async () => {
     if (!newUser.email || !newUser.password || !newUser.fullName) {
-      alert('Complete todos los campos requeridos')
+      Swal.fire({
+        icon: 'error',
+        title: 'Campos Incompletos',
+        text: 'Complete todos los campos requeridos'
+      })
       return
     }
 
     setCreating(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       if (!session) {
         throw new Error('No hay sesión activa')
       }
@@ -107,12 +112,22 @@ export function UserManagement() {
         throw new Error(result.error || 'Error creando usuario')
       }
 
-      alert('✅ Usuario creado exitosamente')
+      await Swal.fire({
+        icon: 'success',
+        title: 'Usuario Creado',
+        text: 'El usuario se ha creado exitosamente',
+        showConfirmButton: false,
+        timer: 2000
+      })
       setShowCreateModal(false)
       setNewUser({ email: '', password: '', fullName: '', roleId: '' })
       await loadData()
     } catch (err: any) {
-      alert('❌ Error: ' + err.message)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.message
+      })
     } finally {
       setCreating(false)
     }
@@ -120,12 +135,16 @@ export function UserManagement() {
 
 const handleRoleChange = async (userId: string, newRoleId: string) => {
   console.log('🔄 Intentando cambiar rol:', { userId, newRoleId })
-  
+
   try {
     // Verificar que hay un rol seleccionado
     if (!newRoleId) {
       console.log('⚠️ No se seleccionó rol')
-      alert('Selecciona un rol válido')
+      Swal.fire({
+        icon: 'warning',
+        title: 'Rol no seleccionado',
+        text: 'Selecciona un rol válido'
+      })
       return
     }
 
@@ -149,11 +168,21 @@ const handleRoleChange = async (userId: string, newRoleId: string) => {
     // Recargar datos
     await loadData()
     console.log('✅ Datos recargados')
-    
-    alert('✅ Rol actualizado correctamente')
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Rol Actualizado',
+      text: 'El rol se ha actualizado correctamente',
+      showConfirmButton: false,
+      timer: 2000
+    })
   } catch (err: any) {
     console.error('❌ Error completo:', err)
-    alert('❌ Error al actualizar rol: ' + err.message)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Error al actualizar rol: ' + err.message
+    })
   }
 }
 
@@ -168,9 +197,19 @@ const handleRoleChange = async (userId: string, newRoleId: string) => {
       if (error) throw error
 
       await loadData()
-      alert(`Usuario ${!currentStatus ? 'activado' : 'desactivado'} correctamente`)
+      Swal.fire({
+        icon: 'success',
+        title: 'Estado Actualizado',
+        text: `Usuario ${!currentStatus ? 'activado' : 'desactivado'} correctamente`,
+        showConfirmButton: false,
+        timer: 2000
+      })
     } catch (err: any) {
-      alert('Error al cambiar estado: ' + err.message)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al cambiar estado: ' + err.message
+      })
     }
   }
 
