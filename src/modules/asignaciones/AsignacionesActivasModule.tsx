@@ -279,7 +279,6 @@ export function AsignacionesActivasModule() {
             }}
           >
             <Eye size={16} />
-            Ver Detalles
           </button>
         ),
         enableSorting: false,
