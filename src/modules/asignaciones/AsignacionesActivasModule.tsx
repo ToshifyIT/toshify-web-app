@@ -832,7 +832,7 @@ export function AsignacionesActivasModule() {
                             </span>
                           </div>
                           <div className="detail-item">
-                            <span className="detail-label">Estado (DEBUG)</span>
+                            <span className="detail-label">Estado</span>
                             <span className="detail-value" style={{ fontSize: '14px', color: '#E63946', fontWeight: 700 }}>
                               {asigConductor.estado || 'NULL'}
                             </span>
