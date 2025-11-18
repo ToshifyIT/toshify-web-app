@@ -39,16 +39,15 @@ interface AssignmentData {
   conductor_diurno_id: string  // Para modo Turno
   conductor_nocturno_id: string  // Para modo Turno
   fecha_programada: string  // Fecha cuando se entregará el vehículo
+  // Distancia compartida para todos
+  distancia: string
   // Datos para conductor diurno
-  distancia_diurno: string
   documento_diurno: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
   ubicacion_diurno: string
   // Datos para conductor nocturno
-  distancia_nocturno: string
   documento_nocturno: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
   ubicacion_nocturno: string
   // Datos para conductor A CARGO
-  distancia_cargo: string
   documento_cargo: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
   ubicacion_cargo: string
   notas: string
@@ -73,13 +72,11 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     conductor_diurno_id: '',
     conductor_nocturno_id: '',
     fecha_programada: new Date().toISOString().split('T')[0],
-    distancia_diurno: '',
+    distancia: '',
     documento_diurno: '',
     ubicacion_diurno: '',
-    distancia_nocturno: '',
     documento_nocturno: '',
     ubicacion_nocturno: '',
-    distancia_cargo: '',
     documento_cargo: '',
     ubicacion_cargo: '',
     notas: ''
@@ -297,9 +294,10 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
       // 4. Crear registros en asignaciones_conductores para cada conductor
       // Determinar el horario según el modo y el conductor
+      const distanciaCompartida = parseFloat(formData.distancia) || 0
+
       const conductoresData = conductoresIds.map((conductorId) => {
         let horarioTurno = 'todo_dia' // Por defecto para CARGO
-        let distanciaValue = 0
         let documentoValue: string = 'N/A'
         let ubicacionValue = ''
 
@@ -307,18 +305,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           // Determinar si es conductor diurno o nocturno
           if (conductorId === formData.conductor_diurno_id) {
             horarioTurno = 'diurno'
-            distanciaValue = parseFloat(formData.distancia_diurno) || 0
             documentoValue = formData.documento_diurno || 'N/A'
             ubicacionValue = formData.ubicacion_diurno
           } else if (conductorId === formData.conductor_nocturno_id) {
             horarioTurno = 'nocturno'
-            distanciaValue = parseFloat(formData.distancia_nocturno) || 0
             documentoValue = formData.documento_nocturno || 'N/A'
             ubicacionValue = formData.ubicacion_nocturno
           }
         } else if (formData.horario === 'CARGO') {
           // Modo A CARGO
-          distanciaValue = parseFloat(formData.distancia_cargo) || 0
           documentoValue = formData.documento_cargo || 'N/A'
           ubicacionValue = formData.ubicacion_cargo
         }
@@ -327,7 +322,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           asignacion_id: (asignacion as any)?.id,
           conductor_id: conductorId,
           horario: horarioTurno,
-          distancia: distanciaValue,
+          distancia: distanciaCompartida,
           documento: documentoValue,
           ubicacion: ubicacionValue,
           estado: 'asignado',
@@ -1398,6 +1393,35 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                     </p>
                   </div>
 
+                  {/* Campo de Distancia Compartido */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Distancia (km) *
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.distancia}
+                      onChange={(e) => setFormData({ ...formData, distancia: e.target.value })}
+                      placeholder="Ingrese la distancia del recorrido"
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: '2px solid #E5E7EB',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                    <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
+                      Distancia del recorrido/ruta (aplicable para todos los conductores)
+                    </p>
+                  </div>
+
                   {/* Campos para TURNO - Conductor Diurno */}
                   {formData.horario === 'TURNO' && formData.conductor_diurno_id && (
                     <div style={{
@@ -1410,18 +1434,6 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       <h4 style={{ margin: '0 0 16px 0', color: '#92400E', fontSize: '16px', fontWeight: '700' }}>
                         Conductor Diurno
                       </h4>
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                          Distancia (km) *
-                        </label>
-                        <input
-                          type="number"
-                          value={formData.distancia_diurno}
-                          onChange={(e) => setFormData({ ...formData, distancia_diurno: e.target.value })}
-                          placeholder="Ingrese la distancia"
-                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
-                        />
-                      </div>
                       <div style={{ marginBottom: '16px' }}>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
                           Documento *
@@ -1466,18 +1478,6 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       </h4>
                       <div style={{ marginBottom: '16px' }}>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                          Distancia (km) *
-                        </label>
-                        <input
-                          type="number"
-                          value={formData.distancia_nocturno}
-                          onChange={(e) => setFormData({ ...formData, distancia_nocturno: e.target.value })}
-                          placeholder="Ingrese la distancia"
-                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
-                        />
-                      </div>
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
                           Documento *
                         </label>
                         <select
@@ -1511,25 +1511,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                     <div style={{
                       marginBottom: '24px',
                       padding: '20px',
-                      background: '#F3E8FF',
+                      background: '#D1FAE5',
                       borderRadius: '12px',
-                      border: '2px solid #C084FC'
+                      border: '2px solid #10B981'
                     }}>
-                      <h4 style={{ margin: '0 0 16px 0', color: '#6B21A8', fontSize: '16px', fontWeight: '700' }}>
+                      <h4 style={{ margin: '0 0 16px 0', color: '#065F46', fontSize: '16px', fontWeight: '700' }}>
                         Datos del Conductor
                       </h4>
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                          Distancia (km) *
-                        </label>
-                        <input
-                          type="number"
-                          value={formData.distancia_cargo}
-                          onChange={(e) => setFormData({ ...formData, distancia_cargo: e.target.value })}
-                          placeholder="Ingrese la distancia"
-                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
-                        />
-                      </div>
                       <div style={{ marginBottom: '16px' }}>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
                           Documento *
@@ -1611,14 +1599,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                 disabled={Boolean(
                   loading ||
                   !formData.fecha_programada ||
+                  !formData.distancia ||
                   (formData.horario === 'CARGO' && formData.conductores_ids.length === 0) ||
                   (isTurnoMode && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) ||
                   // Validar campos para conductor diurno
-                  (formData.horario === 'TURNO' && formData.conductor_diurno_id && (!formData.distancia_diurno || !formData.documento_diurno || !formData.ubicacion_diurno)) ||
+                  (formData.horario === 'TURNO' && formData.conductor_diurno_id && (!formData.documento_diurno || !formData.ubicacion_diurno)) ||
                   // Validar campos para conductor nocturno
-                  (formData.horario === 'TURNO' && formData.conductor_nocturno_id && (!formData.distancia_nocturno || !formData.documento_nocturno || !formData.ubicacion_nocturno)) ||
+                  (formData.horario === 'TURNO' && formData.conductor_nocturno_id && (!formData.documento_nocturno || !formData.ubicacion_nocturno)) ||
                   // Validar campos para A CARGO
-                  (formData.horario === 'CARGO' && formData.conductores_ids.length > 0 && (!formData.distancia_cargo || !formData.documento_cargo || !formData.ubicacion_cargo))
+                  (formData.horario === 'CARGO' && formData.conductores_ids.length > 0 && (!formData.documento_cargo || !formData.ubicacion_cargo))
                 )}
               >
                 {loading ? 'Creando...' : 'Programar Asignación'}
