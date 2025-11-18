@@ -238,8 +238,29 @@ export function UserMenuPermissionsManager() {
         if (error) throw error
       }
 
-      console.log('✅ Permiso actualizado, recargando...')
-      await loadUserPermissions(selectedUser)
+      console.log('✅ Permiso de menú actualizado, actualizando estado local...')
+
+      // Actualizar el estado local sin recargar desde el servidor
+      setMenuPermissions(prev => {
+        const index = prev.findIndex(p => p.menu_id === menuId)
+        if (index >= 0) {
+          const updated = [...prev]
+          updated[index] = { ...updated[index], [field]: newValue }
+          return updated
+        } else {
+          // Agregar nuevo permiso al estado
+          const menu = menus.find(m => m.id === menuId)
+          return [...prev, {
+            menu_id: menuId,
+            menu_name: menu?.name || '',
+            menu_label: menu?.label || '',
+            can_view: field === 'can_view' ? newValue : false,
+            can_create: field === 'can_create' ? newValue : false,
+            can_edit: field === 'can_edit' ? newValue : false,
+            can_delete: field === 'can_delete' ? newValue : false
+          }]
+        }
+      })
     } catch (err: any) {
       console.error('❌ Error actualizando permiso:', err)
       alert('Error: ' + err.message)
@@ -298,8 +319,31 @@ export function UserMenuPermissionsManager() {
         if (error) throw error
       }
 
-      console.log('✅ Permiso actualizado, recargando...')
-      await loadUserPermissions(selectedUser)
+      console.log('✅ Permiso de submenú actualizado, actualizando estado local...')
+
+      // Actualizar el estado local sin recargar desde el servidor
+      setSubmenuPermissions(prev => {
+        const index = prev.findIndex(p => p.submenu_id === submenuId)
+        if (index >= 0) {
+          const updated = [...prev]
+          updated[index] = { ...updated[index], [field]: newValue }
+          return updated
+        } else {
+          // Agregar nuevo permiso al estado
+          const submenu = submenus.find(s => s.id === submenuId)
+          const menu = menus.find(m => m.id === submenu?.menu_id)
+          return [...prev, {
+            submenu_id: submenuId,
+            menu_name: menu?.name || '',
+            submenu_name: submenu?.name || '',
+            submenu_label: submenu?.label || '',
+            can_view: field === 'can_view' ? newValue : false,
+            can_create: field === 'can_create' ? newValue : false,
+            can_edit: field === 'can_edit' ? newValue : false,
+            can_delete: field === 'can_delete' ? newValue : false
+          }]
+        }
+      })
     } catch (err: any) {
       console.error('❌ Error actualizando permiso:', err)
       alert('Error: ' + err.message)
