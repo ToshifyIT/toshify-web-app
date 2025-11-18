@@ -113,6 +113,7 @@ export function AsignacionesActivasModule() {
                 )
               `)
               .eq('asignacion_id', asignacion.id)
+              .eq('estado', 'asignado')
 
             return {
               ...asignacion,

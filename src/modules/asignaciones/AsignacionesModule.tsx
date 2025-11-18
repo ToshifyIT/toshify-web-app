@@ -295,24 +295,61 @@ export function AsignacionesModule() {
 
       // 3. Si TODOS confirmaron, activar la asignación
       if (todosConfirmados) {
+        // Obtener IDs de los conductores de esta asignación
+        const conductoresIds = (allConductores as any)?.map((c: any) => c.conductor_id) || []
+
         // PRIMERO: Cerrar todas las asignaciones ACTIVAS del mismo vehículo
-        const cerrarVehiculoResult: any = await supabase
+        const { data: asignacionesACerrar } = await supabase
           .from('asignaciones')
-          // @ts-ignore - Type inference issue with Supabase update
-          .update({
-            estado: 'finalizada',
-            fecha_fin: ahora,
-            notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
-          })
+          .select('id, vehiculo_id')
           .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
           .eq('estado', 'activa')
           .neq('id', selectedAsignacion.id)
 
-        if (cerrarVehiculoResult.error) {
-          console.error('Error cerrando asignaciones del vehículo:', cerrarVehiculoResult.error)
+        if (asignacionesACerrar && asignacionesACerrar.length > 0) {
+          // Cerrar las asignaciones
+          await supabase
+            .from('asignaciones')
+            // @ts-ignore
+            .update({
+              estado: 'finalizada',
+              fecha_fin: ahora,
+              notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
+            })
+            .in('id', asignacionesACerrar.map((a: any) => a.id))
+
+          // Liberar los vehículos a DISPONIBLE
+          const { data: estadoDisponible } = await supabase
+            .from('vehiculos_estados')
+            .select('id')
+            .eq('codigo', 'DISPONIBLE')
+            .single()
+
+          if (estadoDisponible) {
+            const vehiculosACambiar = [...new Set(asignacionesACerrar.map((a: any) => a.vehiculo_id))]
+            await supabase
+              .from('vehiculos')
+              .update({ estado_id: estadoDisponible.id })
+              .in('id', vehiculosACambiar)
+          }
         }
 
-        // SEGUNDO: Activar la nueva asignación confirmada
+        // SEGUNDO: Marcar conductores como cancelado en otras asignaciones
+        if (conductoresIds.length > 0) {
+          for (const conductorId of conductoresIds) {
+            await supabase
+              .from('asignaciones_conductores')
+              .update({
+                estado: 'cancelado',
+                fecha_fin: ahora
+              })
+              .eq('conductor_id', conductorId)
+              .eq('estado', 'asignado')
+              .neq('asignacion_id', selectedAsignacion.id)
+          }
+        }
+
+        // TERCERO: Activar la nueva asignación confirmada
         const { error: updateAsignacionError } = (await (supabase as any)
           .from('asignaciones')
           .update({
