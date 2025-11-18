@@ -883,7 +883,7 @@ export function AsignacionesModule() {
                   <th>Vehículo</th>
                   <th>Modalidad</th>
                   <th>Conductores</th>
-                  <th>Fecha Inicio</th>
+                  <th>Fecha Entrega</th>
                   <th>Fecha Fin</th>
                   <th>Estado</th>
                   <th>Acciones</th>
@@ -921,11 +921,13 @@ export function AsignacionesModule() {
                       </div>
                     </td>
                     <td>
-                      {new Date(asignacion.fecha_inicio).toLocaleDateString('es-ES', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
+                      {asignacion.fecha_programada
+                        ? new Date(asignacion.fecha_programada).toLocaleDateString('es-ES', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })
+                        : 'No definida'}
                     </td>
                     <td>
                       {asignacion.fecha_fin
@@ -1046,7 +1048,7 @@ export function AsignacionesModule() {
             <h2 style={{ marginTop: 0 }}>Confirmar Programación</h2>
             <p>Vehículo: <strong>{selectedAsignacion.vehiculos?.patente}</strong></p>
             <p style={{ fontSize: '14px', color: '#6B7280', marginBottom: '16px' }}>
-              Fecha programada: <strong>{selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR') : 'N/A'}</strong>
+              Fecha de entrega: <strong>{selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR') : 'N/A'}</strong>
             </p>
 
             {/* Lista de conductores con checkboxes */}
@@ -1390,10 +1392,22 @@ export function AsignacionesModule() {
               </div>
 
               {/* Fechas */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
-                    Fecha Programada
+                    Fecha de Programación
+                  </label>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
+                    {new Date(viewAsignacion.created_at).toLocaleDateString('es-ES', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                    Fecha de Entrega
                   </label>
                   <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
                     {viewAsignacion.fecha_programada
@@ -1402,20 +1416,23 @@ export function AsignacionesModule() {
                           month: 'short',
                           day: 'numeric'
                         })
-                      : 'N/A'
+                      : 'No definida'
                     }
                   </p>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
-                    Fecha Inicio
+                    Fecha de Activación
                   </label>
                   <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
-                    {new Date(viewAsignacion.fecha_inicio).toLocaleDateString('es-ES', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })}
+                    {viewAsignacion.fecha_inicio
+                      ? new Date(viewAsignacion.fecha_inicio).toLocaleDateString('es-ES', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })
+                      : 'No activada'
+                    }
                   </p>
                 </div>
                 <div>

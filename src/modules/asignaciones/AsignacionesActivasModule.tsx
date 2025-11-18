@@ -18,6 +18,7 @@ interface AsignacionActiva {
   id: string
   codigo: string
   vehiculo_id: string
+  fecha_programada?: string | null
   fecha_inicio: string
   modalidad: string
   horario: string
@@ -70,6 +71,7 @@ export function AsignacionesActivasModule() {
           id,
           codigo,
           vehiculo_id,
+          fecha_programada,
           fecha_inicio,
           modalidad,
           horario,
@@ -228,11 +230,20 @@ export function AsignacionesActivasModule() {
         enableSorting: true,
       },
       {
+        accessorKey: 'fecha_programada',
+        header: 'Fecha Entrega',
+        cell: ({ getValue }) => {
+          const fecha = getValue() as string | null
+          return fecha ? new Date(fecha).toLocaleDateString('es-AR') : 'No definida'
+        },
+        enableSorting: true,
+      },
+      {
         accessorKey: 'fecha_inicio',
-        header: 'Fecha Inicio',
+        header: 'Fecha Activación',
         cell: ({ getValue }) => {
           const fecha = getValue() as string
-          return new Date(fecha).toLocaleDateString('es-AR')
+          return fecha ? new Date(fecha).toLocaleDateString('es-AR') : 'No activada'
         },
         enableSorting: true,
       },
@@ -709,10 +720,28 @@ export function AsignacionesActivasModule() {
                   </span>
                 </div>
                 <div className="detail-item">
-                  <span className="detail-label">Fecha de Inicio</span>
+                  <span className="detail-label">Fecha de Programación</span>
                   <span className="detail-value">
                     <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                    {new Date(selectedAsignacion.fecha_inicio).toLocaleDateString('es-AR')}
+                    {new Date(selectedAsignacion.created_at).toLocaleDateString('es-AR')}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Fecha de Entrega</span>
+                  <span className="detail-value">
+                    <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                    {selectedAsignacion.fecha_programada
+                      ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR')
+                      : 'No definida'}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Fecha de Activación</span>
+                  <span className="detail-value">
+                    <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                    {selectedAsignacion.fecha_inicio
+                      ? new Date(selectedAsignacion.fecha_inicio).toLocaleDateString('es-AR')
+                      : 'No activada'}
                   </span>
                 </div>
                 <div className="detail-item">
