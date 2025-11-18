@@ -38,9 +38,18 @@ interface AssignmentData {
   conductor_diurno_id: string  // Para modo Turno
   conductor_nocturno_id: string  // Para modo Turno
   fecha_programada: string  // Fecha cuando se entregará el vehículo
-  distancia: string  // Solo para TURNO con ambos conductores
-  documento: 'CONTRATO' | 'ANEXO' | 'N/A' | ''  // Solo para TURNO con ambos conductores
-  ubicacion: string  // Solo para TURNO con ambos conductores
+  // Datos para conductor diurno
+  distancia_diurno: string
+  documento_diurno: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
+  ubicacion_diurno: string
+  // Datos para conductor nocturno
+  distancia_nocturno: string
+  documento_nocturno: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
+  ubicacion_nocturno: string
+  // Datos para conductor A CARGO
+  distancia_cargo: string
+  documento_cargo: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
+  ubicacion_cargo: string
   notas: string
 }
 
@@ -63,9 +72,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     conductor_diurno_id: '',
     conductor_nocturno_id: '',
     fecha_programada: new Date().toISOString().split('T')[0],
-    distancia: '',
-    documento: '',
-    ubicacion: '',
+    distancia_diurno: '',
+    documento_diurno: '',
+    ubicacion_diurno: '',
+    distancia_nocturno: '',
+    documento_nocturno: '',
+    ubicacion_nocturno: '',
+    distancia_cargo: '',
+    documento_cargo: '',
+    ubicacion_cargo: '',
     notas: ''
   })
 
@@ -267,27 +282,37 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       // Determinar el horario según el modo y el conductor
       const conductoresData = conductoresIds.map((conductorId) => {
         let horarioTurno = 'todo_dia' // Por defecto para CARGO
+        let distanciaValue = 0
+        let documentoValue: string = 'N/A'
+        let ubicacionValue = ''
 
         if (formData.horario === 'TURNO') {
           // Determinar si es conductor diurno o nocturno
           if (conductorId === formData.conductor_diurno_id) {
             horarioTurno = 'diurno'
+            distanciaValue = parseFloat(formData.distancia_diurno) || 0
+            documentoValue = formData.documento_diurno || 'N/A'
+            ubicacionValue = formData.ubicacion_diurno
           } else if (conductorId === formData.conductor_nocturno_id) {
             horarioTurno = 'nocturno'
+            distanciaValue = parseFloat(formData.distancia_nocturno) || 0
+            documentoValue = formData.documento_nocturno || 'N/A'
+            ubicacionValue = formData.ubicacion_nocturno
           }
+        } else if (formData.horario === 'CARGO') {
+          // Modo A CARGO
+          distanciaValue = parseFloat(formData.distancia_cargo) || 0
+          documentoValue = formData.documento_cargo || 'N/A'
+          ubicacionValue = formData.ubicacion_cargo
         }
-
-        // Preparar datos adicionales
-        const esParejaTurno = formData.horario === 'TURNO' && formData.conductor_diurno_id && formData.conductor_nocturno_id
-        const distanciaValue = esParejaTurno ? parseFloat(formData.distancia) || 0 : 0
 
         return {
           asignacion_id: (asignacion as any)?.id,
           conductor_id: conductorId,
           horario: horarioTurno,
           distancia: distanciaValue,
-          documento: esParejaTurno ? formData.documento : 'N/A',
-          ubicacion: esParejaTurno ? formData.ubicacion : '',
+          documento: documentoValue,
+          ubicacion: ubicacionValue,
           estado: 'asignado',
           confirmado: false,
           created_by: user?.id
@@ -1333,57 +1358,38 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                     </p>
                   </div>
 
-                  {/* Campos adicionales solo para TURNO con ambos conductores */}
-                  {formData.horario === 'TURNO' && formData.conductor_diurno_id && formData.conductor_nocturno_id && (
-                    <>
-                      <div style={{ marginBottom: '24px' }}>
-                        <label style={{
-                          display: 'block',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          color: '#374151',
-                          marginBottom: '8px'
-                        }}>
+                  {/* Campos para TURNO - Conductor Diurno */}
+                  {formData.horario === 'TURNO' && formData.conductor_diurno_id && (
+                    <div style={{
+                      marginBottom: '24px',
+                      padding: '20px',
+                      background: '#FEF3C7',
+                      borderRadius: '12px',
+                      border: '2px solid #FCD34D'
+                    }}>
+                      <h4 style={{ margin: '0 0 16px 0', color: '#92400E', fontSize: '16px', fontWeight: '700' }}>
+                        Conductor Diurno
+                      </h4>
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
                           Distancia (km) *
                         </label>
                         <input
                           type="number"
-                          value={formData.distancia}
-                          onChange={(e) => setFormData({ ...formData, distancia: e.target.value })}
-                          placeholder="Ingrese la distancia en kilómetros"
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            border: '2px solid #E5E7EB',
-                            borderRadius: '8px',
-                            fontSize: '14px',
-                            fontFamily: 'inherit'
-                          }}
+                          value={formData.distancia_diurno}
+                          onChange={(e) => setFormData({ ...formData, distancia_diurno: e.target.value })}
+                          placeholder="Ingrese la distancia"
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
                       </div>
-
-                      <div style={{ marginBottom: '24px' }}>
-                        <label style={{
-                          display: 'block',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          color: '#374151',
-                          marginBottom: '8px'
-                        }}>
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
                           Documento *
                         </label>
                         <select
-                          value={formData.documento}
-                          onChange={(e) => setFormData({ ...formData, documento: e.target.value as 'CONTRATO' | 'ANEXO' | 'N/A' | '' })}
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            border: '2px solid #E5E7EB',
-                            borderRadius: '8px',
-                            fontSize: '14px',
-                            fontFamily: 'inherit',
-                            background: 'white'
-                          }}
+                          value={formData.documento_diurno}
+                          onChange={(e) => setFormData({ ...formData, documento_diurno: e.target.value as any })}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
                           <option value="CONTRATO">CONTRATO</option>
@@ -1391,33 +1397,127 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           <option value="N/A">N/A</option>
                         </select>
                       </div>
-
-                      <div style={{ marginBottom: '24px' }}>
-                        <label style={{
-                          display: 'block',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          color: '#374151',
-                          marginBottom: '8px'
-                        }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
                           Ubicación *
                         </label>
                         <input
                           type="text"
-                          value={formData.ubicacion}
-                          onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
+                          value={formData.ubicacion_diurno}
+                          onChange={(e) => setFormData({ ...formData, ubicacion_diurno: e.target.value })}
                           placeholder="Ingrese la ubicación"
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            border: '2px solid #E5E7EB',
-                            borderRadius: '8px',
-                            fontSize: '14px',
-                            fontFamily: 'inherit'
-                          }}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
                       </div>
-                    </>
+                    </div>
+                  )}
+
+                  {/* Campos para TURNO - Conductor Nocturno */}
+                  {formData.horario === 'TURNO' && formData.conductor_nocturno_id && (
+                    <div style={{
+                      marginBottom: '24px',
+                      padding: '20px',
+                      background: '#DBEAFE',
+                      borderRadius: '12px',
+                      border: '2px solid #93C5FD'
+                    }}>
+                      <h4 style={{ margin: '0 0 16px 0', color: '#1E3A8A', fontSize: '16px', fontWeight: '700' }}>
+                        Conductor Nocturno
+                      </h4>
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+                          Distancia (km) *
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.distancia_nocturno}
+                          onChange={(e) => setFormData({ ...formData, distancia_nocturno: e.target.value })}
+                          placeholder="Ingrese la distancia"
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
+                        />
+                      </div>
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+                          Documento *
+                        </label>
+                        <select
+                          value={formData.documento_nocturno}
+                          onChange={(e) => setFormData({ ...formData, documento_nocturno: e.target.value as any })}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
+                        >
+                          <option value="">Seleccione un documento</option>
+                          <option value="CONTRATO">CONTRATO</option>
+                          <option value="ANEXO">ANEXO</option>
+                          <option value="N/A">N/A</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+                          Ubicación *
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.ubicacion_nocturno}
+                          onChange={(e) => setFormData({ ...formData, ubicacion_nocturno: e.target.value })}
+                          placeholder="Ingrese la ubicación"
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Campos para CARGO */}
+                  {formData.horario === 'CARGO' && formData.conductores_ids.length > 0 && (
+                    <div style={{
+                      marginBottom: '24px',
+                      padding: '20px',
+                      background: '#F3E8FF',
+                      borderRadius: '12px',
+                      border: '2px solid #C084FC'
+                    }}>
+                      <h4 style={{ margin: '0 0 16px 0', color: '#6B21A8', fontSize: '16px', fontWeight: '700' }}>
+                        Datos del Conductor
+                      </h4>
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+                          Distancia (km) *
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.distancia_cargo}
+                          onChange={(e) => setFormData({ ...formData, distancia_cargo: e.target.value })}
+                          placeholder="Ingrese la distancia"
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
+                        />
+                      </div>
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+                          Documento *
+                        </label>
+                        <select
+                          value={formData.documento_cargo}
+                          onChange={(e) => setFormData({ ...formData, documento_cargo: e.target.value as any })}
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
+                        >
+                          <option value="">Seleccione un documento</option>
+                          <option value="CONTRATO">CONTRATO</option>
+                          <option value="ANEXO">ANEXO</option>
+                          <option value="N/A">N/A</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+                          Ubicación *
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.ubicacion_cargo}
+                          onChange={(e) => setFormData({ ...formData, ubicacion_cargo: e.target.value })}
+                          placeholder="Ingrese la ubicación"
+                          style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
+                        />
+                      </div>
+                    </div>
                   )}
 
                   <div>
@@ -1473,8 +1573,12 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   !formData.fecha_programada ||
                   (formData.horario === 'CARGO' && formData.conductores_ids.length === 0) ||
                   (isTurnoMode && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) ||
-                  // Validar campos adicionales para pareja de turno
-                  (isTurnoMode && formData.conductor_diurno_id && formData.conductor_nocturno_id && (!formData.distancia || !formData.documento || !formData.ubicacion))
+                  // Validar campos para conductor diurno
+                  (formData.horario === 'TURNO' && formData.conductor_diurno_id && (!formData.distancia_diurno || !formData.documento_diurno || !formData.ubicacion_diurno)) ||
+                  // Validar campos para conductor nocturno
+                  (formData.horario === 'TURNO' && formData.conductor_nocturno_id && (!formData.distancia_nocturno || !formData.documento_nocturno || !formData.ubicacion_nocturno)) ||
+                  // Validar campos para A CARGO
+                  (formData.horario === 'CARGO' && formData.conductores_ids.length > 0 && (!formData.distancia_cargo || !formData.documento_cargo || !formData.ubicacion_cargo))
                 )}
               >
                 {loading ? 'Creando...' : 'Programar Asignación'}
