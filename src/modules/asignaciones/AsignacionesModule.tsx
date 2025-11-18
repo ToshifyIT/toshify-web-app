@@ -1381,7 +1381,7 @@ export function AsignacionesModule() {
                     Horario
                   </label>
                   <span className={`badge ${getHorarioBadgeClass(viewAsignacion.horario)}`}>
-                    {viewAsignacion.horario}
+                    {viewAsignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
                   </span>
                 </div>
               </div>
