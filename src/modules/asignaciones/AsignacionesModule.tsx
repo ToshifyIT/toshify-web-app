@@ -293,15 +293,31 @@ export function AsignacionesModule() {
 
       const todosConfirmados = (allConductores as any)?.every((c: any) => c.confirmado === true) || false
 
-      // 3. Si TODOS confirmaron, finalizar la asignación
+      // 3. Si TODOS confirmaron, activar la asignación
       if (todosConfirmados) {
-        // Finalizar la asignación confirmada
+        // PRIMERO: Cerrar todas las asignaciones ACTIVAS del mismo vehículo
+        const cerrarVehiculoResult: any = await supabase
+          .from('asignaciones')
+          // @ts-ignore - Type inference issue with Supabase update
+          .update({
+            estado: 'finalizada',
+            fecha_fin: ahora,
+            notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
+          })
+          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+          .eq('estado', 'activa')
+          .neq('id', selectedAsignacion.id)
+
+        if (cerrarVehiculoResult.error) {
+          console.error('Error cerrando asignaciones del vehículo:', cerrarVehiculoResult.error)
+        }
+
+        // SEGUNDO: Activar la nueva asignación confirmada
         const { error: updateAsignacionError } = (await (supabase as any)
           .from('asignaciones')
           .update({
-            estado: 'finalizada',
+            estado: 'activa',
             fecha_inicio: ahora,
-            fecha_fin: ahora,
             notas: confirmComentarios ? `${selectedAsignacion.notas || ''}\n\n[CONFIRMACIÓN COMPLETA] ${confirmComentarios}` : selectedAsignacion.notas
           })
           .eq('id', selectedAsignacion.id))
@@ -373,9 +389,9 @@ export function AsignacionesModule() {
             if (vehiculoError) throw vehiculoError
           }
 
-          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está FINALIZADA y el vehículo EN USO.', 'success')
+          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA y el vehículo EN USO.', 'success')
         } else {
-          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está FINALIZADA.', 'success')
+          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.', 'success')
         }
       } else {
         // No todos han confirmado, solo actualizar nota
