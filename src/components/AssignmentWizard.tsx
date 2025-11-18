@@ -63,6 +63,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
   const [loading, setLoading] = useState(false)
+  const [vehicleSearch, setVehicleSearch] = useState('')
+  const [conductorSearch, setConductorSearch] = useState('')
 
   const [formData, setFormData] = useState<AssignmentData>({
     modalidad: '',
@@ -104,12 +106,14 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
         if (error) throw error
 
-        // Cargar TODOS los vehículos (sin filtrar por estado)
-        const todosVehiculos = (data || []) as Vehicle[]
+        // Filtrar vehículos que NO estén en reparación
+        const vehiculosDisponibles = (data || []).filter((v: any) =>
+          v.vehiculos_estados?.codigo !== 'EN_REPARACION'
+        ) as Vehicle[]
 
-        console.log('📋 Todos los vehículos cargados:', todosVehiculos)
+        console.log('📋 Vehículos disponibles (sin en reparación):', vehiculosDisponibles)
 
-        setVehicles(todosVehiculos)
+        setVehicles(vehiculosDisponibles)
       } catch (error) {
         console.error('Error loading vehicles:', error)
       }
@@ -283,7 +287,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           modalidad: formData.modalidad,
           horario: formData.horario,
           estado: 'programado',  // Estado inicial PROGRAMADO
-          notas: formData.notas,
+          notas: formData.notas.trim() || null,  // Solo guardar si hay contenido
           codigo: codigoAsignacion,
           created_by: user?.id
         } as any)
@@ -370,6 +374,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     : formData.conductores_ids
 
   const availableConductores = conductores.filter(c => !assignedConductorIds.includes(c.id))
+
+  // Filtrar vehículos por búsqueda
+  const filteredVehicles = vehicles.filter(v =>
+    v.patente.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+    v.marca.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+    v.modelo.toLowerCase().includes(vehicleSearch.toLowerCase())
+  )
+
+  // Filtrar conductores por búsqueda
+  const filteredAvailableConductores = availableConductores.filter(c =>
+    c.nombres.toLowerCase().includes(conductorSearch.toLowerCase()) ||
+    c.apellidos.toLowerCase().includes(conductorSearch.toLowerCase()) ||
+    c.numero_licencia.toLowerCase().includes(conductorSearch.toLowerCase())
+  )
 
   return (
     <>
@@ -1099,13 +1117,31 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   <p>Selecciona el vehículo que deseas asignar.</p>
                 </div>
 
+                {/* Buscador de vehículos */}
+                <div style={{ marginBottom: '20px', maxWidth: '600px', margin: '0 auto 20px auto' }}>
+                  <input
+                    type="text"
+                    placeholder="Buscar por patente, marca o modelo..."
+                    value={vehicleSearch}
+                    onChange={(e) => setVehicleSearch(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: '2px solid #E5E7EB',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                </div>
+
                 <div className="vehicle-grid">
-                  {vehicles.length === 0 ? (
+                  {filteredVehicles.length === 0 ? (
                     <div className="empty-state">
-                      No hay vehículos disponibles en este momento
+                      {vehicleSearch ? 'No se encontraron vehículos con ese criterio' : 'No hay vehículos disponibles en este momento'}
                     </div>
                   ) : (
-                    vehicles.map((vehicle) => (
+                    filteredVehicles.map((vehicle) => (
                       <div
                         key={vehicle.id}
                         className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
@@ -1154,12 +1190,31 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   {/* Conductores Disponibles */}
                   <div className="conductores-column">
                     <h4>Conductores Disponibles</h4>
-                    {availableConductores.length === 0 ? (
+
+                    {/* Buscador de conductores */}
+                    <div style={{ marginBottom: '12px' }}>
+                      <input
+                        type="text"
+                        placeholder="Buscar por nombre o licencia..."
+                        value={conductorSearch}
+                        onChange={(e) => setConductorSearch(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          border: '2px solid #E5E7EB',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    </div>
+
+                    {filteredAvailableConductores.length === 0 ? (
                       <div className="empty-state">
-                        No hay conductores disponibles
+                        {conductorSearch ? 'No se encontraron conductores' : 'No hay conductores disponibles'}
                       </div>
                     ) : (
-                      availableConductores.map((conductor) => (
+                      filteredAvailableConductores.map((conductor) => (
                         <div
                           key={conductor.id}
                           className="conductor-item"
