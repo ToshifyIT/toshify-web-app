@@ -293,75 +293,32 @@ export function AsignacionesModule() {
 
       const todosConfirmados = (allConductores as any)?.every((c: any) => c.confirmado === true) || false
 
-      // 3. Si TODOS confirmaron, cambiar asignación a ACTIVA
+      // 3. Si TODOS confirmaron, finalizar la asignación
       if (todosConfirmados) {
-        // PRIMERO: Cerrar todas las asignaciones activas del vehículo y conductores
-        // Obtener todos los conductores de esta asignación
-        const conductoresIds = (allConductores as any)?.map((c: any) => c.conductor_id) || []
-
-        // Cerrar asignaciones activas del vehículo
-        const cerrarVehiculoResult: any = await supabase
-          .from('asignaciones')
-          // @ts-ignore - Type inference issue with Supabase update
-          .update({
-            estado: 'Cerrada',
-            fecha_fin: ahora,
-            notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
-          })
-          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-          .eq('estado', 'activa')
-          .neq('id', selectedAsignacion.id)
-
-        if (cerrarVehiculoResult.error) {
-          console.error('Error cerrando asignaciones del vehículo:', cerrarVehiculoResult.error)
-        }
-
-        // Cerrar asignaciones activas de los conductores
-        if (conductoresIds.length > 0) {
-          // Obtener asignaciones activas de estos conductores
-          const { data: asignacionesConductores, error: getAsignacionesError } = await supabase
-            .from('asignaciones_conductores')
-            .select('asignacion_id')
-            .in('conductor_id', conductoresIds)
-            .eq('estado', 'asignado')
-
-          if (!getAsignacionesError && asignacionesConductores && asignacionesConductores.length > 0) {
-            const asignacionesIdsToCerrar = asignacionesConductores
-              .map((ac: any) => ac.asignacion_id)
-              .filter((id: string) => id !== selectedAsignacion.id)
-
-            if (asignacionesIdsToCerrar.length > 0) {
-              const cerrarConductoresResult: any = await supabase
-                .from('asignaciones')
-                // @ts-ignore - Type inference issue with Supabase update
-                .update({
-                  estado: 'Cerrada',
-                  fecha_fin: ahora,
-                  notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
-                })
-                .in('id', asignacionesIdsToCerrar)
-                .eq('estado', 'activa')
-
-              if (cerrarConductoresResult.error) {
-                console.error('Error cerrando asignaciones de conductores:', cerrarConductoresResult.error)
-              }
-            }
-          }
-        }
-
-        // SEGUNDO: Activar la nueva asignación
+        // Finalizar la asignación confirmada
         const { error: updateAsignacionError } = (await (supabase as any)
           .from('asignaciones')
           .update({
-            estado: 'activa',
+            estado: 'finalizada',
             fecha_inicio: ahora,
+            fecha_fin: ahora,
             notas: confirmComentarios ? `${selectedAsignacion.notas || ''}\n\n[CONFIRMACIÓN COMPLETA] ${confirmComentarios}` : selectedAsignacion.notas
           })
           .eq('id', selectedAsignacion.id))
 
         if (updateAsignacionError) throw updateAsignacionError
 
-        // 4. Insertar registros en vehiculos_turnos_ocupados para todos los conductores
+        // 4. Primero eliminar turnos ocupados existentes para este vehículo y fecha
+        // Esto previene el error de duplicate key si ya existen registros
+        if (fechaProgramada) {
+          await supabase
+            .from('vehiculos_turnos_ocupados')
+            .delete()
+            .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+            .eq('fecha', fechaProgramada)
+        }
+
+        // 5. Insertar registros en vehiculos_turnos_ocupados para todos los conductores
         const turnosOcupadosData = (allConductores as any)?.map((ac: any) => ({
           vehiculo_id: selectedAsignacion.vehiculo_id,
           fecha: fechaProgramada,
@@ -378,7 +335,7 @@ export function AsignacionesModule() {
           if (turnosError) throw turnosError
         }
 
-        // 5. Determinar si el vehículo debe cambiar a EN_USO
+        // 6. Determinar si el vehículo debe cambiar a EN_USO
         const { data: turnosActivos, error: turnosActivosError } = await supabase
           .from('vehiculos_turnos_ocupados')
           .select('horario')
@@ -397,7 +354,7 @@ export function AsignacionesModule() {
           debeEstarEnUso = true
         }
 
-        // 6. Actualizar estado del vehículo
+        // 7. Actualizar estado del vehículo
         if (debeEstarEnUso) {
           const { data: estadoEnUso, error: estadoError } = await supabase
             .from('vehiculos_estados')
@@ -416,9 +373,9 @@ export function AsignacionesModule() {
             if (vehiculoError) throw vehiculoError
           }
 
-          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA y el vehículo EN USO.', 'success')
+          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está FINALIZADA y el vehículo EN USO.', 'success')
         } else {
-          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA. El vehículo permanece DISPONIBLE para otros turnos.', 'success')
+          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está FINALIZADA.', 'success')
         }
       } else {
         // No todos han confirmado, solo actualizar nota
