@@ -28,6 +28,7 @@ interface Conductor {
     codigo: string
     descripcion: string
   }
+  tieneAsignacionActiva?: boolean
 }
 
 interface AssignmentData {
@@ -147,10 +148,26 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           c.conductores_estados?.codigo?.toLowerCase().includes('activo')
         ) as Conductor[]
 
-        console.log('👥 Conductores cargados:', data)
-        console.log('✅ Conductores activos:', conductoresActivos)
+        // Verificar qué conductores tienen asignaciones activas
+        const { data: asignacionesActivas, error: asignacionesError } = await supabase
+          .from('asignaciones_conductores')
+          .select('conductor_id, asignaciones!inner(estado)')
+          .eq('asignaciones.estado', 'activa') as { data: { conductor_id: string }[] | null; error: any }
 
-        setConductores(conductoresActivos)
+        if (asignacionesError) {
+          console.error('Error verificando asignaciones:', asignacionesError)
+        }
+
+        // Marcar conductores con asignación activa
+        const conductoresConEstado = conductoresActivos.map(conductor => ({
+          ...conductor,
+          tieneAsignacionActiva: asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false
+        }))
+
+        console.log('👥 Conductores cargados:', data)
+        console.log('✅ Conductores con estado:', conductoresConEstado)
+
+        setConductores(conductoresConEstado)
       } catch (error) {
         console.error('Error loading conductores:', error)
       }
@@ -1154,6 +1171,18 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                               {conductor.nombres} {conductor.apellidos}
                             </p>
                             <p className="conductor-license">Lic: {conductor.numero_licencia}</p>
+                            <span style={{
+                              fontSize: '11px',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontWeight: '600',
+                              marginTop: '4px',
+                              display: 'inline-block',
+                              background: conductor.tieneAsignacionActiva ? '#FEE2E2' : '#D1FAE5',
+                              color: conductor.tieneAsignacionActiva ? '#991B1B' : '#065F46'
+                            }}>
+                              {conductor.tieneAsignacionActiva ? 'Asignado' : 'Disponible'}
+                            </span>
                           </div>
                         </div>
                       ))

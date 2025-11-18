@@ -286,6 +286,61 @@ export function AsignacionesModule() {
 
       // 3. Si TODOS confirmaron, cambiar asignación a ACTIVA
       if (todosConfirmados) {
+        // PRIMERO: Cerrar todas las asignaciones activas del vehículo y conductores
+        // Obtener todos los conductores de esta asignación
+        const conductoresIds = (allConductores as any)?.map((c: any) => c.conductor_id) || []
+
+        // Cerrar asignaciones activas del vehículo
+        const cerrarVehiculoResult: any = await supabase
+          .from('asignaciones')
+          // @ts-ignore - Type inference issue with Supabase update
+          .update({
+            estado: 'cerrada',
+            fecha_fin: ahora,
+            notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
+          })
+          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+          .eq('estado', 'activa')
+          .neq('id', selectedAsignacion.id)
+
+        if (cerrarVehiculoResult.error) {
+          console.error('Error cerrando asignaciones del vehículo:', cerrarVehiculoResult.error)
+        }
+
+        // Cerrar asignaciones activas de los conductores
+        if (conductoresIds.length > 0) {
+          // Obtener asignaciones activas de estos conductores
+          const { data: asignacionesConductores, error: getAsignacionesError } = await supabase
+            .from('asignaciones_conductores')
+            .select('asignacion_id')
+            .in('conductor_id', conductoresIds)
+            .eq('estado', 'asignado')
+
+          if (!getAsignacionesError && asignacionesConductores && asignacionesConductores.length > 0) {
+            const asignacionesIdsToCerrar = asignacionesConductores
+              .map((ac: any) => ac.asignacion_id)
+              .filter((id: string) => id !== selectedAsignacion.id)
+
+            if (asignacionesIdsToCerrar.length > 0) {
+              const cerrarConductoresResult: any = await supabase
+                .from('asignaciones')
+                // @ts-ignore - Type inference issue with Supabase update
+                .update({
+                  estado: 'cerrada',
+                  fecha_fin: ahora,
+                  notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
+                })
+                .in('id', asignacionesIdsToCerrar)
+                .eq('estado', 'activa')
+
+              if (cerrarConductoresResult.error) {
+                console.error('Error cerrando asignaciones de conductores:', cerrarConductoresResult.error)
+              }
+            }
+          }
+        }
+
+        // SEGUNDO: Activar la nueva asignación
         const { error: updateAsignacionError } = (await (supabase as any)
           .from('asignaciones')
           .update({

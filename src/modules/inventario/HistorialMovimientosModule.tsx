@@ -7,7 +7,6 @@ import {
   XCircle,
   Truck,
   Calendar,
-  User,
   ArrowUp,
   ArrowDown
 } from 'lucide-react'
