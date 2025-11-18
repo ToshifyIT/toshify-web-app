@@ -306,7 +306,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       Swal.fire({
         icon: 'success',
         title: '¡Programación creada!',
-        text: `Código de asignación: ${codigoAsignacion}\nEstado: PROGRAMADO para ${new Date(formData.fecha_programada).toLocaleDateString('es-AR')}`,
+        text: `Número de asignación: ${codigoAsignacion}\nEstado: PROGRAMADO para ${new Date(formData.fecha_programada).toLocaleDateString('es-AR')}`,
         showConfirmButton: false,
         timer: 3000
       })

@@ -1268,10 +1268,10 @@ export function AsignacionesModule() {
             <h2 style={{ marginTop: 0, marginBottom: '24px', color: '#1F2937' }}>Detalles de Asignación</h2>
 
             <div style={{ display: 'grid', gap: '20px' }}>
-              {/* Código de Asignación */}
+              {/* Número de Asignación */}
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
-                  Código de Asignación
+                  Número de Asignación
                 </label>
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1F2937' }}>
                   {viewAsignacion.codigo}

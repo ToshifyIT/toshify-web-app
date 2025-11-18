@@ -151,7 +151,7 @@ export function AsignacionesActivasModule() {
     () => [
       {
         accessorKey: 'codigo',
-        header: 'Código',
+        header: 'Número',
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: '#E63946' }}>
             {getValue() as string}
@@ -689,7 +689,7 @@ export function AsignacionesActivasModule() {
               </div>
               <div className="details-grid">
                 <div className="detail-item">
-                  <span className="detail-label">Código de Asignación</span>
+                  <span className="detail-label">Número de Asignación</span>
                   <span className="detail-value" style={{ color: '#E63946', fontWeight: 700 }}>
                     {selectedAsignacion.codigo}
                   </span>
