@@ -838,9 +838,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           display: flex;
           align-items: center;
           gap: 12px;
-          cursor: pointer;
+          cursor: grab;
           transition: all 0.2s ease;
           background: white;
+          user-select: none;
+        }
+
+        .conductor-item:active {
+          cursor: grabbing;
+          opacity: 0.7;
         }
 
         .conductor-item:hover {
@@ -954,6 +960,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           border-style: solid;
           border-color: rgba(230, 57, 70, 0.3);
           background: white;
+        }
+
+        .drop-zone.drag-over {
+          border-color: #E63946;
+          background: rgba(230, 57, 70, 0.05);
+          transform: scale(1.02);
+          box-shadow: 0 4px 12px rgba(230, 57, 70, 0.15);
         }
 
         .drop-zone-empty {
@@ -1155,13 +1168,12 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         <div
                           key={conductor.id}
                           className="conductor-item"
-                          onClick={() => {
-                            // En modo A Cargo, asignar directamente
-                            if (formData.horario === 'CARGO') {
-                              handleSelectConductorCargo(conductor.id)
-                            }
-                            // En modo Turno, mostrar opciones (por ahora no hacer nada, usuario debe elegir turno)
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('conductorId', conductor.id)
+                            e.dataTransfer.effectAllowed = 'move'
                           }}
+                          style={{ cursor: 'grab' }}
                         >
                           <div className="conductor-avatar">
                             {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
@@ -1195,9 +1207,26 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       {/* Turno Diurno */}
                       <div className="conductores-column turno-diurno">
                         <h4>
-                          <span className="turno-badge diurno">Diurno</span>
+                          <span className="turno-badge diurno">DIURNO</span>
                         </h4>
-                        <div className={`drop-zone ${conductorDiurno ? 'has-conductor' : ''}`}>
+                        <div
+                          className={`drop-zone ${conductorDiurno ? 'has-conductor' : ''}`}
+                          onDragOver={(e) => {
+                            e.preventDefault()
+                            e.currentTarget.classList.add('drag-over')
+                          }}
+                          onDragLeave={(e) => {
+                            e.currentTarget.classList.remove('drag-over')
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            e.currentTarget.classList.remove('drag-over')
+                            const conductorId = e.dataTransfer.getData('conductorId')
+                            if (conductorId) {
+                              handleSelectConductorDiurno(conductorId)
+                            }
+                          }}
+                        >
                           {conductorDiurno ? (
                             <div className="assigned-conductor-card">
                               <div className="conductor-avatar">
@@ -1219,44 +1248,35 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                             </div>
                           ) : (
                             <div className="drop-zone-empty">
-                              Selecciona un conductor disponible
+                              Arrastra un conductor aquí
                             </div>
                           )}
                         </div>
-
-                        {/* Botones para asignar conductores disponibles */}
-                        {!conductorDiurno && availableConductores.length > 0 && (
-                          <div>
-                            <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '8px' }}>
-                              Asignar a Turno Diurno:
-                            </p>
-                            {availableConductores.slice(0, 3).map((conductor) => (
-                              <div
-                                key={conductor.id}
-                                className="conductor-item"
-                                onClick={() => handleSelectConductorDiurno(conductor.id)}
-                                style={{ cursor: 'pointer', marginBottom: '6px' }}
-                              >
-                                <div className="conductor-avatar" style={{ width: '32px', height: '32px', fontSize: '12px' }}>
-                                  {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
-                                </div>
-                                <div className="conductor-info">
-                                  <p className="conductor-name" style={{ fontSize: '13px' }}>
-                                    {conductor.nombres} {conductor.apellidos}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
 
                       {/* Turno Nocturno */}
                       <div className="conductores-column turno-nocturno">
                         <h4>
-                          <span className="turno-badge nocturno">Nocturno</span>
+                          <span className="turno-badge nocturno">NOCTURNO</span>
                         </h4>
-                        <div className={`drop-zone ${conductorNocturno ? 'has-conductor' : ''}`}>
+                        <div
+                          className={`drop-zone ${conductorNocturno ? 'has-conductor' : ''}`}
+                          onDragOver={(e) => {
+                            e.preventDefault()
+                            e.currentTarget.classList.add('drag-over')
+                          }}
+                          onDragLeave={(e) => {
+                            e.currentTarget.classList.remove('drag-over')
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            e.currentTarget.classList.remove('drag-over')
+                            const conductorId = e.dataTransfer.getData('conductorId')
+                            if (conductorId) {
+                              handleSelectConductorNocturno(conductorId)
+                            }
+                          }}
+                        >
                           {conductorNocturno ? (
                             <div className="assigned-conductor-card">
                               <div className="conductor-avatar">
@@ -1278,36 +1298,10 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                             </div>
                           ) : (
                             <div className="drop-zone-empty">
-                              Selecciona un conductor disponible
+                              Arrastra un conductor aquí
                             </div>
                           )}
                         </div>
-
-                        {/* Botones para asignar conductores disponibles */}
-                        {!conductorNocturno && availableConductores.length > 0 && (
-                          <div>
-                            <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '8px' }}>
-                              Asignar a Turno Nocturno:
-                            </p>
-                            {availableConductores.slice(0, 3).map((conductor) => (
-                              <div
-                                key={conductor.id}
-                                className="conductor-item"
-                                onClick={() => handleSelectConductorNocturno(conductor.id)}
-                                style={{ cursor: 'pointer', marginBottom: '6px' }}
-                              >
-                                <div className="conductor-avatar" style={{ width: '32px', height: '32px', fontSize: '12px' }}>
-                                  {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
-                                </div>
-                                <div className="conductor-info">
-                                  <p className="conductor-name" style={{ fontSize: '13px' }}>
-                                    {conductor.nombres} {conductor.apellidos}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </>
                   )}
@@ -1316,9 +1310,26 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   {!isTurnoMode && (
                     <div className="conductores-column a-cargo">
                       <h4>
-                        <span className="turno-badge cargo">A Cargo</span>
+                        <span className="turno-badge cargo">A CARGO</span>
                       </h4>
-                      <div className={`drop-zone ${conductorCargo ? 'has-conductor' : ''}`}>
+                      <div
+                        className={`drop-zone ${conductorCargo ? 'has-conductor' : ''}`}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.currentTarget.classList.add('drag-over')
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove('drag-over')
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.currentTarget.classList.remove('drag-over')
+                          const conductorId = e.dataTransfer.getData('conductorId')
+                          if (conductorId) {
+                            handleSelectConductorCargo(conductorId)
+                          }
+                        }}
+                      >
                         {conductorCargo ? (
                           <div className="assigned-conductor-card">
                             <div className="conductor-avatar">
@@ -1340,7 +1351,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           </div>
                         ) : (
                           <div className="drop-zone-empty">
-                            Haz clic en un conductor disponible para asignarlo
+                            Arrastra un conductor aquí
                           </div>
                         )}
                       </div>
