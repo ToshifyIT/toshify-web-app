@@ -1,5 +1,5 @@
 // src/components/admin/UserMenuPermissionsManager.tsx
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Check } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { UserWithRole, Menu, Submenu } from '../../types/database.types'
@@ -186,7 +186,7 @@ export function UserMenuPermissionsManager() {
     }
   }
 
-  const toggleMenuPermission = async (
+  const toggleMenuPermission = useCallback(async (
     menuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
@@ -267,9 +267,9 @@ export function UserMenuPermissionsManager() {
     } finally {
       setSaving(false)
     }
-  }
+  }, [selectedUser, menuPermissions, menus])
 
-  const toggleSubmenuPermission = async (
+  const toggleSubmenuPermission = useCallback(async (
     submenuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
@@ -350,7 +350,7 @@ export function UserMenuPermissionsManager() {
     } finally {
       setSaving(false)
     }
-  }
+  }, [selectedUser, submenuPermissions, submenus])
 
   const getMenuPermission = (menuId: string, field: keyof MenuPermission) => {
     const perm = menuPermissions.find(p => p.menu_id === menuId)
@@ -460,12 +460,31 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_view ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
-              if (saving) return
+            onClick={(e) => {
+              console.log('🖱️ Click en checkbox Ver', {
+                saving,
+                type: row.original.type,
+                menu_id: row.original.menu_id,
+                submenu_id: row.original.submenu_id,
+                selectedUser,
+                event: e
+              })
+              if (saving) {
+                console.log('⏸️ Click ignorado: saving=true')
+                return
+              }
+              if (!selectedUser) {
+                console.log('⏸️ Click ignorado: no selectedUser')
+                return
+              }
               if (row.original.type === 'menu' && row.original.menu_id) {
+                console.log('✅ Llamando toggleMenuPermission')
                 toggleMenuPermission(row.original.menu_id, 'can_view')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                console.log('✅ Llamando toggleSubmenuPermission')
                 toggleSubmenuPermission(row.original.submenu_id, 'can_view')
+              } else {
+                console.log('⚠️ No se pudo determinar tipo o ID')
               }
             }}
           >
@@ -480,8 +499,10 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_create ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
+            onClick={(e) => {
+              console.log('🖱️ Click en checkbox Crear', { saving, selectedUser })
               if (saving) return
+              if (!selectedUser) return
               if (row.original.type === 'menu' && row.original.menu_id) {
                 toggleMenuPermission(row.original.menu_id, 'can_create')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
@@ -500,8 +521,10 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_edit ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
+            onClick={(e) => {
+              console.log('🖱️ Click en checkbox Editar', { saving, selectedUser })
               if (saving) return
+              if (!selectedUser) return
               if (row.original.type === 'menu' && row.original.menu_id) {
                 toggleMenuPermission(row.original.menu_id, 'can_edit')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
@@ -520,8 +543,10 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_delete ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
+            onClick={(e) => {
+              console.log('🖱️ Click en checkbox Eliminar', { saving, selectedUser })
               if (saving) return
+              if (!selectedUser) return
               if (row.original.type === 'menu' && row.original.menu_id) {
                 toggleMenuPermission(row.original.menu_id, 'can_delete')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
@@ -535,7 +560,7 @@ export function UserMenuPermissionsManager() {
         enableSorting: true,
       },
     ],
-    [saving]
+    [saving, selectedUser, toggleMenuPermission, toggleSubmenuPermission]
   )
 
   // Configurar TanStack Table
