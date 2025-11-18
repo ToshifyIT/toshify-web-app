@@ -552,6 +552,7 @@ export function UserMenuPermissionsManager() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    autoResetPageIndex: false, // Evitar que la paginación se reinicie al actualizar datos
     initialState: {
       pagination: {
         pageSize: 10,
