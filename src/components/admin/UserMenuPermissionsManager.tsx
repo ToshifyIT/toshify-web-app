@@ -535,7 +535,7 @@ export function UserMenuPermissionsManager() {
         enableSorting: true,
       },
     ],
-    [menuPermissions, submenuPermissions, saving]
+    [saving]
   )
 
   // Configurar TanStack Table
