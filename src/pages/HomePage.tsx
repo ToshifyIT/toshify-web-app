@@ -655,7 +655,7 @@ export function HomePage() {
                   <MenuPorRolPage />
                 </ProtectedRoute>
               } />
-              <Route path="/menu-por-usuario" element={
+              <Route path="/administracion/menu-por-usuario" element={
                 <ProtectedRoute submenuName="menu-por-usuario" action="view">
                   <MenuPorUsuarioPage />
                 </ProtectedRoute>
