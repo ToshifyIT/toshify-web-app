@@ -228,8 +228,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       // 0. Obtener usuario actual
       const { data: { user } } = await supabase.auth.getUser()
 
-      // 1. Generar número de asignación único
-      const numeroAsignacion = `ASG-${Date.now()}`
+      // 1. Generar código de asignación único de 6 dígitos
+      const codigoAsignacion = `ASG-${String(Date.now()).slice(-6)}`
 
       // 2. Preparar lista de conductores según modo
       let conductoresIds: string[] = []
@@ -255,7 +255,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           horario: formData.horario,
           estado: 'programado',  // Estado inicial PROGRAMADO
           notas: formData.notas,
-          numero_asignacion: numeroAsignacion,
+          codigo: codigoAsignacion,
           created_by: user?.id
         } as any)
         .select()
@@ -306,7 +306,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       Swal.fire({
         icon: 'success',
         title: '¡Programación creada!',
-        text: `Número de asignación: ${numeroAsignacion}\nEstado: PROGRAMADO para ${new Date(formData.fecha_programada).toLocaleDateString('es-AR')}`,
+        text: `Código de asignación: ${codigoAsignacion}\nEstado: PROGRAMADO para ${new Date(formData.fecha_programada).toLocaleDateString('es-AR')}`,
         showConfirmButton: false,
         timer: 3000
       })

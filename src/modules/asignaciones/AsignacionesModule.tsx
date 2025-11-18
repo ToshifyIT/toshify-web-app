@@ -8,7 +8,7 @@ import Swal from 'sweetalert2'
 
 interface Asignacion {
   id: string
-  numero_asignacion: string
+  codigo: string
   vehiculo_id: string
   conductor_id: string
   fecha_programada?: string | null
@@ -241,7 +241,7 @@ export function AsignacionesModule() {
 
   const filteredAsignaciones = asignaciones.filter(asignacion => {
     const matchesSearch =
-      asignacion.numero_asignacion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      asignacion.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asignacion.vehiculos?.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asignacion.conductores?.nombres.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asignacion.conductores?.apellidos.toLowerCase().includes(searchTerm.toLowerCase())
@@ -893,7 +893,7 @@ export function AsignacionesModule() {
                 {filteredAsignaciones.map((asignacion) => (
                   <tr key={asignacion.id}>
                     <td>
-                      <strong>{asignacion.numero_asignacion || 'N/A'}</strong>
+                      <strong>{asignacion.codigo || 'N/A'}</strong>
                     </td>
                     <td>
                       <strong>{asignacion.vehiculos?.patente || 'N/A'}</strong>
@@ -1268,13 +1268,13 @@ export function AsignacionesModule() {
             <h2 style={{ marginTop: 0, marginBottom: '24px', color: '#1F2937' }}>Detalles de Asignación</h2>
 
             <div style={{ display: 'grid', gap: '20px' }}>
-              {/* Número de Asignación */}
+              {/* Código de Asignación */}
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
-                  Número de Asignación
+                  Código de Asignación
                 </label>
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1F2937' }}>
-                  {viewAsignacion.numero_asignacion}
+                  {viewAsignacion.codigo}
                 </p>
               </div>
 

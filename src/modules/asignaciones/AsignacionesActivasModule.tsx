@@ -16,7 +16,7 @@ import Swal from 'sweetalert2'
 
 interface AsignacionActiva {
   id: string
-  numero_asignacion: string
+  codigo: string
   vehiculo_id: string
   fecha_inicio: string
   modalidad: string
@@ -68,7 +68,7 @@ export function AsignacionesActivasModule() {
         .from('asignaciones')
         .select(`
           id,
-          numero_asignacion,
+          codigo,
           vehiculo_id,
           fecha_inicio,
           modalidad,
@@ -150,8 +150,8 @@ export function AsignacionesActivasModule() {
   const columns = useMemo<ColumnDef<AsignacionActiva>[]>(
     () => [
       {
-        accessorKey: 'numero_asignacion',
-        header: 'Nro. Asignación',
+        accessorKey: 'codigo',
+        header: 'Código',
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: '#E63946' }}>
             {getValue() as string}
@@ -689,9 +689,9 @@ export function AsignacionesActivasModule() {
               </div>
               <div className="details-grid">
                 <div className="detail-item">
-                  <span className="detail-label">Número de Asignación</span>
+                  <span className="detail-label">Código de Asignación</span>
                   <span className="detail-value" style={{ color: '#E63946', fontWeight: 700 }}>
-                    {selectedAsignacion.numero_asignacion}
+                    {selectedAsignacion.codigo}
                   </span>
                 </div>
                 <div className="detail-item">
