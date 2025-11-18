@@ -67,6 +67,7 @@ export function AsignacionesModule() {
   const [showViewModal, setShowViewModal] = useState(false)
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
   const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Cargar asignaciones desde Supabase
   const loadAsignaciones = async () => {
@@ -144,6 +145,8 @@ export function AsignacionesModule() {
   }, [])
 
   const handleDelete = async (id: string) => {
+    if (isSubmitting) return // Prevenir doble click
+
     if (!canDelete) {
       Swal.fire({
         icon: 'error',
@@ -165,6 +168,7 @@ export function AsignacionesModule() {
     })
 
     if (result.isConfirmed) {
+      setIsSubmitting(true)
       try {
         // 0. Obtener la asignación antes de eliminarla (para actualizar vehículo)
         const asignacion = asignaciones.find(a => a.id === id)
@@ -235,6 +239,8 @@ export function AsignacionesModule() {
       } catch (error: any) {
         console.error('Error deleting assignment:', error)
         Swal.fire('Error', error.message || 'Error al eliminar la asignación', 'error')
+      } finally {
+        setIsSubmitting(false)
       }
     }
   }
@@ -253,11 +259,14 @@ export function AsignacionesModule() {
 
   // Confirmar programación (PROGRAMADO → ACTIVA solo cuando TODOS confirman)
   const handleConfirmProgramacion = async () => {
+    if (isSubmitting) return // Prevenir doble click
+
     if (!selectedAsignacion || conductoresToConfirm.length === 0) {
       Swal.fire('Error', 'Debes seleccionar al menos un conductor para confirmar', 'warning')
       return
     }
 
+    setIsSubmitting(true)
     try {
       const ahora = new Date().toISOString()
       const fechaProgramada = selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toISOString().split('T')[0] : null
@@ -277,7 +286,7 @@ export function AsignacionesModule() {
       // 2. Verificar si TODOS los conductores han confirmado
       const { data: allConductores, error: conductoresError } = await supabase
         .from('asignaciones_conductores')
-        .select('id, confirmado, horario')
+        .select('id, conductor_id, confirmado, horario')
         .eq('asignacion_id', selectedAsignacion.id)
 
       if (conductoresError) throw conductoresError
@@ -295,7 +304,7 @@ export function AsignacionesModule() {
           .from('asignaciones')
           // @ts-ignore - Type inference issue with Supabase update
           .update({
-            estado: 'cerrada',
+            estado: 'Cerrada',
             fecha_fin: ahora,
             notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
           })
@@ -326,7 +335,7 @@ export function AsignacionesModule() {
                 .from('asignaciones')
                 // @ts-ignore - Type inference issue with Supabase update
                 .update({
-                  estado: 'cerrada',
+                  estado: 'Cerrada',
                   fecha_fin: ahora,
                   notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
                 })
@@ -434,16 +443,21 @@ export function AsignacionesModule() {
     } catch (error: any) {
       console.error('Error confirmando programación:', error)
       Swal.fire('Error', error.message || 'Error al confirmar la programación', 'error')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   // Cancelar programación completa
   const handleCancelProgramacion = async () => {
+    if (isSubmitting) return // Prevenir doble click
+
     if (!selectedAsignacion || !cancelMotivo.trim()) {
       Swal.fire('Error', 'Debes ingresar un motivo de cancelación', 'warning')
       return
     }
 
+    setIsSubmitting(true)
     try {
       // 1. Marcar todos los conductores como no confirmados
       const { error: conductoresError } = (await (supabase as any)
@@ -489,6 +503,8 @@ export function AsignacionesModule() {
     } catch (error: any) {
       console.error('Error cancelando programación:', error)
       Swal.fire('Error', error.message || 'Error al cancelar la programación', 'error')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -1192,18 +1208,18 @@ export function AsignacionesModule() {
               </button>
               <button
                 onClick={handleConfirmProgramacion}
-                disabled={conductoresToConfirm.length === 0}
+                disabled={conductoresToConfirm.length === 0 || isSubmitting}
                 style={{
                   padding: '10px 20px',
                   border: 'none',
-                  background: conductoresToConfirm.length > 0 ? '#10B981' : '#D1D5DB',
+                  background: (conductoresToConfirm.length > 0 && !isSubmitting) ? '#10B981' : '#D1D5DB',
                   color: 'white',
                   borderRadius: '8px',
-                  cursor: conductoresToConfirm.length > 0 ? 'pointer' : 'not-allowed',
+                  cursor: (conductoresToConfirm.length > 0 && !isSubmitting) ? 'pointer' : 'not-allowed',
                   fontWeight: '600'
                 }}
               >
-                Confirmar Seleccionados
+                {isSubmitting ? 'Procesando...' : 'Confirmar Seleccionados'}
               </button>
             </div>
           </div>
@@ -1273,18 +1289,18 @@ export function AsignacionesModule() {
               </button>
               <button
                 onClick={handleCancelProgramacion}
-                disabled={!cancelMotivo.trim()}
+                disabled={!cancelMotivo.trim() || isSubmitting}
                 style={{
                   padding: '10px 20px',
                   border: 'none',
-                  background: cancelMotivo.trim() ? '#DC2626' : '#D1D5DB',
+                  background: (cancelMotivo.trim() && !isSubmitting) ? '#DC2626' : '#D1D5DB',
                   color: 'white',
                   borderRadius: '8px',
-                  cursor: cancelMotivo.trim() ? 'pointer' : 'not-allowed',
+                  cursor: (cancelMotivo.trim() && !isSubmitting) ? 'pointer' : 'not-allowed',
                   fontWeight: '600'
                 }}
               >
-                Cancelar Programación
+                {isSubmitting ? 'Procesando...' : 'Cancelar Programación'}
               </button>
             </div>
           </div>

@@ -108,7 +108,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
         // Filtrar vehículos que NO estén en reparación
         const vehiculosDisponibles = (data || []).filter((v: any) =>
-          v.vehiculos_estados?.codigo !== 'EN_REPARACION'
+          v.vehiculos_estados?.codigo !== 'REPARACION'
         ) as Vehicle[]
 
         console.log('📋 Vehículos disponibles (sin en reparación):', vehiculosDisponibles)
