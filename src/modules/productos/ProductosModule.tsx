@@ -62,6 +62,13 @@ interface Producto {
   categorias?: Categoria
 }
 
+interface StockPorProveedor {
+  proveedor_id: string
+  proveedor_nombre: string
+  cantidad: number
+  estado: string
+}
+
 export function ProductosModule() {
   const { canCreateInSubmenu, canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
 
@@ -82,6 +89,8 @@ export function ProductosModule() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showViewModal, setShowViewModal] = useState(false)
   const [selectedProducto, setSelectedProducto] = useState<Producto | null>(null)
+  const [stockPorProveedor, setStockPorProveedor] = useState<StockPorProveedor[]>([])
+  const [loadingStock, setLoadingStock] = useState(false)
 
   // Form states
   const [formData, setFormData] = useState({
@@ -348,9 +357,60 @@ export function ProductosModule() {
     setShowEditModal(true)
   }
 
-  const openViewModal = (producto: Producto) => {
+  const openViewModal = async (producto: Producto) => {
     setSelectedProducto(producto)
     setShowViewModal(true)
+    await loadStockPorProveedor(producto.id)
+  }
+
+  const loadStockPorProveedor = async (productoId: string) => {
+    try {
+      setLoadingStock(true)
+      const { data, error } = await supabase
+        .from('inventario')
+        .select(`
+          proveedor_id,
+          cantidad,
+          estado,
+          proveedores (
+            razon_social
+          )
+        `)
+        .eq('producto_id', productoId)
+        .in('estado', ['disponible', 'en_uso'])
+        .gt('cantidad', 0)
+        .order('estado', { ascending: true })
+
+      if (error) throw error
+
+      const stockAgrupado = (data || []).reduce((acc: StockPorProveedor[], item: any) => {
+        if (!item.proveedor_id || !item.proveedores) return acc
+
+        const existente = acc.find(
+          s => s.proveedor_id === item.proveedor_id && s.estado === item.estado
+        )
+
+        if (existente) {
+          existente.cantidad += Number(item.cantidad)
+        } else {
+          acc.push({
+            proveedor_id: item.proveedor_id,
+            proveedor_nombre: item.proveedores.razon_social,
+            cantidad: Number(item.cantidad),
+            estado: item.estado
+          })
+        }
+
+        return acc
+      }, [])
+
+      setStockPorProveedor(stockAgrupado)
+    } catch (err) {
+      console.error('Error cargando stock por proveedor:', err)
+      setStockPorProveedor([])
+    } finally {
+      setLoadingStock(false)
+    }
   }
 
   const resetForm = () => {
@@ -487,60 +547,66 @@ export function ProductosModule() {
               <button
                 onClick={() => openViewModal(row.original)}
                 style={{
-                  padding: '6px 12px',
-                  background: '#3B82F6',
-                  color: 'white',
+                  padding: '6px',
+                  background: 'transparent',
+                  color: '#6B7280',
                   border: 'none',
-                  borderRadius: '6px',
+                  borderRadius: '4px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '13px'
+                  justifyContent: 'center',
+                  transition: 'color 0.2s'
                 }}
+                title="Ver"
+                onMouseEnter={(e) => e.currentTarget.style.color = '#3B82F6'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
               >
-                <Eye size={14} />
-                Ver
+                <Eye size={18} />
               </button>
             )}
             {canEdit && (
               <button
                 onClick={() => openEditModal(row.original)}
                 style={{
-                  padding: '6px 12px',
-                  background: '#10B981',
-                  color: 'white',
+                  padding: '6px',
+                  background: 'transparent',
+                  color: '#6B7280',
                   border: 'none',
-                  borderRadius: '6px',
+                  borderRadius: '4px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '13px'
+                  justifyContent: 'center',
+                  transition: 'color 0.2s'
                 }}
+                title="Editar"
+                onMouseEnter={(e) => e.currentTarget.style.color = '#10B981'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
               >
-                <Edit size={14} />
-                Editar
+                <Edit size={18} />
               </button>
             )}
             {canDelete && (
               <button
                 onClick={() => handleDelete(row.original.id)}
                 style={{
-                  padding: '6px 12px',
-                  background: '#EF4444',
-                  color: 'white',
+                  padding: '6px',
+                  background: 'transparent',
+                  color: '#6B7280',
                   border: 'none',
-                  borderRadius: '6px',
+                  borderRadius: '4px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '13px'
+                  justifyContent: 'center',
+                  transition: 'color 0.2s'
                 }}
+                title="Eliminar"
+                onMouseEnter={(e) => e.currentTarget.style.color = '#EF4444'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
               >
-                <Trash2 size={14} />
-                Eliminar
+                <Trash2 size={18} />
               </button>
             )}
           </div>
@@ -1430,6 +1496,129 @@ export function ProductosModule() {
                     <div style={{ gridColumn: '1 / -1' }}>
                       <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Observación</span>
                       <span style={{ fontSize: '14px' }}>{selectedProducto.observacion}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Stock por Proveedor */}
+                <div style={{ gridColumn: '1 / -1', marginTop: '16px' }}>
+                  <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+                    Stock por Proveedor
+                  </span>
+                  {loadingStock ? (
+                    <div style={{ textAlign: 'center', padding: '12px', color: '#6B7280', fontSize: '13px' }}>
+                      Cargando stock...
+                    </div>
+                  ) : stockPorProveedor.length === 0 ? (
+                    <div style={{
+                      background: '#F3F4F6',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      textAlign: 'center',
+                      color: '#6B7280',
+                      fontSize: '13px'
+                    }}>
+                      No hay stock registrado para este producto
+                    </div>
+                  ) : (
+                    <div style={{
+                      border: '1px solid #E5E7EB',
+                      borderRadius: '8px',
+                      overflow: 'hidden'
+                    }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                            <th style={{
+                              padding: '10px 12px',
+                              textAlign: 'left',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              color: '#374151',
+                              textTransform: 'uppercase'
+                            }}>
+                              Proveedor
+                            </th>
+                            <th style={{
+                              padding: '10px 12px',
+                              textAlign: 'center',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              color: '#374151',
+                              textTransform: 'uppercase'
+                            }}>
+                              Estado
+                            </th>
+                            <th style={{
+                              padding: '10px 12px',
+                              textAlign: 'right',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              color: '#374151',
+                              textTransform: 'uppercase'
+                            }}>
+                              Cantidad
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stockPorProveedor.map((stock, idx) => (
+                            <tr
+                              key={`${stock.proveedor_id}-${stock.estado}-${idx}`}
+                              style={{
+                                borderBottom: idx < stockPorProveedor.length - 1 ? '1px solid #E5E7EB' : 'none',
+                                background: 'white'
+                              }}
+                            >
+                              <td style={{ padding: '10px 12px', fontSize: '13px', color: '#1F2937' }}>
+                                {stock.proveedor_nombre}
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                <span style={{
+                                  background: stock.estado === 'disponible' ? '#D1FAE5' : '#FEF3C7',
+                                  color: stock.estado === 'disponible' ? '#065F46' : '#92400E',
+                                  padding: '3px 10px',
+                                  borderRadius: '10px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  textTransform: 'uppercase'
+                                }}>
+                                  {stock.estado === 'disponible' ? 'Disponible' : 'En Uso'}
+                                </span>
+                              </td>
+                              <td style={{
+                                padding: '10px 12px',
+                                textAlign: 'right',
+                                fontSize: '14px',
+                                fontWeight: 600,
+                                color: '#1F2937'
+                              }}>
+                                {stock.cantidad} {selectedProducto.unidades_medida?.descripcion || ''}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: '#F9FAFB', borderTop: '2px solid #DC2626' }}>
+                            <td colSpan={2} style={{
+                              padding: '10px 12px',
+                              fontSize: '13px',
+                              fontWeight: 700,
+                              color: '#DC2626',
+                              textAlign: 'right'
+                            }}>
+                              TOTAL:
+                            </td>
+                            <td style={{
+                              padding: '10px 12px',
+                              textAlign: 'right',
+                              fontSize: '15px',
+                              fontWeight: 700,
+                              color: '#DC2626'
+                            }}>
+                              {stockPorProveedor.reduce((sum, stock) => sum + stock.cantidad, 0)} {selectedProducto.unidades_medida?.descripcion || ''}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>

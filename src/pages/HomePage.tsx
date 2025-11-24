@@ -15,6 +15,7 @@ import { InformesPage } from './informes/InformesPage'
 import { AsignacionesPage } from './asignaciones/AsignacionesPage'
 import { AsignacionesActivasPage } from './asignaciones/AsignacionesActivasPage'
 import { ProductosPage } from './productos/ProductosPage'
+import { ProveedoresPage } from './proveedores/ProveedoresPage'
 import { InventarioDashboardPage } from './inventario/InventarioDashboardPage'
 import { MovimientosPage } from './inventario/MovimientosPage'
 import { AsignacionesActivasPage as AsignacionesActivasInventarioPage } from './inventario/AsignacionesActivasPage'
@@ -569,6 +570,11 @@ export function HomePage() {
               <Route path="/productos" element={
                 <ProtectedRoute submenuName="productos" action="view">
                   <ProductosPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/proveedores" element={
+                <ProtectedRoute submenuName="proveedores" action="view">
+                  <ProveedoresPage />
                 </ProtectedRoute>
               } />
 
