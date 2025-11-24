@@ -327,8 +327,8 @@ export function AsignacionesModule() {
 
           if (estadoDisponible) {
             const vehiculosACambiar = [...new Set(asignacionesACerrar.map((a: any) => a.vehiculo_id))]
-            await supabase
-              .from('vehiculos')
+            await (supabase
+              .from('vehiculos') as any)
               .update({ estado_id: estadoDisponible.id })
               .in('id', vehiculosACambiar)
           }
@@ -337,8 +337,8 @@ export function AsignacionesModule() {
         // SEGUNDO: Marcar conductores como cancelado en otras asignaciones
         if (conductoresIds.length > 0) {
           for (const conductorId of conductoresIds) {
-            await supabase
-              .from('asignaciones_conductores')
+            await (supabase
+              .from('asignaciones_conductores') as any)
               .update({
                 estado: 'cancelado',
                 fecha_fin: ahora

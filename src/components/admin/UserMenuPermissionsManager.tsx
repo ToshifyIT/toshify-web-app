@@ -499,7 +499,7 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_create ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={(e) => {
+            onClick={() => {
               console.log('🖱️ Click en checkbox Crear', { saving, selectedUser })
               if (saving) return
               if (!selectedUser) return
@@ -521,7 +521,7 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_edit ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={(e) => {
+            onClick={() => {
               console.log('🖱️ Click en checkbox Editar', { saving, selectedUser })
               if (saving) return
               if (!selectedUser) return
@@ -543,7 +543,7 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_delete ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={(e) => {
+            onClick={() => {
               console.log('🖱️ Click en checkbox Eliminar', { saving, selectedUser })
               if (saving) return
               if (!selectedUser) return
