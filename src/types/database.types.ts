@@ -764,7 +764,7 @@ export interface Database {
           created_by: string | null
           created_at: string
           updated_at: string
-          numero_asignacion: string | null
+          codigo: string | null
           horario: string | null
           fecha_inicio_real: string | null
           fecha_fin_real: string | null
@@ -783,7 +783,7 @@ export interface Database {
           created_by?: string | null
           created_at?: string
           updated_at?: string
-          numero_asignacion?: string | null
+          codigo?: string | null
           horario?: string | null
           fecha_inicio_real?: string | null
           fecha_fin_real?: string | null
@@ -802,7 +802,7 @@ export interface Database {
           created_by?: string | null
           created_at?: string
           updated_at?: string
-          numero_asignacion?: string | null
+          codigo?: string | null
           horario?: string | null
           fecha_inicio_real?: string | null
           fecha_fin_real?: string | null

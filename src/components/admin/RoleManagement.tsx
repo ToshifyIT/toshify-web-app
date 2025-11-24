@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { AlertTriangle, Edit2, Trash2, Info } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { Role } from '../../types/database.types'
+import Swal from 'sweetalert2'
 
 // @ts-nocheck en operaciones de base de datos por problemas de tipos generados
 
@@ -25,7 +26,7 @@ export function RoleManagement() {
     icon: ''
   })
 
-  const availableModules = ['vehiculos', 'conductores', 'usuarios', 'reportes']
+  // const availableModules = ['vehiculos', 'conductores', 'usuarios', 'reportes']
 
   useEffect(() => {
     loadRoles()
@@ -50,14 +51,18 @@ export function RoleManagement() {
 
   const handleCreateRole = async () => {
     if (!newRole.name.trim()) {
-      alert('El nombre del rol es requerido')
+      Swal.fire({
+        icon: 'error',
+        title: 'Campo Requerido',
+        text: 'El nombre del rol es requerido'
+      })
       return
     }
 
     setCreating(true)
     try {
       // Crear el rol
-      const { data: roleData, error: roleError } = await supabase
+      const { error: roleError } = await supabase
         .from('roles')
         // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .insert([{
@@ -69,30 +74,26 @@ export function RoleManagement() {
 
       if (roleError) throw roleError
 
-      // Crear permisos por defecto para cada módulo
-      const defaultPermissions = availableModules.map(module => ({
-        role_id: (roleData as Role).id,
-        module: module,
-        can_create: false,
-        can_read: true,
-        can_update: false,
-        can_delete: false
-      }))
+      // Nota: Los permisos ahora se manejan a través de role_menu_permissions
+      // No necesitamos crear permisos por defecto aquí
 
-      const { error: permError } = await supabase
-        .from('permissions')
-        // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
-        .insert(defaultPermissions)
-
-      if (permError) throw permError
-
-      alert('Rol creado exitosamente con permisos por defecto')
+      await Swal.fire({
+        icon: 'success',
+        title: 'Rol Creado',
+        text: 'El rol se ha creado exitosamente',
+        showConfirmButton: false,
+        timer: 2000
+      })
       setShowCreateModal(false)
       setNewRole({ name: '', description: '', icon: '' })
       await loadRoles()
     } catch (err: any) {
       console.error('Error creando rol:', err)
-      alert('Error: ' + err.message)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.message
+      })
     } finally {
       setCreating(false)
     }
@@ -100,7 +101,11 @@ export function RoleManagement() {
 
   const handleEditRole = async () => {
     if (!selectedRole || !editRole.name.trim()) {
-      alert('El nombre del rol es requerido')
+      Swal.fire({
+        icon: 'error',
+        title: 'Campo Requerido',
+        text: 'El nombre del rol es requerido'
+      })
       return
     }
 
@@ -117,13 +122,23 @@ export function RoleManagement() {
 
       if (error) throw error
 
-      alert('Rol actualizado exitosamente')
+      await Swal.fire({
+        icon: 'success',
+        title: 'Rol Actualizado',
+        text: 'El rol se ha actualizado exitosamente',
+        showConfirmButton: false,
+        timer: 2000
+      })
       setShowEditModal(false)
       setSelectedRole(null)
       await loadRoles()
     } catch (err: any) {
       console.error('Error actualizando rol:', err)
-      alert('Error: ' + err.message)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.message
+      })
     } finally {
       setCreating(false)
     }
@@ -144,20 +159,19 @@ export function RoleManagement() {
       if (usersError) throw usersError
 
       if (users && users.length > 0) {
-        alert('No se puede eliminar este rol porque tiene usuarios asignados')
+        Swal.fire({
+          icon: 'warning',
+          title: 'No se puede eliminar',
+          text: 'Este rol tiene usuarios asignados'
+        })
         setShowDeleteModal(false)
         setSelectedRole(null)
         setCreating(false)
         return
       }
 
-      // Eliminar permisos asociados primero
-      const { error: permError } = await supabase
-        .from('permissions')
-        .delete()
-        .eq('role_id', selectedRole.id)
-
-      if (permError) throw permError
+      // Nota: Ya no necesitamos eliminar de 'permissions' porque usamos role_menu_permissions
+      // y tiene ON DELETE CASCADE configurado
 
       // Eliminar el rol
       const { error: roleError } = await supabase
@@ -167,13 +181,23 @@ export function RoleManagement() {
 
       if (roleError) throw roleError
 
-      alert('Rol eliminado exitosamente')
+      await Swal.fire({
+        icon: 'success',
+        title: 'Rol Eliminado',
+        text: 'El rol se ha eliminado exitosamente',
+        showConfirmButton: false,
+        timer: 2000
+      })
       setShowDeleteModal(false)
       setSelectedRole(null)
       await loadRoles()
     } catch (err: any) {
       console.error('Error eliminando rol:', err)
-      alert('Error: ' + err.message)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.message
+      })
     } finally {
       setCreating(false)
     }

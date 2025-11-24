@@ -8,7 +8,7 @@ import Swal from 'sweetalert2'
 
 interface Asignacion {
   id: string
-  numero_asignacion: string
+  codigo: string
   vehiculo_id: string
   conductor_id: string
   fecha_programada?: string | null
@@ -67,6 +67,7 @@ export function AsignacionesModule() {
   const [showViewModal, setShowViewModal] = useState(false)
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
   const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Cargar asignaciones desde Supabase
   const loadAsignaciones = async () => {
@@ -144,6 +145,8 @@ export function AsignacionesModule() {
   }, [])
 
   const handleDelete = async (id: string) => {
+    if (isSubmitting) return // Prevenir doble click
+
     if (!canDelete) {
       Swal.fire({
         icon: 'error',
@@ -165,6 +168,7 @@ export function AsignacionesModule() {
     })
 
     if (result.isConfirmed) {
+      setIsSubmitting(true)
       try {
         // 0. Obtener la asignación antes de eliminarla (para actualizar vehículo)
         const asignacion = asignaciones.find(a => a.id === id)
@@ -235,13 +239,15 @@ export function AsignacionesModule() {
       } catch (error: any) {
         console.error('Error deleting assignment:', error)
         Swal.fire('Error', error.message || 'Error al eliminar la asignación', 'error')
+      } finally {
+        setIsSubmitting(false)
       }
     }
   }
 
   const filteredAsignaciones = asignaciones.filter(asignacion => {
     const matchesSearch =
-      asignacion.numero_asignacion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      asignacion.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asignacion.vehiculos?.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asignacion.conductores?.nombres.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asignacion.conductores?.apellidos.toLowerCase().includes(searchTerm.toLowerCase())
@@ -253,11 +259,14 @@ export function AsignacionesModule() {
 
   // Confirmar programación (PROGRAMADO → ACTIVA solo cuando TODOS confirman)
   const handleConfirmProgramacion = async () => {
+    if (isSubmitting) return // Prevenir doble click
+
     if (!selectedAsignacion || conductoresToConfirm.length === 0) {
       Swal.fire('Error', 'Debes seleccionar al menos un conductor para confirmar', 'warning')
       return
     }
 
+    setIsSubmitting(true)
     try {
       const ahora = new Date().toISOString()
       const fechaProgramada = selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toISOString().split('T')[0] : null
@@ -277,15 +286,70 @@ export function AsignacionesModule() {
       // 2. Verificar si TODOS los conductores han confirmado
       const { data: allConductores, error: conductoresError } = await supabase
         .from('asignaciones_conductores')
-        .select('id, confirmado, horario')
+        .select('id, conductor_id, confirmado, horario')
         .eq('asignacion_id', selectedAsignacion.id)
 
       if (conductoresError) throw conductoresError
 
       const todosConfirmados = (allConductores as any)?.every((c: any) => c.confirmado === true) || false
 
-      // 3. Si TODOS confirmaron, cambiar asignación a ACTIVA
+      // 3. Si TODOS confirmaron, activar la asignación
       if (todosConfirmados) {
+        // Obtener IDs de los conductores de esta asignación
+        const conductoresIds = (allConductores as any)?.map((c: any) => c.conductor_id) || []
+
+        // PRIMERO: Cerrar todas las asignaciones ACTIVAS del mismo vehículo
+        const { data: asignacionesACerrar } = await supabase
+          .from('asignaciones')
+          .select('id, vehiculo_id')
+          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+          .eq('estado', 'activa')
+          .neq('id', selectedAsignacion.id)
+
+        if (asignacionesACerrar && asignacionesACerrar.length > 0) {
+          // Cerrar las asignaciones
+          await supabase
+            .from('asignaciones')
+            // @ts-ignore
+            .update({
+              estado: 'finalizada',
+              fecha_fin: ahora,
+              notas: `[AUTO-CERRADA] Asignación cerrada automáticamente al activar nueva asignación.`
+            })
+            .in('id', asignacionesACerrar.map((a: any) => a.id))
+
+          // Liberar los vehículos a DISPONIBLE
+          const { data: estadoDisponible } = await supabase
+            .from('vehiculos_estados')
+            .select('id')
+            .eq('codigo', 'DISPONIBLE')
+            .single()
+
+          if (estadoDisponible) {
+            const vehiculosACambiar = [...new Set(asignacionesACerrar.map((a: any) => a.vehiculo_id))]
+            await supabase
+              .from('vehiculos')
+              .update({ estado_id: estadoDisponible.id })
+              .in('id', vehiculosACambiar)
+          }
+        }
+
+        // SEGUNDO: Marcar conductores como cancelado en otras asignaciones
+        if (conductoresIds.length > 0) {
+          for (const conductorId of conductoresIds) {
+            await supabase
+              .from('asignaciones_conductores')
+              .update({
+                estado: 'cancelado',
+                fecha_fin: ahora
+              })
+              .eq('conductor_id', conductorId)
+              .eq('estado', 'asignado')
+              .neq('asignacion_id', selectedAsignacion.id)
+          }
+        }
+
+        // TERCERO: Activar la nueva asignación confirmada
         const { error: updateAsignacionError } = (await (supabase as any)
           .from('asignaciones')
           .update({
@@ -297,7 +361,17 @@ export function AsignacionesModule() {
 
         if (updateAsignacionError) throw updateAsignacionError
 
-        // 4. Insertar registros en vehiculos_turnos_ocupados para todos los conductores
+        // 4. Primero eliminar turnos ocupados existentes para este vehículo y fecha
+        // Esto previene el error de duplicate key si ya existen registros
+        if (fechaProgramada) {
+          await supabase
+            .from('vehiculos_turnos_ocupados')
+            .delete()
+            .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+            .eq('fecha', fechaProgramada)
+        }
+
+        // 5. Insertar registros en vehiculos_turnos_ocupados para todos los conductores
         const turnosOcupadosData = (allConductores as any)?.map((ac: any) => ({
           vehiculo_id: selectedAsignacion.vehiculo_id,
           fecha: fechaProgramada,
@@ -314,7 +388,7 @@ export function AsignacionesModule() {
           if (turnosError) throw turnosError
         }
 
-        // 5. Determinar si el vehículo debe cambiar a EN_USO
+        // 6. Determinar si el vehículo debe cambiar a EN_USO
         const { data: turnosActivos, error: turnosActivosError } = await supabase
           .from('vehiculos_turnos_ocupados')
           .select('horario')
@@ -333,7 +407,7 @@ export function AsignacionesModule() {
           debeEstarEnUso = true
         }
 
-        // 6. Actualizar estado del vehículo
+        // 7. Actualizar estado del vehículo
         if (debeEstarEnUso) {
           const { data: estadoEnUso, error: estadoError } = await supabase
             .from('vehiculos_estados')
@@ -354,7 +428,7 @@ export function AsignacionesModule() {
 
           Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA y el vehículo EN USO.', 'success')
         } else {
-          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA. El vehículo permanece DISPONIBLE para otros turnos.', 'success')
+          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.', 'success')
         }
       } else {
         // No todos han confirmado, solo actualizar nota
@@ -379,16 +453,21 @@ export function AsignacionesModule() {
     } catch (error: any) {
       console.error('Error confirmando programación:', error)
       Swal.fire('Error', error.message || 'Error al confirmar la programación', 'error')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   // Cancelar programación completa
   const handleCancelProgramacion = async () => {
+    if (isSubmitting) return // Prevenir doble click
+
     if (!selectedAsignacion || !cancelMotivo.trim()) {
       Swal.fire('Error', 'Debes ingresar un motivo de cancelación', 'warning')
       return
     }
 
+    setIsSubmitting(true)
     try {
       // 1. Marcar todos los conductores como no confirmados
       const { error: conductoresError } = (await (supabase as any)
@@ -434,6 +513,8 @@ export function AsignacionesModule() {
     } catch (error: any) {
       console.error('Error cancelando programación:', error)
       Swal.fire('Error', error.message || 'Error al cancelar la programación', 'error')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -510,10 +591,8 @@ export function AsignacionesModule() {
 
   const getHorarioBadgeClass = (horario: string) => {
     switch (horario) {
-      case 'Diurno':
-        return 'badge-diurno'
-      case 'Nocturno':
-        return 'badge-nocturno'
+      case 'TURNO':
+        return 'badge-turno'
       case 'CARGO':
         return 'badge-cargo'
       default:
@@ -689,14 +768,9 @@ export function AsignacionesModule() {
           color: #3730A3;
         }
 
-        .badge-diurno {
+        .badge-turno {
           background: #FEF3C7;
           color: #92400E;
-        }
-
-        .badge-nocturno {
-          background: #DBEAFE;
-          color: #1E3A8A;
         }
 
         .badge-cargo {
@@ -883,7 +957,7 @@ export function AsignacionesModule() {
                   <th>Vehículo</th>
                   <th>Modalidad</th>
                   <th>Conductores</th>
-                  <th>Fecha Inicio</th>
+                  <th>Fecha Entrega</th>
                   <th>Fecha Fin</th>
                   <th>Estado</th>
                   <th>Acciones</th>
@@ -893,7 +967,7 @@ export function AsignacionesModule() {
                 {filteredAsignaciones.map((asignacion) => (
                   <tr key={asignacion.id}>
                     <td>
-                      <strong>{asignacion.numero_asignacion || 'N/A'}</strong>
+                      <strong>{asignacion.codigo || 'N/A'}</strong>
                     </td>
                     <td>
                       <strong>{asignacion.vehiculos?.patente || 'N/A'}</strong>
@@ -904,7 +978,7 @@ export function AsignacionesModule() {
                     </td>
                     <td>
                       <span className={`badge ${getHorarioBadgeClass(asignacion.horario)}`}>
-                        {asignacion.horario}
+                        {asignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
                       </span>
                     </td>
                     <td>
@@ -921,11 +995,13 @@ export function AsignacionesModule() {
                       </div>
                     </td>
                     <td>
-                      {new Date(asignacion.fecha_inicio).toLocaleDateString('es-ES', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
+                      {asignacion.fecha_programada
+                        ? new Date(asignacion.fecha_programada).toLocaleDateString('es-ES', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })
+                        : 'No definida'}
                     </td>
                     <td>
                       {asignacion.fecha_fin
@@ -1046,7 +1122,7 @@ export function AsignacionesModule() {
             <h2 style={{ marginTop: 0 }}>Confirmar Programación</h2>
             <p>Vehículo: <strong>{selectedAsignacion.vehiculos?.patente}</strong></p>
             <p style={{ fontSize: '14px', color: '#6B7280', marginBottom: '16px' }}>
-              Fecha programada: <strong>{selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR') : 'N/A'}</strong>
+              Fecha de entrega: <strong>{selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR') : 'N/A'}</strong>
             </p>
 
             {/* Lista de conductores con checkboxes */}
@@ -1089,7 +1165,7 @@ export function AsignacionesModule() {
                           {ac.conductores.nombres} {ac.conductores.apellidos}
                         </p>
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
-                          Turno: {ac.horario}
+                          {ac.horario !== 'todo_dia' && `Turno: ${ac.horario}`}
                           {ac.confirmado && <span style={{ color: '#10B981', marginLeft: '8px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={14} /> Ya confirmado</span>}
                           {ac.fecha_confirmacion && <span style={{ marginLeft: '8px' }}>el {new Date(ac.fecha_confirmacion).toLocaleDateString('es-AR')}</span>}
                         </p>
@@ -1142,18 +1218,18 @@ export function AsignacionesModule() {
               </button>
               <button
                 onClick={handleConfirmProgramacion}
-                disabled={conductoresToConfirm.length === 0}
+                disabled={conductoresToConfirm.length === 0 || isSubmitting}
                 style={{
                   padding: '10px 20px',
                   border: 'none',
-                  background: conductoresToConfirm.length > 0 ? '#10B981' : '#D1D5DB',
+                  background: (conductoresToConfirm.length > 0 && !isSubmitting) ? '#10B981' : '#D1D5DB',
                   color: 'white',
                   borderRadius: '8px',
-                  cursor: conductoresToConfirm.length > 0 ? 'pointer' : 'not-allowed',
+                  cursor: (conductoresToConfirm.length > 0 && !isSubmitting) ? 'pointer' : 'not-allowed',
                   fontWeight: '600'
                 }}
               >
-                Confirmar Seleccionados
+                {isSubmitting ? 'Procesando...' : 'Confirmar Seleccionados'}
               </button>
             </div>
           </div>
@@ -1223,18 +1299,18 @@ export function AsignacionesModule() {
               </button>
               <button
                 onClick={handleCancelProgramacion}
-                disabled={!cancelMotivo.trim()}
+                disabled={!cancelMotivo.trim() || isSubmitting}
                 style={{
                   padding: '10px 20px',
                   border: 'none',
-                  background: cancelMotivo.trim() ? '#DC2626' : '#D1D5DB',
+                  background: (cancelMotivo.trim() && !isSubmitting) ? '#DC2626' : '#D1D5DB',
                   color: 'white',
                   borderRadius: '8px',
-                  cursor: cancelMotivo.trim() ? 'pointer' : 'not-allowed',
+                  cursor: (cancelMotivo.trim() && !isSubmitting) ? 'pointer' : 'not-allowed',
                   fontWeight: '600'
                 }}
               >
-                Cancelar Programación
+                {isSubmitting ? 'Procesando...' : 'Cancelar Programación'}
               </button>
             </div>
           </div>
@@ -1274,7 +1350,7 @@ export function AsignacionesModule() {
                   Número de Asignación
                 </label>
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1F2937' }}>
-                  {viewAsignacion.numero_asignacion}
+                  {viewAsignacion.codigo}
                 </p>
               </div>
 
@@ -1308,9 +1384,11 @@ export function AsignacionesModule() {
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
                           Licencia: {ac.conductores.numero_licencia}
                         </p>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
-                          Turno: <strong>{ac.horario}</strong>
-                        </p>
+                        {ac.horario !== 'todo_dia' && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
+                            Turno: <strong>{ac.horario}</strong>
+                          </p>
+                        )}
                         <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
                           Estado: <span className={`badge ${getStatusBadgeClass(ac.estado)}`}>{ac.estado}</span>
                         </p>
@@ -1384,16 +1462,28 @@ export function AsignacionesModule() {
                     Horario
                   </label>
                   <span className={`badge ${getHorarioBadgeClass(viewAsignacion.horario)}`}>
-                    {viewAsignacion.horario}
+                    {viewAsignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
                   </span>
                 </div>
               </div>
 
               {/* Fechas */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
-                    Fecha Programada
+                    Fecha de Programación
+                  </label>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
+                    {new Date(viewAsignacion.created_at).toLocaleDateString('es-ES', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
+                    Fecha de Entrega
                   </label>
                   <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
                     {viewAsignacion.fecha_programada
@@ -1402,20 +1492,23 @@ export function AsignacionesModule() {
                           month: 'short',
                           day: 'numeric'
                         })
-                      : 'N/A'
+                      : 'No definida'
                     }
                   </p>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '4px' }}>
-                    Fecha Inicio
+                    Fecha de Activación
                   </label>
                   <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
-                    {new Date(viewAsignacion.fecha_inicio).toLocaleDateString('es-ES', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })}
+                    {viewAsignacion.fecha_inicio
+                      ? new Date(viewAsignacion.fecha_inicio).toLocaleDateString('es-ES', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })
+                      : 'No activada'
+                    }
                   </p>
                 </div>
                 <div>

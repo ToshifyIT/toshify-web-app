@@ -15,9 +15,11 @@ import { InformesPage } from './informes/InformesPage'
 import { AsignacionesPage } from './asignaciones/AsignacionesPage'
 import { AsignacionesActivasPage } from './asignaciones/AsignacionesActivasPage'
 import { ProductosPage } from './productos/ProductosPage'
+import { ProveedoresPage } from './proveedores/ProveedoresPage'
 import { InventarioDashboardPage } from './inventario/InventarioDashboardPage'
 import { MovimientosPage } from './inventario/MovimientosPage'
 import { AsignacionesActivasPage as AsignacionesActivasInventarioPage } from './inventario/AsignacionesActivasPage'
+import { HistorialMovimientosPage } from './inventario/HistorialMovimientosPage'
 import { USSPage } from './integraciones/uss/USSPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
@@ -570,6 +572,11 @@ export function HomePage() {
                   <ProductosPage />
                 </ProtectedRoute>
               } />
+              <Route path="/proveedores" element={
+                <ProtectedRoute submenuName="proveedores" action="view">
+                  <ProveedoresPage />
+                </ProtectedRoute>
+              } />
 
               {/* Inventario */}
               <Route path="/inventario/dashboard" element={
@@ -585,6 +592,11 @@ export function HomePage() {
               <Route path="/inventario/asignaciones-activas" element={
                 <ProtectedRoute submenuName="inventario-asignaciones" action="view">
                   <AsignacionesActivasInventarioPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/inventario/historial" element={
+                <ProtectedRoute submenuName="inventario-historial" action="view">
+                  <HistorialMovimientosPage />
                 </ProtectedRoute>
               } />
 
@@ -649,7 +661,7 @@ export function HomePage() {
                   <MenuPorRolPage />
                 </ProtectedRoute>
               } />
-              <Route path="/menu-por-usuario" element={
+              <Route path="/administracion/menu-por-usuario" element={
                 <ProtectedRoute submenuName="menu-por-usuario" action="view">
                   <MenuPorUsuarioPage />
                 </ProtectedRoute>

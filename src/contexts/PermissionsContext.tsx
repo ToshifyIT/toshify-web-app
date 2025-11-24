@@ -100,6 +100,11 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     }
 
     try {
+      // TEMPORAL: Usar fallback directo hasta que edge function se actualice
+      console.warn('⚠️ Usando fallback directo (edge function deshabilitada temporalmente)')
+      await loadPermissionsFallback()
+
+      /* Edge function temporalmente deshabilitada
       const { data: { session } } = await supabase.auth.getSession()
 
       if (!session) {
@@ -125,6 +130,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       const data: UserPermissionsResponse = await response.json()
       console.log('✅ Permisos cargados desde edge function:', data)
       setUserPermissions(data)
+      */
     } catch (error) {
       console.error('Error cargando permisos:', error)
       console.warn('⚠️ Usando modo fallback')

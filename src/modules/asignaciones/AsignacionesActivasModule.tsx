@@ -16,8 +16,9 @@ import Swal from 'sweetalert2'
 
 interface AsignacionActiva {
   id: string
-  numero_asignacion: string
+  codigo: string
   vehiculo_id: string
+  fecha_programada?: string | null
   fecha_inicio: string
   modalidad: string
   horario: string
@@ -68,8 +69,9 @@ export function AsignacionesActivasModule() {
         .from('asignaciones')
         .select(`
           id,
-          numero_asignacion,
+          codigo,
           vehiculo_id,
+          fecha_programada,
           fecha_inicio,
           modalidad,
           horario,
@@ -111,6 +113,7 @@ export function AsignacionesActivasModule() {
                 )
               `)
               .eq('asignacion_id', asignacion.id)
+              .eq('estado', 'asignado')
 
             return {
               ...asignacion,
@@ -150,8 +153,8 @@ export function AsignacionesActivasModule() {
   const columns = useMemo<ColumnDef<AsignacionActiva>[]>(
     () => [
       {
-        accessorKey: 'numero_asignacion',
-        header: 'Nro. Asignación',
+        accessorKey: 'codigo',
+        header: 'Número',
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: '#E63946' }}>
             {getValue() as string}
@@ -207,10 +210,10 @@ export function AsignacionesActivasModule() {
         enableSorting: false,
       },
       {
-        accessorKey: 'modalidad',
+        accessorKey: 'horario',
         header: 'Modalidad',
         cell: ({ getValue }) => {
-          const modalidad = getValue() as string
+          const horario = getValue() as string
           return (
             <span style={{
               display: 'inline-block',
@@ -218,21 +221,30 @@ export function AsignacionesActivasModule() {
               borderRadius: '6px',
               fontSize: '12px',
               fontWeight: 600,
-              background: modalidad === 'permanente' ? '#DBEAFE' : '#FEF3C7',
-              color: modalidad === 'permanente' ? '#1E40AF' : '#92400E'
+              background: horario === 'CARGO' ? '#E9D5FF' : '#FEF3C7',
+              color: horario === 'CARGO' ? '#6B21A8' : '#92400E'
             }}>
-              {modalidad.charAt(0).toUpperCase() + modalidad.slice(1)}
+              {horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
             </span>
           )
         },
         enableSorting: true,
       },
       {
+        accessorKey: 'fecha_programada',
+        header: 'Fecha Entrega',
+        cell: ({ getValue }) => {
+          const fecha = getValue() as string | null
+          return fecha ? new Date(fecha).toLocaleDateString('es-AR') : 'No definida'
+        },
+        enableSorting: true,
+      },
+      {
         accessorKey: 'fecha_inicio',
-        header: 'Fecha Inicio',
+        header: 'Fecha Activación',
         cell: ({ getValue }) => {
           const fecha = getValue() as string
-          return new Date(fecha).toLocaleDateString('es-AR')
+          return fecha ? new Date(fecha).toLocaleDateString('es-AR') : 'No activada'
         },
         enableSorting: true,
       },
@@ -268,7 +280,6 @@ export function AsignacionesActivasModule() {
             }}
           >
             <Eye size={16} />
-            Ver Detalles
           </button>
         ),
         enableSorting: false,
@@ -691,7 +702,7 @@ export function AsignacionesActivasModule() {
                 <div className="detail-item">
                   <span className="detail-label">Número de Asignación</span>
                   <span className="detail-value" style={{ color: '#E63946', fontWeight: 700 }}>
-                    {selectedAsignacion.numero_asignacion}
+                    {selectedAsignacion.codigo}
                   </span>
                 </div>
                 <div className="detail-item">
@@ -705,21 +716,32 @@ export function AsignacionesActivasModule() {
                 <div className="detail-item">
                   <span className="detail-label">Modalidad</span>
                   <span className="detail-value">
-                    {selectedAsignacion.modalidad.charAt(0).toUpperCase() + selectedAsignacion.modalidad.slice(1)}
+                    {selectedAsignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
                   </span>
                 </div>
                 <div className="detail-item">
-                  <span className="detail-label">Fecha de Inicio</span>
+                  <span className="detail-label">Fecha de Programación</span>
                   <span className="detail-value">
                     <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                    {new Date(selectedAsignacion.fecha_inicio).toLocaleDateString('es-AR')}
+                    {new Date(selectedAsignacion.created_at).toLocaleDateString('es-AR')}
                   </span>
                 </div>
                 <div className="detail-item">
-                  <span className="detail-label">Horario General</span>
+                  <span className="detail-label">Fecha de Entrega</span>
                   <span className="detail-value">
-                    <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                    {selectedAsignacion.horario || 'No especificado'}
+                    <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                    {selectedAsignacion.fecha_programada
+                      ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR')
+                      : 'No definida'}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Fecha de Activación</span>
+                  <span className="detail-value">
+                    <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                    {selectedAsignacion.fecha_inicio
+                      ? new Date(selectedAsignacion.fecha_inicio).toLocaleDateString('es-AR')
+                      : 'No activada'}
                   </span>
                 </div>
               </div>
@@ -794,13 +816,15 @@ export function AsignacionesActivasModule() {
                           )}
                         </div>
                         <div className="details-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                          <div className="detail-item">
-                            <span className="detail-label">Horario</span>
-                            <span className="detail-value" style={{ fontSize: '14px' }}>
-                              <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                              {asigConductor.horario}
-                            </span>
-                          </div>
+                          {asigConductor.horario !== 'todo_dia' && (
+                            <div className="detail-item">
+                              <span className="detail-label">Turno</span>
+                              <span className="detail-value" style={{ fontSize: '14px' }}>
+                                <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                                {asigConductor.horario}
+                              </span>
+                            </div>
+                          )}
                           <div className="detail-item">
                             <span className="detail-label">Teléfono</span>
                             <span className="detail-value" style={{ fontSize: '14px' }}>
@@ -808,7 +832,7 @@ export function AsignacionesActivasModule() {
                             </span>
                           </div>
                           <div className="detail-item">
-                            <span className="detail-label">Estado (DEBUG)</span>
+                            <span className="detail-label">Estado</span>
                             <span className="detail-value" style={{ fontSize: '14px', color: '#E63946', fontWeight: 700 }}>
                               {asigConductor.estado || 'NULL'}
                             </span>

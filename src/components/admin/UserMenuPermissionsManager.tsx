@@ -1,5 +1,5 @@
 // src/components/admin/UserMenuPermissionsManager.tsx
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Check } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { UserWithRole, Menu, Submenu } from '../../types/database.types'
@@ -186,7 +186,7 @@ export function UserMenuPermissionsManager() {
     }
   }
 
-  const toggleMenuPermission = async (
+  const toggleMenuPermission = useCallback(async (
     menuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
@@ -238,17 +238,38 @@ export function UserMenuPermissionsManager() {
         if (error) throw error
       }
 
-      console.log('✅ Permiso actualizado, recargando...')
-      await loadUserPermissions(selectedUser)
+      console.log('✅ Permiso de menú actualizado, actualizando estado local...')
+
+      // Actualizar el estado local sin recargar desde el servidor
+      setMenuPermissions(prev => {
+        const index = prev.findIndex(p => p.menu_id === menuId)
+        if (index >= 0) {
+          const updated = [...prev]
+          updated[index] = { ...updated[index], [field]: newValue }
+          return updated
+        } else {
+          // Agregar nuevo permiso al estado
+          const menu = menus.find(m => m.id === menuId)
+          return [...prev, {
+            menu_id: menuId,
+            menu_name: menu?.name || '',
+            menu_label: menu?.label || '',
+            can_view: field === 'can_view' ? newValue : false,
+            can_create: field === 'can_create' ? newValue : false,
+            can_edit: field === 'can_edit' ? newValue : false,
+            can_delete: field === 'can_delete' ? newValue : false
+          }]
+        }
+      })
     } catch (err: any) {
       console.error('❌ Error actualizando permiso:', err)
       alert('Error: ' + err.message)
     } finally {
       setSaving(false)
     }
-  }
+  }, [selectedUser, menuPermissions, menus])
 
-  const toggleSubmenuPermission = async (
+  const toggleSubmenuPermission = useCallback(async (
     submenuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
@@ -298,15 +319,38 @@ export function UserMenuPermissionsManager() {
         if (error) throw error
       }
 
-      console.log('✅ Permiso actualizado, recargando...')
-      await loadUserPermissions(selectedUser)
+      console.log('✅ Permiso de submenú actualizado, actualizando estado local...')
+
+      // Actualizar el estado local sin recargar desde el servidor
+      setSubmenuPermissions(prev => {
+        const index = prev.findIndex(p => p.submenu_id === submenuId)
+        if (index >= 0) {
+          const updated = [...prev]
+          updated[index] = { ...updated[index], [field]: newValue }
+          return updated
+        } else {
+          // Agregar nuevo permiso al estado
+          const submenu = submenus.find(s => s.id === submenuId)
+          const menu = menus.find(m => m.id === submenu?.menu_id)
+          return [...prev, {
+            submenu_id: submenuId,
+            menu_name: menu?.name || '',
+            submenu_name: submenu?.name || '',
+            submenu_label: submenu?.label || '',
+            can_view: field === 'can_view' ? newValue : false,
+            can_create: field === 'can_create' ? newValue : false,
+            can_edit: field === 'can_edit' ? newValue : false,
+            can_delete: field === 'can_delete' ? newValue : false
+          }]
+        }
+      })
     } catch (err: any) {
       console.error('❌ Error actualizando permiso:', err)
       alert('Error: ' + err.message)
     } finally {
       setSaving(false)
     }
-  }
+  }, [selectedUser, submenuPermissions, submenus])
 
   const getMenuPermission = (menuId: string, field: keyof MenuPermission) => {
     const perm = menuPermissions.find(p => p.menu_id === menuId)
@@ -416,12 +460,31 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_view ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
-              if (saving) return
+            onClick={(e) => {
+              console.log('🖱️ Click en checkbox Ver', {
+                saving,
+                type: row.original.type,
+                menu_id: row.original.menu_id,
+                submenu_id: row.original.submenu_id,
+                selectedUser,
+                event: e
+              })
+              if (saving) {
+                console.log('⏸️ Click ignorado: saving=true')
+                return
+              }
+              if (!selectedUser) {
+                console.log('⏸️ Click ignorado: no selectedUser')
+                return
+              }
               if (row.original.type === 'menu' && row.original.menu_id) {
+                console.log('✅ Llamando toggleMenuPermission')
                 toggleMenuPermission(row.original.menu_id, 'can_view')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                console.log('✅ Llamando toggleSubmenuPermission')
                 toggleSubmenuPermission(row.original.submenu_id, 'can_view')
+              } else {
+                console.log('⚠️ No se pudo determinar tipo o ID')
               }
             }}
           >
@@ -436,8 +499,10 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_create ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
+            onClick={(e) => {
+              console.log('🖱️ Click en checkbox Crear', { saving, selectedUser })
               if (saving) return
+              if (!selectedUser) return
               if (row.original.type === 'menu' && row.original.menu_id) {
                 toggleMenuPermission(row.original.menu_id, 'can_create')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
@@ -456,8 +521,10 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_edit ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
+            onClick={(e) => {
+              console.log('🖱️ Click en checkbox Editar', { saving, selectedUser })
               if (saving) return
+              if (!selectedUser) return
               if (row.original.type === 'menu' && row.original.menu_id) {
                 toggleMenuPermission(row.original.menu_id, 'can_edit')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
@@ -476,8 +543,10 @@ export function UserMenuPermissionsManager() {
         cell: ({ row }) => (
           <div
             className={`perm-checkbox ${row.original.can_delete ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
+            onClick={(e) => {
+              console.log('🖱️ Click en checkbox Eliminar', { saving, selectedUser })
               if (saving) return
+              if (!selectedUser) return
               if (row.original.type === 'menu' && row.original.menu_id) {
                 toggleMenuPermission(row.original.menu_id, 'can_delete')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
@@ -491,7 +560,7 @@ export function UserMenuPermissionsManager() {
         enableSorting: true,
       },
     ],
-    [menuPermissions, submenuPermissions, saving]
+    [saving, selectedUser, toggleMenuPermission, toggleSubmenuPermission]
   )
 
   // Configurar TanStack Table
@@ -508,6 +577,7 @@ export function UserMenuPermissionsManager() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    autoResetPageIndex: false, // Evitar que la paginación se reinicie al actualizar datos
     initialState: {
       pagination: {
         pageSize: 10,
