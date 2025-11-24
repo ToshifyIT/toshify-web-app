@@ -319,8 +319,8 @@ export function AsignacionesModule() {
             .in('id', asignacionesACerrar.map((a: any) => a.id))
 
           // Liberar los vehículos a DISPONIBLE
-          const { data: estadoDisponible } = await supabase
-            .from('vehiculos_estados')
+          const { data: estadoDisponible } = await (supabase
+            .from('vehiculos_estados') as any)
             .select('id')
             .eq('codigo', 'DISPONIBLE')
             .single()
