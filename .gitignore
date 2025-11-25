@@ -31,7 +31,8 @@ claude*
 
 # Environment variables
 .env*
-!.env.example
+.env.example
+.env.test
 
 # Supabase
 supabase/.branches
@@ -39,3 +40,8 @@ supabase/.temp
 supabase/.env
 # Scripts folder with SQL or anything else
 scripts/
+
+# Generated files
+*.pdf
+*.sql
+nul
