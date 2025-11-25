@@ -14,6 +14,8 @@ export function CabifyModule() {
     lastUpdate: null,
     period: 'custom'
   })
+  const [isDataFromHistory, setIsDataFromHistory] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0, message: '' })
 
   // Search state
   const [searchTerm, setSearchTerm] = useState('')
@@ -82,6 +84,7 @@ export function CabifyModule() {
       // Si hay datos en el historial, usarlos
       if (historicalData && historicalData.length > 0) {
         console.log(`✅ Datos encontrados en historial: ${historicalData.length} conductores`)
+        setIsDataFromHistory(true)
 
         // Mapear datos del historial al formato del frontend
         const mappedData = historicalData.map((record: any) => ({
@@ -145,15 +148,32 @@ export function CabifyModule() {
 
       // PASO 2: Si no hay datos en historial, consultar API de Cabify
       console.log('🌐 No hay datos en historial, consultando API de Cabify...')
+      setIsDataFromHistory(false)
 
-      const data = await cabifyService.getDriversWithDetails('custom', {
-        startDate: selectedWeek.startDate,
-        endDate: selectedWeek.endDate
-      })
+      // IMPORTANTE: Limpiar drivers antes de empezar para que se vea el progreso incremental
+      setDrivers([])
+      setLoadingProgress({ current: 0, total: 0, message: '' })
 
-      console.log('✅ Conductores recibidos desde API:', data)
-      setDrivers(data)
+      const data = await cabifyService.getDriversWithDetails(
+        'custom',
+        {
+          startDate: selectedWeek.startDate,
+          endDate: selectedWeek.endDate
+        },
+        // Callback de progreso
+        (current, total, newDrivers, message) => {
+          setLoadingProgress({ current, total, message })
+          // Ir mostrando resultados a medida que llegan
+          if (newDrivers && newDrivers.length > 0) {
+            setDrivers(prev => [...prev, ...newDrivers])
+          }
+        }
+      )
+
+      console.log('✅ Conductores recibidos desde API:', data.length)
+      // NO sobrescribir - los datos ya están en el state por el callback incremental
       setCurrentPage(1)
+      setLoadingProgress({ current: 0, total: 0, message: '' })
       setQueryState(prev => ({
         ...prev,
         loading: false,
@@ -446,31 +466,32 @@ export function CabifyModule() {
           {/* Sincronizar con Historial Button */}
           <button
             onClick={sincronizarHistorial}
-            disabled={queryState.loading || !selectedWeek || drivers.length === 0}
+            disabled={queryState.loading || !selectedWeek || drivers.length === 0 || isDataFromHistory}
             className="btn-secondary"
             style={{
               padding: '8px 16px',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              opacity: queryState.loading || !selectedWeek || drivers.length === 0 ? 0.5 : 1,
-              cursor: queryState.loading || !selectedWeek || drivers.length === 0 ? 'not-allowed' : 'pointer',
-              backgroundColor: '#7C3AED',
+              opacity: queryState.loading || !selectedWeek || drivers.length === 0 || isDataFromHistory ? 0.5 : 1,
+              cursor: queryState.loading || !selectedWeek || drivers.length === 0 || isDataFromHistory ? 'not-allowed' : 'pointer',
+              backgroundColor: isDataFromHistory ? '#9CA3AF' : '#7C3AED',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
               fontSize: '0.875rem',
               fontWeight: 600
             }}
+            title={isDataFromHistory ? 'Esta semana ya está sincronizada' : 'Guardar datos en el historial'}
           >
             <Database size={18} />
-            Sincronizar con Historial
+            {isDataFromHistory ? 'Ya Sincronizado' : 'Sincronizar con Historial'}
           </button>
         </div>
       </div>
 
-      {/* Loading State */}
-      {queryState.loading && (
+      {/* Loading State - Solo mostrar spinner si NO hay datos todavía */}
+      {queryState.loading && drivers.length === 0 && (
         <div style={{ textAlign: 'center', padding: '96px 24px', color: '#6B7280' }}>
           <div style={{
             display: 'inline-block',
@@ -481,7 +502,41 @@ export function CabifyModule() {
             borderRadius: '50%',
             marginBottom: '16px'
           }} className="animate-spin" />
-          <p style={{ fontSize: '0.875rem' }}>Cargando conductores desde Cabify...</p>
+          <p style={{ fontSize: '0.875rem' }}>
+            {loadingProgress.total > 0
+              ? `${loadingProgress.message} (${loadingProgress.current}/${loadingProgress.total})`
+              : 'Cargando conductores desde Cabify...'}
+          </p>
+        </div>
+      )}
+
+      {/* Progress Banner - Mostrar cuando hay datos cargándose incrementalmente */}
+      {queryState.loading && drivers.length > 0 && (
+        <div style={{
+          backgroundColor: '#EFF6FF',
+          border: '1px solid #BFDBFE',
+          borderRadius: '8px',
+          padding: '12px 16px',
+          marginBottom: '16px',
+          color: '#1E40AF',
+          fontSize: '0.875rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{
+            display: 'inline-block',
+            width: '20px',
+            height: '20px',
+            border: '3px solid #BFDBFE',
+            borderTop: '3px solid #1E40AF',
+            borderRadius: '50%'
+          }} className="animate-spin" />
+          <strong>
+            {loadingProgress.total > 0
+              ? `${loadingProgress.message} (${loadingProgress.current}/${loadingProgress.total})`
+              : 'Cargando más conductores...'}
+          </strong>
         </div>
       )}
 
@@ -507,20 +562,20 @@ export function CabifyModule() {
         </div>
       )}
 
-      {/* Lista de Conductores */}
-      {!queryState.loading && !queryState.error && drivers.length > 0 && (
+      {/* Lista de Conductores - Mostrar mientras se cargan o cuando ya están cargados */}
+      {!queryState.error && drivers.length > 0 && (
         <>
           {/* Info Card */}
           <div style={{
-            backgroundColor: '#ECFDF5',
-            border: '1px solid #A7F3D0',
+            backgroundColor: isDataFromHistory ? '#FEF3C7' : '#ECFDF5',
+            border: isDataFromHistory ? '1px solid #FCD34D' : '1px solid #A7F3D0',
             borderRadius: '8px',
             padding: '12px 16px',
             marginBottom: '16px',
-            color: '#065F46',
+            color: isDataFromHistory ? '#92400E' : '#065F46',
             fontSize: '0.875rem'
           }}>
-            <strong>✅ Conexión exitosa:</strong> Se obtuvieron {drivers.length} conductores desde la API de Cabify
+            <strong>{isDataFromHistory ? '📊 Datos desde historial:' : '✅ Conexión exitosa:'}</strong> {drivers.length} conductores {isDataFromHistory ? 'cargados desde la base de datos' : 'desde la API de Cabify'}
           </div>
 
           {/* Buscador */}

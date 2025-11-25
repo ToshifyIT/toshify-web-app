@@ -1031,7 +1031,11 @@ class CabifyService {
    * Versión SUPER OPTIMIZADA - Trae datos de TODAS las compañías en paralelo
    * EXACTAMENTE como script.gs.txt (líneas 834-1007)
    */
-  async getDriversWithDetails(period: CabifyPeriod = 'semana', customRange?: { startDate: string; endDate: string }): Promise<any[]> {
+  async getDriversWithDetails(
+    period: CabifyPeriod = 'semana',
+    customRange?: { startDate: string; endDate: string },
+    onProgress?: (current: number, total: number, newDrivers: any[], message: string) => void
+  ): Promise<any[]> {
     try {
       console.log('🔄 Iniciando obtención de conductores con detalles completos...')
 
@@ -1259,7 +1263,21 @@ class CabifyService {
               }
             })
 
-            companyDriversData.push(...batchResults.filter(r => r !== null))
+            const validResults = batchResults.filter(r => r !== null)
+            companyDriversData.push(...validResults)
+
+            // Reportar progreso después de cada batch
+            if (onProgress) {
+              allDriversData.push(...validResults)
+              const totalProcessed = allDriversData.length
+              const totalDrivers = drivers.length * companyIds.length
+              onProgress(
+                totalProcessed,
+                totalDrivers,
+                validResults,
+                `Procesando conductores: ${totalProcessed}/${totalDrivers}`
+              )
+            }
           }
 
           console.log(`    ✅ Compañía ${companyId}: ${companyDriversData.length} conductores procesados`)
@@ -1272,13 +1290,9 @@ class CabifyService {
       })
 
       // Esperar a que TODAS las compañías terminen
-      const allCompaniesResults = await Promise.all(companyPromises)
+      await Promise.all(companyPromises)
 
-      // Combinar todos los resultados
-      allCompaniesResults.forEach(companyResults => {
-        allDriversData.push(...companyResults)
-      })
-
+      // allDriversData ya contiene todos los resultados gracias al callback incremental
       console.log(`✅ TOTAL: ${allDriversData.length} conductores de ${companyIds.length} compañías`)
       return allDriversData
 
