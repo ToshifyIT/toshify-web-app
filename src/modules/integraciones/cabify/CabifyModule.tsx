@@ -1,9 +1,10 @@
 // src/modules/integraciones/cabify/CabifyModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { RefreshCw, Search } from 'lucide-react'
+import { RefreshCw, Search, Database } from 'lucide-react'
 import { cabifyService } from '../../../services/cabifyService'
 import type { CabifyQueryState } from '../../../types/cabify.types'
 import Swal from 'sweetalert2'
+import { supabase } from '../../../lib/supabase'
 
 export function CabifyModule() {
   const [drivers, setDrivers] = useState<any[]>([])
@@ -62,18 +63,97 @@ export function CabifyModule() {
     try {
       setQueryState(prev => ({ ...prev, loading: true, error: null }))
 
-      console.log('🔄 Obteniendo datos detallados de conductores de Cabify...')
+      console.log('🔄 Cargando datos de conductores...')
       console.log(`📅 Semana seleccionada: ${selectedWeek.label}`)
       console.log(`📅 Rango: ${selectedWeek.startDate} - ${selectedWeek.endDate}`)
+
+      // PASO 1: Intentar cargar desde el historial primero
+      console.log('📊 Consultando tabla cabify_historico...')
+      const { data: historicalData, error: dbError } = await supabase
+        .from('cabify_historico')
+        .select('*')
+        .eq('fecha_inicio', selectedWeek.startDate)
+        .eq('fecha_fin', selectedWeek.endDate)
+
+      if (dbError) {
+        console.warn('⚠️ Error consultando historial:', dbError)
+      }
+
+      // Si hay datos en el historial, usarlos
+      if (historicalData && historicalData.length > 0) {
+        console.log(`✅ Datos encontrados en historial: ${historicalData.length} conductores`)
+
+        // Mapear datos del historial al formato del frontend
+        const mappedData = historicalData.map((record: any) => ({
+          id: record.cabify_driver_id,
+          companyId: record.cabify_company_id,
+          companyName: record.cabify_company_id,
+          name: record.nombre,
+          surname: record.apellido,
+          email: record.email,
+          nationalIdNumber: record.dni,
+          mobileNum: record.telefono_numero,
+          mobileCc: record.telefono_codigo,
+          driverLicense: record.licencia,
+          assetId: record.vehiculo_id,
+          vehicleMake: record.vehiculo_marca,
+          vehicleModel: record.vehiculo_modelo,
+          vehicleRegPlate: record.vehiculo_patente,
+          vehiculo: record.vehiculo_completo,
+          score: record.score,
+          viajesAceptados: record.viajes_aceptados,
+          viajesPerdidos: record.viajes_perdidos,
+          viajesOfrecidos: record.viajes_ofrecidos,
+          viajesFinalizados: record.viajes_finalizados,
+          viajesRechazados: record.viajes_rechazados,
+          tasaAceptacion: record.tasa_aceptacion,
+          horasConectadas: record.horas_conectadas,
+          horasConectadasFormato: record.horas_conectadas_formato,
+          tasaOcupacion: record.tasa_ocupacion,
+          cobroEfectivo: record.cobro_efectivo,
+          cobroApp: record.cobro_app,
+          gananciaTotal: record.ganancia_total,
+          gananciaPorHora: record.ganancia_por_hora,
+          peajes: record.peajes,
+          permisoEfectivo: record.permiso_efectivo,
+          disabled: record.estado_conductor === 'Inactivo',
+          activatedAt: null
+        }))
+
+        setDrivers(mappedData)
+        setCurrentPage(1)
+        setQueryState(prev => ({
+          ...prev,
+          loading: false,
+          lastUpdate: new Date(),
+          error: null
+        }))
+
+        Swal.fire({
+          icon: 'success',
+          title: 'Datos desde historial',
+          html: `
+            📊 ${mappedData.length} conductores cargados<br>
+            <small>Semana: ${selectedWeek.label}</small>
+          `,
+          timer: 2000,
+          showConfirmButton: false
+        })
+
+        return
+      }
+
+      // PASO 2: Si no hay datos en historial, consultar API de Cabify
+      console.log('🌐 No hay datos en historial, consultando API de Cabify...')
 
       const data = await cabifyService.getDriversWithDetails('custom', {
         startDate: selectedWeek.startDate,
         endDate: selectedWeek.endDate
       })
 
-      console.log('✅ Conductores recibidos con detalles:', data)
+      console.log('✅ Conductores recibidos desde API:', data)
       setDrivers(data)
-      setCurrentPage(1) // Reset to first page when loading new data
+      setCurrentPage(1)
       setQueryState(prev => ({
         ...prev,
         loading: false,
@@ -83,9 +163,13 @@ export function CabifyModule() {
 
       Swal.fire({
         icon: 'success',
-        title: 'Conductores obtenidos',
-        text: `${data.length} conductores cargados - ${selectedWeek.label}`,
-        timer: 2000,
+        title: 'Datos desde API Cabify',
+        html: `
+          🌐 ${data.length} conductores cargados<br>
+          <small>Semana: ${selectedWeek.label}</small><br>
+          <small style="color: #F59E0B;">💡 Puedes sincronizar estos datos para consultas futuras</small>
+        `,
+        timer: 3000,
         showConfirmButton: false
       })
 
@@ -100,7 +184,138 @@ export function CabifyModule() {
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.message || 'No se pudieron cargar los conductores de Cabify'
+        text: error.message || 'No se pudieron cargar los conductores'
+      })
+    }
+  }
+
+  const sincronizarHistorial = async () => {
+    if (!selectedWeek) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Advertencia',
+        text: 'Primero selecciona una semana'
+      })
+      return
+    }
+
+    if (drivers.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sin datos',
+        text: 'No hay conductores cargados para sincronizar'
+      })
+      return
+    }
+
+    try {
+      // Confirmar con el usuario
+      const result = await Swal.fire({
+        icon: 'question',
+        title: 'Sincronizar con historial',
+        html: `
+          ¿Guardar los datos de <strong>${drivers.length} conductores</strong> en el historial?<br>
+          <small>Semana: ${selectedWeek.label}</small>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Sí, guardar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#7C3AED'
+      })
+
+      if (!result.isConfirmed) return
+
+      // Mostrar loading
+      Swal.fire({
+        title: 'Sincronizando...',
+        html: 'Guardando datos en el historial',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading()
+        }
+      })
+
+      // Obtener el token de sesión
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error('No hay sesión activa')
+      }
+
+      // Mapear los drivers al formato de la tabla cabify_historico
+      const historyData = drivers.map(driver => ({
+        cabify_driver_id: driver.id,
+        cabify_company_id: driver.companyId,
+        nombre: driver.name,
+        apellido: driver.surname,
+        email: driver.email,
+        dni: driver.nationalIdNumber,
+        licencia: driver.driverLicense,
+        telefono_codigo: driver.mobileCc,
+        telefono_numero: driver.mobileNum,
+        vehiculo_id: driver.assetId,
+        vehiculo_patente: driver.vehicleRegPlate,
+        vehiculo_marca: driver.vehicleMake,
+        vehiculo_modelo: driver.vehicleModel,
+        vehiculo_completo: driver.vehiculo,
+        viajes_finalizados: driver.viajesFinalizados,
+        viajes_rechazados: driver.viajesRechazados,
+        viajes_perdidos: driver.viajesPerdidos,
+        viajes_aceptados: driver.viajesAceptados,
+        viajes_ofrecidos: driver.viajesOfrecidos,
+        score: driver.score,
+        tasa_aceptacion: driver.tasaAceptacion,
+        tasa_ocupacion: driver.tasaOcupacion,
+        horas_conectadas: driver.horasConectadas,
+        horas_conectadas_formato: driver.horasConectadasFormato,
+        cobro_efectivo: driver.cobroEfectivo,
+        cobro_app: driver.cobroApp,
+        peajes: driver.peajes,
+        ganancia_total: driver.gananciaTotal,
+        ganancia_por_hora: driver.gananciaPorHora,
+        permiso_efectivo: driver.permisoEfectivo,
+        estado_conductor: driver.disabled ? 'Inactivo' : 'Activo'
+      }))
+
+      // Llamar al Edge Function
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const response = await fetch(`${supabaseUrl}/functions/v1/save-cabify-history`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          drivers: historyData,
+          startDate: selectedWeek.startDate,
+          endDate: selectedWeek.endDate
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Error al sincronizar')
+      }
+
+      const responseData = await response.json()
+
+      // Mostrar éxito
+      Swal.fire({
+        icon: 'success',
+        title: 'Sincronizado',
+        html: `
+          ✅ ${responseData.message}<br>
+          <small>Semana: ${selectedWeek.label}</small>
+        `,
+        confirmButtonColor: '#7C3AED'
+      })
+
+    } catch (error: any) {
+      console.error('❌ Error al sincronizar:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.message || 'No se pudo sincronizar con el historial'
       })
     }
   }
@@ -226,6 +441,30 @@ export function CabifyModule() {
           >
             <RefreshCw size={18} className={queryState.loading ? 'animate-spin' : ''} />
             {queryState.loading ? 'Cargando...' : 'Actualizar'}
+          </button>
+
+          {/* Sincronizar con Historial Button */}
+          <button
+            onClick={sincronizarHistorial}
+            disabled={queryState.loading || !selectedWeek || drivers.length === 0}
+            className="btn-secondary"
+            style={{
+              padding: '8px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              opacity: queryState.loading || !selectedWeek || drivers.length === 0 ? 0.5 : 1,
+              cursor: queryState.loading || !selectedWeek || drivers.length === 0 ? 'not-allowed' : 'pointer',
+              backgroundColor: '#7C3AED',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '0.875rem',
+              fontWeight: 600
+            }}
+          >
+            <Database size={18} />
+            Sincronizar con Historial
           </button>
         </div>
       </div>
