@@ -1076,8 +1076,8 @@ class CabifyService {
 
           const companyDriversData: any[] = []
 
-          // OPTIMIZACIÓN 2: Procesar conductores en batches de 50 en paralelo (MÁXIMO RENDIMIENTO)
-          const BATCH_SIZE = 50
+          // OPTIMIZACIÓN 2: Procesar conductores en batches de 100 en paralelo (MÁXIMO RENDIMIENTO)
+          const BATCH_SIZE = 100
           for (let j = 0; j < drivers.length; j += BATCH_SIZE) {
             const batch = drivers.slice(j, j + BATCH_SIZE)
             console.log(`    📦 Batch ${Math.floor(j / BATCH_SIZE) + 1}/${Math.ceil(drivers.length / BATCH_SIZE)} (${batch.length} conductores)`)
