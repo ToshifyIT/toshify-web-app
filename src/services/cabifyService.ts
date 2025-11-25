@@ -1507,89 +1507,104 @@ class CabifyService {
 
   /**
    * Obtener lunes y domingo de una semana específica en Buenos Aires
-   * Convierte a ISO string como lo hace script.gs.rtf
+   * EXACTAMENTE como script.gs.txt getLastWeekInfo() - líneas 718-761
+   *
+   * weeksAgo: cuántas semanas atrás desde HOY (0 = semana actual, 1 = semana pasada, etc.)
    */
-  getWeekRange(year: number, weekNumber: number): { startDate: string; endDate: string; label: string } {
-    // Calcular el primer día del año EN BUENOS AIRES
-    const firstDayOfYear = new Date(year, 0, 1)
+  getWeekRange(weeksAgo: number = 0): { startDate: string; endDate: string; label: string } {
+    // PASO 1: Obtener fecha actual en Argentina (como script.gs línea 719)
+    const today = this.getArgentinaDate()
+    const dow = today.getDay()
 
-    // Encontrar el primer lunes del año
-    const firstMonday = new Date(firstDayOfYear)
-    const dayOfWeek = firstDayOfYear.getDay()
-    const daysUntilMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 ? 0 : 8 - dayOfWeek
-    firstMonday.setDate(firstDayOfYear.getDate() + daysUntilMonday)
+    // PASO 2: Calcular el lunes de ESTA semana (como script.gs líneas 722-725)
+    const currentMonday = new Date(today)
+    const deltaToMonday = (dow === 0 ? -6 : 1 - dow)
+    currentMonday.setDate(currentMonday.getDate() + deltaToMonday)
+    currentMonday.setHours(0, 0, 0, 0)
 
-    // Calcular el lunes de la semana especificada
-    const monday = new Date(firstMonday)
-    monday.setDate(firstMonday.getDate() + (weekNumber - 1) * 7)
+    // PASO 3: Calcular el lunes de la semana deseada
+    let monday: Date
+    let sunday: Date
 
-    // Ajustar a Buenos Aires timezone y crear fecha de inicio (00:00:00)
-    const mondayBA = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0, 0)
+    if (weeksAgo === 0) {
+      // SEMANA ACTUAL: desde lunes 00:00 hasta AHORA
+      monday = new Date(currentMonday)
+      sunday = new Date(today) // Hora actual
+    } else {
+      // SEMANAS ANTERIORES: desde lunes 00:00 hasta domingo 23:59:59
+      monday = new Date(currentMonday)
+      monday.setDate(monday.getDate() - (weeksAgo * 7))
 
-    // Calcular el domingo de esa semana
-    const sunday = new Date(mondayBA)
-    sunday.setDate(mondayBA.getDate() + 6)
-    sunday.setHours(23, 59, 59, 999)
+      sunday = new Date(monday)
+      sunday.setDate(sunday.getDate() + 6)
+      sunday.setHours(23, 59, 59, 999)
+    }
 
-    // Convertir a ISO string (como en script.gs.rtf: startDate.toISOString())
+    // PASO 4: Convertir a UTC con offset +3 (script.gs líneas 742-754)
+    // Inicio: día a las 03:00 UTC
+    const startUTC = new Date(Date.UTC(
+      monday.getFullYear(),
+      monday.getMonth(),
+      monday.getDate(),
+      3, 0, 0, 0
+    ))
+
+    // Fin: día siguiente a las 02:59:59.999 UTC
+    let endUTC: Date
+    if (weeksAgo === 0) {
+      // Para semana actual, usar la hora actual convertida a UTC
+      endUTC = new Date(Date.UTC(
+        sunday.getFullYear(),
+        sunday.getMonth(),
+        sunday.getDate(),
+        sunday.getHours() + 3, // Agregar offset de Argentina
+        sunday.getMinutes(),
+        sunday.getSeconds(),
+        sunday.getMilliseconds()
+      ))
+    } else {
+      // Para semanas anteriores, usar fin fijo (domingo 23:59 -> lunes 02:59 UTC)
+      endUTC = new Date(Date.UTC(
+        sunday.getFullYear(),
+        sunday.getMonth(),
+        sunday.getDate() + 1,
+        2, 59, 59, 999
+      ))
+    }
+
+    // Generar label
+    const formatDate = (date: Date) => {
+      const day = String(date.getDate()).padStart(2, '0')
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      return `${day}/${month}`
+    }
+
+    let label: string
+    if (weeksAgo === 0) {
+      label = 'Semana Actual'
+    } else {
+      const endDate = new Date(sunday)
+      label = `${formatDate(monday)} - ${formatDate(endDate)}`
+    }
+
     return {
-      startDate: mondayBA.toISOString(),
-      endDate: sunday.toISOString(),
-      label: `Semana ${weekNumber} - ${year}`
+      startDate: startUTC.toISOString(),
+      endDate: endUTC.toISOString(),
+      label
     }
   }
 
   /**
-   * Obtener número de semana actual en Buenos Aires (lunes = inicio)
+   * Generar lista de semanas disponibles (últimas N semanas)
+   * Semana 0 = actual, 1 = anterior, 2 = hace 2 semanas, etc.
    */
-  getCurrentWeekNumber(): { year: number; week: number } {
-    const argDate = this.getArgentinaDate()
-
-    // Copiar fecha para no mutar
-    const date = new Date(argDate)
-
-    // Ajustar al lunes de esta semana
-    const dayOfWeek = date.getDay()
-    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek // Si es domingo, retroceder 6 días
-    date.setDate(date.getDate() + diff)
-    date.setHours(0, 0, 0, 0)
-
-    // Obtener el primer día del año
-    const yearStart = new Date(date.getFullYear(), 0, 1)
-
-    // Calcular diferencia en días
-    const daysDiff = Math.floor((date.getTime() - yearStart.getTime()) / (24 * 60 * 60 * 1000))
-
-    // Calcular número de semana
-    const weekNumber = Math.ceil((daysDiff + 1) / 7)
-
-    return {
-      year: date.getFullYear(),
-      week: weekNumber
-    }
-  }
-
-  /**
-   * Generar lista de semanas disponibles (últimas 12 semanas)
-   */
-  getAvailableWeeks(count: number = 12): Array<{ year: number; week: number; label: string; startDate: string; endDate: string }> {
-    const weeks: Array<{ year: number; week: number; label: string; startDate: string; endDate: string }> = []
-    const current = this.getCurrentWeekNumber()
+  getAvailableWeeks(count: number = 12): Array<{ weeksAgo: number; label: string; startDate: string; endDate: string }> {
+    const weeks: Array<{ weeksAgo: number; label: string; startDate: string; endDate: string }> = []
 
     for (let i = 0; i < count; i++) {
-      let year = current.year
-      let week = current.week - i
-
-      // Ajustar si vamos al año anterior
-      if (week < 1) {
-        year--
-        week = 52 + week // Aproximadamente 52 semanas por año
-      }
-
-      const range = this.getWeekRange(year, week)
+      const range = this.getWeekRange(i)
       weeks.push({
-        year,
-        week,
+        weeksAgo: i,
         label: range.label,
         startDate: range.startDate,
         endDate: range.endDate

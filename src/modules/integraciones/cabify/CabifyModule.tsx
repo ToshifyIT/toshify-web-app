@@ -1,6 +1,6 @@
 // src/modules/integraciones/cabify/CabifyModule.tsx
-import { useState, useEffect } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { RefreshCw, Search } from 'lucide-react'
 import { cabifyService } from '../../../services/cabifyService'
 import type { CabifyQueryState } from '../../../types/cabify.types'
 import Swal from 'sweetalert2'
@@ -14,21 +14,22 @@ export function CabifyModule() {
     period: 'custom'
   })
 
+  // Search state
+  const [searchTerm, setSearchTerm] = useState('')
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
 
   // Week selector state
   const [availableWeeks, setAvailableWeeks] = useState<Array<{
-    year: number
-    week: number
+    weeksAgo: number
     label: string
     startDate: string
     endDate: string
   }>>([])
   const [selectedWeek, setSelectedWeek] = useState<{
-    year: number
-    week: number
+    weeksAgo: number
     label: string
     startDate: string
     endDate: string
@@ -104,11 +105,37 @@ export function CabifyModule() {
     }
   }
 
+  // Filter drivers based on search term
+  const filteredDrivers = useMemo(() => {
+    if (!searchTerm.trim()) return drivers
+
+    const term = searchTerm.toLowerCase()
+    return drivers.filter((driver) => {
+      const fullName = `${driver.name} ${driver.surname}`.toLowerCase()
+      const email = (driver.email || '').toLowerCase()
+      const dni = (driver.nationalIdNumber || '').toString().toLowerCase()
+      const phone = (driver.mobileNum || '').toString().toLowerCase()
+      const vehicle = (driver.vehiculo || '').toLowerCase()
+      const plate = (driver.vehicleRegPlate || '').toLowerCase()
+      const license = (driver.driverLicense || '').toLowerCase()
+
+      return (
+        fullName.includes(term) ||
+        email.includes(term) ||
+        dni.includes(term) ||
+        phone.includes(term) ||
+        vehicle.includes(term) ||
+        plate.includes(term) ||
+        license.includes(term)
+      )
+    })
+  }, [drivers, searchTerm])
+
   // Calculate pagination values
-  const totalPages = Math.ceil(drivers.length / itemsPerPage)
+  const totalPages = Math.ceil(filteredDrivers.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
-  const currentDrivers = drivers.slice(startIndex, endIndex)
+  const currentDrivers = filteredDrivers.slice(startIndex, endIndex)
 
   // Pagination handlers
   const goToPage = (page: number) => {
@@ -123,53 +150,60 @@ export function CabifyModule() {
   }
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1600px', margin: '0 auto' }}>
+    <div style={{ padding: '24px', backgroundColor: '#F9FAFB', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{
+        marginBottom: '24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        gap: '16px',
+        flexWrap: 'wrap'
+      }}>
         <div>
-          <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#1F2937', marginBottom: '8px' }}>
-            Lista de Conductores Cabify (TEST)
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>
+            Conductores Cabify
           </h1>
-          <p style={{ color: '#6B7280', fontSize: '14px' }}>
-            Verificando conexión con la API
+          <p style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+            Gestión de conductores y estadísticas de la plataforma Cabify
           </p>
           {queryState.lastUpdate && (
-            <p style={{ color: '#9CA3AF', fontSize: '12px', marginTop: '4px' }}>
+            <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '4px' }}>
               Última actualización: {queryState.lastUpdate.toLocaleString('es-AR')}
             </p>
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
           {/* Week Selector */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: '#6B7280' }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6B7280' }}>
               Semana:
             </label>
             <select
-              value={selectedWeek ? `${selectedWeek.year}-${selectedWeek.week}` : ''}
+              value={selectedWeek ? selectedWeek.weeksAgo.toString() : ''}
               onChange={(e) => {
-                const [year, week] = e.target.value.split('-').map(Number)
-                const selected = availableWeeks.find(w => w.year === year && w.week === week)
+                const weeksAgo = Number(e.target.value)
+                const selected = availableWeeks.find(w => w.weeksAgo === weeksAgo)
                 if (selected) {
                   setSelectedWeek(selected)
                 }
               }}
               disabled={queryState.loading || availableWeeks.length === 0}
               style={{
-                padding: '10px 16px',
-                borderRadius: '8px',
+                padding: '8px 12px',
                 border: '1px solid #D1D5DB',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: queryState.loading ? 'not-allowed' : 'pointer',
-                background: 'white',
-                color: '#1F2937',
-                minWidth: '200px'
+                borderRadius: '6px',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                backgroundColor: 'white',
+                color: '#374151',
+                minWidth: '200px',
+                cursor: queryState.loading || availableWeeks.length === 0 ? 'not-allowed' : 'pointer'
               }}
             >
               {availableWeeks.map((week) => (
-                <option key={`${week.year}-${week.week}`} value={`${week.year}-${week.week}`}>
+                <option key={week.weeksAgo} value={week.weeksAgo}>
                   {week.label}
                 </option>
               ))}
@@ -180,22 +214,17 @@ export function CabifyModule() {
           <button
             onClick={() => loadData()}
             disabled={queryState.loading || !selectedWeek}
+            className="btn-primary"
             style={{
-              padding: '10px 20px',
-              background: queryState.loading || !selectedWeek ? '#9CA3AF' : '#DC2626',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: queryState.loading || !selectedWeek ? 'not-allowed' : 'pointer',
-              fontSize: '14px',
-              fontWeight: 600,
+              padding: '8px 16px',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              marginTop: '20px'
+              opacity: queryState.loading || !selectedWeek ? 0.5 : 1,
+              cursor: queryState.loading || !selectedWeek ? 'not-allowed' : 'pointer'
             }}
           >
-            <RefreshCw size={18} style={{ animation: queryState.loading ? 'spin 1s linear infinite' : 'none' }} />
+            <RefreshCw size={18} className={queryState.loading ? 'animate-spin' : ''} />
             {queryState.loading ? 'Cargando...' : 'Actualizar'}
           </button>
         </div>
@@ -203,45 +232,36 @@ export function CabifyModule() {
 
       {/* Loading State */}
       {queryState.loading && (
-        <div style={{ textAlign: 'center', padding: '100px 50px', color: '#6B7280' }}>
+        <div style={{ textAlign: 'center', padding: '96px 24px', color: '#6B7280' }}>
           <div style={{
-            border: '3px solid #f0f0f0',
-            borderTop: '3px solid #1a1a1a',
+            display: 'inline-block',
+            width: '48px',
+            height: '48px',
+            border: '4px solid #E5E7EB',
+            borderTop: '4px solid #111827',
             borderRadius: '50%',
-            width: '40px',
-            height: '40px',
-            animation: 'spin 1s linear infinite',
-            margin: '20px auto'
-          }} />
-          <p>Cargando conductores desde Cabify...</p>
+            marginBottom: '16px'
+          }} className="animate-spin" />
+          <p style={{ fontSize: '0.875rem' }}>Cargando conductores desde Cabify...</p>
         </div>
       )}
 
       {/* Error State */}
       {queryState.error && !queryState.loading && (
         <div style={{
-          textAlign: 'center',
-          padding: '50px',
-          color: '#DC2626',
-          background: '#FEF2F2',
-          margin: '20px',
+          backgroundColor: '#FEF2F2',
+          border: '1px solid #FECACA',
           borderRadius: '8px',
-          border: '1px solid #FEE'
+          padding: '48px 24px',
+          textAlign: 'center'
         }}>
-          <h3 style={{ marginBottom: '10px' }}>Error al cargar conductores</h3>
-          <p>{queryState.error}</p>
+          <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#B91C1C', marginBottom: '8px' }}>
+            Error al cargar conductores
+          </h3>
+          <p style={{ color: '#DC2626', marginBottom: '16px' }}>{queryState.error}</p>
           <button
             onClick={() => loadData()}
-            style={{
-              marginTop: '15px',
-              padding: '10px 20px',
-              background: '#D1FAE5',
-              color: '#065F46',
-              border: '1px solid #A7F3D0',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 600
-            }}
+            className="btn-secondary"
           >
             Reintentar
           </button>
@@ -253,35 +273,92 @@ export function CabifyModule() {
         <>
           {/* Info Card */}
           <div style={{
-            background: '#D1FAE5',
+            backgroundColor: '#ECFDF5',
             border: '1px solid #A7F3D0',
             borderRadius: '8px',
-            padding: '16px 24px',
-            marginBottom: '24px',
-            color: '#065F46'
+            padding: '12px 16px',
+            marginBottom: '16px',
+            color: '#065F46',
+            fontSize: '0.875rem'
           }}>
             <strong>✅ Conexión exitosa:</strong> Se obtuvieron {drivers.length} conductores desde la API de Cabify
           </div>
 
-          {/* Tabla Simple */}
+          {/* Buscador */}
           <div style={{
-            background: 'white',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ position: 'relative', flex: '1 1 auto', maxWidth: '400px' }}>
+              <Search style={{
+                position: 'absolute',
+                left: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: '#9CA3AF'
+              }} size={18} />
+              <input
+                type="text"
+                placeholder="Buscar conductor..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setCurrentPage(1)
+                }}
+                style={{
+                  width: '100%',
+                  paddingLeft: '40px',
+                  paddingRight: '12px',
+                  paddingTop: '8px',
+                  paddingBottom: '8px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  outline: 'none'
+                }}
+              />
+            </div>
+            {searchTerm && (
+              <button
+                onClick={() => {
+                  setSearchTerm('')
+                  setCurrentPage(1)
+                }}
+                style={{
+                  fontSize: '0.875rem',
+                  color: '#6B7280',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  padding: '4px 8px'
+                }}
+              >
+                Limpiar
+              </button>
+            )}
+            <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+              {filteredDrivers.length === drivers.length
+                ? `${drivers.length} conductores`
+                : `${filteredDrivers.length} de ${drivers.length} conductores`
+              }
+            </div>
+          </div>
+
+          {/* Tabla */}
+          <div style={{
+            backgroundColor: 'white',
             borderRadius: '8px',
             border: '1px solid #E5E7EB',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
           }}>
-            <div style={{
-              background: '#EDE9FE',
-              color: '#1B1F3B',
-              padding: '20px 24px',
-              fontSize: '1.05rem',
-              fontWeight: 600,
-              borderBottom: '1px solid #DDD6FE'
-            }}>
-              Conductores Activos de Cabify
-            </div>
-
-            <div style={{ maxHeight: '600px', overflowY: 'auto', overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', maxHeight: '600px' }}>
               <table style={{
                 width: '100%',
                 borderCollapse: 'collapse',
@@ -314,17 +391,17 @@ export function CabifyModule() {
                       'Estado'
                     ].map((header) => (
                       <th key={header} style={{
-                        background: '#EDE9FE',
-                        color: '#1B1F3B',
-                        padding: '14px 16px',
+                        background: '#F9FAFB',
+                        color: '#374151',
+                        padding: '12px 16px',
                         textAlign: 'left',
                         fontWeight: 600,
                         position: 'sticky',
                         top: 0,
                         zIndex: 10,
-                        borderBottom: '1px solid #DDD6FE',
+                        borderBottom: '1px solid #E5E7EB',
                         fontSize: '0.75rem',
-                        letterSpacing: '0.3px',
+                        letterSpacing: '0.5px',
                         textTransform: 'uppercase',
                         whiteSpace: 'nowrap'
                       }}>
@@ -336,15 +413,15 @@ export function CabifyModule() {
                 <tbody>
                   {currentDrivers.map((driver, index) => (
                     <tr key={driver.id || index} style={{
-                      background: index % 2 === 0 ? 'white' : '#FAFAFA'
+                      background: index % 2 === 0 ? '#FFFFFF' : '#F9FAFB'
                     }}>
                       {/* Compañía */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', fontSize: '0.7rem', fontWeight: 600, color: '#6B7280' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontSize: '0.7rem', fontWeight: 600, color: '#6B7280' }}>
                         {driver.companyName || '-'}
                       </td>
 
                       {/* Conductor (Nombre completo) */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <strong style={{ fontSize: '0.875rem', color: '#111827' }}>
                             {driver.name && driver.surname ? `${driver.name} ${driver.surname}` : driver.name || '-'}
@@ -353,27 +430,27 @@ export function CabifyModule() {
                       </td>
 
                       {/* Email */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', fontSize: '0.75rem', color: '#4B5563' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontSize: '0.75rem', color: '#4B5563' }}>
                         {driver.email || '-'}
                       </td>
 
                       {/* DNI */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', fontSize: '0.8rem' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontSize: '0.8rem' }}>
                         {driver.nationalIdNumber || '-'}
                       </td>
 
                       {/* Licencia */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', fontSize: '0.8rem' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontSize: '0.8rem' }}>
                         {driver.driverLicense || '-'}
                       </td>
 
                       {/* Teléfono */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', fontSize: '0.75rem' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontSize: '0.75rem' }}>
                         {driver.mobileCc && driver.mobileNum ? `${driver.mobileCc} ${driver.mobileNum}` : '-'}
                       </td>
 
                       {/* Vehículo (Marca + Modelo) */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', fontSize: '0.75rem' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontSize: '0.75rem' }}>
                         {driver.vehiculo ||
                           (driver.vehicleMake && driver.vehicleModel
                             ? `${driver.vehicleMake} ${driver.vehicleModel}`
@@ -381,12 +458,12 @@ export function CabifyModule() {
                       </td>
 
                       {/* Patente */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', fontWeight: 600, fontSize: '0.8rem' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontWeight: 600, fontSize: '0.8rem' }}>
                         {driver.vehicleRegPlate || '-'}
                       </td>
 
                       {/* Score */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
                         <strong style={{
                           color: driver.score >= 4.5 ? '#059669' : driver.score >= 4.0 ? '#D97706' : '#DC2626',
                           fontSize: '0.875rem'
@@ -396,22 +473,22 @@ export function CabifyModule() {
                       </td>
 
                       {/* Viajes Finalizados */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', fontWeight: 600 }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', fontWeight: 600 }}>
                         {driver.viajesFinalizados || 0}
                       </td>
 
                       {/* Viajes Rechazados */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', color: '#DC2626' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', color: '#DC2626' }}>
                         {driver.viajesRechazados || 0}
                       </td>
 
                       {/* Viajes Perdidos */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', color: '#F59E0B' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', color: '#F59E0B' }}>
                         {driver.viajesPerdidos || 0}
                       </td>
 
                       {/* Tasa Aceptación */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', fontWeight: 600 }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', fontWeight: 600 }}>
                         <span style={{
                           color: driver.tasaAceptacion >= 80 ? '#059669' : driver.tasaAceptacion >= 60 ? '#D97706' : '#DC2626'
                         }}>
@@ -420,12 +497,12 @@ export function CabifyModule() {
                       </td>
 
                       {/* Horas Conectadas */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600 }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600 }}>
                         {driver.horasConectadasFormato || '-'}
                       </td>
 
                       {/* Tasa Ocupación */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', fontWeight: 600 }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'center', fontWeight: 600 }}>
                         <span style={{
                           color: driver.tasaOcupacion >= 70 ? '#059669' : driver.tasaOcupacion >= 50 ? '#D97706' : '#DC2626'
                         }}>
@@ -434,32 +511,32 @@ export function CabifyModule() {
                       </td>
 
                       {/* Cobro Efectivo */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontSize: '0.8rem', color: '#4B5563' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontSize: '0.8rem', color: '#4B5563' }}>
                         ${driver.cobroEfectivo || '0.00'}
                       </td>
 
                       {/* Cobro App */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontSize: '0.8rem', color: '#4B5563' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontSize: '0.8rem', color: '#4B5563' }}>
                         ${driver.cobroApp || '0.00'}
                       </td>
 
                       {/* Peajes */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontSize: '0.8rem', color: '#6B7280' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontSize: '0.8rem', color: '#6B7280' }}>
                         ${driver.peajes || '0.00'}
                       </td>
 
                       {/* Ganancia Total */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>
                         ${driver.gananciaTotal || '0.00'}
                       </td>
 
                       {/* Ganancia por Hora */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontWeight: 700, fontSize: '0.875rem', color: '#059669' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontWeight: 700, fontSize: '0.875rem', color: '#059669' }}>
                         ${driver.gananciaPorHora || '0.00'}
                       </td>
 
                       {/* Permiso Efectivo */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
                         <span style={{
                           display: 'inline-block',
                           padding: '4px 8px',
@@ -475,7 +552,7 @@ export function CabifyModule() {
                       </td>
 
                       {/* Estado */}
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
                         <span style={{
                           display: 'inline-block',
                           padding: '4px 10px',
@@ -497,13 +574,14 @@ export function CabifyModule() {
 
             {/* Pagination Controls */}
             <div style={{
-              padding: '20px 24px',
+              padding: '16px 20px',
               borderTop: '1px solid #E5E7EB',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
-              gap: '16px'
+              gap: '16px',
+              backgroundColor: '#FAFAFA'
             }}>
               {/* Items per page selector */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -512,12 +590,14 @@ export function CabifyModule() {
                   value={itemsPerPage}
                   onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
                   style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
+                    padding: '6px 10px',
                     border: '1px solid #D1D5DB',
+                    borderRadius: '6px',
                     fontSize: '0.875rem',
-                    cursor: 'pointer',
-                    background: 'white'
+                    backgroundColor: 'white',
+                    color: '#374151',
+                    outline: 'none',
+                    cursor: 'pointer'
                   }}
                 >
                   <option value={10}>10</option>
@@ -526,29 +606,30 @@ export function CabifyModule() {
                   <option value={100}>100</option>
                 </select>
                 <span style={{ fontSize: '0.875rem', color: '#6B7280' }}>
-                  conductores por página
+                  por página
                 </span>
               </div>
 
               {/* Page info */}
               <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
-                Mostrando {startIndex + 1}-{Math.min(endIndex, drivers.length)} de {drivers.length} conductores
+                Mostrando {startIndex + 1}-{Math.min(endIndex, filteredDrivers.length)} de {filteredDrivers.length}
+                {searchTerm && ` (filtrados de ${drivers.length})`}
               </div>
 
               {/* Page navigation */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <button
                   onClick={() => goToPage(1)}
                   disabled={currentPage === 1}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '6px',
                     border: '1px solid #D1D5DB',
-                    background: currentPage === 1 ? '#F3F4F6' : 'white',
-                    color: currentPage === 1 ? '#9CA3AF' : '#374151',
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                    borderRadius: '6px',
                     fontSize: '0.875rem',
-                    fontWeight: 500
+                    fontWeight: 500,
+                    backgroundColor: currentPage === 1 ? '#F3F4F6' : 'white',
+                    color: currentPage === 1 ? '#9CA3AF' : '#374151',
+                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
                   }}
                 >
                   Primera
@@ -559,13 +640,13 @@ export function CabifyModule() {
                   disabled={currentPage === 1}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '6px',
                     border: '1px solid #D1D5DB',
-                    background: currentPage === 1 ? '#F3F4F6' : 'white',
-                    color: currentPage === 1 ? '#9CA3AF' : '#374151',
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                    borderRadius: '6px',
                     fontSize: '0.875rem',
-                    fontWeight: 500
+                    fontWeight: 500,
+                    backgroundColor: currentPage === 1 ? '#F3F4F6' : 'white',
+                    color: currentPage === 1 ? '#9CA3AF' : '#374151',
+                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
                   }}
                 >
                   Anterior
@@ -591,14 +672,14 @@ export function CabifyModule() {
                         onClick={() => goToPage(pageNum)}
                         style={{
                           padding: '6px 12px',
+                          border: currentPage === pageNum ? '1px solid #7C3AED' : '1px solid #D1D5DB',
                           borderRadius: '6px',
-                          border: '1px solid #D1D5DB',
-                          background: currentPage === pageNum ? '#7C3AED' : 'white',
-                          color: currentPage === pageNum ? 'white' : '#374151',
-                          cursor: 'pointer',
                           fontSize: '0.875rem',
-                          fontWeight: currentPage === pageNum ? 600 : 500,
-                          minWidth: '36px'
+                          fontWeight: 500,
+                          minWidth: '40px',
+                          backgroundColor: currentPage === pageNum ? '#7C3AED' : 'white',
+                          color: currentPage === pageNum ? 'white' : '#374151',
+                          cursor: 'pointer'
                         }}
                       >
                         {pageNum}
@@ -612,13 +693,13 @@ export function CabifyModule() {
                   disabled={currentPage === totalPages}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '6px',
                     border: '1px solid #D1D5DB',
-                    background: currentPage === totalPages ? '#F3F4F6' : 'white',
-                    color: currentPage === totalPages ? '#9CA3AF' : '#374151',
-                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                    borderRadius: '6px',
                     fontSize: '0.875rem',
-                    fontWeight: 500
+                    fontWeight: 500,
+                    backgroundColor: currentPage === totalPages ? '#F3F4F6' : 'white',
+                    color: currentPage === totalPages ? '#9CA3AF' : '#374151',
+                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
                   }}
                 >
                   Siguiente
@@ -629,13 +710,13 @@ export function CabifyModule() {
                   disabled={currentPage === totalPages}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '6px',
                     border: '1px solid #D1D5DB',
-                    background: currentPage === totalPages ? '#F3F4F6' : 'white',
-                    color: currentPage === totalPages ? '#9CA3AF' : '#374151',
-                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                    borderRadius: '6px',
                     fontSize: '0.875rem',
-                    fontWeight: 500
+                    fontWeight: 500,
+                    backgroundColor: currentPage === totalPages ? '#F3F4F6' : 'white',
+                    color: currentPage === totalPages ? '#9CA3AF' : '#374151',
+                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
                   }}
                 >
                   Última
@@ -645,13 +726,6 @@ export function CabifyModule() {
           </div>
         </>
       )}
-
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   )
 }
