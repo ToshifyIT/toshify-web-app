@@ -248,7 +248,7 @@ class CabifyService {
             query: graphqlQuery,
             variables: {
               page: currentPage,
-              perPage: 200,
+              perPage: 500, // Aumentado para máximo rendimiento
               companyId: companyId,
             },
           }),
@@ -720,7 +720,7 @@ class CabifyService {
               startAt: "${startAt}",
               endAt: "${endAt}",
               page: 1,
-              perPage: 100
+              perPage: 500
             ) {
               movements {
                 breakdown {
@@ -805,7 +805,7 @@ class CabifyService {
                     startAt,
                     endAt,
                     page: 1,
-                    perPage: 100,
+                    perPage: 500,
                   },
                 }),
               })
@@ -940,7 +940,7 @@ class CabifyService {
               companyId,
               driverId,
               page: 1,
-              perPage: 100,
+              perPage: 500, // Aumentado para reducir requests
               startAt, // String! para journeys
               endAt,   // String! para journeys
             },
@@ -1002,7 +1002,7 @@ class CabifyService {
                   companyId,
                   driverId,
                   page,
-                  perPage: 100,
+                  perPage: 500, // Aumentado para reducir requests
                   startAt,
                   endAt,
                 },
@@ -1076,15 +1076,20 @@ class CabifyService {
 
           const companyDriversData: any[] = []
 
-          // OPTIMIZACIÓN 2: Procesar conductores en batches de 10 en paralelo
-          for (let j = 0; j < drivers.length; j += 10) {
-            const batch = drivers.slice(j, j + 10)
-            console.log(`    📦 Batch ${Math.floor(j / 10) + 1}/${Math.ceil(drivers.length / 10)} (${batch.length} conductores)`)
+          // OPTIMIZACIÓN 2: Procesar conductores en batches de 50 en paralelo (MÁXIMO RENDIMIENTO)
+          const BATCH_SIZE = 50
+          for (let j = 0; j < drivers.length; j += BATCH_SIZE) {
+            const batch = drivers.slice(j, j + BATCH_SIZE)
+            console.log(`    📦 Batch ${Math.floor(j / BATCH_SIZE) + 1}/${Math.ceil(drivers.length / BATCH_SIZE)} (${batch.length} conductores)`)
 
             // Paso 1: Obtener datos de todos los conductores del batch en paralelo
             const batchDataPromises = batch.map(async (driver) => {
               try {
-                const completeData = await this.getDriverCompleteData(driver.id, companyId, startDate, endDate)
+                // OPTIMIZACIÓN: Obtener datos del conductor Y peajes en paralelo
+                const [completeData, totalPeajes] = await Promise.all([
+                  this.getDriverCompleteData(driver.id, companyId, startDate, endDate),
+                  this.getTollsForDriver(companyId, driver.id, startDate, endDate).catch(() => 0)
+                ])
 
                 if (!completeData || !completeData.driver) {
                   console.warn(`      ⚠️ No se obtuvieron datos para ${driver.name}`)
@@ -1143,9 +1148,6 @@ class CabifyService {
                 const cobroEfectivo = cobroEfectivoMinor / 100
                 const cobroApp = cobroAppMinor / 100
                 const gananciaTotalViajes = gananciaTotalViajesMinor / 100
-
-                // Obtener peajes (script.gs línea 948)
-                const totalPeajes = await this.getTollsForDriver(companyId, driver.id, startDate, endDate).catch(() => 0)
 
                 // Permiso efectivo (script.gs líneas 488-489, 950)
                 const cashPreference = driverData.preferences?.find((p: any) => p.name === 'payment_cash')
