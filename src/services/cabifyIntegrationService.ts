@@ -1,7 +1,7 @@
 // src/services/cabifyIntegrationService.ts
 import { supabase } from '../lib/supabase'
 import { cabifyService } from './cabifyService'
-import type { CabifyDriver, CabifyDriverEnriched, CabifyPeriod, CabifyMetrics } from '../types/cabify.types'
+import type { CabifyDriverEnriched, CabifyPeriod, CabifyMetrics } from '../types/cabify.types'
 
 const ALQUILER_A_CARGO = Number(import.meta.env.VITE_ALQUILER_A_CARGO) || 360000
 const ALQUILER_TURNO = Number(import.meta.env.VITE_ALQUILER_TURNO) || 245000
@@ -22,7 +22,7 @@ class CabifyIntegrationService {
       console.log(`📊 ${cabifyDrivers.length} conductores obtenidos de Cabify`)
 
       // 2. Obtener asignaciones activas con conductores y vehículos
-      const { data: asignaciones, error } = await supabase
+      const { data: asignacionesData, error } = await supabase
         .from('asignaciones')
         .select(`
           id,
@@ -54,6 +54,7 @@ class CabifyIntegrationService {
         throw error
       }
 
+      const asignaciones = asignacionesData as any[]
       console.log(`📋 ${asignaciones?.length || 0} asignaciones activas encontradas`)
 
       // 3. Crear un mapa de DNI -> Asignación para búsqueda rápida

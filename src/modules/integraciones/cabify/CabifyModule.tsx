@@ -146,8 +146,8 @@ export function CabifyModule() {
         return
       }
 
-      // PASO 2: Si no hay datos en historial, consultar API de Cabify
-      console.log('🌐 No hay datos en historial, consultando API de Cabify...')
+      // PASO 2: Si no hay datos en historial, consultar API de Cabify con streaming en tiempo real
+      console.log('🌐 No hay datos en historial, consultando API de Cabify con carga en tiempo real...')
       setIsDataFromHistory(false)
 
       // IMPORTANTE: Limpiar drivers antes de empezar para que se vea el progreso incremental
@@ -160,10 +160,10 @@ export function CabifyModule() {
           startDate: selectedWeek.startDate,
           endDate: selectedWeek.endDate
         },
-        // Callback de progreso
+        // Callback de progreso para streaming en tiempo real
         (current, total, newDrivers, message) => {
           setLoadingProgress({ current, total, message })
-          // Ir mostrando resultados a medida que llegan
+          // Ir mostrando resultados a medida que llegan (STREAMING)
           if (newDrivers && newDrivers.length > 0) {
             setDrivers(prev => [...prev, ...newDrivers])
           }
@@ -185,7 +185,7 @@ export function CabifyModule() {
         icon: 'success',
         title: 'Datos desde API Cabify',
         html: `
-          🌐 ${data.length} conductores cargados<br>
+          🌐 ${data.length} conductores cargados en tiempo real<br>
           <small>Semana: ${selectedWeek.label}</small><br>
           <small style="color: #F59E0B;">💡 Puedes sincronizar estos datos para consultas futuras</small>
         `,
