@@ -978,12 +978,13 @@ export function ProductosModule() {
 
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Proveedor
+                    Marca
                   </label>
                   <input
                     type="text"
                     value={formData.proveedor}
                     onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                    placeholder="Ej: YPF, Shell, Bosch..."
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -1233,12 +1234,13 @@ export function ProductosModule() {
 
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Proveedor
+                    Marca
                   </label>
                   <input
                     type="text"
                     value={formData.proveedor}
                     onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                    placeholder="Ej: YPF, Shell, Bosch..."
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -1488,7 +1490,7 @@ export function ProductosModule() {
                   </div>
                   {selectedProducto.proveedor && (
                     <div>
-                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Proveedor</span>
+                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Marca</span>
                       <span style={{ fontSize: '14px' }}>{selectedProducto.proveedor}</span>
                     </div>
                   )}

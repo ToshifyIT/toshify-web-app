@@ -254,9 +254,13 @@ export function MovimientosModule() {
         inventario_id: item.id
       }))
 
+      // Ordenar por cantidad descendente (mayor stock primero)
+      stockAgrupado.sort((a, b) => b.cantidad - a.cantidad)
+
       setStockPorProveedor(stockAgrupado)
 
-      if (stockAgrupado.length > 0 && !proveedorId) {
+      // Auto-seleccionar el proveedor con mayor stock
+      if (stockAgrupado.length > 0) {
         setProveedorId(stockAgrupado[0].proveedor_id)
       }
     } catch (err) {
