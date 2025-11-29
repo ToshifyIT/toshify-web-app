@@ -48,12 +48,6 @@ interface Vehiculo {
   modelo: string
 }
 
-interface Servicio {
-  id: string
-  descripcion: string
-  fecha: string
-}
-
 interface ProductoAsignadoVehiculo {
   producto_id: string
   proveedor_id: string
@@ -89,7 +83,6 @@ export function MovimientosModule() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
-  const [servicios, setServicios] = useState<Servicio[]>([])
   const [vehiculosConInventario, setVehiculosConInventario] = useState<Vehiculo[]>([])
   const [productosAsignadosVehiculo, setProductosAsignadosVehiculo] = useState<ProductoAsignadoVehiculo[]>([])
   const [stockPorProveedor, setStockPorProveedor] = useState<StockPorProveedor[]>([])
@@ -116,16 +109,17 @@ export function MovimientosModule() {
   const [observaciones, setObservaciones] = useState('')
 
   // Form data - Entrada
-  const [estadoInicial, setEstadoInicial] = useState<EstadoInicial>('disponible')
+  const [estadoInicial, setEstadoInicial] = useState<EstadoInicial>('en_transito')
   const [numeroPedido, setNumeroPedido] = useState('')
   const [fechaEstimadaLlegada, setFechaEstimadaLlegada] = useState('')
 
   // Form data - Salida
   const [motivoSalida, setMotivoSalida] = useState<MotivoSalida>('consumo_servicio')
-  const [servicioId, setServicioId] = useState('')
+  const [servicioVinculado, setServicioVinculado] = useState('')
 
   // Form data - Devolución
   const [estadoRetorno, setEstadoRetorno] = useState<EstadoRetorno>('operativa')
+  const [servicioVinculadoDevolucion, setServicioVinculadoDevolucion] = useState('')
 
   // =====================================================
   // EFECTOS
@@ -188,20 +182,6 @@ export function MovimientosModule() {
     }
   }, [vehiculoId, tipoMovimiento])
 
-  useEffect(() => {
-    // Cargar servicios cuando es salida por consumo
-    if (tipoMovimiento === 'salida' && motivoSalida === 'consumo_servicio') {
-      loadServicios()
-    }
-  }, [tipoMovimiento, motivoSalida])
-
-  useEffect(() => {
-    // Cargar servicios cuando es uso de herramienta
-    if (tipoMovimiento === 'asignacion') {
-      loadServicios()
-    }
-  }, [tipoMovimiento])
-
   // =====================================================
   // FUNCIONES DE CARGA
   // =====================================================
@@ -254,22 +234,6 @@ export function MovimientosModule() {
       Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudieron cargar los datos necesarios' })
     } finally {
       setLoading(false)
-    }
-  }
-
-  const loadServicios = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('servicios')
-        .select('id, descripcion, fecha')
-        .order('fecha', { ascending: false })
-        .limit(50)
-
-      if (error) throw error
-      setServicios(data || [])
-    } catch (err) {
-      console.error('Error cargando servicios:', err)
-      setServicios([])
     }
   }
 
@@ -398,12 +362,13 @@ export function MovimientosModule() {
     setProductosLote([])
     setModoLote(false)
     setProductosAsignadosVehiculo([])
-    setEstadoInicial('disponible')
+    setEstadoInicial('en_transito') // Siempre en tránsito
     setNumeroPedido('')
     setFechaEstimadaLlegada('')
     setMotivoSalida('consumo_servicio')
-    setServicioId('')
+    setServicioVinculado('')
     setEstadoRetorno('operativa')
+    setServicioVinculadoDevolucion('')
   }
 
   // Determinar si requiere aprobación
@@ -509,8 +474,8 @@ export function MovimientosModule() {
         Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un motivo de salida' })
         return
       }
-      if (motivoSalida === 'consumo_servicio' && !servicioId) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un servicio vinculado' })
+      if (motivoSalida === 'consumo_servicio' && !servicioVinculado.trim()) {
+        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes indicar el servicio vinculado' })
         return
       }
     }
@@ -525,8 +490,8 @@ export function MovimientosModule() {
         Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un vehículo' })
         return
       }
-      if (!servicioId) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un servicio vinculado' })
+      if (!servicioVinculado.trim()) {
+        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes indicar el servicio vinculado' })
         return
       }
       if (!proveedorId) {
@@ -600,6 +565,17 @@ export function MovimientosModule() {
       // Movimiento normal
       // Nota: para devoluciones, vehiculoId representa el vehículo origen (desde donde se devuelve)
       // El RPC usa p_vehiculo_destino_id internamente pero lo mapea a vehiculo_origen_id
+
+      // Construir observaciones con servicio vinculado incluido
+      let observacionesFinal = observaciones || ''
+      if (tipoMovimiento === 'salida' && servicioVinculado.trim()) {
+        observacionesFinal = `Servicio: ${servicioVinculado.trim()}${observaciones ? '. ' + observaciones : ''}`
+      } else if (tipoMovimiento === 'asignacion' && servicioVinculado.trim()) {
+        observacionesFinal = `Servicio: ${servicioVinculado.trim()}${observaciones ? '. ' + observaciones : ''}`
+      } else if (tipoMovimiento === 'devolucion' && servicioVinculadoDevolucion.trim()) {
+        observacionesFinal = `Servicio: ${servicioVinculadoDevolucion.trim()}${observaciones ? '. ' + observaciones : ''}`
+      }
+
       const { error } = await (supabase.rpc as any)('procesar_movimiento_inventario', {
         p_producto_id: productoId,
         p_tipo_movimiento: tipoMovimiento,
@@ -609,9 +585,9 @@ export function MovimientosModule() {
         p_vehiculo_destino_id: vehiculoId || null,
         p_estado_destino: tipoMovimiento === 'devolucion' ? estadoRetorno : 'disponible',
         p_usuario_id: userData.user?.id,
-        p_observaciones: observaciones || null,
+        p_observaciones: observacionesFinal || null,
         p_motivo_salida: tipoMovimiento === 'salida' ? motivoSalida : null,
-        p_servicio_id: servicioId || null,
+        p_servicio_id: null, // Ya no usamos ID, el servicio va en observaciones
         p_estado_aprobacion: necesitaAprobacion ? 'pendiente' : 'aprobado',
         p_estado_retorno: tipoMovimiento === 'devolucion' ? estadoRetorno : null
       })
@@ -856,107 +832,63 @@ export function MovimientosModule() {
                 </select>
               </div>
 
-              {/* Estado Inicial (solo modo simple) */}
-              {!modoLote && (
+              {/* Aviso de que siempre va a tránsito */}
+              <div style={{
+                background: '#FFFBEB',
+                border: '1px solid #F59E0B',
+                borderRadius: '8px',
+                padding: '12px',
+                fontSize: '13px',
+                color: '#92400E',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <Truck size={18} />
+                <div>
+                  <strong>Los productos ingresarán en estado "En Tránsito".</strong>
+                  <div style={{ fontSize: '12px', marginTop: '2px' }}>Deberás confirmar su recepción desde "Pedidos en Tránsito" para que pasen a stock disponible.</div>
+                </div>
+              </div>
+
+              {/* Número de Pedido (siempre visible) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
-                    Estado Inicial *
+                    N° Pedido/Referencia *
                   </label>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <label style={{
-                      flex: 1,
-                      padding: '12px',
-                      border: `2px solid ${estadoInicial === 'disponible' ? '#059669' : '#E5E7EB'}`,
+                  <input
+                    type="text"
+                    placeholder="Ej: PED-001, FAC-123"
+                    value={numeroPedido}
+                    onChange={(e) => setNumeroPedido(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #D1D5DB',
                       borderRadius: '8px',
-                      cursor: 'pointer',
-                      background: estadoInicial === 'disponible' ? '#ECFDF5' : 'white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}>
-                      <input
-                        type="radio"
-                        name="estadoInicial"
-                        checked={estadoInicial === 'disponible'}
-                        onChange={() => setEstadoInicial('disponible')}
-                      />
-                      <div>
-                        <div style={{ fontWeight: 600, color: '#059669' }}>
-                          <CheckCircle size={16} style={{ display: 'inline', marginRight: '4px' }} />
-                          En Stock
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#6B7280' }}>Disponible inmediatamente</div>
-                      </div>
-                    </label>
-                    <label style={{
-                      flex: 1,
-                      padding: '12px',
-                      border: `2px solid ${estadoInicial === 'en_transito' ? '#D97706' : '#E5E7EB'}`,
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                    Fecha Estimada Llegada
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaEstimadaLlegada}
+                    onChange={(e) => setFechaEstimadaLlegada(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #D1D5DB',
                       borderRadius: '8px',
-                      cursor: 'pointer',
-                      background: estadoInicial === 'en_transito' ? '#FFFBEB' : 'white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}>
-                      <input
-                        type="radio"
-                        name="estadoInicial"
-                        checked={estadoInicial === 'en_transito'}
-                        onChange={() => setEstadoInicial('en_transito')}
-                      />
-                      <div>
-                        <div style={{ fontWeight: 600, color: '#D97706' }}>
-                          <Truck size={16} style={{ display: 'inline', marginRight: '4px' }} />
-                          En Tránsito
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#6B7280' }}>Requiere confirmación de recepción</div>
-                      </div>
-                    </label>
-                  </div>
+                      fontSize: '14px'
+                    }}
+                  />
                 </div>
-              )}
-
-              {/* Número de Pedido (si está en tránsito o modo lote) */}
-              {(estadoInicial === 'en_transito' || modoLote) && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
-                      N° Pedido/Referencia *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: PED-001, FAC-123"
-                      value={numeroPedido}
-                      onChange={(e) => setNumeroPedido(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        border: '1px solid #D1D5DB',
-                        borderRadius: '8px',
-                        fontSize: '14px'
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
-                      Fecha Estimada Llegada
-                    </label>
-                    <input
-                      type="date"
-                      value={fechaEstimadaLlegada}
-                      onChange={(e) => setFechaEstimadaLlegada(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        border: '1px solid #D1D5DB',
-                        borderRadius: '8px',
-                        fontSize: '14px'
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
+              </div>
             </>
           )}
 
@@ -1023,9 +955,11 @@ export function MovimientosModule() {
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
                     Servicio Vinculado *
                   </label>
-                  <select
-                    value={servicioId}
-                    onChange={(e) => setServicioId(e.target.value)}
+                  <input
+                    type="text"
+                    placeholder="Ej: Mantenimiento preventivo, Reparación motor, etc."
+                    value={servicioVinculado}
+                    onChange={(e) => setServicioVinculado(e.target.value)}
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -1033,14 +967,7 @@ export function MovimientosModule() {
                       borderRadius: '8px',
                       fontSize: '14px'
                     }}
-                  >
-                    <option value="">Seleccionar servicio...</option>
-                    {servicios.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.descripcion} - {new Date(s.fecha).toLocaleDateString('es-CL')}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
               )}
             </>
@@ -1090,9 +1017,11 @@ export function MovimientosModule() {
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
                   Servicio Vinculado *
                 </label>
-                <select
-                  value={servicioId}
-                  onChange={(e) => setServicioId(e.target.value)}
+                <input
+                  type="text"
+                  placeholder="Ej: Mantenimiento preventivo, Reparación frenos, etc."
+                  value={servicioVinculado}
+                  onChange={(e) => setServicioVinculado(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '10px',
@@ -1100,14 +1029,7 @@ export function MovimientosModule() {
                     borderRadius: '8px',
                     fontSize: '14px'
                   }}
-                >
-                  <option value="">Seleccionar servicio...</option>
-                  {servicios.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.descripcion} - {new Date(s.fecha).toLocaleDateString('es-CL')}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </>
           )}
@@ -1173,6 +1095,28 @@ export function MovimientosModule() {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* Servicio vinculado (opcional) */}
+              {vehiculoId && productoId && (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                    Servicio Vinculado
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Mantenimiento completado, Fin de servicio, etc."
+                    value={servicioVinculadoDevolucion}
+                    onChange={(e) => setServicioVinculadoDevolucion(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
                 </div>
               )}
 
