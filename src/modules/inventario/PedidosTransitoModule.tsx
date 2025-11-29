@@ -168,6 +168,15 @@ export function PedidosTransitoModule() {
       confirmButtonText: 'Confirmar Recepción',
       confirmButtonColor: '#059669',
       cancelButtonText: 'Cancelar',
+      didOpen: () => {
+        const input = Swal.getInput()
+        if (input) {
+          input.addEventListener('input', (e) => {
+            const target = e.target as HTMLInputElement
+            target.value = target.value.replace(/[^0-9]/g, '').replace(/^0+/, '') || ''
+          })
+        }
+      },
       inputValidator: (value) => {
         const num = parseInt(value, 10)
         if (!value || isNaN(num) || num <= 0) {
@@ -247,6 +256,15 @@ export function PedidosTransitoModule() {
       confirmButtonText: 'Confirmar Recepción',
       confirmButtonColor: '#059669',
       cancelButtonText: 'Cancelar',
+      didOpen: () => {
+        const input = Swal.getInput()
+        if (input) {
+          input.addEventListener('input', (e) => {
+            const target = e.target as HTMLInputElement
+            target.value = target.value.replace(/[^0-9]/g, '').replace(/^0+/, '') || ''
+          })
+        }
+      },
       inputValidator: (value) => {
         const num = parseInt(value, 10)
         if (!value || isNaN(num) || num <= 0) {

@@ -130,19 +130,18 @@ export function MovimientosModule() {
   }, [])
 
   useEffect(() => {
-    // Cargar stock por proveedor cuando se selecciona producto
+    // Cargar stock por proveedor cuando se selecciona producto (solo para salida y asignación)
     const shouldLoadStock = productoId && !modoLote && (
       tipoMovimiento === 'salida' ||
-      tipoMovimiento === 'asignacion' ||
-      (tipoMovimiento === 'devolucion' && !vehiculoId)
+      tipoMovimiento === 'asignacion'
     )
 
     if (shouldLoadStock) {
       loadStockPorProveedor(productoId)
-    } else if (!modoLote && !(tipoMovimiento === 'devolucion' && vehiculoId && productoId)) {
-      setStockPorProveedor([])
-      if (!(tipoMovimiento === 'devolucion' && vehiculoId && productoId)) {
-        setProveedorId('')
+    } else if (!modoLote && tipoMovimiento !== 'entrada') {
+      // Solo limpiar stock si no es entrada (en entrada el usuario selecciona proveedor manualmente)
+      if (tipoMovimiento !== 'devolucion' || !vehiculoId) {
+        setStockPorProveedor([])
       }
     }
   }, [productoId, tipoMovimiento, modoLote, vehiculoId])
@@ -530,39 +529,8 @@ export function MovimientosModule() {
 
     try {
       const { data: userData } = await supabase.auth.getUser()
-      const necesitaAprobacion = requiereAprobacion()
 
-      // Si es entrada simple en tránsito, crear pedido con 1 item
-      if (tipoMovimiento === 'entrada' && estadoInicial === 'en_transito') {
-        if (!numeroPedido.trim()) {
-          // Generar número automático
-          const autoNum = `PED-${Date.now()}`
-          setNumeroPedido(autoNum)
-        }
-
-        const items = [{ producto_id: productoId, cantidad }]
-        const { error } = await (supabase.rpc as any)('crear_pedido_inventario', {
-          p_numero_pedido: numeroPedido || `PED-${Date.now()}`,
-          p_proveedor_id: proveedorId,
-          p_fecha_estimada: fechaEstimadaLlegada || null,
-          p_observaciones: observaciones || null,
-          p_usuario_id: userData.user?.id,
-          p_items: JSON.stringify(items)
-        })
-
-        if (error) throw error
-
-        Swal.fire({
-          icon: 'success',
-          title: 'Pedido en tránsito creado',
-          text: 'El producto quedará disponible cuando confirmes su recepción',
-          timer: 2500
-        })
-        resetForm()
-        return
-      }
-
-      // Movimiento normal
+      // Movimiento normal (incluye entrada simple que va a tránsito automáticamente)
       // Nota: para devoluciones, vehiculoId representa el vehículo origen (desde donde se devuelve)
       // El RPC usa p_vehiculo_destino_id internamente pero lo mapea a vehiculo_origen_id
 
@@ -587,19 +555,20 @@ export function MovimientosModule() {
         p_usuario_id: userData.user?.id,
         p_observaciones: observacionesFinal || null,
         p_motivo_salida: tipoMovimiento === 'salida' ? motivoSalida : null,
-        p_servicio_id: null, // Ya no usamos ID, el servicio va en observaciones
-        p_estado_aprobacion: necesitaAprobacion ? 'pendiente' : 'aprobado',
+        p_servicio_id: null,
+        p_estado_aprobacion: 'aprobado', // El RPC maneja internamente que entrada vaya a pendiente
         p_estado_retorno: tipoMovimiento === 'devolucion' ? estadoRetorno : null
       })
 
       if (error) throw error
 
-      if (necesitaAprobacion) {
+      // Mensaje según tipo de movimiento
+      if (tipoMovimiento === 'entrada') {
         Swal.fire({
-          icon: 'info',
-          title: 'Movimiento registrado',
-          text: 'El movimiento quedó pendiente de aprobación por un encargado',
-          timer: 2500
+          icon: 'success',
+          title: 'Entrada registrada',
+          text: 'El producto está en tránsito. Confirma la recepción desde "Pedidos en Tránsito".',
+          timer: 3000
         })
       } else {
         Swal.fire({
