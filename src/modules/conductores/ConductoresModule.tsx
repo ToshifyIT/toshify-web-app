@@ -151,122 +151,104 @@ export function ConductoresModule() {
     setError("");
 
     try {
+      // ✅ OPTIMIZADO: Una sola query con todos los JOINs (700 queries → 1 query)
       const { data, error: fetchError } = await supabase
         .from("conductores")
-        .select("*")
+        .select(`
+          *,
+          estados_civiles (
+            id,
+            codigo,
+            descripcion
+          ),
+          nacionalidades (
+            id,
+            codigo,
+            descripcion
+          ),
+          conductores_licencias_categorias (
+            licencias_categorias (
+              id,
+              codigo,
+              descripcion
+            )
+          ),
+          conductores_estados (
+            id,
+            codigo,
+            descripcion
+          ),
+          licencias_estados (
+            id,
+            codigo,
+            descripcion
+          ),
+          licencias_tipos (
+            id,
+            codigo,
+            descripcion
+          )
+        `)
         .order("created_at", { ascending: false });
 
       if (fetchError) throw fetchError;
 
-      // Cargar las relaciones manualmente
+      // Procesar las relaciones en memoria (mucho más rápido que queries)
       if (data && data.length > 0) {
-        const conductoresConRelaciones = await Promise.all(
-          data.map(async (conductor: any) => {
-            const relaciones: any = { ...conductor };
-
-            if (conductor.estado_civil_id) {
-              const { data: estadoCivil } = await supabase
-                .from("estados_civiles")
-                .select("id, codigo, descripcion")
-                .eq("id", conductor.estado_civil_id)
-                .single();
-              relaciones.estados_civiles = estadoCivil;
-            }
-
-            if (conductor.nacionalidad_id) {
-              const { data: nacionalidad } = await supabase
-                .from("nacionalidades")
-                .select("id, codigo, descripcion")
-                .eq("id", conductor.nacionalidad_id)
-                .single();
-              relaciones.nacionalidades = nacionalidad;
-            }
-
-            // Obtener categorías de licencia desde la tabla de relación
-            const { data: categoriasLicencia } = await supabase
-              .from("conductores_licencias_categorias")
-              .select(
-                `
-                licencias_categorias (
-                  id,
-                  codigo,
-                  descripcion
-                )
-              `,
-              )
-              .eq("conductor_id", conductor.id);
-
-            if (categoriasLicencia && categoriasLicencia.length > 0) {
-              relaciones.licencias_categorias = categoriasLicencia.map(
-                (c: any) => c.licencias_categorias,
-              );
-            }
-
-            if (conductor.estado_id) {
-              const { data: estado } = await supabase
-                .from("conductores_estados")
-                .select("id, codigo, descripcion")
-                .eq("id", conductor.estado_id)
-                .single();
-              relaciones.conductores_estados = estado;
-            }
-
-            if (conductor.licencia_estado_id) {
-              const { data: licenciaEstado } = await supabase
-                .from("licencias_estados")
-                .select("id, codigo, descripcion")
-                .eq("id", conductor.licencia_estado_id)
-                .single();
-              relaciones.licencias_estados = licenciaEstado;
-            }
-
-            if (conductor.licencia_tipo_id) {
-              const { data: tipoLicencia } = await supabase
-                .from("licencias_tipos")
-                .select("id, codigo, descripcion")
-                .eq("id", conductor.licencia_tipo_id)
-                .single();
-              relaciones.licencias_tipos = tipoLicencia;
-            }
-
-            // Obtener vehículo asignado (solo para conductores activos)
-            const conductorEsActivo =
-              relaciones.conductores_estados?.codigo?.toLowerCase() === "activo";
-
-            if (conductorEsActivo) {
-              // Buscar asignación con vehículo (puede ser "asignado" o "activo")
-              const { data: asignacionesActivas } = await supabase
-                .from("asignaciones_conductores")
-                .select(
-                  `
-                id,
-                estado,
-                asignaciones!inner (
-                  vehiculo_id,
-                  vehiculos (
-                    patente,
-                    marca,
-                    modelo
-                  )
-                )
-              `,
-                )
-                .eq("conductor_id", conductor.id)
-                .in("estado", ["asignado", "activo"])
-                .limit(1);
-
-              if (asignacionesActivas && asignacionesActivas.length > 0) {
-                const asignacion = asignacionesActivas[0] as any;
-                if (asignacion?.asignaciones?.vehiculos) {
-                  relaciones.vehiculo_asignado =
-                    asignacion.asignaciones.vehiculos;
-                }
-              }
-            }
-
-            return relaciones;
-          }),
+        // Obtener todos los IDs de conductores activos de una vez
+        const conductoresActivos = data.filter((c: any) =>
+          c.conductores_estados?.codigo?.toLowerCase() === "activo"
         );
+        const conductoresActivosIds = conductoresActivos.map((c: any) => c.id);
+
+        // Obtener todas las asignaciones de vehículos en una sola query
+        let asignacionesMap = new Map();
+        if (conductoresActivosIds.length > 0) {
+          const { data: asignaciones } = await supabase
+            .from("asignaciones_conductores")
+            .select(`
+              conductor_id,
+              estado,
+              asignaciones!inner (
+                vehiculo_id,
+                vehiculos (
+                  patente,
+                  marca,
+                  modelo
+                )
+              )
+            `)
+            .in("conductor_id", conductoresActivosIds)
+            .in("estado", ["asignado", "activo"]);
+
+          // Mapear asignaciones por conductor_id
+          if (asignaciones) {
+            asignaciones.forEach((asig: any) => {
+              if (asig?.asignaciones?.vehiculos) {
+                asignacionesMap.set(asig.conductor_id, asig.asignaciones.vehiculos);
+              }
+            });
+          }
+        }
+
+        // Mapear categorías de licencia
+        const conductoresConRelaciones = data.map((conductor: any) => {
+          const relaciones: any = { ...conductor };
+
+          // Procesar categorías de licencia
+          if (conductor.conductores_licencias_categorias && conductor.conductores_licencias_categorias.length > 0) {
+            relaciones.licencias_categorias = conductor.conductores_licencias_categorias
+              .map((c: any) => c.licencias_categorias)
+              .filter((c: any) => c !== null);
+          }
+
+          // Agregar vehículo asignado si existe
+          if (asignacionesMap.has(conductor.id)) {
+            relaciones.vehiculo_asignado = asignacionesMap.get(conductor.id);
+          }
+
+          return relaciones;
+        });
 
         setConductores(conductoresConRelaciones);
       } else {

@@ -92,32 +92,24 @@ export function VehicleManagement() {
     setError('')
 
     try {
+      // ✅ OPTIMIZADO: Una sola query con JOIN (51 queries → 1 query)
       const { data, error: fetchError } = await supabase
         .from('vehiculos')
-        .select('*')
+        .select(`
+          *,
+          vehiculos_estados (
+            id,
+            codigo,
+            descripcion
+          )
+        `)
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
 
-      // Cargar las relaciones manualmente
+      // Los datos ya vienen con las relaciones, no necesitamos hacer más queries
       if (data && data.length > 0) {
-        const vehiculosConRelaciones = await Promise.all(
-          data.map(async (vehiculo: any) => {
-            const relaciones: any = { ...vehiculo }
-
-
-            if (vehiculo.estado_id) {
-              const { data: estado } = await supabase.from('vehiculos_estados').select('id, codigo, descripcion').eq('id', vehiculo.estado_id).single()
-              relaciones.vehiculos_estados = estado
-            }
-
-
-
-            return relaciones
-          })
-        )
-
-        setVehiculos(vehiculosConRelaciones)
+        setVehiculos(data as VehiculoWithRelations[])
       } else {
         setVehiculos([])
       }

@@ -73,6 +73,8 @@ export function AsignacionesModule() {
   const loadAsignaciones = async () => {
     try {
       setLoading(true)
+
+      // ✅ OPTIMIZADO: Una sola query con todos los JOINs (31 queries → 1 query)
       const { data, error } = await supabase
         .from('asignaciones')
         .select(`
@@ -86,6 +88,19 @@ export function AsignacionesModule() {
             nombres,
             apellidos,
             numero_licencia
+          ),
+          asignaciones_conductores (
+            id,
+            conductor_id,
+            estado,
+            horario,
+            confirmado,
+            fecha_confirmacion,
+            conductores (
+              nombres,
+              apellidos,
+              numero_licencia
+            )
           )
         `)
         .order('created_at', { ascending: false })
@@ -95,37 +110,8 @@ export function AsignacionesModule() {
         throw error
       }
 
-      // Cargar conductores asignados por separado
-      if (data && data.length > 0) {
-        const asignacionesConConductores = await Promise.all(
-          data.map(async (asignacion: any) => {
-            const { data: conductoresAsignados } = await supabase
-              .from('asignaciones_conductores')
-              .select(`
-                id,
-                conductor_id,
-                estado,
-                horario,
-                confirmado,
-                fecha_confirmacion,
-                conductores (
-                  nombres,
-                  apellidos,
-                  numero_licencia
-                )
-              `)
-              .eq('asignacion_id', asignacion.id)
-
-            return {
-              ...asignacion,
-              asignaciones_conductores: conductoresAsignados || []
-            }
-          })
-        )
-        setAsignaciones(asignacionesConConductores)
-      } else {
-        setAsignaciones(data || [])
-      }
+      // Los datos ya vienen completos con todas las relaciones
+      setAsignaciones(data || [])
     } catch (error: any) {
       console.error('Error loading asignaciones:', error)
       Swal.fire('Error', error.message || 'Error al cargar las asignaciones', 'error')

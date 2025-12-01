@@ -21,6 +21,7 @@ export function CabifyModule() {
 
   // Search state
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -57,6 +58,15 @@ export function CabifyModule() {
       loadData()
     }
   }, [selectedWeek])
+
+  // Debounce search term (300ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   const loadData = async () => {
     if (!selectedWeek) {
@@ -166,31 +176,42 @@ export function CabifyModule() {
     }
   }
 
-  // Filter drivers based on search term
+  // Pre-calculate search index (O(n) once per drivers change)
+  // Crea un índice con todo el texto buscable de cada conductor
+  const searchIndex = useMemo(() => {
+    return new Map(
+      drivers.map((driver) => {
+        // Concatenar todos los campos buscables en un solo string
+        const searchableText = [
+          driver.name,
+          driver.surname,
+          driver.email,
+          driver.nationalIdNumber,
+          driver.mobileNum,
+          driver.vehiculo,
+          driver.vehicleRegPlate,
+          driver.driverLicense
+        ]
+          .filter(Boolean) // Eliminar valores null/undefined
+          .join(' ')
+          .toLowerCase()
+
+        return [driver.id, searchableText]
+      })
+    )
+  }, [drivers])
+
+  // Filter drivers based on debounced search term (O(n) con 1 comparación por conductor)
   const filteredDrivers = useMemo(() => {
-    if (!searchTerm.trim()) return drivers
+    if (!debouncedSearch.trim()) return drivers
 
-    const term = searchTerm.toLowerCase()
+    const term = debouncedSearch.toLowerCase()
+
     return drivers.filter((driver) => {
-      const fullName = `${driver.name} ${driver.surname}`.toLowerCase()
-      const email = (driver.email || '').toLowerCase()
-      const dni = (driver.nationalIdNumber || '').toString().toLowerCase()
-      const phone = (driver.mobileNum || '').toString().toLowerCase()
-      const vehicle = (driver.vehiculo || '').toLowerCase()
-      const plate = (driver.vehicleRegPlate || '').toLowerCase()
-      const license = (driver.driverLicense || '').toLowerCase()
-
-      return (
-        fullName.includes(term) ||
-        email.includes(term) ||
-        dni.includes(term) ||
-        phone.includes(term) ||
-        vehicle.includes(term) ||
-        plate.includes(term) ||
-        license.includes(term)
-      )
+      const searchableText = searchIndex.get(driver.id)
+      return searchableText?.includes(term) || false
     })
-  }, [drivers, searchTerm])
+  }, [drivers, debouncedSearch, searchIndex])
 
   // Calculate pagination values
   const totalPages = Math.ceil(filteredDrivers.length / itemsPerPage)
