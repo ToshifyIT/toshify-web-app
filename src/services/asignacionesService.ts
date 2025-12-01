@@ -51,8 +51,8 @@ class AsignacionesService {
       const asignacionesMap = new Map<string, AsignacionActiva>()
 
       if (data && data.length > 0) {
-        for (const record of data) {
-          const conductor = (record.conductores as any)
+        for (const record of (data as any[])) {
+          const conductor = record.conductores
 
           if (conductor && conductor.numero_dni) {
             asignacionesMap.set(conductor.numero_dni, {

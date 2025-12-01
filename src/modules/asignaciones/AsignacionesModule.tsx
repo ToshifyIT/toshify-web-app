@@ -255,7 +255,7 @@ export function AsignacionesModule() {
 
   // Expandir asignaciones TURNO en filas separadas (una por conductor)
   // A CARGO se mantiene en una sola fila
-  const expandedAsignaciones = filteredAsignaciones.flatMap(asignacion => {
+  const expandedAsignaciones = filteredAsignaciones.flatMap((asignacion): any => {
     // Si es A CARGO, retornar una sola fila
     if (asignacion.horario === 'CARGO') {
       return [{
@@ -991,7 +991,7 @@ export function AsignacionesModule() {
                 </tr>
               </thead>
               <tbody>
-                {expandedAsignaciones.map((row, index) => (
+                {expandedAsignaciones.map((row: any, index) => (
                   <tr key={`${row.id}-${index}`}>
                     <td>
                       <strong>{row.codigo || 'N/A'}</strong>
@@ -1020,7 +1020,7 @@ export function AsignacionesModule() {
                         </span>
                       ) : row.horario === 'CARGO' && row.asignaciones_conductores && row.asignaciones_conductores.length > 0 ? (
                         <div className="conductores-list">
-                          {row.asignaciones_conductores.map((ac) => (
+                          {row.asignaciones_conductores.map((ac: any) => (
                             <span key={ac.id} className="conductor-item">
                               {ac.conductores.nombres} {ac.conductores.apellidos}
                             </span>
