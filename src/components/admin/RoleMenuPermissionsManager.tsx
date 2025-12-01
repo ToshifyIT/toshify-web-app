@@ -1,7 +1,8 @@
 // src/components/admin/RoleMenuPermissionsManager.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Check } from 'lucide-react'
+import { Check, AlertTriangle, Shield } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import type { Role, Menu, Submenu } from '../../types/database.types'
 import {
   useReactTable,
@@ -13,6 +14,18 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
+import {
+  UUIDSchema,
+  SearchTermSchema,
+  PermissionFieldSchema,
+  sanitizeHTML,
+  sanitizeObject,
+  devLog,
+  handleDatabaseError,
+  checkPermission,
+  rateLimiter
+} from '../../utils/security'
+import { z } from 'zod'
 
 interface RoleMenuPermission {
   role_id: string
@@ -51,6 +64,13 @@ interface PermissionRow {
 }
 
 export function RoleMenuPermissionsManager() {
+  // =====================================================
+  // AUTENTICACIÓN Y AUTORIZACIÓN
+  // =====================================================
+  const { user, profile } = useAuth()
+  const [authError, setAuthError] = useState<string>('')
+
+  // Estados
   const [roles, setRoles] = useState<Role[]>([])
   const [menus, setMenus] = useState<Menu[]>([])
   const [submenus, setSubmenus] = useState<Submenu[]>([])
@@ -63,6 +83,19 @@ export function RoleMenuPermissionsManager() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [roleSearchTerm, setRoleSearchTerm] = useState('')
   const [showRoleDropdown, setShowRoleDropdown] = useState(false)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+
+  // =====================================================
+  // VERIFICACIÓN DE PERMISOS
+  // =====================================================
+  useEffect(() => {
+    const permissionCheck = checkPermission(profile?.roles?.name, 'manage_permissions')
+
+    if (!permissionCheck.hasPermission) {
+      setAuthError(permissionCheck.reason || 'No tienes permisos para acceder a esta sección')
+      setLoading(false)
+    }
+  }, [profile])
 
   useEffect(() => {
     loadData()
@@ -75,33 +108,49 @@ export function RoleMenuPermissionsManager() {
   }, [selectedRole])
 
   const loadData = async () => {
+    if (authError) return // No cargar si no tiene permisos
+
     setLoading(true)
     try {
       // Cargar roles
-      const { data: rolesData } = await supabase
+      const { data: rolesData, error: rolesError } = await supabase
         .from('roles')
         .select('*')
         .order('name')
 
+      if (rolesError) throw rolesError
+
       // Cargar menús
-      const { data: menusData } = await supabase
+      const { data: menusData, error: menusError } = await supabase
         .from('menus')
         .select('*')
         .eq('is_active', true)
         .order('order_index')
 
+      if (menusError) throw menusError
+
       // Cargar submenús
-      const { data: submenusData } = await supabase
+      const { data: submenusData, error: submenusError } = await supabase
         .from('submenus')
         .select('*, menus(name)')
         .eq('is_active', true)
         .order('order_index')
 
-      setRoles(rolesData || [])
-      setMenus(menusData || [])
-      setSubmenus(submenusData || [])
+      if (submenusError) throw submenusError
+
+      // Sanitizar datos antes de guardar en estado
+      setRoles((rolesData || []).map(role => sanitizeObject(role)))
+      setMenus((menusData || []).map(menu => sanitizeObject(menu)))
+      setSubmenus((submenusData || []).map(submenu => sanitizeObject(submenu)))
+
+      devLog.info('✅ Datos cargados correctamente')
     } catch (err) {
-      console.error('Error cargando datos:', err)
+      const safeError = handleDatabaseError(err)
+      devLog.error('Error cargando datos:', safeError.logMessage)
+      setNotification({
+        type: 'error',
+        message: safeError.userMessage
+      })
     } finally {
       setLoading(false)
     }
@@ -109,7 +158,9 @@ export function RoleMenuPermissionsManager() {
 
   const loadRolePermissions = async (roleId: string) => {
     try {
-      console.log('📥 Cargando permisos para rol:', roleId)
+      // Validar UUID del rol
+      const validatedRoleId = UUIDSchema.parse(roleId)
+      devLog.info('📥 Cargando permisos para rol:', validatedRoleId)
 
       // Cargar permisos de menú del rol
       const { data: menuPermsData, error: menuError } = await supabase
@@ -127,11 +178,9 @@ export function RoleMenuPermissionsManager() {
             label
           )
         `)
-        .eq('role_id', roleId)
+        .eq('role_id', validatedRoleId)
 
-      if (menuError) {
-        console.error('Error cargando permisos de menú:', menuError)
-      }
+      if (menuError) throw menuError
 
       // Cargar permisos de submenú del rol
       const { data: submenuPermsData, error: submenuError } = await supabase
@@ -149,14 +198,12 @@ export function RoleMenuPermissionsManager() {
             label
           )
         `)
-        .eq('role_id', roleId)
+        .eq('role_id', validatedRoleId)
 
-      if (submenuError) {
-        console.error('Error cargando permisos de submenú:', submenuError)
-      }
+      if (submenuError) throw submenuError
 
-      // Transformar datos
-      const formattedMenuPerms = (menuPermsData || []).map((p: any) => ({
+      // Transformar y sanitizar datos
+      const formattedMenuPerms = (menuPermsData || []).map((p: any) => sanitizeObject({
         role_id: p.role_id,
         menu_id: p.menu_id,
         menu_name: p.menus?.name || '',
@@ -167,7 +214,7 @@ export function RoleMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
-      const formattedSubmenuPerms = (submenuPermsData || []).map((p: any) => ({
+      const formattedSubmenuPerms = (submenuPermsData || []).map((p: any) => sanitizeObject({
         role_id: p.role_id,
         submenu_id: p.submenu_id,
         submenu_name: p.submenus?.name || '',
@@ -178,13 +225,28 @@ export function RoleMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
-      console.log('✅ Permisos de menú cargados:', formattedMenuPerms)
-      console.log('✅ Permisos de submenú cargados:', formattedSubmenuPerms)
+      devLog.info('✅ Permisos cargados:', {
+        menus: formattedMenuPerms.length,
+        submenus: formattedSubmenuPerms.length
+      })
 
       setMenuPermissions(formattedMenuPerms)
       setSubmenuPermissions(formattedSubmenuPerms)
     } catch (err) {
-      console.error('❌ Error cargando permisos:', err)
+      if (err instanceof z.ZodError) {
+        devLog.error('❌ ID de rol inválido:', err.issues)
+        setNotification({
+          type: 'error',
+          message: 'ID de rol inválido'
+        })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('❌ Error cargando permisos:', safeError.logMessage)
+        setNotification({
+          type: 'error',
+          message: safeError.userMessage
+        })
+      }
     }
   }
 
@@ -192,61 +254,124 @@ export function RoleMenuPermissionsManager() {
     menuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
+    // =====================================================
+    // VALIDACIONES DE SEGURIDAD
+    // =====================================================
+
+    // 1. Verificar que hay un rol seleccionado
     if (!selectedRole) {
-      console.log('⚠️ No hay rol seleccionado')
+      devLog.warn('⚠️ No hay rol seleccionado')
+      setNotification({
+        type: 'error',
+        message: 'Debes seleccionar un rol primero'
+      })
       return
     }
 
-    console.log('🔄 Toggling menu permission:', { menuId, field, selectedRole })
+    // 2. Rate limiting (prevenir spam)
+    const rateLimitKey = `toggle_menu_${user?.id}_${selectedRole}`
+    if (!rateLimiter.check(rateLimitKey)) {
+      setNotification({
+        type: 'error',
+        message: 'Demasiados cambios. Por favor, espera un momento.'
+      })
+      return
+    }
 
     setSaving(true)
     try {
-      const existingPerm = menuPermissions.find(p => p.menu_id === menuId)
-      const newValue = existingPerm ? !existingPerm[field] : true
+      // 3. Validar UUIDs
+      const validatedRoleId = UUIDSchema.parse(selectedRole)
+      const validatedMenuId = UUIDSchema.parse(menuId)
+      const validatedField = PermissionFieldSchema.parse(field)
 
-      console.log('📝 Estado actual:', existingPerm)
-      console.log('✨ Nuevo valor:', newValue)
+      devLog.info('🔄 Toggling menu permission:', {
+        menuId: validatedMenuId,
+        field: validatedField,
+        roleId: validatedRoleId
+      })
+
+      const existingPerm = menuPermissions.find(p => p.menu_id === validatedMenuId)
+      const newValue = existingPerm ? !existingPerm[validatedField] : true
 
       if (existingPerm) {
         // Actualizar permiso existente
-        console.log('🔧 Actualizando permiso existente...')
-        const { data, error } = await supabase
+        devLog.info('🔧 Actualizando permiso existente')
+        const { error } = await supabase
           .from('role_menu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
-          .update({ [field]: newValue })
-          .eq('role_id', selectedRole)
-          .eq('menu_id', menuId)
-          .select()
+          .update({ [validatedField]: newValue })
+          .eq('role_id', validatedRoleId)
+          .eq('menu_id', validatedMenuId)
 
-        console.log('📦 Respuesta update:', { data, error })
         if (error) throw error
       } else {
         // Crear nuevo permiso
-        console.log('➕ Creando nuevo permiso...')
-        const { data, error } = await supabase
+        devLog.info('➕ Creando nuevo permiso')
+        const { error } = await supabase
           .from('role_menu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
-            role_id: selectedRole,
-            menu_id: menuId,
-            can_view: field === 'can_view',
-            can_create: field === 'can_create',
-            can_edit: field === 'can_edit',
-            can_delete: field === 'can_delete'
+            role_id: validatedRoleId,
+            menu_id: validatedMenuId,
+            can_view: validatedField === 'can_view',
+            can_create: validatedField === 'can_create',
+            can_edit: validatedField === 'can_edit',
+            can_delete: validatedField === 'can_delete'
           }])
-          .select()
 
-        console.log('📦 Respuesta insert:', { data, error })
         if (error) throw error
       }
 
-      console.log('✅ Permiso actualizado, recargando...')
-      await loadRolePermissions(selectedRole)
-    } catch (err: any) {
-      console.error('❌ Error actualizando permiso:', err)
-      alert('Error: ' + err.message)
+      devLog.info('✅ Permiso actualizado exitosamente')
+
+      // Actualizar el estado local sin recargar desde el servidor
+      setMenuPermissions(prev => {
+        const index = prev.findIndex(p => p.menu_id === validatedMenuId)
+        if (index >= 0) {
+          const updated = [...prev]
+          updated[index] = { ...updated[index], [validatedField]: newValue }
+          return updated
+        } else {
+          // Agregar nuevo permiso al estado
+          const menu = menus.find(m => m.id === validatedMenuId)
+          return [...prev, {
+            role_id: validatedRoleId,
+            menu_id: validatedMenuId,
+            menu_name: menu?.name || '',
+            menu_label: menu?.label || '',
+            can_view: validatedField === 'can_view' ? newValue : false,
+            can_create: validatedField === 'can_create' ? newValue : false,
+            can_edit: validatedField === 'can_edit' ? newValue : false,
+            can_delete: validatedField === 'can_delete' ? newValue : false
+          }]
+        }
+      })
+
+      setNotification({
+        type: 'success',
+        message: 'Permiso actualizado correctamente'
+      })
+
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        devLog.error('❌ Error de validación:', err.issues)
+        setNotification({
+          type: 'error',
+          message: 'Datos inválidos. Por favor, recarga la página.'
+        })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('❌ Error actualizando permiso:', safeError.logMessage)
+        setNotification({
+          type: 'error',
+          message: safeError.userMessage
+        })
+      }
     } finally {
       setSaving(false)
+      // Auto-limpiar notificación después de 3 segundos
+      setTimeout(() => setNotification(null), 3000)
     }
   }
 
@@ -254,59 +379,124 @@ export function RoleMenuPermissionsManager() {
     submenuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
+    // =====================================================
+    // VALIDACIONES DE SEGURIDAD
+    // =====================================================
+
+    // 1. Verificar que hay un rol seleccionado
     if (!selectedRole) {
-      console.log('⚠️ No hay rol seleccionado')
+      devLog.warn('⚠️ No hay rol seleccionado')
+      setNotification({
+        type: 'error',
+        message: 'Debes seleccionar un rol primero'
+      })
       return
     }
 
-    console.log('🔄 Toggling submenu permission:', { submenuId, field, selectedRole })
+    // 2. Rate limiting (prevenir spam)
+    const rateLimitKey = `toggle_submenu_${user?.id}_${selectedRole}`
+    if (!rateLimiter.check(rateLimitKey)) {
+      setNotification({
+        type: 'error',
+        message: 'Demasiados cambios. Por favor, espera un momento.'
+      })
+      return
+    }
 
     setSaving(true)
     try {
-      const existingPerm = submenuPermissions.find(p => p.submenu_id === submenuId)
-      const newValue = existingPerm ? !existingPerm[field] : true
+      // 3. Validar UUIDs
+      const validatedRoleId = UUIDSchema.parse(selectedRole)
+      const validatedSubmenuId = UUIDSchema.parse(submenuId)
+      const validatedField = PermissionFieldSchema.parse(field)
 
-      console.log('📝 Estado actual:', existingPerm)
-      console.log('✨ Nuevo valor:', newValue)
+      devLog.info('🔄 Toggling submenu permission:', {
+        submenuId: validatedSubmenuId,
+        field: validatedField,
+        roleId: validatedRoleId
+      })
+
+      const existingPerm = submenuPermissions.find(p => p.submenu_id === validatedSubmenuId)
+      const newValue = existingPerm ? !existingPerm[validatedField] : true
 
       if (existingPerm) {
-        console.log('🔧 Actualizando permiso existente...')
-        const { data, error } = await supabase
+        // Actualizar permiso existente
+        devLog.info('🔧 Actualizando permiso existente')
+        const { error } = await supabase
           .from('role_submenu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
-          .update({ [field]: newValue })
-          .eq('role_id', selectedRole)
-          .eq('submenu_id', submenuId)
-          .select()
+          .update({ [validatedField]: newValue })
+          .eq('role_id', validatedRoleId)
+          .eq('submenu_id', validatedSubmenuId)
 
-        console.log('📦 Respuesta update:', { data, error })
         if (error) throw error
       } else {
-        console.log('➕ Creando nuevo permiso...')
-        const { data, error } = await supabase
+        // Crear nuevo permiso
+        devLog.info('➕ Creando nuevo permiso')
+        const { error } = await supabase
           .from('role_submenu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
-            role_id: selectedRole,
-            submenu_id: submenuId,
-            can_view: field === 'can_view',
-            can_create: field === 'can_create',
-            can_edit: field === 'can_edit',
-            can_delete: field === 'can_delete'
+            role_id: validatedRoleId,
+            submenu_id: validatedSubmenuId,
+            can_view: validatedField === 'can_view',
+            can_create: validatedField === 'can_create',
+            can_edit: validatedField === 'can_edit',
+            can_delete: validatedField === 'can_delete'
           }])
-          .select()
 
-        console.log('📦 Respuesta insert:', { data, error })
         if (error) throw error
       }
 
-      console.log('✅ Permiso actualizado, recargando...')
-      await loadRolePermissions(selectedRole)
-    } catch (err: any) {
-      console.error('❌ Error actualizando permiso:', err)
-      alert('Error: ' + err.message)
+      devLog.info('✅ Permiso actualizado exitosamente')
+
+      // Actualizar el estado local sin recargar desde el servidor
+      setSubmenuPermissions(prev => {
+        const index = prev.findIndex(p => p.submenu_id === validatedSubmenuId)
+        if (index >= 0) {
+          const updated = [...prev]
+          updated[index] = { ...updated[index], [validatedField]: newValue }
+          return updated
+        } else {
+          // Agregar nuevo permiso al estado
+          const submenu = submenus.find(s => s.id === validatedSubmenuId)
+          return [...prev, {
+            role_id: validatedRoleId,
+            submenu_id: validatedSubmenuId,
+            submenu_name: submenu?.name || '',
+            submenu_label: submenu?.label || '',
+            can_view: validatedField === 'can_view' ? newValue : false,
+            can_create: validatedField === 'can_create' ? newValue : false,
+            can_edit: validatedField === 'can_edit' ? newValue : false,
+            can_delete: validatedField === 'can_delete' ? newValue : false
+          }]
+        }
+      })
+
+      setNotification({
+        type: 'success',
+        message: 'Permiso actualizado correctamente'
+      })
+
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        devLog.error('❌ Error de validación:', err.issues)
+        setNotification({
+          type: 'error',
+          message: 'Datos inválidos. Por favor, recarga la página.'
+        })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('❌ Error actualizando permiso:', safeError.logMessage)
+        setNotification({
+          type: 'error',
+          message: safeError.userMessage
+        })
+      }
     } finally {
       setSaving(false)
+      // Auto-limpiar notificación después de 3 segundos
+      setTimeout(() => setNotification(null), 3000)
     }
   }
 
@@ -510,6 +700,7 @@ export function RoleMenuPermissionsManager() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    autoResetPageIndex: false, // Evitar que la paginación se reinicie al actualizar datos
     initialState: {
       pagination: {
         pageSize: 10,
@@ -519,14 +710,40 @@ export function RoleMenuPermissionsManager() {
 
   const selectedRoleData = roles.find(r => r.id === selectedRole)
 
-  // Filtrar roles según búsqueda
-  const filteredRoles = roles.filter(role =>
-    role.name.toLowerCase().includes(roleSearchTerm.toLowerCase()) ||
-    (role.description && role.description.toLowerCase().includes(roleSearchTerm.toLowerCase()))
-  )
+  // Filtrar roles según búsqueda (con validación)
+  const filteredRoles = useMemo(() => {
+    try {
+      const sanitizedSearch = SearchTermSchema.parse(roleSearchTerm).toLowerCase()
+      return roles.filter(role =>
+        role.name.toLowerCase().includes(sanitizedSearch) ||
+        (role.description && role.description.toLowerCase().includes(sanitizedSearch))
+      )
+    } catch {
+      // Si la búsqueda es inválida, retornar todos los roles
+      return roles
+    }
+  }, [roles, roleSearchTerm])
 
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>
+  }
+
+  // Mostrar error de autorización si no tiene permisos
+  if (authError) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <Shield size={64} style={{ margin: '0 auto 20px', color: '#EF4444' }} />
+        <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#1F2937', marginBottom: '12px' }}>
+          Acceso Denegado
+        </h2>
+        <p style={{ fontSize: '16px', color: '#6B7280', marginBottom: '20px' }}>
+          {authError}
+        </p>
+        <p style={{ fontSize: '14px', color: '#9CA3AF' }}>
+          Si crees que deberías tener acceso a esta sección, contacta a tu administrador.
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -791,7 +1008,63 @@ export function RoleMenuPermissionsManager() {
           font-size: 64px;
           margin-bottom: 16px;
         }
+
+        .notification {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          padding: 16px 24px;
+          border-radius: 8px;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          z-index: 9999;
+          animation: slideIn 0.3s ease-out;
+          max-width: 400px;
+        }
+
+        @keyframes slideIn {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        .notification.success {
+          background: #10B981;
+          color: white;
+        }
+
+        .notification.error {
+          background: #EF4444;
+          color: white;
+        }
+
+        .notification-message {
+          flex: 1;
+          font-size: 14px;
+          font-weight: 500;
+        }
       `}</style>
+
+      {/* Notificación flotante */}
+      {notification && (
+        <div className={`notification ${notification.type}`}>
+          {notification.type === 'success' ? (
+            <Check size={20} />
+          ) : (
+            <AlertTriangle size={20} />
+          )}
+          <div className="notification-message">
+            {notification.message}
+          </div>
+        </div>
+      )}
 
       <div className="permissions-container">
         {/* Header */}
@@ -813,7 +1086,7 @@ export function RoleMenuPermissionsManager() {
             <input
               type="text"
               className="select-input"
-              placeholder={selectedRoleData ? `${selectedRoleData.name} - ${selectedRoleData.description || 'Sin descripción'}` : 'Buscar y seleccionar rol...'}
+              placeholder={selectedRoleData ? `${sanitizeHTML(selectedRoleData.name)} - ${sanitizeHTML(selectedRoleData.description || 'Sin descripción')}` : 'Buscar y seleccionar rol...'}
               value={roleSearchTerm}
               onChange={(e) => setRoleSearchTerm(e.target.value)}
               onFocus={() => setShowRoleDropdown(true)}
@@ -837,10 +1110,10 @@ export function RoleMenuPermissionsManager() {
                       }}
                     >
                       <div style={{ fontWeight: 600, marginBottom: '2px', textTransform: 'capitalize' }}>
-                        {role.name}
+                        {sanitizeHTML(role.name)}
                       </div>
                       <div style={{ fontSize: '13px', color: '#6B7280' }}>
-                        {role.description || 'Sin descripción'}
+                        {sanitizeHTML(role.description || 'Sin descripción')}
                       </div>
                     </div>
                   ))
@@ -857,10 +1130,10 @@ export function RoleMenuPermissionsManager() {
               </svg>
               <div>
                 <div style={{ fontWeight: 600, color: '#1F2937', fontSize: '14px', textTransform: 'capitalize' }}>
-                  {selectedRoleData.name}
+                  {sanitizeHTML(selectedRoleData.name)}
                 </div>
                 <div style={{ fontSize: '13px', color: '#6B7280' }}>
-                  {selectedRoleData.description || 'Sin descripción'}
+                  {sanitizeHTML(selectedRoleData.description || 'Sin descripción')}
                 </div>
               </div>
             </div>

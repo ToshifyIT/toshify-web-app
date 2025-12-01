@@ -57,9 +57,10 @@ export function InventarioDashboardModule() {
   })
 
   // Calcular totales generales
+  // Stock Total = Disponible + En Uso + En Tránsito (NO incluye dañado ni perdido)
   const totales = filteredData.reduce(
     (acc, item) => ({
-      total: acc.total + item.stock_total,
+      total: acc.total + item.disponible + item.en_uso + item.en_transito,
       disponible: acc.disponible + item.disponible,
       en_uso: acc.en_uso + item.en_uso,
       en_transito: acc.en_transito + item.en_transito,

@@ -1,10 +1,11 @@
 // src/modules/integraciones/cabify/CabifyModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { RefreshCw, Search, Database } from 'lucide-react'
+import { RefreshCw, Search } from 'lucide-react'
 import { cabifyService } from '../../../services/cabifyService'
+import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService'
+import { asignacionesService, type AsignacionActiva } from '../../../services/asignacionesService'
 import type { CabifyQueryState } from '../../../types/cabify.types'
 import Swal from 'sweetalert2'
-import { supabase } from '../../../lib/supabase'
 
 export function CabifyModule() {
   const [drivers, setDrivers] = useState<any[]>([])
@@ -14,11 +15,13 @@ export function CabifyModule() {
     lastUpdate: null,
     period: 'custom'
   })
-  const [isDataFromHistory, setIsDataFromHistory] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0, message: '' })
+  const [dataSource, setDataSource] = useState<'historical' | 'api' | 'hybrid'>('historical')
+  const [asignaciones, setAsignaciones] = useState<Map<string, AsignacionActiva>>(new Map())
 
   // Search state
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -56,6 +59,15 @@ export function CabifyModule() {
     }
   }, [selectedWeek])
 
+  // Debounce search term (300ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
   const loadData = async () => {
     if (!selectedWeek) {
       console.log('⚠️ No hay semana seleccionada')
@@ -64,116 +76,43 @@ export function CabifyModule() {
 
     try {
       setQueryState(prev => ({ ...prev, loading: true, error: null }))
+      setDrivers([])
+      setLoadingProgress({ current: 0, total: 0, message: '' })
 
       console.log('🔄 Cargando datos de conductores...')
       console.log(`📅 Semana seleccionada: ${selectedWeek.label}`)
       console.log(`📅 Rango: ${selectedWeek.startDate} - ${selectedWeek.endDate}`)
 
-      // PASO 1: Intentar cargar desde el historial primero
-      console.log('📊 Consultando tabla cabify_historico...')
-      const { data: historicalData, error: dbError } = await supabase
-        .from('cabify_historico')
-        .select('*')
-        .eq('fecha_inicio', selectedWeek.startDate)
-        .eq('fecha_fin', selectedWeek.endDate)
-
-      if (dbError) {
-        console.warn('⚠️ Error consultando historial:', dbError)
-      }
-
-      // Si hay datos en el historial, usarlos
-      if (historicalData && historicalData.length > 0) {
-        console.log(`✅ Datos encontrados en historial: ${historicalData.length} conductores`)
-        setIsDataFromHistory(true)
-
-        // Mapear datos del historial al formato del frontend
-        const mappedData = historicalData.map((record: any) => ({
-          id: record.cabify_driver_id,
-          companyId: record.cabify_company_id,
-          companyName: record.cabify_company_id,
-          name: record.nombre,
-          surname: record.apellido,
-          email: record.email,
-          nationalIdNumber: record.dni,
-          mobileNum: record.telefono_numero,
-          mobileCc: record.telefono_codigo,
-          driverLicense: record.licencia,
-          assetId: record.vehiculo_id,
-          vehicleMake: record.vehiculo_marca,
-          vehicleModel: record.vehiculo_modelo,
-          vehicleRegPlate: record.vehiculo_patente,
-          vehiculo: record.vehiculo_completo,
-          score: record.score,
-          viajesAceptados: record.viajes_aceptados,
-          viajesPerdidos: record.viajes_perdidos,
-          viajesOfrecidos: record.viajes_ofrecidos,
-          viajesFinalizados: record.viajes_finalizados,
-          viajesRechazados: record.viajes_rechazados,
-          tasaAceptacion: record.tasa_aceptacion,
-          horasConectadas: record.horas_conectadas,
-          horasConectadasFormato: record.horas_conectadas_formato,
-          tasaOcupacion: record.tasa_ocupacion,
-          cobroEfectivo: record.cobro_efectivo,
-          cobroApp: record.cobro_app,
-          gananciaTotal: record.ganancia_total,
-          gananciaPorHora: record.ganancia_por_hora,
-          peajes: record.peajes,
-          permisoEfectivo: record.permiso_efectivo,
-          disabled: record.estado_conductor === 'Inactivo',
-          activatedAt: null
-        }))
-
-        setDrivers(mappedData)
-        setCurrentPage(1)
-        setQueryState(prev => ({
-          ...prev,
-          loading: false,
-          lastUpdate: new Date(),
-          error: null
-        }))
-
-        Swal.fire({
-          icon: 'success',
-          title: 'Datos desde historial',
-          html: `
-            📊 ${mappedData.length} conductores cargados<br>
-            <small>Semana: ${selectedWeek.label}</small>
-          `,
-          timer: 2000,
-          showConfirmButton: false
-        })
-
-        return
-      }
-
-      // PASO 2: Si no hay datos en historial, consultar API de Cabify con streaming en tiempo real
-      console.log('🌐 No hay datos en historial, consultando API de Cabify con carga en tiempo real...')
-      setIsDataFromHistory(false)
-
-      // IMPORTANTE: Limpiar drivers antes de empezar para que se vea el progreso incremental
-      setDrivers([])
-      setLoadingProgress({ current: 0, total: 0, message: '' })
-
-      const data = await cabifyService.getDriversWithDetails(
-        'custom',
+      // Usar servicio histórico inteligente (consulta BD primero, API solo si es necesario)
+      const { drivers: driverData, stats } = await cabifyHistoricalService.getDriversData(
+        selectedWeek.startDate,
+        selectedWeek.endDate,
         {
-          startDate: selectedWeek.startDate,
-          endDate: selectedWeek.endDate
-        },
-        // Callback de progreso para streaming en tiempo real
-        (current, total, newDrivers, message) => {
-          setLoadingProgress({ current, total, message })
-          // Ir mostrando resultados a medida que llegan (STREAMING)
-          if (newDrivers && newDrivers.length > 0) {
-            setDrivers(prev => [...prev, ...newDrivers])
+          onProgress: (current, total, message) => {
+            setLoadingProgress({ current, total, message })
           }
         }
       )
 
-      console.log('✅ Conductores recibidos desde API:', data.length)
-      // NO sobrescribir - los datos ya están en el state por el callback incremental
+      console.log(`✅ Datos cargados desde ${stats.source}:`, driverData.length, 'conductores')
+      console.log('📊 Estadísticas:', stats)
+
+      setDrivers(driverData)
+      setDataSource(stats.source)
       setCurrentPage(1)
       setLoadingProgress({ current: 0, total: 0, message: '' })
+
+      // Cruzar con asignaciones del sistema por DNI (en batch para mejor performance)
+      console.log('🔄 Consultando asignaciones activas por DNI...')
+      const dnis = driverData
+        .map(d => d.nationalIdNumber)
+        .filter(dni => dni && dni.trim().length > 0)
+
+      if (dnis.length > 0) {
+        const asignacionesMap = await asignacionesService.getAsignacionesByDNIs(dnis)
+        setAsignaciones(asignacionesMap)
+        console.log(`✅ ${asignacionesMap.size} conductores con asignación activa`)
+      }
       setQueryState(prev => ({
         ...prev,
         loading: false,
@@ -181,15 +120,43 @@ export function CabifyModule() {
         error: null
       }))
 
+      // Mostrar mensaje según la fuente de datos
+      const sourceMessages = {
+        historical: {
+          icon: 'success' as const,
+          title: 'Datos desde historial',
+          html: `
+            📊 ${driverData.length} conductores cargados desde la base de datos<br>
+            <small>Semana: ${selectedWeek.label}</small><br>
+            <small style="color: #059669;">⚡ Consulta instantánea (${stats.executionTimeMs}ms)</small>
+          `,
+          timer: 2000
+        },
+        api: {
+          icon: 'info' as const,
+          title: 'Datos desde API Cabify',
+          html: `
+            🌐 ${driverData.length} conductores cargados desde Cabify<br>
+            <small>Semana: ${selectedWeek.label}</small><br>
+            <small style="color: #7C3AED;">💾 Guardado automáticamente en historial</small>
+          `,
+          timer: 3000
+        },
+        hybrid: {
+          icon: 'success' as const,
+          title: 'Datos combinados',
+          html: `
+            🔄 ${driverData.length} conductores cargados<br>
+            <small>📊 ${stats.historicalRecords} desde historial + 🌐 ${stats.apiRecords} desde API</small><br>
+            <small>Semana: ${selectedWeek.label}</small>
+          `,
+          timer: 3000
+        }
+      }
+
+      const message = sourceMessages[stats.source]
       Swal.fire({
-        icon: 'success',
-        title: 'Datos desde API Cabify',
-        html: `
-          🌐 ${data.length} conductores cargados en tiempo real<br>
-          <small>Semana: ${selectedWeek.label}</small><br>
-          <small style="color: #F59E0B;">💡 Puedes sincronizar estos datos para consultas futuras</small>
-        `,
-        timer: 3000,
+        ...message,
         showConfirmButton: false
       })
 
@@ -209,162 +176,42 @@ export function CabifyModule() {
     }
   }
 
-  const sincronizarHistorial = async () => {
-    if (!selectedWeek) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Advertencia',
-        text: 'Primero selecciona una semana'
+  // Pre-calculate search index (O(n) once per drivers change)
+  // Crea un índice con todo el texto buscable de cada conductor
+  const searchIndex = useMemo(() => {
+    return new Map(
+      drivers.map((driver) => {
+        // Concatenar todos los campos buscables en un solo string
+        const searchableText = [
+          driver.name,
+          driver.surname,
+          driver.email,
+          driver.nationalIdNumber,
+          driver.mobileNum,
+          driver.vehiculo,
+          driver.vehicleRegPlate,
+          driver.driverLicense
+        ]
+          .filter(Boolean) // Eliminar valores null/undefined
+          .join(' ')
+          .toLowerCase()
+
+        return [driver.id, searchableText]
       })
-      return
-    }
+    )
+  }, [drivers])
 
-    if (drivers.length === 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Sin datos',
-        text: 'No hay conductores cargados para sincronizar'
-      })
-      return
-    }
-
-    try {
-      // Confirmar con el usuario
-      const result = await Swal.fire({
-        icon: 'question',
-        title: 'Sincronizar con historial',
-        html: `
-          ¿Guardar los datos de <strong>${drivers.length} conductores</strong> en el historial?<br>
-          <small>Semana: ${selectedWeek.label}</small>
-        `,
-        showCancelButton: true,
-        confirmButtonText: 'Sí, guardar',
-        cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#7C3AED'
-      })
-
-      if (!result.isConfirmed) return
-
-      // Mostrar loading
-      Swal.fire({
-        title: 'Sincronizando...',
-        html: 'Guardando datos en el historial',
-        allowOutsideClick: false,
-        didOpen: () => {
-          Swal.showLoading()
-        }
-      })
-
-      // Obtener el token de sesión
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (!session) {
-        throw new Error('No hay sesión activa')
-      }
-
-      // Mapear los drivers al formato de la tabla cabify_historico
-      const historyData = drivers.map(driver => ({
-        cabify_driver_id: driver.id,
-        cabify_company_id: driver.companyId,
-        nombre: driver.name,
-        apellido: driver.surname,
-        email: driver.email,
-        dni: driver.nationalIdNumber,
-        licencia: driver.driverLicense,
-        telefono_codigo: driver.mobileCc,
-        telefono_numero: driver.mobileNum,
-        vehiculo_id: driver.assetId,
-        vehiculo_patente: driver.vehicleRegPlate,
-        vehiculo_marca: driver.vehicleMake,
-        vehiculo_modelo: driver.vehicleModel,
-        vehiculo_completo: driver.vehiculo,
-        viajes_finalizados: driver.viajesFinalizados,
-        viajes_rechazados: driver.viajesRechazados,
-        viajes_perdidos: driver.viajesPerdidos,
-        viajes_aceptados: driver.viajesAceptados,
-        viajes_ofrecidos: driver.viajesOfrecidos,
-        score: driver.score,
-        tasa_aceptacion: driver.tasaAceptacion,
-        tasa_ocupacion: driver.tasaOcupacion,
-        horas_conectadas: driver.horasConectadas,
-        horas_conectadas_formato: driver.horasConectadasFormato,
-        cobro_efectivo: driver.cobroEfectivo,
-        cobro_app: driver.cobroApp,
-        peajes: driver.peajes,
-        ganancia_total: driver.gananciaTotal,
-        ganancia_por_hora: driver.gananciaPorHora,
-        permiso_efectivo: driver.permisoEfectivo,
-        estado_conductor: driver.disabled ? 'Inactivo' : 'Activo'
-      }))
-
-      // Llamar al Edge Function
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-      const response = await fetch(`${supabaseUrl}/functions/v1/save-cabify-history`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          drivers: historyData,
-          startDate: selectedWeek.startDate,
-          endDate: selectedWeek.endDate
-        })
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Error al sincronizar')
-      }
-
-      const responseData = await response.json()
-
-      // Mostrar éxito
-      Swal.fire({
-        icon: 'success',
-        title: 'Sincronizado',
-        html: `
-          ✅ ${responseData.message}<br>
-          <small>Semana: ${selectedWeek.label}</small>
-        `,
-        confirmButtonColor: '#7C3AED'
-      })
-
-    } catch (error: any) {
-      console.error('❌ Error al sincronizar:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || 'No se pudo sincronizar con el historial'
-      })
-    }
-  }
-
-  // Filter drivers based on search term
+  // Filter drivers based on debounced search term (O(n) con 1 comparación por conductor)
   const filteredDrivers = useMemo(() => {
-    if (!searchTerm.trim()) return drivers
+    if (!debouncedSearch.trim()) return drivers
 
-    const term = searchTerm.toLowerCase()
+    const term = debouncedSearch.toLowerCase()
+
     return drivers.filter((driver) => {
-      const fullName = `${driver.name} ${driver.surname}`.toLowerCase()
-      const email = (driver.email || '').toLowerCase()
-      const dni = (driver.nationalIdNumber || '').toString().toLowerCase()
-      const phone = (driver.mobileNum || '').toString().toLowerCase()
-      const vehicle = (driver.vehiculo || '').toLowerCase()
-      const plate = (driver.vehicleRegPlate || '').toLowerCase()
-      const license = (driver.driverLicense || '').toLowerCase()
-
-      return (
-        fullName.includes(term) ||
-        email.includes(term) ||
-        dni.includes(term) ||
-        phone.includes(term) ||
-        vehicle.includes(term) ||
-        plate.includes(term) ||
-        license.includes(term)
-      )
+      const searchableText = searchIndex.get(driver.id)
+      return searchableText?.includes(term) || false
     })
-  }, [drivers, searchTerm])
+  }, [drivers, debouncedSearch, searchIndex])
 
   // Calculate pagination values
   const totalPages = Math.ceil(filteredDrivers.length / itemsPerPage)
@@ -394,12 +241,30 @@ export function CabifyModule() {
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', marginBottom: '8px' }}>
             Conductores Cabify
           </h1>
-          <p style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+          <p style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '4px' }}>
             Gestión de conductores y estadísticas de la plataforma Cabify
           </p>
+          <div style={{
+            fontSize: '0.75rem',
+            color: '#059669',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginTop: '4px'
+          }}>
+            <span style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              backgroundColor: '#059669',
+              display: 'inline-block',
+              animation: 'pulse 2s infinite'
+            }} />
+            <strong>Sincronización automática activa</strong> - Datos actualizados cada 5 minutos
+          </div>
           {queryState.lastUpdate && (
             <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '4px' }}>
-              Última actualización: {queryState.lastUpdate.toLocaleString('es-AR')}
+              Última consulta: {queryState.lastUpdate.toLocaleString('es-AR')}
             </p>
           )}
         </div>
@@ -456,31 +321,6 @@ export function CabifyModule() {
           >
             <RefreshCw size={18} className={queryState.loading ? 'animate-spin' : ''} />
             {queryState.loading ? 'Cargando...' : 'Actualizar'}
-          </button>
-
-          {/* Sincronizar con Historial Button */}
-          <button
-            onClick={sincronizarHistorial}
-            disabled={queryState.loading || !selectedWeek || drivers.length === 0 || isDataFromHistory}
-            className="btn-secondary"
-            style={{
-              padding: '8px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              opacity: queryState.loading || !selectedWeek || drivers.length === 0 || isDataFromHistory ? 0.5 : 1,
-              cursor: queryState.loading || !selectedWeek || drivers.length === 0 || isDataFromHistory ? 'not-allowed' : 'pointer',
-              backgroundColor: isDataFromHistory ? '#9CA3AF' : '#7C3AED',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '0.875rem',
-              fontWeight: 600
-            }}
-            title={isDataFromHistory ? 'Esta semana ya está sincronizada' : 'Guardar datos en el historial'}
-          >
-            <Database size={18} />
-            {isDataFromHistory ? 'Ya Sincronizado' : 'Sincronizar con Historial'}
           </button>
         </div>
       </div>
@@ -562,15 +402,32 @@ export function CabifyModule() {
         <>
           {/* Info Card */}
           <div style={{
-            backgroundColor: isDataFromHistory ? '#FEF3C7' : '#ECFDF5',
-            border: isDataFromHistory ? '1px solid #FCD34D' : '1px solid #A7F3D0',
+            backgroundColor: dataSource === 'historical' ? '#ECFDF5' : dataSource === 'api' ? '#EFF6FF' : '#FEF3C7',
+            border: dataSource === 'historical' ? '1px solid #A7F3D0' : dataSource === 'api' ? '1px solid #BFDBFE' : '1px solid #FCD34D',
             borderRadius: '8px',
             padding: '12px 16px',
             marginBottom: '16px',
-            color: isDataFromHistory ? '#92400E' : '#065F46',
-            fontSize: '0.875rem'
+            color: dataSource === 'historical' ? '#065F46' : dataSource === 'api' ? '#1E40AF' : '#92400E',
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
           }}>
-            <strong>{isDataFromHistory ? '📊 Datos desde historial:' : '✅ Conexión exitosa:'}</strong> {drivers.length} conductores {isDataFromHistory ? 'cargados desde la base de datos' : 'desde la API de Cabify'}
+            <strong>
+              {dataSource === 'historical' && '📊 Datos desde historial:'}
+              {dataSource === 'api' && '🌐 Datos desde API Cabify:'}
+              {dataSource === 'hybrid' && '🔄 Datos combinados:'}
+            </strong>
+            <span>
+              {drivers.length} conductores
+              {dataSource === 'historical' && ' (consulta instantánea)'}
+              {dataSource === 'api' && ' (guardado automáticamente)'}
+            </span>
+            {dataSource === 'historical' && (
+              <span style={{ marginLeft: 'auto', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                ⚡ Sincronización automática cada 5 minutos
+              </span>
+            )}
           </div>
 
           {/* Buscador */}
@@ -658,6 +515,7 @@ export function CabifyModule() {
                       'Conductor',
                       'Email',
                       'DNI',
+                      'Estado Sistema',
                       'Licencia',
                       'Teléfono',
                       'Vehículo',
@@ -728,6 +586,48 @@ export function CabifyModule() {
                       {/* DNI */}
                       <td style={{ padding: '12px 16px', fontSize: '14px', color: '#1F2937' }}>
                         {driver.nationalIdNumber || '-'}
+                      </td>
+
+                      {/* Estado Sistema (TURNO/CARGO) */}
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        {(() => {
+                          const asignacion = driver.nationalIdNumber ? asignaciones.get(driver.nationalIdNumber) : null
+
+                          if (!asignacion) {
+                            return (
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                background: '#F3F4F6',
+                                color: '#6B7280',
+                                border: '1px solid #E5E7EB'
+                              }}>
+                                Sin asignación
+                              </span>
+                            )
+                          }
+
+                          const isTurno = asignacion.horario === 'TURNO'
+                          const isCargo = asignacion.horario === 'CARGO'
+
+                          return (
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              background: isTurno ? '#DBEAFE' : isCargo ? '#FEF3C7' : '#F3F4F6',
+                              color: isTurno ? '#1E40AF' : isCargo ? '#92400E' : '#6B7280',
+                              border: `1px solid ${isTurno ? '#BFDBFE' : isCargo ? '#FCD34D' : '#E5E7EB'}`
+                            }}>
+                              {asignacion.horario || 'Desconocido'}
+                            </span>
+                          )
+                        })()}
                       </td>
 
                       {/* Licencia */}

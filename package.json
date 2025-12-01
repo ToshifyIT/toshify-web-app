@@ -7,25 +7,35 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync:cabify": "npx tsx scripts/sync-cabify-historical.ts",
+    "sync:cabify:weekly": "npx tsx scripts/sync-cabify-historical.ts weekly 1",
+    "sync:cabify:backfill": "npx tsx scripts/sync-cabify-historical.ts backfill 12",
+    "sync:cabify:realtime": "npx tsx scripts/sync-cabify-historical.ts realtime",
+    "check:cabify-historico": "npx tsx scripts/check-cabify-historico.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",
     "@tanstack/react-table": "^8.21.3",
+    "axios": "^1.13.2",
+    "dompurify": "^3.3.0",
     "lucide-react": "^0.548.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.4",
-    "sweetalert2": "^11.26.3"
+    "sweetalert2": "^11.26.3",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@tailwindcss/postcss": "^4.1.16",
+    "@types/dompurify": "^3.0.5",
     "@types/node": "^24.9.1",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
+    "dotenv": "^17.2.3",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",

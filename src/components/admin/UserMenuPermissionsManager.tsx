@@ -1,7 +1,8 @@
 // src/components/admin/UserMenuPermissionsManager.tsx
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Check } from 'lucide-react'
+import { Check, AlertTriangle, Shield } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import type { UserWithRole, Menu, Submenu } from '../../types/database.types'
 import {
   useReactTable,
@@ -13,6 +14,18 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
+import {
+  UUIDSchema,
+  SearchTermSchema,
+  PermissionFieldSchema,
+  sanitizeHTML,
+  sanitizeObject,
+  devLog,
+  handleDatabaseError,
+  checkPermission,
+  rateLimiter
+} from '../../utils/security'
+import { z } from 'zod'
 
 interface MenuPermission {
   menu_id: string
@@ -50,18 +63,40 @@ interface PermissionRow {
 }
 
 export function UserMenuPermissionsManager() {
+  // =====================================================
+  // AUTENTICACIÓN Y AUTORIZACIÓN
+  // =====================================================
+  const { user, profile } = useAuth()
+  const [authError, setAuthError] = useState<string>('')
+
+  // Estados
   const [users, setUsers] = useState<UserWithRole[]>([])
   const [menus, setMenus] = useState<Menu[]>([])
   const [submenus, setSubmenus] = useState<Submenu[]>([])
   const [selectedUser, setSelectedUser] = useState<string>('')
   const [menuPermissions, setMenuPermissions] = useState<MenuPermission[]>([])
   const [submenuPermissions, setSubmenuPermissions] = useState<SubmenuPermission[]>([])
+  const [roleMenuPermissions, setRoleMenuPermissions] = useState<MenuPermission[]>([]) // Permisos del rol
+  const [roleSubmenuPermissions, setRoleSubmenuPermissions] = useState<SubmenuPermission[]>([]) // Permisos del rol
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
   const [userSearchTerm, setUserSearchTerm] = useState('')
   const [showUserDropdown, setShowUserDropdown] = useState(false)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+
+  // =====================================================
+  // VERIFICACIÓN DE PERMISOS
+  // =====================================================
+  useEffect(() => {
+    const permissionCheck = checkPermission(profile?.roles?.name, 'manage_permissions')
+
+    if (!permissionCheck.hasPermission) {
+      setAuthError(permissionCheck.reason || 'No tienes permisos para acceder a esta sección')
+      setLoading(false)
+    }
+  }, [profile])
 
   useEffect(() => {
     loadData()
@@ -74,33 +109,49 @@ export function UserMenuPermissionsManager() {
   }, [selectedUser])
 
   const loadData = async () => {
+    if (authError) return // No cargar si no tiene permisos
+
     setLoading(true)
     try {
       // Cargar usuarios
-      const { data: usersData } = await supabase
+      const { data: usersData, error: usersError } = await supabase
         .from('user_profiles')
         .select('*, roles(*)')
         .order('full_name')
 
+      if (usersError) throw usersError
+
       // Cargar menús
-      const { data: menusData } = await supabase
+      const { data: menusData, error: menusError } = await supabase
         .from('menus')
         .select('*')
         .eq('is_active', true)
         .order('order_index')
 
+      if (menusError) throw menusError
+
       // Cargar submenús
-      const { data: submenusData } = await supabase
+      const { data: submenusData, error: submenusError } = await supabase
         .from('submenus')
         .select('*, menus(name)')
         .eq('is_active', true)
         .order('order_index')
 
-      setUsers(usersData as UserWithRole[] || [])
-      setMenus(menusData || [])
-      setSubmenus(submenusData || [])
+      if (submenusError) throw submenusError
+
+      // Sanitizar datos antes de guardar en estado
+      setUsers((usersData as UserWithRole[] || []).map(user => sanitizeObject(user)))
+      setMenus((menusData || []).map(menu => sanitizeObject(menu)))
+      setSubmenus((submenusData || []).map(submenu => sanitizeObject(submenu)))
+
+      devLog.info('✅ Datos cargados correctamente')
     } catch (err) {
-      console.error('Error cargando datos:', err)
+      const safeError = handleDatabaseError(err)
+      devLog.error('Error cargando datos:', safeError.logMessage)
+      setNotification({
+        type: 'error',
+        message: safeError.userMessage
+      })
     } finally {
       setLoading(false)
     }
@@ -108,6 +159,15 @@ export function UserMenuPermissionsManager() {
 
   const loadUserPermissions = async (userId: string) => {
     try {
+      // Validar UUID del usuario
+      const validatedUserId = UUIDSchema.parse(userId)
+
+      // Obtener el rol del usuario
+      const user = users.find(u => u.id === validatedUserId)
+      const userRoleId = user?.role_id
+
+      devLog.info('📥 Cargando permisos para usuario:', validatedUserId, 'con rol:', userRoleId)
+
       // Cargar permisos de menú del usuario desde la tabla correcta
       const { data: menuPermsData, error: menuError } = await supabase
         .from('user_menu_permissions')
@@ -123,11 +183,9 @@ export function UserMenuPermissionsManager() {
             label
           )
         `)
-        .eq('user_id', userId)
+        .eq('user_id', validatedUserId)
 
-      if (menuError) {
-        console.error('Error cargando permisos de menú:', menuError)
-      }
+      if (menuError) throw menuError
 
       // Cargar permisos de submenú del usuario desde la tabla correcta
       const { data: submenuPermsData, error: submenuError } = await supabase
@@ -148,14 +206,65 @@ export function UserMenuPermissionsManager() {
             )
           )
         `)
-        .eq('user_id', userId)
+        .eq('user_id', validatedUserId)
 
-      if (submenuError) {
-        console.error('Error cargando permisos de submenú:', submenuError)
+      if (submenuError) throw submenuError
+
+      // Cargar permisos del ROL del usuario
+      let roleMenuPerms: any[] = []
+      let roleSubmenuPerms: any[] = []
+
+      if (userRoleId) {
+        const validatedRoleId = UUIDSchema.parse(userRoleId)
+        devLog.info('🔐 Cargando permisos del rol:', validatedRoleId)
+
+        // Permisos de menú del rol
+        const { data: roleMenuData, error: roleMenuError } = await supabase
+          .from('role_menu_permissions')
+          .select(`
+            menu_id,
+            can_view,
+            can_create,
+            can_edit,
+            can_delete,
+            menus (
+              id,
+              name,
+              label
+            )
+          `)
+          .eq('role_id', validatedRoleId)
+
+        if (roleMenuError) throw roleMenuError
+        roleMenuPerms = roleMenuData || []
+
+        // Permisos de submenú del rol
+        const { data: roleSubmenuData, error: roleSubmenuError } = await supabase
+          .from('role_submenu_permissions')
+          .select(`
+            submenu_id,
+            can_view,
+            can_create,
+            can_edit,
+            can_delete,
+            submenus (
+              id,
+              name,
+              label,
+              menu_id,
+              menus (
+                name
+              )
+            )
+          `)
+          .eq('role_id', validatedRoleId)
+
+        if (roleSubmenuError) throw roleSubmenuError
+        roleSubmenuPerms = roleSubmenuData || []
       }
 
-      // Transformar los datos al formato esperado
-      const formattedMenuPerms = (menuPermsData || []).map((p: any) => ({
+      // Transformar y sanitizar los datos al formato esperado
+      const formattedMenuPerms = (menuPermsData || []).map((p: any) => sanitizeObject({
         menu_id: p.menu_id,
         menu_name: p.menus?.name || '',
         menu_label: p.menus?.label || '',
@@ -165,7 +274,7 @@ export function UserMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
-      const formattedSubmenuPerms = (submenuPermsData || []).map((p: any) => ({
+      const formattedSubmenuPerms = (submenuPermsData || []).map((p: any) => sanitizeObject({
         submenu_id: p.submenu_id,
         menu_name: p.submenus?.menus?.name || '',
         submenu_name: p.submenus?.name || '',
@@ -176,13 +285,53 @@ export function UserMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
-      console.log('📋 Permisos de menú cargados:', formattedMenuPerms)
-      console.log('📋 Permisos de submenú cargados:', formattedSubmenuPerms)
+      const formattedRoleMenuPerms = roleMenuPerms.map((p: any) => sanitizeObject({
+        menu_id: p.menu_id,
+        menu_name: p.menus?.name || '',
+        menu_label: p.menus?.label || '',
+        can_view: p.can_view,
+        can_create: p.can_create,
+        can_edit: p.can_edit,
+        can_delete: p.can_delete
+      }))
+
+      const formattedRoleSubmenuPerms = roleSubmenuPerms.map((p: any) => sanitizeObject({
+        submenu_id: p.submenu_id,
+        menu_name: p.submenus?.menus?.name || '',
+        submenu_name: p.submenus?.name || '',
+        submenu_label: p.submenus?.label || '',
+        can_view: p.can_view,
+        can_create: p.can_create,
+        can_edit: p.can_edit,
+        can_delete: p.can_delete
+      }))
+
+      devLog.info('✅ Permisos cargados:', {
+        menuPerms: formattedMenuPerms.length,
+        submenuPerms: formattedSubmenuPerms.length,
+        roleMenuPerms: formattedRoleMenuPerms.length,
+        roleSubmenuPerms: formattedRoleSubmenuPerms.length
+      })
 
       setMenuPermissions(formattedMenuPerms)
       setSubmenuPermissions(formattedSubmenuPerms)
+      setRoleMenuPermissions(formattedRoleMenuPerms)
+      setRoleSubmenuPermissions(formattedRoleSubmenuPerms)
     } catch (err) {
-      console.error('❌ Error cargando permisos:', err)
+      if (err instanceof z.ZodError) {
+        devLog.error('❌ Error de validación:', err.issues)
+        setNotification({
+          type: 'error',
+          message: 'Datos inválidos. Por favor, recarga la página.'
+        })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('Error cargando permisos:', safeError.logMessage)
+        setNotification({
+          type: 'error',
+          message: safeError.userMessage
+        })
+      }
     }
   }
 
@@ -190,176 +339,261 @@ export function UserMenuPermissionsManager() {
     menuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
+    // 1. Verificar que hay usuario seleccionado
     if (!selectedUser) {
-      console.log('⚠️ No hay usuario seleccionado')
+      devLog.warn('⚠️ No hay usuario seleccionado')
+      setNotification({
+        type: 'error',
+        message: 'Debes seleccionar un usuario primero'
+      })
       return
     }
 
-    console.log('🔄 Toggling menu permission:', { menuId, field, selectedUser })
+    // 2. Rate limiting
+    const rateLimitKey = `toggle_user_menu_${user?.id}_${selectedUser}`
+    if (!rateLimiter.check(rateLimitKey)) {
+      setNotification({
+        type: 'error',
+        message: 'Demasiados cambios. Por favor, espera un momento.'
+      })
+      return
+    }
 
     setSaving(true)
     try {
-      const existingPerm = menuPermissions.find(p => p.menu_id === menuId)
-      const newValue = existingPerm ? !existingPerm[field] : true
+      // 3. Validar UUIDs
+      const validatedUserId = UUIDSchema.parse(selectedUser)
+      const validatedMenuId = UUIDSchema.parse(menuId)
+      const validatedField = PermissionFieldSchema.parse(field)
 
-      console.log('📝 Estado actual:', existingPerm)
-      console.log('✨ Nuevo valor:', newValue)
+      devLog.info('🔄 Toggling menu permission:', { menuId: validatedMenuId, field: validatedField, userId: validatedUserId })
+
+      const existingPerm = menuPermissions.find(p => p.menu_id === validatedMenuId)
+      const newValue = existingPerm ? !existingPerm[validatedField] : true
 
       if (existingPerm) {
         // Actualizar permiso existente
-        console.log('🔧 Actualizando permiso existente...')
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('user_menu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
-          .update({ [field]: newValue })
-          .eq('user_id', selectedUser)
-          .eq('menu_id', menuId)
-          .select()
+          .update({ [validatedField]: newValue })
+          .eq('user_id', validatedUserId)
+          .eq('menu_id', validatedMenuId)
 
-        console.log('📦 Respuesta update:', { data, error })
         if (error) throw error
       } else {
         // Crear nuevo permiso
-        console.log('➕ Creando nuevo permiso...')
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('user_menu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
-            user_id: selectedUser,
-            menu_id: menuId,
-            can_view: field === 'can_view',
-            can_create: field === 'can_create',
-            can_edit: field === 'can_edit',
-            can_delete: field === 'can_delete'
+            user_id: validatedUserId,
+            menu_id: validatedMenuId,
+            can_view: validatedField === 'can_view',
+            can_create: validatedField === 'can_create',
+            can_edit: validatedField === 'can_edit',
+            can_delete: validatedField === 'can_delete'
           }])
-          .select()
 
-        console.log('📦 Respuesta insert:', { data, error })
         if (error) throw error
       }
 
-      console.log('✅ Permiso de menú actualizado, actualizando estado local...')
+      devLog.info('✅ Permiso actualizado exitosamente')
 
       // Actualizar el estado local sin recargar desde el servidor
       setMenuPermissions(prev => {
-        const index = prev.findIndex(p => p.menu_id === menuId)
+        const index = prev.findIndex(p => p.menu_id === validatedMenuId)
         if (index >= 0) {
           const updated = [...prev]
-          updated[index] = { ...updated[index], [field]: newValue }
+          updated[index] = { ...updated[index], [validatedField]: newValue }
           return updated
         } else {
           // Agregar nuevo permiso al estado
-          const menu = menus.find(m => m.id === menuId)
+          const menu = menus.find(m => m.id === validatedMenuId)
           return [...prev, {
-            menu_id: menuId,
+            menu_id: validatedMenuId,
             menu_name: menu?.name || '',
             menu_label: menu?.label || '',
-            can_view: field === 'can_view' ? newValue : false,
-            can_create: field === 'can_create' ? newValue : false,
-            can_edit: field === 'can_edit' ? newValue : false,
-            can_delete: field === 'can_delete' ? newValue : false
+            can_view: validatedField === 'can_view' ? newValue : false,
+            can_create: validatedField === 'can_create' ? newValue : false,
+            can_edit: validatedField === 'can_edit' ? newValue : false,
+            can_delete: validatedField === 'can_delete' ? newValue : false
           }]
         }
       })
-    } catch (err: any) {
-      console.error('❌ Error actualizando permiso:', err)
-      alert('Error: ' + err.message)
+
+      setNotification({
+        type: 'success',
+        message: 'Permiso actualizado correctamente'
+      })
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        devLog.error('❌ Error de validación:', err.issues)
+        setNotification({
+          type: 'error',
+          message: 'Datos inválidos. Por favor, recarga la página.'
+        })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('❌ Error actualizando permiso:', safeError.logMessage)
+        setNotification({
+          type: 'error',
+          message: safeError.userMessage
+        })
+      }
     } finally {
       setSaving(false)
+      setTimeout(() => setNotification(null), 3000)
     }
-  }, [selectedUser, menuPermissions, menus])
+  }, [selectedUser, menuPermissions, menus, user])
 
   const toggleSubmenuPermission = useCallback(async (
     submenuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
+    // 1. Verificar que hay usuario seleccionado
     if (!selectedUser) {
-      console.log('⚠️ No hay usuario seleccionado')
+      devLog.warn('⚠️ No hay usuario seleccionado')
+      setNotification({
+        type: 'error',
+        message: 'Debes seleccionar un usuario primero'
+      })
       return
     }
 
-    console.log('🔄 Toggling submenu permission:', { submenuId, field, selectedUser })
+    // 2. Rate limiting
+    const rateLimitKey = `toggle_user_submenu_${user?.id}_${selectedUser}`
+    if (!rateLimiter.check(rateLimitKey)) {
+      setNotification({
+        type: 'error',
+        message: 'Demasiados cambios. Por favor, espera un momento.'
+      })
+      return
+    }
 
     setSaving(true)
     try {
-      const existingPerm = submenuPermissions.find(p => p.submenu_id === submenuId)
-      const newValue = existingPerm ? !existingPerm[field] : true
+      // 3. Validar UUIDs
+      const validatedUserId = UUIDSchema.parse(selectedUser)
+      const validatedSubmenuId = UUIDSchema.parse(submenuId)
+      const validatedField = PermissionFieldSchema.parse(field)
 
-      console.log('📝 Estado actual:', existingPerm)
-      console.log('✨ Nuevo valor:', newValue)
+      devLog.info('🔄 Toggling submenu permission:', { submenuId: validatedSubmenuId, field: validatedField, userId: validatedUserId })
+
+      const existingPerm = submenuPermissions.find(p => p.submenu_id === validatedSubmenuId)
+      const newValue = existingPerm ? !existingPerm[validatedField] : true
 
       if (existingPerm) {
-        console.log('🔧 Actualizando permiso existente...')
-        const { data, error } = await supabase
+        // Actualizar permiso existente
+        const { error } = await supabase
           .from('user_submenu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
-          .update({ [field]: newValue })
-          .eq('user_id', selectedUser)
-          .eq('submenu_id', submenuId)
-          .select()
+          .update({ [validatedField]: newValue })
+          .eq('user_id', validatedUserId)
+          .eq('submenu_id', validatedSubmenuId)
 
-        console.log('📦 Respuesta update:', { data, error })
         if (error) throw error
       } else {
-        console.log('➕ Creando nuevo permiso...')
-        const { data, error } = await supabase
+        // Crear nuevo permiso
+        const { error } = await supabase
           .from('user_submenu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
-            user_id: selectedUser,
-            submenu_id: submenuId,
-            can_view: field === 'can_view',
-            can_create: field === 'can_create',
-            can_edit: field === 'can_edit',
-            can_delete: field === 'can_delete'
+            user_id: validatedUserId,
+            submenu_id: validatedSubmenuId,
+            can_view: validatedField === 'can_view',
+            can_create: validatedField === 'can_create',
+            can_edit: validatedField === 'can_edit',
+            can_delete: validatedField === 'can_delete'
           }])
-          .select()
 
-        console.log('📦 Respuesta insert:', { data, error })
         if (error) throw error
       }
 
-      console.log('✅ Permiso de submenú actualizado, actualizando estado local...')
+      devLog.info('✅ Permiso actualizado exitosamente')
 
       // Actualizar el estado local sin recargar desde el servidor
       setSubmenuPermissions(prev => {
-        const index = prev.findIndex(p => p.submenu_id === submenuId)
+        const index = prev.findIndex(p => p.submenu_id === validatedSubmenuId)
         if (index >= 0) {
           const updated = [...prev]
-          updated[index] = { ...updated[index], [field]: newValue }
+          updated[index] = { ...updated[index], [validatedField]: newValue }
           return updated
         } else {
           // Agregar nuevo permiso al estado
-          const submenu = submenus.find(s => s.id === submenuId)
+          const submenu = submenus.find(s => s.id === validatedSubmenuId)
           const menu = menus.find(m => m.id === submenu?.menu_id)
           return [...prev, {
-            submenu_id: submenuId,
+            submenu_id: validatedSubmenuId,
             menu_name: menu?.name || '',
             submenu_name: submenu?.name || '',
             submenu_label: submenu?.label || '',
-            can_view: field === 'can_view' ? newValue : false,
-            can_create: field === 'can_create' ? newValue : false,
-            can_edit: field === 'can_edit' ? newValue : false,
-            can_delete: field === 'can_delete' ? newValue : false
+            can_view: validatedField === 'can_view' ? newValue : false,
+            can_create: validatedField === 'can_create' ? newValue : false,
+            can_edit: validatedField === 'can_edit' ? newValue : false,
+            can_delete: validatedField === 'can_delete' ? newValue : false
           }]
         }
       })
-    } catch (err: any) {
-      console.error('❌ Error actualizando permiso:', err)
-      alert('Error: ' + err.message)
+
+      setNotification({
+        type: 'success',
+        message: 'Permiso actualizado correctamente'
+      })
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        devLog.error('❌ Error de validación:', err.issues)
+        setNotification({
+          type: 'error',
+          message: 'Datos inválidos. Por favor, recarga la página.'
+        })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('❌ Error actualizando permiso:', safeError.logMessage)
+        setNotification({
+          type: 'error',
+          message: safeError.userMessage
+        })
+      }
     } finally {
       setSaving(false)
+      setTimeout(() => setNotification(null), 3000)
     }
-  }, [selectedUser, submenuPermissions, submenus])
+  }, [selectedUser, submenuPermissions, submenus, menus, user])
 
+  // Obtener permiso con herencia del rol
   const getMenuPermission = (menuId: string, field: keyof MenuPermission) => {
-    const perm = menuPermissions.find(p => p.menu_id === menuId)
-    return perm ? perm[field] : false
+    // Prioridad: permisos del usuario > permisos del rol
+    const userPerm = menuPermissions.find(p => p.menu_id === menuId)
+    if (userPerm) {
+      return userPerm[field]
+    }
+
+    // Si no hay permiso del usuario, heredar del rol
+    const rolePerm = roleMenuPermissions.find(p => p.menu_id === menuId)
+    return rolePerm ? rolePerm[field] : false
   }
 
+  // Obtener permiso con herencia del rol
   const getSubmenuPermission = (submenuId: string, field: keyof SubmenuPermission) => {
-    const perm = submenuPermissions.find(p => p.submenu_id === submenuId)
-    return perm ? perm[field] : false
+    // Prioridad: permisos del usuario > permisos del rol
+    const userPerm = submenuPermissions.find(p => p.submenu_id === submenuId)
+    if (userPerm) {
+      return userPerm[field]
+    }
+
+    // Si no hay permiso del usuario, heredar del rol
+    const rolePerm = roleSubmenuPermissions.find(p => p.submenu_id === submenuId)
+    return rolePerm ? rolePerm[field] : false
+  }
+
+  // Verificar si un permiso es heredado del rol (no tiene override del usuario)
+  const isMenuPermissionInherited = (menuId: string): boolean => {
+    return !menuPermissions.some(p => p.menu_id === menuId)
+  }
+
+  const isSubmenuPermissionInherited = (submenuId: string): boolean => {
+    return !submenuPermissions.some(p => p.submenu_id === submenuId)
   }
 
   // Crear estructura de datos plana para la tabla
@@ -399,7 +633,7 @@ export function UserMenuPermissionsManager() {
     })
 
     return rows
-  }, [menus, submenus, menuPermissions, submenuPermissions])
+  }, [menus, submenus, menuPermissions, submenuPermissions, roleMenuPermissions, roleSubmenuPermissions])
 
   // Definir columnas
   const columns = useMemo<ColumnDef<PermissionRow>[]>(
@@ -457,110 +691,159 @@ export function UserMenuPermissionsManager() {
       {
         accessorKey: 'can_view',
         header: 'Ver',
-        cell: ({ row }) => (
-          <div
-            className={`perm-checkbox ${row.original.can_view ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={(e) => {
-              console.log('🖱️ Click en checkbox Ver', {
-                saving,
-                type: row.original.type,
-                menu_id: row.original.menu_id,
-                submenu_id: row.original.submenu_id,
-                selectedUser,
-                event: e
-              })
-              if (saving) {
-                console.log('⏸️ Click ignorado: saving=true')
-                return
-              }
-              if (!selectedUser) {
-                console.log('⏸️ Click ignorado: no selectedUser')
-                return
-              }
-              if (row.original.type === 'menu' && row.original.menu_id) {
-                console.log('✅ Llamando toggleMenuPermission')
-                toggleMenuPermission(row.original.menu_id, 'can_view')
-              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
-                console.log('✅ Llamando toggleSubmenuPermission')
-                toggleSubmenuPermission(row.original.submenu_id, 'can_view')
-              } else {
-                console.log('⚠️ No se pudo determinar tipo o ID')
-              }
-            }}
-          >
-            {row.original.can_view && <Check size={16} />}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isInherited = row.original.type === 'menu' && row.original.menu_id
+            ? isMenuPermissionInherited(row.original.menu_id)
+            : row.original.type === 'submenu' && row.original.submenu_id
+            ? isSubmenuPermissionInherited(row.original.submenu_id)
+            : false
+
+          return (
+            <div
+              className={`perm-checkbox ${row.original.can_view ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
+              onClick={(e) => {
+                console.log('🖱️ Click en checkbox Ver', {
+                  saving,
+                  type: row.original.type,
+                  menu_id: row.original.menu_id,
+                  submenu_id: row.original.submenu_id,
+                  selectedUser,
+                  isInherited,
+                  event: e
+                })
+                if (saving) {
+                  console.log('⏸️ Click ignorado: saving=true')
+                  return
+                }
+                if (!selectedUser) {
+                  console.log('⏸️ Click ignorado: no selectedUser')
+                  return
+                }
+                if (row.original.type === 'menu' && row.original.menu_id) {
+                  console.log('✅ Llamando toggleMenuPermission')
+                  toggleMenuPermission(row.original.menu_id, 'can_view')
+                } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                  console.log('✅ Llamando toggleSubmenuPermission')
+                  toggleSubmenuPermission(row.original.submenu_id, 'can_view')
+                } else {
+                  console.log('⚠️ No se pudo determinar tipo o ID')
+                }
+              }}
+              title={isInherited ? 'Permiso heredado del rol' : 'Permiso específico del usuario'}
+            >
+              {row.original.can_view && <Check size={16} />}
+              {isInherited && row.original.can_view && (
+                <div className="inherited-badge">R</div>
+              )}
+            </div>
+          )
+        },
         enableSorting: true,
       },
       {
         accessorKey: 'can_create',
         header: 'Crear',
-        cell: ({ row }) => (
-          <div
-            className={`perm-checkbox ${row.original.can_create ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
-              console.log('🖱️ Click en checkbox Crear', { saving, selectedUser })
-              if (saving) return
-              if (!selectedUser) return
-              if (row.original.type === 'menu' && row.original.menu_id) {
-                toggleMenuPermission(row.original.menu_id, 'can_create')
-              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
-                toggleSubmenuPermission(row.original.submenu_id, 'can_create')
-              }
-            }}
-          >
-            {row.original.can_create && <Check size={16} />}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isInherited = row.original.type === 'menu' && row.original.menu_id
+            ? isMenuPermissionInherited(row.original.menu_id)
+            : row.original.type === 'submenu' && row.original.submenu_id
+            ? isSubmenuPermissionInherited(row.original.submenu_id)
+            : false
+
+          return (
+            <div
+              className={`perm-checkbox ${row.original.can_create ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
+              onClick={() => {
+                console.log('🖱️ Click en checkbox Crear', { saving, selectedUser, isInherited })
+                if (saving) return
+                if (!selectedUser) return
+                if (row.original.type === 'menu' && row.original.menu_id) {
+                  toggleMenuPermission(row.original.menu_id, 'can_create')
+                } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                  toggleSubmenuPermission(row.original.submenu_id, 'can_create')
+                }
+              }}
+              title={isInherited ? 'Permiso heredado del rol' : 'Permiso específico del usuario'}
+            >
+              {row.original.can_create && <Check size={16} />}
+              {isInherited && row.original.can_create && (
+                <div className="inherited-badge">R</div>
+              )}
+            </div>
+          )
+        },
         enableSorting: true,
       },
       {
         accessorKey: 'can_edit',
         header: 'Editar',
-        cell: ({ row }) => (
-          <div
-            className={`perm-checkbox ${row.original.can_edit ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
-              console.log('🖱️ Click en checkbox Editar', { saving, selectedUser })
-              if (saving) return
-              if (!selectedUser) return
-              if (row.original.type === 'menu' && row.original.menu_id) {
-                toggleMenuPermission(row.original.menu_id, 'can_edit')
-              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
-                toggleSubmenuPermission(row.original.submenu_id, 'can_edit')
-              }
-            }}
-          >
-            {row.original.can_edit && <Check size={16} />}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isInherited = row.original.type === 'menu' && row.original.menu_id
+            ? isMenuPermissionInherited(row.original.menu_id)
+            : row.original.type === 'submenu' && row.original.submenu_id
+            ? isSubmenuPermissionInherited(row.original.submenu_id)
+            : false
+
+          return (
+            <div
+              className={`perm-checkbox ${row.original.can_edit ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
+              onClick={() => {
+                console.log('🖱️ Click en checkbox Editar', { saving, selectedUser, isInherited })
+                if (saving) return
+                if (!selectedUser) return
+                if (row.original.type === 'menu' && row.original.menu_id) {
+                  toggleMenuPermission(row.original.menu_id, 'can_edit')
+                } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                  toggleSubmenuPermission(row.original.submenu_id, 'can_edit')
+                }
+              }}
+              title={isInherited ? 'Permiso heredado del rol' : 'Permiso específico del usuario'}
+            >
+              {row.original.can_edit && <Check size={16} />}
+              {isInherited && row.original.can_edit && (
+                <div className="inherited-badge">R</div>
+              )}
+            </div>
+          )
+        },
         enableSorting: true,
       },
       {
         accessorKey: 'can_delete',
         header: 'Eliminar',
-        cell: ({ row }) => (
-          <div
-            className={`perm-checkbox ${row.original.can_delete ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
-              console.log('🖱️ Click en checkbox Eliminar', { saving, selectedUser })
-              if (saving) return
-              if (!selectedUser) return
-              if (row.original.type === 'menu' && row.original.menu_id) {
-                toggleMenuPermission(row.original.menu_id, 'can_delete')
-              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
-                toggleSubmenuPermission(row.original.submenu_id, 'can_delete')
-              }
-            }}
-          >
-            {row.original.can_delete && <Check size={16} />}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isInherited = row.original.type === 'menu' && row.original.menu_id
+            ? isMenuPermissionInherited(row.original.menu_id)
+            : row.original.type === 'submenu' && row.original.submenu_id
+            ? isSubmenuPermissionInherited(row.original.submenu_id)
+            : false
+
+          return (
+            <div
+              className={`perm-checkbox ${row.original.can_delete ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
+              onClick={() => {
+                console.log('🖱️ Click en checkbox Eliminar', { saving, selectedUser, isInherited })
+                if (saving) return
+                if (!selectedUser) return
+                if (row.original.type === 'menu' && row.original.menu_id) {
+                  toggleMenuPermission(row.original.menu_id, 'can_delete')
+                } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                  toggleSubmenuPermission(row.original.submenu_id, 'can_delete')
+                }
+              }}
+              title={isInherited ? 'Permiso heredado del rol' : 'Permiso específico del usuario'}
+            >
+              {row.original.can_delete && <Check size={16} />}
+              {isInherited && row.original.can_delete && (
+                <div className="inherited-badge">R</div>
+              )}
+            </div>
+          )
+        },
         enableSorting: true,
       },
     ],
-    [saving, selectedUser, toggleMenuPermission, toggleSubmenuPermission]
+    [saving, selectedUser, toggleMenuPermission, toggleSubmenuPermission, menuPermissions, submenuPermissions, roleMenuPermissions, roleSubmenuPermissions]
   )
 
   // Configurar TanStack Table
@@ -587,14 +870,39 @@ export function UserMenuPermissionsManager() {
 
   const selectedUserData = users.find(u => u.id === selectedUser)
 
-  // Filtrar usuarios según búsqueda
-  const filteredUsers = users.filter(user =>
-    (user.full_name && user.full_name.toLowerCase().includes(userSearchTerm.toLowerCase())) ||
-    (user.roles?.name && user.roles.name.toLowerCase().includes(userSearchTerm.toLowerCase()))
-  )
+  // Filtrar usuarios según búsqueda con validación
+  const filteredUsers = useMemo(() => {
+    try {
+      const sanitizedSearch = SearchTermSchema.parse(userSearchTerm).toLowerCase()
+      return users.filter(user =>
+        (user.full_name && user.full_name.toLowerCase().includes(sanitizedSearch)) ||
+        (user.roles?.name && user.roles.name.toLowerCase().includes(sanitizedSearch))
+      )
+    } catch {
+      return users
+    }
+  }, [users, userSearchTerm])
 
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>
+  }
+
+  // Mostrar pantalla de acceso denegado si no tiene permisos
+  if (authError) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <Shield size={64} style={{ margin: '0 auto 20px', color: '#EF4444' }} />
+        <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#1F2937', marginBottom: '12px' }}>
+          Acceso Denegado
+        </h2>
+        <p style={{ fontSize: '16px', color: '#6B7280', marginBottom: '20px' }}>
+          {authError}
+        </p>
+        <p style={{ fontSize: '14px', color: '#9CA3AF' }}>
+          Si crees que deberías tener acceso a esta sección, contacta a tu administrador.
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -779,6 +1087,7 @@ export function UserMenuPermissionsManager() {
           transition: all 0.2s;
           background: white;
           font-size: 16px;
+          position: relative;
         }
 
         .perm-checkbox:hover {
@@ -792,9 +1101,36 @@ export function UserMenuPermissionsManager() {
           color: white;
         }
 
+        .perm-checkbox.inherited {
+          border-style: dashed;
+          border-width: 2px;
+          opacity: 0.7;
+        }
+
+        .perm-checkbox.inherited.checked {
+          background: #93C5FD;
+          border-color: #3B82F6;
+        }
+
         .perm-checkbox.disabled {
           opacity: 0.3;
           cursor: not-allowed;
+        }
+
+        .inherited-badge {
+          position: absolute;
+          top: -8px;
+          right: -8px;
+          background: #3B82F6;
+          color: white;
+          border-radius: 50%;
+          width: 16px;
+          height: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-weight: 700;
         }
 
         .pagination {
@@ -859,7 +1195,58 @@ export function UserMenuPermissionsManager() {
           font-size: 64px;
           margin-bottom: 16px;
         }
+
+        .notification {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 9999;
+          padding: 16px 20px;
+          border-radius: 8px;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          min-width: 300px;
+          max-width: 500px;
+          animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+          from {
+            transform: translateX(400px);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        .notification.success {
+          background: #10B981;
+          color: white;
+        }
+
+        .notification.error {
+          background: #EF4444;
+          color: white;
+        }
+
+        .notification-message {
+          flex: 1;
+          font-size: 14px;
+          font-weight: 500;
+        }
       `}</style>
+
+      {/* Notification Component */}
+      {notification && (
+        <div className={`notification ${notification.type}`}>
+          {notification.type === 'success' ? <Check size={20} /> : <AlertTriangle size={20} />}
+          <div className="notification-message">{notification.message}</div>
+        </div>
+      )}
 
       <div className="permissions-container">
         {/* Header */}
@@ -881,7 +1268,7 @@ export function UserMenuPermissionsManager() {
             <input
               type="text"
               className="select-input"
-              placeholder={selectedUserData ? `${selectedUserData.full_name || 'Sin nombre'} (${selectedUserData.roles?.name || 'Sin rol'})` : 'Buscar y seleccionar usuario...'}
+              placeholder={selectedUserData ? `${sanitizeHTML(selectedUserData.full_name || 'Sin nombre')} (${sanitizeHTML(selectedUserData.roles?.name || 'Sin rol')})` : 'Buscar y seleccionar usuario...'}
               value={userSearchTerm}
               onChange={(e) => setUserSearchTerm(e.target.value)}
               onFocus={() => setShowUserDropdown(true)}
@@ -905,10 +1292,10 @@ export function UserMenuPermissionsManager() {
                       }}
                     >
                       <div style={{ fontWeight: 600, marginBottom: '2px' }}>
-                        {user.full_name || 'Sin nombre'}
+                        {sanitizeHTML(user.full_name || 'Sin nombre')}
                       </div>
                       <div style={{ fontSize: '13px', color: '#6B7280' }}>
-                        {user.roles?.name || 'Sin rol'}
+                        {sanitizeHTML(user.roles?.name || 'Sin rol')}
                       </div>
                     </div>
                   ))
@@ -925,10 +1312,10 @@ export function UserMenuPermissionsManager() {
               </svg>
               <div>
                 <div style={{ fontWeight: 600, color: '#1F2937', fontSize: '14px' }}>
-                  {selectedUserData.full_name || 'Sin nombre'}
+                  {sanitizeHTML(selectedUserData.full_name || 'Sin nombre')}
                 </div>
                 <div style={{ fontSize: '13px', color: '#6B7280' }}>
-                  {selectedUserData.roles?.name || 'Sin rol'}
+                  {sanitizeHTML(selectedUserData.roles?.name || 'Sin rol')}
                 </div>
               </div>
             </div>
