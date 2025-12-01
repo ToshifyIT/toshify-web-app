@@ -1,7 +1,8 @@
 // src/components/admin/UserMenuPermissionsManager.tsx
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Check } from 'lucide-react'
+import { Check, AlertTriangle, Shield } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import type { UserWithRole, Menu, Submenu } from '../../types/database.types'
 import {
   useReactTable,
@@ -13,6 +14,18 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
+import {
+  UUIDSchema,
+  SearchTermSchema,
+  PermissionFieldSchema,
+  sanitizeHTML,
+  sanitizeObject,
+  devLog,
+  handleDatabaseError,
+  checkPermission,
+  rateLimiter
+} from '../../utils/security'
+import { z } from 'zod'
 
 interface MenuPermission {
   menu_id: string
