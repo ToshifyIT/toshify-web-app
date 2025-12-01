@@ -234,7 +234,7 @@ export function RoleMenuPermissionsManager() {
       setSubmenuPermissions(formattedSubmenuPerms)
     } catch (err) {
       if (err instanceof z.ZodError) {
-        devLog.error('❌ ID de rol inválido:', err.errors)
+        devLog.error('❌ ID de rol inválido:', err.issues)
         setNotification({
           type: 'error',
           message: 'ID de rol inválido'
@@ -355,7 +355,7 @@ export function RoleMenuPermissionsManager() {
 
     } catch (err) {
       if (err instanceof z.ZodError) {
-        devLog.error('❌ Error de validación:', err.errors)
+        devLog.error('❌ Error de validación:', err.issues)
         setNotification({
           type: 'error',
           message: 'Datos inválidos. Por favor, recarga la página.'
@@ -460,7 +460,6 @@ export function RoleMenuPermissionsManager() {
         } else {
           // Agregar nuevo permiso al estado
           const submenu = submenus.find(s => s.id === validatedSubmenuId)
-          const menu = menus.find(m => m.name === (submenu as any)?.menus?.name)
           return [...prev, {
             role_id: validatedRoleId,
             submenu_id: validatedSubmenuId,
@@ -481,7 +480,7 @@ export function RoleMenuPermissionsManager() {
 
     } catch (err) {
       if (err instanceof z.ZodError) {
-        devLog.error('❌ Error de validación:', err.errors)
+        devLog.error('❌ Error de validación:', err.issues)
         setNotification({
           type: 'error',
           message: 'Datos inválidos. Por favor, recarga la página.'

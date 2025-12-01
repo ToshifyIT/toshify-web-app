@@ -63,6 +63,13 @@ interface PermissionRow {
 }
 
 export function UserMenuPermissionsManager() {
+  // =====================================================
+  // AUTENTICACIÓN Y AUTORIZACIÓN
+  // =====================================================
+  const { user, profile } = useAuth()
+  const [authError, setAuthError] = useState<string>('')
+
+  // Estados
   const [users, setUsers] = useState<UserWithRole[]>([])
   const [menus, setMenus] = useState<Menu[]>([])
   const [submenus, setSubmenus] = useState<Submenu[]>([])
@@ -77,6 +84,19 @@ export function UserMenuPermissionsManager() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [userSearchTerm, setUserSearchTerm] = useState('')
   const [showUserDropdown, setShowUserDropdown] = useState(false)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+
+  // =====================================================
+  // VERIFICACIÓN DE PERMISOS
+  // =====================================================
+  useEffect(() => {
+    const permissionCheck = checkPermission(profile?.roles?.name, 'manage_permissions')
+
+    if (!permissionCheck.hasPermission) {
+      setAuthError(permissionCheck.reason || 'No tienes permisos para acceder a esta sección')
+      setLoading(false)
+    }
+  }, [profile])
 
   useEffect(() => {
     loadData()
@@ -89,33 +109,49 @@ export function UserMenuPermissionsManager() {
   }, [selectedUser])
 
   const loadData = async () => {
+    if (authError) return // No cargar si no tiene permisos
+
     setLoading(true)
     try {
       // Cargar usuarios
-      const { data: usersData } = await supabase
+      const { data: usersData, error: usersError } = await supabase
         .from('user_profiles')
         .select('*, roles(*)')
         .order('full_name')
 
+      if (usersError) throw usersError
+
       // Cargar menús
-      const { data: menusData } = await supabase
+      const { data: menusData, error: menusError } = await supabase
         .from('menus')
         .select('*')
         .eq('is_active', true)
         .order('order_index')
 
+      if (menusError) throw menusError
+
       // Cargar submenús
-      const { data: submenusData } = await supabase
+      const { data: submenusData, error: submenusError } = await supabase
         .from('submenus')
         .select('*, menus(name)')
         .eq('is_active', true)
         .order('order_index')
 
-      setUsers(usersData as UserWithRole[] || [])
-      setMenus(menusData || [])
-      setSubmenus(submenusData || [])
+      if (submenusError) throw submenusError
+
+      // Sanitizar datos antes de guardar en estado
+      setUsers((usersData as UserWithRole[] || []).map(user => sanitizeObject(user)))
+      setMenus((menusData || []).map(menu => sanitizeObject(menu)))
+      setSubmenus((submenusData || []).map(submenu => sanitizeObject(submenu)))
+
+      devLog.info('✅ Datos cargados correctamente')
     } catch (err) {
-      console.error('Error cargando datos:', err)
+      const safeError = handleDatabaseError(err)
+      devLog.error('Error cargando datos:', safeError.logMessage)
+      setNotification({
+        type: 'error',
+        message: safeError.userMessage
+      })
     } finally {
       setLoading(false)
     }
@@ -123,11 +159,14 @@ export function UserMenuPermissionsManager() {
 
   const loadUserPermissions = async (userId: string) => {
     try {
+      // Validar UUID del usuario
+      const validatedUserId = UUIDSchema.parse(userId)
+
       // Obtener el rol del usuario
-      const user = users.find(u => u.id === userId)
+      const user = users.find(u => u.id === validatedUserId)
       const userRoleId = user?.role_id
 
-      console.log('📥 Cargando permisos para usuario:', userId, 'con rol:', userRoleId)
+      devLog.info('📥 Cargando permisos para usuario:', validatedUserId, 'con rol:', userRoleId)
 
       // Cargar permisos de menú del usuario desde la tabla correcta
       const { data: menuPermsData, error: menuError } = await supabase
@@ -144,11 +183,9 @@ export function UserMenuPermissionsManager() {
             label
           )
         `)
-        .eq('user_id', userId)
+        .eq('user_id', validatedUserId)
 
-      if (menuError) {
-        console.error('Error cargando permisos de menú:', menuError)
-      }
+      if (menuError) throw menuError
 
       // Cargar permisos de submenú del usuario desde la tabla correcta
       const { data: submenuPermsData, error: submenuError } = await supabase
@@ -169,18 +206,17 @@ export function UserMenuPermissionsManager() {
             )
           )
         `)
-        .eq('user_id', userId)
+        .eq('user_id', validatedUserId)
 
-      if (submenuError) {
-        console.error('Error cargando permisos de submenú:', submenuError)
-      }
+      if (submenuError) throw submenuError
 
       // Cargar permisos del ROL del usuario
       let roleMenuPerms: any[] = []
       let roleSubmenuPerms: any[] = []
 
       if (userRoleId) {
-        console.log('🔐 Cargando permisos del rol:', userRoleId)
+        const validatedRoleId = UUIDSchema.parse(userRoleId)
+        devLog.info('🔐 Cargando permisos del rol:', validatedRoleId)
 
         // Permisos de menú del rol
         const { data: roleMenuData, error: roleMenuError } = await supabase
@@ -197,13 +233,10 @@ export function UserMenuPermissionsManager() {
               label
             )
           `)
-          .eq('role_id', userRoleId)
+          .eq('role_id', validatedRoleId)
 
-        if (roleMenuError) {
-          console.error('Error cargando permisos de menú del rol:', roleMenuError)
-        } else {
-          roleMenuPerms = roleMenuData || []
-        }
+        if (roleMenuError) throw roleMenuError
+        roleMenuPerms = roleMenuData || []
 
         // Permisos de submenú del rol
         const { data: roleSubmenuData, error: roleSubmenuError } = await supabase
@@ -224,17 +257,14 @@ export function UserMenuPermissionsManager() {
               )
             )
           `)
-          .eq('role_id', userRoleId)
+          .eq('role_id', validatedRoleId)
 
-        if (roleSubmenuError) {
-          console.error('Error cargando permisos de submenú del rol:', roleSubmenuError)
-        } else {
-          roleSubmenuPerms = roleSubmenuData || []
-        }
+        if (roleSubmenuError) throw roleSubmenuError
+        roleSubmenuPerms = roleSubmenuData || []
       }
 
-      // Transformar los datos al formato esperado
-      const formattedMenuPerms = (menuPermsData || []).map((p: any) => ({
+      // Transformar y sanitizar los datos al formato esperado
+      const formattedMenuPerms = (menuPermsData || []).map((p: any) => sanitizeObject({
         menu_id: p.menu_id,
         menu_name: p.menus?.name || '',
         menu_label: p.menus?.label || '',
@@ -244,7 +274,7 @@ export function UserMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
-      const formattedSubmenuPerms = (submenuPermsData || []).map((p: any) => ({
+      const formattedSubmenuPerms = (submenuPermsData || []).map((p: any) => sanitizeObject({
         submenu_id: p.submenu_id,
         menu_name: p.submenus?.menus?.name || '',
         submenu_name: p.submenus?.name || '',
@@ -255,7 +285,7 @@ export function UserMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
-      const formattedRoleMenuPerms = roleMenuPerms.map((p: any) => ({
+      const formattedRoleMenuPerms = roleMenuPerms.map((p: any) => sanitizeObject({
         menu_id: p.menu_id,
         menu_name: p.menus?.name || '',
         menu_label: p.menus?.label || '',
@@ -265,7 +295,7 @@ export function UserMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
-      const formattedRoleSubmenuPerms = roleSubmenuPerms.map((p: any) => ({
+      const formattedRoleSubmenuPerms = roleSubmenuPerms.map((p: any) => sanitizeObject({
         submenu_id: p.submenu_id,
         menu_name: p.submenus?.menus?.name || '',
         submenu_name: p.submenus?.name || '',
@@ -276,17 +306,32 @@ export function UserMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
-      console.log('✅ Permisos de menú (usuario):', formattedMenuPerms)
-      console.log('✅ Permisos de submenú (usuario):', formattedSubmenuPerms)
-      console.log('🔐 Permisos de menú (rol):', formattedRoleMenuPerms)
-      console.log('🔐 Permisos de submenú (rol):', formattedRoleSubmenuPerms)
+      devLog.info('✅ Permisos cargados:', {
+        menuPerms: formattedMenuPerms.length,
+        submenuPerms: formattedSubmenuPerms.length,
+        roleMenuPerms: formattedRoleMenuPerms.length,
+        roleSubmenuPerms: formattedRoleSubmenuPerms.length
+      })
 
       setMenuPermissions(formattedMenuPerms)
       setSubmenuPermissions(formattedSubmenuPerms)
       setRoleMenuPermissions(formattedRoleMenuPerms)
       setRoleSubmenuPermissions(formattedRoleSubmenuPerms)
     } catch (err) {
-      console.error('❌ Error cargando permisos:', err)
+      if (err instanceof z.ZodError) {
+        devLog.error('❌ Error de validación:', err.issues)
+        setNotification({
+          type: 'error',
+          message: 'Datos inválidos. Por favor, recarga la página.'
+        })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('Error cargando permisos:', safeError.logMessage)
+        setNotification({
+          type: 'error',
+          message: safeError.userMessage
+        })
+      }
     }
   }
 
@@ -294,167 +339,227 @@ export function UserMenuPermissionsManager() {
     menuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
+    // 1. Verificar que hay usuario seleccionado
     if (!selectedUser) {
-      console.log('⚠️ No hay usuario seleccionado')
+      devLog.warn('⚠️ No hay usuario seleccionado')
+      setNotification({
+        type: 'error',
+        message: 'Debes seleccionar un usuario primero'
+      })
       return
     }
 
-    console.log('🔄 Toggling menu permission:', { menuId, field, selectedUser })
+    // 2. Rate limiting
+    const rateLimitKey = `toggle_user_menu_${user?.id}_${selectedUser}`
+    if (!rateLimiter.check(rateLimitKey)) {
+      setNotification({
+        type: 'error',
+        message: 'Demasiados cambios. Por favor, espera un momento.'
+      })
+      return
+    }
 
     setSaving(true)
     try {
-      const existingPerm = menuPermissions.find(p => p.menu_id === menuId)
-      const newValue = existingPerm ? !existingPerm[field] : true
+      // 3. Validar UUIDs
+      const validatedUserId = UUIDSchema.parse(selectedUser)
+      const validatedMenuId = UUIDSchema.parse(menuId)
+      const validatedField = PermissionFieldSchema.parse(field)
 
-      console.log('📝 Estado actual:', existingPerm)
-      console.log('✨ Nuevo valor:', newValue)
+      devLog.info('🔄 Toggling menu permission:', { menuId: validatedMenuId, field: validatedField, userId: validatedUserId })
+
+      const existingPerm = menuPermissions.find(p => p.menu_id === validatedMenuId)
+      const newValue = existingPerm ? !existingPerm[validatedField] : true
 
       if (existingPerm) {
         // Actualizar permiso existente
-        console.log('🔧 Actualizando permiso existente...')
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('user_menu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
-          .update({ [field]: newValue })
-          .eq('user_id', selectedUser)
-          .eq('menu_id', menuId)
-          .select()
+          .update({ [validatedField]: newValue })
+          .eq('user_id', validatedUserId)
+          .eq('menu_id', validatedMenuId)
 
-        console.log('📦 Respuesta update:', { data, error })
         if (error) throw error
       } else {
         // Crear nuevo permiso
-        console.log('➕ Creando nuevo permiso...')
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('user_menu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
-            user_id: selectedUser,
-            menu_id: menuId,
-            can_view: field === 'can_view',
-            can_create: field === 'can_create',
-            can_edit: field === 'can_edit',
-            can_delete: field === 'can_delete'
+            user_id: validatedUserId,
+            menu_id: validatedMenuId,
+            can_view: validatedField === 'can_view',
+            can_create: validatedField === 'can_create',
+            can_edit: validatedField === 'can_edit',
+            can_delete: validatedField === 'can_delete'
           }])
-          .select()
 
-        console.log('📦 Respuesta insert:', { data, error })
         if (error) throw error
       }
 
-      console.log('✅ Permiso de menú actualizado, actualizando estado local...')
+      devLog.info('✅ Permiso actualizado exitosamente')
 
       // Actualizar el estado local sin recargar desde el servidor
       setMenuPermissions(prev => {
-        const index = prev.findIndex(p => p.menu_id === menuId)
+        const index = prev.findIndex(p => p.menu_id === validatedMenuId)
         if (index >= 0) {
           const updated = [...prev]
-          updated[index] = { ...updated[index], [field]: newValue }
+          updated[index] = { ...updated[index], [validatedField]: newValue }
           return updated
         } else {
           // Agregar nuevo permiso al estado
-          const menu = menus.find(m => m.id === menuId)
+          const menu = menus.find(m => m.id === validatedMenuId)
           return [...prev, {
-            menu_id: menuId,
+            menu_id: validatedMenuId,
             menu_name: menu?.name || '',
             menu_label: menu?.label || '',
-            can_view: field === 'can_view' ? newValue : false,
-            can_create: field === 'can_create' ? newValue : false,
-            can_edit: field === 'can_edit' ? newValue : false,
-            can_delete: field === 'can_delete' ? newValue : false
+            can_view: validatedField === 'can_view' ? newValue : false,
+            can_create: validatedField === 'can_create' ? newValue : false,
+            can_edit: validatedField === 'can_edit' ? newValue : false,
+            can_delete: validatedField === 'can_delete' ? newValue : false
           }]
         }
       })
-    } catch (err: any) {
-      console.error('❌ Error actualizando permiso:', err)
-      alert('Error: ' + err.message)
+
+      setNotification({
+        type: 'success',
+        message: 'Permiso actualizado correctamente'
+      })
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        devLog.error('❌ Error de validación:', err.issues)
+        setNotification({
+          type: 'error',
+          message: 'Datos inválidos. Por favor, recarga la página.'
+        })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('❌ Error actualizando permiso:', safeError.logMessage)
+        setNotification({
+          type: 'error',
+          message: safeError.userMessage
+        })
+      }
     } finally {
       setSaving(false)
+      setTimeout(() => setNotification(null), 3000)
     }
-  }, [selectedUser, menuPermissions, menus])
+  }, [selectedUser, menuPermissions, menus, user])
 
   const toggleSubmenuPermission = useCallback(async (
     submenuId: string,
     field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
   ) => {
+    // 1. Verificar que hay usuario seleccionado
     if (!selectedUser) {
-      console.log('⚠️ No hay usuario seleccionado')
+      devLog.warn('⚠️ No hay usuario seleccionado')
+      setNotification({
+        type: 'error',
+        message: 'Debes seleccionar un usuario primero'
+      })
       return
     }
 
-    console.log('🔄 Toggling submenu permission:', { submenuId, field, selectedUser })
+    // 2. Rate limiting
+    const rateLimitKey = `toggle_user_submenu_${user?.id}_${selectedUser}`
+    if (!rateLimiter.check(rateLimitKey)) {
+      setNotification({
+        type: 'error',
+        message: 'Demasiados cambios. Por favor, espera un momento.'
+      })
+      return
+    }
 
     setSaving(true)
     try {
-      const existingPerm = submenuPermissions.find(p => p.submenu_id === submenuId)
-      const newValue = existingPerm ? !existingPerm[field] : true
+      // 3. Validar UUIDs
+      const validatedUserId = UUIDSchema.parse(selectedUser)
+      const validatedSubmenuId = UUIDSchema.parse(submenuId)
+      const validatedField = PermissionFieldSchema.parse(field)
 
-      console.log('📝 Estado actual:', existingPerm)
-      console.log('✨ Nuevo valor:', newValue)
+      devLog.info('🔄 Toggling submenu permission:', { submenuId: validatedSubmenuId, field: validatedField, userId: validatedUserId })
+
+      const existingPerm = submenuPermissions.find(p => p.submenu_id === validatedSubmenuId)
+      const newValue = existingPerm ? !existingPerm[validatedField] : true
 
       if (existingPerm) {
-        console.log('🔧 Actualizando permiso existente...')
-        const { data, error } = await supabase
+        // Actualizar permiso existente
+        const { error } = await supabase
           .from('user_submenu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
-          .update({ [field]: newValue })
-          .eq('user_id', selectedUser)
-          .eq('submenu_id', submenuId)
-          .select()
+          .update({ [validatedField]: newValue })
+          .eq('user_id', validatedUserId)
+          .eq('submenu_id', validatedSubmenuId)
 
-        console.log('📦 Respuesta update:', { data, error })
         if (error) throw error
       } else {
-        console.log('➕ Creando nuevo permiso...')
-        const { data, error } = await supabase
+        // Crear nuevo permiso
+        const { error } = await supabase
           .from('user_submenu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
-            user_id: selectedUser,
-            submenu_id: submenuId,
-            can_view: field === 'can_view',
-            can_create: field === 'can_create',
-            can_edit: field === 'can_edit',
-            can_delete: field === 'can_delete'
+            user_id: validatedUserId,
+            submenu_id: validatedSubmenuId,
+            can_view: validatedField === 'can_view',
+            can_create: validatedField === 'can_create',
+            can_edit: validatedField === 'can_edit',
+            can_delete: validatedField === 'can_delete'
           }])
-          .select()
 
-        console.log('📦 Respuesta insert:', { data, error })
         if (error) throw error
       }
 
-      console.log('✅ Permiso de submenú actualizado, actualizando estado local...')
+      devLog.info('✅ Permiso actualizado exitosamente')
 
       // Actualizar el estado local sin recargar desde el servidor
       setSubmenuPermissions(prev => {
-        const index = prev.findIndex(p => p.submenu_id === submenuId)
+        const index = prev.findIndex(p => p.submenu_id === validatedSubmenuId)
         if (index >= 0) {
           const updated = [...prev]
-          updated[index] = { ...updated[index], [field]: newValue }
+          updated[index] = { ...updated[index], [validatedField]: newValue }
           return updated
         } else {
           // Agregar nuevo permiso al estado
-          const submenu = submenus.find(s => s.id === submenuId)
+          const submenu = submenus.find(s => s.id === validatedSubmenuId)
           const menu = menus.find(m => m.id === submenu?.menu_id)
           return [...prev, {
-            submenu_id: submenuId,
+            submenu_id: validatedSubmenuId,
             menu_name: menu?.name || '',
             submenu_name: submenu?.name || '',
             submenu_label: submenu?.label || '',
-            can_view: field === 'can_view' ? newValue : false,
-            can_create: field === 'can_create' ? newValue : false,
-            can_edit: field === 'can_edit' ? newValue : false,
-            can_delete: field === 'can_delete' ? newValue : false
+            can_view: validatedField === 'can_view' ? newValue : false,
+            can_create: validatedField === 'can_create' ? newValue : false,
+            can_edit: validatedField === 'can_edit' ? newValue : false,
+            can_delete: validatedField === 'can_delete' ? newValue : false
           }]
         }
       })
-    } catch (err: any) {
-      console.error('❌ Error actualizando permiso:', err)
-      alert('Error: ' + err.message)
+
+      setNotification({
+        type: 'success',
+        message: 'Permiso actualizado correctamente'
+      })
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        devLog.error('❌ Error de validación:', err.issues)
+        setNotification({
+          type: 'error',
+          message: 'Datos inválidos. Por favor, recarga la página.'
+        })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('❌ Error actualizando permiso:', safeError.logMessage)
+        setNotification({
+          type: 'error',
+          message: safeError.userMessage
+        })
+      }
     } finally {
       setSaving(false)
+      setTimeout(() => setNotification(null), 3000)
     }
-  }, [selectedUser, submenuPermissions, submenus])
+  }, [selectedUser, submenuPermissions, submenus, menus, user])
 
   // Obtener permiso con herencia del rol
   const getMenuPermission = (menuId: string, field: keyof MenuPermission) => {
@@ -765,14 +870,39 @@ export function UserMenuPermissionsManager() {
 
   const selectedUserData = users.find(u => u.id === selectedUser)
 
-  // Filtrar usuarios según búsqueda
-  const filteredUsers = users.filter(user =>
-    (user.full_name && user.full_name.toLowerCase().includes(userSearchTerm.toLowerCase())) ||
-    (user.roles?.name && user.roles.name.toLowerCase().includes(userSearchTerm.toLowerCase()))
-  )
+  // Filtrar usuarios según búsqueda con validación
+  const filteredUsers = useMemo(() => {
+    try {
+      const sanitizedSearch = SearchTermSchema.parse(userSearchTerm).toLowerCase()
+      return users.filter(user =>
+        (user.full_name && user.full_name.toLowerCase().includes(sanitizedSearch)) ||
+        (user.roles?.name && user.roles.name.toLowerCase().includes(sanitizedSearch))
+      )
+    } catch {
+      return users
+    }
+  }, [users, userSearchTerm])
 
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>
+  }
+
+  // Mostrar pantalla de acceso denegado si no tiene permisos
+  if (authError) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <Shield size={64} style={{ margin: '0 auto 20px', color: '#EF4444' }} />
+        <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#1F2937', marginBottom: '12px' }}>
+          Acceso Denegado
+        </h2>
+        <p style={{ fontSize: '16px', color: '#6B7280', marginBottom: '20px' }}>
+          {authError}
+        </p>
+        <p style={{ fontSize: '14px', color: '#9CA3AF' }}>
+          Si crees que deberías tener acceso a esta sección, contacta a tu administrador.
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -1065,7 +1195,58 @@ export function UserMenuPermissionsManager() {
           font-size: 64px;
           margin-bottom: 16px;
         }
+
+        .notification {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 9999;
+          padding: 16px 20px;
+          border-radius: 8px;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          min-width: 300px;
+          max-width: 500px;
+          animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+          from {
+            transform: translateX(400px);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        .notification.success {
+          background: #10B981;
+          color: white;
+        }
+
+        .notification.error {
+          background: #EF4444;
+          color: white;
+        }
+
+        .notification-message {
+          flex: 1;
+          font-size: 14px;
+          font-weight: 500;
+        }
       `}</style>
+
+      {/* Notification Component */}
+      {notification && (
+        <div className={`notification ${notification.type}`}>
+          {notification.type === 'success' ? <Check size={20} /> : <AlertTriangle size={20} />}
+          <div className="notification-message">{notification.message}</div>
+        </div>
+      )}
 
       <div className="permissions-container">
         {/* Header */}
@@ -1087,7 +1268,7 @@ export function UserMenuPermissionsManager() {
             <input
               type="text"
               className="select-input"
-              placeholder={selectedUserData ? `${selectedUserData.full_name || 'Sin nombre'} (${selectedUserData.roles?.name || 'Sin rol'})` : 'Buscar y seleccionar usuario...'}
+              placeholder={selectedUserData ? `${sanitizeHTML(selectedUserData.full_name || 'Sin nombre')} (${sanitizeHTML(selectedUserData.roles?.name || 'Sin rol')})` : 'Buscar y seleccionar usuario...'}
               value={userSearchTerm}
               onChange={(e) => setUserSearchTerm(e.target.value)}
               onFocus={() => setShowUserDropdown(true)}
@@ -1111,10 +1292,10 @@ export function UserMenuPermissionsManager() {
                       }}
                     >
                       <div style={{ fontWeight: 600, marginBottom: '2px' }}>
-                        {user.full_name || 'Sin nombre'}
+                        {sanitizeHTML(user.full_name || 'Sin nombre')}
                       </div>
                       <div style={{ fontSize: '13px', color: '#6B7280' }}>
-                        {user.roles?.name || 'Sin rol'}
+                        {sanitizeHTML(user.roles?.name || 'Sin rol')}
                       </div>
                     </div>
                   ))
@@ -1131,10 +1312,10 @@ export function UserMenuPermissionsManager() {
               </svg>
               <div>
                 <div style={{ fontWeight: 600, color: '#1F2937', fontSize: '14px' }}>
-                  {selectedUserData.full_name || 'Sin nombre'}
+                  {sanitizeHTML(selectedUserData.full_name || 'Sin nombre')}
                 </div>
                 <div style={{ fontSize: '13px', color: '#6B7280' }}>
-                  {selectedUserData.roles?.name || 'Sin rol'}
+                  {sanitizeHTML(selectedUserData.roles?.name || 'Sin rol')}
                 </div>
               </div>
             </div>

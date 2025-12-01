@@ -73,17 +73,17 @@ export function sanitizeObject<T extends Record<string, any>>(obj: T): T {
  */
 export const devLog = {
   info: (...args: any[]) => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.MODE === 'development' || import.meta.env.DEV) {
       console.log(...args)
     }
   },
   error: (...args: any[]) => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.MODE === 'development' || import.meta.env.DEV) {
       console.error(...args)
     }
   },
   warn: (...args: any[]) => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.MODE === 'development' || import.meta.env.DEV) {
       console.warn(...args)
     }
   }
@@ -167,12 +167,12 @@ export interface PermissionCheck {
 /**
  * Verifica si un usuario tiene un permiso específico
  * @param userRole - Rol del usuario
- * @param requiredPermission - Permiso requerido
+ * @param _requiredPermission - Permiso requerido (reservado para futura implementación)
  * @returns Objeto indicando si tiene permiso y razón si no
  */
 export function checkPermission(
   userRole: string | undefined,
-  requiredPermission: string
+  _requiredPermission: string
 ): PermissionCheck {
   if (!userRole) {
     return {
