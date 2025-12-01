@@ -53,6 +53,7 @@ export function AsignacionesActivasModule() {
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [loading, setLoading] = useState(true)
   const [globalFilter, setGlobalFilter] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -60,6 +61,14 @@ export function AsignacionesActivasModule() {
   useEffect(() => {
     loadAsignacionesActivas()
   }, [])
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(globalFilter)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [globalFilter])
 
   const loadAsignacionesActivas = async () => {
     setLoading(true)
@@ -85,6 +94,21 @@ export function AsignacionesActivasModule() {
             vehiculos_tipos (
               descripcion
             )
+          ),
+          asignaciones_conductores (
+            id,
+            conductor_id,
+            estado,
+            horario,
+            confirmado,
+            fecha_confirmacion,
+            conductores (
+              id,
+              nombres,
+              apellidos,
+              numero_licencia,
+              telefono_contacto
+            )
           )
         `)
         .in('estado', ['activo', 'activa'])
@@ -92,46 +116,8 @@ export function AsignacionesActivasModule() {
 
       if (error) throw error
 
-      // Cargar conductores asignados por separado (igual que en AsignacionesModule)
-      if (asignacionesData && asignacionesData.length > 0) {
-        const asignacionesConConductores = await Promise.all(
-          asignacionesData.map(async (asignacion: any) => {
-            const { data: conductoresAsignados } = await supabase
-              .from('asignaciones_conductores')
-              .select(`
-                id,
-                conductor_id,
-                estado,
-                horario,
-                confirmado,
-                conductores (
-                  id,
-                  nombres,
-                  apellidos,
-                  numero_licencia,
-                  telefono_contacto
-                )
-              `)
-              .eq('asignacion_id', asignacion.id)
-              .eq('estado', 'asignado')
-
-            return {
-              ...asignacion,
-              asignaciones_conductores: conductoresAsignados || []
-            }
-          })
-        )
-
-        console.log('Asignaciones con conductores:', asignacionesConConductores)
-        if (asignacionesConConductores.length > 0) {
-          console.log('Primera asignación:', asignacionesConConductores[0])
-          console.log('Conductores:', asignacionesConConductores[0].asignaciones_conductores)
-        }
-
-        setAsignaciones(asignacionesConConductores)
-      } else {
-        setAsignaciones(asignacionesData || [])
-      }
+      // ✅ OPTIMIZADO: Ya no necesitamos queries separadas, incluir en la query principal
+      setAsignaciones(asignacionesData || [])
     } catch (err: any) {
       console.error('Error cargando asignaciones activas:', err)
       Swal.fire({
@@ -149,6 +135,36 @@ export function AsignacionesActivasModule() {
     setSelectedAsignacion(asignacion)
     setShowDetailsModal(true)
   }
+
+  // Expandir filas para TURNO (una fila por conductor) vs A CARGO (una fila con todos)
+  const expandedAsignaciones = useMemo(() => {
+    return asignaciones.flatMap((asignacion: any) => {
+      // Si es A CARGO, retornar una sola fila con todos los conductores
+      if (asignacion.horario === 'CARGO') {
+        return [{
+          ...asignacion,
+          conductorEspecifico: null,
+          turnoEspecifico: '-'
+        }]
+      }
+
+      // Si es TURNO con conductores, retornar una fila por cada conductor
+      if (asignacion.asignaciones_conductores && asignacion.asignaciones_conductores.length > 0) {
+        return asignacion.asignaciones_conductores.map((ac: any) => ({
+          ...asignacion,
+          conductorEspecifico: ac,
+          turnoEspecifico: ac.horario
+        }))
+      }
+
+      // Si no hay conductores, retornar una fila vacía
+      return [{
+        ...asignacion,
+        conductorEspecifico: null,
+        turnoEspecifico: '-'
+      }]
+    })
+  }, [asignaciones])
 
   const columns = useMemo<ColumnDef<AsignacionActiva>[]>(
     () => [
@@ -181,30 +197,48 @@ export function AsignacionesActivasModule() {
         enableSorting: true,
       },
       {
-        id: 'conductores',
-        header: 'Conductores',
+        id: 'turno',
+        header: 'Turno',
         cell: ({ row }) => {
-          // TEMPORAL: mostrar todos los conductores sin filtrar para debug
-          const todosConductores = row.original.asignaciones_conductores || []
-          console.log('Conductores en fila:', todosConductores)
-          const conductores = todosConductores // Sin filtrar temporalmente
-          return conductores.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {conductores.map((ac, idx) => (
-                <div key={idx} style={{
-                  background: '#F0FDF4',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '13px',
-                  color: '#166534',
-                  fontWeight: 500
-                }}>
-                  {ac.conductores.nombres} {ac.conductores.apellidos}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <span style={{ color: '#9CA3AF', fontSize: '13px' }}>Sin conductores</span>
+          const turno = (row.original as any).turnoEspecifico
+          return (
+            <span style={{ fontSize: '13px', fontWeight: '500' }}>
+              {turno === '-' ? '-' : turno || 'N/A'}
+            </span>
+          )
+        },
+        enableSorting: false,
+      },
+      {
+        id: 'conductor',
+        header: 'Conductor',
+        cell: ({ row }) => {
+          const conductorEsp = (row.original as any).conductorEspecifico
+
+          // Si hay conductor específico (TURNO), mostrar solo ese
+          if (conductorEsp) {
+            return (
+              <span style={{ fontSize: '13px', fontWeight: '500' }}>
+                {conductorEsp.conductores.nombres} {conductorEsp.conductores.apellidos}
+              </span>
+            )
+          }
+
+          // Si es A CARGO, mostrar todos los conductores
+          if (row.original.horario === 'CARGO' && row.original.asignaciones_conductores && row.original.asignaciones_conductores.length > 0) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {row.original.asignaciones_conductores.map((ac, idx) => (
+                  <span key={idx} style={{ fontSize: '13px', fontWeight: '500' }}>
+                    {ac.conductores.nombres} {ac.conductores.apellidos}
+                  </span>
+                ))}
+              </div>
+            )
+          }
+
+          return (
+            <span style={{ color: '#9CA3AF', fontSize: '13px' }}>Sin conductor</span>
           )
         },
         enableSorting: false,
@@ -289,11 +323,11 @@ export function AsignacionesActivasModule() {
   )
 
   const table = useReactTable({
-    data: asignaciones,
+    data: expandedAsignaciones,
     columns,
     state: {
       sorting,
-      globalFilter,
+      globalFilter: debouncedSearch,
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
@@ -569,7 +603,7 @@ export function AsignacionesActivasModule() {
           Asignaciones Activas
         </h3>
         <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
-          {asignaciones.length} asignación{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''}
+          {expandedAsignaciones.length} fila{expandedAsignaciones.length !== 1 ? 's' : ''} ({asignaciones.length} asignación{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''})
         </p>
       </div>
 
@@ -616,7 +650,7 @@ export function AsignacionesActivasModule() {
           <tbody>
             {table.getRowModel().rows.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF' }}>
                   <Info size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
                   <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>
                     No hay asignaciones activas

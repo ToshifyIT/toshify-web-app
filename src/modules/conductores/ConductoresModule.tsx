@@ -95,6 +95,15 @@ export function ConductoresModule() {
     loadCatalogs();
   }, []);
 
+  // Debounce search term (300ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(globalFilter);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [globalFilter]);
+
   const loadCatalogs = async () => {
     try {
       const [
@@ -790,10 +799,10 @@ export function ConductoresModule() {
     columns,
     state: {
       sorting,
-      globalFilter,
+      globalFilter: debouncedSearch,
     },
     onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    onGlobalFilterChange: setDebouncedSearch,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),

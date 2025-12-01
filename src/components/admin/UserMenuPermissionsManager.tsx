@@ -56,6 +56,8 @@ export function UserMenuPermissionsManager() {
   const [selectedUser, setSelectedUser] = useState<string>('')
   const [menuPermissions, setMenuPermissions] = useState<MenuPermission[]>([])
   const [submenuPermissions, setSubmenuPermissions] = useState<SubmenuPermission[]>([])
+  const [roleMenuPermissions, setRoleMenuPermissions] = useState<MenuPermission[]>([]) // Permisos del rol
+  const [roleSubmenuPermissions, setRoleSubmenuPermissions] = useState<SubmenuPermission[]>([]) // Permisos del rol
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [globalFilter, setGlobalFilter] = useState('')
@@ -108,6 +110,12 @@ export function UserMenuPermissionsManager() {
 
   const loadUserPermissions = async (userId: string) => {
     try {
+      // Obtener el rol del usuario
+      const user = users.find(u => u.id === userId)
+      const userRoleId = user?.role_id
+
+      console.log('📥 Cargando permisos para usuario:', userId, 'con rol:', userRoleId)
+
       // Cargar permisos de menú del usuario desde la tabla correcta
       const { data: menuPermsData, error: menuError } = await supabase
         .from('user_menu_permissions')
@@ -154,6 +162,64 @@ export function UserMenuPermissionsManager() {
         console.error('Error cargando permisos de submenú:', submenuError)
       }
 
+      // Cargar permisos del ROL del usuario
+      let roleMenuPerms: any[] = []
+      let roleSubmenuPerms: any[] = []
+
+      if (userRoleId) {
+        console.log('🔐 Cargando permisos del rol:', userRoleId)
+
+        // Permisos de menú del rol
+        const { data: roleMenuData, error: roleMenuError } = await supabase
+          .from('role_menu_permissions')
+          .select(`
+            menu_id,
+            can_view,
+            can_create,
+            can_edit,
+            can_delete,
+            menus (
+              id,
+              name,
+              label
+            )
+          `)
+          .eq('role_id', userRoleId)
+
+        if (roleMenuError) {
+          console.error('Error cargando permisos de menú del rol:', roleMenuError)
+        } else {
+          roleMenuPerms = roleMenuData || []
+        }
+
+        // Permisos de submenú del rol
+        const { data: roleSubmenuData, error: roleSubmenuError } = await supabase
+          .from('role_submenu_permissions')
+          .select(`
+            submenu_id,
+            can_view,
+            can_create,
+            can_edit,
+            can_delete,
+            submenus (
+              id,
+              name,
+              label,
+              menu_id,
+              menus (
+                name
+              )
+            )
+          `)
+          .eq('role_id', userRoleId)
+
+        if (roleSubmenuError) {
+          console.error('Error cargando permisos de submenú del rol:', roleSubmenuError)
+        } else {
+          roleSubmenuPerms = roleSubmenuData || []
+        }
+      }
+
       // Transformar los datos al formato esperado
       const formattedMenuPerms = (menuPermsData || []).map((p: any) => ({
         menu_id: p.menu_id,
@@ -176,11 +242,36 @@ export function UserMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
-      console.log('📋 Permisos de menú cargados:', formattedMenuPerms)
-      console.log('📋 Permisos de submenú cargados:', formattedSubmenuPerms)
+      const formattedRoleMenuPerms = roleMenuPerms.map((p: any) => ({
+        menu_id: p.menu_id,
+        menu_name: p.menus?.name || '',
+        menu_label: p.menus?.label || '',
+        can_view: p.can_view,
+        can_create: p.can_create,
+        can_edit: p.can_edit,
+        can_delete: p.can_delete
+      }))
+
+      const formattedRoleSubmenuPerms = roleSubmenuPerms.map((p: any) => ({
+        submenu_id: p.submenu_id,
+        menu_name: p.submenus?.menus?.name || '',
+        submenu_name: p.submenus?.name || '',
+        submenu_label: p.submenus?.label || '',
+        can_view: p.can_view,
+        can_create: p.can_create,
+        can_edit: p.can_edit,
+        can_delete: p.can_delete
+      }))
+
+      console.log('✅ Permisos de menú (usuario):', formattedMenuPerms)
+      console.log('✅ Permisos de submenú (usuario):', formattedSubmenuPerms)
+      console.log('🔐 Permisos de menú (rol):', formattedRoleMenuPerms)
+      console.log('🔐 Permisos de submenú (rol):', formattedRoleSubmenuPerms)
 
       setMenuPermissions(formattedMenuPerms)
       setSubmenuPermissions(formattedSubmenuPerms)
+      setRoleMenuPermissions(formattedRoleMenuPerms)
+      setRoleSubmenuPermissions(formattedRoleSubmenuPerms)
     } catch (err) {
       console.error('❌ Error cargando permisos:', err)
     }
@@ -352,14 +443,39 @@ export function UserMenuPermissionsManager() {
     }
   }, [selectedUser, submenuPermissions, submenus])
 
+  // Obtener permiso con herencia del rol
   const getMenuPermission = (menuId: string, field: keyof MenuPermission) => {
-    const perm = menuPermissions.find(p => p.menu_id === menuId)
-    return perm ? perm[field] : false
+    // Prioridad: permisos del usuario > permisos del rol
+    const userPerm = menuPermissions.find(p => p.menu_id === menuId)
+    if (userPerm) {
+      return userPerm[field]
+    }
+
+    // Si no hay permiso del usuario, heredar del rol
+    const rolePerm = roleMenuPermissions.find(p => p.menu_id === menuId)
+    return rolePerm ? rolePerm[field] : false
   }
 
+  // Obtener permiso con herencia del rol
   const getSubmenuPermission = (submenuId: string, field: keyof SubmenuPermission) => {
-    const perm = submenuPermissions.find(p => p.submenu_id === submenuId)
-    return perm ? perm[field] : false
+    // Prioridad: permisos del usuario > permisos del rol
+    const userPerm = submenuPermissions.find(p => p.submenu_id === submenuId)
+    if (userPerm) {
+      return userPerm[field]
+    }
+
+    // Si no hay permiso del usuario, heredar del rol
+    const rolePerm = roleSubmenuPermissions.find(p => p.submenu_id === submenuId)
+    return rolePerm ? rolePerm[field] : false
+  }
+
+  // Verificar si un permiso es heredado del rol (no tiene override del usuario)
+  const isMenuPermissionInherited = (menuId: string): boolean => {
+    return !menuPermissions.some(p => p.menu_id === menuId)
+  }
+
+  const isSubmenuPermissionInherited = (submenuId: string): boolean => {
+    return !submenuPermissions.some(p => p.submenu_id === submenuId)
   }
 
   // Crear estructura de datos plana para la tabla
@@ -399,7 +515,7 @@ export function UserMenuPermissionsManager() {
     })
 
     return rows
-  }, [menus, submenus, menuPermissions, submenuPermissions])
+  }, [menus, submenus, menuPermissions, submenuPermissions, roleMenuPermissions, roleSubmenuPermissions])
 
   // Definir columnas
   const columns = useMemo<ColumnDef<PermissionRow>[]>(
@@ -457,110 +573,159 @@ export function UserMenuPermissionsManager() {
       {
         accessorKey: 'can_view',
         header: 'Ver',
-        cell: ({ row }) => (
-          <div
-            className={`perm-checkbox ${row.original.can_view ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={(e) => {
-              console.log('🖱️ Click en checkbox Ver', {
-                saving,
-                type: row.original.type,
-                menu_id: row.original.menu_id,
-                submenu_id: row.original.submenu_id,
-                selectedUser,
-                event: e
-              })
-              if (saving) {
-                console.log('⏸️ Click ignorado: saving=true')
-                return
-              }
-              if (!selectedUser) {
-                console.log('⏸️ Click ignorado: no selectedUser')
-                return
-              }
-              if (row.original.type === 'menu' && row.original.menu_id) {
-                console.log('✅ Llamando toggleMenuPermission')
-                toggleMenuPermission(row.original.menu_id, 'can_view')
-              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
-                console.log('✅ Llamando toggleSubmenuPermission')
-                toggleSubmenuPermission(row.original.submenu_id, 'can_view')
-              } else {
-                console.log('⚠️ No se pudo determinar tipo o ID')
-              }
-            }}
-          >
-            {row.original.can_view && <Check size={16} />}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isInherited = row.original.type === 'menu' && row.original.menu_id
+            ? isMenuPermissionInherited(row.original.menu_id)
+            : row.original.type === 'submenu' && row.original.submenu_id
+            ? isSubmenuPermissionInherited(row.original.submenu_id)
+            : false
+
+          return (
+            <div
+              className={`perm-checkbox ${row.original.can_view ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
+              onClick={(e) => {
+                console.log('🖱️ Click en checkbox Ver', {
+                  saving,
+                  type: row.original.type,
+                  menu_id: row.original.menu_id,
+                  submenu_id: row.original.submenu_id,
+                  selectedUser,
+                  isInherited,
+                  event: e
+                })
+                if (saving) {
+                  console.log('⏸️ Click ignorado: saving=true')
+                  return
+                }
+                if (!selectedUser) {
+                  console.log('⏸️ Click ignorado: no selectedUser')
+                  return
+                }
+                if (row.original.type === 'menu' && row.original.menu_id) {
+                  console.log('✅ Llamando toggleMenuPermission')
+                  toggleMenuPermission(row.original.menu_id, 'can_view')
+                } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                  console.log('✅ Llamando toggleSubmenuPermission')
+                  toggleSubmenuPermission(row.original.submenu_id, 'can_view')
+                } else {
+                  console.log('⚠️ No se pudo determinar tipo o ID')
+                }
+              }}
+              title={isInherited ? 'Permiso heredado del rol' : 'Permiso específico del usuario'}
+            >
+              {row.original.can_view && <Check size={16} />}
+              {isInherited && row.original.can_view && (
+                <div className="inherited-badge">R</div>
+              )}
+            </div>
+          )
+        },
         enableSorting: true,
       },
       {
         accessorKey: 'can_create',
         header: 'Crear',
-        cell: ({ row }) => (
-          <div
-            className={`perm-checkbox ${row.original.can_create ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
-              console.log('🖱️ Click en checkbox Crear', { saving, selectedUser })
-              if (saving) return
-              if (!selectedUser) return
-              if (row.original.type === 'menu' && row.original.menu_id) {
-                toggleMenuPermission(row.original.menu_id, 'can_create')
-              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
-                toggleSubmenuPermission(row.original.submenu_id, 'can_create')
-              }
-            }}
-          >
-            {row.original.can_create && <Check size={16} />}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isInherited = row.original.type === 'menu' && row.original.menu_id
+            ? isMenuPermissionInherited(row.original.menu_id)
+            : row.original.type === 'submenu' && row.original.submenu_id
+            ? isSubmenuPermissionInherited(row.original.submenu_id)
+            : false
+
+          return (
+            <div
+              className={`perm-checkbox ${row.original.can_create ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
+              onClick={() => {
+                console.log('🖱️ Click en checkbox Crear', { saving, selectedUser, isInherited })
+                if (saving) return
+                if (!selectedUser) return
+                if (row.original.type === 'menu' && row.original.menu_id) {
+                  toggleMenuPermission(row.original.menu_id, 'can_create')
+                } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                  toggleSubmenuPermission(row.original.submenu_id, 'can_create')
+                }
+              }}
+              title={isInherited ? 'Permiso heredado del rol' : 'Permiso específico del usuario'}
+            >
+              {row.original.can_create && <Check size={16} />}
+              {isInherited && row.original.can_create && (
+                <div className="inherited-badge">R</div>
+              )}
+            </div>
+          )
+        },
         enableSorting: true,
       },
       {
         accessorKey: 'can_edit',
         header: 'Editar',
-        cell: ({ row }) => (
-          <div
-            className={`perm-checkbox ${row.original.can_edit ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
-              console.log('🖱️ Click en checkbox Editar', { saving, selectedUser })
-              if (saving) return
-              if (!selectedUser) return
-              if (row.original.type === 'menu' && row.original.menu_id) {
-                toggleMenuPermission(row.original.menu_id, 'can_edit')
-              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
-                toggleSubmenuPermission(row.original.submenu_id, 'can_edit')
-              }
-            }}
-          >
-            {row.original.can_edit && <Check size={16} />}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isInherited = row.original.type === 'menu' && row.original.menu_id
+            ? isMenuPermissionInherited(row.original.menu_id)
+            : row.original.type === 'submenu' && row.original.submenu_id
+            ? isSubmenuPermissionInherited(row.original.submenu_id)
+            : false
+
+          return (
+            <div
+              className={`perm-checkbox ${row.original.can_edit ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
+              onClick={() => {
+                console.log('🖱️ Click en checkbox Editar', { saving, selectedUser, isInherited })
+                if (saving) return
+                if (!selectedUser) return
+                if (row.original.type === 'menu' && row.original.menu_id) {
+                  toggleMenuPermission(row.original.menu_id, 'can_edit')
+                } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                  toggleSubmenuPermission(row.original.submenu_id, 'can_edit')
+                }
+              }}
+              title={isInherited ? 'Permiso heredado del rol' : 'Permiso específico del usuario'}
+            >
+              {row.original.can_edit && <Check size={16} />}
+              {isInherited && row.original.can_edit && (
+                <div className="inherited-badge">R</div>
+              )}
+            </div>
+          )
+        },
         enableSorting: true,
       },
       {
         accessorKey: 'can_delete',
         header: 'Eliminar',
-        cell: ({ row }) => (
-          <div
-            className={`perm-checkbox ${row.original.can_delete ? 'checked' : ''} ${saving ? 'disabled' : ''}`}
-            onClick={() => {
-              console.log('🖱️ Click en checkbox Eliminar', { saving, selectedUser })
-              if (saving) return
-              if (!selectedUser) return
-              if (row.original.type === 'menu' && row.original.menu_id) {
-                toggleMenuPermission(row.original.menu_id, 'can_delete')
-              } else if (row.original.type === 'submenu' && row.original.submenu_id) {
-                toggleSubmenuPermission(row.original.submenu_id, 'can_delete')
-              }
-            }}
-          >
-            {row.original.can_delete && <Check size={16} />}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isInherited = row.original.type === 'menu' && row.original.menu_id
+            ? isMenuPermissionInherited(row.original.menu_id)
+            : row.original.type === 'submenu' && row.original.submenu_id
+            ? isSubmenuPermissionInherited(row.original.submenu_id)
+            : false
+
+          return (
+            <div
+              className={`perm-checkbox ${row.original.can_delete ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
+              onClick={() => {
+                console.log('🖱️ Click en checkbox Eliminar', { saving, selectedUser, isInherited })
+                if (saving) return
+                if (!selectedUser) return
+                if (row.original.type === 'menu' && row.original.menu_id) {
+                  toggleMenuPermission(row.original.menu_id, 'can_delete')
+                } else if (row.original.type === 'submenu' && row.original.submenu_id) {
+                  toggleSubmenuPermission(row.original.submenu_id, 'can_delete')
+                }
+              }}
+              title={isInherited ? 'Permiso heredado del rol' : 'Permiso específico del usuario'}
+            >
+              {row.original.can_delete && <Check size={16} />}
+              {isInherited && row.original.can_delete && (
+                <div className="inherited-badge">R</div>
+              )}
+            </div>
+          )
+        },
         enableSorting: true,
       },
     ],
-    [saving, selectedUser, toggleMenuPermission, toggleSubmenuPermission]
+    [saving, selectedUser, toggleMenuPermission, toggleSubmenuPermission, menuPermissions, submenuPermissions, roleMenuPermissions, roleSubmenuPermissions]
   )
 
   // Configurar TanStack Table
@@ -779,6 +944,7 @@ export function UserMenuPermissionsManager() {
           transition: all 0.2s;
           background: white;
           font-size: 16px;
+          position: relative;
         }
 
         .perm-checkbox:hover {
@@ -792,9 +958,36 @@ export function UserMenuPermissionsManager() {
           color: white;
         }
 
+        .perm-checkbox.inherited {
+          border-style: dashed;
+          border-width: 2px;
+          opacity: 0.7;
+        }
+
+        .perm-checkbox.inherited.checked {
+          background: #93C5FD;
+          border-color: #3B82F6;
+        }
+
         .perm-checkbox.disabled {
           opacity: 0.3;
           cursor: not-allowed;
+        }
+
+        .inherited-badge {
+          position: absolute;
+          top: -8px;
+          right: -8px;
+          background: #3B82F6;
+          color: white;
+          border-radius: 50%;
+          width: 16px;
+          height: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-weight: 700;
         }
 
         .pagination {

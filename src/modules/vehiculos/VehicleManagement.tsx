@@ -32,6 +32,7 @@ export function VehicleManagement() {
 
   // TanStack Table states
   const [globalFilter, setGlobalFilter] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
 
   // Catalog states
@@ -72,6 +73,15 @@ export function VehicleManagement() {
     loadVehiculos()
     loadCatalogs()
   }, [])
+
+  // Debounce search term (300ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(globalFilter)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [globalFilter])
 
   const loadCatalogs = async () => {
     try {
@@ -492,10 +502,10 @@ export function VehicleManagement() {
     columns,
     state: {
       sorting,
-      globalFilter,
+      globalFilter: debouncedSearch,
     },
     onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    onGlobalFilterChange: setDebouncedSearch,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),

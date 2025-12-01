@@ -57,6 +57,7 @@ export function AsignacionesModule() {
   const [loading, setLoading] = useState(true)
   const [showWizard, setShowWizard] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -129,6 +130,15 @@ export function AsignacionesModule() {
     }
     getCurrentUser()
   }, [])
+
+  // Debounce search term (300ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   const handleDelete = async (id: string) => {
     if (isSubmitting) return // Prevenir doble click
@@ -233,14 +243,43 @@ export function AsignacionesModule() {
 
   const filteredAsignaciones = asignaciones.filter(asignacion => {
     const matchesSearch =
-      asignacion.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      asignacion.vehiculos?.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      asignacion.conductores?.nombres.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      asignacion.conductores?.apellidos.toLowerCase().includes(searchTerm.toLowerCase())
+      asignacion.codigo?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      asignacion.vehiculos?.patente.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      asignacion.conductores?.nombres.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      asignacion.conductores?.apellidos.toLowerCase().includes(debouncedSearch.toLowerCase())
 
     const matchesStatus = !statusFilter || asignacion.estado === statusFilter
 
     return matchesSearch && matchesStatus
+  })
+
+  // Expandir asignaciones TURNO en filas separadas (una por conductor)
+  // A CARGO se mantiene en una sola fila
+  const expandedAsignaciones = filteredAsignaciones.flatMap(asignacion => {
+    // Si es A CARGO, retornar una sola fila
+    if (asignacion.horario === 'CARGO') {
+      return [{
+        ...asignacion,
+        conductorEspecifico: null,
+        turnoEspecifico: '-'
+      }]
+    }
+
+    // Si es TURNO, retornar una fila por cada conductor
+    if (asignacion.asignaciones_conductores && asignacion.asignaciones_conductores.length > 0) {
+      return asignacion.asignaciones_conductores.map(ac => ({
+        ...asignacion,
+        conductorEspecifico: ac,
+        turnoEspecifico: ac.horario
+      }))
+    }
+
+    // Si no tiene conductores, retornar fila vacía
+    return [{
+      ...asignacion,
+      conductorEspecifico: null,
+      turnoEspecifico: '-'
+    }]
   })
 
   // Confirmar programación (PROGRAMADO → ACTIVA solo cuando TODOS confirman)
@@ -880,7 +919,8 @@ export function AsignacionesModule() {
           Gestión de Asignaciones
         </h3>
         <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
-          {filteredAsignaciones.length} asignación{filteredAsignaciones.length !== 1 ? 'es' : ''} encontrada{filteredAsignaciones.length !== 1 ? 's' : ''}
+          {filteredAsignaciones.length} asignación{filteredAsignaciones.length !== 1 ? 'es' : ''}
+          {expandedAsignaciones.length !== filteredAsignaciones.length && ` (${expandedAsignaciones.length} fila${expandedAsignaciones.length !== 1 ? 's' : ''})`}
         </p>
       </div>
 
@@ -918,9 +958,9 @@ export function AsignacionesModule() {
             className="filter-select"
           >
             <option value="">Todos los estados</option>
+            <option value="programado">Programado</option>
             <option value="activa">Activa</option>
             <option value="finalizada">Finalizada</option>
-            <option value="cancelada">Cancelada</option>
           </select>
         </div>
       </div>
@@ -942,7 +982,8 @@ export function AsignacionesModule() {
                   <th>Número</th>
                   <th>Vehículo</th>
                   <th>Modalidad</th>
-                  <th>Conductores</th>
+                  <th>Turno</th>
+                  <th>Conductor</th>
                   <th>Fecha Entrega</th>
                   <th>Fecha Fin</th>
                   <th>Estado</th>
@@ -950,39 +991,48 @@ export function AsignacionesModule() {
                 </tr>
               </thead>
               <tbody>
-                {filteredAsignaciones.map((asignacion) => (
-                  <tr key={asignacion.id}>
+                {expandedAsignaciones.map((row, index) => (
+                  <tr key={`${row.id}-${index}`}>
                     <td>
-                      <strong>{asignacion.codigo || 'N/A'}</strong>
+                      <strong>{row.codigo || 'N/A'}</strong>
                     </td>
                     <td>
-                      <strong>{asignacion.vehiculos?.patente || 'N/A'}</strong>
+                      <strong>{row.vehiculos?.patente || 'N/A'}</strong>
                       <br />
                       <span style={{ fontSize: '12px', color: '#6B7280' }}>
-                        {asignacion.vehiculos?.marca} {asignacion.vehiculos?.modelo}
+                        {row.vehiculos?.marca} {row.vehiculos?.modelo}
                       </span>
                     </td>
                     <td>
-                      <span className={`badge ${getHorarioBadgeClass(asignacion.horario)}`}>
-                        {asignacion.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
+                      <span className={`badge ${getHorarioBadgeClass(row.horario)}`}>
+                        {row.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
                       </span>
                     </td>
                     <td>
-                      <div className="conductores-list">
-                        {asignacion.asignaciones_conductores && asignacion.asignaciones_conductores.length > 0 ? (
-                          asignacion.asignaciones_conductores.map((ac) => (
+                      <span style={{ fontSize: '13px', fontWeight: '500' }}>
+                        {row.turnoEspecifico === '-' ? '-' : row.turnoEspecifico || 'N/A'}
+                      </span>
+                    </td>
+                    <td>
+                      {row.conductorEspecifico ? (
+                        <span style={{ fontSize: '13px' }}>
+                          {row.conductorEspecifico.conductores.nombres} {row.conductorEspecifico.conductores.apellidos}
+                        </span>
+                      ) : row.horario === 'CARGO' && row.asignaciones_conductores && row.asignaciones_conductores.length > 0 ? (
+                        <div className="conductores-list">
+                          {row.asignaciones_conductores.map((ac) => (
                             <span key={ac.id} className="conductor-item">
                               {ac.conductores.nombres} {ac.conductores.apellidos}
                             </span>
-                          ))
-                        ) : (
-                          <span style={{ color: '#9CA3AF', fontSize: '12px' }}>Sin conductores</span>
-                        )}
-                      </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ color: '#9CA3AF', fontSize: '12px' }}>Sin conductor</span>
+                      )}
                     </td>
                     <td>
-                      {asignacion.fecha_programada
-                        ? new Date(asignacion.fecha_programada).toLocaleDateString('es-ES', {
+                      {row.fecha_programada
+                        ? new Date(row.fecha_programada).toLocaleDateString('es-ES', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric'
@@ -990,8 +1040,8 @@ export function AsignacionesModule() {
                         : 'No definida'}
                     </td>
                     <td>
-                      {asignacion.fecha_fin
-                        ? new Date(asignacion.fecha_fin).toLocaleDateString('es-ES', {
+                      {row.fecha_fin
+                        ? new Date(row.fecha_fin).toLocaleDateString('es-ES', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric'
@@ -999,16 +1049,16 @@ export function AsignacionesModule() {
                         : 'Sin definir'}
                     </td>
                     <td>
-                      <span className={`badge ${getStatusBadgeClass(asignacion.estado)}`}>
-                        {asignacion.estado}
+                      <span className={`badge ${getStatusBadgeClass(row.estado)}`}>
+                        {row.estado}
                       </span>
                     </td>
                     <td>
                       {/* Botón Confirmar - solo visible si estado es PROGRAMADO */}
-                      {asignacion.estado === 'programado' && (
+                      {row.estado === 'programado' && (
                         <button
                           onClick={() => {
-                            setSelectedAsignacion(asignacion)
+                            setSelectedAsignacion(row)
                             setShowConfirmModal(true)
                           }}
                           className="btn-action"
@@ -1021,16 +1071,16 @@ export function AsignacionesModule() {
                       )}
 
                       {/* Botón Cancelar - solo visible si estado es PROGRAMADO */}
-                      {asignacion.estado === 'programado' && (
+                      {row.estado === 'programado' && (
                         <button
                           onClick={() => {
-                            setSelectedAsignacion(asignacion)
+                            setSelectedAsignacion(row)
                             setShowCancelModal(true)
                           }}
                           className="btn-action"
                           style={{ background: '#F59E0B', color: 'white' }}
                           title="Cancelar programación"
-                          disabled={asignacion.created_by !== currentUserId}
+                          disabled={row.created_by !== currentUserId}
                         >
                           <XCircle size={16} style={{ display: 'inline', verticalAlign: 'middle' }} />
                         </button>
@@ -1040,7 +1090,7 @@ export function AsignacionesModule() {
                         className="btn-action"
                         title="Ver detalles"
                         onClick={() => {
-                          setViewAsignacion(asignacion)
+                          setViewAsignacion(row)
                           setShowViewModal(true)
                         }}
                       >
@@ -1048,7 +1098,7 @@ export function AsignacionesModule() {
                       </button>
 
                       <button
-                        onClick={() => handleDelete(asignacion.id)}
+                        onClick={() => handleDelete(row.id)}
                         className="btn-action btn-delete"
                         title="Eliminar"
                         disabled={!canDelete}
@@ -1062,7 +1112,7 @@ export function AsignacionesModule() {
             </table>
           </div>
 
-          {filteredAsignaciones.length === 0 && !loading && (
+          {expandedAsignaciones.length === 0 && !loading && (
             <div className="empty-state">
               No se encontraron asignaciones con los filtros seleccionados.
             </div>
