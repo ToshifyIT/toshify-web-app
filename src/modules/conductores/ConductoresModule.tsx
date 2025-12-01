@@ -38,6 +38,7 @@ export function ConductoresModule() {
 
   // TanStack Table states
   const [globalFilter, setGlobalFilter] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
 
   // Catalog states
