@@ -143,8 +143,10 @@ class CabifyHistoricalService {
 
   /**
    * Verificar si los datos fueron sincronizados recientemente (últimos 10 min)
+   * @deprecated No se usa actualmente, pero se mantiene para uso futuro
    */
-  private async checkRecentSync(startDate: string, endDate: string): Promise<boolean> {
+  // @ts-expect-error - Método no usado pero mantenido para uso futuro
+  private async _checkRecentSync(startDate: string, endDate: string): Promise<boolean> {
     try {
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
 
@@ -237,7 +239,7 @@ class CabifyHistoricalService {
     const apiDrivers = await cabifyService.getDriversWithDetails(
       'custom' as CabifyPeriod,
       { startDate, endDate },
-      options.onProgress
+      options.onProgress ? (current, total, _newDrivers, message) => options.onProgress!(current, total, message) : undefined
     )
 
     // 6. Guardar en histórico (asíncrono, no bloquear respuesta)
@@ -270,7 +272,7 @@ class CabifyHistoricalService {
    */
   private async queryHistorical(
     startDate: string,
-    endDate: string
+    _endDate: string
   ): Promise<DriverHistoricalData[]> {
     // Consulta flexible: buscar por fecha_inicio únicamente
     // Esto permite usar datos sincronizados sin requerir fecha_fin exacta
@@ -294,7 +296,7 @@ class CabifyHistoricalService {
     console.log(`📦 ${data.length} registros históricos encontrados`)
 
     // Mapear a formato estándar
-    return data.map(record => ({
+    return (data as any[]).map((record: any) => ({
       id: record.cabify_driver_id,
       companyId: record.cabify_company_id,
       companyName: record.cabify_company_id,
@@ -433,7 +435,7 @@ class CabifyHistoricalService {
 
         const { error } = await supabase
           .from('cabify_historico')
-          .insert(batch)
+          .insert(batch as any)
 
         if (error) {
           // Ignorar errores de duplicados (constraint único)
