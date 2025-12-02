@@ -10,6 +10,7 @@ import {
   ArrowUp,
   ArrowDown
 } from 'lucide-react'
+import './HistorialMovimientos.css'
 
 interface Movimiento {
   id: string
@@ -119,28 +120,15 @@ export function HistorialMovimientosModule() {
 
   const getTipoIcon = (tipo: string) => {
     const icons: Record<string, any> = {
-      entrada: <ArrowDown size={16} style={{ color: '#059669' }} />,
-      salida: <ArrowUp size={16} style={{ color: '#DC2626' }} />,
-      asignacion: <Truck size={16} style={{ color: '#D97706' }} />,
-      devolucion: <RotateCcw size={16} style={{ color: '#1E40AF' }} />,
-      ajuste: <Package size={16} style={{ color: '#6B7280' }} />,
-      daño: <AlertTriangle size={16} style={{ color: '#DC2626' }} />,
-      perdida: <XCircle size={16} style={{ color: '#6B7280' }} />
+      entrada: <ArrowDown size={16} />,
+      salida: <ArrowUp size={16} />,
+      asignacion: <Truck size={16} />,
+      devolucion: <RotateCcw size={16} />,
+      ajuste: <Package size={16} />,
+      daño: <AlertTriangle size={16} />,
+      perdida: <XCircle size={16} />
     }
     return icons[tipo] || <Package size={16} />
-  }
-
-  const getTipoBadgeStyle = (tipo: string) => {
-    const styles: Record<string, any> = {
-      entrada: { background: '#D1FAE5', color: '#059669' },
-      salida: { background: '#FEE2E2', color: '#DC2626' },
-      asignacion: { background: '#FEF3C7', color: '#D97706' },
-      devolucion: { background: '#DBEAFE', color: '#1E40AF' },
-      ajuste: { background: '#F3F4F6', color: '#6B7280' },
-      daño: { background: '#FEE2E2', color: '#DC2626' },
-      perdida: { background: '#F3F4F6', color: '#6B7280' }
-    }
-    return styles[tipo] || { background: '#F3F4F6', color: '#6B7280' }
   }
 
   const filteredData = movimientos.filter((item) => {
@@ -158,50 +146,34 @@ export function HistorialMovimientosModule() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px' }}>
-        <p>Cargando historial...</p>
+      <div className="dt-loading">
+        <div className="dt-loading-spinner"></div>
+        <span>Cargando historial...</span>
       </div>
     )
   }
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div className="module-container">
       {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#1F2937', marginBottom: '8px' }}>
-          Historial de Movimientos
-        </h1>
-        <p style={{ color: '#6B7280', fontSize: '14px' }}>
-          Últimos 100 movimientos del inventario
-        </p>
+      <div className="module-header">
+        <h1 className="module-title">Historial de Movimientos</h1>
+        <p className="module-subtitle">Últimos 100 movimientos del inventario</p>
       </div>
 
       {/* Filtros */}
-      <div style={{ marginBottom: '24px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+      <div className="hist-filters">
         <input
           type="text"
+          className="hist-search-input"
           placeholder="Buscar por producto, usuario o vehículo..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: '300px',
-            padding: '10px 16px',
-            border: '1px solid #D1D5DB',
-            borderRadius: '8px',
-            fontSize: '14px'
-          }}
         />
         <select
+          className="hist-type-select"
           value={tipoFilter}
           onChange={(e) => setTipoFilter(e.target.value)}
-          style={{
-            padding: '10px 16px',
-            border: '1px solid #D1D5DB',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: 600
-          }}
         >
           <option value="all">Todos los tipos</option>
           <option value="entrada">Entrada</option>
@@ -213,118 +185,67 @@ export function HistorialMovimientosModule() {
         </select>
       </div>
 
-      {/* Tabla de Movimientos */}
-      <div style={{ background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #E5E7EB' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      {/* Tabla de Movimientos - usando clases de DataTable */}
+      <div className="dt-container">
+        <div className="dt-table-wrapper">
+          <table className="dt-table">
             <thead>
-              <tr style={{ background: '#F9FAFB', borderBottom: '2px solid #E5E7EB' }}>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
-                  Fecha
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
-                  Tipo
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
-                  Producto
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
-                  Cantidad
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
-                  Vehículo
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
-                  Usuario
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
-                  Observaciones
-                </th>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Producto</th>
+                <th style={{ textAlign: 'center' }}>Cantidad</th>
+                <th>Vehículo</th>
+                <th>Usuario</th>
+                <th>Observaciones</th>
               </tr>
             </thead>
             <tbody>
               {filteredData.map((item) => (
-                <tr
-                  key={item.id}
-                  style={{ borderBottom: '1px solid #E5E7EB' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#F9FAFB')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'white')}
-                >
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6B7280' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <tr key={item.id}>
+                  <td>
+                    <div className="hist-date-cell">
                       <Calendar size={14} />
                       <div>
                         <div>{new Date(item.created_at).toLocaleDateString('es-CL')}</div>
-                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                        <div className="hist-date-time">
                           {new Date(item.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{
-                      ...getTipoBadgeStyle(item.tipo_movimiento),
-                      padding: '6px 12px',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}>
+                  <td>
+                    <span className={`hist-tipo-badge ${item.tipo_movimiento}`}>
                       {getTipoIcon(item.tipo_movimiento)}
                       {getTipoLabel(item.tipo_movimiento)}
                     </span>
                   </td>
-                  <td style={{ padding: '12px 16px' }}>
+                  <td>
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#DC2626' }}>
-                        {item.producto.codigo}
-                      </div>
-                      <div style={{ fontSize: '13px', color: '#6B7280' }}>
-                        {item.producto.nombre}
-                      </div>
+                      <div className="hist-producto-codigo">{item.producto.codigo}</div>
+                      <div className="hist-producto-nombre">{item.producto.nombre}</div>
                     </div>
                   </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '16px', fontWeight: 700 }}>
-                    {item.cantidad}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px' }}>
+                  <td style={{ textAlign: 'center' }} className="hist-cantidad">{item.cantidad}</td>
+                  <td>
                     {item.vehiculo_destino?.patente || item.vehiculo_origen?.patente || '-'}
                   </td>
-                  <td style={{ padding: '12px 16px' }}>
+                  <td>
                     {item.usuario ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{
-                          width: '32px',
-                          height: '32px',
-                          background: '#DC2626',
-                          borderRadius: '50%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'white',
-                          fontWeight: 700,
-                          fontSize: '12px'
-                        }}>
+                      <div className="hist-usuario-cell">
+                        <div className="hist-usuario-avatar">
                           {item.usuario.nombre.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div style={{ fontSize: '13px', fontWeight: 600 }}>
-                            {item.usuario.nombre}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                            {item.usuario.email}
-                          </div>
+                          <div className="hist-usuario-nombre">{item.usuario.nombre}</div>
+                          <div className="hist-usuario-email">{item.usuario.email}</div>
                         </div>
                       </div>
                     ) : (
-                      <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Sistema</span>
+                      <span className="hist-usuario-sistema">Sistema</span>
                     )}
                   </td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6B7280' }}>
-                    {item.observaciones || '-'}
-                  </td>
+                  <td className="hist-observaciones">{item.observaciones || '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -333,18 +254,9 @@ export function HistorialMovimientosModule() {
       </div>
 
       {filteredData.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: '60px 20px',
-          background: 'white',
-          borderRadius: '12px',
-          border: '1px solid #E5E7EB',
-          marginTop: '20px'
-        }}>
-          <Package size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px' }} />
-          <p style={{ fontSize: '16px', fontWeight: 600, color: '#6B7280' }}>
-            No se encontraron movimientos
-          </p>
+        <div className="hist-empty">
+          <Package size={48} className="hist-empty-icon" />
+          <p className="hist-empty-text">No se encontraron movimientos</p>
         </div>
       )}
     </div>

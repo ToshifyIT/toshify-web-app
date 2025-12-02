@@ -1,18 +1,10 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, User, Car, Calendar, Clock, Info } from 'lucide-react'
+import { Eye, User, Car, Calendar, Clock, Info, ClipboardList } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  flexRender,
-  type ColumnDef,
-  type SortingState,
-} from '@tanstack/react-table'
+import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
+import { DataTable } from '../../components/ui/DataTable'
 
 interface AsignacionActiva {
   id: string
@@ -52,23 +44,12 @@ interface AsignacionActiva {
 export function AsignacionesActivasModule() {
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [loading, setLoading] = useState(true)
-  const [globalFilter, setGlobalFilter] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [sorting, setSorting] = useState<SortingState>([])
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
 
   useEffect(() => {
     loadAsignacionesActivas()
   }, [])
-
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(globalFilter)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [globalFilter])
 
   const loadAsignacionesActivas = async () => {
     setLoading(true)
@@ -249,15 +230,7 @@ export function AsignacionesActivasModule() {
         cell: ({ getValue }) => {
           const horario = getValue() as string
           return (
-            <span style={{
-              display: 'inline-block',
-              padding: '4px 12px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: 600,
-              background: horario === 'CARGO' ? '#E9D5FF' : '#FEF3C7',
-              color: horario === 'CARGO' ? '#6B21A8' : '#92400E'
-            }}>
+            <span className={horario === 'CARGO' ? 'dt-badge dt-badge-blue' : 'dt-badge dt-badge-yellow'}>
               {horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
             </span>
           )
@@ -286,35 +259,15 @@ export function AsignacionesActivasModule() {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => (
-          <button
-            onClick={() => openDetailsModal(row.original)}
-            style={{
-              padding: '8px 16px',
-              background: 'white',
-              border: '1px solid #E5E7EB',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              color: '#374151',
-              transition: 'all 0.2s'
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.borderColor = '#E63946'
-              e.currentTarget.style.color = '#E63946'
-              e.currentTarget.style.background = '#FEF2F2'
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.borderColor = '#E5E7EB'
-              e.currentTarget.style.color = '#374151'
-              e.currentTarget.style.background = 'white'
-            }}
-          >
-            <Eye size={16} />
-          </button>
+          <div className="dt-actions">
+            <button
+              className="dt-btn-action dt-btn-view"
+              onClick={() => openDetailsModal(row.original)}
+              title="Ver detalles"
+            >
+              <Eye size={16} />
+            </button>
+          </div>
         ),
         enableSorting: false,
       },
@@ -322,173 +275,9 @@ export function AsignacionesActivasModule() {
     []
   )
 
-  const table = useReactTable({
-    data: expandedAsignaciones,
-    columns,
-    state: {
-      sorting,
-      globalFilter: debouncedSearch,
-    },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
-  })
-
-  if (loading) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <div style={{ color: '#6B7280' }}>Cargando asignaciones activas...</div>
-      </div>
-    )
-  }
-
   return (
-    <div>
+    <div className="module-container">
       <style>{`
-        .table-container {
-          background: white;
-          border-radius: 12px;
-          overflow: hidden;
-          border: 1px solid #E5E7EB;
-          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-        }
-
-        .data-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-
-        .data-table th {
-          background: #F9FAFB;
-          padding: 14px 16px;
-          text-align: left;
-          font-size: 12px;
-          font-weight: 600;
-          color: #6B7280;
-          text-transform: uppercase;
-          border-bottom: 2px solid #E5E7EB;
-          cursor: pointer;
-          user-select: none;
-        }
-
-        .data-table th.sortable:hover {
-          background: #F3F4F6;
-        }
-
-        .data-table td {
-          padding: 16px;
-          border-bottom: 1px solid #F3F4F6;
-        }
-
-        .data-table tbody tr {
-          transition: background 0.2s;
-        }
-
-        .data-table tbody tr:hover {
-          background: #F9FAFB;
-        }
-
-        .search-input {
-          width: 100%;
-          max-width: 400px;
-          padding: 12px 16px 12px 42px;
-          font-size: 15px;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          background: white;
-          transition: border-color 0.2s;
-        }
-
-        .search-input:focus {
-          outline: none;
-          border-color: #E63946;
-          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
-        }
-
-        .pagination {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          border-top: 1px solid #E5E7EB;
-          background: #FAFAFA;
-        }
-
-        .pagination-info {
-          font-size: 14px;
-          color: #6B7280;
-        }
-
-        .pagination-controls {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-
-        .pagination-controls button {
-          padding: 8px 12px;
-          border: 1px solid #E5E7EB;
-          background: white;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 500;
-          color: #374151;
-          transition: all 0.2s;
-        }
-
-        .pagination-controls button:hover:not(:disabled) {
-          background: #F9FAFB;
-          border-color: #E63946;
-          color: #E63946;
-        }
-
-        .pagination-controls button:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-
-        .pagination-controls select {
-          padding: 8px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          font-size: 14px;
-          background: white;
-          cursor: pointer;
-        }
-
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          padding: 20px;
-        }
-
-        .modal-content {
-          background: white;
-          border-radius: 16px;
-          max-width: 900px;
-          width: 100%;
-          max-height: 90vh;
-          overflow-y: auto;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
-
         .modal-header {
           padding: 24px 32px;
           border-bottom: 1px solid #E5E7EB;
@@ -501,14 +290,7 @@ export function AsignacionesActivasModule() {
           padding: 32px;
         }
 
-        .modal-footer {
-          padding: 20px 32px;
-          border-top: 1px solid #E5E7EB;
-          display: flex;
-          justify-content: flex-end;
-        }
-
-        .section-title {
+        .asignacion-section-title {
           font-size: 16px;
           font-weight: 700;
           color: #1F2937;
@@ -518,26 +300,6 @@ export function AsignacionesActivasModule() {
           display: flex;
           align-items: center;
           gap: 8px;
-        }
-
-        .details-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 20px;
-          margin-bottom: 24px;
-        }
-
-        .detail-item {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .detail-label {
-          font-size: 12px;
-          font-weight: 600;
-          color: #6B7280;
-          text-transform: uppercase;
         }
 
         .detail-value {
@@ -598,123 +360,23 @@ export function AsignacionesActivasModule() {
       `}</style>
 
       {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
-          Asignaciones Activas
-        </h3>
-        <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
-          {expandedAsignaciones.length} fila{expandedAsignaciones.length !== 1 ? 's' : ''} ({asignaciones.length} asignación{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''})
+      <div className="module-header">
+        <h3 className="module-title">Asignaciones Activas</h3>
+        <p className="module-subtitle">
+          {expandedAsignaciones.length} fila{expandedAsignaciones.length !== 1 ? 's' : ''} ({asignaciones.length} asignacion{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''})
         </p>
       </div>
 
-      {/* Search */}
-      <div style={{ marginBottom: '24px', position: 'relative' }}>
-        <Eye size={20} color="#9CA3AF" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
-        <input
-          type="text"
-          className="search-input"
-          placeholder="Buscar por vehículo, conductor, número de asignación..."
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-        />
-      </div>
-
-      {/* Table */}
-      <div className="table-container">
-        <table className="data-table">
-          <thead>
-            {table.getHeaderGroups().map(headerGroup => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map(header => (
-                  <th
-                    key={header.id}
-                    onClick={header.column.getToggleSortingHandler()}
-                    className={header.column.getCanSort() ? 'sortable' : ''}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getCanSort() && (
-                        <span className="sort-indicator">
-                          {{
-                            asc: ' ↑',
-                            desc: ' ↓',
-                          }[header.column.getIsSorted() as string] ?? ' ↕'}
-                        </span>
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF' }}>
-                  <Info size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-                  <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>
-                    No hay asignaciones activas
-                  </div>
-                  <div style={{ fontSize: '14px' }}>
-                    {globalFilter ? 'No se encontraron resultados para tu búsqueda' : 'Actualmente no hay asignaciones en estado activo'}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              table.getRowModel().rows.map(row => (
-                <tr key={row.id}>
-                  {row.getVisibleCells().map(cell => (
-                    <td key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-
-        {/* Pagination */}
-        {table.getRowModel().rows.length > 0 && (
-          <div className="pagination">
-            <div className="pagination-info">
-              Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
-              {Math.min(
-                (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                table.getFilteredRowModel().rows.length
-              )}{' '}
-              de {table.getFilteredRowModel().rows.length} registros
-            </div>
-            <div className="pagination-controls">
-              <button onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}>
-                {'<<'}
-              </button>
-              <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
-                {'<'}
-              </button>
-              <span style={{ fontSize: '14px', color: '#6B7280' }}>
-                Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
-              </span>
-              <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
-                {'>'}
-              </button>
-              <button onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()}>
-                {'>>'}
-              </button>
-              <select
-                value={table.getState().pagination.pageSize}
-                onChange={e => table.setPageSize(Number(e.target.value))}
-              >
-                {[10, 20, 30, 50].map(pageSize => (
-                  <option key={pageSize} value={pageSize}>
-                    {pageSize} por página
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* DataTable */}
+      <DataTable
+        data={expandedAsignaciones}
+        columns={columns}
+        loading={loading}
+        searchPlaceholder="Buscar por vehiculo, conductor, numero de asignacion..."
+        emptyIcon={<ClipboardList size={64} />}
+        emptyTitle="No hay asignaciones activas"
+        emptyDescription="Actualmente no hay asignaciones en estado activo"
+      />
 
       {/* Modal de Detalles */}
       {showDetailsModal && selectedAsignacion && (

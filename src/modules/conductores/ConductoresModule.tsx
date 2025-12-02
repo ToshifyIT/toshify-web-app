@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import Swal from "sweetalert2";
@@ -13,16 +13,9 @@ import type {
   LicenciaEstado,
   LicenciaTipo,
 } from "../../types/database.types";
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  flexRender,
-  type ColumnDef,
-  type SortingState,
-} from "@tanstack/react-table";
+import { type ColumnDef } from "@tanstack/react-table";
+import { DataTable } from "../../components/ui/DataTable";
+import "./ConductoresModule.css";
 
 export function ConductoresModule() {
   const [conductores, setConductores] = useState<ConductorWithRelations[]>([]);
@@ -36,10 +29,7 @@ export function ConductoresModule() {
   const [selectedConductor, setSelectedConductor] =
     useState<ConductorWithRelations | null>(null);
 
-  // TanStack Table states
-  const [globalFilter, setGlobalFilter] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  // Removed TanStack Table states - now handled by DataTable component
 
   // Catalog states
   const [estadosCiviles, setEstadosCiviles] = useState<EstadoCivil[]>([]);
@@ -94,15 +84,6 @@ export function ConductoresModule() {
     loadConductores();
     loadCatalogs();
   }, []);
-
-  // Debounce search term (300ms delay)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(globalFilter);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [globalFilter]);
 
   const loadCatalogs = async () => {
     try {
@@ -650,24 +631,14 @@ export function ConductoresModule() {
       },
       {
         accessorKey: "licencias_categorias",
-        header: "Categorías",
+        header: "Categorias",
         cell: ({ row }) => {
           const categorias = row.original.licencias_categorias;
           if (Array.isArray(categorias) && categorias.length > 0) {
             return (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+              <div className="dt-actions">
                 {categorias.map((cat: any, idx: number) => (
-                  <span
-                    key={idx}
-                    style={{
-                      background: "#DBEAFE",
-                      color: "#1E40AF",
-                      padding: "4px 8px",
-                      borderRadius: "4px",
-                      fontSize: "12px",
-                      fontWeight: "600",
-                    }}
-                  >
+                  <span key={idx} className="dt-badge dt-badge-blue">
                     {cat.codigo}
                   </span>
                 ))}
@@ -697,52 +668,34 @@ export function ConductoresModule() {
         cell: ({ row }) => {
           const codigo = row.original.conductores_estados?.codigo || "N/A";
           const codigoLower = codigo.toLowerCase();
-          
-          // Determinar el color según el estado
-          let backgroundColor = "#3B82F6"; // Color por defecto (azul)
+
+          let badgeClass = "dt-badge dt-badge-solid-blue";
           if (codigoLower === "baja") {
-            backgroundColor = "#6B7280"; // Gris
+            badgeClass = "dt-badge dt-badge-solid-gray";
           } else if (codigoLower === "activo") {
-            backgroundColor = "#10B981"; // Verde
+            badgeClass = "dt-badge dt-badge-solid-green";
           }
-          
-          return (
-            <span
-              className="badge"
-              style={{
-                backgroundColor: backgroundColor,
-                color: "white",
-                padding: "4px 12px",
-                borderRadius: "12px",
-                fontSize: "12px",
-                fontWeight: "600",
-              }}
-            >
-              {codigo}
-            </span>
-          );
+
+          return <span className={badgeClass}>{codigo}</span>;
         },
         enableSorting: true,
       },
       {
         id: "vehiculo_asignado",
-        header: "Vehículo Asignado",
+        header: "Vehiculo Asignado",
         cell: ({ row }) => {
           const vehiculo = (row.original as any).vehiculo_asignado;
           if (vehiculo) {
             return (
-              <div style={{ fontSize: "13px" }}>
-                <strong>{vehiculo.patente}</strong>
-                <br />
-                <span style={{ fontSize: "11px", color: "#6B7280" }}>
+              <div className="vehiculo-cell">
+                <div className="vehiculo-cell-patente">{vehiculo.patente}</div>
+                <div className="vehiculo-cell-info">
                   {vehiculo.marca} {vehiculo.modelo}
-                </span>
+                </div>
               </div>
             );
           }
-          return (
-            <span style={{ color: "#9CA3AF", fontSize: "12px" }}>N/A</span>
-          );
+          return <span className="vehiculo-cell-na">N/A</span>;
         },
         enableSorting: false,
       },
@@ -750,9 +703,9 @@ export function ConductoresModule() {
         id: "acciones",
         header: "Acciones",
         cell: ({ row }) => (
-          <div>
+          <div className="dt-actions">
             <button
-              className="btn-action btn-view"
+              className="dt-btn-action dt-btn-view"
               onClick={() => {
                 setSelectedConductor(row.original);
                 setShowDetailsModal(true);
@@ -762,7 +715,7 @@ export function ConductoresModule() {
               <Eye size={16} />
             </button>
             <button
-              className="btn-action btn-edit"
+              className="dt-btn-action dt-btn-edit"
               onClick={() => openEditModal(row.original)}
               disabled={!canUpdate}
               title={
@@ -774,7 +727,7 @@ export function ConductoresModule() {
               <Edit2 size={16} />
             </button>
             <button
-              className="btn-action btn-delete"
+              className="dt-btn-action dt-btn-delete"
               onClick={() => openDeleteModal(row.original)}
               disabled={!canDelete}
               title={
@@ -793,668 +746,47 @@ export function ConductoresModule() {
     [canUpdate, canDelete],
   );
 
-  // Configurar TanStack Table
-  const table = useReactTable({
-    data: conductores,
-    columns,
-    state: {
-      sorting,
-      globalFilter: debouncedSearch,
-    },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setDebouncedSearch,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
-  });
-
-  if (loading) {
-    return (
-      <div style={{ textAlign: "center", padding: "40px", color: "#6B7280" }}>
-        Cargando conductores...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div
-        style={{
-          padding: "16px",
-          background: "#FEE2E2",
-          color: "#DC2626",
-          borderRadius: "8px",
-        }}
-      >
-        Error: {error}
-      </div>
-    );
-  }
-
   return (
-    <div>
-      <style>{`
-        .conductores-container {
-          max-width: 1400px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-
-        .search-filter-container {
-          margin-bottom: 20px;
-        }
-
-        .search-input {
-          width: 100%;
-          padding: 12px 16px 12px 42px;
-          font-size: 15px;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          background: white;
-          transition: border-color 0.2s;
-        }
-
-        .search-input:focus {
-          outline: none;
-          border-color: #E63946;
-          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
-        }
-
-        .table-container {
-          background: white;
-          border: 1px solid #E5E7EB;
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-        }
-
-        .data-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-
-        .data-table th {
-          background: #F9FAFB;
-          padding: 14px 16px;
-          text-align: left;
-          font-size: 12px;
-          font-weight: 600;
-          color: #6B7280;
-          text-transform: uppercase;
-          border-bottom: 2px solid #E5E7EB;
-          cursor: pointer;
-          user-select: none;
-        }
-
-        .data-table th.sortable:hover {
-          background: #F3F4F6;
-        }
-
-        .data-table th:last-child {
-          text-align: center;
-        }
-
-        .data-table td {
-          padding: 12px 16px;
-          border-bottom: 1px solid #F3F4F6;
-          color: #1F2937;
-        }
-
-        .data-table td:last-child {
-          text-align: center;
-        }
-
-        .data-table tbody tr {
-          transition: background 0.2s;
-        }
-
-        .data-table tbody tr:hover {
-          background: #F9FAFB;
-        }
-
-        .sort-indicator {
-          margin-left: 8px;
-          color: #9CA3AF;
-          font-size: 14px;
-        }
-
-        .badge {
-          display: inline-block;
-          padding: 4px 12px;
-          border-radius: 12px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .badge-available {
-          background: #D1FAE5;
-          color: #065F46;
-        }
-
-        .badge-inactive {
-          background: #FEE2E2;
-          color: #DC2626;
-        }
-
-        .badge-maintenance {
-          background: #FEF3C7;
-          color: #92400E;
-        }
-
-        .btn-action {
-          padding: 6px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          background: white;
-          color: #1F2937;
-          font-size: 12px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s;
-          margin: 0 4px;
-        }
-
-        .btn-action:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .btn-action.btn-view:hover {
-          border-color: #8B5CF6;
-          color: #8B5CF6;
-          background: #F5F3FF;
-        }
-
-        .btn-action.btn-edit:not(:disabled):hover {
-          border-color: #3B82F6;
-          color: #3B82F6;
-          background: #EFF6FF;
-        }
-
-        .btn-action.btn-delete:not(:disabled):hover {
-          border-color: #E63946;
-          color: #E63946;
-          background: #FEE2E2;
-        }
-
-        .btn-primary {
-          padding: 12px 28px;
-          background: #E63946;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-size: 15px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 6px rgba(230, 57, 70, 0.2);
-        }
-
-        .btn-primary:hover {
-          background: #D62828;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 12px rgba(230, 57, 70, 0.3);
-        }
-
-        .btn-primary:disabled {
-          background: #9CA3AF;
-          cursor: not-allowed;
-        }
-
-        .btn-secondary {
-          padding: 10px 20px;
-          background: white;
-          color: #6B7280;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btn-secondary:hover {
-          background: #F9FAFB;
-        }
-
-        .pagination {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          border-top: 1px solid #E5E7EB;
-          background: #FAFAFA;
-        }
-
-        .pagination-info {
-          font-size: 14px;
-          color: #6B7280;
-        }
-
-        .pagination-controls {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-
-        .pagination-controls button {
-          padding: 8px 12px;
-          border: 1px solid #E5E7EB;
-          background: white;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 500;
-          color: #374151;
-          transition: all 0.2s;
-        }
-
-        .pagination-controls button:hover:not(:disabled) {
-          background: #F9FAFB;
-          border-color: #E63946;
-          color: #E63946;
-        }
-
-        .pagination-controls button:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-
-        .pagination-controls select {
-          padding: 8px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          font-size: 14px;
-          background: white;
-          cursor: pointer;
-        }
-
-        .empty-state {
-          padding: 80px 20px;
-          text-align: center;
-          color: #9CA3AF;
-        }
-
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0,0,0,0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-        }
-
-        .modal-content {
-          background: white;
-          padding: 40px;
-          border-radius: 16px;
-          max-width: 900px;
-          width: 90%;
-          max-height: 90vh;
-          overflow-y: auto;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
-
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
-          margin-bottom: 16px;
-        }
-
-        .form-row-3 {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: 16px;
-          margin-bottom: 16px;
-        }
-
-        .form-group {
-          margin-bottom: 16px;
-        }
-
-        .form-label {
-          display: block;
-          margin-bottom: 8px;
-          font-weight: 600;
-          font-size: 14px;
-          color: #1F2937;
-        }
-
-        .form-input {
-          width: 100%;
-          padding: 10px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          font-size: 14px;
-          font-family: inherit;
-        }
-
-        .form-input:focus {
-          outline: none;
-          border-color: #E63946;
-        }
-
-        .form-checkbox {
-          margin-right: 8px;
-        }
-
-        .delete-warning {
-          background: #FEF2F2;
-          border: 1px solid #FEE2E2;
-          border-radius: 8px;
-          padding: 16px;
-          margin-bottom: 20px;
-        }
-
-        .delete-warning-title {
-          color: #DC2626;
-          font-weight: 600;
-          font-size: 14px;
-          margin-bottom: 8px;
-        }
-
-        .delete-warning-text {
-          color: #7F1D1D;
-          font-size: 14px;
-          line-height: 1.6;
-        }
-
-        .section-title {
-          font-size: 16px;
-          font-weight: 700;
-          color: #1F2937;
-          margin: 24px 0 16px 0;
-          padding-bottom: 8px;
-          border-bottom: 2px solid #E5E7EB;
-        }
-
-        .details-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
-          margin-bottom: 16px;
-        }
-
-        .detail-item {
-          margin-bottom: 12px;
-        }
-
-        .detail-label {
-          font-weight: 600;
-          fontSize: 12px;
-          color: #6B7280;
-          display: block;
-          marginBottom: 4px;
-        }
-
-        .detail-value {
-          fontSize: 14px;
-          color: #1F2937;
-        }
-
-        @media (max-width: 768px) {
-          .form-row, .form-row-3, .details-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
-
-      <div className="conductores-container">
-        {/* Header */}
-        <div style={{ marginBottom: "32px", textAlign: "center" }}>
-          <h3
-            style={{
-              margin: 0,
-              fontSize: "24px",
-              fontWeight: "700",
-              color: "#1F2937",
-            }}
-          >
-            Gestión de Conductores
-          </h3>
-          <p
-            style={{ margin: "8px 0 0 0", fontSize: "15px", color: "#6B7280" }}
-          >
-            {conductores.length} conductor{conductores.length !== 1 ? "es" : ""}{" "}
-            registrado{conductores.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-
-        {/* Action Button */}
-        <div
-          style={{
-            marginBottom: "24px",
-            display: "flex",
-            justifyContent: "flex-end",
-          }}
-        >
-          <button
-            className="btn-primary"
-            onClick={() => {
-              resetForm();
-              setShowCreateModal(true);
-            }}
-            disabled={!canCreate}
-            title={
-              !canCreate ? "No tienes permisos para crear conductores" : ""
-            }
-          >
-            + Crear Conductor
-          </button>
-        </div>
-
-        {conductores.length > 0 ? (
-          <>
-            {/* Search Filter */}
-            <div className="search-filter-container">
-              <div style={{ position: "relative" }}>
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#9CA3AF"
-                  strokeWidth="2"
-                  style={{
-                    position: "absolute",
-                    left: "14px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                  }}
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="M21 21l-4.35-4.35" />
-                </svg>
-                <input
-                  type="text"
-                  className="search-input"
-                  placeholder="Buscar por nombre, DNI, licencia..."
-                  value={globalFilter}
-                  onChange={(e) => setGlobalFilter(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="table-container">
-              <table className="data-table">
-                <thead>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <tr key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <th
-                          key={header.id}
-                          onClick={header.column.getToggleSortingHandler()}
-                          className={
-                            header.column.getCanSort() ? "sortable" : ""
-                          }
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent:
-                                header.id === "acciones"
-                                  ? "center"
-                                  : "flex-start",
-                            }}
-                          >
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                            {header.column.getCanSort() && (
-                              <span className="sort-indicator">
-                                {{
-                                  asc: " ↑",
-                                  desc: " ↓",
-                                }[header.column.getIsSorted() as string] ??
-                                  " ↕"}
-                              </span>
-                            )}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody>
-                  {table.getRowModel().rows.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={9}
-                        style={{
-                          textAlign: "center",
-                          padding: "40px",
-                          color: "#9CA3AF",
-                        }}
-                      >
-                        No se encontraron resultados
-                      </td>
-                    </tr>
-                  ) : (
-                    table.getRowModel().rows.map((row) => (
-                      <tr key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <td key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-
-              {/* Pagination */}
-              {table.getRowModel().rows.length > 0 && (
-                <div className="pagination">
-                  <div className="pagination-info">
-                    Mostrando{" "}
-                    {table.getState().pagination.pageIndex *
-                      table.getState().pagination.pageSize +
-                      1}{" "}
-                    a{" "}
-                    {Math.min(
-                      (table.getState().pagination.pageIndex + 1) *
-                        table.getState().pagination.pageSize,
-                      table.getFilteredRowModel().rows.length,
-                    )}{" "}
-                    de {table.getFilteredRowModel().rows.length} registros
-                  </div>
-                  <div className="pagination-controls">
-                    <button
-                      onClick={() => table.setPageIndex(0)}
-                      disabled={!table.getCanPreviousPage()}
-                    >
-                      {"<<"}
-                    </button>
-                    <button
-                      onClick={() => table.previousPage()}
-                      disabled={!table.getCanPreviousPage()}
-                    >
-                      {"<"}
-                    </button>
-                    <span style={{ fontSize: "14px", color: "#6B7280" }}>
-                      Página {table.getState().pagination.pageIndex + 1} de{" "}
-                      {table.getPageCount()}
-                    </span>
-                    <button
-                      onClick={() => table.nextPage()}
-                      disabled={!table.getCanNextPage()}
-                    >
-                      {">"}
-                    </button>
-                    <button
-                      onClick={() =>
-                        table.setPageIndex(table.getPageCount() - 1)
-                      }
-                      disabled={!table.getCanNextPage()}
-                    >
-                      {">>"}
-                    </button>
-                    <select
-                      value={table.getState().pagination.pageSize}
-                      onChange={(e) =>
-                        table.setPageSize(Number(e.target.value))
-                      }
-                    >
-                      {[10, 20, 30, 50].map((pageSize) => (
-                        <option key={pageSize} value={pageSize}>
-                          {pageSize} por página
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="empty-state">
-            <svg
-              width="80"
-              height="80"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1"
-              style={{ margin: "0 auto 16px" }}
-            >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            <h3
-              style={{
-                margin: "0 0 8px 0",
-                color: "#6B7280",
-                fontSize: "18px",
-              }}
-            >
-              No hay conductores registrados
-            </h3>
-            <p style={{ margin: 0, fontSize: "14px" }}>
-              {canCreate
-                ? 'Crea el primero usando el botón "+ Crear Conductor".'
-                : ""}
-            </p>
-          </div>
-        )}
+    <div className="module-container">
+      {/* Header */}
+      <div className="module-header">
+        <h3 className="module-title">Gestion de Conductores</h3>
+        <p className="module-subtitle">
+          {conductores.length} conductor{conductores.length !== 1 ? "es" : ""}{" "}
+          registrado{conductores.length !== 1 ? "s" : ""}
+        </p>
       </div>
+
+      {/* Action Button */}
+      <div className="module-actions">
+        <button
+          className="btn-primary"
+          onClick={() => {
+            resetForm();
+            setShowCreateModal(true);
+          }}
+          disabled={!canCreate}
+          title={!canCreate ? "No tienes permisos para crear conductores" : ""}
+        >
+          + Crear Conductor
+        </button>
+      </div>
+
+      {/* DataTable */}
+      <DataTable
+        data={conductores}
+        columns={columns}
+        loading={loading}
+        error={error}
+        searchPlaceholder="Buscar por nombre, DNI, licencia..."
+        emptyIcon={<Users size={64} />}
+        emptyTitle="No hay conductores registrados"
+        emptyDescription={
+          canCreate
+            ? 'Crea el primero usando el boton "+ Crear Conductor".'
+            : ""
+        }
+      />
 
       {/* Modales definidos en componente separado para reducir tamaño del archivo */}
       {showCreateModal && (
