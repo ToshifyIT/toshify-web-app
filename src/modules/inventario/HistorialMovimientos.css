@@ -1,0 +1,197 @@
+/* src/modules/inventario/HistorialMovimientos.css */
+/* Estilos para el módulo de Historial de Movimientos - Usando base de DataTable */
+
+/* Filtros */
+.hist-filters {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hist-search-input {
+  flex: 1;
+  min-width: 300px;
+  padding: 12px 16px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.hist-search-input:focus {
+  outline: none;
+  border-color: #E63946;
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+}
+
+.hist-type-select {
+  padding: 12px 16px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  background: white;
+  cursor: pointer;
+}
+
+.hist-type-select:focus {
+  outline: none;
+  border-color: #E63946;
+}
+
+/* Celdas especiales */
+.hist-date-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.hist-date-time {
+  font-size: 11px;
+  color: #9CA3AF;
+}
+
+/* Badge de Tipo - usando clases de DataTable como base */
+.hist-tipo-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hist-tipo-badge.entrada {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.hist-tipo-badge.salida {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.hist-tipo-badge.asignacion {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.hist-tipo-badge.devolucion {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.hist-tipo-badge.ajuste {
+  background: #F3F4F6;
+  color: #6B7280;
+}
+
+.hist-tipo-badge.daño {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.hist-tipo-badge.perdida {
+  background: #F3F4F6;
+  color: #6B7280;
+}
+
+/* Celda de Producto */
+.hist-producto-codigo {
+  font-size: 14px;
+  font-weight: 600;
+  color: #E63946;
+}
+
+.hist-producto-nombre {
+  font-size: 13px;
+  color: #6B7280;
+}
+
+/* Celda de Cantidad */
+.hist-cantidad {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Celda de Usuario */
+.hist-usuario-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hist-usuario-avatar {
+  width: 32px;
+  height: 32px;
+  background: #E63946;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.hist-usuario-nombre {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hist-usuario-email {
+  font-size: 11px;
+  color: #9CA3AF;
+}
+
+.hist-usuario-sistema {
+  color: #9CA3AF;
+  font-style: italic;
+}
+
+/* Celda de Observaciones */
+.hist-observaciones {
+  font-size: 13px;
+  color: #6B7280;
+}
+
+/* Estado Vacío */
+.hist-empty {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #E5E7EB;
+  margin-top: 20px;
+}
+
+.hist-empty-icon {
+  color: #D1D5DB;
+  margin: 0 auto 16px;
+}
+
+.hist-empty-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #6B7280;
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hist-filters {
+    flex-direction: column;
+  }
+
+  .hist-search-input {
+    min-width: 100%;
+  }
+
+  .hist-type-select {
+    width: 100%;
+  }
+}

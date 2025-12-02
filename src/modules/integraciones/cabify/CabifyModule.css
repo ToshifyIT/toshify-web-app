@@ -1,0 +1,266 @@
+/* src/modules/integraciones/cabify/CabifyModule.css */
+/* Estilos para el módulo de Cabify - Usando base de DataTable */
+
+/* Header */
+.cabify-header {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cabify-header-info h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1F2937;
+  margin: 0 0 8px 0;
+}
+
+.cabify-header-info > p {
+  font-size: 14px;
+  color: #6B7280;
+  margin: 0 0 4px 0;
+}
+
+.cabify-sync-status {
+  font-size: 12px;
+  color: #059669;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.cabify-sync-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #059669;
+  display: inline-block;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.cabify-last-update {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin-top: 4px;
+}
+
+/* Controls */
+.cabify-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.cabify-week-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cabify-week-selector label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6B7280;
+}
+
+.cabify-week-selector select {
+  padding: 8px 12px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: white;
+  color: #374151;
+  min-width: 200px;
+  cursor: pointer;
+}
+
+.cabify-week-selector select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cabify-refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Info Card */
+.cabify-info-card {
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cabify-info-card.historical {
+  background-color: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  color: #065F46;
+}
+
+.cabify-info-card.api {
+  background-color: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  color: #1E40AF;
+}
+
+.cabify-info-card.hybrid {
+  background-color: #FEF3C7;
+  border: 1px solid #FCD34D;
+  color: #92400E;
+}
+
+.cabify-info-card .auto-sync {
+  margin-left: auto;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Search Bar */
+.cabify-search-bar {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cabify-results-count {
+  font-size: 14px;
+  color: #6B7280;
+}
+
+/* Progress Banner */
+.cabify-progress-banner {
+  background-color: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #1E40AF;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Error State */
+.cabify-error {
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.cabify-error h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #B91C1C;
+  margin: 0 0 8px 0;
+}
+
+.cabify-error p {
+  color: #DC2626;
+  margin: 0 0 16px 0;
+}
+
+/* Celdas especiales */
+.cabify-company {
+  font-weight: 600;
+  color: #6B7280;
+  font-size: 12px;
+}
+
+.cabify-driver-name {
+  font-weight: 600;
+}
+
+.cabify-score {
+  font-weight: 700;
+}
+
+.cabify-score.high { color: #059669; }
+.cabify-score.medium { color: #D97706; }
+.cabify-score.low { color: #DC2626; }
+
+.cabify-trips-completed {
+  font-weight: 600;
+}
+
+.cabify-trips-rejected {
+  color: #DC2626;
+}
+
+.cabify-trips-lost {
+  color: #F59E0B;
+}
+
+.cabify-rate {
+  font-weight: 600;
+}
+
+.cabify-rate.high { color: #059669; }
+.cabify-rate.medium { color: #D97706; }
+.cabify-rate.low { color: #DC2626; }
+
+.cabify-hours {
+  font-weight: 600;
+}
+
+.cabify-money.total {
+  font-weight: 700;
+  color: #111827;
+}
+
+.cabify-money.per-hour {
+  font-weight: 700;
+  color: #059669;
+}
+
+.cabify-money.tolls {
+  color: #6B7280;
+}
+
+.cabify-plate {
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .cabify-header {
+    flex-direction: column;
+  }
+
+  .cabify-controls {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .cabify-week-selector {
+    width: 100%;
+  }
+
+  .cabify-week-selector select {
+    width: 100%;
+  }
+
+  .cabify-refresh-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

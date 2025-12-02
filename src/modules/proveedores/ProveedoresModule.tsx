@@ -1,29 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  flexRender,
-  type SortingState,
-  type ColumnDef,
-} from '@tanstack/react-table'
+import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import {
-  Eye,
-  Edit,
-  Trash2,
-  Plus,
-  Search,
-  Building2,
-  FileText,
-  Phone,
-  CreditCard,
-  Calendar
-} from 'lucide-react'
+import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { DataTable } from '../../components/ui/DataTable'
 
 interface Proveedor {
   id: string
@@ -51,8 +32,6 @@ export function ProveedoresModule() {
 
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sorting, setSorting] = useState<SortingState>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showViewModal, setShowViewModal] = useState(false)
@@ -298,18 +277,7 @@ export function ProveedoresModule() {
         accessorKey: 'tipo_documento',
         header: 'Tipo Doc.',
         cell: ({ getValue }) => (
-          <span
-            style={{
-              background: '#DBEAFE',
-              color: '#1E40AF',
-              padding: '4px 12px',
-              borderRadius: '12px',
-              fontSize: '12px',
-              fontWeight: 600
-            }}
-          >
-            {getValue() as string}
-          </span>
+          <span className="dt-badge dt-badge-blue">{getValue() as string}</span>
         ),
       },
       {
@@ -343,17 +311,7 @@ export function ProveedoresModule() {
         cell: ({ getValue }) => {
           const activo = getValue() as boolean
           return (
-            <span
-              style={{
-                background: activo ? '#D1FAE5' : '#FEE2E2',
-                color: activo ? '#065F46' : '#991B1B',
-                padding: '4px 12px',
-                borderRadius: '12px',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'inline-block'
-              }}
-            >
+            <span className={activo ? 'dt-badge dt-badge-green' : 'dt-badge dt-badge-red'}>
               {activo ? 'Activo' : 'Inactivo'}
             </span>
           )
@@ -363,71 +321,32 @@ export function ProveedoresModule() {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => (
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="dt-actions">
             {canView && (
               <button
+                className="dt-btn-action dt-btn-view"
                 onClick={() => openViewModal(row.original)}
-                style={{
-                  padding: '6px',
-                  background: 'transparent',
-                  color: '#6B7280',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'color 0.2s'
-                }}
                 title="Ver"
-                onMouseEnter={(e) => e.currentTarget.style.color = '#3B82F6'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
               >
-                <Eye size={18} />
+                <Eye size={16} />
               </button>
             )}
             {canEdit && (
               <button
+                className="dt-btn-action dt-btn-edit"
                 onClick={() => openEditModal(row.original)}
-                style={{
-                  padding: '6px',
-                  background: 'transparent',
-                  color: '#6B7280',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'color 0.2s'
-                }}
                 title="Editar"
-                onMouseEnter={(e) => e.currentTarget.style.color = '#10B981'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
               >
-                <Edit size={18} />
+                <Edit size={16} />
               </button>
             )}
             {canDelete && (
               <button
+                className="dt-btn-action dt-btn-delete"
                 onClick={() => handleDelete(row.original.id)}
-                style={{
-                  padding: '6px',
-                  background: 'transparent',
-                  color: '#6B7280',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'color 0.2s'
-                }}
                 title="Eliminar"
-                onMouseEnter={(e) => e.currentTarget.style.color = '#EF4444'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
               >
-                <Trash2 size={18} />
+                <Trash2 size={16} />
               </button>
             )}
           </div>
@@ -437,185 +356,35 @@ export function ProveedoresModule() {
     [canView, canEdit, canDelete]
   )
 
-  const filteredData = useMemo(() => {
-    return proveedores.filter((proveedor) =>
-      proveedor.razon_social.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      proveedor.numero_documento.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      proveedor.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      proveedor.telefono?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  }, [proveedores, searchTerm])
-
-  const table = useReactTable({
-    data: filteredData,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: { pageSize: 10 },
-    },
-  })
-
-  if (loading) {
-    return (
-      <div style={{ textAlign: 'center', padding: '40px' }}>
-        <p>Cargando proveedores...</p>
-      </div>
-    )
-  }
-
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#1F2937', marginBottom: '8px' }}>
-          Gestión de Proveedores
-        </h1>
-        <p style={{ color: '#6B7280', fontSize: '14px' }}>
-          {proveedores.length} proveedores registrados
+    <div className="module-container">
+      {/* Header */}
+      <div className="module-header">
+        <h3 className="module-title">Gestion de Proveedores</h3>
+        <p className="module-subtitle">
+          {proveedores.length} proveedor{proveedores.length !== 1 ? 'es' : ''} registrado{proveedores.length !== 1 ? 's' : ''}
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
-          <Search
-            size={18}
-            style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#9CA3AF',
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Buscar por razón social, documento, email, teléfono..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px 10px 40px',
-              border: '1px solid #D1D5DB',
-              borderRadius: '8px',
-              fontSize: '14px',
-            }}
-          />
-        </div>
-
+      {/* Action Button */}
+      <div className="module-actions">
         {canCreate && (
-          <button
-            onClick={openCreateModal}
-            style={{
-              padding: '10px 16px',
-              background: '#DC2626',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              fontWeight: 600,
-            }}
-          >
-            <Plus size={18} />
-            Crear Proveedor
+          <button className="btn-primary" onClick={openCreateModal}>
+            + Crear Proveedor
           </button>
         )}
       </div>
 
-      {/* Table */}
-      <div style={{ background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} style={{ background: '#F9FAFB', borderBottom: '2px solid #E5E7EB' }}>
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    style={{
-                      padding: '12px 16px',
-                      textAlign: 'left',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: '#374151',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em',
-                    }}
-                  >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                style={{
-                  borderBottom: '1px solid #E5E7EB',
-                  transition: 'background 0.2s',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#F9FAFB')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'white')}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} style={{ padding: '12px 16px', fontSize: '14px', color: '#1F2937' }}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Pagination */}
-        <div style={{ padding: '16px', borderTop: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '14px', color: '#6B7280' }}>
-            Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
-            {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, filteredData.length)} de {filteredData.length} registros
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #D1D5DB',
-                borderRadius: '6px',
-                background: 'white',
-                cursor: table.getCanPreviousPage() ? 'pointer' : 'not-allowed',
-                fontSize: '14px',
-              }}
-            >
-              Anterior
-            </button>
-            <span style={{ padding: '8px 12px', fontSize: '14px', color: '#6B7280' }}>
-              Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
-            </span>
-            <button
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #D1D5DB',
-                borderRadius: '6px',
-                background: 'white',
-                cursor: table.getCanNextPage() ? 'pointer' : 'not-allowed',
-                fontSize: '14px',
-              }}
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* DataTable */}
+      <DataTable
+        data={proveedores}
+        columns={columns}
+        loading={loading}
+        searchPlaceholder="Buscar por razon social, documento, email, telefono..."
+        emptyIcon={<Building2 size={64} />}
+        emptyTitle="No hay proveedores registrados"
+        emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Proveedor".' : ''}
+      />
 
       {/* Create Modal */}
       {showCreateModal && (

@@ -1,0 +1,168 @@
+/* src/modules/inventario/InventarioDashboard.css */
+/* Estilos para el Dashboard de Inventario - Usando base de DataTable */
+
+/* Filtros */
+.inv-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.inv-filter-btn {
+  padding: 8px 16px;
+  background: white;
+  color: #6B7280;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.inv-filter-btn:hover {
+  background: #F9FAFB;
+  border-color: #D1D5DB;
+}
+
+.inv-filter-btn.active {
+  background: #E63946;
+  color: white;
+  border-color: #E63946;
+}
+
+/* Cards de Resumen */
+.inv-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.inv-summary-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.inv-summary-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.inv-summary-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inv-summary-icon.total { background: #EFF6FF; color: #3B82F6; }
+.inv-summary-icon.disponible { background: #D1FAE5; color: #059669; }
+.inv-summary-icon.en-uso { background: #FEF3C7; color: #D97706; }
+.inv-summary-icon.en-transito { background: #E0E7FF; color: #4F46E5; }
+.inv-summary-icon.dañado { background: #FEE2E2; color: #DC2626; }
+.inv-summary-icon.perdido { background: #F3F4F6; color: #6B7280; }
+
+.inv-summary-label {
+  font-size: 12px;
+  color: #6B7280;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.inv-summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.inv-summary-value.total { color: #3B82F6; }
+.inv-summary-value.disponible { color: #059669; }
+.inv-summary-value.en-uso { color: #D97706; }
+.inv-summary-value.en-transito { color: #4F46E5; }
+.inv-summary-value.dañado { color: #DC2626; }
+.inv-summary-value.perdido { color: #6B7280; }
+
+/* Tabla Header */
+.inv-table-header {
+  padding: 16px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.inv-table-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1F2937;
+  margin: 0;
+}
+
+/* Celdas especiales */
+.inv-codigo {
+  font-weight: 600;
+  color: #E63946;
+}
+
+.inv-nombre {
+  font-weight: 500;
+}
+
+.inv-tipo-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.inv-tipo-badge.herramienta {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.inv-tipo-badge.repuesto {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.inv-total {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.inv-disponible { color: #059669; font-weight: 600; }
+.inv-en-uso { color: #D97706; font-weight: 600; }
+.inv-en-transito { color: #4F46E5; font-weight: 600; }
+.inv-dañado { color: #DC2626; font-weight: 600; }
+.inv-perdido { color: #6B7280; font-weight: 600; }
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .inv-summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .inv-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .inv-filters {
+    flex-direction: column;
+  }
+
+  .inv-filter-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

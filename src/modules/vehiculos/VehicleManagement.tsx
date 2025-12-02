@@ -1,6 +1,6 @@
-// src/components/admin/VehicleManagement.tsx
+// src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -8,16 +8,9 @@ import type {
   VehiculoWithRelations,
   VehiculoEstado
 } from '../../types/database.types'
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  flexRender,
-  type ColumnDef,
-  type SortingState,
-} from '@tanstack/react-table'
+import { type ColumnDef } from '@tanstack/react-table'
+import { DataTable } from '../../components/ui/DataTable'
+import './VehicleManagement.css'
 
 export function VehicleManagement() {
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
@@ -30,10 +23,7 @@ export function VehicleManagement() {
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
 
-  // TanStack Table states
-  const [globalFilter, setGlobalFilter] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [sorting, setSorting] = useState<SortingState>([])
+  // Removed TanStack Table states - now handled by DataTable component
 
   // Catalog states
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
@@ -73,15 +63,6 @@ export function VehicleManagement() {
     loadVehiculos()
     loadCatalogs()
   }, [])
-
-  // Debounce search term (300ms delay)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(globalFilter)
-    }, 300)
-
-    return () => clearTimeout(timer)
-  }, [globalFilter])
 
   const loadCatalogs = async () => {
     try {
@@ -423,35 +404,27 @@ export function VehicleManagement() {
         header: 'Estado',
         cell: ({ row }) => {
           const estado = row.original.vehiculos_estados
-          const getEstadoBadgeStyle = (codigo: string) => {
-            switch (codigo) {
-              case 'DISPONIBLE':
-                return { backgroundColor: '#10B981', color: 'white' }
-              case 'EN_USO':
-                return { backgroundColor: '#3B82F6', color: 'white' }
-              case 'MANTENIMIENTO':
-                return { backgroundColor: '#F59E0B', color: 'white' }
-              case 'FUERA_SERVICIO':
-                return { backgroundColor: '#EF4444', color: 'white' }
-              default:
-                return { backgroundColor: '#6B7280', color: 'white' }
-            }
+          const codigo = estado?.codigo || 'N/A'
+
+          let badgeClass = 'dt-badge dt-badge-solid-gray'
+          switch (codigo) {
+            case 'DISPONIBLE':
+              badgeClass = 'dt-badge dt-badge-solid-green'
+              break
+            case 'EN_USO':
+              badgeClass = 'dt-badge dt-badge-solid-blue'
+              break
+            case 'MANTENIMIENTO':
+              badgeClass = 'dt-badge dt-badge-solid-yellow'
+              break
+            case 'FUERA_SERVICIO':
+              badgeClass = 'dt-badge dt-badge-solid-red'
+              break
           }
 
           return (
-            <span
-              className="badge"
-              style={{
-                ...getEstadoBadgeStyle(estado?.codigo || ''),
-                padding: '4px 12px',
-                fontSize: '12px',
-                fontWeight: '600',
-                borderRadius: '6px',
-                whiteSpace: 'nowrap'
-              }}
-              title={estado?.descripcion || 'N/A'}
-            >
-              {estado?.codigo || 'N/A'}
+            <span className={badgeClass} title={estado?.descripcion || 'N/A'}>
+              {codigo}
             </span>
           )
         },
@@ -461,9 +434,9 @@ export function VehicleManagement() {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => (
-          <div>
+          <div className="dt-actions">
             <button
-              className="btn-action btn-view"
+              className="dt-btn-action dt-btn-view"
               onClick={() => {
                 setSelectedVehiculo(row.original)
                 setShowDetailsModal(true)
@@ -473,18 +446,18 @@ export function VehicleManagement() {
               <Eye size={16} />
             </button>
             <button
-              className="btn-action btn-edit"
+              className="dt-btn-action dt-btn-edit"
               onClick={() => openEditModal(row.original)}
               disabled={!canUpdate}
-              title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehículo'}
+              title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehiculo'}
             >
               <Edit size={16} />
             </button>
             <button
-              className="btn-action btn-delete"
+              className="dt-btn-action dt-btn-delete"
               onClick={() => openDeleteModal(row.original)}
               disabled={!canDelete}
-              title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehículo'}
+              title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehiculo'}
             >
               <Trash2 size={16} />
             </button>
@@ -496,579 +469,49 @@ export function VehicleManagement() {
     [canUpdate, canDelete]
   )
 
-  // Configurar TanStack Table
-  const table = useReactTable({
-    data: vehiculos,
-    columns,
-    state: {
-      sorting,
-      globalFilter: debouncedSearch,
-    },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setDebouncedSearch,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
-  })
-
-  if (loading) {
-    return (
-      <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>
-        Cargando vehículos...
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div style={{
-        padding: '16px',
-        background: '#FEE2E2',
-        color: '#DC2626',
-        borderRadius: '8px'
-      }}>
-        Error: {error}
-      </div>
-    )
-  }
-
   return (
-    <div>
-      <style>{`
-        .vehiculos-container {
-          max-width: 1400px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-
-        .search-filter-container {
-          margin-bottom: 20px;
-        }
-
-        .search-input {
-          width: 100%;
-          padding: 12px 16px 12px 42px;
-          font-size: 15px;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          background: white;
-          transition: border-color 0.2s;
-        }
-
-        .search-input:focus {
-          outline: none;
-          border-color: #E63946;
-          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
-        }
-
-        .table-container {
-          background: white;
-          border: 1px solid #E5E7EB;
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-        }
-
-        .data-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-
-        .data-table th {
-          background: #F9FAFB;
-          padding: 14px 16px;
-          text-align: left;
-          font-size: 12px;
-          font-weight: 600;
-          color: #6B7280;
-          text-transform: uppercase;
-          border-bottom: 2px solid #E5E7EB;
-          cursor: pointer;
-          user-select: none;
-        }
-
-        .data-table th.sortable:hover {
-          background: #F3F4F6;
-        }
-
-        .data-table th:last-child {
-          text-align: center;
-        }
-
-        .data-table td {
-          padding: 12px 16px;
-          border-bottom: 1px solid #F3F4F6;
-          color: #1F2937;
-        }
-
-        .data-table td:last-child {
-          text-align: center;
-        }
-
-        .data-table tbody tr {
-          transition: background 0.2s;
-        }
-
-        .data-table tbody tr:hover {
-          background: #F9FAFB;
-        }
-
-        .sort-indicator {
-          margin-left: 8px;
-          color: #9CA3AF;
-          font-size: 14px;
-        }
-
-        .patente-badge {
-          display: inline-block;
-          background: #1F2937;
-          color: white;
-          padding: 6px 12px;
-          border-radius: 6px;
-          font-weight: 700;
-          font-family: monospace;
-          font-size: 14px;
-          letter-spacing: 1px;
-        }
-
-        .badge {
-          display: inline-block;
-          padding: 4px 12px;
-          border-radius: 12px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .badge-available {
-          background: #D1FAE5;
-          color: #065F46;
-        }
-
-        .badge-in-use {
-          background: #DBEAFE;
-          color: #1E40AF;
-        }
-
-        .badge-maintenance {
-          background: #FEF3C7;
-          color: #92400E;
-        }
-
-        .badge-inactive {
-          background: #FEE2E2;
-          color: #DC2626;
-        }
-
-        .btn-action {
-          padding: 6px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          background: white;
-          color: #1F2937;
-          font-size: 12px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s;
-          margin: 0 4px;
-        }
-
-        .btn-action:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .btn-action.btn-edit:not(:disabled):hover {
-          border-color: #3B82F6;
-          color: #3B82F6;
-          background: #EFF6FF;
-        }
-
-        .btn-action.btn-view:hover {
-          border-color: #8B5CF6;
-          color: #8B5CF6;
-          background: #F5F3FF;
-        }
-
-        .btn-action.btn-delete:not(:disabled):hover {
-          border-color: #E63946;
-          color: #E63946;
-          background: #FEE2E2;
-        }
-
-        .btn-primary {
-          padding: 12px 28px;
-          background: #E63946;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-size: 15px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 6px rgba(230, 57, 70, 0.2);
-        }
-
-        .btn-primary:hover {
-          background: #D62828;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 12px rgba(230, 57, 70, 0.3);
-        }
-
-        .btn-primary:disabled {
-          background: #9CA3AF;
-          cursor: not-allowed;
-        }
-
-        .btn-secondary {
-          padding: 10px 20px;
-          background: white;
-          color: #6B7280;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btn-secondary:hover {
-          background: #F9FAFB;
-        }
-
-        .pagination {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          border-top: 1px solid #E5E7EB;
-          background: #FAFAFA;
-        }
-
-        .pagination-info {
-          font-size: 14px;
-          color: #6B7280;
-        }
-
-        .pagination-controls {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-
-        .pagination-controls button {
-          padding: 8px 12px;
-          border: 1px solid #E5E7EB;
-          background: white;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 500;
-          color: #374151;
-          transition: all 0.2s;
-        }
-
-        .pagination-controls button:hover:not(:disabled) {
-          background: #F9FAFB;
-          border-color: #E63946;
-          color: #E63946;
-        }
-
-        .pagination-controls button:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-
-        .pagination-controls select {
-          padding: 8px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          font-size: 14px;
-          background: white;
-          cursor: pointer;
-        }
-
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0,0,0,0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-        }
-
-        .modal-content {
-          background: white;
-          padding: 40px;
-          border-radius: 16px;
-          max-width: 900px;
-          width: 90%;
-          max-height: 90vh;
-          overflow-y: auto;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
-
-        .section-title {
-          font-weight: 700;
-          font-size: 16px;
-          color: #1F2937;
-          margin: 24px 0 16px 0;
-          padding-bottom: 8px;
-          border-bottom: 2px solid #E5E7EB;
-        }
-
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
-          margin-bottom: 16px;
-        }
-
-        .form-group {
-          margin-bottom: 16px;
-        }
-
-        .form-label {
-          display: block;
-          margin-bottom: 8px;
-          font-weight: 600;
-          font-size: 14px;
-          color: #1F2937;
-        }
-
-        .form-input {
-          width: 100%;
-          padding: 10px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          font-size: 14px;
-          font-family: inherit;
-        }
-
-        .form-input:focus {
-          outline: none;
-          border-color: #E63946;
-        }
-
-        .delete-warning {
-          background: #FEF2F2;
-          border: 1px solid #FEE2E2;
-          border-radius: 8px;
-          padding: 16px;
-          margin-bottom: 20px;
-        }
-
-        .delete-warning-title {
-          color: #DC2626;
-          font-weight: 600;
-          font-size: 14px;
-          margin-bottom: 8px;
-        }
-
-        .delete-warning-text {
-          color: #7F1D1D;
-          font-size: 14px;
-          line-height: 1.6;
-        }
-
-        .no-permission-msg {
-          background: #FEF3C7;
-          border: 1px solid #FDE68A;
-          border-radius: 8px;
-          padding: 12px 16px;
-          margin-bottom: 20px;
-          color: #92400E;
-          font-size: 14px;
-        }
-
-        .empty-state {
-          padding: 80px 20px;
-          text-align: center;
-          color: #9CA3AF;
-        }
-
-        @media (max-width: 768px) {
-          .form-row {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
-
-      <div className="vehiculos-container">
-        {/* Header */}
-        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
-            Gestión de Vehículos
-          </h3>
-          <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
-            {vehiculos.length} vehículo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-
-        {!canCreate && (
-          <div className="no-permission-msg" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Info size={16} />
-            No tienes permisos para crear vehículos. Solo puedes ver la lista.
-          </div>
-        )}
-
-        {/* Action Button */}
-        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            className="btn-primary"
-            onClick={() => {
-              resetForm();
-              setShowCreateModal(true);
-            }}
-            disabled={!canCreate}
-            title={!canCreate ? 'No tienes permisos para crear vehículos' : ''}
-          >
-            + Crear Vehículo
-          </button>
-        </div>
-
-        {vehiculos.length > 0 ? (
-          <>
-            {/* Search Filter */}
-            <div className="search-filter-container">
-              <div style={{ position: 'relative' }}>
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#9CA3AF"
-                  strokeWidth="2"
-                  style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}
-                >
-                  <circle cx="11" cy="11" r="8"/>
-                  <path d="M21 21l-4.35-4.35"/>
-                </svg>
-                <input
-                  type="text"
-                  className="search-input"
-                  placeholder="Buscar por patente, marca, modelo..."
-                  value={globalFilter}
-                  onChange={(e) => setGlobalFilter(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="table-container">
-              <table className="data-table">
-                <thead>
-                  {table.getHeaderGroups().map(headerGroup => (
-                    <tr key={headerGroup.id}>
-                      {headerGroup.headers.map(header => (
-                        <th
-                          key={header.id}
-                          onClick={header.column.getToggleSortingHandler()}
-                          className={header.column.getCanSort() ? 'sortable' : ''}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: header.id === 'acciones' ? 'center' : 'flex-start' }}>
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                            {header.column.getCanSort() && (
-                              <span className="sort-indicator">
-                                {{
-                                  asc: ' ↑',
-                                  desc: ' ↓',
-                                }[header.column.getIsSorted() as string] ?? ' ↕'}
-                              </span>
-                            )}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody>
-                  {table.getRowModel().rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
-                        No se encontraron resultados
-                      </td>
-                    </tr>
-                  ) : (
-                    table.getRowModel().rows.map(row => (
-                      <tr key={row.id}>
-                        {row.getVisibleCells().map(cell => (
-                          <td key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-
-              {/* Pagination */}
-              {table.getRowModel().rows.length > 0 && (
-                <div className="pagination">
-                  <div className="pagination-info">
-                    Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
-                    {Math.min(
-                      (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                      table.getFilteredRowModel().rows.length
-                    )}{' '}
-                    de {table.getFilteredRowModel().rows.length} registros
-                  </div>
-                  <div className="pagination-controls">
-                    <button onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}>
-                      {'<<'}
-                    </button>
-                    <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
-                      {'<'}
-                    </button>
-                    <span style={{ fontSize: '14px', color: '#6B7280' }}>
-                      Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
-                    </span>
-                    <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
-                      {'>'}
-                    </button>
-                    <button onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()}>
-                      {'>>'}
-                    </button>
-                    <select
-                      value={table.getState().pagination.pageSize}
-                      onChange={e => table.setPageSize(Number(e.target.value))}
-                    >
-                      {[10, 20, 30, 50].map(pageSize => (
-                        <option key={pageSize} value={pageSize}>
-                          {pageSize} por página
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="empty-state">
-            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ margin: '0 auto 16px' }}>
-              <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/>
-              <polygon points="12 15 17 21 7 21 12 15"/>
-            </svg>
-            <h3 style={{ margin: '0 0 8px 0', color: '#6B7280', fontSize: '18px' }}>
-              No hay vehículos registrados
-            </h3>
-            <p style={{ margin: 0, fontSize: '14px' }}>
-              {canCreate ? 'Crea el primero usando el botón "+ Crear Vehículo".' : ''}
-            </p>
-          </div>
-        )}
+    <div className="module-container">
+      {/* Header */}
+      <div className="module-header">
+        <h3 className="module-title">Gestion de Vehiculos</h3>
+        <p className="module-subtitle">
+          {vehiculos.length} vehiculo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
+        </p>
       </div>
+
+      {!canCreate && (
+        <div className="no-permission-msg">
+          <Info size={16} />
+          No tienes permisos para crear vehiculos. Solo puedes ver la lista.
+        </div>
+      )}
+
+      {/* Action Button */}
+      <div className="module-actions">
+        <button
+          className="btn-primary"
+          onClick={() => {
+            resetForm()
+            setShowCreateModal(true)
+          }}
+          disabled={!canCreate}
+          title={!canCreate ? 'No tienes permisos para crear vehiculos' : ''}
+        >
+          + Crear Vehiculo
+        </button>
+      </div>
+
+      {/* DataTable */}
+      <DataTable
+        data={vehiculos}
+        columns={columns}
+        loading={loading}
+        error={error}
+        searchPlaceholder="Buscar por patente, marca, modelo..."
+        emptyIcon={<Car size={64} />}
+        emptyTitle="No hay vehiculos registrados"
+        emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Vehiculo".' : ''}
+      />
 
       {/* MODALS - Se mantienen exactamente iguales */}
       {/* Modal Crear */}

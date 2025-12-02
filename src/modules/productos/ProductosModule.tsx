@@ -1,28 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  flexRender,
-  type SortingState,
-  type ColumnDef,
-} from '@tanstack/react-table'
+import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import {
-  Eye,
-  Edit,
-  Trash2,
-  Plus,
-  Search,
-  Package,
-  Tag,
-  Info,
-  Calendar
-} from 'lucide-react'
+import { Eye, Edit, Trash2, Package, Tag, Info, Calendar } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { DataTable } from '../../components/ui/DataTable'
 
 interface UnidadMedida {
   id: string
@@ -83,8 +65,6 @@ export function ProductosModule() {
   const [estados, setEstados] = useState<ProductoEstado[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sorting, setSorting] = useState<SortingState>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showViewModal, setShowViewModal] = useState(false)
@@ -448,24 +428,13 @@ export function ProductosModule() {
       },
       {
         id: 'categoria',
-        header: 'Categoría',
+        header: 'Categoria',
         cell: ({ row }) => {
           const categoria = row.original.categorias
           return categoria ? (
-            <span
-              style={{
-                background: '#DBEAFE',
-                color: '#1E40AF',
-                padding: '4px 12px',
-                borderRadius: '12px',
-                fontSize: '12px',
-                fontWeight: 600
-              }}
-            >
-              {categoria.nombre}
-            </span>
+            <span className="dt-badge dt-badge-blue">{categoria.nombre}</span>
           ) : (
-            <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Sin categoría</span>
+            <span className="vehiculo-cell-na">Sin categoria</span>
           )
         },
       },
@@ -475,31 +444,9 @@ export function ProductosModule() {
         cell: ({ row }) => {
           const tipo = row.original.tipo
           return tipo === 'HERRAMIENTAS' ? (
-            <span
-              style={{
-                background: '#DBEAFE',
-                color: '#1E40AF',
-                padding: '4px 12px',
-                borderRadius: '12px',
-                fontSize: '12px',
-                fontWeight: 600
-              }}
-            >
-              HERRAMIENTAS
-            </span>
+            <span className="dt-badge dt-badge-blue">HERRAMIENTAS</span>
           ) : (
-            <span
-              style={{
-                background: '#FEF3C7',
-                color: '#92400E',
-                padding: '4px 12px',
-                borderRadius: '12px',
-                fontSize: '12px',
-                fontWeight: 600
-              }}
-            >
-              REPUESTOS
-            </span>
+            <span className="dt-badge dt-badge-yellow">REPUESTOS</span>
           )
         },
       },
@@ -513,26 +460,23 @@ export function ProductosModule() {
         header: 'Estado',
         cell: ({ row }) => {
           const estado = row.original.productos_estados?.codigo
-          const colors: Record<string, { bg: string; text: string }> = {
-            'STOCK': { bg: '#D1FAE5', text: '#065F46' },
-            'USO': { bg: '#FEF3C7', text: '#92400E' },
-            'TRANSITO': { bg: '#DBEAFE', text: '#1E40AF' },
-            'PEDIDO': { bg: '#FCE7F3', text: '#9F1239' },
+          let badgeClass = 'dt-badge dt-badge-gray'
+          switch (estado) {
+            case 'STOCK':
+              badgeClass = 'dt-badge dt-badge-green'
+              break
+            case 'USO':
+              badgeClass = 'dt-badge dt-badge-yellow'
+              break
+            case 'TRANSITO':
+              badgeClass = 'dt-badge dt-badge-blue'
+              break
+            case 'PEDIDO':
+              badgeClass = 'dt-badge dt-badge-red'
+              break
           }
-          const color = colors[estado || ''] || { bg: '#F3F4F6', text: '#1F2937' }
-
           return (
-            <span
-              style={{
-                background: color.bg,
-                color: color.text,
-                padding: '4px 12px',
-                borderRadius: '12px',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'inline-block'
-              }}
-            >
+            <span className={badgeClass}>
               {row.original.productos_estados?.descripcion || 'N/A'}
             </span>
           )
@@ -542,71 +486,32 @@ export function ProductosModule() {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => (
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="dt-actions">
             {canView && (
               <button
+                className="dt-btn-action dt-btn-view"
                 onClick={() => openViewModal(row.original)}
-                style={{
-                  padding: '6px',
-                  background: 'transparent',
-                  color: '#6B7280',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'color 0.2s'
-                }}
                 title="Ver"
-                onMouseEnter={(e) => e.currentTarget.style.color = '#3B82F6'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
               >
-                <Eye size={18} />
+                <Eye size={16} />
               </button>
             )}
             {canEdit && (
               <button
+                className="dt-btn-action dt-btn-edit"
                 onClick={() => openEditModal(row.original)}
-                style={{
-                  padding: '6px',
-                  background: 'transparent',
-                  color: '#6B7280',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'color 0.2s'
-                }}
                 title="Editar"
-                onMouseEnter={(e) => e.currentTarget.style.color = '#10B981'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
               >
-                <Edit size={18} />
+                <Edit size={16} />
               </button>
             )}
             {canDelete && (
               <button
+                className="dt-btn-action dt-btn-delete"
                 onClick={() => handleDelete(row.original.id)}
-                style={{
-                  padding: '6px',
-                  background: 'transparent',
-                  color: '#6B7280',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'color 0.2s'
-                }}
                 title="Eliminar"
-                onMouseEnter={(e) => e.currentTarget.style.color = '#EF4444'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
               >
-                <Trash2 size={18} />
+                <Trash2 size={16} />
               </button>
             )}
           </div>
@@ -616,187 +521,35 @@ export function ProductosModule() {
     [canView, canEdit, canDelete]
   )
 
-  const filteredData = useMemo(() => {
-    return productos.filter((producto) =>
-      producto.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      producto.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      producto.proveedor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      producto.categorias?.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  }, [productos, searchTerm])
-
-  const table = useReactTable({
-    data: filteredData,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: { pageSize: 10 },
-    },
-  })
-
-  console.log('ProductosModule render - loading:', loading, 'productos:', productos.length)
-
-  if (loading) {
-    return (
-      <div style={{ textAlign: 'center', padding: '40px' }}>
-        <p>Cargando productos...</p>
-      </div>
-    )
-  }
-
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#1F2937', marginBottom: '8px' }}>
-          Gestión de Productos
-        </h1>
-        <p style={{ color: '#6B7280', fontSize: '14px' }}>
-          {productos.length} productos registrados
+    <div className="module-container">
+      {/* Header */}
+      <div className="module-header">
+        <h3 className="module-title">Gestion de Productos</h3>
+        <p className="module-subtitle">
+          {productos.length} producto{productos.length !== 1 ? 's' : ''} registrado{productos.length !== 1 ? 's' : ''}
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
-          <Search
-            size={18}
-            style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#9CA3AF',
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Buscar por código, nombre, proveedor, categoría..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px 10px 40px',
-              border: '1px solid #D1D5DB',
-              borderRadius: '8px',
-              fontSize: '14px',
-            }}
-          />
-        </div>
-
+      {/* Action Button */}
+      <div className="module-actions">
         {canCreate && (
-          <button
-            onClick={openCreateModal}
-            style={{
-              padding: '10px 16px',
-              background: '#DC2626',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              fontWeight: 600,
-            }}
-          >
-            <Plus size={18} />
-            Crear Producto
+          <button className="btn-primary" onClick={openCreateModal}>
+            + Crear Producto
           </button>
         )}
       </div>
 
-      {/* Table */}
-      <div style={{ background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} style={{ background: '#F9FAFB', borderBottom: '2px solid #E5E7EB' }}>
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    style={{
-                      padding: '12px 16px',
-                      textAlign: 'left',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: '#374151',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em',
-                    }}
-                  >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                style={{
-                  borderBottom: '1px solid #E5E7EB',
-                  transition: 'background 0.2s',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#F9FAFB')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'white')}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} style={{ padding: '12px 16px', fontSize: '14px', color: '#1F2937' }}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Pagination */}
-        <div style={{ padding: '16px', borderTop: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '14px', color: '#6B7280' }}>
-            Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
-            {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, filteredData.length)} de {filteredData.length} registros
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #D1D5DB',
-                borderRadius: '6px',
-                background: 'white',
-                cursor: table.getCanPreviousPage() ? 'pointer' : 'not-allowed',
-                fontSize: '14px',
-              }}
-            >
-              Anterior
-            </button>
-            <span style={{ padding: '8px 12px', fontSize: '14px', color: '#6B7280' }}>
-              Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
-            </span>
-            <button
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #D1D5DB',
-                borderRadius: '6px',
-                background: 'white',
-                cursor: table.getCanNextPage() ? 'pointer' : 'not-allowed',
-                fontSize: '14px',
-              }}
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* DataTable */}
+      <DataTable
+        data={productos}
+        columns={columns}
+        loading={loading}
+        searchPlaceholder="Buscar por codigo, nombre, proveedor, categoria..."
+        emptyIcon={<Package size={64} />}
+        emptyTitle="No hay productos registrados"
+        emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Producto".' : ''}
+      />
 
       {/* Create Modal */}
       {showCreateModal && (
