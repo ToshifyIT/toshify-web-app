@@ -1,4 +1,14 @@
 // src/components/ui/DataTable/DataTable.tsx
+/**
+ * @fileoverview Componente DataTable reutilizable basado en TanStack Table v8.
+ * Proporciona búsqueda global, ordenamiento, paginación y diseño responsive.
+ *
+ * @module components/ui/DataTable
+ * @author Toshify Team
+ * @version 1.0.0
+ * @see {@link https://tanstack.com/table/v8} TanStack Table Documentation
+ */
+
 import { useState, useEffect, type ReactNode } from "react";
 import {
   useReactTable,
@@ -13,22 +23,105 @@ import {
 } from "@tanstack/react-table";
 import "./DataTable.css";
 
+/**
+ * Props para el componente DataTable.
+ *
+ * @template T - Tipo de datos de cada fila de la tabla
+ *
+ * @example
+ * ```tsx
+ * interface User {
+ *   id: string;
+ *   name: string;
+ * }
+ *
+ * const props: DataTableProps<User> = {
+ *   data: users,
+ *   columns: userColumns,
+ *   searchPlaceholder: "Buscar usuarios...",
+ *   pageSize: 20,
+ * };
+ * ```
+ */
 export interface DataTableProps<T> {
+  /** Array de datos a mostrar en la tabla */
   data: T[];
-  columns: ColumnDef<T, any>[];
+  /** Definición de columnas según TanStack Table */
+  columns: ColumnDef<T, unknown>[];
+  /** Placeholder del input de búsqueda @default "Buscar..." */
   searchPlaceholder?: string;
+  /** Icono a mostrar cuando no hay datos */
   emptyIcon?: ReactNode;
+  /** Título del estado vacío @default "No hay datos" */
   emptyTitle?: string;
+  /** Descripción del estado vacío @default "" */
   emptyDescription?: string;
+  /** Indica si está cargando datos @default false */
   loading?: boolean;
+  /** Mensaje de error a mostrar @default null */
   error?: string | null;
+  /** Cantidad de registros por página inicial @default 10 */
   pageSize?: number;
+  /** Opciones de tamaño de página disponibles @default [10, 20, 30, 50] */
   pageSizeOptions?: number[];
+  /** Muestra/oculta la barra de búsqueda @default true */
   showSearch?: boolean;
+  /** Muestra/oculta los controles de paginación @default true */
   showPagination?: boolean;
+  /** Callback ejecutado cuando la tabla está inicializada */
   onTableReady?: (table: Table<T>) => void;
 }
 
+/**
+ * Componente de tabla de datos reutilizable con búsqueda, ordenamiento y paginación.
+ *
+ * @template T - Tipo de datos de cada fila
+ *
+ * @param {DataTableProps<T>} props - Props del componente
+ * @returns {JSX.Element} Tabla renderizada con controles
+ *
+ * @example
+ * ```tsx
+ * // Uso básico
+ * <DataTable
+ *   data={users}
+ *   columns={columns}
+ *   searchPlaceholder="Buscar usuarios..."
+ * />
+ * ```
+ *
+ * @example
+ * ```tsx
+ * // Con estados de carga y error
+ * <DataTable
+ *   data={products}
+ *   columns={productColumns}
+ *   loading={isLoading}
+ *   error={errorMessage}
+ *   emptyIcon={<PackageIcon />}
+ *   emptyTitle="Sin productos"
+ * />
+ * ```
+ *
+ * @example
+ * ```tsx
+ * // Acceso a la instancia de tabla
+ * const [table, setTable] = useState<Table<User> | null>(null);
+ *
+ * <DataTable
+ *   data={users}
+ *   columns={columns}
+ *   onTableReady={setTable}
+ * />
+ *
+ * // Luego usar table.getFilteredRowModel() para exportar, etc.
+ * ```
+ *
+ * @throws {Error} Si columns está vacío y hay datos
+ *
+ * @see {@link DataTableProps} Para la definición completa de props
+ * @see {@link https://tanstack.com/table/v8/docs/guide/column-defs} Para definir columnas
+ */
 export function DataTable<T>({
   data,
   columns,
