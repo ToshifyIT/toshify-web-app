@@ -191,6 +191,76 @@ class CabifyIntegrationService {
   getDriversWithoutAssignment(drivers: CabifyDriverEnriched[]): CabifyDriverEnriched[] {
     return drivers.filter(d => d.modalidad === 'Sin asignación')
   }
+
+  /**
+   * Obtener Top 10 Mejores desde histórico (sincronizado cada 5 min)
+   */
+  async getTopMejoresFromHistorico(): Promise<CabifyRankingDriver[]> {
+    const { data, error } = await supabase
+      .from('cabify_top_mejores')
+      .select('*')
+
+    if (error) {
+      console.error('❌ Error obteniendo top mejores:', error)
+      return []
+    }
+
+    return (data || []).map(this.mapRankingDriver)
+  }
+
+  /**
+   * Obtener Top 10 Peores desde histórico (sincronizado cada 5 min)
+   */
+  async getTopPeoresFromHistorico(): Promise<CabifyRankingDriver[]> {
+    const { data, error } = await supabase
+      .from('cabify_top_peores')
+      .select('*')
+
+    if (error) {
+      console.error('❌ Error obteniendo top peores:', error)
+      return []
+    }
+
+    return (data || []).map(this.mapRankingDriver)
+  }
+
+  /**
+   * Mapear datos de ranking a estructura común
+   */
+  private mapRankingDriver(row: any): CabifyRankingDriver {
+    return {
+      dni: row.dni,
+      nombre: row.nombre,
+      apellido: row.apellido,
+      nombreCompleto: `${row.nombre} ${row.apellido}`.trim(),
+      vehiculoPatente: row.vehiculo_patente,
+      viajesFinalizados: row.viajes_finalizados || 0,
+      gananciaTotal: parseFloat(row.ganancia_total) || 0,
+      score: parseFloat(row.score) || 0,
+      gananciaPorHora: parseFloat(row.ganancia_por_hora) || 0,
+      horasConectadas: parseFloat(row.horas_conectadas) || 0,
+      horario: row.horario,
+      fechaActualizacion: row.fecha_guardado
+    }
+  }
+}
+
+/**
+ * Tipo para conductores en ranking
+ */
+export interface CabifyRankingDriver {
+  dni: string
+  nombre: string
+  apellido: string
+  nombreCompleto: string
+  vehiculoPatente: string
+  viajesFinalizados: number
+  gananciaTotal: number
+  score: number
+  gananciaPorHora: number
+  horasConectadas: number
+  horario: 'CARGO' | 'Diurno' | 'Nocturno' | null
+  fechaActualizacion: string
 }
 
 // Exportar instancia singleton

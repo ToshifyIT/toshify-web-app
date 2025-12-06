@@ -280,7 +280,12 @@ export function calculateTopDrivers(
 ): TopDriversResult {
   const conductoresConAsignacion = filterDriversWithAssignment(drivers, asignaciones)
 
-  const ordenados = [...conductoresConAsignacion].sort((a, b) => {
+  // Filtrar solo conductores con al menos 1 viaje para rankings
+  const conductoresConViajes = conductoresConAsignacion.filter(
+    (driver) => (driver.viajesFinalizados || 0) > 0
+  )
+
+  const ordenados = [...conductoresConViajes].sort((a, b) => {
     const gananciasA = parseNumericValue(a.gananciaTotal)
     const gananciasB = parseNumericValue(b.gananciaTotal)
     return gananciasB - gananciasA // Mayor a menor

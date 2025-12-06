@@ -15,10 +15,11 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable/DataTable'
 
 // Tipos
-import type { CabifyDriver, ViewMode, AccordionKey } from './types/cabify.types'
+import type { CabifyDriver, AccordionKey } from './types/cabify.types'
 
 // Hooks
 import { useCabifyData, useCabifyStats } from './hooks'
+import { useCabifyRankings } from './hooks/useCabifyRankings'
 
 // Componentes
 import { CabifyHeader, StatsAccordion, TopDriversSection } from './components'
@@ -56,17 +57,13 @@ export function CabifyModule() {
     refreshData,
   } = useCabifyData()
 
-  const {
-    estadisticas,
-    topMejores,
-    topPeores,
-    chartDataMejores,
-    chartDataPeores,
-  } = useCabifyStats(drivers, asignaciones)
+  const { estadisticas } = useCabifyStats(drivers, asignaciones)
+
+  // Rankings desde histórico (sincronizado cada 5 min)
+  const { topMejores, topPeores } = useCabifyRankings()
 
   // Estado local de UI
   const [accordionState, setAccordionState] = useState(INITIAL_ACCORDION_STATE)
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
 
   // Handlers
   const handleToggleAccordion = useCallback((key: AccordionKey) => {
@@ -127,12 +124,7 @@ export function CabifyModule() {
           <TopDriversSection
             topMejores={topMejores}
             topPeores={topPeores}
-            chartDataMejores={chartDataMejores}
-            chartDataPeores={chartDataPeores}
-            viewMode={viewMode}
             accordionState={accordionState}
-            asignaciones={asignaciones}
-            onViewModeChange={setViewMode}
             onToggleAccordion={handleToggleAccordion}
           />
         </div>
