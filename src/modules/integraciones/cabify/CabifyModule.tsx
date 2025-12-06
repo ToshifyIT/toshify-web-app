@@ -352,6 +352,48 @@ export function CabifyModule() {
     ? `${loadingProgress.message} (${loadingProgress.current}/${loadingProgress.total})`
     : 'Cargando conductores desde Cabify...'
 
+  // Calcular Top 10 Mejores y Peores (solo con asignación activa)
+  const { topMejores, topPeores } = useMemo(() => {
+    // Filtrar solo conductores con asignación activa
+    const conductoresConAsignacion = drivers.filter(d => {
+      const asig = d.nationalIdNumber ? asignaciones.get(d.nationalIdNumber) : null
+      return asig !== null && asig !== undefined
+    })
+
+    // Ordenar por ganancia total
+    const ordenados = [...conductoresConAsignacion].sort((a, b) => {
+      const gA = typeof a.gananciaTotal === 'string' ? parseFloat(a.gananciaTotal) : (a.gananciaTotal || 0)
+      const gB = typeof b.gananciaTotal === 'string' ? parseFloat(b.gananciaTotal) : (b.gananciaTotal || 0)
+      return gB - gA // Mayor a menor
+    })
+
+    return {
+      topMejores: ordenados.slice(0, 10),
+      topPeores: ordenados.slice(-10).reverse() // Últimos 10, invertidos para mostrar del peor al menos peor
+    }
+  }, [drivers, asignaciones])
+
+  // Función para formatear moneda
+  const formatCurrency = (value: number | string | undefined): string => {
+    const num = typeof value === 'string' ? parseFloat(value) : (value || 0)
+    return num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+
+  // Función para obtener patente (primera si hay múltiples separadas por /)
+  const getPatente = (driver: CabifyDriver): string => {
+    // Primero intentar patente del sistema (asignación)
+    const asig = driver.nationalIdNumber ? asignaciones.get(driver.nationalIdNumber) : null
+    if (asig?.patente) {
+      return asig.patente
+    }
+    // Si no, usar la de Cabify (primera si hay múltiples)
+    if (driver.vehicleRegPlate) {
+      const patentes = driver.vehicleRegPlate.split('/')
+      return patentes[0].trim()
+    }
+    return '-'
+  }
+
   return (
     <div className="module-container">
       {/* Header */}
@@ -431,6 +473,83 @@ export function CabifyModule() {
           {dataSource === 'historical' && (
             <span className="auto-sync">Sincronización automática cada 5 minutos</span>
           )}
+        </div>
+      )}
+
+      {/* Top 10 Cards */}
+      {!queryState.loading && drivers.length > 0 && (topMejores.length > 0 || topPeores.length > 0) && (
+        <div className="cabify-tops-container">
+          {/* Top 10 Mejores */}
+          <div className="cabify-top-card mejores">
+            <h3 className="cabify-top-title mejores">Top 10 Mejores Conductores</h3>
+            <div className="cabify-top-list">
+              {topMejores.map((driver, index) => {
+                const asig = driver.nationalIdNumber ? asignaciones.get(driver.nationalIdNumber) : null
+                return (
+                  <div key={driver.id} className="cabify-top-item">
+                    <div className="cabify-top-rank">#{index + 1}</div>
+                    <div className="cabify-top-info">
+                      <div className="cabify-top-name">
+                        {driver.name} {driver.surname}
+                      </div>
+                      <div className="cabify-top-details">
+                        {getPatente(driver)} • {driver.viajesFinalizados || 0} viajes • Score {driver.score?.toFixed(2) || '-'}
+                      </div>
+                    </div>
+                    <div className="cabify-top-stats">
+                      {asig && (
+                        <span className={`cabify-top-badge ${asig.horario === 'CARGO' ? 'cargo' : 'turno'}`}>
+                          {asig.horario === 'CARGO' ? 'A cargo' : 'Turno'}
+                        </span>
+                      )}
+                      <span className="cabify-top-amount mejores">
+                        {formatCurrency(driver.gananciaTotal)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+              {topMejores.length === 0 && (
+                <div className="cabify-top-empty">No hay conductores con asignación activa</div>
+              )}
+            </div>
+          </div>
+
+          {/* Top 10 Peores */}
+          <div className="cabify-top-card peores">
+            <h3 className="cabify-top-title peores">10 Conductores con Menor Rendimiento</h3>
+            <div className="cabify-top-list">
+              {topPeores.map((driver, index) => {
+                const asig = driver.nationalIdNumber ? asignaciones.get(driver.nationalIdNumber) : null
+                return (
+                  <div key={driver.id} className="cabify-top-item">
+                    <div className="cabify-top-rank">#{index + 1}</div>
+                    <div className="cabify-top-info">
+                      <div className="cabify-top-name">
+                        {driver.name} {driver.surname}
+                      </div>
+                      <div className="cabify-top-details">
+                        {getPatente(driver)} • {driver.viajesFinalizados || 0} viajes • Score {driver.score?.toFixed(2) || '-'}
+                      </div>
+                    </div>
+                    <div className="cabify-top-stats">
+                      {asig && (
+                        <span className={`cabify-top-badge ${asig.horario === 'CARGO' ? 'cargo' : 'turno'}`}>
+                          {asig.horario === 'CARGO' ? 'A cargo' : 'Turno'}
+                        </span>
+                      )}
+                      <span className="cabify-top-amount peores">
+                        {formatCurrency(driver.gananciaTotal)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+              {topPeores.length === 0 && (
+                <div className="cabify-top-empty">No hay conductores con asignación activa</div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
