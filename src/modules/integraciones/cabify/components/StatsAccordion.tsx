@@ -5,7 +5,7 @@
  */
 
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import type { DriverStatistics } from '../types/cabify.types'
 import { formatCurrency } from '../utils/cabify.utils'
 import { STATS_LABELS } from '../constants/cabify.constants'
@@ -129,6 +129,7 @@ interface ModalidadChartProps {
 
 function ModalidadChart({ estadisticas }: ModalidadChartProps) {
   const { distribucionModalidad, conductoresCargo, conductoresTurno } = estadisticas
+  const total = conductoresCargo + conductoresTurno
 
   // Convertir a formato compatible con Recharts (evita errores de readonly)
   const chartData = distribucionModalidad.map(d => ({
@@ -137,31 +138,38 @@ function ModalidadChart({ estadisticas }: ModalidadChartProps) {
     color: d.color,
   })) as Array<{ name: string; value: number; color: string; [key: string]: unknown }>
 
+  // Calcular porcentajes
+  const pctCargo = total > 0 ? ((conductoresCargo / total) * 100).toFixed(0) : '0'
+  const pctTurno = total > 0 ? ((conductoresTurno / total) * 100).toFixed(0) : '0'
+
   return (
     <div className="cabify-chart-section">
       <h4 className="cabify-chart-title">{STATS_LABELS.MODALIDAD_DISTRIBUTION}</h4>
       <div className="cabify-chart-container">
-        <ResponsiveContainer width="100%" height={200}>
+        <ResponsiveContainer width={180} height={180}>
           <PieChart>
             <Pie
               data={chartData}
               cx="50%"
               cy="50%"
-              innerRadius={50}
-              outerRadius={80}
-              paddingAngle={5}
+              innerRadius={45}
+              outerRadius={70}
+              paddingAngle={3}
               dataKey="value"
-              label={({ name, percent }) => `${name ?? ''}: ${((percent ?? 0) * 100).toFixed(0)}%`}
             >
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={entry.color} />
               ))}
             </Pie>
             <Tooltip formatter={(value: number) => [`${value} conductores`, 'Cantidad']} />
-            <Legend />
           </PieChart>
         </ResponsiveContainer>
-        <ModalidadLegend cargo={conductoresCargo} turno={conductoresTurno} />
+        <ModalidadLegend
+          cargo={conductoresCargo}
+          turno={conductoresTurno}
+          pctCargo={pctCargo}
+          pctTurno={pctTurno}
+        />
       </div>
     </div>
   )
@@ -170,18 +178,26 @@ function ModalidadChart({ estadisticas }: ModalidadChartProps) {
 interface ModalidadLegendProps {
   readonly cargo: number
   readonly turno: number
+  readonly pctCargo: string
+  readonly pctTurno: string
 }
 
-function ModalidadLegend({ cargo, turno }: ModalidadLegendProps) {
+function ModalidadLegend({ cargo, turno, pctCargo, pctTurno }: ModalidadLegendProps) {
   return (
     <div className="cabify-modalidad-legend">
       <div className="cabify-modalidad-item">
         <span className="cabify-modalidad-dot cargo" />
-        <span>A Cargo: {cargo}</span>
+        <div className="cabify-modalidad-info">
+          <span className="cabify-modalidad-label">A Cargo</span>
+          <span className="cabify-modalidad-value">{cargo} ({pctCargo}%)</span>
+        </div>
       </div>
       <div className="cabify-modalidad-item">
         <span className="cabify-modalidad-dot turno" />
-        <span>Turno: {turno}</span>
+        <div className="cabify-modalidad-info">
+          <span className="cabify-modalidad-label">Turno</span>
+          <span className="cabify-modalidad-value">{turno} ({pctTurno}%)</span>
+        </div>
       </div>
     </div>
   )

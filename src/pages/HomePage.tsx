@@ -381,6 +381,9 @@ export function HomePage() {
           .content-area {
             padding: 24px;
           }
+          .sidebar {
+            width: 220px;
+          }
         }
 
         .menu-toggle {
@@ -391,6 +394,10 @@ export function HomePage() {
           cursor: pointer;
           padding: 8px;
           color: var(--text-primary);
+          min-width: 44px;
+          min-height: 44px;
+          align-items: center;
+          justify-content: center;
         }
 
         .sidebar-overlay {
@@ -408,14 +415,16 @@ export function HomePage() {
           display: block;
         }
 
+        /* Tablet portrait & large phones */
         @media (max-width: 768px) {
           .menu-toggle {
-            display: block;
+            display: flex;
           }
           .sidebar {
-            width: 240px;
+            width: 280px;
+            max-width: 85vw;
             position: fixed;
-            left: -240px;
+            left: -100%;
             top: 0;
             bottom: 0;
             z-index: 1000;
@@ -426,38 +435,164 @@ export function HomePage() {
           }
           .topbar {
             padding: 0 12px;
+            justify-content: space-between;
           }
           .topbar-title {
             font-size: 16px;
           }
           .btn-logout {
-            padding: 8px 12px;
-            font-size: 12px;
+            padding: 10px 16px;
+            font-size: 13px;
+            min-height: 44px;
           }
           .content-area {
             padding: 16px;
           }
           .content-card {
             padding: 20px;
+            border-radius: 8px;
+          }
+          .card-title {
+            font-size: 18px;
+          }
+          .card-description {
+            font-size: 13px;
+          }
+          .sidebar-header {
+            padding: 16px;
+          }
+          .sidebar-footer {
+            padding: 12px 16px;
+          }
+          .user-card {
+            padding: 12px;
           }
         }
 
+        /* Mobile phones (iPhone 15 Pro Max = 430px, iPhone 14 = 390px) */
         @media (max-width: 480px) {
           .topbar {
-            padding: 0 8px;
+            padding: 0 10px;
+            height: 56px;
+            gap: 8px;
           }
           .topbar-title {
             font-size: 14px;
           }
           .btn-logout {
-            padding: 6px 10px;
-            font-size: 11px;
+            padding: 10px 14px;
+            font-size: 13px;
+            min-height: 44px;
+            border-radius: 6px;
           }
           .content-area {
             padding: 12px;
           }
           .content-card {
             padding: 16px;
+            border-radius: 8px;
+          }
+          .card-title {
+            font-size: 16px;
+          }
+          .card-description {
+            font-size: 12px;
+          }
+          .sidebar {
+            width: 100%;
+            max-width: 300px;
+          }
+          .sidebar-header {
+            padding: 14px 16px;
+          }
+          .sidebar-logo-icon {
+            width: 30px;
+            height: 30px;
+            font-size: 14px;
+          }
+          .sidebar-logo-text h1 {
+            font-size: 15px;
+          }
+          .sidebar-logo-text p {
+            font-size: 10px;
+          }
+          .nav-item {
+            padding: 12px;
+            font-size: 14px;
+            min-height: 44px;
+          }
+          .nav-section-header {
+            padding: 10px 12px;
+            font-size: 10px;
+            min-height: 40px;
+          }
+          .nav-section-items {
+            padding-left: 8px;
+          }
+          .user-avatar {
+            width: 34px;
+            height: 34px;
+            font-size: 12px;
+          }
+          .user-name {
+            font-size: 13px;
+          }
+          .user-role {
+            font-size: 10px;
+          }
+        }
+
+        /* Small phones (iPhone SE, older devices) */
+        @media (max-width: 375px) {
+          .topbar {
+            padding: 0 8px;
+            height: 52px;
+          }
+          .btn-logout {
+            padding: 8px 12px;
+            font-size: 12px;
+          }
+          .content-area {
+            padding: 10px;
+          }
+          .content-card {
+            padding: 14px;
+          }
+          .card-title {
+            font-size: 15px;
+          }
+          .sidebar {
+            max-width: 280px;
+          }
+          .nav-item {
+            padding: 10px 12px;
+            font-size: 13px;
+          }
+        }
+
+        /* Landscape orientation on mobile */
+        @media (max-height: 500px) and (orientation: landscape) {
+          .sidebar {
+            width: 240px;
+          }
+          .topbar {
+            height: 48px;
+          }
+          .content-area {
+            padding: 8px 12px;
+          }
+          .sidebar-header {
+            padding: 8px 12px;
+          }
+          .sidebar-footer {
+            padding: 8px 12px;
+          }
+          .nav-item {
+            padding: 8px 12px;
+            min-height: 36px;
+          }
+          .user-card {
+            padding: 8px;
           }
         }
       `}</style>
