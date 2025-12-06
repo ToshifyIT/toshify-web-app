@@ -689,7 +689,13 @@
 
   .cabify-chart-container {
     flex-direction: column;
-    gap: 12px;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .cabify-modalidad-legend {
+    flex-direction: row;
+    gap: 24px;
   }
 
   .cabify-header-info h1 {
@@ -895,14 +901,23 @@
   .cabify-chart-title {
     font-size: 12px;
     margin-bottom: 10px;
+    text-align: center;
   }
 
   .cabify-chart-container {
-    gap: 16px;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
   }
 
   .cabify-chart-wrapper {
     padding: 8px;
+  }
+
+  .cabify-modalidad-legend {
+    flex-direction: row;
+    gap: 20px;
+    justify-content: center;
   }
 
   .cabify-modalidad-item {
@@ -983,5 +998,20 @@
 
   .cabify-table-container .dt-table {
     min-width: 800px;
+  }
+
+  /* Chart Extra Small */
+  .cabify-modalidad-legend {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .cabify-modalidad-label {
+    font-size: 10px;
+  }
+
+  .cabify-modalidad-value {
+    font-size: 13px;
   }
 }

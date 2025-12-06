@@ -146,24 +146,26 @@ function ModalidadChart({ estadisticas }: ModalidadChartProps) {
     <div className="cabify-chart-section">
       <h4 className="cabify-chart-title">{STATS_LABELS.MODALIDAD_DISTRIBUTION}</h4>
       <div className="cabify-chart-container">
-        <ResponsiveContainer width={180} height={180}>
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              innerRadius={45}
-              outerRadius={70}
-              paddingAngle={3}
-              dataKey="value"
-            >
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(value: number) => [`${value} conductores`, 'Cantidad']} />
-          </PieChart>
-        </ResponsiveContainer>
+        <div className="cabify-chart-wrapper">
+          <ResponsiveContainer width={160} height={160}>
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                innerRadius={40}
+                outerRadius={65}
+                paddingAngle={3}
+                dataKey="value"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value: number) => [`${value} conductores`, 'Cantidad']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
         <ModalidadLegend
           cargo={conductoresCargo}
           turno={conductoresTurno}
