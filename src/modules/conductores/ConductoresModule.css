@@ -1,12 +1,13 @@
 /* src/modules/conductores/ConductoresModule.css */
 /* Estilos específicos del módulo de Conductores */
 /* Nota: Los estilos base se heredan de modules.css */
+/* Con soporte para Dark Mode mediante CSS Variables */
 
 /* Badges específicos de Conductores */
 .categoria-badge {
   display: inline-flex;
-  background: #DBEAFE;
-  color: #1E40AF;
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 11px;
@@ -19,19 +20,19 @@
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  color: white;
+  color: var(--text-inverse);
 }
 
 .estado-badge-activo {
-  background: #10B981;
+  background: var(--color-success);
 }
 
 .estado-badge-baja {
-  background: #6B7280;
+  background: var(--color-gray-500);
 }
 
 .estado-badge-default {
-  background: #3B82F6;
+  background: var(--color-info);
 }
 
 /* Mobile devices (< 480px) */

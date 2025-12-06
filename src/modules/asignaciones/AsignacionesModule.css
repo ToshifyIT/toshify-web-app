@@ -1,5 +1,6 @@
 /* src/modules/asignaciones/AsignacionesModule.css */
 /* Estilos para el módulo de Asignaciones - Diseño compacto */
+/* Con soporte para Dark Mode mediante CSS Variables */
 
 /* Filtro de estado adicional */
 .asig-filters {
@@ -10,76 +11,77 @@
 
 .asig-status-select {
   padding: 8px 12px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
-  background: white;
+  background: var(--input-bg);
+  color: var(--text-primary);
   cursor: pointer;
   min-width: 180px;
 }
 
 .asig-status-select:focus {
   outline: none;
-  border-color: #E63946;
+  border-color: var(--border-focus);
 }
 
 /* Badges de estado */
 .asig-badge-programado {
-  background: #FEF3C7;
-  color: #92400E;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
 }
 
 .asig-badge-activa {
-  background: #D1FAE5;
-  color: #065F46;
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
 }
 
 .asig-badge-finalizada {
-  background: #E0E7FF;
-  color: #3730A3;
+  background: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
 }
 
 .asig-badge-cancelada {
-  background: #FEE2E2;
-  color: #991B1B;
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
 }
 
 /* Badges de modalidad */
 .asig-badge-dia-completo {
-  background: #DBEAFE;
-  color: #1E40AF;
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
 }
 
 .asig-badge-medio-dia {
-  background: #E9D5FF;
-  color: #6B21A8;
+  background: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
 }
 
 .asig-badge-por-horas {
-  background: #FED7AA;
-  color: #9A3412;
+  background: var(--badge-orange-bg);
+  color: var(--badge-orange-text);
 }
 
 .asig-badge-semanal {
-  background: #D1FAE5;
-  color: #065F46;
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
 }
 
 .asig-badge-mensual {
-  background: #C7D2FE;
-  color: #3730A3;
+  background: var(--badge-indigo-bg);
+  color: var(--badge-indigo-text);
 }
 
 /* Badges de horario */
 .asig-badge-turno {
-  background: #FEF3C7;
-  color: #92400E;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
 }
 
 .asig-badge-cargo {
-  background: #E9D5FF;
-  color: #6B21A8;
+  background: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
 }
 
 /* Celda de vehículo */
@@ -90,13 +92,13 @@
 
 .asig-vehiculo-patente {
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .asig-vehiculo-info {
   font-size: 11px;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 /* Lista de conductores en celda */
@@ -108,33 +110,33 @@
 
 .asig-conductor-item {
   font-size: 12px;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .asig-sin-conductor {
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   font-size: 11px;
 }
 
 /* Botones de acción específicos */
 .asig-btn-confirm {
-  background: #10B981 !important;
-  color: white !important;
-  border-color: #10B981 !important;
+  background: var(--color-success) !important;
+  color: var(--text-inverse) !important;
+  border-color: var(--color-success) !important;
 }
 
 .asig-btn-confirm:hover {
-  background: #059669 !important;
+  background: var(--color-success-dark) !important;
 }
 
 .asig-btn-cancel-prog {
-  background: #F59E0B !important;
-  color: white !important;
-  border-color: #F59E0B !important;
+  background: var(--color-warning) !important;
+  color: var(--text-inverse) !important;
+  border-color: var(--color-warning) !important;
 }
 
 .asig-btn-cancel-prog:hover {
-  background: #D97706 !important;
+  background: var(--color-warning-dark) !important;
 }
 
 /* Modal overlay común */
@@ -144,7 +146,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -154,13 +156,14 @@
 }
 
 .asig-modal-content {
-  background: white;
+  background: var(--modal-bg);
   border-radius: 10px;
   padding: 20px 24px;
   max-width: 600px;
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
+  border: 1px solid var(--border-primary);
 }
 
 .asig-modal-content.wide {
@@ -171,7 +174,7 @@
   margin: 0 0 12px 0;
   font-size: 18px;
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 /* Lista de conductores en modal de confirmación */
@@ -186,25 +189,26 @@
 }
 
 .asig-confirm-conductor.confirmed {
-  background: #D1FAE5;
-  border: 2px solid #10B981;
+  background: var(--badge-green-bg);
+  border: 2px solid var(--color-success);
   opacity: 0.7;
   cursor: not-allowed;
 }
 
 .asig-confirm-conductor.pending {
-  background: #F9FAFB;
-  border: 2px solid #E5E7EB;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-primary);
 }
 
 .asig-confirm-conductor.pending:hover {
-  border-color: #10B981;
+  border-color: var(--color-success);
 }
 
 .asig-confirm-conductor input[type="checkbox"] {
   width: 16px;
   height: 16px;
   cursor: pointer;
+  accent-color: var(--color-primary);
 }
 
 .asig-confirm-conductor.confirmed input[type="checkbox"] {
@@ -214,18 +218,18 @@
 .asig-conductor-name {
   font-size: 13px;
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-primary);
   margin: 0;
 }
 
 .asig-conductor-details {
   font-size: 11px;
-  color: #6B7280;
+  color: var(--text-secondary);
   margin: 2px 0 0 0;
 }
 
 .asig-conductor-confirmed {
-  color: #10B981;
+  color: var(--color-success);
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -238,20 +242,22 @@
 .asig-modal-textarea {
   width: 100%;
   padding: 10px;
-  border: 2px solid #E5E7EB;
+  border: 2px solid var(--input-border);
   border-radius: 6px;
   font-size: 13px;
   font-family: inherit;
   resize: vertical;
+  background: var(--input-bg);
+  color: var(--text-primary);
 }
 
 .asig-modal-textarea.cancel {
-  border-color: #FCA5A5;
+  border-color: var(--color-danger-light);
 }
 
 .asig-modal-textarea:focus {
   outline: none;
-  border-color: #E63946;
+  border-color: var(--border-focus);
 }
 
 /* Acciones del modal */
@@ -272,14 +278,14 @@
   display: block;
   font-size: 11px;
   font-weight: 600;
-  color: #6B7280;
+  color: var(--text-secondary);
   margin-bottom: 2px;
 }
 
 .asig-detail-value {
   margin: 0;
   font-size: 14px;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .asig-detail-value.code {
@@ -299,22 +305,22 @@
 /* Conductor card en modal de visualización */
 .asig-conductor-card {
   padding: 10px;
-  background: #F9FAFB;
+  background: var(--bg-secondary);
   border-radius: 6px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--border-primary);
 }
 
 .asig-conductor-card-name {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .asig-conductor-card-info {
   margin: 2px 0 0 0;
   font-size: 11px;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 .asig-conductor-status {
@@ -327,8 +333,8 @@
 
 .asig-btn-unconfirm {
   padding: 3px 6px;
-  background: #F59E0B;
-  color: white;
+  background: var(--color-warning);
+  color: var(--text-inverse);
   border: none;
   border-radius: 3px;
   font-size: 10px;
@@ -337,16 +343,16 @@
 }
 
 .asig-btn-unconfirm:hover {
-  background: #D97706;
+  background: var(--color-warning-dark);
 }
 
 /* Notas en modal */
 .asig-notes-box {
   margin: 0;
   font-size: 13px;
-  color: #1F2937;
+  color: var(--text-primary);
   padding: 10px;
-  background: #F9FAFB;
+  background: var(--bg-secondary);
   border-radius: 6px;
   white-space: pre-wrap;
 }

@@ -1,12 +1,14 @@
 /* src/styles/modules.css */
 /* Estilos compartidos para todos los módulos con tablas */
-/* Diseño compacto y estandarizado */
+/* Diseño compacto y estandarizado - Con soporte para Dark Mode */
 
 /* Container */
 .module-container {
   max-width: 1400px;
   margin: 0 auto;
   padding: 12px 16px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 /* Header */
@@ -19,13 +21,13 @@
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .module-subtitle {
   margin: 4px 0 0 0;
   font-size: 14px;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 /* Action Bar */
@@ -39,24 +41,24 @@
 /* Primary Button */
 .btn-primary {
   padding: 8px 18px;
-  background: #E63946;
-  color: white;
+  background: var(--color-primary);
+  color: var(--text-inverse);
   border: none;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(230, 57, 70, 0.2);
+  box-shadow: 0 2px 4px var(--color-primary-shadow);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #D62828;
-  box-shadow: 0 4px 8px rgba(230, 57, 70, 0.3);
+  background: var(--color-primary-hover);
+  box-shadow: 0 4px 8px var(--color-primary-shadow);
 }
 
 .btn-primary:disabled {
-  background: #9CA3AF;
+  background: var(--color-gray-400);
   cursor: not-allowed;
   box-shadow: none;
 }
@@ -64,9 +66,9 @@
 /* Secondary Button */
 .btn-secondary {
   padding: 8px 16px;
-  background: white;
-  color: #6B7280;
-  border: 1px solid #E5E7EB;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
@@ -75,8 +77,8 @@
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #F9FAFB;
-  border-color: #D1D5DB;
+  background: var(--bg-secondary);
+  border-color: var(--color-gray-300);
 }
 
 .btn-secondary:disabled {
@@ -86,12 +88,12 @@
 
 /* Warning/Info Messages */
 .no-permission-msg {
-  background: #FEF3C7;
-  border: 1px solid #FDE68A;
+  background: var(--badge-yellow-bg);
+  border: 1px solid var(--color-warning);
   border-radius: 6px;
   padding: 10px 14px;
   margin-bottom: 12px;
-  color: #92400E;
+  color: var(--badge-yellow-text);
   font-size: 13px;
   display: flex;
   align-items: center;
@@ -105,7 +107,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -114,25 +116,26 @@
 }
 
 .modal-content {
-  background: white;
+  background: var(--modal-bg);
   padding: 20px 24px;
   border-radius: 12px;
   max-width: 900px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-primary);
 }
 
 .modal-title {
   margin: 0 0 16px 0;
   font-size: 18px;
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .modal-title-danger {
-  color: #DC2626;
+  color: var(--color-danger);
 }
 
 /* Form */
@@ -159,28 +162,31 @@
   margin-bottom: 4px;
   font-weight: 600;
   font-size: 12px;
-  color: #374151;
+  color: var(--text-primary);
 }
 
 .form-input {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   font-size: 13px;
   font-family: inherit;
   transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--input-bg);
+  color: var(--text-primary);
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #E63946;
-  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+  border-color: var(--border-focus);
+  box-shadow: var(--input-focus-shadow);
 }
 
 .form-input:disabled {
-  background: #F9FAFB;
+  background: var(--bg-secondary);
   cursor: not-allowed;
+  color: var(--text-tertiary);
 }
 
 .form-textarea {
@@ -191,6 +197,7 @@
 .form-checkbox {
   margin-right: 6px;
   cursor: pointer;
+  accent-color: var(--color-primary);
 }
 
 .form-checkbox-label {
@@ -199,17 +206,17 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  color: #374151;
+  color: var(--text-primary);
 }
 
 /* Section Title */
 .section-title {
   font-size: 14px;
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-primary);
   margin: 16px 0 10px 0;
   padding-bottom: 6px;
-  border-bottom: 2px solid #E5E7EB;
+  border-bottom: 2px solid var(--border-primary);
 }
 
 /* Details Grid */
@@ -227,7 +234,7 @@
 .detail-label {
   font-weight: 600;
   font-size: 10px;
-  color: #6B7280;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.025em;
   display: block;
@@ -236,20 +243,20 @@
 
 .detail-value {
   font-size: 13px;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 /* Delete Warning */
 .delete-warning {
-  background: #FEF2F2;
-  border: 1px solid #FEE2E2;
+  background: var(--badge-red-bg);
+  border: 1px solid var(--color-danger-light);
   border-radius: 6px;
   padding: 12px;
   margin-bottom: 12px;
 }
 
 .delete-warning-title {
-  color: #DC2626;
+  color: var(--color-danger);
   font-weight: 600;
   font-size: 13px;
   margin-bottom: 6px;
@@ -259,7 +266,7 @@
 }
 
 .delete-warning-text {
-  color: #7F1D1D;
+  color: var(--badge-red-text);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -271,14 +278,14 @@
   justify-content: flex-end;
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #E5E7EB;
+  border-top: 1px solid var(--border-primary);
 }
 
 /* Custom Badges */
 .patente-badge {
   display: inline-block;
-  background: #1F2937;
-  color: white;
+  background: var(--color-gray-800);
+  color: var(--text-inverse);
   padding: 4px 10px;
   border-radius: 4px;
   font-weight: 700;
@@ -293,16 +300,16 @@
 
 .vehiculo-cell-patente {
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .vehiculo-cell-info {
   font-size: 10px;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 .vehiculo-cell-na {
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   font-size: 11px;
 }
 

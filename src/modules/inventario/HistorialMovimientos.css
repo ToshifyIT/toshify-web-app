@@ -1,5 +1,6 @@
 /* src/modules/inventario/HistorialMovimientos.css */
 /* Estilos para el módulo de Historial de Movimientos - Diseño compacto */
+/* Con soporte para Dark Mode mediante CSS Variables */
 
 /* Filtros */
 .hist-filters {
@@ -13,31 +14,38 @@
   flex: 1;
   min-width: 250px;
   padding: 8px 12px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text-primary);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .hist-search-input:focus {
   outline: none;
-  border-color: #E63946;
-  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+  border-color: var(--border-focus);
+  box-shadow: var(--input-focus-shadow);
+}
+
+.hist-search-input::placeholder {
+  color: var(--text-tertiary);
 }
 
 .hist-type-select {
   padding: 8px 12px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
-  background: white;
+  background: var(--input-bg);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
 .hist-type-select:focus {
   outline: none;
-  border-color: #E63946;
+  border-color: var(--border-focus);
 }
 
 /* Celdas especiales */
@@ -46,12 +54,12 @@
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 .hist-date-time {
   font-size: 10px;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
 }
 
 /* Badge de Tipo */
@@ -66,50 +74,50 @@
 }
 
 .hist-tipo-badge.entrada {
-  background: #D1FAE5;
-  color: #065F46;
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
 }
 
 .hist-tipo-badge.salida {
-  background: #FEE2E2;
-  color: #DC2626;
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
 }
 
 .hist-tipo-badge.asignacion {
-  background: #FEF3C7;
-  color: #92400E;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
 }
 
 .hist-tipo-badge.devolucion {
-  background: #DBEAFE;
-  color: #1E40AF;
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
 }
 
 .hist-tipo-badge.ajuste {
-  background: #F3F4F6;
-  color: #6B7280;
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
 }
 
 .hist-tipo-badge.daño {
-  background: #FEE2E2;
-  color: #DC2626;
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
 }
 
 .hist-tipo-badge.perdida {
-  background: #F3F4F6;
-  color: #6B7280;
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
 }
 
 /* Celda de Producto */
 .hist-producto-codigo {
   font-size: 13px;
   font-weight: 600;
-  color: #E63946;
+  color: var(--color-primary);
 }
 
 .hist-producto-nombre {
   font-size: 12px;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 /* Celda de Cantidad */
@@ -128,12 +136,12 @@
 .hist-usuario-avatar {
   width: 28px;
   height: 28px;
-  background: #E63946;
+  background: var(--color-primary);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--text-inverse);
   font-weight: 700;
   font-size: 10px;
 }
@@ -141,15 +149,16 @@
 .hist-usuario-nombre {
   font-size: 12px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .hist-usuario-email {
   font-size: 10px;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
 }
 
 .hist-usuario-sistema {
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   font-style: italic;
   font-size: 12px;
 }
@@ -157,28 +166,28 @@
 /* Celda de Observaciones */
 .hist-observaciones {
   font-size: 12px;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 /* Estado Vacío */
 .hist-empty {
   text-align: center;
   padding: 40px 16px;
-  background: white;
+  background: var(--bg-primary);
   border-radius: 8px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--border-primary);
   margin-top: 12px;
 }
 
 .hist-empty-icon {
-  color: #D1D5DB;
+  color: var(--text-tertiary);
   margin: 0 auto 12px;
 }
 
 .hist-empty-text {
   font-size: 14px;
   font-weight: 600;
-  color: #6B7280;
+  color: var(--text-secondary);
   margin: 0;
 }
 
