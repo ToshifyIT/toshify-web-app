@@ -31,6 +31,7 @@ import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
+import { ThemeToggle } from '../components/ui/ThemeToggle'
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
@@ -95,8 +96,15 @@ export function HomePage() {
         }
 
         .sidebar-header {
-          padding: 20px;
+          padding: 16px 20px;
           border-bottom: 1px solid var(--border-primary);
+        }
+
+        .sidebar-header-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
         }
 
         .sidebar-logo {
@@ -461,12 +469,15 @@ export function HomePage() {
         {/* Sidebar */}
         <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="sidebar-header">
-            <div className="sidebar-logo">
-              <div className="sidebar-logo-icon">T</div>
-              <div className="sidebar-logo-text">
-                <h1>Toshify</h1>
-                <p>Admin Panel</p>
+            <div className="sidebar-header-row">
+              <div className="sidebar-logo">
+                <div className="sidebar-logo-icon">T</div>
+                <div className="sidebar-logo-text">
+                  <h1>Toshify</h1>
+                  <p>Admin Panel</p>
+                </div>
               </div>
+              <ThemeToggle />
             </div>
           </div>
 

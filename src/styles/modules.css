@@ -40,6 +40,9 @@
 
 /* Primary Button */
 .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 18px;
   background: var(--color-primary);
   color: var(--text-inverse);
@@ -50,6 +53,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: 0 2px 4px var(--color-primary-shadow);
+  white-space: nowrap;
 }
 
 .btn-primary:hover:not(:disabled) {

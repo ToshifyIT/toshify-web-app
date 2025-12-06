@@ -515,15 +515,6 @@ export function AsignacionesModule() {
             {expandedAsignaciones.length !== filteredAsignaciones.length && ` (${expandedAsignaciones.length} filas)`}
           </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => setShowWizard(true)}
-          disabled={!canCreate}
-          title={!canCreate ? 'No tienes permisos para crear asignaciones' : 'Nueva Asignación'}
-        >
-          <Plus size={18} />
-          Nueva Asignación
-        </button>
       </div>
 
       {/* Filtro de estado */}
@@ -541,7 +532,7 @@ export function AsignacionesModule() {
         </select>
       </div>
 
-      {/* DataTable */}
+      {/* DataTable with integrated action button */}
       <DataTable
         data={expandedAsignaciones}
         columns={columns}
@@ -553,6 +544,17 @@ export function AsignacionesModule() {
         emptyDescription="Crea la primera asignación usando el botón 'Nueva Asignación'"
         pageSize={20}
         pageSizeOptions={[10, 20, 50, 100]}
+        headerAction={
+          <button
+            className="btn-primary"
+            onClick={() => setShowWizard(true)}
+            disabled={!canCreate}
+            title={!canCreate ? 'No tienes permisos para crear asignaciones' : 'Nueva Asignación'}
+          >
+            <Plus size={18} />
+            Nueva Asignación
+          </button>
+        }
       />
 
       {/* Wizard Modal */}

@@ -70,6 +70,8 @@ export interface DataTableProps<T> {
   showPagination?: boolean;
   /** Callback ejecutado cuando la tabla está inicializada */
   onTableReady?: (table: Table<T>) => void;
+  /** Acción a mostrar en el header junto al buscador (ej: botón de crear) */
+  headerAction?: ReactNode;
 }
 
 /**
@@ -136,6 +138,7 @@ export function DataTable<T>({
   showSearch = true,
   showPagination = true,
   onTableReady,
+  headerAction,
 }: DataTableProps<T>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -207,30 +210,35 @@ export function DataTable<T>({
 
   return (
     <div className="dt-wrapper">
-      {/* Search */}
-      {showSearch && (
-        <div className="dt-search-container">
-          <div className="dt-search-wrapper">
-            <svg
-              className="dt-search-icon"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-            <input
-              type="text"
-              className="dt-search-input"
-              placeholder={searchPlaceholder}
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-            />
-          </div>
+      {/* Header with Search and Action */}
+      {(showSearch || headerAction) && (
+        <div className="dt-header-bar">
+          {showSearch && (
+            <div className="dt-search-wrapper">
+              <svg
+                className="dt-search-icon"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                className="dt-search-input"
+                placeholder={searchPlaceholder}
+                value={globalFilter}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+              />
+            </div>
+          )}
+          {headerAction && (
+            <div className="dt-header-action">{headerAction}</div>
+          )}
         </div>
       )}
 

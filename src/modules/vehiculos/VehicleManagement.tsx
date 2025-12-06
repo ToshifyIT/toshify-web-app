@@ -486,22 +486,7 @@ export function VehicleManagement() {
         </div>
       )}
 
-      {/* Action Button */}
-      <div className="module-actions">
-        <button
-          className="btn-primary"
-          onClick={() => {
-            resetForm()
-            setShowCreateModal(true)
-          }}
-          disabled={!canCreate}
-          title={!canCreate ? 'No tienes permisos para crear vehiculos' : ''}
-        >
-          + Crear Vehiculo
-        </button>
-      </div>
-
-      {/* DataTable */}
+      {/* DataTable with integrated action button */}
       <DataTable
         data={vehiculos}
         columns={columns}
@@ -511,6 +496,19 @@ export function VehicleManagement() {
         emptyIcon={<Car size={64} />}
         emptyTitle="No hay vehiculos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Vehiculo".' : ''}
+        headerAction={
+          <button
+            className="btn-primary"
+            onClick={() => {
+              resetForm()
+              setShowCreateModal(true)
+            }}
+            disabled={!canCreate}
+            title={!canCreate ? 'No tienes permisos para crear vehiculos' : ''}
+          >
+            + Crear Vehiculo
+          </button>
+        }
       />
 
       {/* MODALS - Se mantienen exactamente iguales */}

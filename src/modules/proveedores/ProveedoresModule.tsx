@@ -366,16 +366,7 @@ export function ProveedoresModule() {
         </p>
       </div>
 
-      {/* Action Button */}
-      <div className="module-actions">
-        {canCreate && (
-          <button className="btn-primary" onClick={openCreateModal}>
-            + Crear Proveedor
-          </button>
-        )}
-      </div>
-
-      {/* DataTable */}
+      {/* DataTable with integrated action button */}
       <DataTable
         data={proveedores}
         columns={columns}
@@ -384,6 +375,13 @@ export function ProveedoresModule() {
         emptyIcon={<Building2 size={64} />}
         emptyTitle="No hay proveedores registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Proveedor".' : ''}
+        headerAction={
+          canCreate ? (
+            <button className="btn-primary" onClick={openCreateModal}>
+              + Crear Proveedor
+            </button>
+          ) : undefined
+        }
       />
 
       {/* Create Modal */}
