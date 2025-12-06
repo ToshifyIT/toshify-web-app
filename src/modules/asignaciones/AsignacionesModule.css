@@ -385,3 +385,175 @@
     width: 100%;
   }
 }
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .asig-filters {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .asig-status-select {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+    min-width: 100%;
+  }
+
+  .asig-modal-overlay {
+    padding: 8px;
+  }
+
+  .asig-modal-content {
+    padding: 14px 16px;
+    margin: 4px;
+    max-height: 95vh;
+  }
+
+  .asig-modal-content.wide {
+    max-width: 100%;
+  }
+
+  .asig-modal-title {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+
+  /* Badges Mobile */
+  .asig-badge-programado,
+  .asig-badge-activa,
+  .asig-badge-finalizada,
+  .asig-badge-cancelada,
+  .asig-badge-dia-completo,
+  .asig-badge-medio-dia,
+  .asig-badge-por-horas,
+  .asig-badge-semanal,
+  .asig-badge-mensual,
+  .asig-badge-turno,
+  .asig-badge-cargo {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  /* Vehicle Cell Mobile */
+  .asig-vehiculo-patente {
+    font-size: 12px;
+  }
+
+  .asig-vehiculo-info {
+    font-size: 10px;
+  }
+
+  /* Conductores List Mobile */
+  .asig-conductor-item {
+    font-size: 11px;
+  }
+
+  .asig-sin-conductor {
+    font-size: 10px;
+  }
+
+  /* Confirmation Modal Mobile */
+  .asig-confirm-conductor {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .asig-conductor-name {
+    font-size: 12px;
+  }
+
+  .asig-conductor-details {
+    font-size: 10px;
+  }
+
+  .asig-conductor-confirmed {
+    font-size: 11px;
+    margin-left: 4px;
+  }
+
+  /* Textarea Mobile */
+  .asig-modal-textarea {
+    padding: 10px;
+    font-size: 14px;
+    min-height: 80px;
+  }
+
+  /* Actions Mobile */
+  .asig-modal-actions {
+    margin-top: 12px;
+    gap: 6px;
+  }
+
+  .asig-btn-confirm,
+  .asig-btn-cancel-prog {
+    padding: 10px 14px !important;
+    font-size: 14px !important;
+  }
+
+  /* Detail Grid Mobile */
+  .asig-detail-grid {
+    gap: 10px;
+  }
+
+  .asig-detail-label {
+    font-size: 10px;
+    margin-bottom: 1px;
+  }
+
+  .asig-detail-value {
+    font-size: 13px;
+  }
+
+  /* Conductor Card Mobile */
+  .asig-conductor-card {
+    padding: 8px;
+  }
+
+  .asig-conductor-card-name {
+    font-size: 12px;
+  }
+
+  .asig-conductor-card-info {
+    font-size: 10px;
+  }
+
+  .asig-conductor-status {
+    font-size: 10px;
+    gap: 4px;
+  }
+
+  .asig-btn-unconfirm {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  /* Notes Mobile */
+  .asig-notes-box {
+    padding: 8px;
+    font-size: 12px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .asig-modal-content {
+    padding: 12px 14px;
+  }
+
+  .asig-modal-title {
+    font-size: 15px;
+  }
+
+  .asig-status-select {
+    font-size: 13px;
+    padding: 10px;
+  }
+
+  .asig-confirm-conductor {
+    padding: 6px;
+  }
+
+  .asig-conductor-name {
+    font-size: 11px;
+  }
+}

@@ -33,3 +33,25 @@
 .estado-badge-default {
   background: #3B82F6;
 }
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .categoria-badge {
+    padding: 2px 4px;
+    font-size: 10px;
+  }
+
+  .estado-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .categoria-badge,
+  .estado-badge {
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+}

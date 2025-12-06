@@ -178,3 +178,93 @@
     justify-content: center;
   }
 }
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .inv-filters {
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .inv-filter-btn {
+    padding: 10px 14px; /* Touch-friendly */
+    font-size: 13px;
+  }
+
+  .inv-summary-grid {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .inv-summary-card {
+    padding: 10px;
+  }
+
+  .inv-summary-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .inv-summary-label {
+    font-size: 9px;
+  }
+
+  .inv-summary-value {
+    font-size: 16px;
+  }
+
+  .inv-table-header {
+    padding: 10px;
+  }
+
+  .inv-table-title {
+    font-size: 13px;
+  }
+
+  /* Table cells Mobile */
+  .inv-codigo {
+    font-size: 11px;
+  }
+
+  .inv-nombre {
+    font-size: 11px;
+  }
+
+  .inv-tipo-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+
+  .inv-total {
+    font-size: 11px;
+  }
+
+  .inv-disponible,
+  .inv-en-uso,
+  .inv-en-transito,
+  .inv-dañado,
+  .inv-perdido {
+    font-size: 11px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .inv-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .inv-summary-content {
+    gap: 8px;
+  }
+
+  .inv-summary-value {
+    font-size: 14px;
+  }
+
+  .inv-filter-btn {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+}

@@ -728,4 +728,235 @@
   .cabify-header-info h1 {
     font-size: 16px;
   }
+
+  .cabify-table-container .dt-table {
+    min-width: 1200px;
+  }
+}
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .cabify-header {
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+
+  .cabify-header-info h1 {
+    font-size: 15px;
+    margin-bottom: 2px;
+  }
+
+  .cabify-header-info > p {
+    font-size: 11px;
+  }
+
+  .cabify-sync-status {
+    font-size: 10px;
+  }
+
+  .cabify-controls {
+    gap: 6px;
+  }
+
+  .cabify-week-selector label {
+    font-size: 10px;
+  }
+
+  .cabify-week-selector select {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  .cabify-refresh-btn {
+    padding: 10px 14px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  .cabify-info-card {
+    padding: 8px 10px;
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+
+  .cabify-search-bar {
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+
+  .cabify-results-count {
+    font-size: 11px;
+  }
+
+  .cabify-progress-banner {
+    padding: 8px 10px;
+    font-size: 11px;
+    gap: 8px;
+  }
+
+  .cabify-error {
+    padding: 20px 14px;
+  }
+
+  .cabify-error h3 {
+    font-size: 14px;
+  }
+
+  .cabify-error p {
+    font-size: 12px;
+  }
+
+  /* Top Cards Mobile */
+  .cabify-accordion-card {
+    margin-bottom: 8px;
+  }
+
+  .cabify-accordion-header {
+    padding: 10px 12px;
+  }
+
+  .cabify-accordion-title {
+    font-size: 13px;
+  }
+
+  .cabify-accordion-content {
+    padding: 10px;
+  }
+
+  .cabify-top-item {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .cabify-top-rank {
+    font-size: 11px;
+    min-width: 22px;
+  }
+
+  .cabify-top-name {
+    font-size: 12px;
+  }
+
+  .cabify-top-details {
+    font-size: 10px;
+  }
+
+  .cabify-top-badge {
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+
+  .cabify-top-amount {
+    font-size: 12px;
+    min-width: 70px;
+  }
+
+  .cabify-top-stats {
+    padding-left: 30px;
+    gap: 8px;
+  }
+
+  /* Stats Grid Mobile */
+  .cabify-stat-card {
+    padding: 10px 8px;
+  }
+
+  .cabify-stat-value {
+    font-size: 16px;
+  }
+
+  .cabify-stat-label {
+    font-size: 9px;
+  }
+
+  /* Chart Mobile */
+  .cabify-chart-section {
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+
+  .cabify-chart-title {
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  .cabify-chart-container {
+    gap: 16px;
+  }
+
+  .cabify-chart-wrapper {
+    padding: 8px;
+  }
+
+  .cabify-modalidad-item {
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .cabify-modalidad-dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* View Toggle Mobile */
+  .cabify-view-toggle {
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 4px 0;
+  }
+
+  .cabify-view-toggle > span {
+    font-size: 11px;
+    width: 100%;
+  }
+
+  .cabify-toggle-btn {
+    padding: 8px 12px; /* Touch-friendly */
+    font-size: 12px;
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* Table Mobile */
+  .cabify-table-container .dt-table {
+    min-width: 1000px;
+  }
+
+  .cabify-table-container .dt-table th,
+  .cabify-table-container .dt-table td {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .cabify-header-info h1 {
+    font-size: 14px;
+  }
+
+  .cabify-accordion-title {
+    font-size: 12px;
+  }
+
+  .cabify-top-name {
+    font-size: 11px;
+  }
+
+  .cabify-top-amount {
+    font-size: 11px;
+    min-width: 60px;
+  }
+
+  .cabify-stat-value {
+    font-size: 14px;
+  }
+
+  .cabify-toggle-btn {
+    padding: 8px 8px;
+    font-size: 11px;
+  }
+
+  .cabify-table-container .dt-table {
+    min-width: 800px;
+  }
 }

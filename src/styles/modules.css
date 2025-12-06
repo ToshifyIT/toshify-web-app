@@ -328,6 +328,10 @@
 }
 
 @media (max-width: 768px) {
+  .module-container {
+    padding: 8px 10px;
+  }
+
   .form-row,
   .form-row-3,
   .details-grid {
@@ -336,6 +340,7 @@
 
   .modal-content {
     padding: 16px 20px;
+    margin: 8px;
   }
 
   .module-actions {
@@ -349,5 +354,138 @@
 
   .module-title {
     font-size: 18px;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .modal-footer button {
+    width: 100%;
+  }
+}
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .module-container {
+    padding: 6px 8px;
+  }
+
+  .module-header {
+    margin-bottom: 8px;
+  }
+
+  .module-title {
+    font-size: 16px;
+  }
+
+  .module-subtitle {
+    font-size: 12px;
+  }
+
+  .module-actions {
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 10px 16px; /* Touch-friendly - min 44px height */
+    font-size: 14px;
+  }
+
+  .modal-overlay {
+    padding: 8px;
+  }
+
+  .modal-content {
+    padding: 14px 16px;
+    border-radius: 10px;
+    max-height: 95vh;
+  }
+
+  .modal-title {
+    font-size: 16px;
+    margin-bottom: 12px;
+  }
+
+  .form-group {
+    margin-bottom: 8px;
+  }
+
+  .form-label {
+    font-size: 11px;
+    margin-bottom: 3px;
+  }
+
+  .form-input {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  .form-textarea {
+    min-height: 70px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    margin: 12px 0 8px 0;
+  }
+
+  .detail-label {
+    font-size: 9px;
+  }
+
+  .detail-value {
+    font-size: 12px;
+  }
+
+  .delete-warning {
+    padding: 10px;
+  }
+
+  .delete-warning-title,
+  .delete-warning-text {
+    font-size: 12px;
+  }
+
+  .modal-footer {
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+
+  .no-permission-msg {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .patente-badge {
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .module-container {
+    padding: 4px 6px;
+  }
+
+  .module-title {
+    font-size: 15px;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .modal-content {
+    padding: 12px 14px;
+  }
+
+  .modal-title {
+    font-size: 15px;
   }
 }

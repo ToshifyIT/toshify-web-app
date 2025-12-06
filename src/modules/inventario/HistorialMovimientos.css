@@ -196,3 +196,105 @@
     width: 100%;
   }
 }
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .hist-filters {
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+
+  .hist-search-input {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  .hist-type-select {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  /* Table cells Mobile */
+  .hist-date-cell {
+    font-size: 11px;
+    gap: 2px;
+  }
+
+  .hist-date-time {
+    font-size: 9px;
+  }
+
+  .hist-tipo-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+    gap: 2px;
+  }
+
+  .hist-producto-codigo {
+    font-size: 11px;
+  }
+
+  .hist-producto-nombre {
+    font-size: 10px;
+  }
+
+  .hist-cantidad {
+    font-size: 12px;
+  }
+
+  .hist-usuario-cell {
+    gap: 4px;
+  }
+
+  .hist-usuario-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+  }
+
+  .hist-usuario-nombre {
+    font-size: 11px;
+  }
+
+  .hist-usuario-email {
+    font-size: 9px;
+  }
+
+  .hist-usuario-sistema {
+    font-size: 10px;
+  }
+
+  .hist-observaciones {
+    font-size: 10px;
+  }
+
+  /* Empty State Mobile */
+  .hist-empty {
+    padding: 30px 12px;
+    margin-top: 10px;
+  }
+
+  .hist-empty-text {
+    font-size: 13px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .hist-search-input,
+  .hist-type-select {
+    font-size: 13px;
+    padding: 10px;
+  }
+
+  .hist-tipo-badge {
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+
+  .hist-usuario-avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 8px;
+  }
+}

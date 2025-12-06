@@ -418,11 +418,111 @@
 
 @media (max-width: 480px) {
   .dt-search-input {
-    padding: 8px 12px 8px 36px;
-    font-size: 12px;
+    padding: 10px 12px 10px 36px;
+    font-size: 14px; /* Más grande para mejor legibilidad táctil */
+  }
+
+  .dt-table {
+    min-width: 500px;
+  }
+
+  .dt-table th,
+  .dt-table td {
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  .dt-table th {
+    font-size: 9px;
   }
 
   .dt-pagination-text {
     display: none;
+  }
+
+  .dt-pagination-info {
+    font-size: 11px;
+    width: 100%;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
+  .dt-pagination-controls {
+    justify-content: center;
+  }
+
+  .dt-pagination-btn {
+    padding: 8px 10px; /* Más grande para táctil - min 44px touch target */
+    min-width: 36px;
+    font-size: 13px;
+  }
+
+  .dt-pagination-select {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .dt-btn-action {
+    padding: 8px 10px; /* Touch-friendly */
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .dt-actions {
+    gap: 4px;
+  }
+
+  .dt-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+
+  .dt-empty {
+    padding: 30px 12px;
+  }
+
+  .dt-empty-icon svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .dt-empty-title {
+    font-size: 14px;
+  }
+
+  .dt-empty-description {
+    font-size: 12px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .dt-table {
+    min-width: 450px;
+  }
+
+  .dt-table th,
+  .dt-table td {
+    padding: 6px 4px;
+    font-size: 10px;
+  }
+
+  .dt-table th {
+    font-size: 8px;
+  }
+
+  .dt-search-container {
+    margin-bottom: 8px;
+  }
+
+  .dt-pagination {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .dt-pagination-btn {
+    padding: 6px 8px;
+    min-width: 32px;
+    font-size: 12px;
   }
 }
