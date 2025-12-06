@@ -1,7 +1,8 @@
 // src/modules/integraciones/cabify/CabifyModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { RefreshCw, Users } from 'lucide-react'
+import { RefreshCw, Users, ChevronDown, ChevronUp, BarChart3, List } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import { DataTable } from '../../../components/ui/DataTable/DataTable'
 import { cabifyService } from '../../../services/cabifyService'
 import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService'
@@ -51,6 +52,14 @@ export function CabifyModule() {
   const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0, message: '' })
   const [dataSource, setDataSource] = useState<'historical' | 'api' | 'hybrid'>('historical')
   const [asignaciones, setAsignaciones] = useState<Map<string, AsignacionActiva>>(new Map())
+
+  // Estados para acordeones y vistas
+  const [accordionState, setAccordionState] = useState({
+    mejores: true,
+    peores: true,
+    estadisticas: true
+  })
+  const [viewMode, setViewMode] = useState<'list' | 'chart'>('list')
 
   // Week selector state
   const [availableWeeks, setAvailableWeeks] = useState<Array<{
@@ -373,6 +382,91 @@ export function CabifyModule() {
     }
   }, [drivers, asignaciones])
 
+  // Calcular estadísticas adicionales
+  const estadisticas = useMemo(() => {
+    const conductoresConAsignacion = drivers.filter(d => {
+      const asig = d.nationalIdNumber ? asignaciones.get(d.nationalIdNumber) : null
+      return asig !== null && asig !== undefined
+    })
+
+    if (conductoresConAsignacion.length === 0) {
+      return {
+        totalRecaudado: 0,
+        promedioRecaudacion: 0,
+        totalViajes: 0,
+        promedioViajes: 0,
+        conductoresCargo: 0,
+        conductoresTurno: 0,
+        totalConductores: 0,
+        distribucionModalidad: []
+      }
+    }
+
+    // Total y promedio de recaudación
+    const ganancias = conductoresConAsignacion.map(d =>
+      typeof d.gananciaTotal === 'string' ? parseFloat(d.gananciaTotal) : (d.gananciaTotal || 0)
+    )
+    const totalRecaudado = ganancias.reduce((sum, g) => sum + g, 0)
+    const promedioRecaudacion = totalRecaudado / conductoresConAsignacion.length
+
+    // Total y promedio de viajes
+    const viajes = conductoresConAsignacion.map(d => d.viajesFinalizados || 0)
+    const totalViajes = viajes.reduce((sum, v) => sum + v, 0)
+    const promedioViajes = totalViajes / conductoresConAsignacion.length
+
+    // Distribución por modalidad
+    let conductoresCargo = 0
+    let conductoresTurno = 0
+
+    conductoresConAsignacion.forEach(d => {
+      const asig = d.nationalIdNumber ? asignaciones.get(d.nationalIdNumber) : null
+      if (asig?.horario === 'CARGO') conductoresCargo++
+      else if (asig?.horario === 'TURNO') conductoresTurno++
+    })
+
+    const distribucionModalidad = [
+      { name: 'A Cargo', value: conductoresCargo, color: '#F59E0B' },
+      { name: 'Turno', value: conductoresTurno, color: '#3B82F6' }
+    ].filter(d => d.value > 0)
+
+    return {
+      totalRecaudado,
+      promedioRecaudacion,
+      totalViajes,
+      promedioViajes,
+      conductoresCargo,
+      conductoresTurno,
+      totalConductores: conductoresConAsignacion.length,
+      distribucionModalidad
+    }
+  }, [drivers, asignaciones])
+
+  // Datos para gráfico de distribución de ganancias en Top 10
+  const chartDataMejores = useMemo(() =>
+    topMejores.map(d => ({
+      name: `${d.name || ''} ${d.surname || ''}`.trim().split(' ')[0] || 'N/A',
+      value: typeof d.gananciaTotal === 'string' ? parseFloat(d.gananciaTotal) : (d.gananciaTotal || 0),
+      fullName: `${d.name || ''} ${d.surname || ''}`.trim()
+    }))
+  , [topMejores])
+
+  const chartDataPeores = useMemo(() =>
+    topPeores.map(d => ({
+      name: `${d.name || ''} ${d.surname || ''}`.trim().split(' ')[0] || 'N/A',
+      value: typeof d.gananciaTotal === 'string' ? parseFloat(d.gananciaTotal) : (d.gananciaTotal || 0),
+      fullName: `${d.name || ''} ${d.surname || ''}`.trim()
+    }))
+  , [topPeores])
+
+  // Colores para gráficos
+  const COLORS_MEJORES = ['#059669', '#10B981', '#34D399', '#6EE7B7', '#A7F3D0', '#D1FAE5', '#ECFDF5', '#059669', '#10B981', '#34D399']
+  const COLORS_PEORES = ['#DC2626', '#EF4444', '#F87171', '#FCA5A5', '#FECACA', '#FEE2E2', '#FEF2F2', '#DC2626', '#EF4444', '#F87171']
+
+  // Toggle accordion
+  const toggleAccordion = (key: 'mejores' | 'peores' | 'estadisticas') => {
+    setAccordionState(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
   // Función para formatear moneda
   const formatCurrency = (value: number | string | undefined): string => {
     const num = typeof value === 'string' ? parseFloat(value) : (value || 0)
@@ -476,80 +570,266 @@ export function CabifyModule() {
         </div>
       )}
 
-      {/* Top 10 Cards */}
-      {!queryState.loading && drivers.length > 0 && (topMejores.length > 0 || topPeores.length > 0) && (
-        <div className="cabify-tops-container">
-          {/* Top 10 Mejores */}
-          <div className="cabify-top-card mejores">
-            <h3 className="cabify-top-title mejores">Top 10 Mejores Conductores</h3>
-            <div className="cabify-top-list">
-              {topMejores.map((driver, index) => {
-                const asig = driver.nationalIdNumber ? asignaciones.get(driver.nationalIdNumber) : null
-                return (
-                  <div key={driver.id} className="cabify-top-item">
-                    <div className="cabify-top-rank">#{index + 1}</div>
-                    <div className="cabify-top-info">
-                      <div className="cabify-top-name">
-                        {driver.name} {driver.surname}
+      {/* Estadísticas y Top 10 Dashboard */}
+      {!queryState.loading && drivers.length > 0 && (
+        <div className="cabify-dashboard">
+          {/* Card de Estadísticas Generales */}
+          <div className="cabify-accordion-card estadisticas">
+            <div
+              className="cabify-accordion-header"
+              onClick={() => toggleAccordion('estadisticas')}
+            >
+              <h3 className="cabify-accordion-title">
+                Estadísticas de Conductores con Asignación
+              </h3>
+              {accordionState.estadisticas ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            </div>
+            {accordionState.estadisticas && (
+              <div className="cabify-accordion-content">
+                <div className="cabify-stats-grid">
+                  <div className="cabify-stat-card">
+                    <div className="cabify-stat-value">{estadisticas.totalConductores}</div>
+                    <div className="cabify-stat-label">Conductores Activos</div>
+                  </div>
+                  <div className="cabify-stat-card highlight-green">
+                    <div className="cabify-stat-value">${formatCurrency(estadisticas.totalRecaudado)}</div>
+                    <div className="cabify-stat-label">Total Recaudado</div>
+                  </div>
+                  <div className="cabify-stat-card">
+                    <div className="cabify-stat-value">${formatCurrency(estadisticas.promedioRecaudacion)}</div>
+                    <div className="cabify-stat-label">Promedio por Conductor</div>
+                  </div>
+                  <div className="cabify-stat-card">
+                    <div className="cabify-stat-value">{estadisticas.totalViajes.toLocaleString('es-AR')}</div>
+                    <div className="cabify-stat-label">Total Viajes</div>
+                  </div>
+                  <div className="cabify-stat-card">
+                    <div className="cabify-stat-value">{estadisticas.promedioViajes.toFixed(1)}</div>
+                    <div className="cabify-stat-label">Promedio Viajes/Conductor</div>
+                  </div>
+                </div>
+
+                {/* Gráfico de distribución por modalidad */}
+                {estadisticas.distribucionModalidad.length > 0 && (
+                  <div className="cabify-chart-section">
+                    <h4 className="cabify-chart-title">Distribución por Modalidad</h4>
+                    <div className="cabify-chart-container">
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={estadisticas.distribucionModalidad}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={80}
+                            paddingAngle={5}
+                            dataKey="value"
+                            label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`}
+                          >
+                            {estadisticas.distribucionModalidad.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => [`${value} conductores`, 'Cantidad']} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="cabify-modalidad-legend">
+                        <div className="cabify-modalidad-item">
+                          <span className="cabify-modalidad-dot cargo"></span>
+                          <span>A Cargo: {estadisticas.conductoresCargo}</span>
+                        </div>
+                        <div className="cabify-modalidad-item">
+                          <span className="cabify-modalidad-dot turno"></span>
+                          <span>Turno: {estadisticas.conductoresTurno}</span>
+                        </div>
                       </div>
-                      <div className="cabify-top-details">
-                        {getPatente(driver)} • {driver.viajesFinalizados || 0} viajes • Score {driver.score?.toFixed(2) || '-'}
-                      </div>
-                    </div>
-                    <div className="cabify-top-stats">
-                      {asig && (
-                        <span className={`cabify-top-badge ${asig.horario === 'CARGO' ? 'cargo' : 'turno'}`}>
-                          {asig.horario === 'CARGO' ? 'A cargo' : 'Turno'}
-                        </span>
-                      )}
-                      <span className="cabify-top-amount mejores">
-                        {formatCurrency(driver.gananciaTotal)}
-                      </span>
                     </div>
                   </div>
-                )
-              })}
-              {topMejores.length === 0 && (
-                <div className="cabify-top-empty">No hay conductores con asignación activa</div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Top 10 Peores */}
-          <div className="cabify-top-card peores">
-            <h3 className="cabify-top-title peores">10 Conductores con Menor Rendimiento</h3>
-            <div className="cabify-top-list">
-              {topPeores.map((driver, index) => {
-                const asig = driver.nationalIdNumber ? asignaciones.get(driver.nationalIdNumber) : null
-                return (
-                  <div key={driver.id} className="cabify-top-item">
-                    <div className="cabify-top-rank">#{index + 1}</div>
-                    <div className="cabify-top-info">
-                      <div className="cabify-top-name">
-                        {driver.name} {driver.surname}
-                      </div>
-                      <div className="cabify-top-details">
-                        {getPatente(driver)} • {driver.viajesFinalizados || 0} viajes • Score {driver.score?.toFixed(2) || '-'}
-                      </div>
-                    </div>
-                    <div className="cabify-top-stats">
-                      {asig && (
-                        <span className={`cabify-top-badge ${asig.horario === 'CARGO' ? 'cargo' : 'turno'}`}>
-                          {asig.horario === 'CARGO' ? 'A cargo' : 'Turno'}
-                        </span>
-                      )}
-                      <span className="cabify-top-amount peores">
-                        {formatCurrency(driver.gananciaTotal)}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-              {topPeores.length === 0 && (
-                <div className="cabify-top-empty">No hay conductores con asignación activa</div>
-              )}
+          {/* Toggle de vista Lista/Gráfico */}
+          {(topMejores.length > 0 || topPeores.length > 0) && (
+            <div className="cabify-view-toggle">
+              <span>Vista:</span>
+              <button
+                className={`cabify-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+                onClick={() => setViewMode('list')}
+                title="Vista Lista"
+              >
+                <List size={18} />
+                Lista
+              </button>
+              <button
+                className={`cabify-toggle-btn ${viewMode === 'chart' ? 'active' : ''}`}
+                onClick={() => setViewMode('chart')}
+                title="Vista Gráfico"
+              >
+                <BarChart3 size={18} />
+                Gráfico
+              </button>
             </div>
-          </div>
+          )}
+
+          {/* Top 10 Cards Container */}
+          {(topMejores.length > 0 || topPeores.length > 0) && (
+            <div className="cabify-tops-container">
+              {/* Top 10 Mejores */}
+              <div className="cabify-accordion-card mejores">
+                <div
+                  className="cabify-accordion-header mejores"
+                  onClick={() => toggleAccordion('mejores')}
+                >
+                  <h3 className="cabify-accordion-title">Top 10 Mejores Conductores</h3>
+                  {accordionState.mejores ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                </div>
+                {accordionState.mejores && (
+                  <div className="cabify-accordion-content">
+                    {viewMode === 'list' ? (
+                      <div className="cabify-top-list">
+                        {topMejores.map((driver, index) => {
+                          const asig = driver.nationalIdNumber ? asignaciones.get(driver.nationalIdNumber) : null
+                          return (
+                            <div key={driver.id} className="cabify-top-item">
+                              <div className="cabify-top-rank">#{index + 1}</div>
+                              <div className="cabify-top-info">
+                                <div className="cabify-top-name">
+                                  {driver.name} {driver.surname}
+                                </div>
+                                <div className="cabify-top-details">
+                                  {getPatente(driver)} • {driver.viajesFinalizados || 0} viajes • Score {driver.score?.toFixed(2) || '-'}
+                                </div>
+                              </div>
+                              <div className="cabify-top-stats">
+                                {asig && (
+                                  <span className={`cabify-top-badge ${asig.horario === 'CARGO' ? 'cargo' : 'turno'}`}>
+                                    {asig.horario === 'CARGO' ? 'A cargo' : 'Turno'}
+                                  </span>
+                                )}
+                                <span className="cabify-top-amount mejores">
+                                  ${formatCurrency(driver.gananciaTotal)}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {topMejores.length === 0 && (
+                          <div className="cabify-top-empty">No hay conductores con asignación activa</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="cabify-chart-wrapper">
+                        <ResponsiveContainer width="100%" height={300}>
+                          <PieChart>
+                            <Pie
+                              data={chartDataMejores}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={100}
+                              paddingAngle={2}
+                              dataKey="value"
+                              label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`}
+                            >
+                              {chartDataMejores.map((_, index) => (
+                                <Cell key={`cell-mejores-${index}`} fill={COLORS_MEJORES[index % COLORS_MEJORES.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(value: number, _name: string, props: any) => [
+                                `$${formatCurrency(value)}`,
+                                props.payload.fullName
+                              ]}
+                            />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Top 10 Peores */}
+              <div className="cabify-accordion-card peores">
+                <div
+                  className="cabify-accordion-header peores"
+                  onClick={() => toggleAccordion('peores')}
+                >
+                  <h3 className="cabify-accordion-title">10 Conductores con Menor Rendimiento</h3>
+                  {accordionState.peores ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                </div>
+                {accordionState.peores && (
+                  <div className="cabify-accordion-content">
+                    {viewMode === 'list' ? (
+                      <div className="cabify-top-list">
+                        {topPeores.map((driver, index) => {
+                          const asig = driver.nationalIdNumber ? asignaciones.get(driver.nationalIdNumber) : null
+                          return (
+                            <div key={driver.id} className="cabify-top-item">
+                              <div className="cabify-top-rank">#{index + 1}</div>
+                              <div className="cabify-top-info">
+                                <div className="cabify-top-name">
+                                  {driver.name} {driver.surname}
+                                </div>
+                                <div className="cabify-top-details">
+                                  {getPatente(driver)} • {driver.viajesFinalizados || 0} viajes • Score {driver.score?.toFixed(2) || '-'}
+                                </div>
+                              </div>
+                              <div className="cabify-top-stats">
+                                {asig && (
+                                  <span className={`cabify-top-badge ${asig.horario === 'CARGO' ? 'cargo' : 'turno'}`}>
+                                    {asig.horario === 'CARGO' ? 'A cargo' : 'Turno'}
+                                  </span>
+                                )}
+                                <span className="cabify-top-amount peores">
+                                  ${formatCurrency(driver.gananciaTotal)}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {topPeores.length === 0 && (
+                          <div className="cabify-top-empty">No hay conductores con asignación activa</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="cabify-chart-wrapper">
+                        <ResponsiveContainer width="100%" height={300}>
+                          <PieChart>
+                            <Pie
+                              data={chartDataPeores}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={100}
+                              paddingAngle={2}
+                              dataKey="value"
+                              label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`}
+                            >
+                              {chartDataPeores.map((_, index) => (
+                                <Cell key={`cell-peores-${index}`} fill={COLORS_PEORES[index % COLORS_PEORES.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(value: number, _name: string, props: any) => [
+                                `$${formatCurrency(value)}`,
+                                props.payload.fullName
+                              ]}
+                            />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

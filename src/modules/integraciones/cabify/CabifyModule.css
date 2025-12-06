@@ -398,10 +398,268 @@
   font-size: 14px;
 }
 
+/* ==========================================
+   DASHBOARD CONTAINER
+   ========================================== */
+
+.cabify-dashboard {
+  margin-bottom: 24px;
+}
+
+/* ==========================================
+   ACCORDION CARDS
+   ========================================== */
+
+.cabify-accordion-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #E5E7EB;
+  overflow: hidden;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+}
+
+.cabify-accordion-card.estadisticas {
+  border-top: 4px solid #6366F1;
+}
+
+.cabify-accordion-card.mejores {
+  border-top: 4px solid #10B981;
+}
+
+.cabify-accordion-card.peores {
+  border-top: 4px solid #EF4444;
+}
+
+.cabify-accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  background: #F9FAFB;
+  transition: background-color 0.15s;
+}
+
+.cabify-accordion-header:hover {
+  background: #F3F4F6;
+}
+
+.cabify-accordion-header.mejores {
+  background: linear-gradient(to right, #ECFDF5, #D1FAE5);
+}
+
+.cabify-accordion-header.mejores:hover {
+  background: linear-gradient(to right, #D1FAE5, #A7F3D0);
+}
+
+.cabify-accordion-header.peores {
+  background: linear-gradient(to right, #FEF2F2, #FECACA);
+}
+
+.cabify-accordion-header.peores:hover {
+  background: linear-gradient(to right, #FECACA, #FCA5A5);
+}
+
+.cabify-accordion-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1F2937;
+}
+
+.cabify-accordion-content {
+  padding: 20px;
+}
+
+/* ==========================================
+   STATISTICS GRID
+   ========================================== */
+
+.cabify-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.cabify-stat-card {
+  background: #F9FAFB;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  border: 1px solid #E5E7EB;
+}
+
+.cabify-stat-card.highlight-green {
+  background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+  border-color: #A7F3D0;
+}
+
+.cabify-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1F2937;
+  margin-bottom: 4px;
+}
+
+.cabify-stat-card.highlight-green .cabify-stat-value {
+  color: #059669;
+}
+
+.cabify-stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ==========================================
+   CHART SECTION
+   ========================================== */
+
+.cabify-chart-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #E5E7EB;
+}
+
+.cabify-chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 16px 0;
+}
+
+.cabify-chart-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+}
+
+.cabify-chart-wrapper {
+  padding: 16px;
+}
+
+.cabify-modalidad-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cabify-modalidad-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.cabify-modalidad-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.cabify-modalidad-dot.cargo {
+  background-color: #F59E0B;
+}
+
+.cabify-modalidad-dot.turno {
+  background-color: #3B82F6;
+}
+
+/* ==========================================
+   VIEW TOGGLE
+   ========================================== */
+
+.cabify-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 8px 0;
+}
+
+.cabify-view-toggle > span {
+  font-size: 14px;
+  font-weight: 500;
+  color: #6B7280;
+}
+
+.cabify-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  background: white;
+  color: #6B7280;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cabify-toggle-btn:hover {
+  background: #F9FAFB;
+  border-color: #D1D5DB;
+}
+
+.cabify-toggle-btn.active {
+  background: #6366F1;
+  border-color: #6366F1;
+  color: white;
+}
+
+.cabify-toggle-btn.active:hover {
+  background: #4F46E5;
+  border-color: #4F46E5;
+}
+
+/* ==========================================
+   RECHARTS CUSTOMIZATION
+   ========================================== */
+
+.recharts-legend-item-text {
+  font-size: 12px !important;
+  color: #374151 !important;
+}
+
+.recharts-tooltip-wrapper {
+  z-index: 1000;
+}
+
+.recharts-default-tooltip {
+  background: white !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+  padding: 12px !important;
+}
+
 /* Responsive */
+@media (max-width: 1280px) {
+  .cabify-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 1024px) {
   .cabify-tops-container {
     grid-template-columns: 1fr;
+  }
+
+  .cabify-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .cabify-chart-container {
+    flex-direction: column;
+    gap: 16px;
   }
 }
 
@@ -437,5 +695,17 @@
     justify-content: space-between;
     margin-top: 8px;
     padding-left: 44px;
+  }
+
+  .cabify-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cabify-stat-value {
+    font-size: 20px;
+  }
+
+  .cabify-view-toggle {
+    flex-wrap: wrap;
   }
 }

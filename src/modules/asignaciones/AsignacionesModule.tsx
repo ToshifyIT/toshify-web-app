@@ -173,7 +173,7 @@ export function AsignacionesModule() {
             .from('vehiculos_estados')
             .select('id')
             .eq('codigo', 'DISPONIBLE')
-            .single()
+            .single() as { data: { id: string } | null }
 
           if (estadoDisponible) {
             await (supabase as any).from('vehiculos').update({ estado_id: estadoDisponible.id }).eq('id', asignacion.vehiculo_id)
@@ -300,7 +300,7 @@ export function AsignacionesModule() {
         .from('vehiculos_estados')
         .select('id')
         .eq('codigo', 'DISPONIBLE')
-        .single()
+        .single() as { data: { id: string } | null }
 
       if (estadoDisponible) {
         await (supabase as any).from('vehiculos').update({ estado_id: estadoDisponible.id }).eq('id', selectedAsignacion.vehiculo_id)
