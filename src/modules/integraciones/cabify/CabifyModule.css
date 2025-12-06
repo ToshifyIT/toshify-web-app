@@ -240,6 +240,26 @@
   font-weight: 600;
 }
 
+/* Table Container - tabla ancha con scroll */
+.cabify-table-container {
+  overflow: visible;
+}
+
+.cabify-table-container .dt-table-wrapper {
+  max-height: 600px;
+  overflow: auto;
+}
+
+.cabify-table-container .dt-table {
+  min-width: 2000px;
+}
+
+.cabify-table-container .dt-table th,
+.cabify-table-container .dt-table td {
+  white-space: nowrap;
+  padding: 10px 12px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .cabify-header {

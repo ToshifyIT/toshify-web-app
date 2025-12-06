@@ -1,16 +1,8 @@
 // src/modules/integraciones/cabify/CabifyModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { RefreshCw, Search } from 'lucide-react'
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  flexRender,
-  type ColumnDef,
-  type SortingState,
-} from '@tanstack/react-table'
+import { RefreshCw, Users } from 'lucide-react'
+import { type ColumnDef } from '@tanstack/react-table'
+import { DataTable } from '../../../components/ui/DataTable/DataTable'
 import { cabifyService } from '../../../services/cabifyService'
 import { cabifyHistoricalService } from '../../../services/cabifyHistoricalService'
 import { asignacionesService, type AsignacionActiva } from '../../../services/asignacionesService'
@@ -60,11 +52,6 @@ export function CabifyModule() {
   const [dataSource, setDataSource] = useState<'historical' | 'api' | 'hybrid'>('historical')
   const [asignaciones, setAsignaciones] = useState<Map<string, AsignacionActiva>>(new Map())
 
-  // TanStack Table states
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [globalFilter, setGlobalFilter] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-
   // Week selector state
   const [availableWeeks, setAvailableWeeks] = useState<Array<{
     weeksAgo: number
@@ -95,15 +82,6 @@ export function CabifyModule() {
       loadData()
     }
   }, [selectedWeek])
-
-  // Debounce search term (300ms delay)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(globalFilter)
-    }, 300)
-
-    return () => clearTimeout(timer)
-  }, [globalFilter])
 
   const loadData = async () => {
     if (!selectedWeek) {
@@ -198,7 +176,7 @@ export function CabifyModule() {
   }
 
   // Definir columnas para TanStack Table
-  const columns = useMemo<ColumnDef<CabifyDriver>[]>(
+  const columns = useMemo<ColumnDef<CabifyDriver, any>[]>(
     () => [
       {
         accessorKey: 'companyName',
@@ -369,25 +347,10 @@ export function CabifyModule() {
     [asignaciones]
   )
 
-  const table = useReactTable({
-    data: drivers,
-    columns,
-    state: {
-      sorting,
-      globalFilter: debouncedSearch,
-    },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setDebouncedSearch,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 20,
-      },
-    },
-  })
+  // Loading message personalizado
+  const loadingMessage = loadingProgress.total > 0
+    ? `${loadingProgress.message} (${loadingProgress.current}/${loadingProgress.total})`
+    : 'Cargando conductores desde Cabify...'
 
   return (
     <div className="module-container">
@@ -436,27 +399,11 @@ export function CabifyModule() {
         </div>
       </div>
 
-      {/* Loading State */}
-      {queryState.loading && drivers.length === 0 && (
-        <div className="dt-loading">
-          <div className="dt-loading-spinner" />
-          <span>
-            {loadingProgress.total > 0
-              ? `${loadingProgress.message} (${loadingProgress.current}/${loadingProgress.total})`
-              : 'Cargando conductores desde Cabify...'}
-          </span>
-        </div>
-      )}
-
-      {/* Progress Banner */}
+      {/* Progress Banner (solo cuando hay datos y está cargando más) */}
       {queryState.loading && drivers.length > 0 && (
         <div className="cabify-progress-banner">
           <div className="dt-loading-spinner" style={{ width: 20, height: 20 }} />
-          <strong>
-            {loadingProgress.total > 0
-              ? `${loadingProgress.message} (${loadingProgress.current}/${loadingProgress.total})`
-              : 'Cargando más conductores...'}
-          </strong>
+          <strong>{loadingMessage}</strong>
         </div>
       )}
 
@@ -469,155 +416,39 @@ export function CabifyModule() {
         </div>
       )}
 
-      {/* Lista de Conductores */}
+      {/* Info Card (solo cuando hay datos) */}
       {!queryState.error && drivers.length > 0 && (
-        <>
-          {/* Info Card */}
-          <div className={`cabify-info-card ${dataSource}`}>
-            <strong>
-              {dataSource === 'historical' && 'Datos desde historial:'}
-              {dataSource === 'api' && 'Datos desde API Cabify:'}
-              {dataSource === 'hybrid' && 'Datos combinados:'}
-            </strong>
-            <span>
-              {drivers.length} conductores
-              {dataSource === 'historical' && ' (consulta instantánea)'}
-            </span>
-            {dataSource === 'historical' && (
-              <span className="auto-sync">Sincronización automática cada 5 minutos</span>
-            )}
-          </div>
-
-          {/* Buscador */}
-          <div className="cabify-search-bar">
-            <div className="dt-search-wrapper" style={{ flex: 1, maxWidth: 400 }}>
-              <Search className="dt-search-icon" size={18} />
-              <input
-                type="text"
-                className="dt-search-input"
-                placeholder="Buscar conductor..."
-                value={globalFilter}
-                onChange={(e) => setGlobalFilter(e.target.value)}
-              />
-            </div>
-            {globalFilter && (
-              <button
-                onClick={() => setGlobalFilter('')}
-                className="btn-secondary"
-                style={{ padding: '8px 12px' }}
-              >
-                Limpiar
-              </button>
-            )}
-            <div className="cabify-results-count">
-              {table.getFilteredRowModel().rows.length === drivers.length
-                ? `${drivers.length} conductores`
-                : `${table.getFilteredRowModel().rows.length} de ${drivers.length} conductores`}
-            </div>
-          </div>
-
-          {/* Tabla con TanStack Table */}
-          <div className="dt-container">
-            <div className="dt-table-wrapper" style={{ maxHeight: 600 }}>
-              <table className="dt-table" style={{ minWidth: 2000 }}>
-                <thead>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <tr key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <th
-                          key={header.id}
-                          onClick={header.column.getToggleSortingHandler()}
-                          className={header.column.getCanSort() ? 'dt-sortable' : ''}
-                        >
-                          <div className="dt-header-content">
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                            {header.column.getCanSort() && (
-                              <span className="dt-sort-indicator">
-                                {{
-                                  asc: ' ↑',
-                                  desc: ' ↓',
-                                }[header.column.getIsSorted() as string] ?? ' ↕'}
-                              </span>
-                            )}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody>
-                  {table.getRowModel().rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={columns.length} className="dt-no-results">
-                        No se encontraron resultados
-                      </td>
-                    </tr>
-                  ) : (
-                    table.getRowModel().rows.map((row) => (
-                      <tr key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <td key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {table.getRowModel().rows.length > 0 && (
-              <div className="dt-pagination">
-                <div className="dt-pagination-info">
-                  Mostrando{' '}
-                  {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}{' '}
-                  a{' '}
-                  {Math.min(
-                    (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                    table.getFilteredRowModel().rows.length
-                  )}{' '}
-                  de {table.getFilteredRowModel().rows.length} registros
-                </div>
-                <div className="dt-pagination-controls">
-                  <button
-                    onClick={() => table.setPageIndex(0)}
-                    disabled={!table.getCanPreviousPage()}
-                    className="dt-pagination-btn"
-                  >
-                    {'<<'}
-                  </button>
-                  <button
-                    onClick={() => table.previousPage()}
-                    disabled={!table.getCanPreviousPage()}
-                    className="dt-pagination-btn"
-                  >
-                    {'<'}
-                  </button>
-                  <span className="dt-pagination-text">
-                    Pagina {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
-                  </span>
-                  <button
-                    onClick={() => table.nextPage()}
-                    disabled={!table.getCanNextPage()}
-                    className="dt-pagination-btn"
-                  >
-                    {'>'}
-                  </button>
-                  <button
-                    onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-                    disabled={!table.getCanNextPage()}
-                    className="dt-pagination-btn"
-                  >
-                    {'>>'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
+        <div className={`cabify-info-card ${dataSource}`}>
+          <strong>
+            {dataSource === 'historical' && 'Datos desde historial:'}
+            {dataSource === 'api' && 'Datos desde API Cabify:'}
+            {dataSource === 'hybrid' && 'Datos combinados:'}
+          </strong>
+          <span>
+            {drivers.length} conductores
+            {dataSource === 'historical' && ' (consulta instantánea)'}
+          </span>
+          {dataSource === 'historical' && (
+            <span className="auto-sync">Sincronización automática cada 5 minutos</span>
+          )}
+        </div>
       )}
+
+      {/* DataTable */}
+      <div className="cabify-table-container">
+        <DataTable
+          data={drivers}
+          columns={columns}
+          loading={queryState.loading && drivers.length === 0}
+          error={null}
+          searchPlaceholder="Buscar conductor por nombre, email, DNI, patente..."
+          emptyIcon={<Users size={48} />}
+          emptyTitle="No hay conductores"
+          emptyDescription="Selecciona una semana y haz clic en Actualizar para cargar datos"
+          pageSize={20}
+          pageSizeOptions={[10, 20, 50, 100]}
+        />
+      </div>
     </div>
   )
 }

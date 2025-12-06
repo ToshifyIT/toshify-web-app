@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { type ColumnDef } from '@tanstack/react-table'
+import { DataTable } from '../../components/ui/DataTable/DataTable'
 import {
   Package,
   RotateCcw,
@@ -36,10 +38,36 @@ interface Movimiento {
   } | null
 }
 
+const getTipoLabel = (tipo: string): string => {
+  const labels: Record<string, string> = {
+    entrada: 'Entrada',
+    salida: 'Salida',
+    asignacion: 'Uso',
+    devolucion: 'Devolución',
+    ajuste: 'Ajuste',
+    daño: 'Daño',
+    perdida: 'Pérdida'
+  }
+  return labels[tipo] || tipo
+}
+
+const getTipoIcon = (tipo: string) => {
+  const icons: Record<string, any> = {
+    entrada: <ArrowDown size={16} />,
+    salida: <ArrowUp size={16} />,
+    asignacion: <Truck size={16} />,
+    devolucion: <RotateCcw size={16} />,
+    ajuste: <Package size={16} />,
+    daño: <AlertTriangle size={16} />,
+    perdida: <XCircle size={16} />
+  }
+  return icons[tipo] || <Package size={16} />
+}
+
 export function HistorialMovimientosModule() {
   const [movimientos, setMovimientos] = useState<Movimiento[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const [tipoFilter, setTipoFilter] = useState<string>('all')
 
   useEffect(() => {
@@ -49,7 +77,8 @@ export function HistorialMovimientosModule() {
   const loadMovimientos = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      setError(null)
+      const { data, error: fetchError } = await supabase
         .from('movimientos')
         .select(`
           id,
@@ -77,7 +106,7 @@ export function HistorialMovimientosModule() {
         .order('created_at', { ascending: false })
         .limit(100)
 
-      if (error) throw error
+      if (fetchError) throw fetchError
 
       // Transform data
       const transformed = (data || []).map((item: any) => ({
@@ -100,58 +129,113 @@ export function HistorialMovimientosModule() {
       setMovimientos(transformed)
     } catch (err: any) {
       console.error('Error cargando movimientos:', err)
+      setError(err.message || 'Error al cargar movimientos')
     } finally {
       setLoading(false)
     }
   }
 
-  const getTipoLabel = (tipo: string): string => {
-    const labels: Record<string, string> = {
-      entrada: 'Entrada',
-      salida: 'Salida',
-      asignacion: 'Uso',
-      devolucion: 'Devolución',
-      ajuste: 'Ajuste',
-      daño: 'Daño',
-      perdida: 'Pérdida'
+  // Filtrar por tipo de movimiento
+  const filteredData = useMemo(() => {
+    if (tipoFilter === 'all') return movimientos
+    return movimientos.filter(item => item.tipo_movimiento === tipoFilter)
+  }, [movimientos, tipoFilter])
+
+  // Definición de columnas para TanStack Table
+  const columns = useMemo<ColumnDef<Movimiento, any>[]>(() => [
+    {
+      accessorKey: 'created_at',
+      header: 'Fecha',
+      cell: ({ row }) => {
+        const date = new Date(row.original.created_at)
+        return (
+          <div className="hist-date-cell">
+            <Calendar size={14} />
+            <div>
+              <div>{date.toLocaleDateString('es-CL')}</div>
+              <div className="hist-date-time">
+                {date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+          </div>
+        )
+      }
+    },
+    {
+      accessorKey: 'tipo_movimiento',
+      header: 'Tipo',
+      cell: ({ row }) => {
+        const tipo = row.original.tipo_movimiento
+        return (
+          <span className={`hist-tipo-badge ${tipo}`}>
+            {getTipoIcon(tipo)}
+            {getTipoLabel(tipo)}
+          </span>
+        )
+      }
+    },
+    {
+      accessorFn: (row) => `${row.producto.codigo} ${row.producto.nombre}`,
+      id: 'producto',
+      header: 'Producto',
+      cell: ({ row }) => (
+        <div>
+          <div className="hist-producto-codigo">{row.original.producto.codigo}</div>
+          <div className="hist-producto-nombre">{row.original.producto.nombre}</div>
+        </div>
+      )
+    },
+    {
+      accessorKey: 'cantidad',
+      header: 'Cantidad',
+      cell: ({ row }) => (
+        <div style={{ textAlign: 'center' }} className="hist-cantidad">
+          {row.original.cantidad}
+        </div>
+      )
+    },
+    {
+      accessorFn: (row) => row.vehiculo_destino?.patente || row.vehiculo_origen?.patente || '',
+      id: 'vehiculo',
+      header: 'Vehículo',
+      cell: ({ row }) => (
+        <span>
+          {row.original.vehiculo_destino?.patente || row.original.vehiculo_origen?.patente || '-'}
+        </span>
+      )
+    },
+    {
+      accessorFn: (row) => row.usuario?.nombre || 'Sistema',
+      id: 'usuario',
+      header: 'Usuario',
+      cell: ({ row }) => {
+        const usuario = row.original.usuario
+        if (!usuario) {
+          return <span className="hist-usuario-sistema">Sistema</span>
+        }
+        return (
+          <div className="hist-usuario-cell">
+            <div className="hist-usuario-avatar">
+              {usuario.nombre.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div className="hist-usuario-nombre">{usuario.nombre}</div>
+              <div className="hist-usuario-email">{usuario.email}</div>
+            </div>
+          </div>
+        )
+      }
+    },
+    {
+      accessorKey: 'observaciones',
+      header: 'Observaciones',
+      cell: ({ row }) => (
+        <span className="hist-observaciones">
+          {row.original.observaciones || '-'}
+        </span>
+      )
     }
-    return labels[tipo] || tipo
-  }
-
-  const getTipoIcon = (tipo: string) => {
-    const icons: Record<string, any> = {
-      entrada: <ArrowDown size={16} />,
-      salida: <ArrowUp size={16} />,
-      asignacion: <Truck size={16} />,
-      devolucion: <RotateCcw size={16} />,
-      ajuste: <Package size={16} />,
-      daño: <AlertTriangle size={16} />,
-      perdida: <XCircle size={16} />
-    }
-    return icons[tipo] || <Package size={16} />
-  }
-
-  const filteredData = movimientos.filter((item) => {
-    const matchesSearch =
-      item.producto.codigo.toLowerCase().includes(filter.toLowerCase()) ||
-      item.producto.nombre.toLowerCase().includes(filter.toLowerCase()) ||
-      item.usuario?.nombre.toLowerCase().includes(filter.toLowerCase()) ||
-      item.vehiculo_destino?.patente.toLowerCase().includes(filter.toLowerCase()) ||
-      item.vehiculo_origen?.patente.toLowerCase().includes(filter.toLowerCase())
-
-    const matchesTipo = tipoFilter === 'all' || item.tipo_movimiento === tipoFilter
-
-    return matchesSearch && matchesTipo
-  })
-
-  if (loading) {
-    return (
-      <div className="dt-loading">
-        <div className="dt-loading-spinner"></div>
-        <span>Cargando historial...</span>
-      </div>
-    )
-  }
+  ], [])
 
   return (
     <div className="module-container">
@@ -161,15 +245,8 @@ export function HistorialMovimientosModule() {
         <p className="module-subtitle">Últimos 100 movimientos del inventario</p>
       </div>
 
-      {/* Filtros */}
+      {/* Filtro de tipo (adicional al buscador del DataTable) */}
       <div className="hist-filters">
-        <input
-          type="text"
-          className="hist-search-input"
-          placeholder="Buscar por producto, usuario o vehículo..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
         <select
           className="hist-type-select"
           value={tipoFilter}
@@ -185,80 +262,19 @@ export function HistorialMovimientosModule() {
         </select>
       </div>
 
-      {/* Tabla de Movimientos - usando clases de DataTable */}
-      <div className="dt-container">
-        <div className="dt-table-wrapper">
-          <table className="dt-table">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Tipo</th>
-                <th>Producto</th>
-                <th style={{ textAlign: 'center' }}>Cantidad</th>
-                <th>Vehículo</th>
-                <th>Usuario</th>
-                <th>Observaciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredData.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <div className="hist-date-cell">
-                      <Calendar size={14} />
-                      <div>
-                        <div>{new Date(item.created_at).toLocaleDateString('es-CL')}</div>
-                        <div className="hist-date-time">
-                          {new Date(item.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`hist-tipo-badge ${item.tipo_movimiento}`}>
-                      {getTipoIcon(item.tipo_movimiento)}
-                      {getTipoLabel(item.tipo_movimiento)}
-                    </span>
-                  </td>
-                  <td>
-                    <div>
-                      <div className="hist-producto-codigo">{item.producto.codigo}</div>
-                      <div className="hist-producto-nombre">{item.producto.nombre}</div>
-                    </div>
-                  </td>
-                  <td style={{ textAlign: 'center' }} className="hist-cantidad">{item.cantidad}</td>
-                  <td>
-                    {item.vehiculo_destino?.patente || item.vehiculo_origen?.patente || '-'}
-                  </td>
-                  <td>
-                    {item.usuario ? (
-                      <div className="hist-usuario-cell">
-                        <div className="hist-usuario-avatar">
-                          {item.usuario.nombre.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="hist-usuario-nombre">{item.usuario.nombre}</div>
-                          <div className="hist-usuario-email">{item.usuario.email}</div>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="hist-usuario-sistema">Sistema</span>
-                    )}
-                  </td>
-                  <td className="hist-observaciones">{item.observaciones || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {filteredData.length === 0 && (
-        <div className="hist-empty">
-          <Package size={48} className="hist-empty-icon" />
-          <p className="hist-empty-text">No se encontraron movimientos</p>
-        </div>
-      )}
+      {/* DataTable */}
+      <DataTable
+        data={filteredData}
+        columns={columns}
+        loading={loading}
+        error={error}
+        searchPlaceholder="Buscar por producto, usuario o vehículo..."
+        emptyIcon={<Package size={48} />}
+        emptyTitle="No hay movimientos"
+        emptyDescription="No se encontraron movimientos en el historial"
+        pageSize={20}
+        pageSizeOptions={[10, 20, 50, 100]}
+      />
     </div>
   )
 }
