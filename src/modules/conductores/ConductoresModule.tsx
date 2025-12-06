@@ -757,22 +757,7 @@ export function ConductoresModule() {
         </p>
       </div>
 
-      {/* Action Button */}
-      <div className="module-actions">
-        <button
-          className="btn-primary"
-          onClick={() => {
-            resetForm();
-            setShowCreateModal(true);
-          }}
-          disabled={!canCreate}
-          title={!canCreate ? "No tienes permisos para crear conductores" : ""}
-        >
-          + Crear Conductor
-        </button>
-      </div>
-
-      {/* DataTable */}
+      {/* DataTable with integrated action button */}
       <DataTable
         data={conductores}
         columns={columns}
@@ -785,6 +770,19 @@ export function ConductoresModule() {
           canCreate
             ? 'Crea el primero usando el boton "+ Crear Conductor".'
             : ""
+        }
+        headerAction={
+          <button
+            className="btn-primary"
+            onClick={() => {
+              resetForm();
+              setShowCreateModal(true);
+            }}
+            disabled={!canCreate}
+            title={!canCreate ? "No tienes permisos para crear conductores" : ""}
+          >
+            + Crear Conductor
+          </button>
         }
       />
 

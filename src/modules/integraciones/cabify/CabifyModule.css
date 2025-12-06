@@ -1,43 +1,44 @@
 /* src/modules/integraciones/cabify/CabifyModule.css */
-/* Estilos para el módulo de Cabify - Usando base de DataTable */
+/* Estilos para el módulo de Cabify - Diseño compacto */
+/* Con soporte para Dark Mode mediante CSS Variables */
 
 /* Header */
 .cabify-header {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .cabify-header-info h1 {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
-  color: #1F2937;
-  margin: 0 0 8px 0;
-}
-
-.cabify-header-info > p {
-  font-size: 14px;
-  color: #6B7280;
+  color: var(--text-primary);
   margin: 0 0 4px 0;
 }
 
+.cabify-header-info > p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 2px 0;
+}
+
 .cabify-sync-status {
-  font-size: 12px;
-  color: #059669;
+  font-size: 11px;
+  color: var(--color-success);
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 4px;
+  margin-top: 2px;
 }
 
 .cabify-sync-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background-color: #059669;
+  background-color: var(--color-success);
   display: inline-block;
   animation: pulse 2s infinite;
 }
@@ -48,39 +49,39 @@
 }
 
 .cabify-last-update {
-  font-size: 12px;
-  color: #9CA3AF;
-  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
 }
 
 /* Controls */
 .cabify-controls {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
+  gap: 8px;
 }
 
 .cabify-week-selector {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .cabify-week-selector label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 .cabify-week-selector select {
-  padding: 8px 12px;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  font-size: 13px;
   font-weight: 500;
-  background-color: white;
-  color: #374151;
-  min-width: 200px;
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  min-width: 180px;
   cursor: pointer;
 }
 
@@ -92,97 +93,98 @@
 .cabify-refresh-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 /* Info Card */
 .cabify-info-card {
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  font-size: 14px;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .cabify-info-card.historical {
-  background-color: #ECFDF5;
-  border: 1px solid #A7F3D0;
-  color: #065F46;
+  background-color: var(--badge-green-bg);
+  border: 1px solid var(--color-success-light);
+  color: var(--badge-green-text);
 }
 
 .cabify-info-card.api {
-  background-color: #EFF6FF;
-  border: 1px solid #BFDBFE;
-  color: #1E40AF;
+  background-color: var(--badge-blue-bg);
+  border: 1px solid var(--color-info-light);
+  color: var(--badge-blue-text);
 }
 
 .cabify-info-card.hybrid {
-  background-color: #FEF3C7;
-  border: 1px solid #FCD34D;
-  color: #92400E;
+  background-color: var(--badge-yellow-bg);
+  border: 1px solid var(--color-warning);
+  color: var(--badge-yellow-text);
 }
 
 .cabify-info-card .auto-sync {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 11px;
   font-style: italic;
 }
 
 /* Search Bar */
 .cabify-search-bar {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .cabify-results-count {
-  font-size: 14px;
-  color: #6B7280;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 /* Progress Banner */
 .cabify-progress-banner {
-  background-color: #EFF6FF;
-  border: 1px solid #BFDBFE;
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  color: #1E40AF;
-  font-size: 14px;
+  background-color: var(--badge-blue-bg);
+  border: 1px solid var(--color-info-light);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  color: var(--badge-blue-text);
+  font-size: 13px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 /* Error State */
 .cabify-error {
-  background-color: #FEF2F2;
-  border: 1px solid #FECACA;
-  border-radius: 8px;
-  padding: 48px 24px;
+  background-color: var(--badge-red-bg);
+  border: 1px solid var(--color-danger-light);
+  border-radius: 6px;
+  padding: 32px 20px;
   text-align: center;
 }
 
 .cabify-error h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: #B91C1C;
-  margin: 0 0 8px 0;
+  color: var(--color-danger);
+  margin: 0 0 6px 0;
 }
 
 .cabify-error p {
-  color: #DC2626;
-  margin: 0 0 16px 0;
+  color: var(--color-danger);
+  margin: 0 0 12px 0;
+  font-size: 13px;
 }
 
 /* Celdas especiales */
 .cabify-company {
   font-weight: 600;
-  color: #6B7280;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -194,29 +196,29 @@
   font-weight: 700;
 }
 
-.cabify-score.high { color: #059669; }
-.cabify-score.medium { color: #D97706; }
-.cabify-score.low { color: #DC2626; }
+.cabify-score.high { color: var(--color-success); }
+.cabify-score.medium { color: var(--color-warning); }
+.cabify-score.low { color: var(--color-danger); }
 
 .cabify-trips-completed {
   font-weight: 600;
 }
 
 .cabify-trips-rejected {
-  color: #DC2626;
+  color: var(--color-danger);
 }
 
 .cabify-trips-lost {
-  color: #F59E0B;
+  color: var(--color-warning);
 }
 
 .cabify-rate {
   font-weight: 600;
 }
 
-.cabify-rate.high { color: #059669; }
-.cabify-rate.medium { color: #D97706; }
-.cabify-rate.low { color: #DC2626; }
+.cabify-rate.high { color: var(--color-success); }
+.cabify-rate.medium { color: var(--color-warning); }
+.cabify-rate.low { color: var(--color-danger); }
 
 .cabify-hours {
   font-weight: 600;
@@ -224,23 +226,460 @@
 
 .cabify-money.total {
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .cabify-money.per-hour {
   font-weight: 700;
-  color: #059669;
+  color: var(--color-success);
 }
 
 .cabify-money.tolls {
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 .cabify-plate {
   font-weight: 600;
 }
 
-/* Responsive */
+/* Table Container - tabla ancha con scroll */
+.cabify-table-container {
+  overflow: visible;
+}
+
+.cabify-table-container .dt-table-wrapper {
+  max-height: 500px;
+  overflow: auto;
+}
+
+.cabify-table-container .dt-table {
+  min-width: 1800px;
+}
+
+.cabify-table-container .dt-table th,
+.cabify-table-container .dt-table td {
+  white-space: nowrap;
+  padding: 6px 10px;
+}
+
+/* ==========================================
+   TOP 10 CARDS
+   ========================================== */
+
+.cabify-tops-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.cabify-top-card {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.cabify-top-card.mejores {
+  border-top: 4px solid var(--color-success);
+}
+
+.cabify-top-card.peores {
+  border-top: 4px solid var(--color-danger);
+}
+
+.cabify-top-title {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cabify-top-title.mejores {
+  background: linear-gradient(to right, var(--badge-green-bg), var(--color-success-light));
+  color: var(--badge-green-text);
+}
+
+.cabify-top-title.peores {
+  background: linear-gradient(to right, var(--badge-red-bg), var(--color-danger-light));
+  color: var(--badge-red-text);
+}
+
+.cabify-top-list {
+  padding: 0;
+}
+
+.cabify-top-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--table-border);
+  transition: background-color 0.15s;
+}
+
+.cabify-top-item:last-child {
+  border-bottom: none;
+}
+
+.cabify-top-item:hover {
+  background-color: var(--table-row-hover);
+}
+
+.cabify-top-rank {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 28px;
+}
+
+.cabify-top-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cabify-top-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cabify-top-details {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.cabify-top-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.cabify-top-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.cabify-top-badge.cargo {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+
+.cabify-top-badge.turno {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+}
+
+.cabify-top-amount {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 90px;
+  text-align: right;
+}
+
+.cabify-top-amount.mejores {
+  color: var(--color-success);
+}
+
+.cabify-top-amount.peores {
+  color: var(--color-danger);
+}
+
+.cabify-top-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* ==========================================
+   DASHBOARD CONTAINER
+   ========================================== */
+
+.cabify-dashboard {
+  margin-bottom: 16px;
+}
+
+/* ==========================================
+   ACCORDION CARDS
+   ========================================== */
+
+.cabify-accordion-card {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 10px;
+}
+
+.cabify-accordion-card.estadisticas {
+  border-top: 4px solid var(--color-purple);
+}
+
+.cabify-accordion-card.mejores {
+  border-top: 4px solid var(--color-success);
+}
+
+.cabify-accordion-card.peores {
+  border-top: 4px solid var(--color-danger);
+}
+
+.cabify-accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  transition: background-color 0.15s;
+}
+
+.cabify-accordion-header:hover {
+  background: var(--table-row-hover);
+}
+
+.cabify-accordion-header.mejores {
+  background: linear-gradient(to right, var(--badge-green-bg), var(--color-success-light));
+}
+
+.cabify-accordion-header.mejores:hover {
+  background: var(--color-success-light);
+}
+
+.cabify-accordion-header.peores {
+  background: linear-gradient(to right, var(--badge-red-bg), var(--color-danger-light));
+}
+
+.cabify-accordion-header.peores:hover {
+  background: var(--color-danger-light);
+}
+
+.cabify-accordion-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cabify-accordion-content {
+  padding: 14px;
+}
+
+/* ==========================================
+   STATISTICS GRID
+   ========================================== */
+
+.cabify-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.cabify-stat-card {
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 12px 10px;
+  text-align: center;
+  border: 1px solid var(--border-primary);
+}
+
+.cabify-stat-card.highlight-green {
+  background: linear-gradient(135deg, var(--badge-green-bg) 0%, var(--color-success-light) 100%);
+  border-color: var(--color-success-light);
+}
+
+.cabify-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.cabify-stat-card.highlight-green .cabify-stat-value {
+  color: var(--color-success);
+}
+
+.cabify-stat-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ==========================================
+   CHART SECTION
+   ========================================== */
+
+.cabify-chart-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.cabify-chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 12px 0;
+}
+
+.cabify-chart-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.cabify-chart-wrapper {
+  padding: 12px;
+}
+
+.cabify-modalidad-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cabify-modalidad-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.cabify-modalidad-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.cabify-modalidad-dot.cargo {
+  background-color: var(--color-warning);
+}
+
+.cabify-modalidad-dot.turno {
+  background-color: var(--color-info);
+}
+
+/* ==========================================
+   VIEW TOGGLE
+   ========================================== */
+
+.cabify-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 6px 0;
+}
+
+.cabify-view-toggle > span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.cabify-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cabify-toggle-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-secondary);
+}
+
+.cabify-toggle-btn.active {
+  background: var(--color-purple);
+  border-color: var(--color-purple);
+  color: var(--text-inverse);
+}
+
+.cabify-toggle-btn.active:hover {
+  background: var(--color-purple-dark);
+  border-color: var(--color-purple-dark);
+}
+
+/* ==========================================
+   RECHARTS CUSTOMIZATION
+   ========================================== */
+
+.recharts-legend-item-text {
+  font-size: 12px !important;
+  color: var(--text-primary) !important;
+}
+
+.recharts-tooltip-wrapper {
+  z-index: 1000;
+}
+
+.recharts-default-tooltip {
+  background: var(--bg-primary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-lg) !important;
+  padding: 12px !important;
+}
+
+/* Responsive - Multi-resolution support */
+@media (max-width: 1440px) {
+  .cabify-stats-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .cabify-stat-value {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .cabify-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .cabify-tops-container {
+    grid-template-columns: 1fr;
+  }
+
+  .cabify-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .cabify-chart-container {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .cabify-header-info h1 {
+    font-size: 18px;
+  }
+}
+
 @media (max-width: 768px) {
   .cabify-header {
     flex-direction: column;
@@ -262,5 +701,263 @@
   .cabify-refresh-btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .cabify-top-item {
+    flex-wrap: wrap;
+  }
+
+  .cabify-top-stats {
+    width: 100%;
+    justify-content: space-between;
+    margin-top: 6px;
+    padding-left: 38px;
+  }
+
+  .cabify-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cabify-stat-value {
+    font-size: 18px;
+  }
+
+  .cabify-view-toggle {
+    flex-wrap: wrap;
+  }
+
+  .cabify-header-info h1 {
+    font-size: 16px;
+  }
+
+  .cabify-table-container .dt-table {
+    min-width: 1200px;
+  }
+}
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .cabify-header {
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+
+  .cabify-header-info h1 {
+    font-size: 15px;
+    margin-bottom: 2px;
+  }
+
+  .cabify-header-info > p {
+    font-size: 11px;
+  }
+
+  .cabify-sync-status {
+    font-size: 10px;
+  }
+
+  .cabify-controls {
+    gap: 6px;
+  }
+
+  .cabify-week-selector label {
+    font-size: 10px;
+  }
+
+  .cabify-week-selector select {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  .cabify-refresh-btn {
+    padding: 10px 14px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  .cabify-info-card {
+    padding: 8px 10px;
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+
+  .cabify-search-bar {
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+
+  .cabify-results-count {
+    font-size: 11px;
+  }
+
+  .cabify-progress-banner {
+    padding: 8px 10px;
+    font-size: 11px;
+    gap: 8px;
+  }
+
+  .cabify-error {
+    padding: 20px 14px;
+  }
+
+  .cabify-error h3 {
+    font-size: 14px;
+  }
+
+  .cabify-error p {
+    font-size: 12px;
+  }
+
+  /* Top Cards Mobile */
+  .cabify-accordion-card {
+    margin-bottom: 8px;
+  }
+
+  .cabify-accordion-header {
+    padding: 10px 12px;
+  }
+
+  .cabify-accordion-title {
+    font-size: 13px;
+  }
+
+  .cabify-accordion-content {
+    padding: 10px;
+  }
+
+  .cabify-top-item {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .cabify-top-rank {
+    font-size: 11px;
+    min-width: 22px;
+  }
+
+  .cabify-top-name {
+    font-size: 12px;
+  }
+
+  .cabify-top-details {
+    font-size: 10px;
+  }
+
+  .cabify-top-badge {
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+
+  .cabify-top-amount {
+    font-size: 12px;
+    min-width: 70px;
+  }
+
+  .cabify-top-stats {
+    padding-left: 30px;
+    gap: 8px;
+  }
+
+  /* Stats Grid Mobile */
+  .cabify-stat-card {
+    padding: 10px 8px;
+  }
+
+  .cabify-stat-value {
+    font-size: 16px;
+  }
+
+  .cabify-stat-label {
+    font-size: 9px;
+  }
+
+  /* Chart Mobile */
+  .cabify-chart-section {
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+
+  .cabify-chart-title {
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  .cabify-chart-container {
+    gap: 16px;
+  }
+
+  .cabify-chart-wrapper {
+    padding: 8px;
+  }
+
+  .cabify-modalidad-item {
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .cabify-modalidad-dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* View Toggle Mobile */
+  .cabify-view-toggle {
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 4px 0;
+  }
+
+  .cabify-view-toggle > span {
+    font-size: 11px;
+    width: 100%;
+  }
+
+  .cabify-toggle-btn {
+    padding: 8px 12px; /* Touch-friendly */
+    font-size: 12px;
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* Table Mobile */
+  .cabify-table-container .dt-table {
+    min-width: 1000px;
+  }
+
+  .cabify-table-container .dt-table th,
+  .cabify-table-container .dt-table td {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .cabify-header-info h1 {
+    font-size: 14px;
+  }
+
+  .cabify-accordion-title {
+    font-size: 12px;
+  }
+
+  .cabify-top-name {
+    font-size: 11px;
+  }
+
+  .cabify-top-amount {
+    font-size: 11px;
+    min-width: 60px;
+  }
+
+  .cabify-stat-value {
+    font-size: 14px;
+  }
+
+  .cabify-toggle-btn {
+    padding: 8px 8px;
+    font-size: 11px;
+  }
+
+  .cabify-table-container .dt-table {
+    min-width: 800px;
   }
 }

@@ -224,11 +224,11 @@ export function RoleManagement() {
   }
 
   if (loading) {
-    return <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>Cargando roles...</div>
+    return <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>Cargando roles...</div>
   }
 
   return (
-    <div>
+    <div className="module-container">
       <style>{`
         .roles-grid {
           display: grid;
@@ -241,17 +241,17 @@ export function RoleManagement() {
         }
 
         .role-card {
-          background: white;
-          border: none;
+          background: var(--bg-primary);
+          border: 1px solid var(--border-primary);
           border-radius: 16px;
           padding: 28px;
           transition: all 0.3s ease;
           position: relative;
-          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+          box-shadow: var(--shadow-sm);
         }
 
         .role-card:hover {
-          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+          box-shadow: var(--shadow-md);
           transform: translateY(-4px);
         }
 
@@ -262,14 +262,14 @@ export function RoleManagement() {
         .role-name {
           font-size: 18px;
           font-weight: 700;
-          color: #1F2937;
+          color: var(--text-primary);
           margin-bottom: 8px;
           text-transform: capitalize;
         }
 
         .role-description {
           font-size: 14px;
-          color: #6B7280;
+          color: var(--text-secondary);
           line-height: 1.6;
           margin-bottom: 16px;
         }
@@ -283,9 +283,10 @@ export function RoleManagement() {
         .btn-icon {
           flex: 1;
           padding: 8px;
-          border: 1px solid #E5E7EB;
+          border: 1px solid var(--border-primary);
           border-radius: 6px;
-          background: white;
+          background: var(--bg-primary);
+          color: var(--text-secondary);
           font-size: 12px;
           font-weight: 600;
           cursor: pointer;
@@ -297,86 +298,42 @@ export function RoleManagement() {
         }
 
         .btn-icon:hover {
-          background: #F9FAFB;
+          background: var(--bg-secondary);
         }
 
         .btn-icon.btn-edit:hover {
-          border-color: #3B82F6;
-          color: #3B82F6;
+          border-color: var(--color-info);
+          color: var(--color-info);
         }
 
         .btn-icon.btn-delete:hover {
-          border-color: #E63946;
-          color: #E63946;
+          border-color: var(--color-primary);
+          color: var(--color-primary);
         }
 
-        .btn-primary {
-          padding: 12px 28px;
-          background: #E63946;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-size: 15px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 6px rgba(230, 57, 70, 0.2);
-        }
-
-        .btn-primary:hover {
-          background: #D62828;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 12px rgba(230, 57, 70, 0.3);
-        }
-
-        .btn-primary:disabled {
-          background: #9CA3AF;
-          cursor: not-allowed;
-        }
-
-        .btn-secondary {
-          padding: 10px 20px;
-          background: white;
-          color: #6B7280;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btn-secondary:hover {
-          background: #F9FAFB;
-        }
-
-        .btn-secondary:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .modal-overlay {
+        .rm-modal-overlay {
           position: fixed;
           top: 0;
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0,0,0,0.5);
+          background: var(--bg-overlay);
           display: flex;
           align-items: center;
           justify-content: center;
           z-index: 1000;
         }
 
-        .modal-content {
-          background: white;
+        .rm-modal-content {
+          background: var(--modal-bg);
           padding: 40px;
           border-radius: 16px;
           max-width: 500px;
           width: 90%;
           max-height: 90vh;
           overflow-y: auto;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          box-shadow: var(--shadow-lg);
+          border: 1px solid var(--border-primary);
         }
 
         .form-group {
@@ -388,21 +345,30 @@ export function RoleManagement() {
           margin-bottom: 8px;
           font-weight: 600;
           font-size: 14px;
-          color: #1F2937;
+          color: var(--text-primary);
         }
 
         .form-input {
           width: 100%;
           padding: 10px 12px;
-          border: 1px solid #E5E7EB;
+          border: 1px solid var(--input-border);
           border-radius: 6px;
           font-size: 14px;
           font-family: inherit;
+          background: var(--input-bg);
+          color: var(--text-primary);
         }
 
         .form-input:focus {
           outline: none;
-          border-color: #E63946;
+          border-color: var(--border-focus);
+          box-shadow: var(--input-focus-shadow);
+        }
+
+        .rm-action-bar {
+          margin-bottom: 24px;
+          display: flex;
+          justify-content: flex-end;
         }
 
         .icon-selector {
@@ -415,7 +381,7 @@ export function RoleManagement() {
         .icon-option {
           width: 44px;
           height: 44px;
-          border: 2px solid #E5E7EB;
+          border: 2px solid var(--border-primary);
           border-radius: 8px;
           display: flex;
           align-items: center;
@@ -423,36 +389,36 @@ export function RoleManagement() {
           font-size: 20px;
           cursor: pointer;
           transition: all 0.2s;
-          background: white;
+          background: var(--bg-primary);
         }
 
         .icon-option:hover {
-          border-color: #E63946;
+          border-color: var(--color-primary);
           transform: scale(1.1);
         }
 
         .icon-option.selected {
-          border-color: #E63946;
-          background: #FEE2E2;
+          border-color: var(--color-primary);
+          background: var(--color-primary-light);
         }
 
         .delete-warning {
-          background: #FEF2F2;
-          border: 1px solid #FEE2E2;
+          background: var(--badge-red-bg);
+          border: 1px solid var(--color-danger-light);
           border-radius: 8px;
           padding: 16px;
           margin-bottom: 20px;
         }
 
         .delete-warning-title {
-          color: #DC2626;
+          color: var(--color-danger);
           font-weight: 600;
           font-size: 14px;
           margin-bottom: 8px;
         }
 
         .delete-warning-text {
-          color: #7F1D1D;
+          color: var(--color-danger-dark);
           font-size: 14px;
           line-height: 1.6;
         }
@@ -501,17 +467,15 @@ export function RoleManagement() {
       `}</style>
 
       {/* Header */}
-      <div style={{ marginBottom: '32px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
-          Roles del Sistema
-        </h3>
-        <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+      <div className="module-header">
+        <h3 className="module-title">Roles del Sistema</h3>
+        <p className="module-subtitle">
           {roles.length} rol{roles.length !== 1 ? 'es' : ''} configurado{roles.length !== 1 ? 's' : ''}
         </p>
       </div>
 
       {/* Action Button */}
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+      <div className="rm-action-bar">
         <button
           className="btn-primary"
           onClick={() => setShowCreateModal(true)}
@@ -549,12 +513,12 @@ export function RoleManagement() {
 
       {/* Modal para crear rol */}
       {showCreateModal && (
-        <div className="modal-overlay" onClick={() => !creating && setShowCreateModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700' }}>
+        <div className="rm-modal-overlay" onClick={() => !creating && setShowCreateModal(false)}>
+          <div className="rm-modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>
               Crear Nuevo Rol
             </h2>
-            <p style={{ color: '#6B7280', fontSize: '14px', marginBottom: '24px' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
               Define un nuevo rol con sus permisos por defecto
             </p>
 
@@ -583,13 +547,13 @@ export function RoleManagement() {
             </div>
 
             <div style={{
-              background: '#EFF6FF',
-              border: '1px solid #BFDBFE',
+              background: 'var(--badge-blue-bg)',
+              border: '1px solid var(--color-info-light)',
               borderRadius: '8px',
               padding: '12px',
               marginBottom: '16px',
               fontSize: '13px',
-              color: '#1E40AF',
+              color: 'var(--badge-blue-text)',
               display: 'flex',
               alignItems: 'flex-start',
               gap: '8px'
@@ -625,12 +589,12 @@ export function RoleManagement() {
 
       {/* Modal para editar rol */}
       {showEditModal && selectedRole && (
-        <div className="modal-overlay" onClick={() => !creating && setShowEditModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700' }}>
+        <div className="rm-modal-overlay" onClick={() => !creating && setShowEditModal(false)}>
+          <div className="rm-modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>
               Editar Rol
             </h2>
-            <p style={{ color: '#6B7280', fontSize: '14px', marginBottom: '24px' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
               Modifica la información del rol "{selectedRole.name}"
             </p>
 
@@ -682,9 +646,9 @@ export function RoleManagement() {
 
       {/* Modal para eliminar rol */}
       {showDeleteModal && selectedRole && (
-        <div className="modal-overlay" onClick={() => !creating && setShowDeleteModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700', color: '#DC2626' }}>
+        <div className="rm-modal-overlay" onClick={() => !creating && setShowDeleteModal(false)}>
+          <div className="rm-modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700', color: 'var(--color-danger)' }}>
               Eliminar Rol
             </h2>
 
@@ -698,7 +662,7 @@ export function RoleManagement() {
               </div>
             </div>
 
-            <p style={{ color: '#6B7280', fontSize: '14px', marginBottom: '24px' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
               ¿Estás seguro de que deseas continuar?
             </p>
 
@@ -717,7 +681,7 @@ export function RoleManagement() {
                 className="btn-primary"
                 onClick={handleDeleteRole}
                 disabled={creating}
-                style={{ background: '#DC2626' }}
+                style={{ background: 'var(--color-danger)' }}
               >
                 {creating ? 'Eliminando...' : 'Sí, Eliminar'}
               </button>

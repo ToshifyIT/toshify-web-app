@@ -1,0 +1,565 @@
+/* src/modules/asignaciones/AsignacionesModule.css */
+/* Estilos para el módulo de Asignaciones - Diseño compacto */
+/* Con soporte para Dark Mode mediante CSS Variables */
+
+/* Filtro de estado adicional */
+.asig-filters {
+  margin-bottom: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.asig-status-select {
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 180px;
+}
+
+.asig-status-select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Badges de estado */
+.asig-badge-programado {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+
+.asig-badge-activa {
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+
+.asig-badge-finalizada {
+  background: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
+}
+
+.asig-badge-cancelada {
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
+}
+
+/* Badges de modalidad */
+.asig-badge-dia-completo {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+}
+
+.asig-badge-medio-dia {
+  background: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
+}
+
+.asig-badge-por-horas {
+  background: var(--badge-orange-bg);
+  color: var(--badge-orange-text);
+}
+
+.asig-badge-semanal {
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+
+.asig-badge-mensual {
+  background: var(--badge-indigo-bg);
+  color: var(--badge-indigo-text);
+}
+
+/* Badges de horario */
+.asig-badge-turno {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+
+.asig-badge-cargo {
+  background: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
+}
+
+/* Celda de vehículo */
+.asig-vehiculo-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.asig-vehiculo-patente {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.asig-vehiculo-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Lista de conductores en celda */
+.asig-conductores-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.asig-conductor-item {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.asig-sin-conductor {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+/* Botones de acción específicos */
+.asig-btn-confirm {
+  background: var(--color-success) !important;
+  color: var(--text-inverse) !important;
+  border-color: var(--color-success) !important;
+}
+
+.asig-btn-confirm:hover {
+  background: var(--color-success-dark) !important;
+}
+
+.asig-btn-cancel-prog {
+  background: var(--color-warning) !important;
+  color: var(--text-inverse) !important;
+  border-color: var(--color-warning) !important;
+}
+
+.asig-btn-cancel-prog:hover {
+  background: var(--color-warning-dark) !important;
+}
+
+/* Modal overlay común */
+.asig-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.asig-modal-content {
+  background: var(--modal-bg);
+  border-radius: 10px;
+  padding: 20px 24px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-primary);
+}
+
+.asig-modal-content.wide {
+  max-width: 700px;
+}
+
+.asig-modal-title {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Lista de conductores en modal de confirmación */
+.asig-confirm-conductor {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.asig-confirm-conductor.confirmed {
+  background: var(--badge-green-bg);
+  border: 2px solid var(--color-success);
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.asig-confirm-conductor.pending {
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-primary);
+}
+
+.asig-confirm-conductor.pending:hover {
+  border-color: var(--color-success);
+}
+
+.asig-confirm-conductor input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.asig-confirm-conductor.confirmed input[type="checkbox"] {
+  cursor: not-allowed;
+}
+
+.asig-conductor-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.asig-conductor-details {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 2px 0 0 0;
+}
+
+.asig-conductor-confirmed {
+  color: var(--color-success);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+/* Textarea en modal */
+.asig-modal-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.asig-modal-textarea.cancel {
+  border-color: var(--color-danger-light);
+}
+
+.asig-modal-textarea:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Acciones del modal */
+.asig-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* Detalles en modal de visualización */
+.asig-detail-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.asig-detail-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.asig-detail-value {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.asig-detail-value.code {
+  font-weight: 700;
+}
+
+.asig-detail-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.asig-detail-row.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* Conductor card en modal de visualización */
+.asig-conductor-card {
+  padding: 10px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+}
+
+.asig-conductor-card-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.asig-conductor-card-info {
+  margin: 2px 0 0 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.asig-conductor-status {
+  margin: 3px 0 0 0;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asig-btn-unconfirm {
+  padding: 3px 6px;
+  background: var(--color-warning);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.asig-btn-unconfirm:hover {
+  background: var(--color-warning-dark);
+}
+
+/* Notas en modal */
+.asig-notes-box {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 10px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+/* Responsive - Multi-resolution support */
+@media (max-width: 1024px) {
+  .asig-modal-content {
+    padding: 16px 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .asig-filters {
+    flex-direction: column;
+  }
+
+  .asig-status-select {
+    width: 100%;
+  }
+
+  .asig-modal-content {
+    padding: 16px;
+    margin: 12px;
+  }
+
+  .asig-detail-row,
+  .asig-detail-row.four {
+    grid-template-columns: 1fr;
+  }
+
+  .asig-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .asig-modal-actions button {
+    width: 100%;
+  }
+}
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .asig-filters {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .asig-status-select {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+    min-width: 100%;
+  }
+
+  .asig-modal-overlay {
+    padding: 8px;
+  }
+
+  .asig-modal-content {
+    padding: 14px 16px;
+    margin: 4px;
+    max-height: 95vh;
+  }
+
+  .asig-modal-content.wide {
+    max-width: 100%;
+  }
+
+  .asig-modal-title {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+
+  /* Badges Mobile */
+  .asig-badge-programado,
+  .asig-badge-activa,
+  .asig-badge-finalizada,
+  .asig-badge-cancelada,
+  .asig-badge-dia-completo,
+  .asig-badge-medio-dia,
+  .asig-badge-por-horas,
+  .asig-badge-semanal,
+  .asig-badge-mensual,
+  .asig-badge-turno,
+  .asig-badge-cargo {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  /* Vehicle Cell Mobile */
+  .asig-vehiculo-patente {
+    font-size: 12px;
+  }
+
+  .asig-vehiculo-info {
+    font-size: 10px;
+  }
+
+  /* Conductores List Mobile */
+  .asig-conductor-item {
+    font-size: 11px;
+  }
+
+  .asig-sin-conductor {
+    font-size: 10px;
+  }
+
+  /* Confirmation Modal Mobile */
+  .asig-confirm-conductor {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .asig-conductor-name {
+    font-size: 12px;
+  }
+
+  .asig-conductor-details {
+    font-size: 10px;
+  }
+
+  .asig-conductor-confirmed {
+    font-size: 11px;
+    margin-left: 4px;
+  }
+
+  /* Textarea Mobile */
+  .asig-modal-textarea {
+    padding: 10px;
+    font-size: 14px;
+    min-height: 80px;
+  }
+
+  /* Actions Mobile */
+  .asig-modal-actions {
+    margin-top: 12px;
+    gap: 6px;
+  }
+
+  .asig-btn-confirm,
+  .asig-btn-cancel-prog {
+    padding: 10px 14px !important;
+    font-size: 14px !important;
+  }
+
+  /* Detail Grid Mobile */
+  .asig-detail-grid {
+    gap: 10px;
+  }
+
+  .asig-detail-label {
+    font-size: 10px;
+    margin-bottom: 1px;
+  }
+
+  .asig-detail-value {
+    font-size: 13px;
+  }
+
+  /* Conductor Card Mobile */
+  .asig-conductor-card {
+    padding: 8px;
+  }
+
+  .asig-conductor-card-name {
+    font-size: 12px;
+  }
+
+  .asig-conductor-card-info {
+    font-size: 10px;
+  }
+
+  .asig-conductor-status {
+    font-size: 10px;
+    gap: 4px;
+  }
+
+  .asig-btn-unconfirm {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  /* Notes Mobile */
+  .asig-notes-box {
+    padding: 8px;
+    font-size: 12px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .asig-modal-content {
+    padding: 12px 14px;
+  }
+
+  .asig-modal-title {
+    font-size: 15px;
+  }
+
+  .asig-status-select {
+    font-size: 13px;
+    padding: 10px;
+  }
+
+  .asig-confirm-conductor {
+    padding: 6px;
+  }
+
+  .asig-conductor-name {
+    font-size: 11px;
+  }
+}

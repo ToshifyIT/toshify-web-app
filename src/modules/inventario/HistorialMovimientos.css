@@ -1,120 +1,128 @@
 /* src/modules/inventario/HistorialMovimientos.css */
-/* Estilos para el módulo de Historial de Movimientos - Usando base de DataTable */
+/* Estilos para el módulo de Historial de Movimientos - Diseño compacto */
+/* Con soporte para Dark Mode mediante CSS Variables */
 
 /* Filtros */
 .hist-filters {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .hist-search-input {
   flex: 1;
-  min-width: 300px;
-  padding: 12px 16px;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  font-size: 14px;
+  min-width: 250px;
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text-primary);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .hist-search-input:focus {
   outline: none;
-  border-color: #E63946;
-  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+  border-color: var(--border-focus);
+  box-shadow: var(--input-focus-shadow);
+}
+
+.hist-search-input::placeholder {
+  color: var(--text-tertiary);
 }
 
 .hist-type-select {
-  padding: 12px 16px;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  font-size: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 600;
-  background: white;
+  background: var(--input-bg);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
 .hist-type-select:focus {
   outline: none;
-  border-color: #E63946;
+  border-color: var(--border-focus);
 }
 
 /* Celdas especiales */
 .hist-date-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #6B7280;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .hist-date-time {
-  font-size: 11px;
-  color: #9CA3AF;
+  font-size: 10px;
+  color: var(--text-tertiary);
 }
 
-/* Badge de Tipo - usando clases de DataTable como base */
+/* Badge de Tipo */
 .hist-tipo-badge {
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .hist-tipo-badge.entrada {
-  background: #D1FAE5;
-  color: #065F46;
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
 }
 
 .hist-tipo-badge.salida {
-  background: #FEE2E2;
-  color: #DC2626;
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
 }
 
 .hist-tipo-badge.asignacion {
-  background: #FEF3C7;
-  color: #92400E;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
 }
 
 .hist-tipo-badge.devolucion {
-  background: #DBEAFE;
-  color: #1E40AF;
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
 }
 
 .hist-tipo-badge.ajuste {
-  background: #F3F4F6;
-  color: #6B7280;
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
 }
 
 .hist-tipo-badge.daño {
-  background: #FEE2E2;
-  color: #DC2626;
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
 }
 
 .hist-tipo-badge.perdida {
-  background: #F3F4F6;
-  color: #6B7280;
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
 }
 
 /* Celda de Producto */
 .hist-producto-codigo {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: #E63946;
+  color: var(--color-primary);
 }
 
 .hist-producto-nombre {
-  font-size: 13px;
-  color: #6B7280;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* Celda de Cantidad */
 .hist-cantidad {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -122,62 +130,64 @@
 .hist-usuario-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .hist-usuario-avatar {
-  width: 32px;
-  height: 32px;
-  background: #E63946;
+  width: 28px;
+  height: 28px;
+  background: var(--color-primary);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--text-inverse);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .hist-usuario-nombre {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .hist-usuario-email {
-  font-size: 11px;
-  color: #9CA3AF;
+  font-size: 10px;
+  color: var(--text-tertiary);
 }
 
 .hist-usuario-sistema {
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   font-style: italic;
+  font-size: 12px;
 }
 
 /* Celda de Observaciones */
 .hist-observaciones {
-  font-size: 13px;
-  color: #6B7280;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* Estado Vacío */
 .hist-empty {
   text-align: center;
-  padding: 60px 20px;
-  background: white;
-  border-radius: 12px;
-  border: 1px solid #E5E7EB;
-  margin-top: 20px;
+  padding: 40px 16px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  margin-top: 12px;
 }
 
 .hist-empty-icon {
-  color: #D1D5DB;
-  margin: 0 auto 16px;
+  color: var(--text-tertiary);
+  margin: 0 auto 12px;
 }
 
 .hist-empty-text {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
-  color: #6B7280;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -193,5 +203,107 @@
 
   .hist-type-select {
     width: 100%;
+  }
+}
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .hist-filters {
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+
+  .hist-search-input {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  .hist-type-select {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  /* Table cells Mobile */
+  .hist-date-cell {
+    font-size: 11px;
+    gap: 2px;
+  }
+
+  .hist-date-time {
+    font-size: 9px;
+  }
+
+  .hist-tipo-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+    gap: 2px;
+  }
+
+  .hist-producto-codigo {
+    font-size: 11px;
+  }
+
+  .hist-producto-nombre {
+    font-size: 10px;
+  }
+
+  .hist-cantidad {
+    font-size: 12px;
+  }
+
+  .hist-usuario-cell {
+    gap: 4px;
+  }
+
+  .hist-usuario-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+  }
+
+  .hist-usuario-nombre {
+    font-size: 11px;
+  }
+
+  .hist-usuario-email {
+    font-size: 9px;
+  }
+
+  .hist-usuario-sistema {
+    font-size: 10px;
+  }
+
+  .hist-observaciones {
+    font-size: 10px;
+  }
+
+  /* Empty State Mobile */
+  .hist-empty {
+    padding: 30px 12px;
+    margin-top: 10px;
+  }
+
+  .hist-empty-text {
+    font-size: 13px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .hist-search-input,
+  .hist-type-select {
+    font-size: 13px;
+    padding: 10px;
+  }
+
+  .hist-tipo-badge {
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+
+  .hist-usuario-avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 8px;
   }
 }

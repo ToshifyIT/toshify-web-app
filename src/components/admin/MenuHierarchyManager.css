@@ -1,0 +1,134 @@
+/* src/components/admin/MenuHierarchyManager.css */
+/* Estilos para el Gestor de Menús */
+
+/* Badges de tipo */
+.mhm-type-menu {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.mhm-type-submenu {
+  background: #F3E8FF;
+  color: #6B21A8;
+}
+
+/* Indentación visual para submenús */
+.mhm-submenu-indicator {
+  color: #9CA3AF;
+  margin-right: 8px;
+}
+
+/* Código de ruta */
+.mhm-route-code {
+  font-size: 12px;
+  font-family: monospace;
+  color: #6B7280;
+  background: #F3F4F6;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Botones de acción en header */
+.mhm-header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Modal */
+.mhm-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.mhm-modal-content {
+  background: white;
+  padding: 32px;
+  border-radius: 16px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.mhm-modal-title {
+  margin: 0 0 24px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1F2937;
+}
+
+/* Formularios en modal */
+.mhm-form-group {
+  margin-bottom: 20px;
+}
+
+.mhm-form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #1F2937;
+}
+
+.mhm-form-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.mhm-form-input:focus {
+  outline: none;
+  border-color: #E63946;
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+}
+
+.mhm-form-input:disabled {
+  background: #F9FAFB;
+  cursor: not-allowed;
+}
+
+.mhm-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .mhm-header-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .mhm-header-actions button {
+    width: 100%;
+  }
+
+  .mhm-modal-content {
+    padding: 24px;
+    margin: 16px;
+  }
+
+  .mhm-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .mhm-modal-actions button {
+    width: 100%;
+  }
+}

@@ -531,16 +531,7 @@ export function ProductosModule() {
         </p>
       </div>
 
-      {/* Action Button */}
-      <div className="module-actions">
-        {canCreate && (
-          <button className="btn-primary" onClick={openCreateModal}>
-            + Crear Producto
-          </button>
-        )}
-      </div>
-
-      {/* DataTable */}
+      {/* DataTable with integrated action button */}
       <DataTable
         data={productos}
         columns={columns}
@@ -549,6 +540,13 @@ export function ProductosModule() {
         emptyIcon={<Package size={64} />}
         emptyTitle="No hay productos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Producto".' : ''}
+        headerAction={
+          canCreate ? (
+            <button className="btn-primary" onClick={openCreateModal}>
+              + Crear Producto
+            </button>
+          ) : undefined
+        }
       />
 
       {/* Create Modal */}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import {
   Package,
@@ -9,6 +9,8 @@ import {
   CheckCircle,
   Activity
 } from 'lucide-react'
+import { type ColumnDef } from '@tanstack/react-table'
+import { DataTable } from '../../components/ui/DataTable'
 import './InventarioDashboard.css'
 
 interface StockProducto {
@@ -71,14 +73,89 @@ export function InventarioDashboardModule() {
     { total: 0, disponible: 0, en_uso: 0, en_transito: 0, dañado: 0, perdido: 0 }
   )
 
-  if (loading) {
-    return (
-      <div className="dt-loading">
-        <div className="dt-loading-spinner"></div>
-        <span>Cargando inventario...</span>
-      </div>
-    )
-  }
+  // Definir columnas para TanStack Table
+  const columns = useMemo<ColumnDef<StockProducto>[]>(
+    () => [
+      {
+        accessorKey: 'codigo',
+        header: 'Código',
+        cell: ({ getValue }) => (
+          <span className="inv-codigo">{getValue() as string}</span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'nombre',
+        header: 'Producto',
+        cell: ({ getValue }) => (
+          <span className="inv-nombre">{getValue() as string}</span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'es_retornable',
+        header: 'Tipo',
+        cell: ({ getValue }) => {
+          const esRetornable = getValue() as boolean
+          return (
+            <span className={`inv-tipo-badge ${esRetornable ? 'herramienta' : 'repuesto'}`}>
+              {esRetornable ? 'Herramienta' : 'Repuesto'}
+            </span>
+          )
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'stock_total',
+        header: 'Total',
+        cell: ({ getValue }) => (
+          <span className="inv-total">{getValue() as number}</span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'disponible',
+        header: 'Disponible',
+        cell: ({ getValue }) => (
+          <span className="inv-disponible">{getValue() as number}</span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'en_uso',
+        header: 'En Uso',
+        cell: ({ getValue }) => (
+          <span className="inv-en-uso">{getValue() as number}</span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'en_transito',
+        header: 'En Tránsito',
+        cell: ({ getValue }) => (
+          <span className="inv-en-transito">{getValue() as number}</span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'dañado',
+        header: 'Dañado',
+        cell: ({ getValue }) => (
+          <span className="inv-dañado">{getValue() as number}</span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'perdido',
+        header: 'Perdido',
+        cell: ({ getValue }) => (
+          <span className="inv-perdido">{getValue() as number}</span>
+        ),
+        enableSorting: true,
+      },
+    ],
+    []
+  )
 
   return (
     <div className="module-container">
@@ -187,48 +264,19 @@ export function InventarioDashboardModule() {
         </div>
       </div>
 
-      {/* Tabla de Productos - Usando clases de DataTable */}
-      <div className="dt-container">
-        <div className="inv-table-header">
-          <h2 className="inv-table-title">Stock por Producto</h2>
-        </div>
-        <div className="dt-table-wrapper">
-          <table className="dt-table">
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Producto</th>
-                <th>Tipo</th>
-                <th style={{ textAlign: 'center' }}>Total</th>
-                <th style={{ textAlign: 'center' }}>Disponible</th>
-                <th style={{ textAlign: 'center' }}>En Uso</th>
-                <th style={{ textAlign: 'center' }}>En Tránsito</th>
-                <th style={{ textAlign: 'center' }}>Dañado</th>
-                <th style={{ textAlign: 'center' }}>Perdido</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredData.map((item) => (
-                <tr key={item.id}>
-                  <td className="inv-codigo">{item.codigo}</td>
-                  <td className="inv-nombre">{item.nombre}</td>
-                  <td>
-                    <span className={`inv-tipo-badge ${item.es_retornable ? 'herramienta' : 'repuesto'}`}>
-                      {item.es_retornable ? 'Herramienta' : 'Repuesto'}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'center' }} className="inv-total">{item.stock_total}</td>
-                  <td style={{ textAlign: 'center' }} className="inv-disponible">{item.disponible}</td>
-                  <td style={{ textAlign: 'center' }} className="inv-en-uso">{item.en_uso}</td>
-                  <td style={{ textAlign: 'center' }} className="inv-en-transito">{item.en_transito}</td>
-                  <td style={{ textAlign: 'center' }} className="inv-dañado">{item.dañado}</td>
-                  <td style={{ textAlign: 'center' }} className="inv-perdido">{item.perdido}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Tabla con DataTable - sorting y paginación */}
+      <DataTable
+        data={filteredData}
+        columns={columns}
+        loading={loading}
+        searchPlaceholder="Buscar por código o producto..."
+        emptyIcon={<Package size={64} />}
+        emptyTitle="No hay productos en inventario"
+        emptyDescription=""
+        showSearch={true}
+        showPagination={true}
+        pageSize={20}
+      />
     </div>
   )
 }

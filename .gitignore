@@ -1,5 +1,7 @@
-# Logs
-logs
+# ==========================================
+# LOGS
+# ==========================================
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,41 +9,167 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# ==========================================
+# DEPENDENCIES
+# ==========================================
+node_modules/
+.pnp
+.pnp.js
+
+# ==========================================
+# BUILD OUTPUT
+# ==========================================
+dist/
+dist-ssr/
+build/
+.next/
+out/
 *.local
 
-# Editor directories and files
+# ==========================================
+# ENVIRONMENT & SECRETS (CRITICAL)
+# ==========================================
+# Environment files (except example template)
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+!.env.example
+
+# API Keys & Secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*secret*
+*secrets*
+*credential*
+*credentials*
+*.keystore
+*.jks
+
+# Service account files
+*-service-account*.json
+*serviceaccount*.json
+firebase-adminsdk*.json
+google-cloud*.json
+
+# ==========================================
+# SUPABASE
+# ==========================================
+# Temporary files (local state, versions)
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+
+# Keep migrations and functions (they SHOULD be in git)
+# !supabase/migrations/
+# !supabase/functions/
+
+# ==========================================
+# DATABASE
+# ==========================================
+# SQL files at root (test/temp files) - but allow migrations
+/*.sql
+*.sql.gz
+*.dump
+*.backup
+*.bak
+*.sqlite
+*.sqlite3
+*.db
+
+# ==========================================
+# CLAUDE / AI ASSISTANTS
+# ==========================================
+.claude/
+.claude*
+claude_*
+*.claude
+.cursor/
+.aider*
+.mcp.json
+
+# ==========================================
+# IDE & EDITORS
+# ==========================================
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
+*~
 
-# Claude / AI assistants
-.claude*
-claude*
-*.claude
-*claude*
+# ==========================================
+# OS FILES
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
 
-# Environment variables
-.env*
-.env.example
-.env.test
+# ==========================================
+# TESTING & COVERAGE
+# ==========================================
+coverage/
+.nyc_output/
+*.lcov
+.coverage
+htmlcov/
 
-# Supabase
-supabase/.branches
-supabase/.temp
-supabase/.env
-# Scripts folder with SQL or anything else
+# ==========================================
+# TEMP & CACHE
+# ==========================================
+*.tmp
+*.temp
+.cache/
+.parcel-cache/
+.turbo/
+.vercel/
+.netlify/
+.output/
+
+# ==========================================
+# SCRIPTS (local development)
+# ==========================================
 scripts/
 
-# Generated files
-*.pdf
-*.sql
+# ==========================================
+# MISC
+# ==========================================
+# Windows null device artifact
 nul
+
+# Sensitive documents
+*.pdf
+!docs/*.pdf
+
+# Debug files
+*.dmp
+*.core
+
+# Archives with potentially sensitive data
+*.zip
+*.tar.gz
+*.rar
+!public/*.zip

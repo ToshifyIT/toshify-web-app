@@ -1,151 +1,164 @@
 /* src/modules/inventario/InventarioDashboard.css */
-/* Estilos para el Dashboard de Inventario - Usando base de DataTable */
+/* Estilos para el Dashboard de Inventario - Diseño compacto */
+/* Con soporte para Dark Mode mediante CSS Variables */
 
 /* Filtros */
 .inv-filters {
   display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: 6px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 
 .inv-filter-btn {
-  padding: 8px 16px;
-  background: white;
-  color: #6B7280;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   transition: all 0.15s;
 }
 
 .inv-filter-btn:hover {
-  background: #F9FAFB;
-  border-color: #D1D5DB;
+  background: var(--bg-secondary);
+  border-color: var(--border-secondary);
 }
 
 .inv-filter-btn.active {
-  background: #E63946;
-  color: white;
-  border-color: #E63946;
+  background: var(--color-primary);
+  color: var(--text-inverse);
+  border-color: var(--color-primary);
 }
 
 /* Cards de Resumen */
 .inv-summary-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .inv-summary-card {
-  background: white;
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #E5E7EB;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .inv-summary-content {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .inv-summary-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.inv-summary-icon.total { background: #EFF6FF; color: #3B82F6; }
-.inv-summary-icon.disponible { background: #D1FAE5; color: #059669; }
-.inv-summary-icon.en-uso { background: #FEF3C7; color: #D97706; }
-.inv-summary-icon.en-transito { background: #E0E7FF; color: #4F46E5; }
-.inv-summary-icon.dañado { background: #FEE2E2; color: #DC2626; }
-.inv-summary-icon.perdido { background: #F3F4F6; color: #6B7280; }
+.inv-summary-icon.total { background: var(--badge-blue-bg); color: var(--color-info); }
+.inv-summary-icon.disponible { background: var(--badge-green-bg); color: var(--color-success); }
+.inv-summary-icon.en-uso { background: var(--badge-yellow-bg); color: var(--color-warning); }
+.inv-summary-icon.en-transito { background: var(--badge-purple-bg); color: var(--color-purple); }
+.inv-summary-icon.dañado { background: var(--badge-red-bg); color: var(--color-danger); }
+.inv-summary-icon.perdido { background: var(--badge-gray-bg); color: var(--text-secondary); }
 
 .inv-summary-label {
-  font-size: 12px;
-  color: #6B7280;
+  font-size: 10px;
+  color: var(--text-secondary);
   font-weight: 600;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
 .inv-summary-value {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
   margin: 0;
 }
 
-.inv-summary-value.total { color: #3B82F6; }
-.inv-summary-value.disponible { color: #059669; }
-.inv-summary-value.en-uso { color: #D97706; }
-.inv-summary-value.en-transito { color: #4F46E5; }
-.inv-summary-value.dañado { color: #DC2626; }
-.inv-summary-value.perdido { color: #6B7280; }
+.inv-summary-value.total { color: var(--color-info); }
+.inv-summary-value.disponible { color: var(--color-success); }
+.inv-summary-value.en-uso { color: var(--color-warning); }
+.inv-summary-value.en-transito { color: var(--color-purple); }
+.inv-summary-value.dañado { color: var(--color-danger); }
+.inv-summary-value.perdido { color: var(--text-secondary); }
 
 /* Tabla Header */
 .inv-table-header {
-  padding: 16px;
-  border-bottom: 1px solid #E5E7EB;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .inv-table-title {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-primary);
   margin: 0;
 }
 
 /* Celdas especiales */
 .inv-codigo {
   font-weight: 600;
-  color: #E63946;
+  color: var(--color-primary);
+  font-size: 13px;
 }
 
 .inv-nombre {
   font-weight: 500;
+  font-size: 13px;
 }
 
 .inv-tipo-badge {
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
   font-weight: 600;
   display: inline-block;
 }
 
 .inv-tipo-badge.herramienta {
-  background: #FEF3C7;
-  color: #92400E;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
 }
 
 .inv-tipo-badge.repuesto {
-  background: #DBEAFE;
-  color: #1E40AF;
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
 }
 
 .inv-total {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
 }
 
-.inv-disponible { color: #059669; font-weight: 600; }
-.inv-en-uso { color: #D97706; font-weight: 600; }
-.inv-en-transito { color: #4F46E5; font-weight: 600; }
-.inv-dañado { color: #DC2626; font-weight: 600; }
-.inv-perdido { color: #6B7280; font-weight: 600; }
+.inv-disponible { color: var(--color-success); font-weight: 600; }
+.inv-en-uso { color: var(--color-warning); font-weight: 600; }
+.inv-en-transito { color: var(--color-purple); font-weight: 600; }
+.inv-dañado { color: var(--color-danger); font-weight: 600; }
+.inv-perdido { color: var(--text-secondary); font-weight: 600; }
 
-/* Responsive */
+/* Responsive - Multi-resolution support */
+@media (max-width: 1440px) {
+  .inv-summary-grid {
+    gap: 8px;
+  }
+
+  .inv-summary-value {
+    font-size: 16px;
+  }
+}
+
 @media (max-width: 1200px) {
   .inv-summary-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -164,5 +177,95 @@
   .inv-filter-btn {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .inv-filters {
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .inv-filter-btn {
+    padding: 10px 14px; /* Touch-friendly */
+    font-size: 13px;
+  }
+
+  .inv-summary-grid {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .inv-summary-card {
+    padding: 10px;
+  }
+
+  .inv-summary-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .inv-summary-label {
+    font-size: 9px;
+  }
+
+  .inv-summary-value {
+    font-size: 16px;
+  }
+
+  .inv-table-header {
+    padding: 10px;
+  }
+
+  .inv-table-title {
+    font-size: 13px;
+  }
+
+  /* Table cells Mobile */
+  .inv-codigo {
+    font-size: 11px;
+  }
+
+  .inv-nombre {
+    font-size: 11px;
+  }
+
+  .inv-tipo-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+
+  .inv-total {
+    font-size: 11px;
+  }
+
+  .inv-disponible,
+  .inv-en-uso,
+  .inv-en-transito,
+  .inv-dañado,
+  .inv-perdido {
+    font-size: 11px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .inv-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .inv-summary-content {
+    gap: 8px;
+  }
+
+  .inv-summary-value {
+    font-size: 14px;
+  }
+
+  .inv-filter-btn {
+    padding: 10px 12px;
+    font-size: 12px;
   }
 }

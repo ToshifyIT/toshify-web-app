@@ -12,6 +12,8 @@ export interface AsignacionActiva {
   modalidad: string | null
   nombreConductor: string
   asignacionId: string
+  patente: string | null
+  turnoEspecifico: string | null // diurno, nocturno, etc.
 }
 
 class AsignacionesService {
@@ -25,7 +27,7 @@ class AsignacionesService {
     }
 
     try {
-      // Consulta optimizada: obtener todas las asignaciones activas de los DNIs en una sola query
+      // Consulta optimizada: obtener asignaciones con vehículo y conductores
       const { data, error } = await supabase
         .from('asignaciones')
         .select(`
@@ -33,13 +35,18 @@ class AsignacionesService {
           horario,
           estado,
           modalidad,
-          conductores!inner (
-            numero_dni,
-            nombres,
-            apellidos
+          vehiculos (
+            patente
+          ),
+          asignaciones_conductores (
+            horario,
+            conductores (
+              numero_dni,
+              nombres,
+              apellidos
+            )
           )
         `)
-        .in('conductores.numero_dni', dnis)
         .in('estado', ['activa', 'programado'])
 
       if (error) {
@@ -52,17 +59,26 @@ class AsignacionesService {
 
       if (data && data.length > 0) {
         for (const record of (data as any[])) {
-          const conductor = record.conductores
+          const patente = record.vehiculos?.patente || null
 
-          if (conductor && conductor.numero_dni) {
-            asignacionesMap.set(conductor.numero_dni, {
-              dni: conductor.numero_dni,
-              horario: record.horario as 'TURNO' | 'CARGO' | null,
-              estado: record.estado as 'activa' | 'programado' | null,
-              modalidad: record.modalidad,
-              nombreConductor: `${conductor.nombres} ${conductor.apellidos}`,
-              asignacionId: record.id
-            })
+          // Iterar por cada conductor asignado
+          if (record.asignaciones_conductores) {
+            for (const ac of record.asignaciones_conductores) {
+              const conductor = ac.conductores
+
+              if (conductor && conductor.numero_dni && dnis.includes(conductor.numero_dni)) {
+                asignacionesMap.set(conductor.numero_dni, {
+                  dni: conductor.numero_dni,
+                  horario: record.horario as 'TURNO' | 'CARGO' | null,
+                  estado: record.estado as 'activa' | 'programado' | null,
+                  modalidad: record.modalidad,
+                  nombreConductor: `${conductor.nombres} ${conductor.apellidos}`,
+                  asignacionId: record.id,
+                  patente: patente,
+                  turnoEspecifico: ac.horario || null
+                })
+              }
+            }
           }
         }
       }

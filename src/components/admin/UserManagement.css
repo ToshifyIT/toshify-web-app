@@ -1,0 +1,134 @@
+/* src/components/admin/UserManagement.css */
+/* Estilos específicos para el módulo de Gestión de Usuarios */
+
+/* Celdas específicas */
+.um-user-name {
+  font-weight: 600;
+  color: #1F2937;
+}
+
+.um-user-id {
+  font-size: 12px;
+  color: #6B7280;
+  font-family: monospace;
+}
+
+.um-select-role {
+  padding: 6px 10px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  background: white;
+  transition: border-color 0.2s;
+}
+
+.um-select-role:hover {
+  border-color: #D1D5DB;
+}
+
+.um-select-role:focus {
+  outline: none;
+  border-color: #E63946;
+  box-shadow: 0 0 0 2px rgba(230, 57, 70, 0.1);
+}
+
+/* Modal */
+.um-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.um-modal-content {
+  background: white;
+  padding: 40px;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.um-modal-title {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1F2937;
+}
+
+.um-modal-subtitle {
+  color: #6B7280;
+  font-size: 14px;
+  margin: 0 0 24px 0;
+}
+
+/* Form */
+.um-form-group {
+  margin-bottom: 16px;
+}
+
+.um-form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #1F2937;
+}
+
+.um-form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.um-form-input:focus {
+  outline: none;
+  border-color: #E63946;
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+}
+
+.um-form-input:disabled {
+  background-color: #F9FAFB;
+  cursor: not-allowed;
+}
+
+.um-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .um-modal-content {
+    padding: 24px;
+    margin: 16px;
+  }
+
+  .um-form-group {
+    margin-bottom: 12px;
+  }
+
+  .um-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .um-modal-actions button {
+    width: 100%;
+  }
+}

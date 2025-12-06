@@ -2,17 +2,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { Menu, Submenu } from '../../types/database.types'
+import { type ColumnDef } from '@tanstack/react-table'
+import { DataTable } from '../ui/DataTable/DataTable'
+import { Menu as MenuIcon } from 'lucide-react'
 import Swal from 'sweetalert2'
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  flexRender,
-  type ColumnDef,
-  type SortingState,
-} from '@tanstack/react-table'
+import './MenuHierarchyManager.css'
 
 interface MenuRow {
   id: string
@@ -29,13 +23,12 @@ export function MenuHierarchyManager() {
   const [menus, setMenus] = useState<Menu[]>([])
   const [submenus, setSubmenus] = useState<Submenu[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showMenuModal, setShowMenuModal] = useState(false)
   const [showSubmenuModal, setShowSubmenuModal] = useState(false)
   const [editingMenu, setEditingMenu] = useState<Menu | null>(null)
   const [editingSubmenu, setEditingSubmenu] = useState<Submenu | null>(null)
   const [saving, setSaving] = useState(false)
-  const [globalFilter, setGlobalFilter] = useState('')
-  const [sorting, setSorting] = useState<SortingState>([])
 
   const [menuForm, setMenuForm] = useState({
     name: '',
@@ -58,6 +51,7 @@ export function MenuHierarchyManager() {
 
   const loadData = async () => {
     setLoading(true)
+    setError(null)
     try {
       const { data: menusData, error: menusError } = await supabase
         .from('menus')
@@ -75,8 +69,9 @@ export function MenuHierarchyManager() {
 
       setMenus(menusData || [])
       setSubmenus(submenusData || [])
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error cargando datos:', err)
+      setError(err.message || 'Error al cargar datos')
     } finally {
       setLoading(false)
     }
@@ -148,11 +143,7 @@ export function MenuHierarchyManager() {
     if (!result.isConfirmed) return
 
     try {
-      const { error } = await supabase
-        .from('menus')
-        .delete()
-        .eq('id', menu.id)
-
+      const { error } = await supabase.from('menus').delete().eq('id', menu.id)
       if (error) throw error
 
       Swal.fire('¡Eliminado!', 'Menú eliminado exitosamente', 'success')
@@ -233,11 +224,7 @@ export function MenuHierarchyManager() {
     if (!result.isConfirmed) return
 
     try {
-      const { error } = await supabase
-        .from('submenus')
-        .delete()
-        .eq('id', submenu.id)
-
+      const { error } = await supabase.from('submenus').delete().eq('id', submenu.id)
       if (error) throw error
 
       Swal.fire('¡Eliminado!', 'Submenú eliminado exitosamente', 'success')
@@ -255,7 +242,7 @@ export function MenuHierarchyManager() {
     setSubmenuForm({ name: '', label: '', route: '', order_index: 0, menu_id: '' })
   }
 
-  // Construir datos para la tabla
+  // Construir datos para la tabla (menús + submenús jerárquicos)
   const tableData = useMemo<MenuRow[]>(() => {
     const rows: MenuRow[] = []
     menus.forEach(menu => {
@@ -287,8 +274,8 @@ export function MenuHierarchyManager() {
     return rows
   }, [menus, submenus])
 
-  // Definir columnas
-  const columns = useMemo<ColumnDef<MenuRow>[]>(
+  // Definir columnas para DataTable
+  const columns = useMemo<ColumnDef<MenuRow, any>[]>(
     () => [
       {
         accessorKey: 'type',
@@ -296,48 +283,48 @@ export function MenuHierarchyManager() {
         cell: ({ getValue }) => {
           const type = getValue() as 'menu' | 'submenu'
           return (
-            <span className={`type-badge ${type === 'menu' ? 'type-menu' : 'type-submenu'}`}>
+            <span className={`dt-badge ${type === 'menu' ? 'mhm-type-menu' : 'mhm-type-submenu'}`}>
               {type === 'menu' ? 'Menú' : 'Submenú'}
             </span>
           )
-        },
-        size: 100
+        }
       },
       {
         accessorKey: 'name',
         header: 'Nombre',
         cell: ({ row, getValue }) => (
           <>
-            {row.original.type === 'submenu' && <span style={{ color: '#9CA3AF', marginRight: '8px' }}>↳</span>}
+            {row.original.type === 'submenu' && <span className="mhm-submenu-indicator">↳</span>}
             <strong>{getValue() as string}</strong>
           </>
         )
       },
       {
         accessorKey: 'label',
-        header: 'Etiqueta'
+        header: 'Etiqueta',
+        cell: ({ getValue }) => <span>{getValue() as string}</span>
       },
       {
         accessorKey: 'route',
         header: 'Ruta',
-        cell: ({ getValue }) => (
-          <code style={{ fontSize: '12px', color: '#6B7280' }}>
-            {getValue() as string || '-'}
-          </code>
-        )
+        cell: ({ getValue }) => {
+          const route = getValue() as string
+          return route ? <code className="mhm-route-code">{route}</code> : <span style={{ color: '#9CA3AF' }}>-</span>
+        }
       },
       {
         accessorKey: 'order_index',
         header: 'Orden',
-        size: 80
+        cell: ({ getValue }) => <span style={{ textAlign: 'center', display: 'block' }}>{getValue() as number}</span>
       },
       {
-        id: 'actions',
+        id: 'acciones',
         header: 'Acciones',
+        enableSorting: false,
         cell: ({ row }) => (
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+          <div className="dt-actions">
             <button
-              className="btn-action"
+              className="dt-btn-action dt-btn-edit"
               onClick={() => {
                 if (row.original.type === 'menu') {
                   setEditingMenu(row.original.data as Menu)
@@ -364,7 +351,7 @@ export function MenuHierarchyManager() {
               Editar
             </button>
             <button
-              className="btn-action btn-delete"
+              className="dt-btn-action dt-btn-delete"
               onClick={() => {
                 if (row.original.type === 'menu') {
                   handleDeleteMenu(row.original.data as Menu)
@@ -376,628 +363,220 @@ export function MenuHierarchyManager() {
               Eliminar
             </button>
           </div>
-        ),
-        size: 140
+        )
       }
     ],
     []
   )
 
-  const table = useReactTable({
-    data: tableData,
-    columns,
-    state: {
-      sorting,
-      globalFilter
-    },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10
-      }
-    }
-  })
-
-  if (loading) {
-    return <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>Cargando...</div>
-  }
-
   return (
-    <div>
-      <style>{`
-        .manager-container {
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-
-        .search-bar {
-          margin-bottom: 24px;
-          display: flex;
-          gap: 12px;
-          align-items: center;
-        }
-
-        .search-input {
-          flex: 1;
-          padding: 12px 16px;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          font-size: 15px;
-          transition: border-color 0.2s;
-        }
-
-        .search-input:focus {
-          outline: none;
-          border-color: #E63946;
-          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
-        }
-
-        .btn-create {
-          padding: 12px 24px;
-          background: #E63946;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 6px rgba(230, 57, 70, 0.2);
-          white-space: nowrap;
-        }
-
-        .btn-create:hover {
-          background: #D62828;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 12px rgba(230, 57, 70, 0.3);
-        }
-
-        .table-wrapper {
-          background: white;
-          border-radius: 12px;
-          border: 1px solid #E5E7EB;
-          overflow: hidden;
-          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-        }
-
-        .data-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-
-        .data-table thead {
-          background: #F9FAFB;
-          border-bottom: 2px solid #E5E7EB;
-        }
-
-        .data-table th {
-          padding: 14px 16px;
-          text-align: left;
-          font-size: 12px;
-          font-weight: 600;
-          color: #6B7280;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          cursor: pointer;
-          user-select: none;
-        }
-
-        .data-table th:hover {
-          background: #F3F4F6;
-        }
-
-        .data-table th.sortable {
-          position: relative;
-        }
-
-        .sort-indicator {
-          margin-left: 8px;
-          font-size: 10px;
-          color: #9CA3AF;
-        }
-
-        .data-table td {
-          padding: 14px 16px;
-          border-bottom: 1px solid #F3F4F6;
-          color: #1F2937;
-          font-size: 14px;
-        }
-
-        .data-table tbody tr:hover {
-          background: #F9FAFB;
-        }
-
-        .data-table tbody tr:last-child td {
-          border-bottom: none;
-        }
-
-        .type-badge {
-          display: inline-block;
-          padding: 4px 10px;
-          border-radius: 6px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .type-menu {
-          background: #DBEAFE;
-          color: #1E40AF;
-        }
-
-        .type-submenu {
-          background: #F3E8FF;
-          color: #6B21A8;
-        }
-
-        .btn-action {
-          padding: 6px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          background: white;
-          cursor: pointer;
-          transition: all 0.2s;
-          font-size: 12px;
-          font-weight: 500;
-          color: #6B7280;
-        }
-
-        .btn-action:hover {
-          border-color: #3B82F6;
-          color: #3B82F6;
-          background: #EFF6FF;
-        }
-
-        .btn-action.btn-delete:hover {
-          border-color: #E63946;
-          color: #E63946;
-          background: #FEE2E2;
-        }
-
-        .pagination {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          background: #F9FAFB;
-          border-top: 1px solid #E5E7EB;
-        }
-
-        .pagination-info {
-          font-size: 14px;
-          color: #6B7280;
-        }
-
-        .pagination-controls {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-
-        .pagination button {
-          padding: 8px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          background: white;
-          cursor: pointer;
-          font-size: 14px;
-          color: #6B7280;
-          transition: all 0.2s;
-        }
-
-        .pagination button:hover:not(:disabled) {
-          border-color: #E63946;
-          color: #E63946;
-          background: #FEF2F2;
-        }
-
-        .pagination button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .pagination select {
-          padding: 6px 10px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          font-size: 14px;
-          color: #6B7280;
-          background: white;
-          cursor: pointer;
-        }
-
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-        }
-
-        .modal-content {
-          background: white;
-          padding: 32px;
-          border-radius: 16px;
-          max-width: 600px;
-          width: 90%;
-          max-height: 90vh;
-          overflow-y: auto;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
-
-        .form-group {
-          margin-bottom: 20px;
-        }
-
-        .form-label {
-          display: block;
-          margin-bottom: 8px;
-          font-weight: 600;
-          font-size: 14px;
-          color: #1F2937;
-        }
-
-        .form-input {
-          width: 100%;
-          padding: 10px 14px;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          font-size: 14px;
-          transition: border-color 0.2s;
-        }
-
-        .form-input:focus {
-          outline: none;
-          border-color: #E63946;
-          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
-        }
-
-        .modal-actions {
-          display: flex;
-          gap: 12px;
-          justify-content: flex-end;
-          margin-top: 24px;
-        }
-
-        .btn-secondary {
-          padding: 10px 24px;
-          background: white;
-          color: #6B7280;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btn-secondary:hover {
-          background: #F9FAFB;
-        }
-
-        .btn-primary {
-          padding: 10px 24px;
-          background: #E63946;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btn-primary:hover {
-          background: #D62828;
-        }
-
-        .btn-primary:disabled {
-          background: #9CA3AF;
-          cursor: not-allowed;
-        }
-      `}</style>
-
-      <div className="manager-container">
-        {/* Header */}
-        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
-            Gestor de Menús
-          </h3>
-          <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
+    <div className="module-container">
+      {/* Header */}
+      <div className="module-header">
+        <div>
+          <h1 className="module-title">Gestor de Menús</h1>
+          <p className="module-subtitle">
             Administra la estructura de navegación del sistema
           </p>
         </div>
+      </div>
 
-        {/* Search Bar & Actions */}
-        <div className="search-bar">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Buscar en todos los campos..."
-            value={globalFilter ?? ''}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-          />
-          <button className="btn-create" onClick={() => setShowMenuModal(true)}>
-            + Menú
-          </button>
-          <button className="btn-create" onClick={() => setShowSubmenuModal(true)}>
-            + Submenú
-          </button>
-        </div>
+      {/* DataTable with integrated action buttons */}
+      <DataTable
+        data={tableData}
+        columns={columns}
+        loading={loading}
+        error={error}
+        searchPlaceholder="Buscar por nombre, etiqueta o ruta..."
+        emptyIcon={<MenuIcon size={48} />}
+        emptyTitle="No hay menús"
+        emptyDescription="Crea el primer menú usando el botón '+ Menú'"
+        pageSize={20}
+        pageSizeOptions={[10, 20, 50]}
+        headerAction={
+          <div className="mhm-header-actions">
+            <button className="btn-primary" onClick={() => setShowMenuModal(true)}>
+              + Menú
+            </button>
+            <button className="btn-primary" onClick={() => setShowSubmenuModal(true)}>
+              + Submenú
+            </button>
+          </div>
+        }
+      />
 
-        {/* Table */}
-        <div className="table-wrapper">
-          <table className="data-table">
-            <thead>
-              {table.getHeaderGroups().map(headerGroup => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map(header => (
-                    <th
-                      key={header.id}
-                      onClick={header.column.getToggleSortingHandler()}
-                      className={header.column.getCanSort() ? 'sortable' : ''}
-                      style={{ width: header.getSize() }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {header.column.getCanSort() && (
-                          <span className="sort-indicator">
-                            {{
-                              asc: ' ↑',
-                              desc: ' ↓',
-                            }[header.column.getIsSorted() as string] ?? ' ↕'}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.map(row => (
-                <tr key={row.id}>
-                  {row.getVisibleCells().map(cell => (
-                    <td key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Modal Menú */}
+      {showMenuModal && (
+        <div className="mhm-modal-overlay" onClick={() => !saving && setShowMenuModal(false)}>
+          <div className="mhm-modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mhm-modal-title">
+              {editingMenu ? 'Editar Menú' : 'Crear Nuevo Menú'}
+            </h2>
 
-          {/* Pagination */}
-          <div className="pagination">
-            <div className="pagination-info">
-              Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
-              {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, table.getFilteredRowModel().rows.length)}{' '}
-              de {table.getFilteredRowModel().rows.length} registros
+            <div className="mhm-form-group">
+              <label className="mhm-form-label">Nombre (ID) *</label>
+              <input
+                type="text"
+                className="mhm-form-input"
+                value={menuForm.name}
+                onChange={(e) => setMenuForm({ ...menuForm, name: e.target.value })}
+                placeholder="vehiculos"
+                disabled={saving}
+              />
             </div>
-            <div className="pagination-controls">
+
+            <div className="mhm-form-group">
+              <label className="mhm-form-label">Etiqueta (Visible) *</label>
+              <input
+                type="text"
+                className="mhm-form-input"
+                value={menuForm.label}
+                onChange={(e) => setMenuForm({ ...menuForm, label: e.target.value })}
+                placeholder="Vehículos"
+                disabled={saving}
+              />
+            </div>
+
+            <div className="mhm-form-group">
+              <label className="mhm-form-label">Ruta</label>
+              <input
+                type="text"
+                className="mhm-form-input"
+                value={menuForm.route}
+                onChange={(e) => setMenuForm({ ...menuForm, route: e.target.value })}
+                placeholder="/vehiculos"
+                disabled={saving}
+              />
+            </div>
+
+            <div className="mhm-form-group">
+              <label className="mhm-form-label">Orden</label>
+              <input
+                type="number"
+                className="mhm-form-input"
+                value={menuForm.order_index}
+                onChange={(e) => setMenuForm({ ...menuForm, order_index: parseInt(e.target.value) || 0 })}
+                disabled={saving}
+              />
+            </div>
+
+            <div className="mhm-modal-actions">
               <button
-                onClick={() => table.setPageIndex(0)}
-                disabled={!table.getCanPreviousPage()}
+                className="btn-secondary"
+                onClick={() => {
+                  setShowMenuModal(false)
+                  setEditingMenu(null)
+                  resetMenuForm()
+                }}
+                disabled={saving}
               >
-                {'<<'}
+                Cancelar
               </button>
               <button
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
+                className="btn-primary"
+                onClick={editingMenu ? handleUpdateMenu : handleCreateMenu}
+                disabled={saving}
               >
-                {'<'}
+                {saving ? 'Guardando...' : (editingMenu ? 'Actualizar' : 'Crear')}
               </button>
-              <span style={{ padding: '0 12px', fontSize: '14px', color: '#6B7280' }}>
-                Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
-              </span>
-              <button
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-              >
-                {'>'}
-              </button>
-              <button
-                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-                disabled={!table.getCanNextPage()}
-              >
-                {'>>'}
-              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Submenú */}
+      {showSubmenuModal && (
+        <div className="mhm-modal-overlay" onClick={() => !saving && setShowSubmenuModal(false)}>
+          <div className="mhm-modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mhm-modal-title">
+              {editingSubmenu ? 'Editar Submenú' : 'Crear Nuevo Submenú'}
+            </h2>
+
+            <div className="mhm-form-group">
+              <label className="mhm-form-label">Menú Padre *</label>
               <select
-                value={table.getState().pagination.pageSize}
-                onChange={e => table.setPageSize(Number(e.target.value))}
+                className="mhm-form-input"
+                value={submenuForm.menu_id}
+                onChange={(e) => setSubmenuForm({ ...submenuForm, menu_id: e.target.value })}
+                disabled={saving || !!editingSubmenu}
               >
-                {[10, 20, 30, 50].map(pageSize => (
-                  <option key={pageSize} value={pageSize}>
-                    {pageSize} por página
-                  </option>
+                <option value="">Seleccionar menú...</option>
+                {menus.map(menu => (
+                  <option key={menu.id} value={menu.id}>{menu.label}</option>
                 ))}
               </select>
             </div>
+
+            <div className="mhm-form-group">
+              <label className="mhm-form-label">Nombre (ID) *</label>
+              <input
+                type="text"
+                className="mhm-form-input"
+                value={submenuForm.name}
+                onChange={(e) => setSubmenuForm({ ...submenuForm, name: e.target.value })}
+                placeholder="gestion-conductores"
+                disabled={saving}
+              />
+            </div>
+
+            <div className="mhm-form-group">
+              <label className="mhm-form-label">Etiqueta (Visible) *</label>
+              <input
+                type="text"
+                className="mhm-form-input"
+                value={submenuForm.label}
+                onChange={(e) => setSubmenuForm({ ...submenuForm, label: e.target.value })}
+                placeholder="Gestión de Conductores"
+                disabled={saving}
+              />
+            </div>
+
+            <div className="mhm-form-group">
+              <label className="mhm-form-label">Ruta</label>
+              <input
+                type="text"
+                className="mhm-form-input"
+                value={submenuForm.route}
+                onChange={(e) => setSubmenuForm({ ...submenuForm, route: e.target.value })}
+                placeholder="/vehiculos/conductores"
+                disabled={saving}
+              />
+            </div>
+
+            <div className="mhm-form-group">
+              <label className="mhm-form-label">Orden</label>
+              <input
+                type="number"
+                className="mhm-form-input"
+                value={submenuForm.order_index}
+                onChange={(e) => setSubmenuForm({ ...submenuForm, order_index: parseInt(e.target.value) || 0 })}
+                disabled={saving}
+              />
+            </div>
+
+            <div className="mhm-modal-actions">
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setShowSubmenuModal(false)
+                  setEditingSubmenu(null)
+                  resetSubmenuForm()
+                }}
+                disabled={saving}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-primary"
+                onClick={editingSubmenu ? handleUpdateSubmenu : handleCreateSubmenu}
+                disabled={saving}
+              >
+                {saving ? 'Guardando...' : (editingSubmenu ? 'Actualizar' : 'Crear')}
+              </button>
+            </div>
           </div>
         </div>
-
-        {/* Modal Menú */}
-        {showMenuModal && (
-          <div className="modal-overlay" onClick={() => !saving && setShowMenuModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700' }}>
-                {editingMenu ? 'Editar Menú' : 'Crear Nuevo Menú'}
-              </h2>
-
-              <div className="form-group">
-                <label className="form-label">Nombre (ID) *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={menuForm.name}
-                  onChange={(e) => setMenuForm({ ...menuForm, name: e.target.value })}
-                  placeholder="vehiculos"
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Etiqueta (Visible) *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={menuForm.label}
-                  onChange={(e) => setMenuForm({ ...menuForm, label: e.target.value })}
-                  placeholder="Vehículos"
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Ruta</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={menuForm.route}
-                  onChange={(e) => setMenuForm({ ...menuForm, route: e.target.value })}
-                  placeholder="/vehiculos"
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Orden</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={menuForm.order_index}
-                  onChange={(e) => setMenuForm({ ...menuForm, order_index: parseInt(e.target.value) })}
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="modal-actions">
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    setShowMenuModal(false)
-                    setEditingMenu(null)
-                    resetMenuForm()
-                  }}
-                  disabled={saving}
-                >
-                  Cancelar
-                </button>
-                <button
-                  className="btn-primary"
-                  onClick={editingMenu ? handleUpdateMenu : handleCreateMenu}
-                  disabled={saving}
-                >
-                  {saving ? 'Guardando...' : (editingMenu ? 'Actualizar' : 'Crear')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Submenú */}
-        {showSubmenuModal && (
-          <div className="modal-overlay" onClick={() => !saving && setShowSubmenuModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700' }}>
-                {editingSubmenu ? 'Editar Submenú' : 'Crear Nuevo Submenú'}
-              </h2>
-
-              <div className="form-group">
-                <label className="form-label">Menú Padre *</label>
-                <select
-                  className="form-input"
-                  value={submenuForm.menu_id}
-                  onChange={(e) => setSubmenuForm({ ...submenuForm, menu_id: e.target.value })}
-                  disabled={saving || !!editingSubmenu}
-                >
-                  <option value="">Seleccionar menú...</option>
-                  {menus.map(menu => (
-                    <option key={menu.id} value={menu.id}>{menu.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Nombre (ID) *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={submenuForm.name}
-                  onChange={(e) => setSubmenuForm({ ...submenuForm, name: e.target.value })}
-                  placeholder="gestion-conductores"
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Etiqueta (Visible) *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={submenuForm.label}
-                  onChange={(e) => setSubmenuForm({ ...submenuForm, label: e.target.value })}
-                  placeholder="Gestión de Conductores"
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Ruta</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={submenuForm.route}
-                  onChange={(e) => setSubmenuForm({ ...submenuForm, route: e.target.value })}
-                  placeholder="/vehiculos/conductores"
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Orden</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={submenuForm.order_index}
-                  onChange={(e) => setSubmenuForm({ ...submenuForm, order_index: parseInt(e.target.value) })}
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="modal-actions">
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    setShowSubmenuModal(false)
-                    setEditingSubmenu(null)
-                    resetSubmenuForm()
-                  }}
-                  disabled={saving}
-                >
-                  Cancelar
-                </button>
-                <button
-                  className="btn-primary"
-                  onClick={editingSubmenu ? handleUpdateSubmenu : handleCreateSubmenu}
-                  disabled={saving}
-                >
-                  {saving ? 'Guardando...' : (editingSubmenu ? 'Actualizar' : 'Crear')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }

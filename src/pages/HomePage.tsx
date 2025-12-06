@@ -31,6 +31,7 @@ import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
+import { ThemeToggle } from '../components/ui/ThemeToggle'
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
@@ -88,15 +89,22 @@ export function HomePage() {
         /* Sidebar */
         .sidebar {
           width: 240px;
-          background: #FFFFFF;
+          background: var(--bg-primary);
           display: flex;
           flex-direction: column;
-          border-right: 1px solid #E5E7EB;
+          border-right: 1px solid var(--border-primary);
         }
 
         .sidebar-header {
-          padding: 20px;
-          border-bottom: 1px solid #E5E7EB;
+          padding: 16px 20px;
+          border-bottom: 1px solid var(--border-primary);
+        }
+
+        .sidebar-header-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
         }
 
         .sidebar-logo {
@@ -108,24 +116,24 @@ export function HomePage() {
         .sidebar-logo-icon {
           width: 32px;
           height: 32px;
-          background: #1F2937;
+          background: var(--color-gray-800);
           border-radius: 6px;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: white;
+          color: var(--text-inverse);
           font-size: 16px;
           font-weight: 600;
         }
 
         .sidebar-logo-text h1 {
-          color: #1F2937;
+          color: var(--text-primary);
           font-size: 16px;
           font-weight: 600;
         }
 
         .sidebar-logo-text p {
-          color: #6B7280;
+          color: var(--text-secondary);
           font-size: 11px;
           margin-top: 2px;
         }
@@ -141,7 +149,7 @@ export function HomePage() {
           align-items: center;
           gap: 10px;
           padding: 10px 12px;
-          color: #6B7280;
+          color: var(--text-secondary);
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.15s;
@@ -155,13 +163,13 @@ export function HomePage() {
         }
 
         .nav-item:hover {
-          background: #F3F4F6;
-          color: #1F2937;
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
         }
 
         .nav-item.active {
-          background: #1F2937;
-          color: white;
+          background: var(--color-gray-800);
+          color: var(--text-inverse);
         }
 
         .nav-item:disabled {
@@ -171,7 +179,7 @@ export function HomePage() {
 
         .nav-item:disabled:hover {
           background: none;
-          color: #6B7280;
+          color: var(--text-secondary);
         }
 
         .nav-icon {
@@ -190,7 +198,7 @@ export function HomePage() {
           justify-content: space-between;
           gap: 10px;
           padding: 8px 12px;
-          color: #9CA3AF;
+          color: var(--text-tertiary);
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.15s;
@@ -205,8 +213,8 @@ export function HomePage() {
         }
 
         .nav-section-header:hover {
-          background: #F9FAFB;
-          color: #6B7280;
+          background: var(--bg-secondary);
+          color: var(--text-secondary);
         }
 
         .nav-section-title {
@@ -219,7 +227,7 @@ export function HomePage() {
         .nav-section-arrow {
           font-size: 10px;
           transition: transform 0.2s;
-          color: #9CA3AF;
+          color: var(--text-tertiary);
         }
 
         .nav-section-arrow.open {
@@ -238,13 +246,13 @@ export function HomePage() {
 
         .nav-divider {
           height: 1px;
-          background: #E5E7EB;
+          background: var(--border-primary);
           margin: 12px 0;
         }
 
         .sidebar-footer {
           padding: 12px;
-          border-top: 1px solid #E5E7EB;
+          border-top: 1px solid var(--border-primary);
         }
 
         .user-card {
@@ -252,19 +260,19 @@ export function HomePage() {
           align-items: center;
           gap: 10px;
           padding: 10px;
-          background: #F9FAFB;
+          background: var(--bg-secondary);
           border-radius: 6px;
         }
 
         .user-avatar {
           width: 36px;
           height: 36px;
-          background: #1F2937;
+          background: var(--color-gray-800);
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: white;
+          color: var(--text-inverse);
           font-weight: 600;
           font-size: 13px;
         }
@@ -275,7 +283,7 @@ export function HomePage() {
         }
 
         .user-name {
-          color: #1F2937;
+          color: var(--text-primary);
           font-size: 13px;
           font-weight: 600;
           white-space: nowrap;
@@ -284,7 +292,7 @@ export function HomePage() {
         }
 
         .user-role {
-          color: #6B7280;
+          color: var(--text-secondary);
           font-size: 11px;
         }
 
@@ -298,8 +306,8 @@ export function HomePage() {
 
         .topbar {
           height: 64px;
-          background: white;
-          border-bottom: 1px solid #E5E7EB;
+          background: var(--bg-primary);
+          border-bottom: 1px solid var(--border-primary);
           display: flex;
           align-items: center;
           justify-content: flex-end;
@@ -310,14 +318,14 @@ export function HomePage() {
         .topbar-title {
           font-size: 24px;
           font-weight: 700;
-          color: #1F2937;
+          color: var(--text-primary);
         }
 
         .btn-logout {
           padding: 10px 24px;
-          background: #E63946;
-          color: white;
-          border: 2px solid #E63946;
+          background: var(--color-primary);
+          color: var(--text-inverse);
+          border: 2px solid var(--color-primary);
           border-radius: 8px;
           font-size: 14px;
           font-weight: 600;
@@ -329,24 +337,24 @@ export function HomePage() {
         }
 
         .btn-logout:hover {
-          background: #DC2626;
-          border-color: #DC2626;
+          background: var(--color-primary-hover);
+          border-color: var(--color-primary-hover);
           transform: translateY(-1px);
-          box-shadow: 0 4px 6px rgba(220, 38, 38, 0.2);
+          box-shadow: 0 4px 6px var(--color-primary-shadow);
         }
 
         .content-area {
           flex: 1;
           overflow-y: auto;
-          background: #F9FAFB;
+          background: var(--bg-secondary);
           padding: 32px;
         }
 
         .content-card {
-          background: white;
+          background: var(--bg-primary);
           border-radius: 12px;
           padding: 32px;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          box-shadow: var(--shadow-sm);
         }
 
         .card-header {
@@ -356,12 +364,12 @@ export function HomePage() {
         .card-title {
           font-size: 20px;
           font-weight: 700;
-          color: #1F2937;
+          color: var(--text-primary);
           margin-bottom: 8px;
         }
 
         .card-description {
-          color: #6B7280;
+          color: var(--text-secondary);
           font-size: 14px;
           line-height: 1.6;
         }
@@ -382,7 +390,7 @@ export function HomePage() {
           font-size: 24px;
           cursor: pointer;
           padding: 8px;
-          color: #1F2937;
+          color: var(--text-primary);
         }
 
         .sidebar-overlay {
@@ -392,7 +400,7 @@ export function HomePage() {
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.5);
+          background: var(--bg-overlay);
           z-index: 999;
         }
 
@@ -461,12 +469,15 @@ export function HomePage() {
         {/* Sidebar */}
         <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="sidebar-header">
-            <div className="sidebar-logo">
-              <div className="sidebar-logo-icon">T</div>
-              <div className="sidebar-logo-text">
-                <h1>Toshify</h1>
-                <p>Admin Panel</p>
+            <div className="sidebar-header-row">
+              <div className="sidebar-logo">
+                <div className="sidebar-logo-icon">T</div>
+                <div className="sidebar-logo-text">
+                  <h1>Toshify</h1>
+                  <p>Admin Panel</p>
+                </div>
               </div>
+              <ThemeToggle />
             </div>
           </div>
 
@@ -519,7 +530,7 @@ export function HomePage() {
                 }
               })
             ) : (
-              <div style={{ padding: '20px', color: '#6B7280', fontSize: '13px', textAlign: 'center' }}>
+              <div style={{ padding: '20px', color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center' }}>
                 No tienes menús disponibles
               </div>
             )}
