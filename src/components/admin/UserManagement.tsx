@@ -285,15 +285,9 @@ export function UserManagement() {
             {users.length} usuario{users.length !== 1 ? 's' : ''} registrado{users.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => setShowCreateModal(true)}
-        >
-          + Crear Usuario
-        </button>
       </div>
 
-      {/* DataTable */}
+      {/* DataTable with integrated action button */}
       <DataTable
         data={users}
         columns={columns}
@@ -305,6 +299,14 @@ export function UserManagement() {
         emptyDescription="Crea el primero usando el botón '+ Crear Usuario'"
         pageSize={10}
         pageSizeOptions={[10, 20, 30, 50]}
+        headerAction={
+          <button
+            className="btn-primary"
+            onClick={() => setShowCreateModal(true)}
+          >
+            + Crear Usuario
+          </button>
+        }
       />
 
       {/* Modal para crear usuario */}

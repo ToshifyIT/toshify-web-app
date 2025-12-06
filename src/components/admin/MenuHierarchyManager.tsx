@@ -379,17 +379,9 @@ export function MenuHierarchyManager() {
             Administra la estructura de navegación del sistema
           </p>
         </div>
-        <div className="mhm-header-actions">
-          <button className="btn-primary" onClick={() => setShowMenuModal(true)}>
-            + Menú
-          </button>
-          <button className="btn-primary" onClick={() => setShowSubmenuModal(true)}>
-            + Submenú
-          </button>
-        </div>
       </div>
 
-      {/* DataTable */}
+      {/* DataTable with integrated action buttons */}
       <DataTable
         data={tableData}
         columns={columns}
@@ -401,6 +393,16 @@ export function MenuHierarchyManager() {
         emptyDescription="Crea el primer menú usando el botón '+ Menú'"
         pageSize={20}
         pageSizeOptions={[10, 20, 50]}
+        headerAction={
+          <div className="mhm-header-actions">
+            <button className="btn-primary" onClick={() => setShowMenuModal(true)}>
+              + Menú
+            </button>
+            <button className="btn-primary" onClick={() => setShowSubmenuModal(true)}>
+              + Submenú
+            </button>
+          </div>
+        }
       />
 
       {/* Modal Menú */}
