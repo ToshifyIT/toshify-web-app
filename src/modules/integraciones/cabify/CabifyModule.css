@@ -1,41 +1,41 @@
 /* src/modules/integraciones/cabify/CabifyModule.css */
-/* Estilos para el módulo de Cabify - Usando base de DataTable */
+/* Estilos para el módulo de Cabify - Diseño compacto */
 
 /* Header */
 .cabify-header {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .cabify-header-info h1 {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: #1F2937;
-  margin: 0 0 8px 0;
-}
-
-.cabify-header-info > p {
-  font-size: 14px;
-  color: #6B7280;
   margin: 0 0 4px 0;
 }
 
+.cabify-header-info > p {
+  font-size: 13px;
+  color: #6B7280;
+  margin: 0 0 2px 0;
+}
+
 .cabify-sync-status {
-  font-size: 12px;
+  font-size: 11px;
   color: #059669;
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 4px;
+  margin-top: 2px;
 }
 
 .cabify-sync-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background-color: #059669;
   display: inline-block;
@@ -48,39 +48,39 @@
 }
 
 .cabify-last-update {
-  font-size: 12px;
+  font-size: 11px;
   color: #9CA3AF;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 /* Controls */
 .cabify-controls {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
+  gap: 8px;
 }
 
 .cabify-week-selector {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .cabify-week-selector label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: #6B7280;
 }
 
 .cabify-week-selector select {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: 4px;
+  font-size: 13px;
   font-weight: 500;
   background-color: white;
   color: #374151;
-  min-width: 200px;
+  min-width: 180px;
   cursor: pointer;
 }
 
@@ -92,18 +92,18 @@
 .cabify-refresh-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 /* Info Card */
 .cabify-info-card {
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  font-size: 14px;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .cabify-info-card.historical {
@@ -126,21 +126,21 @@
 
 .cabify-info-card .auto-sync {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 11px;
   font-style: italic;
 }
 
 /* Search Bar */
 .cabify-search-bar {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .cabify-results-count {
-  font-size: 14px;
+  font-size: 13px;
   color: #6B7280;
 }
 
@@ -148,35 +148,36 @@
 .cabify-progress-banner {
   background-color: #EFF6FF;
   border: 1px solid #BFDBFE;
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
   color: #1E40AF;
-  font-size: 14px;
+  font-size: 13px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 /* Error State */
 .cabify-error {
   background-color: #FEF2F2;
   border: 1px solid #FECACA;
-  border-radius: 8px;
-  padding: 48px 24px;
+  border-radius: 6px;
+  padding: 32px 20px;
   text-align: center;
 }
 
 .cabify-error h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #B91C1C;
-  margin: 0 0 8px 0;
+  margin: 0 0 6px 0;
 }
 
 .cabify-error p {
   color: #DC2626;
-  margin: 0 0 16px 0;
+  margin: 0 0 12px 0;
+  font-size: 13px;
 }
 
 /* Celdas especiales */
@@ -246,18 +247,18 @@
 }
 
 .cabify-table-container .dt-table-wrapper {
-  max-height: 600px;
+  max-height: 500px;
   overflow: auto;
 }
 
 .cabify-table-container .dt-table {
-  min-width: 2000px;
+  min-width: 1800px;
 }
 
 .cabify-table-container .dt-table th,
 .cabify-table-container .dt-table td {
   white-space: nowrap;
-  padding: 10px 12px;
+  padding: 6px 10px;
 }
 
 /* ==========================================
@@ -267,16 +268,16 @@
 .cabify-tops-container {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .cabify-top-card {
   background: white;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid #E5E7EB;
   overflow: hidden;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .cabify-top-card.mejores {
@@ -289,8 +290,8 @@
 
 .cabify-top-title {
   margin: 0;
-  padding: 16px 20px;
-  font-size: 16px;
+  padding: 10px 14px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -311,8 +312,8 @@
 .cabify-top-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
+  gap: 10px;
+  padding: 8px 14px;
   border-bottom: 1px solid #F3F4F6;
   transition: background-color 0.15s;
 }
@@ -326,10 +327,10 @@
 }
 
 .cabify-top-rank {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   color: #6B7280;
-  min-width: 32px;
+  min-width: 28px;
 }
 
 .cabify-top-info {
@@ -338,7 +339,7 @@
 }
 
 .cabify-top-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #1F2937;
   white-space: nowrap;
@@ -347,23 +348,23 @@
 }
 
 .cabify-top-details {
-  font-size: 12px;
+  font-size: 11px;
   color: #6B7280;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .cabify-top-stats {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
 .cabify-top-badge {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
 }
 
 .cabify-top-badge.cargo {
@@ -377,9 +378,9 @@
 }
 
 .cabify-top-amount {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
-  min-width: 100px;
+  min-width: 90px;
   text-align: right;
 }
 
@@ -392,10 +393,10 @@
 }
 
 .cabify-top-empty {
-  padding: 24px;
+  padding: 16px;
   text-align: center;
   color: #9CA3AF;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 /* ==========================================
@@ -403,7 +404,7 @@
    ========================================== */
 
 .cabify-dashboard {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 /* ==========================================
@@ -412,11 +413,11 @@
 
 .cabify-accordion-card {
   background: white;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid #E5E7EB;
   overflow: hidden;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-  margin-bottom: 16px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  margin-bottom: 10px;
 }
 
 .cabify-accordion-card.estadisticas {
@@ -435,7 +436,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 10px 14px;
   cursor: pointer;
   background: #F9FAFB;
   transition: background-color 0.15s;
@@ -463,13 +464,13 @@
 
 .cabify-accordion-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: #1F2937;
 }
 
 .cabify-accordion-content {
-  padding: 20px;
+  padding: 14px;
 }
 
 /* ==========================================
@@ -479,14 +480,14 @@
 .cabify-stats-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .cabify-stat-card {
   background: #F9FAFB;
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 6px;
+  padding: 12px 10px;
   text-align: center;
   border: 1px solid #E5E7EB;
 }
@@ -497,10 +498,10 @@
 }
 
 .cabify-stat-value {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: #1F2937;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .cabify-stat-card.highlight-green .cabify-stat-value {
@@ -508,11 +509,11 @@
 }
 
 .cabify-stat-label {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   color: #6B7280;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 /* ==========================================
@@ -520,46 +521,46 @@
    ========================================== */
 
 .cabify-chart-section {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid #E5E7EB;
 }
 
 .cabify-chart-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #374151;
-  margin: 0 0 16px 0;
+  margin: 0 0 12px 0;
 }
 
 .cabify-chart-container {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 32px;
+  gap: 24px;
 }
 
 .cabify-chart-wrapper {
-  padding: 16px;
+  padding: 12px;
 }
 
 .cabify-modalidad-legend {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .cabify-modalidad-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 13px;
   color: #374151;
 }
 
 .cabify-modalidad-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
 }
 
@@ -578,13 +579,13 @@
 .cabify-view-toggle {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding: 8px 0;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 6px 0;
 }
 
 .cabify-view-toggle > span {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: #6B7280;
 }
@@ -592,13 +593,13 @@
 .cabify-toggle-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 5px;
+  padding: 6px 12px;
   border: 1px solid #E5E7EB;
-  border-radius: 6px;
+  border-radius: 4px;
   background: white;
   color: #6B7280;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
@@ -641,7 +642,18 @@
   padding: 12px !important;
 }
 
-/* Responsive */
+/* Responsive - Multi-resolution support */
+@media (max-width: 1440px) {
+  .cabify-stats-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .cabify-stat-value {
+    font-size: 18px;
+  }
+}
+
 @media (max-width: 1280px) {
   .cabify-stats-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -659,7 +671,11 @@
 
   .cabify-chart-container {
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
+  }
+
+  .cabify-header-info h1 {
+    font-size: 18px;
   }
 }
 
@@ -693,8 +709,8 @@
   .cabify-top-stats {
     width: 100%;
     justify-content: space-between;
-    margin-top: 8px;
-    padding-left: 44px;
+    margin-top: 6px;
+    padding-left: 38px;
   }
 
   .cabify-stats-grid {
@@ -702,10 +718,14 @@
   }
 
   .cabify-stat-value {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .cabify-view-toggle {
     flex-wrap: wrap;
+  }
+
+  .cabify-header-info h1 {
+    font-size: 16px;
   }
 }

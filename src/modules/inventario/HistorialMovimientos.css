@@ -1,21 +1,21 @@
 /* src/modules/inventario/HistorialMovimientos.css */
-/* Estilos para el módulo de Historial de Movimientos - Usando base de DataTable */
+/* Estilos para el módulo de Historial de Movimientos - Diseño compacto */
 
 /* Filtros */
 .hist-filters {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .hist-search-input {
   flex: 1;
-  min-width: 300px;
-  padding: 12px 16px;
+  min-width: 250px;
+  padding: 8px 12px;
   border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 6px;
+  font-size: 13px;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -26,10 +26,10 @@
 }
 
 .hist-type-select {
-  padding: 12px 16px;
+  padding: 8px 12px;
   border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 600;
   background: white;
   cursor: pointer;
@@ -44,25 +44,25 @@
 .hist-date-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 4px;
+  font-size: 12px;
   color: #6B7280;
 }
 
 .hist-date-time {
-  font-size: 11px;
+  font-size: 10px;
   color: #9CA3AF;
 }
 
-/* Badge de Tipo - usando clases de DataTable como base */
+/* Badge de Tipo */
 .hist-tipo-badge {
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .hist-tipo-badge.entrada {
@@ -102,19 +102,19 @@
 
 /* Celda de Producto */
 .hist-producto-codigo {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #E63946;
 }
 
 .hist-producto-nombre {
-  font-size: 13px;
+  font-size: 12px;
   color: #6B7280;
 }
 
 /* Celda de Cantidad */
 .hist-cantidad {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -122,12 +122,12 @@
 .hist-usuario-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .hist-usuario-avatar {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   background: #E63946;
   border-radius: 50%;
   display: flex;
@@ -135,47 +135,48 @@
   justify-content: center;
   color: white;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .hist-usuario-nombre {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .hist-usuario-email {
-  font-size: 11px;
+  font-size: 10px;
   color: #9CA3AF;
 }
 
 .hist-usuario-sistema {
   color: #9CA3AF;
   font-style: italic;
+  font-size: 12px;
 }
 
 /* Celda de Observaciones */
 .hist-observaciones {
-  font-size: 13px;
+  font-size: 12px;
   color: #6B7280;
 }
 
 /* Estado Vacío */
 .hist-empty {
   text-align: center;
-  padding: 60px 20px;
+  padding: 40px 16px;
   background: white;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid #E5E7EB;
-  margin-top: 20px;
+  margin-top: 12px;
 }
 
 .hist-empty-icon {
   color: #D1D5DB;
-  margin: 0 auto 16px;
+  margin: 0 auto 12px;
 }
 
 .hist-empty-text {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: #6B7280;
   margin: 0;
