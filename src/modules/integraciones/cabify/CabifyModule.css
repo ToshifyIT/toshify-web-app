@@ -96,6 +96,52 @@
   gap: 6px;
 }
 
+/* Period Filter Buttons */
+.cabify-period-filter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 3px;
+  border: 1px solid var(--border-primary);
+}
+
+.cabify-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cabify-filter-btn:hover:not(:disabled) {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.cabify-filter-btn.active {
+  background: var(--color-purple);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-sm);
+}
+
+.cabify-filter-btn.active:hover:not(:disabled) {
+  background: var(--color-purple-dark);
+}
+
+.cabify-filter-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Info Card */
 .cabify-info-card {
   border-radius: 6px;
@@ -719,6 +765,17 @@
 
   .cabify-week-selector select {
     width: 100%;
+  }
+
+  .cabify-period-filter {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .cabify-filter-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 10px 12px;
   }
 
   .cabify-refresh-btn {

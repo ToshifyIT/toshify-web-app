@@ -3,6 +3,23 @@ import { supabase } from '../lib/supabase'
 import { cabifyService } from './cabifyService'
 import type { CabifyDriverEnriched, CabifyPeriod, CabifyMetrics } from '../types/cabify.types'
 
+/**
+ * Tipo para los resultados de las funciones RPC de rankings
+ */
+interface RankingRow {
+  dni: string
+  nombre: string
+  apellido: string
+  vehiculo_patente: string
+  viajes_finalizados: number
+  ganancia_total: number
+  score: number
+  ganancia_por_hora: number
+  horas_conectadas: number
+  horario: string | null
+  fecha_guardado: string
+}
+
 const ALQUILER_A_CARGO = Number(import.meta.env.VITE_ALQUILER_A_CARGO) || 360000
 const ALQUILER_TURNO = Number(import.meta.env.VITE_ALQUILER_TURNO) || 245000
 
@@ -193,15 +210,91 @@ class CabifyIntegrationService {
   }
 
   /**
-   * Obtener Top 10 Mejores desde histórico (sincronizado cada 5 min)
+   * Obtener Top 10 Mejores desde histórico con filtro de período
    */
-  async getTopMejoresFromHistorico(): Promise<CabifyRankingDriver[]> {
+  async getTopMejoresFromHistorico(
+    fechaInicio?: string,
+    fechaFin?: string
+  ): Promise<CabifyRankingDriver[]> {
+    // Si no se especifica período, usar la semana actual
+    const { startDate, endDate } = this.getDefaultPeriod(fechaInicio, fechaFin)
+
+    const { data, error } = await (supabase
+      .rpc('get_cabify_top_mejores', {
+        p_fecha_inicio: startDate,
+        p_fecha_fin: endDate
+      }) as unknown as Promise<{ data: RankingRow[] | null; error: Error | null }>)
+
+    if (error) {
+      console.error('❌ Error obteniendo top mejores:', error)
+      // Fallback a la vista si la función falla
+      return this.getTopMejoresFallback()
+    }
+
+    return (data || []).map(this.mapRankingDriver)
+  }
+
+  /**
+   * Obtener Top 10 Peores desde histórico con filtro de período
+   */
+  async getTopPeoresFromHistorico(
+    fechaInicio?: string,
+    fechaFin?: string
+  ): Promise<CabifyRankingDriver[]> {
+    // Si no se especifica período, usar la semana actual
+    const { startDate, endDate } = this.getDefaultPeriod(fechaInicio, fechaFin)
+
+    const { data, error } = await (supabase
+      .rpc('get_cabify_top_peores', {
+        p_fecha_inicio: startDate,
+        p_fecha_fin: endDate
+      }) as unknown as Promise<{ data: RankingRow[] | null; error: Error | null }>)
+
+    if (error) {
+      console.error('❌ Error obteniendo top peores:', error)
+      // Fallback a la vista si la función falla
+      return this.getTopPeoresFallback()
+    }
+
+    return (data || []).map(this.mapRankingDriver)
+  }
+
+  /**
+   * Calcular período por defecto (semana actual)
+   */
+  private getDefaultPeriod(fechaInicio?: string, fechaFin?: string): { startDate: string; endDate: string } {
+    if (fechaInicio) {
+      return {
+        startDate: fechaInicio,
+        endDate: fechaFin || new Date().toISOString()
+      }
+    }
+
+    // Por defecto: inicio de la semana actual hasta ahora
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - daysFromMonday)
+    monday.setHours(0, 0, 0, 0)
+
+    return {
+      startDate: monday.toISOString(),
+      endDate: now.toISOString()
+    }
+  }
+
+  /**
+   * Fallback: obtener top mejores desde vista (sin filtro)
+   */
+  private async getTopMejoresFallback(): Promise<CabifyRankingDriver[]> {
     const { data, error } = await supabase
       .from('cabify_top_mejores')
       .select('*')
 
     if (error) {
-      console.error('❌ Error obteniendo top mejores:', error)
+      console.error('❌ Error en fallback top mejores:', error)
       return []
     }
 
@@ -209,15 +302,15 @@ class CabifyIntegrationService {
   }
 
   /**
-   * Obtener Top 10 Peores desde histórico (sincronizado cada 5 min)
+   * Fallback: obtener top peores desde vista (sin filtro)
    */
-  async getTopPeoresFromHistorico(): Promise<CabifyRankingDriver[]> {
+  private async getTopPeoresFallback(): Promise<CabifyRankingDriver[]> {
     const { data, error } = await supabase
       .from('cabify_top_peores')
       .select('*')
 
     if (error) {
-      console.error('❌ Error obteniendo top peores:', error)
+      console.error('❌ Error en fallback top peores:', error)
       return []
     }
 

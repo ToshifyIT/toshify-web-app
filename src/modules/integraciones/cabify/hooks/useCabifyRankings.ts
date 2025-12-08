@@ -1,11 +1,16 @@
 // src/modules/integraciones/cabify/hooks/useCabifyRankings.ts
 /**
  * Hook para obtener rankings de conductores desde histórico de Cabify
- * Los datos vienen de las vistas que se actualizan cada 5 minutos
+ * Soporta filtros por período (semana actual, día anterior, etc.)
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import { cabifyIntegrationService, type CabifyRankingDriver } from '../../../../services/cabifyIntegrationService'
+
+interface UseCabifyRankingsProps {
+  fechaInicio?: string
+  fechaFin?: string
+}
 
 interface UseCabifyRankingsReturn {
   topMejores: CabifyRankingDriver[]
@@ -15,7 +20,7 @@ interface UseCabifyRankingsReturn {
   refetch: () => Promise<void>
 }
 
-export function useCabifyRankings(): UseCabifyRankingsReturn {
+export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRankingsReturn {
   const [topMejores, setTopMejores] = useState<CabifyRankingDriver[]>([])
   const [topPeores, setTopPeores] = useState<CabifyRankingDriver[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -27,8 +32,14 @@ export function useCabifyRankings(): UseCabifyRankingsReturn {
       setError(null)
 
       const [mejores, peores] = await Promise.all([
-        cabifyIntegrationService.getTopMejoresFromHistorico(),
-        cabifyIntegrationService.getTopPeoresFromHistorico()
+        cabifyIntegrationService.getTopMejoresFromHistorico(
+          props?.fechaInicio,
+          props?.fechaFin
+        ),
+        cabifyIntegrationService.getTopPeoresFromHistorico(
+          props?.fechaInicio,
+          props?.fechaFin
+        )
       ])
 
       setTopMejores(mejores)
@@ -39,7 +50,7 @@ export function useCabifyRankings(): UseCabifyRankingsReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [props?.fechaInicio, props?.fechaFin])
 
   useEffect(() => {
     fetchRankings()

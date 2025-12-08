@@ -4,8 +4,8 @@
  * Principio: Single Responsibility - Solo UI de encabezado
  */
 
-import { RefreshCw } from 'lucide-react'
-import type { WeekOption } from '../types/cabify.types'
+import { RefreshCw, Calendar, ChevronLeft } from 'lucide-react'
+import type { WeekOption, PeriodFilter } from '../types/cabify.types'
 import { UI_TEXT } from '../constants/cabify.constants'
 
 // =====================================================
@@ -17,7 +17,9 @@ interface CabifyHeaderProps {
   readonly isLoading: boolean
   readonly availableWeeks: readonly WeekOption[]
   readonly selectedWeek: WeekOption | null
+  readonly periodFilter: PeriodFilter
   readonly onWeekChange: (week: WeekOption) => void
+  readonly onPeriodFilterChange: (filter: PeriodFilter) => void
   readonly onRefresh: () => void
 }
 
@@ -30,7 +32,9 @@ export function CabifyHeader({
   isLoading,
   availableWeeks,
   selectedWeek,
+  periodFilter,
   onWeekChange,
+  onPeriodFilterChange,
   onRefresh,
 }: CabifyHeaderProps) {
   const handleWeekChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -50,9 +54,11 @@ export function CabifyHeader({
       <HeaderControls
         selectedWeek={selectedWeek}
         availableWeeks={availableWeeks}
+        periodFilter={periodFilter}
         isLoading={isLoading}
         isDisabled={isDisabled}
         onWeekChange={handleWeekChange}
+        onPeriodFilterChange={onPeriodFilterChange}
         onRefresh={onRefresh}
       />
     </div>
@@ -102,18 +108,22 @@ function LastUpdate({ date }: LastUpdateProps) {
 interface HeaderControlsProps {
   readonly selectedWeek: WeekOption | null
   readonly availableWeeks: readonly WeekOption[]
+  readonly periodFilter: PeriodFilter
   readonly isLoading: boolean
   readonly isDisabled: boolean
   readonly onWeekChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
+  readonly onPeriodFilterChange: (filter: PeriodFilter) => void
   readonly onRefresh: () => void
 }
 
 function HeaderControls({
   selectedWeek,
   availableWeeks,
+  periodFilter,
   isLoading,
   isDisabled,
   onWeekChange,
+  onPeriodFilterChange,
   onRefresh,
 }: HeaderControlsProps) {
   return (
@@ -123,6 +133,11 @@ function HeaderControls({
         availableWeeks={availableWeeks}
         isDisabled={isDisabled}
         onChange={onWeekChange}
+      />
+      <PeriodFilterButtons
+        currentFilter={periodFilter}
+        isDisabled={isDisabled}
+        onChange={onPeriodFilterChange}
       />
       <RefreshButton
         isLoading={isLoading}
@@ -160,6 +175,41 @@ function WeekSelector({
           </option>
         ))}
       </select>
+    </div>
+  )
+}
+
+interface PeriodFilterButtonsProps {
+  readonly currentFilter: PeriodFilter
+  readonly isDisabled: boolean
+  readonly onChange: (filter: PeriodFilter) => void
+}
+
+function PeriodFilterButtons({
+  currentFilter,
+  isDisabled,
+  onChange,
+}: PeriodFilterButtonsProps) {
+  return (
+    <div className="cabify-period-filter">
+      <button
+        className={`cabify-filter-btn ${currentFilter === 'semana' ? 'active' : ''}`}
+        onClick={() => onChange('semana')}
+        disabled={isDisabled}
+        title="Ver datos de la semana seleccionada"
+      >
+        <Calendar size={16} />
+        Semana
+      </button>
+      <button
+        className={`cabify-filter-btn ${currentFilter === 'anterior' ? 'active' : ''}`}
+        onClick={() => onChange('anterior')}
+        disabled={isDisabled}
+        title="Ver datos de la semana anterior"
+      >
+        <ChevronLeft size={16} />
+        Anterior
+      </button>
     </div>
   )
 }

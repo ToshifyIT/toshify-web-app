@@ -54,6 +54,19 @@ export type ViewMode = 'list' | 'chart'
 export type AccordionKey = 'mejores' | 'peores' | 'estadisticas'
 export type RatingLevel = 'high' | 'medium' | 'low'
 
+/**
+ * Filtro de período para datos de Cabify
+ * - 'semana': Semana seleccionada completa
+ * - 'anterior': Día/semana anterior al seleccionado
+ */
+export type PeriodFilter = 'semana' | 'anterior'
+
+export interface PeriodRange {
+  readonly startDate: string
+  readonly endDate: string
+  readonly label: string
+}
+
 export interface AccordionState {
   readonly mejores: boolean
   readonly peores: boolean

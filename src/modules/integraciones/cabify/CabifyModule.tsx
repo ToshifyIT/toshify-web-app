@@ -15,7 +15,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable/DataTable'
 
 // Tipos
-import type { CabifyDriver, AccordionKey } from './types/cabify.types'
+import type { CabifyDriver, AccordionKey, PeriodFilter, WeekOption } from './types/cabify.types'
 
 // Hooks
 import { useCabifyData, useCabifyStats } from './hooks'
@@ -40,6 +40,50 @@ import {
 import './CabifyModule.css'
 
 // =====================================================
+// HELPERS PARA CÁLCULO DE PERÍODOS
+// =====================================================
+
+/**
+ * Calcular el período anterior a la semana seleccionada
+ */
+function getPreviousWeekPeriod(selectedWeek: WeekOption | null): { startDate: string; endDate: string } | null {
+  if (!selectedWeek) return null
+
+  const currentStart = new Date(selectedWeek.startDate)
+  const previousEnd = new Date(currentStart)
+  previousEnd.setMilliseconds(previousEnd.getMilliseconds() - 1)
+
+  const previousStart = new Date(previousEnd)
+  previousStart.setDate(previousStart.getDate() - 6)
+  previousStart.setHours(0, 0, 0, 0)
+
+  return {
+    startDate: previousStart.toISOString(),
+    endDate: previousEnd.toISOString()
+  }
+}
+
+/**
+ * Obtener período según el filtro seleccionado
+ */
+function getFilteredPeriod(
+  selectedWeek: WeekOption | null,
+  periodFilter: PeriodFilter
+): { startDate: string; endDate: string } | null {
+  if (!selectedWeek) return null
+
+  if (periodFilter === 'anterior') {
+    return getPreviousWeekPeriod(selectedWeek)
+  }
+
+  // 'semana' - usar la semana seleccionada
+  return {
+    startDate: selectedWeek.startDate,
+    endDate: selectedWeek.endDate
+  }
+}
+
+// =====================================================
 // COMPONENTE PRINCIPAL
 // =====================================================
 
@@ -59,8 +103,22 @@ export function CabifyModule() {
 
   const { estadisticas } = useCabifyStats(drivers, asignaciones)
 
-  // Rankings desde histórico (sincronizado cada 5 min)
-  const { topMejores, topPeores } = useCabifyRankings()
+  // Estado del filtro de período
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('semana')
+
+  // Calcular período filtrado para rankings
+  const filteredPeriod = useMemo(
+    () => getFilteredPeriod(selectedWeek, periodFilter),
+    [selectedWeek, periodFilter]
+  )
+
+  // Rankings desde histórico con filtro de período
+  const { topMejores, topPeores } = useCabifyRankings(
+    filteredPeriod ? {
+      fechaInicio: filteredPeriod.startDate,
+      fechaFin: filteredPeriod.endDate
+    } : undefined
+  )
 
   // Estado local de UI
   const [accordionState, setAccordionState] = useState(INITIAL_ACCORDION_STATE)
@@ -68,6 +126,10 @@ export function CabifyModule() {
   // Handlers
   const handleToggleAccordion = useCallback((key: AccordionKey) => {
     setAccordionState((prev) => ({ ...prev, [key]: !prev[key] }))
+  }, [])
+
+  const handlePeriodFilterChange = useCallback((filter: PeriodFilter) => {
+    setPeriodFilter(filter)
   }, [])
 
   // Columnas de la tabla
@@ -85,6 +147,9 @@ export function CabifyModule() {
   const hasDrivers = drivers.length > 0
   const hasError = Boolean(queryState.error)
 
+  // Label del período actual para mostrar en UI
+  const periodLabel = periodFilter === 'anterior' ? 'Semana Anterior' : 'Semana Actual'
+
   return (
     <div className="module-container">
       <CabifyHeader
@@ -92,7 +157,9 @@ export function CabifyModule() {
         isLoading={isLoading}
         availableWeeks={availableWeeks}
         selectedWeek={selectedWeek}
+        periodFilter={periodFilter}
         onWeekChange={setSelectedWeek}
+        onPeriodFilterChange={handlePeriodFilterChange}
         onRefresh={refreshData}
       />
 
@@ -111,6 +178,7 @@ export function CabifyModule() {
         isVisible={!hasError && hasDrivers}
         dataSource={dataSource}
         driverCount={drivers.length}
+        periodLabel={periodLabel}
       />
 
       {!isLoading && hasDrivers && (
@@ -192,9 +260,10 @@ interface DataSourceInfoProps {
   readonly isVisible: boolean
   readonly dataSource: string
   readonly driverCount: number
+  readonly periodLabel: string
 }
 
-function DataSourceInfo({ isVisible, dataSource, driverCount }: DataSourceInfoProps) {
+function DataSourceInfo({ isVisible, dataSource, driverCount, periodLabel }: DataSourceInfoProps) {
   if (!isVisible) return null
 
   const isHistorical = dataSource === 'historical'
@@ -203,7 +272,7 @@ function DataSourceInfo({ isVisible, dataSource, driverCount }: DataSourceInfoPr
     <div className={`cabify-info-card ${dataSource}`}>
       <strong>{DATA_SOURCE_LABELS[dataSource]}</strong>
       <span>
-        {driverCount} conductores
+        {driverCount} conductores - {periodLabel}
         {isHistorical && ' (consulta instantánea)'}
       </span>
       {isHistorical && (
