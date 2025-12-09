@@ -53,8 +53,14 @@ export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRank
         mejoresData: mejores.slice(0, 2)
       })
 
-      setTopMejores(mejores)
-      setTopPeores(peores)
+      // Ordenar en frontend para garantizar el orden correcto
+      // Mejores: de mayor a menor ganancia (DESC)
+      const sortedMejores = [...mejores].sort((a, b) => b.gananciaTotal - a.gananciaTotal)
+      // Peores: de menor a mayor ganancia (ASC)
+      const sortedPeores = [...peores].sort((a, b) => a.gananciaTotal - b.gananciaTotal)
+
+      setTopMejores(sortedMejores)
+      setTopPeores(sortedPeores)
     } catch (err) {
       console.error('❌ Error fetching rankings:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
