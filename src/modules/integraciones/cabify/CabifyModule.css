@@ -96,48 +96,96 @@
   gap: 6px;
 }
 
-/* Period Filter Buttons */
-.cabify-period-filter {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--bg-secondary);
-  border-radius: 6px;
-  padding: 3px;
-  border: 1px solid var(--border-primary);
+/* Date Range Picker - Dropdown Style */
+.cabify-date-picker-wrapper {
+  position: relative;
 }
 
-.cabify-filter-btn {
+.cabify-date-picker-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   padding: 6px 12px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.cabify-filter-btn:hover:not(:disabled) {
-  background: var(--bg-primary);
   color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
 }
 
-.cabify-filter-btn.active {
-  background: var(--color-purple);
-  color: var(--text-inverse);
-  box-shadow: var(--shadow-sm);
+.cabify-date-picker-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
 }
 
-.cabify-filter-btn.active:hover:not(:disabled) {
-  background: var(--color-purple-dark);
+.cabify-date-picker-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.cabify-filter-btn:disabled {
+.cabify-date-picker-btn svg {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.cabify-date-picker-btn svg.rotate {
+  transform: rotate(180deg);
+}
+
+.cabify-date-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  padding: 12px;
+  z-index: 100;
+  min-width: 200px;
+}
+
+.cabify-date-dropdown-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.cabify-date-dropdown-row:last-child {
+  margin-bottom: 0;
+}
+
+.cabify-date-dropdown-row label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.cabify-date-input {
+  padding: 8px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  width: 100%;
+}
+
+.cabify-date-input:focus {
+  outline: none;
+  border-color: var(--color-purple);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.cabify-date-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

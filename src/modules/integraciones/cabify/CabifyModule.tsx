@@ -15,7 +15,8 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable/DataTable'
 
 // Tipos
-import type { CabifyDriver, AccordionKey, PeriodFilter, WeekOption } from './types/cabify.types'
+import type { CabifyDriver, AccordionKey, WeekOption } from './types/cabify.types'
+import type { DateRange } from './components/CabifyHeader'
 
 // Hooks
 import { useCabifyData, useCabifyStats } from './hooks'
@@ -40,45 +41,14 @@ import {
 import './CabifyModule.css'
 
 // =====================================================
-// HELPERS PARA CÁLCULO DE PERÍODOS
+// HELPER PARA CREAR RANGO DE FECHAS INICIAL
 // =====================================================
 
 /**
- * Calcular el período de la semana anterior completa
+ * Crear rango de fechas inicial basado en la semana seleccionada
  */
-function getPreviousWeekPeriod(selectedWeek: WeekOption | null): { startDate: string; endDate: string } | null {
+function createInitialDateRange(selectedWeek: WeekOption | null): DateRange | null {
   if (!selectedWeek) return null
-
-  // La semana anterior empieza 7 días antes del inicio de la semana seleccionada
-  const currentStart = new Date(selectedWeek.startDate)
-
-  const previousStart = new Date(currentStart)
-  previousStart.setDate(currentStart.getDate() - 7)
-  previousStart.setUTCHours(0, 0, 0, 0)
-
-  const previousEnd = new Date(currentStart)
-  previousEnd.setMilliseconds(previousEnd.getMilliseconds() - 1)
-
-  return {
-    startDate: previousStart.toISOString(),
-    endDate: previousEnd.toISOString()
-  }
-}
-
-/**
- * Obtener período según el filtro seleccionado
- */
-function getFilteredPeriod(
-  selectedWeek: WeekOption | null,
-  periodFilter: PeriodFilter
-): { startDate: string; endDate: string } | null {
-  if (!selectedWeek) return null
-
-  if (periodFilter === 'anterior') {
-    return getPreviousWeekPeriod(selectedWeek)
-  }
-
-  // 'semana' - usar la semana seleccionada
   return {
     startDate: selectedWeek.startDate,
     endDate: selectedWeek.endDate
@@ -105,22 +75,28 @@ export function CabifyModule() {
 
   const { estadisticas } = useCabifyStats(drivers, asignaciones)
 
-  // Estado del filtro de período
-  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('semana')
+  // Estado del rango de fechas personalizado (inicializado desde la semana seleccionada)
+  const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null)
 
-  // Calcular período filtrado para rankings
-  const filteredPeriod = useMemo(
-    () => getFilteredPeriod(selectedWeek, periodFilter),
-    [selectedWeek, periodFilter]
-  )
+  // Sincronizar el rango de fechas cuando cambia la semana seleccionada
+  useMemo(() => {
+    if (selectedWeek && !customDateRange) {
+      setCustomDateRange(createInitialDateRange(selectedWeek))
+    }
+  }, [selectedWeek, customDateRange])
+
+  // Usar el rango personalizado si existe, sino la semana seleccionada
+  const effectiveDateRange = useMemo(() => {
+    return customDateRange || createInitialDateRange(selectedWeek)
+  }, [customDateRange, selectedWeek])
 
   // Memorizar las props del hook de rankings para evitar re-renders innecesarios
   const rankingProps = useMemo(
-    () => filteredPeriod ? {
-      fechaInicio: filteredPeriod.startDate,
-      fechaFin: filteredPeriod.endDate
+    () => effectiveDateRange ? {
+      fechaInicio: effectiveDateRange.startDate,
+      fechaFin: effectiveDateRange.endDate
     } : undefined,
-    [filteredPeriod]
+    [effectiveDateRange]
   )
 
   // Rankings desde histórico con filtro de período
@@ -134,8 +110,8 @@ export function CabifyModule() {
     setAccordionState((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
-  const handlePeriodFilterChange = useCallback((filter: PeriodFilter) => {
-    setPeriodFilter(filter)
+  const handleCustomDateChange = useCallback((range: DateRange) => {
+    setCustomDateRange(range)
   }, [])
 
   // Columnas de la tabla
@@ -154,7 +130,12 @@ export function CabifyModule() {
   const hasError = Boolean(queryState.error)
 
   // Label del período actual para mostrar en UI
-  const periodLabel = periodFilter === 'anterior' ? 'Semana Anterior' : 'Semana Actual'
+  const periodLabel = useMemo(() => {
+    if (!effectiveDateRange) return 'Sin período'
+    const startDate = new Date(effectiveDateRange.startDate).toLocaleDateString('es-AR')
+    const endDate = new Date(effectiveDateRange.endDate).toLocaleDateString('es-AR')
+    return `${startDate} - ${endDate}`
+  }, [effectiveDateRange])
 
   return (
     <div className="module-container">
@@ -163,9 +144,9 @@ export function CabifyModule() {
         isLoading={isLoading}
         availableWeeks={availableWeeks}
         selectedWeek={selectedWeek}
-        periodFilter={periodFilter}
+        customDateRange={customDateRange}
         onWeekChange={setSelectedWeek}
-        onPeriodFilterChange={handlePeriodFilterChange}
+        onCustomDateChange={handleCustomDateChange}
         onRefresh={refreshData}
       />
 

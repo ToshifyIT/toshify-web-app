@@ -4,22 +4,28 @@
  * Principio: Single Responsibility - Solo UI de encabezado
  */
 
-import { RefreshCw, Calendar, ChevronLeft } from 'lucide-react'
-import type { WeekOption, PeriodFilter } from '../types/cabify.types'
+import { useState, useRef, useEffect } from 'react'
+import { RefreshCw, Calendar, ChevronDown } from 'lucide-react'
+import type { WeekOption } from '../types/cabify.types'
 import { UI_TEXT } from '../constants/cabify.constants'
 
 // =====================================================
 // TIPOS
 // =====================================================
 
+export interface DateRange {
+  readonly startDate: string
+  readonly endDate: string
+}
+
 interface CabifyHeaderProps {
   readonly lastUpdate: Date | null
   readonly isLoading: boolean
   readonly availableWeeks: readonly WeekOption[]
   readonly selectedWeek: WeekOption | null
-  readonly periodFilter: PeriodFilter
+  readonly customDateRange: DateRange | null
   readonly onWeekChange: (week: WeekOption) => void
-  readonly onPeriodFilterChange: (filter: PeriodFilter) => void
+  readonly onCustomDateChange: (range: DateRange) => void
   readonly onRefresh: () => void
 }
 
@@ -32,9 +38,9 @@ export function CabifyHeader({
   isLoading,
   availableWeeks,
   selectedWeek,
-  periodFilter,
+  customDateRange,
   onWeekChange,
-  onPeriodFilterChange,
+  onCustomDateChange,
   onRefresh,
 }: CabifyHeaderProps) {
   const handleWeekChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -54,11 +60,11 @@ export function CabifyHeader({
       <HeaderControls
         selectedWeek={selectedWeek}
         availableWeeks={availableWeeks}
-        periodFilter={periodFilter}
+        customDateRange={customDateRange}
         isLoading={isLoading}
         isDisabled={isDisabled}
         onWeekChange={handleWeekChange}
-        onPeriodFilterChange={onPeriodFilterChange}
+        onCustomDateChange={onCustomDateChange}
         onRefresh={onRefresh}
       />
     </div>
@@ -108,22 +114,22 @@ function LastUpdate({ date }: LastUpdateProps) {
 interface HeaderControlsProps {
   readonly selectedWeek: WeekOption | null
   readonly availableWeeks: readonly WeekOption[]
-  readonly periodFilter: PeriodFilter
+  readonly customDateRange: DateRange | null
   readonly isLoading: boolean
   readonly isDisabled: boolean
   readonly onWeekChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
-  readonly onPeriodFilterChange: (filter: PeriodFilter) => void
+  readonly onCustomDateChange: (range: DateRange) => void
   readonly onRefresh: () => void
 }
 
 function HeaderControls({
   selectedWeek,
   availableWeeks,
-  periodFilter,
+  customDateRange,
   isLoading,
   isDisabled,
   onWeekChange,
-  onPeriodFilterChange,
+  onCustomDateChange,
   onRefresh,
 }: HeaderControlsProps) {
   return (
@@ -134,10 +140,10 @@ function HeaderControls({
         isDisabled={isDisabled}
         onChange={onWeekChange}
       />
-      <PeriodFilterButtons
-        currentFilter={periodFilter}
+      <DateRangePicker
+        dateRange={customDateRange}
         isDisabled={isDisabled}
-        onChange={onPeriodFilterChange}
+        onChange={onCustomDateChange}
       />
       <RefreshButton
         isLoading={isLoading}
@@ -179,37 +185,102 @@ function WeekSelector({
   )
 }
 
-interface PeriodFilterButtonsProps {
-  readonly currentFilter: PeriodFilter
+interface DateRangePickerProps {
+  readonly dateRange: DateRange | null
   readonly isDisabled: boolean
-  readonly onChange: (filter: PeriodFilter) => void
+  readonly onChange: (range: DateRange) => void
 }
 
-function PeriodFilterButtons({
-  currentFilter,
+function DateRangePicker({
+  dateRange,
   isDisabled,
   onChange,
-}: PeriodFilterButtonsProps) {
+}: DateRangePickerProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Cerrar dropdown al hacer clic fuera
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const formatDateForInput = (isoDate: string | undefined): string => {
+    if (!isoDate) return ''
+    return isoDate.split('T')[0]
+  }
+
+  const formatDateDisplay = (isoDate: string | undefined): string => {
+    if (!isoDate) return ''
+    return new Date(isoDate).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
+  }
+
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newStartDate = e.target.value
+    if (newStartDate) {
+      onChange({
+        startDate: new Date(newStartDate + 'T00:00:00').toISOString(),
+        endDate: dateRange?.endDate || new Date().toISOString()
+      })
+    }
+  }
+
+  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newEndDate = e.target.value
+    if (newEndDate) {
+      onChange({
+        startDate: dateRange?.startDate || new Date().toISOString(),
+        endDate: new Date(newEndDate + 'T23:59:59').toISOString()
+      })
+    }
+  }
+
+  const displayLabel = dateRange
+    ? `${formatDateDisplay(dateRange.startDate)} - ${formatDateDisplay(dateRange.endDate)}`
+    : 'Seleccionar fechas'
+
   return (
-    <div className="cabify-period-filter">
+    <div className="cabify-date-picker-wrapper" ref={dropdownRef}>
       <button
-        className={`cabify-filter-btn ${currentFilter === 'semana' ? 'active' : ''}`}
-        onClick={() => onChange('semana')}
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
         disabled={isDisabled}
-        title="Ver datos de la semana seleccionada"
+        className="cabify-date-picker-btn"
       >
         <Calendar size={16} />
-        Semana
+        <span>{displayLabel}</span>
+        <ChevronDown size={14} className={isOpen ? 'rotate' : ''} />
       </button>
-      <button
-        className={`cabify-filter-btn ${currentFilter === 'anterior' ? 'active' : ''}`}
-        onClick={() => onChange('anterior')}
-        disabled={isDisabled}
-        title="Ver datos de la semana anterior"
-      >
-        <ChevronLeft size={16} />
-        Anterior
-      </button>
+
+      {isOpen && (
+        <div className="cabify-date-dropdown">
+          <div className="cabify-date-dropdown-row">
+            <label>Desde:</label>
+            <input
+              type="date"
+              value={formatDateForInput(dateRange?.startDate)}
+              onChange={handleStartDateChange}
+              disabled={isDisabled}
+              className="cabify-date-input"
+            />
+          </div>
+          <div className="cabify-date-dropdown-row">
+            <label>Hasta:</label>
+            <input
+              type="date"
+              value={formatDateForInput(dateRange?.endDate)}
+              onChange={handleEndDateChange}
+              disabled={isDisabled}
+              className="cabify-date-input"
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
