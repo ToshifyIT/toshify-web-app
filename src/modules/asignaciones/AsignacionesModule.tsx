@@ -245,6 +245,20 @@ export function AsignacionesModule() {
           .update({ estado: 'activa', fecha_inicio: ahora, notas: confirmComentarios || selectedAsignacion.notas })
           .eq('id', selectedAsignacion.id)
 
+        // Actualizar estado del vehículo a EN_USO
+        const { data: estadoEnUso } = await supabase
+          .from('vehiculos_estados')
+          .select('id')
+          .eq('codigo', 'EN_USO')
+          .single()
+
+        if (estadoEnUso && selectedAsignacion.vehiculo_id) {
+          await supabase
+            .from('vehiculos')
+            .update({ estado_id: estadoEnUso.id })
+            .eq('id', selectedAsignacion.vehiculo_id)
+        }
+
         if (fechaProgramada) {
           await supabase.from('vehiculos_turnos_ocupados').delete()
             .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
