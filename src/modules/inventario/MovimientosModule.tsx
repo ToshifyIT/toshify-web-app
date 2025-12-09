@@ -26,6 +26,7 @@ interface Producto {
     codigo: string
     descripcion: string
   }
+  stock_disponible?: number
 }
 
 interface Proveedor {
@@ -87,7 +88,6 @@ export function MovimientosModule() {
   const [productosAsignadosVehiculo, setProductosAsignadosVehiculo] = useState<ProductoAsignadoVehiculo[]>([])
   const [stockPorProveedor, setStockPorProveedor] = useState<StockPorProveedor[]>([])
   const [loading, setLoading] = useState(true)
-  const [userRole, setUserRole] = useState<string>('')
 
   // Estado del formulario
   const [tipoMovimiento, setTipoMovimiento] = useState<TipoMovimiento>('entrada')
@@ -126,7 +126,6 @@ export function MovimientosModule() {
   // =====================================================
   useEffect(() => {
     loadData()
-    loadUserRole()
   }, [])
 
   useEffect(() => {
@@ -184,29 +183,11 @@ export function MovimientosModule() {
   // =====================================================
   // FUNCIONES DE CARGA
   // =====================================================
-  const loadUserRole = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: userData } = await supabase
-          .from('user_profiles')
-          .select('role_id, roles(name)')
-          .eq('id', user.id)
-          .single() as { data: { role_id: string; roles: { name: string } | null } | null }
-        if (userData?.roles) {
-          setUserRole(userData.roles.name || '')
-        }
-      }
-    } catch (err) {
-      console.error('Error cargando rol:', err)
-    }
-  }
-
   const loadData = async () => {
     try {
       setLoading(true)
 
-      const [prodRes, provRes, vehRes] = await Promise.all([
+      const [prodRes, provRes, vehRes, stockRes] = await Promise.all([
         supabase
           .from('productos')
           .select(`
@@ -222,10 +203,30 @@ export function MovimientosModule() {
         supabase
           .from('vehiculos')
           .select('id, patente, marca, modelo')
-          .order('patente')
+          .order('patente'),
+        // Cargar stock disponible por producto
+        supabase
+          .from('inventario')
+          .select('producto_id, cantidad')
+          .eq('estado', 'disponible')
       ])
 
-      if (prodRes.data) setProductos(prodRes.data)
+      // Calcular stock disponible por producto
+      const stockPorProducto: Record<string, number> = {}
+      if (stockRes.data) {
+        stockRes.data.forEach((item: any) => {
+          stockPorProducto[item.producto_id] = (stockPorProducto[item.producto_id] || 0) + Number(item.cantidad)
+        })
+      }
+
+      // Agregar stock_disponible a cada producto
+      if (prodRes.data) {
+        const productosConStock = prodRes.data.map((p: any) => ({
+          ...p,
+          stock_disponible: stockPorProducto[p.id] || 0
+        }))
+        setProductos(productosConStock)
+      }
       if (provRes.data) setProveedores(provRes.data)
       if (vehRes.data) setVehiculos(vehRes.data)
     } catch (err: any) {
@@ -375,9 +376,9 @@ export function MovimientosModule() {
   }
 
   // Determinar si requiere aprobación
+  // TODOS los movimientos excepto entradas requieren aprobación (sin importar el rol)
   const requiereAprobacion = (): boolean => {
-    if (userRole === 'encargado' || userRole === 'admin') return false
-    return tipoMovimiento === 'salida' || tipoMovimiento === 'asignacion' || tipoMovimiento === 'devolucion'
+    return tipoMovimiento !== 'entrada'
   }
 
   // =====================================================
@@ -534,10 +535,6 @@ export function MovimientosModule() {
     try {
       const { data: userData } = await supabase.auth.getUser()
 
-      // Movimiento normal (incluye entrada simple que va a tránsito automáticamente)
-      // Nota: para devoluciones, vehiculoId representa el vehículo origen (desde donde se devuelve)
-      // El RPC usa p_vehiculo_destino_id internamente pero lo mapea a vehiculo_origen_id
-
       // Construir observaciones con servicio vinculado incluido
       let observacionesFinal = observaciones || ''
       if (tipoMovimiento === 'salida' && servicioVinculado.trim()) {
@@ -548,26 +545,27 @@ export function MovimientosModule() {
         observacionesFinal = `Servicio: ${servicioVinculadoDevolucion.trim()}${observaciones ? '. ' + observaciones : ''}`
       }
 
-      const { error } = await (supabase.rpc as any)('procesar_movimiento_inventario', {
-        p_producto_id: productoId,
-        p_tipo_movimiento: tipoMovimiento,
-        p_cantidad: cantidad,
-        p_proveedor_id: tipoMovimiento === 'devolucion' ? null : (proveedorId || null),
-        p_conductor_destino_id: null,
-        p_vehiculo_destino_id: vehiculoId || null,
-        p_estado_destino: tipoMovimiento === 'devolucion' ? estadoRetorno : 'disponible',
-        p_usuario_id: userData.user?.id,
-        p_observaciones: observacionesFinal || null,
-        p_motivo_salida: tipoMovimiento === 'salida' ? motivoSalida : null,
-        p_servicio_id: null,
-        p_estado_aprobacion: 'aprobado', // El RPC maneja internamente que entrada vaya a pendiente
-        p_estado_retorno: tipoMovimiento === 'devolucion' ? estadoRetorno : null
-      })
-
-      if (error) throw error
-
-      // Mensaje según tipo de movimiento
+      // Para ENTRADA: usar el RPC (va a tránsito)
+      // Para SALIDA/ASIGNACION/DEVOLUCION: insertar directamente con estado pendiente
       if (tipoMovimiento === 'entrada') {
+        const { error } = await (supabase.rpc as any)('procesar_movimiento_inventario', {
+          p_producto_id: productoId,
+          p_tipo_movimiento: tipoMovimiento,
+          p_cantidad: cantidad,
+          p_proveedor_id: proveedorId || null,
+          p_conductor_destino_id: null,
+          p_vehiculo_destino_id: vehiculoId || null,
+          p_estado_destino: 'disponible',
+          p_usuario_id: userData.user?.id,
+          p_observaciones: observacionesFinal || null,
+          p_motivo_salida: null,
+          p_servicio_id: null,
+          p_estado_aprobacion: 'aprobado',
+          p_estado_retorno: null
+        })
+
+        if (error) throw error
+
         Swal.fire({
           icon: 'success',
           title: 'Entrada registrada',
@@ -575,15 +573,36 @@ export function MovimientosModule() {
           timer: 3000
         })
       } else {
+        // Para salida, asignación y devolución: insertar directamente con estado PENDIENTE
+        const movimientoData: any = {
+          producto_id: productoId,
+          tipo_movimiento: tipoMovimiento,
+          cantidad: cantidad,
+          proveedor_id: tipoMovimiento === 'devolucion' ? null : (proveedorId || null),
+          vehiculo_destino_id: (tipoMovimiento === 'asignacion' || tipoMovimiento === 'salida') ? (vehiculoId || null) : null,
+          vehiculo_origen_id: tipoMovimiento === 'devolucion' ? vehiculoId : null,
+          usuario_id: userData.user?.id,
+          observaciones: observacionesFinal || null,
+          motivo_salida: tipoMovimiento === 'salida' ? motivoSalida : null,
+          estado_aprobacion: 'pendiente',
+          estado_retorno: tipoMovimiento === 'devolucion' ? estadoRetorno : null
+        }
+
+        const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
+
+        if (error) throw error
+
         Swal.fire({
           icon: 'success',
-          title: 'Movimiento registrado',
-          text: `${getTipoLabel(tipoMovimiento)} realizada con éxito`,
-          timer: 2000
+          title: 'Movimiento enviado para aprobación',
+          text: `${getTipoLabel(tipoMovimiento)} registrada. Pendiente de aprobación por un encargado.`,
+          timer: 3000
         })
       }
 
       resetForm()
+      // Recargar datos para actualizar el stock mostrado
+      loadData()
     } catch (err: any) {
       console.error('Error procesando movimiento:', err)
       Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar el movimiento' })
@@ -635,6 +654,11 @@ export function MovimientosModule() {
       filtered = filtered.filter(p => p.tipo === 'HERRAMIENTAS')
     }
 
+    // Para salida y asignación, ordenar por stock disponible (mayor stock primero)
+    if (tipoMovimiento === 'salida' || tipoMovimiento === 'asignacion') {
+      filtered = filtered.sort((a, b) => (b.stock_disponible || 0) - (a.stock_disponible || 0))
+    }
+
     if (busquedaProducto.trim()) {
       const search = busquedaProducto.toLowerCase()
       filtered = filtered.filter(p =>
@@ -663,21 +687,21 @@ export function MovimientosModule() {
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#1F2937', marginBottom: '8px' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
           Gestión de Movimientos
         </h1>
-        <p style={{ color: '#6B7280', fontSize: '14px' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
           Registrar entradas, salidas, uso y devolución de herramientas
         </p>
         {requiereAprobacion() && (
           <div style={{
             marginTop: '12px',
             padding: '8px 12px',
-            background: '#FEF3C7',
-            border: '1px solid #FCD34D',
+            background: 'var(--badge-yellow-bg)',
+            border: '1px solid var(--color-warning)',
             borderRadius: '6px',
             fontSize: '13px',
-            color: '#92400E',
+            color: 'var(--badge-yellow-text)',
             display: 'flex',
             alignItems: 'center',
             gap: '8px'
@@ -690,7 +714,7 @@ export function MovimientosModule() {
 
       {/* Selector de Tipo de Movimiento (sin Daño ni Pérdida) */}
       <div style={{ marginBottom: '24px' }}>
-        <label style={{ display: 'block', marginBottom: '12px', fontSize: '14px', fontWeight: 600, color: '#374151' }}>
+        <label style={{ display: 'block', marginBottom: '12px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
           Tipo de Movimiento
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
@@ -700,9 +724,9 @@ export function MovimientosModule() {
               onClick={() => setTipoMovimiento(tipo)}
               style={{
                 padding: '12px 16px',
-                background: tipoMovimiento === tipo ? '#DC2626' : 'white',
-                color: tipoMovimiento === tipo ? 'white' : '#6B7280',
-                border: `2px solid ${tipoMovimiento === tipo ? '#DC2626' : '#E5E7EB'}`,
+                background: tipoMovimiento === tipo ? 'var(--color-primary)' : 'var(--card-bg)',
+                color: tipoMovimiento === tipo ? 'white' : 'var(--text-secondary)',
+                border: `2px solid ${tipoMovimiento === tipo ? 'var(--color-primary)' : 'var(--border-primary)'}`,
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontWeight: 600,
@@ -723,11 +747,11 @@ export function MovimientosModule() {
 
       {/* Formulario */}
       <div style={{
-        background: 'white',
+        background: 'var(--card-bg)',
         borderRadius: '12px',
         padding: '24px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        border: '1px solid #E5E7EB'
+        boxShadow: 'var(--shadow-sm)',
+        border: '1px solid var(--border-primary)'
       }}>
         <div style={{ display: 'grid', gap: '20px' }}>
 
@@ -736,8 +760,8 @@ export function MovimientosModule() {
             <>
               {/* Toggle Modo Lote */}
               <div style={{
-                background: '#F9FAFB',
-                border: '1px solid #E5E7EB',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-primary)',
                 borderRadius: '8px',
                 padding: '12px 16px',
                 display: 'flex',
@@ -745,10 +769,10 @@ export function MovimientosModule() {
                 justifyContent: 'space-between'
               }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#1F2937', marginBottom: '4px' }}>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>
                     {modoLote ? '📦 Ingreso por Lote/Pedido' : '📄 Ingreso Simple'}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                     {modoLote
                       ? 'Registra múltiples productos en un solo pedido'
                       : 'Registra un producto a la vez'
@@ -767,7 +791,7 @@ export function MovimientosModule() {
                   }}
                   style={{
                     padding: '8px 16px',
-                    background: modoLote ? '#DC2626' : '#6B7280',
+                    background: modoLote ? 'var(--color-primary)' : 'var(--text-secondary)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
@@ -782,7 +806,7 @@ export function MovimientosModule() {
 
               {/* Proveedor (siempre requerido) */}
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Proveedor *
                 </label>
                 <select
@@ -791,9 +815,11 @@ export function MovimientosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '8px',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)'
                   }}
                 >
                   <option value="">Seleccionar proveedor...</option>
@@ -807,19 +833,19 @@ export function MovimientosModule() {
 
               {/* Aviso de que siempre va a tránsito */}
               <div style={{
-                background: '#FFFBEB',
-                border: '1px solid #F59E0B',
+                background: 'var(--badge-yellow-bg)',
+                border: '1px solid var(--color-warning)',
                 borderRadius: '8px',
                 padding: '12px',
                 fontSize: '13px',
-                color: '#92400E',
+                color: 'var(--badge-yellow-text)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px'
               }}>
                 <Truck size={18} />
                 <div>
-                  <strong>Los productos ingresarán en estado "En Tránsito".</strong>
+                  <strong style={{ color: 'var(--color-warning)' }}>Los productos ingresarán en estado "En Tránsito".</strong>
                   <div style={{ fontSize: '12px', marginTop: '2px' }}>Deberás confirmar su recepción desde "Pedidos en Tránsito" para que pasen a stock disponible.</div>
                 </div>
               </div>
@@ -827,7 +853,7 @@ export function MovimientosModule() {
               {/* Número de Pedido (siempre visible) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                     N° Pedido/Referencia *
                   </label>
                   <input
@@ -838,14 +864,16 @@ export function MovimientosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '8px',
-                      fontSize: '14px'
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)'
                     }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                     Fecha Estimada Llegada
                   </label>
                   <input
@@ -855,9 +883,11 @@ export function MovimientosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '8px',
-                      fontSize: '14px'
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)'
                     }}
                   />
                 </div>
@@ -870,7 +900,7 @@ export function MovimientosModule() {
             <>
               {/* Motivo de Salida */}
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Motivo de Salida *
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
@@ -880,9 +910,9 @@ export function MovimientosModule() {
                       onClick={() => setMotivoSalida(motivo)}
                       style={{
                         padding: '10px',
-                        background: motivoSalida === motivo ? '#DC2626' : 'white',
-                        color: motivoSalida === motivo ? 'white' : '#6B7280',
-                        border: `1px solid ${motivoSalida === motivo ? '#DC2626' : '#D1D5DB'}`,
+                        background: motivoSalida === motivo ? 'var(--color-primary)' : 'var(--card-bg)',
+                        color: motivoSalida === motivo ? 'white' : 'var(--text-secondary)',
+                        border: `1px solid ${motivoSalida === motivo ? 'var(--color-primary)' : 'var(--border-primary)'}`,
                         borderRadius: '6px',
                         cursor: 'pointer',
                         fontSize: '13px',
@@ -899,7 +929,7 @@ export function MovimientosModule() {
 
               {/* Vehículo (opcional) */}
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Vehículo/Patente (opcional)
                 </label>
                 <select
@@ -908,9 +938,11 @@ export function MovimientosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '8px',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)'
                   }}
                 >
                   <option value="">Sin vehículo asociado</option>
@@ -925,7 +957,7 @@ export function MovimientosModule() {
               {/* Servicio vinculado (obligatorio si es consumo) */}
               {motivoSalida === 'consumo_servicio' && (
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     Servicio Vinculado *
                   </label>
                   <input
@@ -936,9 +968,11 @@ export function MovimientosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '8px',
-                      fontSize: '14px'
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)'
                     }}
                   />
                 </div>
@@ -950,19 +984,19 @@ export function MovimientosModule() {
           {tipoMovimiento === 'asignacion' && (
             <>
               <div style={{
-                background: '#DBEAFE',
-                border: '1px solid #93C5FD',
+                background: 'var(--badge-blue-bg)',
+                border: '1px solid var(--color-info)',
                 borderRadius: '8px',
                 padding: '12px',
                 fontSize: '13px',
-                color: '#1E40AF'
+                color: 'var(--badge-blue-text)'
               }}>
                 <strong>Nota:</strong> Solo herramientas pueden asignarse a vehículos. La herramienta cambia a estado "En uso" y no se descuenta del stock.
               </div>
 
               {/* Vehículo (obligatorio) */}
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Vehículo/Patente *
                 </label>
                 <select
@@ -971,9 +1005,11 @@ export function MovimientosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '8px',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)'
                   }}
                 >
                   <option value="">Seleccionar vehículo...</option>
@@ -987,7 +1023,7 @@ export function MovimientosModule() {
 
               {/* Servicio vinculado (obligatorio) */}
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Servicio Vinculado *
                 </label>
                 <input
@@ -998,9 +1034,11 @@ export function MovimientosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '8px',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)'
                   }}
                 />
               </div>
@@ -1012,7 +1050,7 @@ export function MovimientosModule() {
             <>
               {/* Vehículo que devuelve */}
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Vehículo que devuelve *
                 </label>
                 <select
@@ -1021,9 +1059,11 @@ export function MovimientosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '8px',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)'
                   }}
                 >
                   <option value="">Seleccionar vehículo...</option>
@@ -1034,7 +1074,7 @@ export function MovimientosModule() {
                   ))}
                 </select>
                 {vehiculosConInventario.length === 0 && (
-                  <p style={{ fontSize: '12px', color: '#DC2626', marginTop: '4px', fontStyle: 'italic' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '4px', fontStyle: 'italic' }}>
                     No hay vehículos con herramientas asignadas
                   </p>
                 )}
@@ -1043,7 +1083,7 @@ export function MovimientosModule() {
               {/* Producto a devolver (solo si hay vehículo) */}
               {vehiculoId && (
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     Herramienta a devolver *
                   </label>
                   <select
@@ -1056,9 +1096,11 @@ export function MovimientosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '8px',
-                      fontSize: '14px'
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)'
                     }}
                   >
                     <option value="">Seleccionar herramienta...</option>
@@ -1074,7 +1116,7 @@ export function MovimientosModule() {
               {/* Servicio vinculado (opcional) */}
               {vehiculoId && productoId && (
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     Servicio Vinculado
                   </label>
                   <input
@@ -1085,9 +1127,11 @@ export function MovimientosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '8px',
-                      fontSize: '14px'
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)'
                     }}
                   />
                 </div>
@@ -1096,7 +1140,7 @@ export function MovimientosModule() {
               {/* Estado de retorno */}
               {vehiculoId && productoId && (
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     Estado de la herramienta *
                   </label>
                   <div style={{ display: 'flex', gap: '12px' }}>
@@ -1105,13 +1149,13 @@ export function MovimientosModule() {
                         flex: 1,
                         padding: '12px',
                         border: `2px solid ${estadoRetorno === estado
-                          ? (estado === 'operativa' ? '#059669' : '#DC2626')
-                          : '#E5E7EB'}`,
+                          ? (estado === 'operativa' ? 'var(--color-success)' : 'var(--color-danger)')
+                          : 'var(--border-primary)'}`,
                         borderRadius: '8px',
                         cursor: 'pointer',
                         background: estadoRetorno === estado
-                          ? (estado === 'operativa' ? '#ECFDF5' : '#FEF2F2')
-                          : 'white',
+                          ? (estado === 'operativa' ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)')
+                          : 'var(--card-bg)',
                         textAlign: 'center'
                       }}>
                         <input
@@ -1123,7 +1167,7 @@ export function MovimientosModule() {
                         />
                         <div style={{
                           fontWeight: 600,
-                          color: estado === 'operativa' ? '#059669' : '#DC2626'
+                          color: estado === 'operativa' ? 'var(--color-success)' : 'var(--color-danger)'
                         }}>
                           {estado === 'operativa' && <CheckCircle size={16} style={{ marginBottom: '4px' }} />}
                           {estado === 'dañada' && <AlertTriangle size={16} style={{ marginBottom: '4px' }} />}
@@ -1134,7 +1178,7 @@ export function MovimientosModule() {
                     ))}
                   </div>
                   {estadoRetorno !== 'operativa' && (
-                    <p style={{ fontSize: '12px', color: '#DC2626', marginTop: '8px' }}>
+                    <p style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '8px' }}>
                       * Las observaciones son obligatorias para herramientas dañadas o perdidas
                     </p>
                   )}
@@ -1148,7 +1192,7 @@ export function MovimientosModule() {
           {/* Filtro por Tipo de Producto (solo para entrada y salida sin modo lote) */}
           {(tipoMovimiento === 'entrada' || tipoMovimiento === 'salida') && (
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 Tipo de Producto
               </label>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -1162,9 +1206,9 @@ export function MovimientosModule() {
                     }}
                     style={{
                       padding: '8px 16px',
-                      background: tipoProductoFiltro === tipo ? '#DC2626' : 'white',
-                      color: tipoProductoFiltro === tipo ? 'white' : '#6B7280',
-                      border: `1px solid ${tipoProductoFiltro === tipo ? '#DC2626' : '#D1D5DB'}`,
+                      background: tipoProductoFiltro === tipo ? 'var(--color-primary)' : 'var(--card-bg)',
+                      color: tipoProductoFiltro === tipo ? 'white' : 'var(--text-secondary)',
+                      border: `1px solid ${tipoProductoFiltro === tipo ? 'var(--color-primary)' : 'var(--border-primary)'}`,
                       borderRadius: '6px',
                       cursor: 'pointer',
                       fontSize: '13px',
@@ -1181,7 +1225,7 @@ export function MovimientosModule() {
           {/* Buscador de Producto (modo simple, no devolución) */}
           {!modoLote && tipoMovimiento !== 'devolucion' && (
             <div style={{ position: 'relative' }} data-producto-dropdown>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 {tipoMovimiento === 'asignacion' ? 'Herramienta *' : 'Producto *'}
               </label>
               <div style={{ position: 'relative' }}>
@@ -1192,7 +1236,7 @@ export function MovimientosModule() {
                     left: '12px',
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    color: '#9CA3AF',
+                    color: 'var(--text-tertiary)',
                     pointerEvents: 'none'
                   }}
                 />
@@ -1208,9 +1252,11 @@ export function MovimientosModule() {
                   style={{
                     width: '100%',
                     padding: '10px 10px 10px 40px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '8px',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)'
                   }}
                 />
 
@@ -1222,11 +1268,11 @@ export function MovimientosModule() {
                     right: 0,
                     maxHeight: '300px',
                     overflowY: 'auto',
-                    background: 'white',
-                    border: '1px solid #D1D5DB',
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '8px',
                     marginTop: '4px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                    boxShadow: 'var(--shadow-md)',
                     zIndex: 1000
                   }}>
                     {productosFiltrados.map((p) => (
@@ -1240,17 +1286,34 @@ export function MovimientosModule() {
                         style={{
                           padding: '12px 16px',
                           cursor: 'pointer',
-                          borderBottom: '1px solid #F3F4F6',
-                          fontSize: '14px'
+                          borderBottom: '1px solid var(--border-secondary)',
+                          fontSize: '14px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          background: 'var(--card-bg)',
+                          color: 'var(--text-primary)'
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#F9FAFB'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'var(--card-bg)'}
                       >
-                        <div style={{ fontWeight: 600, color: '#1F2937' }}>
-                          {p.codigo} - {p.nombre}
+                        <div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {p.codigo} - {p.nombre}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            {p.tipo} • {p.unidades_medida?.descripcion || 'Unidad'}
+                          </div>
                         </div>
-                        <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
-                          {p.tipo} • {p.unidades_medida?.descripcion || 'Sin UM'}
+                        <div style={{
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          background: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)',
+                          color: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-text)' : 'var(--badge-red-text)'
+                        }}>
+                          Stock: {p.stock_disponible || 0}
                         </div>
                       </div>
                     ))}
@@ -1258,8 +1321,15 @@ export function MovimientosModule() {
                 )}
               </div>
               {productoId && productoSeleccionado && (
-                <p style={{ fontSize: '12px', color: '#059669', marginTop: '4px' }}>
-                  ✓ {productoSeleccionado.codigo} - {productoSeleccionado.nombre}
+                <p style={{
+                  fontSize: '12px',
+                  color: (productoSeleccionado.stock_disponible || 0) > 0 ? 'var(--color-success)' : 'var(--color-danger)',
+                  marginTop: '4px'
+                }}>
+                  {(productoSeleccionado.stock_disponible || 0) > 0
+                    ? `✓ ${productoSeleccionado.codigo} - ${productoSeleccionado.nombre} (Stock: ${productoSeleccionado.stock_disponible})`
+                    : `⚠ ${productoSeleccionado.codigo} - ${productoSeleccionado.nombre} (Sin stock disponible)`
+                  }
                 </p>
               )}
             </div>
@@ -1268,12 +1338,12 @@ export function MovimientosModule() {
           {/* MODO LOTE: Gestión de productos */}
           {modoLote && tipoMovimiento === 'entrada' && proveedorId && (
             <div style={{
-              background: '#F9FAFB',
-              border: '2px dashed #D1D5DB',
+              background: 'var(--bg-secondary)',
+              border: '2px dashed var(--border-primary)',
               borderRadius: '8px',
               padding: '16px'
             }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1F2937', marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>
                 Productos del pedido ({productosLote.length})
               </h3>
 
@@ -1291,9 +1361,11 @@ export function MovimientosModule() {
                     style={{
                       width: '100%',
                       padding: '8px 12px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
-                      fontSize: '13px'
+                      fontSize: '13px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)'
                     }}
                   />
                   {mostrarDropdownProductos && productosFiltrados.length > 0 && (
@@ -1304,11 +1376,11 @@ export function MovimientosModule() {
                       right: 0,
                       maxHeight: '200px',
                       overflowY: 'auto',
-                      background: 'white',
-                      border: '1px solid #D1D5DB',
+                      background: 'var(--card-bg)',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       marginTop: '4px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      boxShadow: 'var(--shadow-md)',
                       zIndex: 1000
                     }}>
                       {productosFiltrados.map((p) => (
@@ -1322,14 +1394,31 @@ export function MovimientosModule() {
                           style={{
                             padding: '8px 12px',
                             cursor: 'pointer',
-                            borderBottom: '1px solid #F3F4F6',
-                            fontSize: '13px'
+                            borderBottom: '1px solid var(--border-secondary)',
+                            fontSize: '13px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            background: 'var(--card-bg)',
+                            color: 'var(--text-primary)'
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#F9FAFB'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'var(--card-bg)'}
                         >
-                          <div style={{ fontWeight: 600 }}>{p.codigo} - {p.nombre}</div>
-                          <div style={{ fontSize: '11px', color: '#6B7280' }}>{p.tipo}</div>
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.codigo} - {p.nombre}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{p.tipo}</div>
+                          </div>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            background: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)',
+                            color: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-text)' : 'var(--badge-red-text)'
+                          }}>
+                            {p.stock_disponible || 0}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -1344,9 +1433,11 @@ export function MovimientosModule() {
                   style={{
                     width: '100px',
                     padding: '8px 12px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
-                    fontSize: '13px'
+                    fontSize: '13px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)'
                   }}
                 />
                 <button
@@ -1372,7 +1463,7 @@ export function MovimientosModule() {
                   }}
                   style={{
                     padding: '8px 16px',
-                    background: '#DC2626',
+                    background: 'var(--color-primary)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
@@ -1391,20 +1482,20 @@ export function MovimientosModule() {
                     <div
                       key={pl.producto_id}
                       style={{
-                        background: 'white',
+                        background: 'var(--card-bg)',
                         padding: '12px',
                         borderRadius: '6px',
-                        border: '1px solid #E5E7EB',
+                        border: '1px solid var(--border-primary)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center'
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '13px' }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>
                           {pl.producto?.codigo} - {pl.producto?.nombre}
                         </div>
-                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                           {pl.producto?.tipo} • {pl.cantidad} {pl.producto?.unidades_medida?.descripcion || 'und'}
                         </div>
                       </div>
@@ -1412,8 +1503,8 @@ export function MovimientosModule() {
                         onClick={() => setProductosLote(productosLote.filter((_, i) => i !== idx))}
                         style={{
                           padding: '6px 12px',
-                          background: '#FEE2E2',
-                          color: '#DC2626',
+                          background: 'var(--badge-red-bg)',
+                          color: 'var(--color-danger)',
                           border: 'none',
                           borderRadius: '4px',
                           cursor: 'pointer',
@@ -1427,7 +1518,7 @@ export function MovimientosModule() {
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: '13px', color: '#6B7280', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
                   No hay productos agregados
                 </p>
               )}
@@ -1437,7 +1528,7 @@ export function MovimientosModule() {
           {/* Proveedor para Salida/Uso (stock por proveedor) */}
           {(tipoMovimiento === 'salida' || tipoMovimiento === 'asignacion') && productoId && (
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                 Proveedor *
               </label>
               <select
@@ -1446,9 +1537,11 @@ export function MovimientosModule() {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #D1D5DB',
+                  border: '1px solid var(--border-primary)',
                   borderRadius: '8px',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  background: 'var(--input-bg)',
+                  color: 'var(--text-primary)'
                 }}
               >
                 <option value="">Seleccionar proveedor...</option>
@@ -1459,7 +1552,7 @@ export function MovimientosModule() {
                 ))}
               </select>
               {stockPorProveedor.length === 0 && productoId && (
-                <p style={{ fontSize: '12px', color: '#DC2626', marginTop: '4px', fontStyle: 'italic' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-danger)', marginTop: '4px', fontStyle: 'italic' }}>
                   No hay stock disponible de este producto
                 </p>
               )}
@@ -1469,7 +1562,7 @@ export function MovimientosModule() {
           {/* Cantidad (modo simple, no devolución) */}
           {!modoLote && tipoMovimiento !== 'devolucion' && (
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                 Cantidad *
               </label>
               <input
@@ -1480,9 +1573,11 @@ export function MovimientosModule() {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #D1D5DB',
+                  border: '1px solid var(--border-primary)',
                   borderRadius: '8px',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  background: 'var(--input-bg)',
+                  color: 'var(--text-primary)'
                 }}
               />
             </div>
@@ -1490,7 +1585,7 @@ export function MovimientosModule() {
 
           {/* Observaciones */}
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
               Observaciones {(tipoMovimiento === 'devolucion' && estadoRetorno !== 'operativa') ? '*' : ''}
             </label>
             <textarea
@@ -1501,10 +1596,12 @@ export function MovimientosModule() {
               style={{
                 width: '100%',
                 padding: '10px',
-                border: '1px solid #D1D5DB',
+                border: '1px solid var(--border-primary)',
                 borderRadius: '8px',
                 fontSize: '14px',
-                fontFamily: 'inherit'
+                fontFamily: 'inherit',
+                background: 'var(--input-bg)',
+                color: 'var(--text-primary)'
               }}
             />
           </div>
@@ -1515,8 +1612,8 @@ export function MovimientosModule() {
               onClick={resetForm}
               style={{
                 padding: '10px 24px',
-                background: '#F3F4F6',
-                color: '#374151',
+                background: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
                 border: 'none',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -1530,7 +1627,7 @@ export function MovimientosModule() {
               onClick={handleMovimiento}
               style={{
                 padding: '10px 24px',
-                background: '#DC2626',
+                background: 'var(--color-primary)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',

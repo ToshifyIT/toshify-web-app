@@ -268,7 +268,7 @@ export function ProveedoresModule() {
         accessorKey: 'razon_social',
         header: 'Razón Social',
         cell: ({ getValue }) => (
-          <span style={{ fontWeight: 600, color: '#1F2937' }}>
+          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
             {getValue() as string}
           </span>
         ),
@@ -284,7 +284,7 @@ export function ProveedoresModule() {
         accessorKey: 'numero_documento',
         header: 'Número Documento',
         cell: ({ getValue }) => (
-          <span style={{ fontWeight: 500, color: '#DC2626' }}>
+          <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
             {getValue() as string}
           </span>
         ),
@@ -294,7 +294,7 @@ export function ProveedoresModule() {
         header: 'Teléfono',
         cell: ({ getValue }) => {
           const value = getValue() as string
-          return value || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>-</span>
+          return value || <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>-</span>
         },
       },
       {
@@ -302,7 +302,7 @@ export function ProveedoresModule() {
         header: 'Email',
         cell: ({ getValue }) => {
           const value = getValue() as string
-          return value || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>-</span>
+          return value || <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>-</span>
         },
       },
       {
@@ -399,7 +399,7 @@ export function ProveedoresModule() {
           zIndex: 1000,
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--card-bg)',
             borderRadius: '12px',
             padding: '24px',
             width: '90%',
@@ -424,9 +424,11 @@ export function ProveedoresModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -442,9 +444,11 @@ export function ProveedoresModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   >
                     <option value="RUC">RUC</option>
@@ -465,9 +469,11 @@ export function ProveedoresModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   />
                 </div>
@@ -485,9 +491,11 @@ export function ProveedoresModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   />
                 </div>
@@ -503,9 +511,11 @@ export function ProveedoresModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   />
                 </div>
@@ -522,9 +532,11 @@ export function ProveedoresModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -541,9 +553,11 @@ export function ProveedoresModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -559,9 +573,11 @@ export function ProveedoresModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -575,7 +591,7 @@ export function ProveedoresModule() {
                 }}
                 style={{
                   padding: '10px 20px',
-                  background: '#F3F4F6',
+                  background: 'var(--bg-tertiary)',
                   border: 'none',
                   borderRadius: '6px',
                   cursor: 'pointer',
@@ -590,7 +606,7 @@ export function ProveedoresModule() {
                 disabled={!formData.razon_social || !formData.numero_documento}
                 style={{
                   padding: '10px 20px',
-                  background: formData.razon_social && formData.numero_documento ? '#DC2626' : '#D1D5DB',
+                  background: formData.razon_social && formData.numero_documento ? 'var(--color-primary)' : 'var(--border-primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -621,7 +637,7 @@ export function ProveedoresModule() {
           zIndex: 1000,
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--card-bg)',
             borderRadius: '12px',
             padding: '24px',
             width: '90%',
@@ -646,9 +662,11 @@ export function ProveedoresModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -664,9 +682,11 @@ export function ProveedoresModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   >
                     <option value="RUC">RUC</option>
@@ -687,9 +707,11 @@ export function ProveedoresModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   />
                 </div>
@@ -707,9 +729,11 @@ export function ProveedoresModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   />
                 </div>
@@ -725,9 +749,11 @@ export function ProveedoresModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   />
                 </div>
@@ -744,9 +770,11 @@ export function ProveedoresModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -763,9 +791,11 @@ export function ProveedoresModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -781,9 +811,11 @@ export function ProveedoresModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -797,7 +829,7 @@ export function ProveedoresModule() {
                 }}
                 style={{
                   padding: '10px 20px',
-                  background: '#F3F4F6',
+                  background: 'var(--bg-tertiary)',
                   border: 'none',
                   borderRadius: '6px',
                   cursor: 'pointer',
@@ -812,7 +844,7 @@ export function ProveedoresModule() {
                 disabled={!formData.razon_social || !formData.numero_documento}
                 style={{
                   padding: '10px 20px',
-                  background: formData.razon_social && formData.numero_documento ? '#10B981' : '#D1D5DB',
+                  background: formData.razon_social && formData.numero_documento ? 'var(--color-success)' : 'var(--border-primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -843,7 +875,7 @@ export function ProveedoresModule() {
           zIndex: 1000,
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--card-bg)',
             borderRadius: '12px',
             padding: '24px',
             width: '90%',
@@ -865,25 +897,25 @@ export function ProveedoresModule() {
                   gap: '8px',
                   marginBottom: '16px',
                   paddingBottom: '8px',
-                  borderBottom: '2px solid #DC2626'
+                  borderBottom: '2px solid var(--color-primary)'
                 }}>
-                  <FileText size={20} style={{ color: '#DC2626' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                  <FileText size={20} style={{ color: 'var(--color-primary)' }} />
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
                     Información General
                   </h3>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div style={{ gridColumn: '1 / -1' }}>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Razón Social</span>
-                    <span style={{ fontSize: '18px', fontWeight: 700, color: '#1F2937' }}>{selectedProveedor.razon_social}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Razón Social</span>
+                    <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>{selectedProveedor.razon_social}</span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Tipo de Documento</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Tipo de Documento</span>
                     <span
                       style={{
-                        background: '#DBEAFE',
-                        color: '#1E40AF',
+                        background: 'var(--badge-blue-bg)',
+                        color: 'var(--badge-blue-text)',
                         padding: '4px 12px',
                         borderRadius: '12px',
                         fontSize: '13px',
@@ -895,8 +927,8 @@ export function ProveedoresModule() {
                     </span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Número de Documento</span>
-                    <span style={{ fontSize: '16px', fontWeight: 600, color: '#DC2626' }}>{selectedProveedor.numero_documento}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Número de Documento</span>
+                    <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-primary)' }}>{selectedProveedor.numero_documento}</span>
                   </div>
                 </div>
               </div>
@@ -909,30 +941,30 @@ export function ProveedoresModule() {
                   gap: '8px',
                   marginBottom: '16px',
                   paddingBottom: '8px',
-                  borderBottom: '2px solid #DC2626'
+                  borderBottom: '2px solid var(--color-primary)'
                 }}>
-                  <Phone size={20} style={{ color: '#DC2626' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                  <Phone size={20} style={{ color: 'var(--color-primary)' }} />
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
                     Información de Contacto
                   </h3>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Teléfono</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Teléfono</span>
                     <span style={{ fontSize: '14px', fontWeight: 600 }}>
                       {selectedProveedor.telefono || '-'}
                     </span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Email</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Email</span>
                     <span style={{ fontSize: '14px', fontWeight: 600 }}>
                       {selectedProveedor.email || '-'}
                     </span>
                   </div>
                   {selectedProveedor.direccion && (
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Dirección</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Dirección</span>
                       <span style={{ fontSize: '14px' }}>{selectedProveedor.direccion}</span>
                     </div>
                   )}
@@ -948,10 +980,10 @@ export function ProveedoresModule() {
                     gap: '8px',
                     marginBottom: '16px',
                     paddingBottom: '8px',
-                    borderBottom: '2px solid #DC2626'
+                    borderBottom: '2px solid var(--color-primary)'
                   }}>
-                    <CreditCard size={20} style={{ color: '#DC2626' }} />
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                    <CreditCard size={20} style={{ color: 'var(--color-primary)' }} />
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
                       Información de Pago
                     </h3>
                   </div>
@@ -971,10 +1003,10 @@ export function ProveedoresModule() {
                     gap: '8px',
                     marginBottom: '16px',
                     paddingBottom: '8px',
-                    borderBottom: '2px solid #DC2626'
+                    borderBottom: '2px solid var(--color-primary)'
                   }}>
-                    <FileText size={20} style={{ color: '#DC2626' }} />
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                    <FileText size={20} style={{ color: 'var(--color-primary)' }} />
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
                       Observaciones
                     </h3>
                   </div>
@@ -993,21 +1025,21 @@ export function ProveedoresModule() {
                   gap: '8px',
                   marginBottom: '16px',
                   paddingBottom: '8px',
-                  borderBottom: '2px solid #DC2626'
+                  borderBottom: '2px solid var(--color-primary)'
                 }}>
-                  <Calendar size={20} style={{ color: '#DC2626' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                  <Calendar size={20} style={{ color: 'var(--color-primary)' }} />
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
                     Información de Registro
                   </h3>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Estado</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Estado</span>
                     <span
                       style={{
-                        background: selectedProveedor.activo ? '#D1FAE5' : '#FEE2E2',
-                        color: selectedProveedor.activo ? '#065F46' : '#991B1B',
+                        background: selectedProveedor.activo ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)',
+                        color: selectedProveedor.activo ? 'var(--badge-green-text)' : 'var(--badge-red-text)',
                         padding: '4px 12px',
                         borderRadius: '12px',
                         fontSize: '13px',
@@ -1019,13 +1051,13 @@ export function ProveedoresModule() {
                     </span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Creado</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Creado</span>
                     <span style={{ fontSize: '14px' }}>
                       {new Date(selectedProveedor.created_at).toLocaleString('es-AR')}
                     </span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Actualizado</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Actualizado</span>
                     <span style={{ fontSize: '14px' }}>
                       {new Date(selectedProveedor.updated_at).toLocaleString('es-AR')}
                     </span>
@@ -1039,7 +1071,7 @@ export function ProveedoresModule() {
                 onClick={() => setShowViewModal(false)}
                 style={{
                   padding: '10px 20px',
-                  background: '#3B82F6',
+                  background: 'var(--color-primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',

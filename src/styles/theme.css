@@ -229,3 +229,193 @@ body,
 .card-bg {
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
+
+/* ==========================================
+   DARK MODE - Global Overrides
+   Aplica contraste correcto en modo oscuro
+   ========================================== */
+
+/* Body y contenedores principales */
+[data-theme="dark"] body {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Inputs y selects - Alta especificidad */
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+[data-theme="dark"] input:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus {
+  border-color: var(--border-focus) !important;
+  box-shadow: var(--input-focus-shadow) !important;
+}
+
+/* Tablas - Alta especificidad para sobrescribir inline styles */
+[data-theme="dark"] table {
+  background-color: var(--card-bg) !important;
+}
+
+[data-theme="dark"] thead,
+[data-theme="dark"] thead tr,
+[data-theme="dark"] th {
+  background-color: var(--table-header-bg) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="dark"] tbody tr {
+  background-color: var(--card-bg) !important;
+}
+
+[data-theme="dark"] tbody tr:hover {
+  background-color: var(--table-row-hover) !important;
+}
+
+[data-theme="dark"] td {
+  color: var(--text-primary) !important;
+  border-color: var(--table-border) !important;
+}
+
+/* Headers y títulos */
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] h4,
+[data-theme="dark"] h5,
+[data-theme="dark"] h6 {
+  color: var(--text-primary) !important;
+}
+
+/* Párrafos y textos */
+[data-theme="dark"] p {
+  color: var(--text-secondary) !important;
+}
+
+/* Labels */
+[data-theme="dark"] label {
+  color: var(--text-primary) !important;
+}
+
+/* Divs con role de contenedor de contenido */
+[data-theme="dark"] main > div,
+[data-theme="dark"] section,
+[data-theme="dark"] article {
+  color: var(--text-primary);
+}
+
+/* SweetAlert2 Dark Mode - Prioridad alta */
+[data-theme="dark"] .swal2-popup {
+  background-color: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-title {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-html-container {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .swal2-html-container p,
+[data-theme="dark"] .swal2-html-container strong {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-input,
+[data-theme="dark"] .swal2-textarea,
+[data-theme="dark"] .swal2-select {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-validation-message {
+  background-color: var(--badge-red-bg) !important;
+  color: var(--badge-red-text) !important;
+}
+
+[data-theme="dark"] .swal2-input-label {
+  color: var(--text-secondary) !important;
+}
+
+/* Modales */
+[data-theme="dark"] .modal-overlay {
+  background-color: var(--bg-overlay) !important;
+}
+
+[data-theme="dark"] .modal-content {
+  background-color: var(--modal-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Scrollbars para navegadores webkit */
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 4px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ==========================================
+   CLASES DE UTILIDAD PARA TEMA OSCURO
+   Usar estas clases en los componentes
+   ========================================== */
+
+/* Fondos */
+.bg-card {
+  background-color: var(--card-bg);
+}
+
+.bg-surface {
+  background-color: var(--bg-secondary);
+}
+
+.bg-input {
+  background-color: var(--input-bg);
+}
+
+/* Textos */
+.text-heading {
+  color: var(--text-primary);
+}
+
+.text-body {
+  color: var(--text-secondary);
+}
+
+.text-muted {
+  color: var(--text-tertiary);
+}
+
+/* Bordes */
+.border-default {
+  border-color: var(--border-primary);
+}
+
+.border-subtle {
+  border-color: var(--border-secondary);
+}

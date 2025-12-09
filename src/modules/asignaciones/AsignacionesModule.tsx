@@ -253,9 +253,9 @@ export function AsignacionesModule() {
           .single()
 
         if (estadoEnUso && selectedAsignacion.vehiculo_id) {
-          await supabase
-            .from('vehiculos')
-            .update({ estado_id: estadoEnUso.id })
+          await (supabase
+            .from('vehiculos') as any)
+            .update({ estado_id: (estadoEnUso as any).id })
             .eq('id', selectedAsignacion.vehiculo_id)
         }
 

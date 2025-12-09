@@ -105,10 +105,10 @@ export function AsignacionesActivasModule() {
     <div style={{ padding: '24px' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#1F2937', marginBottom: '8px' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
           Asignaciones Activas
         </h1>
-        <p style={{ color: '#6B7280', fontSize: '14px' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
           Herramientas asignadas a vehículos
         </p>
       </div>
@@ -124,9 +124,11 @@ export function AsignacionesActivasModule() {
             width: '100%',
             maxWidth: '400px',
             padding: '10px 16px',
-            border: '1px solid #D1D5DB',
+            border: '1px solid var(--border-primary)',
             borderRadius: '8px',
-            fontSize: '14px'
+            fontSize: '14px',
+            background: 'var(--input-bg)',
+            color: 'var(--text-primary)'
           }}
         />
       </div>
@@ -134,27 +136,27 @@ export function AsignacionesActivasModule() {
       {/* Resumen */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         <div style={{
-          background: 'white',
+          background: 'var(--card-bg)',
           borderRadius: '12px',
           padding: '20px',
-          border: '1px solid #E5E7EB',
+          border: '1px solid var(--border-primary)',
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
               width: '48px',
               height: '48px',
-              background: '#DBEAFE',
+              background: 'var(--badge-blue-bg)',
               borderRadius: '12px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <Truck size={24} style={{ color: '#1E40AF' }} />
+              <Truck size={24} style={{ color: 'var(--badge-blue-text)' }} />
             </div>
             <div>
-              <p style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>Vehículos con asignaciones</p>
-              <p style={{ fontSize: '24px', fontWeight: 700, color: '#1F2937' }}>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Vehículos con asignaciones</p>
+              <p style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>
                 {Object.keys(porVehiculo).length}
               </p>
             </div>
@@ -162,27 +164,27 @@ export function AsignacionesActivasModule() {
         </div>
 
         <div style={{
-          background: 'white',
+          background: 'var(--card-bg)',
           borderRadius: '12px',
           padding: '20px',
-          border: '1px solid #E5E7EB',
+          border: '1px solid var(--border-primary)',
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
               width: '48px',
               height: '48px',
-              background: '#FEF3C7',
+              background: 'var(--badge-yellow-bg)',
               borderRadius: '12px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <Package size={24} style={{ color: '#D97706' }} />
+              <Package size={24} style={{ color: 'var(--badge-yellow-text)' }} />
             </div>
             <div>
-              <p style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>Total herramientas asignadas</p>
-              <p style={{ fontSize: '24px', fontWeight: 700, color: '#1F2937' }}>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Total herramientas asignadas</p>
+              <p style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>
                 {filteredData.reduce((sum, item) => sum + item.cantidad, 0)}
               </p>
             </div>
@@ -196,11 +198,11 @@ export function AsignacionesActivasModule() {
           <div
             key={vehiculoId}
             style={{
-              background: 'white',
+              background: 'var(--card-bg)',
               borderRadius: '12px',
               padding: '20px',
               boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              border: '1px solid #E5E7EB'
+              border: '1px solid var(--border-primary)'
             }}
           >
             {/* Header del Vehículo */}
@@ -210,25 +212,25 @@ export function AsignacionesActivasModule() {
               gap: '12px',
               marginBottom: '16px',
               paddingBottom: '16px',
-              borderBottom: '2px solid #E5E7EB'
+              borderBottom: '2px solid var(--border-primary)'
             }}>
               <div style={{
                 width: '40px',
                 height: '40px',
-                background: '#DC2626',
+                background: 'var(--color-primary)',
                 borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'white'
+                color: 'var(--card-bg)'
               }}>
                 <Truck size={20} />
               </div>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#1F2937', margin: 0 }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
                   {data.vehiculo_patente}
                 </h3>
-                <p style={{ fontSize: '13px', color: '#6B7280', margin: '4px 0 0 0' }}>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
                   {data.vehiculo_marca} {data.vehiculo_modelo} • {data.herramientas.length} herramientas asignadas
                 </p>
               </div>
@@ -238,34 +240,34 @@ export function AsignacionesActivasModule() {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#F9FAFB' }}>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                  <tr style={{ background: 'var(--table-header-bg)' }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       Código
                     </th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       Producto
                     </th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       Cantidad
                     </th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       Fecha Asignación
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.herramientas.map((item, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                      <td style={{ padding: '12px', fontSize: '14px', fontWeight: 600, color: '#DC2626' }}>
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                      <td style={{ padding: '12px', fontSize: '14px', fontWeight: 600, color: 'var(--color-primary)' }}>
                         {item.codigo}
                       </td>
-                      <td style={{ padding: '12px', fontSize: '14px', fontWeight: 500 }}>
+                      <td style={{ padding: '12px', fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
                         {item.producto}
                       </td>
-                      <td style={{ padding: '12px', fontSize: '16px', fontWeight: 700, textAlign: 'center' }}>
+                      <td style={{ padding: '12px', fontSize: '16px', fontWeight: 700, textAlign: 'center', color: 'var(--text-primary)' }}>
                         {item.cantidad}
                       </td>
-                      <td style={{ padding: '12px', fontSize: '14px', color: '#6B7280' }}>
+                      <td style={{ padding: '12px', fontSize: '14px', color: 'var(--text-secondary)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Calendar size={14} />
                           {new Date(item.fecha_asignacion).toLocaleDateString('es-CL')}
@@ -284,12 +286,12 @@ export function AsignacionesActivasModule() {
         <div style={{
           textAlign: 'center',
           padding: '60px 20px',
-          background: 'white',
+          background: 'var(--card-bg)',
           borderRadius: '12px',
-          border: '1px solid #E5E7EB'
+          border: '1px solid var(--border-primary)'
         }}>
-          <Package size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px' }} />
-          <p style={{ fontSize: '16px', fontWeight: 600, color: '#6B7280' }}>
+          <Package size={48} style={{ color: 'var(--border-primary)', margin: '0 auto 16px' }} />
+          <p style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-secondary)' }}>
             No hay herramientas asignadas actualmente
           </p>
         </div>

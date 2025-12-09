@@ -64,6 +64,10 @@ export function AprobacionesPendientesModule() {
   }
 
   const aprobarMovimiento = async (movimiento: MovimientoPendiente) => {
+    const vehiculoInfo = movimiento.vehiculo_patente
+      ? `<p><strong>Vehículo:</strong> ${movimiento.vehiculo_patente}</p>`
+      : ''
+
     const result = await Swal.fire({
       title: 'Aprobar Movimiento',
       html: `
@@ -71,6 +75,7 @@ export function AprobacionesPendientesModule() {
           <p><strong>Tipo:</strong> ${getTipoLabel(movimiento.tipo)}</p>
           <p><strong>Producto:</strong> ${movimiento.producto_nombre}</p>
           <p><strong>Cantidad:</strong> ${movimiento.cantidad}</p>
+          ${vehiculoInfo}
           <p><strong>Registrado por:</strong> ${movimiento.usuario_registrador_nombre}</p>
           ${movimiento.observaciones ? `<p><strong>Observaciones:</strong> ${movimiento.observaciones}</p>` : ''}
         </div>
@@ -114,6 +119,10 @@ export function AprobacionesPendientesModule() {
   }
 
   const rechazarMovimiento = async (movimiento: MovimientoPendiente) => {
+    const vehiculoInfo = movimiento.vehiculo_patente
+      ? `<p><strong>Vehículo:</strong> ${movimiento.vehiculo_patente}</p>`
+      : ''
+
     const { value: motivo } = await Swal.fire({
       title: 'Rechazar Movimiento',
       html: `
@@ -121,6 +130,7 @@ export function AprobacionesPendientesModule() {
           <p><strong>Tipo:</strong> ${getTipoLabel(movimiento.tipo)}</p>
           <p><strong>Producto:</strong> ${movimiento.producto_nombre}</p>
           <p><strong>Cantidad:</strong> ${movimiento.cantidad}</p>
+          ${vehiculoInfo}
           <p><strong>Registrado por:</strong> ${movimiento.usuario_registrador_nombre}</p>
         </div>
       `,
@@ -176,23 +186,21 @@ export function AprobacionesPendientesModule() {
   const verDetalles = (movimiento: MovimientoPendiente) => {
     let detallesHtml = `
       <div style="text-align: left;">
-        <p><strong>ID:</strong> ${movimiento.id}</p>
         <p><strong>Tipo:</strong> ${getTipoLabel(movimiento.tipo)}</p>
         <p><strong>Producto:</strong> ${movimiento.producto_nombre}</p>
-        <p><strong>Tipo de producto:</strong> ${movimiento.producto_tipo === 'herramienta' ? 'Herramienta' : 'Producto'}</p>
         <p><strong>Cantidad:</strong> ${movimiento.cantidad}</p>
     `
-
-    if (movimiento.proveedor_nombre) {
-      detallesHtml += `<p><strong>Proveedor:</strong> ${movimiento.proveedor_nombre}</p>`
-    }
 
     if (movimiento.vehiculo_patente) {
       detallesHtml += `<p><strong>Vehículo:</strong> ${movimiento.vehiculo_patente}</p>`
     }
 
+    if (movimiento.proveedor_nombre) {
+      detallesHtml += `<p><strong>Proveedor:</strong> ${movimiento.proveedor_nombre}</p>`
+    }
+
     if (movimiento.motivo_salida) {
-      detallesHtml += `<p><strong>Motivo salida:</strong> ${getMotivoSalidaLabel(movimiento.motivo_salida)}</p>`
+      detallesHtml += `<p><strong>Motivo:</strong> ${getMotivoSalidaLabel(movimiento.motivo_salida)}</p>`
     }
 
     if (movimiento.estado_retorno) {
@@ -283,7 +291,7 @@ export function AprobacionesPendientesModule() {
 
   if (!canApprove) {
     return (
-      <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
+      <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
         <Clock size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
         <h3>Acceso Restringido</h3>
         <p>Solo los usuarios con rol de Encargado o Admin pueden aprobar movimientos.</p>
@@ -310,15 +318,15 @@ export function AprobacionesPendientesModule() {
         .aprobaciones-title {
           font-size: 24px;
           font-weight: 700;
-          color: #1F2937;
+          color: var(--text-primary);
           display: flex;
           align-items: center;
           gap: 12px;
         }
 
         .pending-badge {
-          background: #FEF3C7;
-          color: #92400E;
+          background: var(--badge-yellow-bg);
+          color: var(--badge-yellow-text);
           padding: 4px 12px;
           border-radius: 16px;
           font-size: 14px;
@@ -333,10 +341,11 @@ export function AprobacionesPendientesModule() {
 
         .filter-select {
           padding: 8px 12px;
-          border: 1px solid #E5E7EB;
+          border: 1px solid var(--border-primary);
           border-radius: 8px;
           font-size: 14px;
-          background: white;
+          background: var(--input-bg);
+          color: var(--text-primary);
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -345,7 +354,8 @@ export function AprobacionesPendientesModule() {
 
         .filter-select select {
           border: none;
-          background: none;
+          background: var(--input-bg);
+          color: var(--text-primary);
           font-size: 14px;
           cursor: pointer;
           outline: none;
@@ -353,20 +363,20 @@ export function AprobacionesPendientesModule() {
 
         .refresh-btn {
           padding: 8px 16px;
-          background: #F3F4F6;
-          border: 1px solid #E5E7EB;
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-primary);
           border-radius: 8px;
           cursor: pointer;
           display: flex;
           align-items: center;
           gap: 8px;
           font-size: 14px;
-          color: #374151;
+          color: var(--text-primary);
           transition: all 0.2s;
         }
 
         .refresh-btn:hover {
-          background: #E5E7EB;
+          background: var(--border-primary);
         }
 
         .movimientos-grid {
@@ -375,8 +385,8 @@ export function AprobacionesPendientesModule() {
         }
 
         .movimiento-card {
-          background: white;
-          border: 1px solid #E5E7EB;
+          background: var(--card-bg);
+          border: 1px solid var(--border-primary);
           border-radius: 12px;
           padding: 20px;
           transition: all 0.2s;
@@ -404,7 +414,7 @@ export function AprobacionesPendientesModule() {
         }
 
         .movimiento-fecha {
-          color: #6B7280;
+          color: var(--text-secondary);
           font-size: 12px;
         }
 
@@ -428,21 +438,21 @@ export function AprobacionesPendientesModule() {
         .field-label {
           font-size: 11px;
           font-weight: 600;
-          color: #9CA3AF;
+          color: var(--text-tertiary);
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
 
         .field-value {
           font-size: 14px;
-          color: #1F2937;
+          color: var(--text-primary);
         }
 
         .movimiento-actions {
           display: flex;
           gap: 12px;
           padding-top: 16px;
-          border-top: 1px solid #F3F4F6;
+          border-top: 1px solid var(--bg-tertiary);
         }
 
         .action-btn {
@@ -467,16 +477,16 @@ export function AprobacionesPendientesModule() {
 
         .btn-aprobar {
           background: #10B981;
-          color: white;
+          color: var(--card-bg);
         }
 
         .btn-aprobar:hover:not(:disabled) {
-          background: #059669;
+          background: var(--color-success);
         }
 
         .btn-rechazar {
-          background: #FEE2E2;
-          color: #DC2626;
+          background: var(--badge-red-bg);
+          color: var(--color-primary);
         }
 
         .btn-rechazar:hover:not(:disabled) {
@@ -484,19 +494,19 @@ export function AprobacionesPendientesModule() {
         }
 
         .btn-detalles {
-          background: #F3F4F6;
-          color: #374151;
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
           flex: 0.5;
         }
 
         .btn-detalles:hover:not(:disabled) {
-          background: #E5E7EB;
+          background: var(--border-primary);
         }
 
         .empty-state {
           text-align: center;
           padding: 60px 20px;
-          color: #6B7280;
+          color: var(--text-secondary);
         }
 
         .empty-state svg {
@@ -507,7 +517,7 @@ export function AprobacionesPendientesModule() {
         .empty-state h3 {
           font-size: 18px;
           font-weight: 600;
-          color: #374151;
+          color: var(--text-primary);
           margin-bottom: 8px;
         }
 
@@ -521,7 +531,7 @@ export function AprobacionesPendientesModule() {
         .spinner {
           width: 40px;
           height: 40px;
-          border: 3px solid #E5E7EB;
+          border: 3px solid var(--border-primary);
           border-top-color: #3B82F6;
           border-radius: 50%;
           animation: spin 1s linear infinite;

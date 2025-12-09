@@ -204,6 +204,70 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           },
           permission_source: 'role_inherited' as const
         }))
+      } else {
+        // Para usuarios NO admin, cargar permisos del rol
+        const roleId = (profileData as any).role_id
+
+        if (roleId) {
+          // Cargar permisos de menús del rol
+          const { data: roleMenuPerms } = await supabase
+            .from('role_menu_permissions')
+            .select(`
+              can_view, can_create, can_edit, can_delete,
+              menus (id, name, label, route, order_index, is_active)
+            `)
+            .eq('role_id', roleId)
+            .eq('can_view', true)
+
+          // Cargar permisos de submenús del rol
+          const { data: roleSubmenuPerms } = await supabase
+            .from('role_submenu_permissions')
+            .select(`
+              can_view, can_create, can_edit, can_delete,
+              submenus (id, name, label, route, order_index, menu_id, is_active)
+            `)
+            .eq('role_id', roleId)
+            .eq('can_view', true)
+
+          // Convertir permisos de menús
+          menusData = (roleMenuPerms || [])
+            .filter((p: any) => p.menus?.is_active)
+            .map((p: any) => ({
+              id: p.menus.id,
+              name: p.menus.name,
+              label: p.menus.label,
+              route: p.menus.route,
+              order_index: p.menus.order_index || 0,
+              permissions: {
+                can_view: p.can_view || false,
+                can_create: p.can_create || false,
+                can_edit: p.can_edit || false,
+                can_delete: p.can_delete || false
+              },
+              permission_source: 'role_inherited' as const
+            }))
+
+          // Convertir permisos de submenús
+          submenusData = (roleSubmenuPerms || [])
+            .filter((p: any) => p.submenus?.is_active)
+            .map((p: any) => ({
+              id: p.submenus.id,
+              name: p.submenus.name,
+              label: p.submenus.label,
+              route: p.submenus.route,
+              order_index: p.submenus.order_index || 0,
+              menu_id: p.submenus.menu_id,
+              permissions: {
+                can_view: p.can_view || false,
+                can_create: p.can_create || false,
+                can_edit: p.can_edit || false,
+                can_delete: p.can_delete || false
+              },
+              permission_source: 'role_inherited' as const
+            }))
+
+          console.log('📋 Permisos de rol cargados - Menús:', menusData.length, 'Submenús:', submenusData.length)
+        }
       }
 
       setUserPermissions({

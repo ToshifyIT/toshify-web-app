@@ -290,6 +290,38 @@ export function ProductosModule() {
 
     if (result.isConfirmed) {
       try {
+        // Verificar si el producto está en uso en inventario
+        const { data: inventarioData } = await supabase
+          .from('inventario')
+          .select('id')
+          .eq('producto_id', id)
+          .limit(1)
+
+        if (inventarioData && inventarioData.length > 0) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'No se puede eliminar',
+            text: 'Este producto tiene movimientos de inventario asociados. Primero elimine los registros de inventario.',
+          })
+          return
+        }
+
+        // Verificar si está en pedidos
+        const { data: pedidosData } = await supabase
+          .from('pedido_items')
+          .select('id')
+          .eq('producto_id', id)
+          .limit(1)
+
+        if (pedidosData && pedidosData.length > 0) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'No se puede eliminar',
+            text: 'Este producto tiene pedidos asociados. Primero elimine los pedidos relacionados.',
+          })
+          return
+        }
+
         const { error } = await (supabase
           .from('productos') as any)
           .delete()
@@ -307,10 +339,15 @@ export function ProductosModule() {
         loadProductos()
       } catch (err: any) {
         console.error('Error eliminando producto:', err)
+        // Mensaje más amigable para errores de FK
+        let errorMessage = err.message || 'No se pudo eliminar el producto'
+        if (err.message?.includes('foreign key constraint')) {
+          errorMessage = 'No se puede eliminar el producto porque está siendo utilizado en otras tablas (inventario, pedidos, etc.)'
+        }
         Swal.fire({
           icon: 'error',
           title: 'Error',
-          text: err.message || 'No se pudo eliminar el producto',
+          text: errorMessage,
         })
       }
     }
@@ -414,7 +451,7 @@ export function ProductosModule() {
         accessorKey: 'codigo',
         header: 'Código',
         cell: ({ getValue }) => (
-          <span style={{ fontWeight: 600, color: '#DC2626' }}>
+          <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
             {getValue() as string}
           </span>
         ),
@@ -564,7 +601,7 @@ export function ProductosModule() {
           zIndex: 1000,
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--card-bg)',
             borderRadius: '12px',
             padding: '24px',
             width: '90%',
@@ -589,9 +626,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -607,9 +646,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -625,9 +666,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -642,9 +685,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 >
                   <option value="">Seleccionar...</option>
@@ -667,9 +712,11 @@ export function ProductosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   >
                     <option value="">Seleccionar...</option>
@@ -691,9 +738,11 @@ export function ProductosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   >
                     <option value="">Ninguna</option>
@@ -717,9 +766,11 @@ export function ProductosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   >
                     <option value="REPUESTOS">REPUESTOS</option>
@@ -739,9 +790,11 @@ export function ProductosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   />
                 </div>
@@ -758,9 +811,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -774,7 +829,7 @@ export function ProductosModule() {
                 }}
                 style={{
                   padding: '10px 20px',
-                  background: '#F3F4F6',
+                  background: 'var(--bg-tertiary)',
                   border: 'none',
                   borderRadius: '6px',
                   cursor: 'pointer',
@@ -789,7 +844,7 @@ export function ProductosModule() {
                 disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id}
                 style={{
                   padding: '10px 20px',
-                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id ? '#DC2626' : '#D1D5DB',
+                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id ? 'var(--color-primary)' : 'var(--border-primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -820,7 +875,7 @@ export function ProductosModule() {
           zIndex: 1000,
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--card-bg)',
             borderRadius: '12px',
             padding: '24px',
             width: '90%',
@@ -845,9 +900,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -863,9 +920,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -881,9 +940,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -898,9 +959,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 >
                   <option value="">Seleccionar...</option>
@@ -923,9 +986,11 @@ export function ProductosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   >
                     <option value="">Seleccionar...</option>
@@ -947,9 +1012,11 @@ export function ProductosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   >
                     <option value="">Ninguna</option>
@@ -973,9 +1040,11 @@ export function ProductosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   >
                     <option value="REPUESTOS">REPUESTOS</option>
@@ -995,9 +1064,11 @@ export function ProductosModule() {
                     style={{
                       width: '100%',
                       padding: '10px',
-                      border: '1px solid #D1D5DB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
                     }}
                   />
                 </div>
@@ -1014,9 +1085,11 @@ export function ProductosModule() {
                   style={{
                     width: '100%',
                     padding: '10px',
-                    border: '1px solid #D1D5DB',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </div>
@@ -1030,7 +1103,7 @@ export function ProductosModule() {
                 }}
                 style={{
                   padding: '10px 20px',
-                  background: '#F3F4F6',
+                  background: 'var(--bg-tertiary)',
                   border: 'none',
                   borderRadius: '6px',
                   cursor: 'pointer',
@@ -1045,7 +1118,7 @@ export function ProductosModule() {
                 disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id}
                 style={{
                   padding: '10px 20px',
-                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id ? '#10B981' : '#D1D5DB',
+                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id ? 'var(--color-success)' : 'var(--border-primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -1076,7 +1149,7 @@ export function ProductosModule() {
           zIndex: 1000,
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--card-bg)',
             borderRadius: '12px',
             padding: '24px',
             width: '90%',
@@ -1098,26 +1171,26 @@ export function ProductosModule() {
                   gap: '8px',
                   marginBottom: '16px',
                   paddingBottom: '8px',
-                  borderBottom: '2px solid #DC2626'
+                  borderBottom: '2px solid var(--color-primary)'
                 }}>
-                  <Package size={20} style={{ color: '#DC2626' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                  <Package size={20} style={{ color: 'var(--color-primary)' }} />
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
                     Información General
                   </h3>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Código</span>
-                    <span style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626' }}>{selectedProducto.codigo}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Código</span>
+                    <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)' }}>{selectedProducto.codigo}</span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Nombre</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Nombre</span>
                     <span style={{ fontSize: '16px', fontWeight: 600 }}>{selectedProducto.nombre}</span>
                   </div>
                   {selectedProducto.descripcion && (
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Descripción</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Descripción</span>
                       <span style={{ fontSize: '14px' }}>{selectedProducto.descripcion}</span>
                     </div>
                   )}
@@ -1132,17 +1205,17 @@ export function ProductosModule() {
                   gap: '8px',
                   marginBottom: '16px',
                   paddingBottom: '8px',
-                  borderBottom: '2px solid #DC2626'
+                  borderBottom: '2px solid var(--color-primary)'
                 }}>
-                  <Tag size={20} style={{ color: '#DC2626' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                  <Tag size={20} style={{ color: 'var(--color-primary)' }} />
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
                     Tipo de Producto
                   </h3>
                 </div>
 
                 <div style={{ display: 'grid', gap: '16px' }}>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Clasificación</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Clasificación</span>
                     {selectedProducto.tipo === 'HERRAMIENTAS' ? (
                       <span
                         style={{
@@ -1184,30 +1257,30 @@ export function ProductosModule() {
                   gap: '8px',
                   marginBottom: '16px',
                   paddingBottom: '8px',
-                  borderBottom: '2px solid #DC2626'
+                  borderBottom: '2px solid var(--color-primary)'
                 }}>
-                  <Info size={20} style={{ color: '#DC2626' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                  <Info size={20} style={{ color: 'var(--color-primary)' }} />
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
                     Detalles Adicionales
                   </h3>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Estado</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Estado</span>
                     <span style={{ fontSize: '14px', fontWeight: 600 }}>
                       {selectedProducto.productos_estados?.descripcion || 'N/A'}
                     </span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Unidad de Medida</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Unidad de Medida</span>
                     <span style={{ fontSize: '14px', fontWeight: 600 }}>
                       {selectedProducto.unidades_medida?.descripcion || 'N/A'}
                     </span>
                   </div>
                   {selectedProducto.categorias && (
                     <div>
-                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Categoría</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Categoría</span>
                       <span
                         style={{
                           background: '#DBEAFE',
@@ -1224,7 +1297,7 @@ export function ProductosModule() {
                     </div>
                   )}
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Tipo</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Tipo</span>
                     <span
                       style={{
                         background: selectedProducto.tipo === 'HERRAMIENTAS' ? '#DBEAFE' : '#FEF3C7',
@@ -1241,13 +1314,13 @@ export function ProductosModule() {
                   </div>
                   {selectedProducto.proveedor && (
                     <div>
-                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Marca</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Marca</span>
                       <span style={{ fontSize: '14px' }}>{selectedProducto.proveedor}</span>
                     </div>
                   )}
                   {selectedProducto.observacion && (
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Observación</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Observación</span>
                       <span style={{ fontSize: '14px' }}>{selectedProducto.observacion}</span>
                     </div>
                   )}
@@ -1255,39 +1328,39 @@ export function ProductosModule() {
 
                 {/* Stock por Proveedor */}
                 <div style={{ gridColumn: '1 / -1', marginTop: '16px' }}>
-                  <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px', fontWeight: 600 }}>
                     Stock por Proveedor
                   </span>
                   {loadingStock ? (
-                    <div style={{ textAlign: 'center', padding: '12px', color: '#6B7280', fontSize: '13px' }}>
+                    <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>
                       Cargando stock...
                     </div>
                   ) : stockPorProveedor.length === 0 ? (
                     <div style={{
-                      background: '#F3F4F6',
+                      background: 'var(--bg-tertiary)',
                       padding: '12px',
                       borderRadius: '8px',
                       textAlign: 'center',
-                      color: '#6B7280',
+                      color: 'var(--text-secondary)',
                       fontSize: '13px'
                     }}>
                       No hay stock registrado para este producto
                     </div>
                   ) : (
                     <div style={{
-                      border: '1px solid #E5E7EB',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '8px',
                       overflow: 'hidden'
                     }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
-                          <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                          <tr style={{ background: 'var(--table-header-bg)', borderBottom: '1px solid var(--border-primary)' }}>
                             <th style={{
                               padding: '10px 12px',
                               textAlign: 'left',
                               fontSize: '12px',
                               fontWeight: 700,
-                              color: '#374151',
+                              color: 'var(--text-secondary)',
                               textTransform: 'uppercase'
                             }}>
                               Proveedor
@@ -1297,7 +1370,7 @@ export function ProductosModule() {
                               textAlign: 'center',
                               fontSize: '12px',
                               fontWeight: 700,
-                              color: '#374151',
+                              color: 'var(--text-secondary)',
                               textTransform: 'uppercase'
                             }}>
                               Estado
@@ -1307,7 +1380,7 @@ export function ProductosModule() {
                               textAlign: 'right',
                               fontSize: '12px',
                               fontWeight: 700,
-                              color: '#374151',
+                              color: 'var(--text-secondary)',
                               textTransform: 'uppercase'
                             }}>
                               Cantidad
@@ -1319,16 +1392,16 @@ export function ProductosModule() {
                             <tr
                               key={`${stock.proveedor_id}-${stock.estado}-${idx}`}
                               style={{
-                                borderBottom: idx < stockPorProveedor.length - 1 ? '1px solid #E5E7EB' : 'none',
-                                background: 'white'
+                                borderBottom: idx < stockPorProveedor.length - 1 ? '1px solid var(--border-primary)' : 'none',
+                                background: 'var(--card-bg)'
                               }}
                             >
-                              <td style={{ padding: '10px 12px', fontSize: '13px', color: '#1F2937' }}>
+                              <td style={{ padding: '10px 12px', fontSize: '13px', color: 'var(--text-primary)' }}>
                                 {stock.proveedor_nombre}
                               </td>
                               <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                 <span style={{
-                                  background: stock.estado === 'disponible' ? '#D1FAE5' : '#FEF3C7',
+                                  background: stock.estado === 'disponible' ? 'var(--badge-green-bg)' : '#FEF3C7',
                                   color: stock.estado === 'disponible' ? '#065F46' : '#92400E',
                                   padding: '3px 10px',
                                   borderRadius: '10px',
@@ -1344,18 +1417,18 @@ export function ProductosModule() {
                                 textAlign: 'right',
                                 fontSize: '14px',
                                 fontWeight: 600,
-                                color: '#1F2937'
+                                color: 'var(--text-primary)'
                               }}>
                                 {stock.cantidad} {selectedProducto.unidades_medida?.descripcion || ''}
                               </td>
                             </tr>
                           ))}
-                          <tr style={{ background: '#F9FAFB', borderTop: '2px solid #DC2626' }}>
+                          <tr style={{ background: 'var(--table-header-bg)', borderTop: '2px solid var(--color-primary)' }}>
                             <td colSpan={2} style={{
                               padding: '10px 12px',
                               fontSize: '13px',
                               fontWeight: 700,
-                              color: '#DC2626',
+                              color: 'var(--color-primary)',
                               textAlign: 'right'
                             }}>
                               TOTAL:
@@ -1365,7 +1438,7 @@ export function ProductosModule() {
                               textAlign: 'right',
                               fontSize: '15px',
                               fontWeight: 700,
-                              color: '#DC2626'
+                              color: 'var(--color-primary)'
                             }}>
                               {stockPorProveedor.reduce((sum, stock) => sum + stock.cantidad, 0)} {selectedProducto.unidades_medida?.descripcion || ''}
                             </td>
@@ -1385,23 +1458,23 @@ export function ProductosModule() {
                   gap: '8px',
                   marginBottom: '16px',
                   paddingBottom: '8px',
-                  borderBottom: '2px solid #DC2626'
+                  borderBottom: '2px solid var(--color-primary)'
                 }}>
-                  <Calendar size={20} style={{ color: '#DC2626' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                  <Calendar size={20} style={{ color: 'var(--color-primary)' }} />
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
                     Información de Registro
                   </h3>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Creado</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Creado</span>
                     <span style={{ fontSize: '14px' }}>
                       {new Date(selectedProducto.created_at).toLocaleString('es-CL')}
                     </span>
                   </div>
                   <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>Actualizado</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Actualizado</span>
                     <span style={{ fontSize: '14px' }}>
                       {new Date(selectedProducto.updated_at).toLocaleString('es-CL')}
                     </span>
@@ -1438,9 +1511,9 @@ export function ProductosModule() {
           gap: 8px;
           font-size: 16px;
           font-weight: 700;
-          color: #1F2937;
+          color: var(--text-primary);
           padding-bottom: 12px;
-          border-bottom: 2px solid #E5E7EB;
+          border-bottom: 2px solid var(--border-primary);
         }
 
         .detail-item {
@@ -1451,13 +1524,13 @@ export function ProductosModule() {
 
         .detail-label {
           font-size: 12px;
-          color: #6B7280;
+          color: var(--text-secondary);
           font-weight: 600;
         }
 
         .detail-value {
           font-size: 14px;
-          color: #1F2937;
+          color: var(--text-primary);
         }
       `}</style>
     </div>

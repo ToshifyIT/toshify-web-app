@@ -105,7 +105,7 @@ export function AsignacionesActivasModule() {
         icon: 'error',
         title: 'Error',
         text: 'No se pudieron cargar las asignaciones activas',
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: 'var(--color-primary)'
       })
     } finally {
       setLoading(false)
@@ -153,7 +153,7 @@ export function AsignacionesActivasModule() {
         accessorKey: 'codigo',
         header: 'Número',
         cell: ({ getValue }) => (
-          <span style={{ fontWeight: 600, color: '#E63946' }}>
+          <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
             {getValue() as string}
           </span>
         ),
@@ -166,10 +166,10 @@ export function AsignacionesActivasModule() {
           const vehiculo = row.original.vehiculos
           return vehiculo ? (
             <div>
-              <div style={{ fontWeight: 600, color: '#1F2937' }}>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                 {vehiculo.patente}
               </div>
-              <div style={{ fontSize: '12px', color: '#6B7280' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                 {vehiculo.marca} {vehiculo.modelo} ({vehiculo.anio})
               </div>
             </div>
@@ -219,7 +219,7 @@ export function AsignacionesActivasModule() {
           }
 
           return (
-            <span style={{ color: '#9CA3AF', fontSize: '13px' }}>Sin conductor</span>
+            <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>Sin conductor</span>
           )
         },
         enableSorting: false,
@@ -280,7 +280,7 @@ export function AsignacionesActivasModule() {
       <style>{`
         .modal-header {
           padding: 24px 32px;
-          border-bottom: 1px solid #E5E7EB;
+          border-bottom: 1px solid var(--border-primary);
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -293,10 +293,10 @@ export function AsignacionesActivasModule() {
         .asignacion-section-title {
           font-size: 16px;
           font-weight: 700;
-          color: #1F2937;
+          color: var(--text-primary);
           margin-bottom: 16px;
           padding-bottom: 8px;
-          border-bottom: 2px solid #E63946;
+          border-bottom: 2px solid var(--color-primary);
           display: flex;
           align-items: center;
           gap: 8px;
@@ -304,13 +304,13 @@ export function AsignacionesActivasModule() {
 
         .detail-value {
           font-size: 15px;
-          color: #1F2937;
+          color: var(--text-primary);
           font-weight: 500;
         }
 
         .conductor-card {
-          background: #F9FAFB;
-          border: 1px solid #E5E7EB;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-primary);
           border-radius: 8px;
           padding: 16px;
           margin-bottom: 12px;
@@ -318,9 +318,9 @@ export function AsignacionesActivasModule() {
 
         .btn-secondary {
           padding: 10px 20px;
-          background: white;
-          color: #6B7280;
-          border: 1px solid #E5E7EB;
+          background: var(--card-bg);
+          color: var(--text-secondary);
+          border: 1px solid var(--border-primary);
           border-radius: 8px;
           font-size: 14px;
           font-weight: 600;
@@ -329,7 +329,7 @@ export function AsignacionesActivasModule() {
         }
 
         .btn-secondary:hover {
-          background: #F9FAFB;
+          background: var(--bg-secondary);
         }
 
         .status-badge {
@@ -343,18 +343,18 @@ export function AsignacionesActivasModule() {
         }
 
         .status-active {
-          background: #D1FAE5;
-          color: #065F46;
+          background: var(--badge-green-bg);
+          color: var(--color-success);
         }
 
         .status-confirmed {
-          background: #DBEAFE;
-          color: #1E40AF;
+          background: var(--badge-blue-bg);
+          color: var(--badge-blue-text);
         }
 
         .sort-indicator {
           margin-left: 8px;
-          color: #9CA3AF;
+          color: var(--text-tertiary);
           font-size: 14px;
         }
       `}</style>
@@ -383,7 +383,7 @@ export function AsignacionesActivasModule() {
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#1F2937' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>
                 Detalles de la Asignación
               </h2>
             </div>
@@ -397,7 +397,7 @@ export function AsignacionesActivasModule() {
               <div className="details-grid">
                 <div className="detail-item">
                   <span className="detail-label">Número de Asignación</span>
-                  <span className="detail-value" style={{ color: '#E63946', fontWeight: 700 }}>
+                  <span className="detail-value" style={{ color: 'var(--color-primary)', fontWeight: 700 }}>
                     {selectedAsignacion.codigo}
                   </span>
                 </div>
@@ -449,8 +449,8 @@ export function AsignacionesActivasModule() {
               </div>
               {selectedAsignacion.vehiculos ? (
                 <div style={{
-                  background: '#F0F9FF',
-                  border: '1px solid #BAE6FD',
+                  background: 'var(--badge-blue-bg)',
+                  border: '1px solid var(--border-primary)',
                   borderRadius: '8px',
                   padding: '20px',
                   marginBottom: '24px'
@@ -483,7 +483,7 @@ export function AsignacionesActivasModule() {
                   </div>
                 </div>
               ) : (
-                <p style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No hay información del vehículo</p>
+                <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No hay información del vehículo</p>
               )}
 
               {/* Conductores Asignados */}
@@ -498,10 +498,10 @@ export function AsignacionesActivasModule() {
                       <div key={idx} className="conductor-card">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
                           <div>
-                            <div style={{ fontSize: '16px', fontWeight: 700, color: '#1F2937', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
                               {asigConductor.conductores.nombres} {asigConductor.conductores.apellidos}
                             </div>
-                            <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                               Licencia: {asigConductor.conductores.numero_licencia}
                             </div>
                           </div>
@@ -529,7 +529,7 @@ export function AsignacionesActivasModule() {
                           </div>
                           <div className="detail-item">
                             <span className="detail-label">Estado</span>
-                            <span className="detail-value" style={{ fontSize: '14px', color: '#E63946', fontWeight: 700 }}>
+                            <span className="detail-value" style={{ fontSize: '14px', color: 'var(--color-primary)', fontWeight: 700 }}>
                               {asigConductor.estado || 'NULL'}
                             </span>
                           </div>
@@ -538,7 +538,7 @@ export function AsignacionesActivasModule() {
                     ))}
                 </div>
               ) : (
-                <p style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No hay conductores asignados actualmente</p>
+                <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No hay conductores asignados actualmente</p>
               )}
             </div>
 

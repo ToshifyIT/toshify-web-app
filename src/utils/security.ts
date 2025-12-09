@@ -249,7 +249,7 @@ class RateLimiter {
 }
 
 // Instancia global de rate limiter
-export const rateLimiter = new RateLimiter(10, 60000) // 10 intentos por minuto
+export const rateLimiter = new RateLimiter(60, 60000) // 60 intentos por minuto
 
 // Limpiar rate limiter cada 5 minutos
 if (typeof window !== 'undefined') {

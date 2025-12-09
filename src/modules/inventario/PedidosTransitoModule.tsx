@@ -320,9 +320,9 @@ export function PedidosTransitoModule() {
 
   const getEstadoBadge = (estado: string) => {
     const estilos: Record<string, { bg: string; color: string; label: string }> = {
-      en_transito: { bg: '#FEF3C7', color: '#D97706', label: 'En Tránsito' },
-      recibido_parcial: { bg: '#DBEAFE', color: '#1E40AF', label: 'Recibido Parcial' },
-      pendiente: { bg: '#F3F4F6', color: '#6B7280', label: 'Pendiente' }
+      en_transito: { bg: 'var(--badge-yellow-bg)', color: 'var(--badge-yellow-text)', label: 'En Tránsito' },
+      recibido_parcial: { bg: 'var(--badge-blue-bg)', color: 'var(--badge-blue-text)', label: 'Recibido Parcial' },
+      pendiente: { bg: 'var(--badge-gray-bg)', color: 'var(--badge-gray-text)', label: 'Pendiente' }
     }
     const estilo = estilos[estado] || estilos.pendiente
 
@@ -377,16 +377,16 @@ export function PedidosTransitoModule() {
     <div style={{ padding: '24px' }}>
       {/* Header */}
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#1F2937', marginBottom: '8px' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
           Productos en Tránsito
         </h1>
-        <p style={{ color: '#6B7280', fontSize: '14px' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
           Confirma la recepción de productos para agregarlos al inventario
         </p>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid #E5E7EB', paddingBottom: '0' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid var(--border-primary)', paddingBottom: '0' }}>
         <button
           onClick={() => setActiveTab('entradas')}
           style={{
@@ -396,8 +396,8 @@ export function PedidosTransitoModule() {
             fontSize: '14px',
             fontWeight: 600,
             cursor: 'pointer',
-            color: activeTab === 'entradas' ? '#DC2626' : '#6B7280',
-            borderBottom: activeTab === 'entradas' ? '2px solid #DC2626' : '2px solid transparent',
+            color: activeTab === 'entradas' ? 'var(--color-primary)' : 'var(--text-secondary)',
+            borderBottom: activeTab === 'entradas' ? '2px solid var(--color-primary)' : '2px solid transparent',
             marginBottom: '-1px',
             display: 'flex',
             alignItems: 'center',
@@ -408,8 +408,8 @@ export function PedidosTransitoModule() {
           Entradas Simples
           {entradasSimples.length > 0 && (
             <span style={{
-              background: '#FEE2E2',
-              color: '#DC2626',
+              background: 'var(--badge-red-bg)',
+              color: 'var(--color-primary)',
               padding: '2px 8px',
               borderRadius: '10px',
               fontSize: '12px',
@@ -428,8 +428,8 @@ export function PedidosTransitoModule() {
             fontSize: '14px',
             fontWeight: 600,
             cursor: 'pointer',
-            color: activeTab === 'pedidos' ? '#DC2626' : '#6B7280',
-            borderBottom: activeTab === 'pedidos' ? '2px solid #DC2626' : '2px solid transparent',
+            color: activeTab === 'pedidos' ? 'var(--color-primary)' : 'var(--text-secondary)',
+            borderBottom: activeTab === 'pedidos' ? '2px solid var(--color-primary)' : '2px solid transparent',
             marginBottom: '-1px',
             display: 'flex',
             alignItems: 'center',
@@ -440,8 +440,8 @@ export function PedidosTransitoModule() {
           Pedidos por Lote
           {pedidos.length > 0 && (
             <span style={{
-              background: '#FEE2E2',
-              color: '#DC2626',
+              background: 'var(--badge-red-bg)',
+              color: 'var(--color-primary)',
               padding: '2px 8px',
               borderRadius: '10px',
               fontSize: '12px',
@@ -462,7 +462,7 @@ export function PedidosTransitoModule() {
             left: '12px',
             top: '50%',
             transform: 'translateY(-50%)',
-            color: '#9CA3AF'
+            color: 'var(--text-tertiary)'
           }}
         />
         <input
@@ -473,9 +473,11 @@ export function PedidosTransitoModule() {
           style={{
             width: '100%',
             padding: '10px 10px 10px 40px',
-            border: '1px solid #D1D5DB',
+            border: '1px solid var(--border-primary)',
             borderRadius: '8px',
-            fontSize: '14px'
+            fontSize: '14px',
+            background: 'var(--input-bg)',
+            color: 'var(--text-primary)'
           }}
         />
       </div>
@@ -487,75 +489,75 @@ export function PedidosTransitoModule() {
             <div style={{
               textAlign: 'center',
               padding: '60px 20px',
-              background: 'white',
+              background: 'var(--card-bg)',
               borderRadius: '12px',
-              border: '1px solid #E5E7EB'
+              border: '1px solid var(--border-primary)'
             }}>
-              <ArrowDownCircle size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px' }} />
-              <p style={{ fontSize: '16px', fontWeight: 600, color: '#6B7280' }}>
+              <ArrowDownCircle size={48} style={{ color: 'var(--text-tertiary)', margin: '0 auto 16px' }} />
+              <p style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 No hay entradas en tránsito
               </p>
-              <p style={{ fontSize: '14px', color: '#9CA3AF', marginTop: '8px' }}>
+              <p style={{ fontSize: '14px', color: 'var(--text-tertiary)', marginTop: '8px' }}>
                 Las entradas simples pendientes de confirmar aparecerán aquí
               </p>
             </div>
           ) : (
             <div style={{
-              background: 'white',
+              background: 'var(--card-bg)',
               borderRadius: '12px',
-              border: '1px solid #E5E7EB',
+              border: '1px solid var(--border-primary)',
               overflow: 'hidden'
             }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#F9FAFB', borderBottom: '2px solid #E5E7EB' }}>
-                    <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                  <tr style={{ background: 'var(--table-header-bg)', borderBottom: '2px solid var(--border-primary)' }}>
+                    <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       Producto
                     </th>
-                    <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       Proveedor
                     </th>
-                    <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       Cantidad
                     </th>
-                    <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       Fecha
                     </th>
-                    <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       Acción
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {entradasFiltradas.map((entrada) => (
-                    <tr key={entrada.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
+                    <tr key={entrada.id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
                       <td style={{ padding: '14px 16px' }}>
-                        <div style={{ fontWeight: 600, color: '#DC2626', fontSize: '14px' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '14px' }}>
                           {entrada.producto_codigo}
                         </div>
-                        <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                           {entrada.producto_nombre}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                           {entrada.producto_tipo}
                         </div>
                       </td>
-                      <td style={{ padding: '14px 16px', fontSize: '14px', color: '#374151' }}>
+                      <td style={{ padding: '14px 16px', fontSize: '14px', color: 'var(--text-primary)' }}>
                         {entrada.proveedor_nombre}
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                         <span style={{
                           fontSize: '16px',
                           fontWeight: 700,
-                          color: '#D97706',
-                          background: '#FEF3C7',
+                          color: 'var(--badge-yellow-text)',
+                          background: 'var(--badge-yellow-bg)',
                           padding: '4px 12px',
                           borderRadius: '8px'
                         }}>
                           {entrada.cantidad}
                         </span>
                       </td>
-                      <td style={{ padding: '14px 16px', textAlign: 'center', fontSize: '13px', color: '#6B7280' }}>
+                      <td style={{ padding: '14px 16px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
                         {new Date(entrada.created_at).toLocaleDateString('es-CL')}
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'center' }}>
@@ -564,7 +566,7 @@ export function PedidosTransitoModule() {
                           disabled={processingItem === entrada.id}
                           style={{
                             padding: '8px 16px',
-                            background: '#059669',
+                            background: 'var(--color-success)',
                             color: 'white',
                             border: 'none',
                             borderRadius: '6px',
@@ -595,15 +597,15 @@ export function PedidosTransitoModule() {
         <div style={{
           textAlign: 'center',
           padding: '60px 20px',
-          background: 'white',
+          background: 'var(--card-bg)',
           borderRadius: '12px',
-          border: '1px solid #E5E7EB'
+          border: '1px solid var(--border-primary)'
         }}>
-          <Truck size={48} style={{ color: '#D1D5DB', margin: '0 auto 16px' }} />
-          <p style={{ fontSize: '16px', fontWeight: 600, color: '#6B7280' }}>
+          <Truck size={48} style={{ color: 'var(--text-tertiary)', margin: '0 auto 16px' }} />
+          <p style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-secondary)' }}>
             No hay pedidos en tránsito
           </p>
-          <p style={{ fontSize: '14px', color: '#9CA3AF', marginTop: '8px' }}>
+          <p style={{ fontSize: '14px', color: 'var(--text-tertiary)', marginTop: '8px' }}>
             Los pedidos con productos pendientes de recepción aparecerán aquí
           </p>
         </div>
@@ -613,11 +615,11 @@ export function PedidosTransitoModule() {
             <div
               key={pedido.pedido_id}
               style={{
-                background: 'white',
+                background: 'var(--card-bg)',
                 borderRadius: '12px',
-                border: '1px solid #E5E7EB',
+                border: '1px solid var(--border-primary)',
                 overflow: 'hidden',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                boxShadow: 'var(--shadow-sm)'
               }}
             >
               {/* Cabecera del pedido */}
@@ -629,15 +631,15 @@ export function PedidosTransitoModule() {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   cursor: 'pointer',
-                  background: '#F9FAFB',
-                  borderBottom: expandedPedidos.has(pedido.pedido_id) ? '1px solid #E5E7EB' : 'none'
+                  background: 'var(--table-header-bg)',
+                  borderBottom: expandedPedidos.has(pedido.pedido_id) ? '1px solid var(--border-primary)' : 'none'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <div style={{
                     width: '40px',
                     height: '40px',
-                    background: '#DC2626',
+                    background: 'var(--color-primary)',
                     borderRadius: '8px',
                     display: 'flex',
                     alignItems: 'center',
@@ -646,10 +648,10 @@ export function PedidosTransitoModule() {
                     <Package size={20} color="white" />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: '16px', color: '#1F2937' }}>
+                    <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>
                       {pedido.numero_pedido}
                     </div>
-                    <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                       {pedido.proveedor_nombre}
                     </div>
                   </div>
@@ -657,18 +659,18 @@ export function PedidosTransitoModule() {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6B7280' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                       <Calendar size={14} />
                       {new Date(pedido.fecha_pedido).toLocaleDateString('es-CL')}
                     </div>
                     {pedido.fecha_estimada_llegada && (
-                      <div style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '2px' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                         Est. llegada: {new Date(pedido.fecha_estimada_llegada).toLocaleDateString('es-CL')}
                       </div>
                     )}
                   </div>
                   {getEstadoBadge(pedido.estado_pedido)}
-                  <div style={{ color: '#6B7280', marginLeft: '8px' }}>
+                  <div style={{ color: 'var(--text-secondary)', marginLeft: '8px' }}>
                     {expandedPedidos.has(pedido.pedido_id) ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                   </div>
                 </div>
@@ -679,23 +681,23 @@ export function PedidosTransitoModule() {
                 <div style={{ padding: '16px 20px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ borderBottom: '2px solid #E5E7EB' }}>
-                        <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                      <tr style={{ borderBottom: '2px solid var(--border-primary)' }}>
+                        <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                           Producto
                         </th>
-                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                           Pedido
                         </th>
-                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                           Recibido
                         </th>
-                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                           Pendiente
                         </th>
-                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                           Estado
                         </th>
-                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>
+                        <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                           Acción
                         </th>
                       </tr>
@@ -704,23 +706,23 @@ export function PedidosTransitoModule() {
                       {pedido.items.map((item) => (
                         <tr
                           key={item.item_id}
-                          style={{ borderBottom: '1px solid #E5E7EB' }}
+                          style={{ borderBottom: '1px solid var(--border-primary)' }}
                         >
                           <td style={{ padding: '12px 10px' }}>
-                            <div style={{ fontWeight: 600, color: '#DC2626', fontSize: '14px' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '14px' }}>
                               {item.producto_codigo}
                             </div>
-                            <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                               {item.producto_nombre}
                             </div>
                           </td>
-                          <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', fontWeight: 600 }}>
+                          <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                             {item.cantidad_pedida}
                           </td>
-                          <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: '#059669', fontWeight: 600 }}>
+                          <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: 'var(--color-success)', fontWeight: 600 }}>
                             {item.cantidad_recibida}
                           </td>
-                          <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: '#D97706', fontWeight: 600 }}>
+                          <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '14px', color: 'var(--color-warning)', fontWeight: 600 }}>
                             {item.cantidad_pendiente}
                           </td>
                           <td style={{ padding: '12px 10px', textAlign: 'center' }}>
@@ -733,7 +735,7 @@ export function PedidosTransitoModule() {
                                 disabled={processingItem === item.item_id}
                                 style={{
                                   padding: '6px 12px',
-                                  background: '#059669',
+                                  background: 'var(--color-success)',
                                   color: 'white',
                                   border: 'none',
                                   borderRadius: '6px',
@@ -752,8 +754,8 @@ export function PedidosTransitoModule() {
                             ) : (
                               <span style={{
                                 padding: '6px 12px',
-                                background: '#D1FAE5',
-                                color: '#059669',
+                                background: 'var(--badge-green-bg)',
+                                color: 'var(--badge-green-text)',
                                 borderRadius: '6px',
                                 fontSize: '12px',
                                 fontWeight: 600
@@ -771,12 +773,13 @@ export function PedidosTransitoModule() {
                     <div style={{
                       marginTop: '12px',
                       padding: '12px',
-                      background: '#F9FAFB',
+                      background: 'var(--bg-secondary)',
                       borderRadius: '6px',
                       fontSize: '13px',
-                      color: '#6B7280'
+                      color: 'var(--text-secondary)',
+                      border: '1px solid var(--border-secondary)'
                     }}>
-                      <strong>Observaciones:</strong> {pedido.observaciones}
+                      <strong style={{ color: 'var(--text-primary)' }}>Observaciones:</strong> {pedido.observaciones}
                     </div>
                   )}
                 </div>
