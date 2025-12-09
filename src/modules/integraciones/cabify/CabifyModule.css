@@ -853,10 +853,29 @@
     font-size: 14px;
   }
 
+  .cabify-period-filter {
+    padding: 2px;
+    width: 100%;
+  }
+
+  .cabify-filter-btn {
+    padding: 10px 8px; /* Touch-friendly - 44px min tap target */
+    font-size: 12px;
+    flex: 1;
+    justify-content: center;
+  }
+
   .cabify-info-card {
-    padding: 8px 10px;
-    font-size: 11px;
+    padding: 10px 12px;
+    font-size: 12px;
     margin-bottom: 8px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .cabify-info-card .auto-sync {
+    margin-left: 0;
   }
 
   .cabify-search-bar {

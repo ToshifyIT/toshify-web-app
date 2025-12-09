@@ -269,18 +269,18 @@ class CabifyHistoricalService {
 
   /**
    * Consultar datos históricos de la BD
+   * Los datos se almacenan por día, esta función los agrega por conductor
    */
   private async queryHistorical(
     startDate: string,
-    _endDate: string
+    endDate: string
   ): Promise<DriverHistoricalData[]> {
-    // Consulta flexible: buscar por fecha_inicio únicamente
-    // Esto permite usar datos sincronizados sin requerir fecha_fin exacta
+    // Consulta todos los registros dentro del rango de fechas
     const { data, error } = await supabase
       .from('cabify_historico')
       .select('*')
-      .eq('fecha_inicio', startDate)
-      .gte('fecha_fin', startDate) // fecha_fin >= startDate (datos válidos)
+      .gte('fecha_inicio', startDate)
+      .lte('fecha_inicio', endDate)
       .order('ganancia_total', { ascending: false })
 
     if (error) {
@@ -293,44 +293,144 @@ class CabifyHistoricalService {
       return []
     }
 
-    console.log(`📦 ${data.length} registros históricos encontrados`)
+    console.log(`📦 ${data.length} registros históricos encontrados (múltiples días)`)
 
-    // Mapear a formato estándar
-    return (data as any[]).map((record: any) => ({
-      id: record.cabify_driver_id,
-      companyId: record.cabify_company_id,
-      companyName: record.cabify_company_id,
-      name: record.nombre || '',
-      surname: record.apellido || '',
-      email: record.email || '',
-      nationalIdNumber: record.dni || '',
-      mobileNum: record.telefono_numero || '',
-      mobileCc: record.telefono_codigo || '',
-      driverLicense: record.licencia || '',
-      assetId: record.vehiculo_id || '',
-      vehicleMake: record.vehiculo_marca || '',
-      vehicleModel: record.vehiculo_modelo || '',
-      vehicleRegPlate: record.vehiculo_patente || '',
-      vehiculo: record.vehiculo_completo || '',
-      score: Number(record.score || 0),
-      viajesAceptados: record.viajes_aceptados || 0,
-      viajesPerdidos: record.viajes_perdidos || 0,
-      viajesOfrecidos: record.viajes_ofrecidos || 0,
-      viajesFinalizados: record.viajes_finalizados || 0,
-      viajesRechazados: record.viajes_rechazados || 0,
-      tasaAceptacion: Number(record.tasa_aceptacion || 0),
-      horasConectadas: Number(record.horas_conectadas || 0),
-      horasConectadasFormato: record.horas_conectadas_formato || '0h 0m',
-      tasaOcupacion: Number(record.tasa_ocupacion || 0),
-      cobroEfectivo: Number(record.cobro_efectivo || 0),
-      cobroApp: Number(record.cobro_app || 0),
-      gananciaTotal: Number(record.ganancia_total || 0),
-      gananciaPorHora: Number(record.ganancia_por_hora || 0),
-      peajes: Number(record.peajes || 0),
-      permisoEfectivo: record.permiso_efectivo || 'Desactivado',
-      disabled: record.estado_conductor === 'Deshabilitado',
-      activatedAt: null
-    }))
+    // Agrupar y sumar datos por conductor (dni)
+    const driverMap = new Map<string, any>()
+
+    for (const record of data as any[]) {
+      const dni = record.dni || record.cabify_driver_id
+      if (!dni) continue
+
+      const existing = driverMap.get(dni)
+
+      if (!existing) {
+        // Primer registro del conductor
+        driverMap.set(dni, {
+          id: record.cabify_driver_id,
+          companyId: record.cabify_company_id,
+          companyName: record.cabify_company_id,
+          name: record.nombre || '',
+          surname: record.apellido || '',
+          email: record.email || '',
+          nationalIdNumber: record.dni || '',
+          mobileNum: record.telefono_numero || '',
+          mobileCc: record.telefono_codigo || '',
+          driverLicense: record.licencia || '',
+          assetId: record.vehiculo_id || '',
+          vehicleMake: record.vehiculo_marca || '',
+          vehicleModel: record.vehiculo_modelo || '',
+          vehicleRegPlate: record.vehiculo_patente || '',
+          vehiculo: record.vehiculo_completo || '',
+          // Acumuladores
+          score: Number(record.score || 0),
+          scoreCount: 1,
+          viajesAceptados: record.viajes_aceptados || 0,
+          viajesPerdidos: record.viajes_perdidos || 0,
+          viajesOfrecidos: record.viajes_ofrecidos || 0,
+          viajesFinalizados: record.viajes_finalizados || 0,
+          viajesRechazados: record.viajes_rechazados || 0,
+          tasaAceptacionSum: Number(record.tasa_aceptacion || 0),
+          tasaAceptacionCount: record.tasa_aceptacion ? 1 : 0,
+          horasConectadas: Number(record.horas_conectadas || 0),
+          tasaOcupacionSum: Number(record.tasa_ocupacion || 0),
+          tasaOcupacionCount: record.tasa_ocupacion ? 1 : 0,
+          cobroEfectivo: Number(record.cobro_efectivo || 0),
+          cobroApp: Number(record.cobro_app || 0),
+          gananciaTotal: Number(record.ganancia_total || 0),
+          peajes: Number(record.peajes || 0),
+          permisoEfectivo: record.permiso_efectivo || 'Desactivado',
+          disabled: record.estado_conductor === 'Deshabilitado',
+        })
+      } else {
+        // Acumular datos de días adicionales
+        existing.viajesAceptados += record.viajes_aceptados || 0
+        existing.viajesPerdidos += record.viajes_perdidos || 0
+        existing.viajesOfrecidos += record.viajes_ofrecidos || 0
+        existing.viajesFinalizados += record.viajes_finalizados || 0
+        existing.viajesRechazados += record.viajes_rechazados || 0
+        existing.horasConectadas += Number(record.horas_conectadas || 0)
+        existing.cobroEfectivo += Number(record.cobro_efectivo || 0)
+        existing.cobroApp += Number(record.cobro_app || 0)
+        existing.gananciaTotal += Number(record.ganancia_total || 0)
+        existing.peajes += Number(record.peajes || 0)
+
+        // Para promedios
+        if (record.score) {
+          existing.score += Number(record.score)
+          existing.scoreCount++
+        }
+        if (record.tasa_aceptacion) {
+          existing.tasaAceptacionSum += Number(record.tasa_aceptacion)
+          existing.tasaAceptacionCount++
+        }
+        if (record.tasa_ocupacion) {
+          existing.tasaOcupacionSum += Number(record.tasa_ocupacion)
+          existing.tasaOcupacionCount++
+        }
+
+        // Usar el último valor de permiso_efectivo
+        if (record.permiso_efectivo) {
+          existing.permisoEfectivo = record.permiso_efectivo
+        }
+      }
+    }
+
+    // Convertir a formato final con promedios calculados
+    const aggregatedDrivers: DriverHistoricalData[] = Array.from(driverMap.values()).map(d => {
+      const avgScore = d.scoreCount > 0 ? d.score / d.scoreCount : 0
+      const avgTasaAceptacion = d.tasaAceptacionCount > 0 ? d.tasaAceptacionSum / d.tasaAceptacionCount : 0
+      const avgTasaOcupacion = d.tasaOcupacionCount > 0 ? d.tasaOcupacionSum / d.tasaOcupacionCount : 0
+      const gananciaPorHora = d.horasConectadas > 0 ? d.gananciaTotal / d.horasConectadas : 0
+
+      // Formatear horas conectadas
+      const hours = Math.floor(d.horasConectadas)
+      const minutes = Math.floor((d.horasConectadas - hours) * 60)
+      const horasConectadasFormato = `${hours}h ${minutes}m`
+
+      return {
+        id: d.id,
+        companyId: d.companyId,
+        companyName: d.companyName,
+        name: d.name,
+        surname: d.surname,
+        email: d.email,
+        nationalIdNumber: d.nationalIdNumber,
+        mobileNum: d.mobileNum,
+        mobileCc: d.mobileCc,
+        driverLicense: d.driverLicense,
+        assetId: d.assetId,
+        vehicleMake: d.vehicleMake,
+        vehicleModel: d.vehicleModel,
+        vehicleRegPlate: d.vehicleRegPlate,
+        vehiculo: d.vehiculo,
+        score: Number(avgScore.toFixed(2)),
+        viajesAceptados: d.viajesAceptados,
+        viajesPerdidos: d.viajesPerdidos,
+        viajesOfrecidos: d.viajesOfrecidos,
+        viajesFinalizados: d.viajesFinalizados,
+        viajesRechazados: d.viajesRechazados,
+        tasaAceptacion: Number(avgTasaAceptacion.toFixed(2)),
+        horasConectadas: Number(d.horasConectadas.toFixed(1)),
+        horasConectadasFormato,
+        tasaOcupacion: Number(avgTasaOcupacion.toFixed(2)),
+        cobroEfectivo: Number(d.cobroEfectivo.toFixed(2)),
+        cobroApp: Number(d.cobroApp.toFixed(2)),
+        gananciaTotal: Number(d.gananciaTotal.toFixed(2)),
+        gananciaPorHora: Number(gananciaPorHora.toFixed(2)),
+        peajes: Number(d.peajes.toFixed(2)),
+        permisoEfectivo: d.permisoEfectivo,
+        disabled: d.disabled,
+        activatedAt: null
+      }
+    })
+
+    // Ordenar por ganancia total descendente
+    aggregatedDrivers.sort((a, b) => b.gananciaTotal - a.gananciaTotal)
+
+    console.log(`📊 ${aggregatedDrivers.length} conductores únicos agregados`)
+
+    return aggregatedDrivers
   }
 
   /**

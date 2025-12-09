@@ -219,11 +219,13 @@ class CabifyIntegrationService {
     // Si no se especifica período, usar la semana actual
     const { startDate, endDate } = this.getDefaultPeriod(fechaInicio, fechaFin)
 
-    const { data, error } = await (supabase
-      .rpc('get_cabify_top_mejores', {
-        p_fecha_inicio: startDate,
-        p_fecha_fin: endDate
-      }) as unknown as Promise<{ data: RankingRow[] | null; error: Error | null }>)
+    console.log('📊 getTopMejoresFromHistorico - Consultando con:', { startDate, endDate })
+
+    // @ts-expect-error - RPC function not in generated types
+    const { data, error } = await supabase.rpc('get_cabify_top_mejores', {
+      p_fecha_inicio: startDate,
+      p_fecha_fin: endDate
+    }) as { data: RankingRow[] | null; error: Error | null }
 
     if (error) {
       console.error('❌ Error obteniendo top mejores:', error)
@@ -231,7 +233,9 @@ class CabifyIntegrationService {
       return this.getTopMejoresFallback()
     }
 
-    return (data || []).map(this.mapRankingDriver)
+    console.log('📊 getTopMejoresFromHistorico - Resultado:', data?.length || 0, 'registros')
+
+    return (data || []).map((row: RankingRow) => this.mapRankingDriver(row))
   }
 
   /**
@@ -244,11 +248,11 @@ class CabifyIntegrationService {
     // Si no se especifica período, usar la semana actual
     const { startDate, endDate } = this.getDefaultPeriod(fechaInicio, fechaFin)
 
-    const { data, error } = await (supabase
-      .rpc('get_cabify_top_peores', {
-        p_fecha_inicio: startDate,
-        p_fecha_fin: endDate
-      }) as unknown as Promise<{ data: RankingRow[] | null; error: Error | null }>)
+    // @ts-expect-error - RPC function not in generated types
+    const { data, error } = await supabase.rpc('get_cabify_top_peores', {
+      p_fecha_inicio: startDate,
+      p_fecha_fin: endDate
+    }) as { data: RankingRow[] | null; error: Error | null }
 
     if (error) {
       console.error('❌ Error obteniendo top peores:', error)
@@ -256,7 +260,7 @@ class CabifyIntegrationService {
       return this.getTopPeoresFallback()
     }
 
-    return (data || []).map(this.mapRankingDriver)
+    return (data || []).map((row: RankingRow) => this.mapRankingDriver(row))
   }
 
   /**
@@ -298,7 +302,7 @@ class CabifyIntegrationService {
       return []
     }
 
-    return (data || []).map(this.mapRankingDriver)
+    return (data || []).map(row => this.mapRankingDriver(row))
   }
 
   /**
@@ -314,7 +318,7 @@ class CabifyIntegrationService {
       return []
     }
 
-    return (data || []).map(this.mapRankingDriver)
+    return (data || []).map(row => this.mapRankingDriver(row))
   }
 
   /**

@@ -44,18 +44,20 @@ import './CabifyModule.css'
 // =====================================================
 
 /**
- * Calcular el período anterior a la semana seleccionada
+ * Calcular el período de la semana anterior completa
  */
 function getPreviousWeekPeriod(selectedWeek: WeekOption | null): { startDate: string; endDate: string } | null {
   if (!selectedWeek) return null
 
+  // La semana anterior empieza 7 días antes del inicio de la semana seleccionada
   const currentStart = new Date(selectedWeek.startDate)
+
+  const previousStart = new Date(currentStart)
+  previousStart.setDate(currentStart.getDate() - 7)
+  previousStart.setUTCHours(0, 0, 0, 0)
+
   const previousEnd = new Date(currentStart)
   previousEnd.setMilliseconds(previousEnd.getMilliseconds() - 1)
-
-  const previousStart = new Date(previousEnd)
-  previousStart.setDate(previousStart.getDate() - 6)
-  previousStart.setHours(0, 0, 0, 0)
 
   return {
     startDate: previousStart.toISOString(),
@@ -112,13 +114,17 @@ export function CabifyModule() {
     [selectedWeek, periodFilter]
   )
 
-  // Rankings desde histórico con filtro de período
-  const { topMejores, topPeores } = useCabifyRankings(
-    filteredPeriod ? {
+  // Memorizar las props del hook de rankings para evitar re-renders innecesarios
+  const rankingProps = useMemo(
+    () => filteredPeriod ? {
       fechaInicio: filteredPeriod.startDate,
       fechaFin: filteredPeriod.endDate
-    } : undefined
+    } : undefined,
+    [filteredPeriod]
   )
+
+  // Rankings desde histórico con filtro de período
+  const { topMejores, topPeores } = useCabifyRankings(rankingProps)
 
   // Estado local de UI
   const [accordionState, setAccordionState] = useState(INITIAL_ACCORDION_STATE)
@@ -188,14 +194,17 @@ export function CabifyModule() {
             isExpanded={accordionState.estadisticas}
             onToggle={() => handleToggleAccordion('estadisticas')}
           />
-
-          <TopDriversSection
-            topMejores={topMejores}
-            topPeores={topPeores}
-            accordionState={accordionState}
-            onToggleAccordion={handleToggleAccordion}
-          />
         </div>
+      )}
+
+      {/* Top Drivers - siempre visible cuando hay datos de rankings */}
+      {(topMejores.length > 0 || topPeores.length > 0) && (
+        <TopDriversSection
+          topMejores={topMejores}
+          topPeores={topPeores}
+          accordionState={accordionState}
+          onToggleAccordion={handleToggleAccordion}
+        />
       )}
 
       <div className="cabify-table-container">

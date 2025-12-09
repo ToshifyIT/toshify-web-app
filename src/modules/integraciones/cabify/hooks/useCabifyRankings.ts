@@ -27,6 +27,11 @@ export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRank
   const [error, setError] = useState<string | null>(null)
 
   const fetchRankings = useCallback(async () => {
+    console.log('🏆 useCabifyRankings - fetchRankings llamado con:', {
+      fechaInicio: props?.fechaInicio,
+      fechaFin: props?.fechaFin
+    })
+
     try {
       setIsLoading(true)
       setError(null)
@@ -42,10 +47,16 @@ export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRank
         )
       ])
 
+      console.log('🏆 Rankings obtenidos:', {
+        mejores: mejores.length,
+        peores: peores.length,
+        mejoresData: mejores.slice(0, 2)
+      })
+
       setTopMejores(mejores)
       setTopPeores(peores)
     } catch (err) {
-      console.error('Error fetching rankings:', err)
+      console.error('❌ Error fetching rankings:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
     } finally {
       setIsLoading(false)

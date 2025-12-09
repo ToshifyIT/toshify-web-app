@@ -142,19 +142,25 @@ function ModalidadChart({ estadisticas }: ModalidadChartProps) {
   const pctCargo = total > 0 ? ((conductoresCargo / total) * 100).toFixed(0) : '0'
   const pctTurno = total > 0 ? ((conductoresTurno / total) * 100).toFixed(0) : '0'
 
+  // Tamaño responsivo del gráfico
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 480
+  const chartSize = isMobile ? 120 : 160
+  const innerRadius = isMobile ? 30 : 40
+  const outerRadius = isMobile ? 50 : 65
+
   return (
     <div className="cabify-chart-section">
       <h4 className="cabify-chart-title">{STATS_LABELS.MODALIDAD_DISTRIBUTION}</h4>
       <div className="cabify-chart-container">
         <div className="cabify-chart-wrapper">
-          <ResponsiveContainer width={160} height={160}>
+          <ResponsiveContainer width={chartSize} height={chartSize}>
             <PieChart>
               <Pie
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                innerRadius={40}
-                outerRadius={65}
+                innerRadius={innerRadius}
+                outerRadius={outerRadius}
                 paddingAngle={3}
                 dataKey="value"
               >
