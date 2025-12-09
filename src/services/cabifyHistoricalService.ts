@@ -275,12 +275,19 @@ class CabifyHistoricalService {
     startDate: string,
     endDate: string
   ): Promise<DriverHistoricalData[]> {
-    // Consulta todos los registros dentro del rango de fechas
+    // Extraer solo la fecha (sin hora) para comparación más robusta
+    // Los datos pueden estar guardados a las 00:00 o 03:00 UTC
+    const startDateOnly = startDate.split('T')[0]
+    const endDateOnly = endDate.split('T')[0]
+
+    console.log(`📅 Consultando histórico: ${startDateOnly} a ${endDateOnly}`)
+
+    // Consulta todos los registros dentro del rango de fechas (comparando por día)
     const { data, error } = await supabase
       .from('cabify_historico')
       .select('*')
-      .gte('fecha_inicio', startDate)
-      .lte('fecha_inicio', endDate)
+      .gte('fecha_inicio', `${startDateOnly}T00:00:00Z`)
+      .lte('fecha_inicio', `${endDateOnly}T23:59:59Z`)
       .order('ganancia_total', { ascending: false })
 
     if (error) {
