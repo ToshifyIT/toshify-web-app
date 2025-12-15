@@ -15,6 +15,45 @@ import type {
   ConductorRanking,
 } from '../modules/integraciones/uss/types/uss.types'
 
+// Tipo para filas de la tabla uss_excesos_velocidad (Supabase no tiene tipos generados)
+interface USSExcesoRow {
+  id: string
+  patente: string
+  patente_normalizada: string
+  vehiculo_id: string | null
+  fecha_evento: string
+  fecha_fin_evento: string | null
+  localizacion: string
+  latitud: number | null
+  longitud: number | null
+  velocidad_maxima: number
+  limite_velocidad: number
+  exceso: number
+  duracion_segundos: number
+  conductor_wialon: string | null
+  conductor_id: string | null
+  wialon_unit_id: number | null
+  periodo_inicio: string
+  periodo_fin: string
+  created_at: string
+}
+
+interface USSStatsRPCResult {
+  total_excesos: number
+  vehiculos_unicos: number
+  conductores_unicos: number
+  velocidad_promedio: number
+  velocidad_maxima: number
+  exceso_promedio: number
+  duracion_promedio: number
+}
+
+interface USSSyncLogRow {
+  completed_at: string | null
+  records_synced: number
+  status: string
+}
+
 // =====================================================
 // CACHÉ EN MEMORIA
 // =====================================================
@@ -126,10 +165,10 @@ export const ussService = {
       return cached
     }
 
-    const { data, error } = await supabase.rpc('get_uss_excesos_stats', {
+    const { data, error } = await (supabase.rpc as Function)('get_uss_excesos_stats', {
       p_start_date: startDate,
       p_end_date: endDate,
-    })
+    }) as { data: USSStatsRPCResult | null; error: unknown }
 
     if (error) {
       // Si la función RPC no existe, calculamos manualmente
@@ -159,7 +198,7 @@ export const ussService = {
       .from('uss_excesos_velocidad')
       .select('velocidad_maxima, exceso, duracion_segundos, patente, conductor_wialon')
       .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`)
+      .lte('fecha_evento', `${endDate}T23:59:59`) as { data: Pick<USSExcesoRow, 'velocidad_maxima' | 'exceso' | 'duracion_segundos' | 'patente' | 'conductor_wialon'>[] | null; error: unknown }
 
     if (error || !data) {
       return {
@@ -204,7 +243,7 @@ export const ussService = {
       .from('uss_excesos_velocidad')
       .select('patente, vehiculo_id, velocidad_maxima, exceso, duracion_segundos')
       .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`)
+      .lte('fecha_evento', `${endDate}T23:59:59`) as { data: Pick<USSExcesoRow, 'patente' | 'vehiculo_id' | 'velocidad_maxima' | 'exceso' | 'duracion_segundos'>[] | null; error: unknown }
 
     if (error || !data) {
       return []
@@ -261,7 +300,7 @@ export const ussService = {
       .from('uss_excesos_velocidad')
       .select('conductor_wialon, conductor_id, velocidad_maxima, patente')
       .gte('fecha_evento', `${startDate}T00:00:00`)
-      .lte('fecha_evento', `${endDate}T23:59:59`)
+      .lte('fecha_evento', `${endDate}T23:59:59`) as { data: Pick<USSExcesoRow, 'conductor_wialon' | 'conductor_id' | 'velocidad_maxima' | 'patente'>[] | null; error: unknown }
 
     if (error || !data) {
       return []
@@ -316,7 +355,7 @@ export const ussService = {
       .select('completed_at, records_synced, status')
       .order('created_at', { ascending: false })
       .limit(1)
-      .single()
+      .single() as { data: USSSyncLogRow | null }
 
     const { count } = await supabase
       .from('uss_excesos_velocidad')

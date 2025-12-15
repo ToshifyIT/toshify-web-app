@@ -24,6 +24,8 @@ interface ExcesosTableProps {
   readonly pageSize: number
   readonly onPageChange: (page: number) => void
   readonly onPageSizeChange: (size: number) => void
+  readonly searchTerm: string
+  readonly onSearchChange: (term: string) => void
 }
 
 type SortField = 'fecha_evento' | 'patente' | 'conductor_wialon' | 'velocidad_maxima' | 'limite_velocidad' | 'exceso' | 'duracion_segundos'
@@ -37,10 +39,11 @@ export function ExcesosTable({
   pageSize,
   onPageChange,
   onPageSizeChange,
+  searchTerm,
+  onSearchChange,
 }: ExcesosTableProps) {
   const [sortField, setSortField] = useState<SortField>('fecha_evento')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  const [searchTerm, setSearchTerm] = useState('')
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -51,21 +54,9 @@ export function ExcesosTable({
     }
   }
 
-  // Filtrar por búsqueda
-  const filteredExcesos = useMemo(() => {
-    if (!searchTerm.trim()) return excesos
-
-    const term = searchTerm.toLowerCase()
-    return excesos.filter(exceso =>
-      exceso.patente?.toLowerCase().includes(term) ||
-      exceso.conductor_wialon?.toLowerCase().includes(term) ||
-      exceso.localizacion?.toLowerCase().includes(term)
-    )
-  }, [excesos, searchTerm])
-
   // Ordenar
   const sortedExcesos = useMemo(() => {
-    return [...filteredExcesos].sort((a, b) => {
+    return [...excesos].sort((a, b) => {
       const aValue = a[sortField]
       const bValue = b[sortField]
 
@@ -79,9 +70,9 @@ export function ExcesosTable({
         ? aStr.localeCompare(bStr)
         : bStr.localeCompare(aStr)
     })
-  }, [filteredExcesos, sortField, sortDirection])
+  }, [excesos, sortField, sortDirection])
 
-  const displayCount = searchTerm ? filteredExcesos.length : totalCount
+  const displayCount = totalCount
   const totalPages = Math.ceil(displayCount / pageSize)
 
   if (isLoading && excesos.length === 0) {
@@ -105,12 +96,12 @@ export function ExcesosTable({
           type="text"
           placeholder="Buscar por patente, conductor o ubicación..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => onSearchChange(e.target.value)}
           className="uss-search-input"
         />
         {searchTerm && (
           <span className="uss-search-results">
-            {filteredExcesos.length} resultado{filteredExcesos.length !== 1 ? 's' : ''}
+            {excesos.length} resultado{excesos.length !== 1 ? 's' : ''}
           </span>
         )}
       </div>

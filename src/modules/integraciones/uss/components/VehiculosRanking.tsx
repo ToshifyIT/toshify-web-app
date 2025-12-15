@@ -5,7 +5,7 @@
 
 import { Car, User, Trophy, AlertTriangle } from 'lucide-react'
 import type { VehiculoRanking, ConductorRanking } from '../types/uss.types'
-import { formatSpeed, formatDuration, extractConductorName, getSeverityColor } from '../utils/uss.utils'
+import { formatSpeed, extractConductorName, getSeverityColor } from '../utils/uss.utils'
 
 interface RankingsProps {
   readonly vehiculosRanking: VehiculoRanking[]

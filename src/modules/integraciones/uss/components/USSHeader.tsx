@@ -1,10 +1,10 @@
 // src/modules/integraciones/uss/components/USSHeader.tsx
 /**
- * Header del módulo USS con controles de fecha y filtros
+ * Header del módulo USS con controles de fecha
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { RefreshCw, Calendar, ChevronDown, Filter } from 'lucide-react'
+import { RefreshCw, Calendar, ChevronDown } from 'lucide-react'
 import type { DateRange } from '../types/uss.types'
 import { DATE_RANGES } from '../constants/uss.constants'
 
@@ -12,13 +12,7 @@ interface USSHeaderProps {
   readonly lastUpdate: Date | null
   readonly isLoading: boolean
   readonly dateRange: DateRange
-  readonly patenteFilter: string
-  readonly conductorFilter: string
-  readonly minExcesoFilter: number
   readonly onDateRangeChange: (range: DateRange) => void
-  readonly onPatenteFilterChange: (value: string) => void
-  readonly onConductorFilterChange: (value: string) => void
-  readonly onMinExcesoFilterChange: (value: number) => void
   readonly onRefresh: () => void
 }
 
@@ -26,17 +20,9 @@ export function USSHeader({
   lastUpdate,
   isLoading,
   dateRange,
-  patenteFilter,
-  conductorFilter,
-  minExcesoFilter,
   onDateRangeChange,
-  onPatenteFilterChange,
-  onConductorFilterChange,
-  onMinExcesoFilterChange,
   onRefresh,
 }: USSHeaderProps) {
-  const [showFilters, setShowFilters] = useState(false)
-
   return (
     <div className="uss-header">
       <div className="uss-header-info">
@@ -57,14 +43,6 @@ export function USSHeader({
         />
 
         <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`btn-secondary uss-filter-toggle ${showFilters ? 'active' : ''}`}
-        >
-          <Filter size={16} />
-          Filtros
-        </button>
-
-        <button
           onClick={onRefresh}
           disabled={isLoading}
           className="btn-primary uss-refresh-btn"
@@ -73,17 +51,6 @@ export function USSHeader({
           {isLoading ? 'Cargando...' : 'Actualizar'}
         </button>
       </div>
-
-      {showFilters && (
-        <FiltersPanel
-          patenteFilter={patenteFilter}
-          conductorFilter={conductorFilter}
-          minExcesoFilter={minExcesoFilter}
-          onPatenteFilterChange={onPatenteFilterChange}
-          onConductorFilterChange={onConductorFilterChange}
-          onMinExcesoFilterChange={onMinExcesoFilterChange}
-        />
-      )}
     </div>
   )
 }
@@ -213,56 +180,3 @@ function DateRangeSelector({ dateRange, isLoading, onChange }: DateRangeSelector
   )
 }
 
-interface FiltersPanelProps {
-  readonly patenteFilter: string
-  readonly conductorFilter: string
-  readonly minExcesoFilter: number
-  readonly onPatenteFilterChange: (value: string) => void
-  readonly onConductorFilterChange: (value: string) => void
-  readonly onMinExcesoFilterChange: (value: number) => void
-}
-
-function FiltersPanel({
-  patenteFilter,
-  conductorFilter,
-  minExcesoFilter,
-  onPatenteFilterChange,
-  onConductorFilterChange,
-  onMinExcesoFilterChange,
-}: FiltersPanelProps) {
-  return (
-    <div className="uss-filters-panel">
-      <div className="uss-filter-group">
-        <label>Patente:</label>
-        <input
-          type="text"
-          value={patenteFilter}
-          onChange={(e) => onPatenteFilterChange(e.target.value)}
-          placeholder="Ej: AB123CD"
-          className="uss-filter-input"
-        />
-      </div>
-      <div className="uss-filter-group">
-        <label>Conductor:</label>
-        <input
-          type="text"
-          value={conductorFilter}
-          onChange={(e) => onConductorFilterChange(e.target.value)}
-          placeholder="Nombre del conductor"
-          className="uss-filter-input"
-        />
-      </div>
-      <div className="uss-filter-group">
-        <label>Exceso mínimo:</label>
-        <input
-          type="number"
-          value={minExcesoFilter || ''}
-          onChange={(e) => onMinExcesoFilterChange(parseInt(e.target.value) || 0)}
-          placeholder="km/h"
-          min="0"
-          className="uss-filter-input"
-        />
-      </div>
-    </div>
-  )
-}
