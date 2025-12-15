@@ -1,18 +1,74 @@
 // src/modules/integraciones/uss/USSModule.tsx
+/**
+ * Módulo principal de USS - Excesos de Velocidad
+ */
+
+import { useUSSData } from './hooks'
+import { USSHeader, ExcesosStats, ExcesosTable, Rankings } from './components'
+import './styles/uss.css'
+
 export function USSModule() {
+  const {
+    excesos,
+    stats,
+    vehiculosRanking,
+    conductoresRanking,
+    queryState,
+    totalCount,
+    dateRange,
+    setDateRange,
+    patenteFilter,
+    setPatenteFilter,
+    conductorFilter,
+    setConductorFilter,
+    minExcesoFilter,
+    setMinExcesoFilter,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    refresh,
+  } = useUSSData()
+
   return (
-    <div>
-      <div className="card-header">
-        <h2 className="card-title">Integración USS</h2>
-        <p className="card-description">
-          Seguimiento de conductores vía USS
-        </p>
-      </div>
-      <div style={{ marginTop: '24px' }}>
-        <p style={{ color: '#6B7280', fontSize: '14px' }}>
-          Módulo de integración en desarrollo...
-        </p>
-      </div>
+    <div className="uss-module">
+      <USSHeader
+        lastUpdate={queryState.lastUpdate}
+        isLoading={queryState.loading}
+        dateRange={dateRange}
+        patenteFilter={patenteFilter}
+        conductorFilter={conductorFilter}
+        minExcesoFilter={minExcesoFilter}
+        onDateRangeChange={setDateRange}
+        onPatenteFilterChange={setPatenteFilter}
+        onConductorFilterChange={setConductorFilter}
+        onMinExcesoFilterChange={setMinExcesoFilter}
+        onRefresh={refresh}
+      />
+
+      {queryState.error && (
+        <div className="uss-error">
+          <p>{queryState.error}</p>
+        </div>
+      )}
+
+      <ExcesosStats stats={stats} isLoading={queryState.loading} />
+
+      <Rankings
+        vehiculosRanking={vehiculosRanking}
+        conductoresRanking={conductoresRanking}
+        isLoading={queryState.loading}
+      />
+
+      <ExcesosTable
+        excesos={excesos}
+        totalCount={totalCount}
+        isLoading={queryState.loading}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
     </div>
   )
 }
