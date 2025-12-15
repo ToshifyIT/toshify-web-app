@@ -3,8 +3,8 @@
  * Tabla de excesos de velocidad
  */
 
-import { useState } from 'react'
-import { ChevronUp, ChevronDown, MapPin } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { ChevronUp, ChevronDown, MapPin, Search } from 'lucide-react'
 import type { ExcesoVelocidad } from '../types/uss.types'
 import {
   formatDateTime,
@@ -26,7 +26,7 @@ interface ExcesosTableProps {
   readonly onPageSizeChange: (size: number) => void
 }
 
-type SortField = 'fecha_evento' | 'patente' | 'velocidad_maxima' | 'exceso' | 'duracion_segundos'
+type SortField = 'fecha_evento' | 'patente' | 'conductor_wialon' | 'velocidad_maxima' | 'limite_velocidad' | 'exceso' | 'duracion_segundos'
 type SortDirection = 'asc' | 'desc'
 
 export function ExcesosTable({
@@ -40,6 +40,7 @@ export function ExcesosTable({
 }: ExcesosTableProps) {
   const [sortField, setSortField] = useState<SortField>('fecha_evento')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [searchTerm, setSearchTerm] = useState('')
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -50,22 +51,38 @@ export function ExcesosTable({
     }
   }
 
-  const sortedExcesos = [...excesos].sort((a, b) => {
-    const aValue = a[sortField]
-    const bValue = b[sortField]
+  // Filtrar por búsqueda
+  const filteredExcesos = useMemo(() => {
+    if (!searchTerm.trim()) return excesos
 
-    if (typeof aValue === 'number' && typeof bValue === 'number') {
-      return sortDirection === 'asc' ? aValue - bValue : bValue - aValue
-    }
+    const term = searchTerm.toLowerCase()
+    return excesos.filter(exceso =>
+      exceso.patente?.toLowerCase().includes(term) ||
+      exceso.conductor_wialon?.toLowerCase().includes(term) ||
+      exceso.localizacion?.toLowerCase().includes(term)
+    )
+  }, [excesos, searchTerm])
 
-    const aStr = String(aValue || '')
-    const bStr = String(bValue || '')
-    return sortDirection === 'asc'
-      ? aStr.localeCompare(bStr)
-      : bStr.localeCompare(aStr)
-  })
+  // Ordenar
+  const sortedExcesos = useMemo(() => {
+    return [...filteredExcesos].sort((a, b) => {
+      const aValue = a[sortField]
+      const bValue = b[sortField]
 
-  const totalPages = Math.ceil(totalCount / pageSize)
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortDirection === 'asc' ? aValue - bValue : bValue - aValue
+      }
+
+      const aStr = String(aValue || '')
+      const bStr = String(bValue || '')
+      return sortDirection === 'asc'
+        ? aStr.localeCompare(bStr)
+        : bStr.localeCompare(aStr)
+    })
+  }, [filteredExcesos, sortField, sortDirection])
+
+  const displayCount = searchTerm ? filteredExcesos.length : totalCount
+  const totalPages = Math.ceil(displayCount / pageSize)
 
   if (isLoading && excesos.length === 0) {
     return <TableLoading />
@@ -81,6 +98,23 @@ export function ExcesosTable({
 
   return (
     <div className="uss-table-container">
+      {/* Buscador */}
+      <div className="uss-table-search">
+        <Search size={18} className="uss-search-icon" />
+        <input
+          type="text"
+          placeholder="Buscar por patente, conductor o ubicación..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="uss-search-input"
+        />
+        {searchTerm && (
+          <span className="uss-search-results">
+            {filteredExcesos.length} resultado{filteredExcesos.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
       <table className="uss-table">
         <thead>
           <tr>
@@ -98,7 +132,13 @@ export function ExcesosTable({
               direction={sortDirection}
               onSort={handleSort}
             />
-            <th>Conductor</th>
+            <SortableHeader
+              field="conductor_wialon"
+              label="Conductor"
+              currentField={sortField}
+              direction={sortDirection}
+              onSort={handleSort}
+            />
             <SortableHeader
               field="velocidad_maxima"
               label="Velocidad"
@@ -106,7 +146,13 @@ export function ExcesosTable({
               direction={sortDirection}
               onSort={handleSort}
             />
-            <th>Límite</th>
+            <SortableHeader
+              field="limite_velocidad"
+              label="Límite"
+              currentField={sortField}
+              direction={sortDirection}
+              onSort={handleSort}
+            />
             <SortableHeader
               field="exceso"
               label="Exceso"
@@ -134,7 +180,7 @@ export function ExcesosTable({
       <Pagination
         page={page}
         pageSize={pageSize}
-        totalCount={totalCount}
+        totalCount={displayCount}
         totalPages={totalPages}
         onPageChange={onPageChange}
         onPageSizeChange={onPageSizeChange}
@@ -161,11 +207,13 @@ function SortableHeader({
   const isActive = field === currentField
 
   return (
-    <th onClick={() => onSort(field)} className="uss-sortable-header">
-      <span>{label}</span>
-      {isActive && (
-        direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-      )}
+    <th onClick={() => onSort(field)} className="uss-sortable">
+      <span className="uss-sortable-content">
+        {label}
+        {isActive && (
+          direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+        )}
+      </span>
     </th>
   )
 }

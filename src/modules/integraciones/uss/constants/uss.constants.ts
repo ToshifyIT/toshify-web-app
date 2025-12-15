@@ -46,8 +46,8 @@ export const SEVERITY_COLORS = {
 } as const
 
 // Límites de paginación
-export const PAGE_SIZES = [10, 25, 50, 100] as const
-export const DEFAULT_PAGE_SIZE = 25
+export const PAGE_SIZES = [25, 50, 100, 200] as const
+export const DEFAULT_PAGE_SIZE = 50
 
 // Columnas de la tabla de excesos
 export const EXCESOS_TABLE_COLUMNS = [

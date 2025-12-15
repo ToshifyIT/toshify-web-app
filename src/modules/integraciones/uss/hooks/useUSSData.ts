@@ -50,7 +50,7 @@ interface UseUSSDataReturn {
   loadMore: () => Promise<void>
 }
 
-const DEFAULT_PAGE_SIZE = 25
+const DEFAULT_PAGE_SIZE = 50
 
 export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
   const { autoLoad = true, defaultPeriod = 'week' } = options

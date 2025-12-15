@@ -4,15 +4,13 @@
  */
 
 import { useUSSData } from './hooks'
-import { USSHeader, ExcesosStats, ExcesosTable, Rankings } from './components'
+import { USSHeader, ExcesosStats, ExcesosTable } from './components'
 import './styles/uss.css'
 
 export function USSModule() {
   const {
     excesos,
     stats,
-    vehiculosRanking,
-    conductoresRanking,
     queryState,
     totalCount,
     dateRange,
@@ -53,12 +51,6 @@ export function USSModule() {
       )}
 
       <ExcesosStats stats={stats} isLoading={queryState.loading} />
-
-      <Rankings
-        vehiculosRanking={vehiculosRanking}
-        conductoresRanking={conductoresRanking}
-        isLoading={queryState.loading}
-      />
 
       <ExcesosTable
         excesos={excesos}
