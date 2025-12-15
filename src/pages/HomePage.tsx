@@ -902,7 +902,7 @@ export function HomePage() {
 
               {/* Integraciones */}
               <Route path="/uss" element={
-                <ProtectedRoute submenuName="uss" action="view">
+                <ProtectedRoute submenuName="ctrl-exceso-vel" action="view">
                   <USSPage />
                 </ProtectedRoute>
               } />
