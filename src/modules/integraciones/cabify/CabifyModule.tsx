@@ -75,27 +75,37 @@ export function CabifyModule() {
 
   const { estadisticas } = useCabifyStats(drivers, asignaciones)
 
-  // Estado del rango de fechas personalizado (inicializado desde la semana seleccionada)
+  // Estado del rango de fechas personalizado (solo se usa cuando el usuario lo modifica manualmente)
   const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null)
 
-  // Sincronizar el rango de fechas cuando cambia la semana seleccionada
-  useMemo(() => {
-    if (selectedWeek && !customDateRange) {
-      setCustomDateRange(createInitialDateRange(selectedWeek))
-    }
-  }, [selectedWeek, customDateRange])
+  // Resetear customDateRange cuando cambia la semana seleccionada
+  // Esto permite que el fallback automático funcione correctamente
+  const [lastSelectedWeekLabel, setLastSelectedWeekLabel] = useState<string | null>(null)
+
+  if (selectedWeek && selectedWeek.label !== lastSelectedWeekLabel) {
+    setLastSelectedWeekLabel(selectedWeek.label)
+    setCustomDateRange(null) // Reset para usar las fechas de la nueva semana
+  }
 
   // Usar el rango personalizado si existe, sino la semana seleccionada
   const effectiveDateRange = useMemo(() => {
-    return customDateRange || createInitialDateRange(selectedWeek)
+    if (customDateRange) return customDateRange
+    return createInitialDateRange(selectedWeek)
   }, [customDateRange, selectedWeek])
 
   // Memorizar las props del hook de rankings para evitar re-renders innecesarios
   const rankingProps = useMemo(
-    () => effectiveDateRange ? {
-      fechaInicio: effectiveDateRange.startDate,
-      fechaFin: effectiveDateRange.endDate
-    } : undefined,
+    () => {
+      if (!effectiveDateRange) return undefined
+      console.log('🎯 rankingProps actualizados:', {
+        fechaInicio: effectiveDateRange.startDate,
+        fechaFin: effectiveDateRange.endDate
+      })
+      return {
+        fechaInicio: effectiveDateRange.startDate,
+        fechaFin: effectiveDateRange.endDate
+      }
+    },
     [effectiveDateRange]
   )
 
