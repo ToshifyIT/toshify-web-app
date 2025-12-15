@@ -16,6 +16,8 @@ interface MenuRow {
   route: string | null
   order_index: number
   menu_id?: string
+  parent_id?: string | null
+  level: number
   data: Menu | Submenu
 }
 
@@ -42,7 +44,8 @@ export function MenuHierarchyManager() {
     label: '',
     route: '',
     order_index: 0,
-    menu_id: ''
+    menu_id: '',
+    parent_id: '' as string | null  // Para submenús anidados
   })
 
   useEffect(() => {
@@ -161,10 +164,29 @@ export function MenuHierarchyManager() {
 
     setSaving(true)
     try {
+      // Calcular el nivel basado en el padre
+      let level = 1
+      const parentId = submenuForm.parent_id || null
+
+      if (parentId) {
+        const parentSubmenu = submenus.find(s => s.id === parentId)
+        if (parentSubmenu) {
+          level = (parentSubmenu.level || 1) + 1
+        }
+      }
+
       const { error } = await supabase
         .from('submenus')
         // @ts-expect-error - Tipo generado incorrectamente
-        .insert([{ ...submenuForm, level: 1, parent_id: null }])
+        .insert([{
+          name: submenuForm.name,
+          label: submenuForm.label,
+          route: submenuForm.route,
+          order_index: submenuForm.order_index,
+          menu_id: submenuForm.menu_id,
+          parent_id: parentId,
+          level: level
+        }])
 
       if (error) throw error
 
@@ -239,7 +261,36 @@ export function MenuHierarchyManager() {
   }
 
   const resetSubmenuForm = () => {
-    setSubmenuForm({ name: '', label: '', route: '', order_index: 0, menu_id: '' })
+    setSubmenuForm({ name: '', label: '', route: '', order_index: 0, menu_id: '', parent_id: '' })
+  }
+
+  // Función recursiva para agregar submenús anidados
+  const addSubmenusRecursively = (
+    rows: MenuRow[],
+    menuId: string,
+    parentId: string | null,
+    menuSubmenus: Submenu[]
+  ) => {
+    const children = menuSubmenus
+      .filter(sub => sub.parent_id === parentId)
+      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+
+    children.forEach(submenu => {
+      rows.push({
+        id: submenu.id,
+        type: 'submenu',
+        name: submenu.name,
+        label: submenu.label,
+        route: submenu.route,
+        order_index: submenu.order_index,
+        menu_id: menuId,
+        parent_id: submenu.parent_id,
+        level: submenu.level || 1,
+        data: submenu
+      })
+      // Agregar hijos de este submenú recursivamente
+      addSubmenusRecursively(rows, menuId, submenu.id, menuSubmenus)
+    })
   }
 
   // Construir datos para la tabla (menús + submenús jerárquicos)
@@ -253,23 +304,14 @@ export function MenuHierarchyManager() {
         label: menu.label,
         route: menu.route,
         order_index: menu.order_index,
+        level: 0,
         data: menu
       })
 
-      submenus
-        .filter(sub => sub.menu_id === menu.id)
-        .forEach(submenu => {
-          rows.push({
-            id: submenu.id,
-            type: 'submenu',
-            name: submenu.name,
-            label: submenu.label,
-            route: submenu.route,
-            order_index: submenu.order_index,
-            menu_id: menu.id,
-            data: submenu
-          })
-        })
+      // Obtener submenús de este menú
+      const menuSubmenus = submenus.filter(sub => sub.menu_id === menu.id)
+      // Agregar recursivamente empezando por los de nivel 1 (parent_id = null)
+      addSubmenusRecursively(rows, menu.id, null, menuSubmenus)
     })
     return rows
   }, [menus, submenus])
@@ -292,12 +334,17 @@ export function MenuHierarchyManager() {
       {
         accessorKey: 'name',
         header: 'Nombre',
-        cell: ({ row, getValue }) => (
-          <>
-            {row.original.type === 'submenu' && <span className="mhm-submenu-indicator">↳</span>}
-            <strong>{getValue() as string}</strong>
-          </>
-        )
+        cell: ({ row, getValue }) => {
+          const level = row.original.level
+          const indent = level > 0 ? '─'.repeat(level) + ' ' : ''
+          const indicator = level > 0 ? '└' + indent : ''
+          return (
+            <span style={{ paddingLeft: `${level * 16}px` }}>
+              {level > 0 && <span className="mhm-submenu-indicator">{indicator}</span>}
+              <strong>{getValue() as string}</strong>
+            </span>
+          )
+        }
       },
       {
         accessorKey: 'label',
@@ -342,7 +389,8 @@ export function MenuHierarchyManager() {
                     label: row.original.label,
                     route: row.original.route || '',
                     order_index: row.original.order_index,
-                    menu_id: row.original.menu_id || ''
+                    menu_id: row.original.menu_id || '',
+                    parent_id: row.original.parent_id || ''
                   })
                   setShowSubmenuModal(true)
                 }
@@ -493,11 +541,11 @@ export function MenuHierarchyManager() {
             </h2>
 
             <div className="mhm-form-group">
-              <label className="mhm-form-label">Menú Padre *</label>
+              <label className="mhm-form-label">Menú Principal *</label>
               <select
                 className="mhm-form-input"
                 value={submenuForm.menu_id}
-                onChange={(e) => setSubmenuForm({ ...submenuForm, menu_id: e.target.value })}
+                onChange={(e) => setSubmenuForm({ ...submenuForm, menu_id: e.target.value, parent_id: '' })}
                 disabled={saving || !!editingSubmenu}
               >
                 <option value="">Seleccionar menú...</option>
@@ -506,6 +554,32 @@ export function MenuHierarchyManager() {
                 ))}
               </select>
             </div>
+
+            {/* Selector de submenú padre (opcional, para anidación) */}
+            {submenuForm.menu_id && (
+              <div className="mhm-form-group">
+                <label className="mhm-form-label">Submenú Padre (opcional)</label>
+                <select
+                  className="mhm-form-input"
+                  value={submenuForm.parent_id || ''}
+                  onChange={(e) => setSubmenuForm({ ...submenuForm, parent_id: e.target.value || null })}
+                  disabled={saving}
+                >
+                  <option value="">-- Ninguno (nivel 1) --</option>
+                  {submenus
+                    .filter(sub => sub.menu_id === submenuForm.menu_id && sub.id !== editingSubmenu?.id)
+                    .map(sub => {
+                      const indent = '─'.repeat(sub.level || 1)
+                      return (
+                        <option key={sub.id} value={sub.id}>
+                          {indent} {sub.label}
+                        </option>
+                      )
+                    })}
+                </select>
+                <small className="mhm-form-hint">Selecciona un submenú si quieres crear un sub-submenú anidado</small>
+              </div>
+            )}
 
             <div className="mhm-form-group">
               <label className="mhm-form-label">Nombre (ID) *</label>

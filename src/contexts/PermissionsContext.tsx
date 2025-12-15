@@ -27,6 +27,8 @@ interface SubmenuPermission {
   order_index: number
   menu_id?: string // Deprecated: usar parent_menu_id
   parent_menu_id?: string
+  parent_id?: string | null  // ID del submenú padre (para submenús anidados)
+  level?: number  // Nivel de anidamiento (1 = primer nivel, 2 = hijo de submenú, etc.)
   permissions: {
     can_view: boolean
     can_create: boolean
@@ -155,6 +157,8 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
       // Verificar si es admin
       const isUserAdmin = (profileData as any).roles?.name === 'admin'
+      console.log('🔐 Usuario:', user!.email, '| Rol:', (profileData as any).roles?.name, '| Es admin:', isUserAdmin)
+      console.log('🔐 Role ID:', (profileData as any).role_id)
 
       let menusData: MenuPermission[] = []
       let submenusData: SubmenuPermission[] = []
@@ -169,7 +173,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
         const { data: allSubmenus } = await supabase
           .from('submenus')
-          .select('*')
+          .select('*, parent_id, level')
           .eq('is_active', true)
           .order('order_index')
 
@@ -196,6 +200,8 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           route: submenu.route,
           order_index: submenu.order_index || 0,
           menu_id: submenu.menu_id,
+          parent_id: submenu.parent_id || null,
+          level: submenu.level || 1,
           permissions: {
             can_view: true,
             can_create: true,
@@ -209,8 +215,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         const roleId = (profileData as any).role_id
 
         if (roleId) {
+          console.log('🔐 Cargando permisos para roleId:', roleId)
           // Cargar permisos de menús del rol
-          const { data: roleMenuPerms } = await supabase
+          const { data: roleMenuPerms, error: menuError } = await supabase
             .from('role_menu_permissions')
             .select(`
               can_view, can_create, can_edit, can_delete,
@@ -219,20 +226,27 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             .eq('role_id', roleId)
             .eq('can_view', true)
 
+          console.log('🔐 roleMenuPerms raw:', roleMenuPerms)
+          if (menuError) console.error('🔐 Error cargando menús:', menuError)
+
           // Cargar permisos de submenús del rol
-          const { data: roleSubmenuPerms } = await supabase
+          const { data: roleSubmenuPerms, error: submenuError } = await supabase
             .from('role_submenu_permissions')
             .select(`
               can_view, can_create, can_edit, can_delete,
-              submenus (id, name, label, route, order_index, menu_id, is_active)
+              submenus (id, name, label, route, order_index, menu_id, parent_id, level, is_active)
             `)
             .eq('role_id', roleId)
             .eq('can_view', true)
 
+          console.log('🔐 roleSubmenuPerms raw:', roleSubmenuPerms)
+          if (submenuError) console.error('🔐 Error cargando submenús:', submenuError)
+
           // Convertir permisos de menús
-          menusData = (roleMenuPerms || [])
-            .filter((p: any) => p.menus?.is_active)
-            .map((p: any) => ({
+          const filteredMenuPerms = (roleMenuPerms || []).filter((p: any) => p.menus?.is_active)
+          console.log('🔐 Menús después de filtrar is_active:', filteredMenuPerms.length, 'de', (roleMenuPerms || []).length)
+
+          menusData = filteredMenuPerms.map((p: any) => ({
               id: p.menus.id,
               name: p.menus.name,
               label: p.menus.label,
@@ -248,15 +262,18 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             }))
 
           // Convertir permisos de submenús
-          submenusData = (roleSubmenuPerms || [])
-            .filter((p: any) => p.submenus?.is_active)
-            .map((p: any) => ({
+          const filteredSubmenuPerms = (roleSubmenuPerms || []).filter((p: any) => p.submenus?.is_active)
+          console.log('🔐 Submenús después de filtrar is_active:', filteredSubmenuPerms.length, 'de', (roleSubmenuPerms || []).length)
+
+          submenusData = filteredSubmenuPerms.map((p: any) => ({
               id: p.submenus.id,
               name: p.submenus.name,
               label: p.submenus.label,
               route: p.submenus.route,
               order_index: p.submenus.order_index || 0,
               menu_id: p.submenus.menu_id,
+              parent_id: p.submenus.parent_id || null,
+              level: p.submenus.level || 1,
               permissions: {
                 can_view: p.can_view || false,
                 can_create: p.can_create || false,
@@ -267,9 +284,14 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             }))
 
           console.log('📋 Permisos de rol cargados - Menús:', menusData.length, 'Submenús:', submenusData.length)
+          console.log('📋 Menús finales:', menusData.map(m => m.name))
+          console.log('📋 Submenús finales:', submenusData.map(s => s.name))
+        } else {
+          console.warn('⚠️ Usuario sin role_id asignado - no se cargarán permisos')
         }
       }
 
+      console.log('✅ Permisos finales a guardar:', { menus: menusData.length, submenus: submenusData.length })
       setUserPermissions({
         user_id: user!.id,
         email: user!.email || '',
