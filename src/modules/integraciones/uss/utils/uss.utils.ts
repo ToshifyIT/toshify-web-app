@@ -47,11 +47,12 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
- * Formatea fecha para mostrar
+ * Formatea fecha para mostrar en hora Argentina (UTC-3)
  */
 export function formatDateTime(dateString: string): string {
   const date = new Date(dateString)
   return date.toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -61,11 +62,12 @@ export function formatDateTime(dateString: string): string {
 }
 
 /**
- * Formatea solo la fecha
+ * Formatea solo la fecha en hora Argentina
  */
 export function formatDate(dateString: string): string {
   const date = new Date(dateString)
   return date.toLocaleDateString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

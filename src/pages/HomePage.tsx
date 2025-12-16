@@ -107,8 +107,8 @@ export function HomePage() {
                 toggleNestedMenu(submenu.submenu_id)
               }}
             >
-              <span className={`nav-nested-arrow ${isNestedOpen ? 'open' : ''}`}>▸</span>
               <span>{submenu.submenu_label}</span>
+              <span className={`nav-nested-arrow ${isNestedOpen ? 'open' : ''}`}>▸</span>
             </button>
             <div className={`nav-nested-items ${!isNestedOpen ? 'collapsed' : ''}`}>
               {renderSubmenus(allSubmenus, submenu.submenu_id, depth + 1)}
@@ -318,19 +318,19 @@ export function HomePage() {
 
         /* Submenús anidados */
         .nav-nested-group {
-          margin-top: 2px;
+          margin-bottom: 2px;
         }
 
         .nav-nested-header {
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 8px 12px;
+          gap: 10px;
+          padding: 10px 12px;
           color: var(--text-secondary);
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.15s;
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 500;
           border: none;
           background: none;
@@ -344,9 +344,10 @@ export function HomePage() {
         }
 
         .nav-nested-arrow {
-          font-size: 8px;
+          font-size: 10px;
           transition: transform 0.2s;
           color: var(--text-tertiary);
+          margin-left: auto;
         }
 
         .nav-nested-arrow.open {
@@ -354,9 +355,10 @@ export function HomePage() {
         }
 
         .nav-nested-items {
-          margin-left: 12px;
-          padding-left: 8px;
+          margin-left: 8px;
+          padding-left: 12px;
           border-left: 1px solid var(--border-primary);
+          margin-top: 2px;
         }
 
         .nav-nested-items.collapsed {
@@ -364,8 +366,8 @@ export function HomePage() {
         }
 
         .nav-item.nested {
-          padding: 8px 12px;
-          font-size: 12px;
+          padding: 10px 12px;
+          font-size: 13px;
         }
 
         .nav-divider {
