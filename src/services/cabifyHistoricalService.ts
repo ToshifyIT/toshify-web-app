@@ -1,16 +1,13 @@
 /**
- * Servicio para consultas híbridas de datos Cabify
+ * Servicio para consultas de datos históricos de Cabify
  *
- * Estrategia inteligente:
- * 1. Consultar primero datos históricos en BD (rápido)
- * 2. Identificar gaps (períodos faltantes)
- * 3. Consultar API solo para gaps (eficiente)
- * 4. Combinar y retornar
+ * Estrategia:
+ * - SOLO consulta datos desde la tabla cabify_historico
+ * - El Edge Function se encarga de sincronizar datos cada 5 minutos
+ * - NUNCA llama a la API de Cabify directamente desde el frontend
  */
 
 import { supabase } from '../lib/supabase'
-import { cabifyService } from './cabifyService'
-import type { CabifyPeriod } from '../types/cabify.types'
 
 // =====================================================
 // TIPOS
@@ -213,58 +210,25 @@ class CabifyHistoricalService {
     const coverage = this.analyzeCoverage(historical, startDate, endDate)
     console.log(`📊 Cobertura histórica: ${coverage.percentage.toFixed(1)}%`)
 
-    // 4. Si hay datos en la tabla, SIEMPRE usarlos (se sincronizan automáticamente)
-    // No verificar si son "recientes" - el cron job se encarga de mantenerlos actualizados
-    if (coverage.hasFullCoverage && !options.forceAPI) {
-      console.log('✅ 100% desde histórico - 0 llamadas API')
+    // 4. SIEMPRE retornar datos del histórico (NUNCA llamar a la API desde el frontend)
+    // El Edge Function se encarga de mantener el histórico actualizado cada 5 minutos
+    console.log(`✅ Datos desde histórico: ${historical.length} conductores`)
 
-      // Cachear resultado
+    // Cachear resultado (incluso si está vacío, para evitar consultas repetidas)
+    if (historical.length > 0) {
       this.cache.set(cacheKey, historical)
-
-      const stats: QueryStats = {
-        source: 'historical',
-        historicalRecords: historical.length,
-        apiRecords: 0,
-        totalRecords: historical.length,
-        executionTimeMs: Date.now() - startTime,
-        cacheHit: false
-      }
-
-      return { drivers: historical, stats }
     }
 
-    // 5. Si no hay datos en la tabla → consultar API
-    console.log('🔄 Consultando API Cabify (no hay datos en histórico)...')
-
-    const apiDrivers = await cabifyService.getDriversWithDetails(
-      'custom' as CabifyPeriod,
-      { startDate, endDate },
-      options.onProgress ? (current, total, _newDrivers, message) => options.onProgress!(current, total, message) : undefined
-    )
-
-    // 6. Guardar en histórico (asíncrono, no bloquear respuesta)
-    this.saveToHistorical(apiDrivers, startDate, endDate).catch(err => {
-      console.error('⚠️  Error guardando en histórico:', err)
-    })
-
-    // 7. Combinar histórico + API (quitar duplicados)
-    const combined = this.mergeDriversData(historical, apiDrivers)
-
-    // Cachear resultado
-    this.cache.set(cacheKey, combined)
-
     const stats: QueryStats = {
-      source: coverage.percentage > 0 ? 'hybrid' : 'api',
+      source: 'historical',
       historicalRecords: historical.length,
-      apiRecords: apiDrivers.length,
-      totalRecords: combined.length,
+      apiRecords: 0,
+      totalRecords: historical.length,
       executionTimeMs: Date.now() - startTime,
       cacheHit: false
     }
 
-    console.log(`✅ Datos combinados: ${historical.length} histórico + ${apiDrivers.length} API = ${combined.length} total`)
-
-    return { drivers: combined, stats }
+    return { drivers: historical, stats }
   }
 
   /**
@@ -280,7 +244,14 @@ class CabifyHistoricalService {
     const startDateOnly = startDate.split('T')[0]
     const endDateOnly = endDate.split('T')[0]
 
-    console.log(`📅 Consultando histórico: ${startDateOnly} a ${endDateOnly}`)
+    console.log('📅 Consultando histórico:', {
+      startDateOriginal: startDate,
+      endDateOriginal: endDate,
+      startDateOnly,
+      endDateOnly,
+      queryGte: `${startDateOnly}T00:00:00Z`,
+      queryLte: `${endDateOnly}T23:59:59Z`
+    })
 
     // Consulta todos los registros dentro del rango de fechas (comparando por día)
     const { data, error } = await supabase
@@ -459,104 +430,6 @@ class CabifyHistoricalService {
       foundRecords: historical.length,
       hasFullCoverage: hasData,
       gaps: hasData ? [] : [{ start: startDate, end: endDate }]
-    }
-  }
-
-  /**
-   * Combinar datos históricos + API (eliminar duplicados)
-   */
-  private mergeDriversData(
-    historical: DriverHistoricalData[],
-    api: any[]
-  ): DriverHistoricalData[] {
-    // Crear mapa de históricos por driver ID
-    const historicalMap = new Map(
-      historical.map(d => [d.id, d])
-    )
-
-    // Agregar datos de API solo si no están en histórico
-    const merged = [...historical]
-
-    for (const apiDriver of api) {
-      if (!historicalMap.has(apiDriver.id)) {
-        merged.push(apiDriver)
-      }
-    }
-
-    return merged
-  }
-
-  /**
-   * Guardar datos de API en histórico (async, no bloquea)
-   */
-  private async saveToHistorical(
-    drivers: any[],
-    startDate: string,
-    endDate: string
-  ): Promise<void> {
-    try {
-      if (drivers.length === 0) return
-
-      console.log(`💾 Guardando ${drivers.length} registros en histórico...`)
-
-      const records = drivers.map(d => ({
-        cabify_driver_id: d.id,
-        cabify_company_id: d.companyId,
-        nombre: d.name,
-        apellido: d.surname,
-        email: d.email,
-        dni: d.nationalIdNumber,
-        licencia: d.driverLicense,
-        telefono_codigo: d.mobileCc,
-        telefono_numero: d.mobileNum,
-        vehiculo_id: d.assetId,
-        vehiculo_patente: d.vehicleRegPlate,
-        vehiculo_marca: d.vehicleMake,
-        vehiculo_modelo: d.vehicleModel,
-        vehiculo_completo: d.vehiculo,
-        fecha_inicio: startDate,
-        fecha_fin: endDate,
-        viajes_finalizados: d.viajesFinalizados,
-        viajes_rechazados: d.viajesRechazados,
-        viajes_perdidos: d.viajesPerdidos,
-        viajes_aceptados: d.viajesAceptados,
-        viajes_ofrecidos: d.viajesOfrecidos,
-        score: d.score,
-        tasa_aceptacion: d.tasaAceptacion,
-        tasa_ocupacion: d.tasaOcupacion,
-        horas_conectadas: d.horasConectadas,
-        horas_conectadas_formato: d.horasConectadasFormato,
-        cobro_efectivo: d.cobroEfectivo,
-        cobro_app: d.cobroApp,
-        peajes: d.peajes,
-        ganancia_total: d.gananciaTotal,
-        ganancia_por_hora: d.gananciaPorHora,
-        permiso_efectivo: d.permisoEfectivo,
-        estado_conductor: d.disabled ? 'Deshabilitado' : 'Activo'
-      }))
-
-      // Insertar en batches de 500
-      const BATCH_SIZE = 500
-      for (let i = 0; i < records.length; i += BATCH_SIZE) {
-        const batch = records.slice(i, i + BATCH_SIZE)
-
-        const { error } = await supabase
-          .from('cabify_historico')
-          .insert(batch as any)
-
-        if (error) {
-          // Ignorar errores de duplicados (constraint único)
-          if (error.code !== '23505') {
-            console.error('❌ Error guardando batch en histórico:', error)
-          }
-        }
-      }
-
-      console.log(`✅ Registros guardados en histórico`)
-
-    } catch (error) {
-      console.error('❌ Error en saveToHistorical:', error)
-      // No lanzar error, solo loguear (no queremos romper el flujo)
     }
   }
 

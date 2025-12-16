@@ -28,6 +28,8 @@ interface SubmenuPermission {
   submenu_label: string
   submenu_route: string
   menu_id: string
+  parent_id: string | null  // ID del submenú padre (para submenús anidados)
+  level: number  // Nivel de anidamiento
   order_index: number
   can_view: boolean
   can_create: boolean
@@ -76,6 +78,8 @@ export function useEffectivePermissions() {
     submenu_label: submenu.label,
     submenu_route: submenu.route,
     menu_id: (submenu as any).parent_menu_id || submenu.menu_id,
+    parent_id: (submenu as any).parent_id || null,
+    level: (submenu as any).level || 1,
     order_index: submenu.order_index,
     can_view: submenu.permissions.can_view,
     can_create: submenu.permissions.can_create,
@@ -131,6 +135,8 @@ export function useEffectivePermissions() {
         submenu_label: submenu.label,
         submenu_route: submenu.route,
         menu_id: (submenu as any).parent_menu_id || submenu.menu_id,
+        parent_id: (submenu as any).parent_id || null,
+        level: (submenu as any).level || 1,
         order_index: submenu.order_index,
         can_view: submenu.permissions.can_view,
         can_create: submenu.permissions.can_create,

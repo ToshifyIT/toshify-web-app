@@ -206,6 +206,7 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
   const allDriversData: any[] = []
 
   for (const companyId of companyIds) {
+
     const driversQuery = `
       query ($companyId: String!, $page: Int!, $perPage: Int!) {
         paginatedDrivers(page: $page, perPage: $perPage, companyId: $companyId) {
@@ -228,6 +229,8 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
 
     const driversJson = await driversRes.json()
     const drivers = driversJson.data?.paginatedDrivers?.drivers || []
+
+    if (drivers.length === 0) continue
 
     for (let i = 0; i < drivers.length; i += 50) {
       const batch = drivers.slice(i, i + 50)
@@ -295,17 +298,21 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
             const driverInfo = driverData.data?.driver
             const journeys = journeysData.data?.paginatedJourneys?.journeys || []
 
-            if (!driverInfo) return null
+            // SIEMPRE guardar el conductor, aunque no tenga stats del período
+            // Usar datos básicos del driver si no hay driverInfo
+            const effectiveDriver = driverInfo || driver
 
-            const assignedSeconds = Number(driverInfo.stats?.assigned || 0)
-            const availableSeconds = Number(driverInfo.stats?.available || 0)
+            // Stats pueden venir de driverInfo o ser 0 si no hay datos del período
+            const stats = driverInfo?.stats || {}
+            const assignedSeconds = Number(stats.assigned || 0)
+            const availableSeconds = Number(stats.available || 0)
             const connectedSeconds = assignedSeconds + availableSeconds
             const horasConectadas = connectedSeconds / 3600
             const tasaOcupacion = connectedSeconds > 0 ? (assignedSeconds / connectedSeconds) * 100 : 0
 
-            const accepted = Number(driverInfo.stats?.accepted || 0)
-            const missed = Number(driverInfo.stats?.missed || 0)
-            const offered = Number(driverInfo.stats?.offered || 0)
+            const accepted = Number(stats.accepted || 0)
+            const missed = Number(stats.missed || 0)
+            const offered = Number(stats.offered || 0)
             const rejected = Math.max(offered - accepted - missed, 0)
             const totalConsidered = accepted + rejected + missed
             const tasaAceptacion = totalConsidered > 0 ? (accepted / totalConsidered) * 100 : 0
@@ -335,13 +342,13 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
             return {
               cabify_driver_id: driver.id,
               cabify_company_id: companyId,
-              nombre: driverInfo.name || driver.name || '',
-              apellido: driverInfo.surname || driver.surname || '',
-              email: driverInfo.email || driver.email || '',
-              dni: driverInfo.nationalIdNumber || driver.nationalIdNumber || '',
-              licencia: driverInfo.driverLicense || driver.driverLicense || '',
-              telefono_codigo: driverInfo.mobileNum ? driver.mobileCc || '' : '',
-              telefono_numero: driverInfo.mobileNum || driver.mobileNum || '',
+              nombre: effectiveDriver.name || '',
+              apellido: effectiveDriver.surname || '',
+              email: effectiveDriver.email || '',
+              dni: effectiveDriver.nationalIdNumber || '',
+              licencia: effectiveDriver.driverLicense || '',
+              telefono_codigo: effectiveDriver.mobileCc || '',
+              telefono_numero: effectiveDriver.mobileNum || '',
               vehiculo_id: firstAssetId,
               first_asset_id: firstAssetId, // Temporal para el batch
               fecha_inicio: startDate,
@@ -351,7 +358,7 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
               viajes_perdidos: missed,
               viajes_aceptados: accepted,
               viajes_ofrecidos: offered,
-              score: driverInfo.stats?.score || 0,
+              score: stats.score || 0,
               tasa_aceptacion: Number(tasaAceptacion.toFixed(2)),
               tasa_ocupacion: Number(tasaOcupacion.toFixed(2)),
               horas_conectadas: Number(horasConectadas.toFixed(1)),
@@ -366,7 +373,7 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
               estado_conductor: 'Activo'
             }
           } catch (error) {
-            console.error(`Error procesando conductor ${driver.id}:`, error)
+            console.error(`❌ Error procesando conductor ${driver.id}:`, error)
             return null
           }
         })
@@ -468,20 +475,27 @@ serve(async (req) => {
 
       // Consultar datos
       const driversData = await getCabifyData(token, day.startDate, day.endDate)
-      console.log(`  ✅ ${driversData.length} conductores obtenidos`)
+      console.log(`  📊 ${driversData.length} conductores obtenidos de API`)
 
-      if (driversData.length > 0) {
+      // Filtrar conductores sin DNI (requerido por constraint de BD)
+      const validDrivers = driversData.filter(d => d.dni && d.dni.trim() !== '')
+      const filteredCount = driversData.length - validDrivers.length
+      if (filteredCount > 0) {
+        console.log(`  ⚠️  ${filteredCount} conductores filtrados (sin DNI)`)
+      }
+
+      if (validDrivers.length > 0) {
         // Guardar en BD
         const { error: insertError } = await supabase
           .from('cabify_historico')
-          .insert(driversData)
+          .insert(validDrivers)
 
         if (insertError) {
           console.error(`  ❌ Error guardando: ${insertError.message}`)
         } else {
-          totalSynced += driversData.length
+          totalSynced += validDrivers.length
           daysProcessed++
-          console.log(`  ✅ Guardado exitosamente`)
+          console.log(`  ✅ ${validDrivers.length} conductores guardados exitosamente`)
         }
       }
     }

@@ -101,6 +101,13 @@
   cursor: not-allowed;
 }
 
+.mhm-form-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6B7280;
+}
+
 .mhm-modal-actions {
   display: flex;
   gap: 12px;

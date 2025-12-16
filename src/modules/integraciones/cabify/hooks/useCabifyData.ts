@@ -113,6 +113,14 @@ export function useCabifyData(): UseCabifyDataReturn {
     setDrivers([])
     setLoadingProgress(INITIAL_LOADING_PROGRESS)
 
+    // Debug: Ver qué fechas estamos consultando
+    console.log('🔍 Consultando datos para:', {
+      weekLabel: week.label,
+      weeksAgo: week.weeksAgo,
+      startDate: week.startDate,
+      endDate: week.endDate
+    })
+
     // Obtener datos históricos
     const { drivers: driverData, stats } = await cabifyHistoricalService.getDriversData(
       week.startDate,
@@ -123,6 +131,30 @@ export function useCabifyData(): UseCabifyDataReturn {
         },
       }
     )
+
+    // Debug: Ver resultado
+    console.log('📊 Datos cargados:', {
+      driversCount: driverData.length,
+      weeksAgo: week.weeksAgo,
+      weekLabel: week.label,
+      source: stats.source
+    })
+
+    // Si es la semana actual (weeksAgo === 0) y no hay datos, cargar semana anterior silenciosamente
+    if (driverData.length === 0 && week.weeksAgo === 0) {
+      // Obtener semanas directamente del servicio (no del estado que puede estar desactualizado)
+      const freshWeeks = cabifyService.getAvailableWeeks(WEEKS_TO_LOAD) as WeekOption[]
+
+      if (freshWeeks.length > 1) {
+        const previousWeek = freshWeeks[1] // Semana anterior
+
+        console.log('⚠️ Semana actual sin datos, cargando semana anterior silenciosamente:', previousWeek.label)
+
+        // Cambiar a la semana anterior directamente (sin popup molesto)
+        setSelectedWeek(previousWeek)
+        return
+      }
+    }
 
     // Actualizar estado con datos
     setDrivers(driverData)

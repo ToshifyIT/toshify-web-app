@@ -33,12 +33,25 @@ import { GestorMenusPage } from './administracion/GestorMenusPage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 
+// Tipo para submenús con jerarquía
+interface SubmenuWithHierarchy {
+  submenu_id: string
+  submenu_name: string
+  submenu_label: string
+  submenu_route: string
+  menu_id: string
+  parent_id: string | null
+  level: number
+  order_index: number
+}
+
 export function HomePage() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
+  const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleSignOut = async () => {
@@ -54,8 +67,67 @@ export function HomePage() {
     setSidebarOpen(!sidebarOpen)
   }
 
+  const toggleNestedMenu = (submenuId: string) => {
+    setOpenNestedMenus(prev => ({ ...prev, [submenuId]: !prev[submenuId] }))
+  }
+
   const isActiveRoute = (path: string) => {
     return location.pathname === path
+  }
+
+  // Función recursiva para renderizar submenús anidados
+  const renderSubmenus = (
+    allSubmenus: SubmenuWithHierarchy[],
+    parentId: string | null = null,
+    depth: number = 0
+  ): React.ReactNode => {
+    // Filtrar submenús que son hijos del padre actual
+    const children = allSubmenus
+      .filter(sub => sub.parent_id === parentId)
+      .sort((a, b) => a.order_index - b.order_index)
+
+    if (children.length === 0) return null
+
+    return children.map(submenu => {
+      // Verificar si este submenú tiene hijos
+      const hasChildren = allSubmenus.some(sub => sub.parent_id === submenu.submenu_id)
+      const isNestedOpen = openNestedMenus[submenu.submenu_id] || false
+
+      if (hasChildren) {
+        // Este submenú tiene hijos - renderizar como grupo colapsable
+        return (
+          <div key={submenu.submenu_id} className="nav-nested-group">
+            <button
+              className="nav-nested-header"
+              onClick={() => {
+                // Si tiene ruta, navegar; si no, solo toggle
+                if (submenu.submenu_route) {
+                  navigate(submenu.submenu_route)
+                }
+                toggleNestedMenu(submenu.submenu_id)
+              }}
+            >
+              <span>{submenu.submenu_label}</span>
+              <span className={`nav-nested-arrow ${isNestedOpen ? 'open' : ''}`}>▸</span>
+            </button>
+            <div className={`nav-nested-items ${!isNestedOpen ? 'collapsed' : ''}`}>
+              {renderSubmenus(allSubmenus, submenu.submenu_id, depth + 1)}
+            </div>
+          </div>
+        )
+      } else {
+        // Submenú sin hijos - renderizar como botón navegable
+        return (
+          <button
+            key={submenu.submenu_id}
+            className={`nav-item ${depth > 0 ? 'nested' : ''} ${isActiveRoute(submenu.submenu_route) ? 'active' : ''}`}
+            onClick={() => navigate(submenu.submenu_route)}
+          >
+            <span className="nav-label">{submenu.submenu_label}</span>
+          </button>
+        )
+      }
+    })
   }
 
   const visibleMenus = getVisibleMenus()
@@ -242,6 +314,60 @@ export function HomePage() {
 
         .nav-section-items.collapsed {
           display: none;
+        }
+
+        /* Submenús anidados */
+        .nav-nested-group {
+          margin-bottom: 2px;
+        }
+
+        .nav-nested-header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 12px;
+          color: var(--text-secondary);
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.15s;
+          font-size: 13px;
+          font-weight: 500;
+          border: none;
+          background: none;
+          width: 100%;
+          text-align: left;
+        }
+
+        .nav-nested-header:hover {
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+        }
+
+        .nav-nested-arrow {
+          font-size: 10px;
+          transition: transform 0.2s;
+          color: var(--text-tertiary);
+          margin-left: auto;
+        }
+
+        .nav-nested-arrow.open {
+          transform: rotate(90deg);
+        }
+
+        .nav-nested-items {
+          margin-left: 8px;
+          padding-left: 12px;
+          border-left: 1px solid var(--border-primary);
+          margin-top: 2px;
+        }
+
+        .nav-nested-items.collapsed {
+          display: none;
+        }
+
+        .nav-item.nested {
+          padding: 10px 12px;
+          font-size: 13px;
         }
 
         .nav-divider {
@@ -638,15 +764,7 @@ export function HomePage() {
                       </button>
 
                       <div className={`nav-section-items ${!isMenuOpen ? 'collapsed' : ''}`}>
-                        {submenus.map((submenu) => (
-                          <button
-                            key={submenu.submenu_id}
-                            className={`nav-item ${isActiveRoute(submenu.submenu_route) ? 'active' : ''}`}
-                            onClick={() => navigate(submenu.submenu_route)}
-                          >
-                            <span className="nav-label">{submenu.submenu_label}</span>
-                          </button>
-                        ))}
+                        {renderSubmenus(submenus as SubmenuWithHierarchy[], null, 0)}
                       </div>
                     </div>
                   )
@@ -786,7 +904,7 @@ export function HomePage() {
 
               {/* Integraciones */}
               <Route path="/uss" element={
-                <ProtectedRoute submenuName="uss" action="view">
+                <ProtectedRoute submenuName="ctrl-exceso-vel" action="view">
                   <USSPage />
                 </ProtectedRoute>
               } />

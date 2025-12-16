@@ -12,7 +12,11 @@
     "sync:cabify:weekly": "npx tsx scripts/sync-cabify-historical.ts weekly 1",
     "sync:cabify:backfill": "npx tsx scripts/sync-cabify-historical.ts backfill 12",
     "sync:cabify:realtime": "npx tsx scripts/sync-cabify-historical.ts realtime",
-    "check:cabify-historico": "npx tsx scripts/check-cabify-historico.ts"
+    "check:cabify-historico": "npx tsx scripts/check-cabify-historico.ts",
+    "sync:uss": "npx tsx scripts/sync-uss-kilometraje.ts",
+    "sync:uss:dry": "npx tsx scripts/sync-uss-kilometraje.ts --dry-run",
+    "sync:uss:excesos": "npx tsx scripts/backfill-uss-excesos.ts",
+    "sync:uss:excesos:week": "npx tsx scripts/backfill-uss-excesos.ts --days 7"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",
