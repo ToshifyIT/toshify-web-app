@@ -182,9 +182,18 @@ export function AsignacionesActivasModule() {
         header: 'Turno',
         cell: ({ row }) => {
           const turno = (row.original as any).turnoEspecifico
+
+          const turnoLabels: Record<string, string> = {
+            'todo_dia': '-',
+            'diurno': 'Diurno',
+            'nocturno': 'Nocturno'
+          }
+
+          const label = turno === '-' ? '-' : (turnoLabels[turno] || turno || 'N/A')
+
           return (
             <span style={{ fontSize: '13px', fontWeight: '500' }}>
-              {turno === '-' ? '-' : turno || 'N/A'}
+              {label}
             </span>
           )
         },
