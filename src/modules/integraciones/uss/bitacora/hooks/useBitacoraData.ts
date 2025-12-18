@@ -1,0 +1,297 @@
+// src/modules/integraciones/uss/bitacora/hooks/useBitacoraData.ts
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../../../../../lib/supabase'
+import { wialonBitacoraService } from '../../../../../services/wialonBitacoraService'
+import type {
+  BitacoraRegistro,
+  BitacoraStats,
+  BitacoraDateRange,
+  BitacoraQueryState,
+} from '../types/bitacora.types'
+import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
+
+// Tipo para asignaciones
+interface AsignacionActiva {
+  patente: string
+  patente_normalizada: string
+  conductor_nombre: string
+  conductor_apellido: string
+  conductor_completo: string
+}
+
+// Helpers para fechas
+function getToday(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+function getYesterday(): string {
+  const date = new Date()
+  date.setDate(date.getDate() - 1)
+  return date.toISOString().split('T')[0]
+}
+
+function getStartOfWeek(): string {
+  const date = new Date()
+  const day = date.getDay()
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1)
+  date.setDate(diff)
+  return date.toISOString().split('T')[0]
+}
+
+function getStartOfMonth(): string {
+  const date = new Date()
+  date.setDate(1)
+  return date.toISOString().split('T')[0]
+}
+
+export function useBitacoraData() {
+  // Estado de fechas
+  const [dateRange, setDateRange] = useState<BitacoraDateRange>({
+    startDate: getToday(),
+    endDate: getToday(),
+    label: 'Hoy',
+  })
+
+  // Estado de datos
+  const [registros, setRegistros] = useState<BitacoraRegistro[]>([])
+  const [stats, setStats] = useState<BitacoraStats | null>(null)
+  const [totalCount, setTotalCount] = useState(0)
+  const [asignaciones, setAsignaciones] = useState<Map<string, AsignacionActiva>>(new Map())
+
+  // Estado de paginación
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(BITACORA_CONSTANTS.DEFAULT_PAGE_SIZE)
+
+  // Estado de filtros
+  const [filterPatente, setFilterPatente] = useState('')
+  const [filterConductor, setFilterConductor] = useState('')
+  const [filterEstado, setFilterEstado] = useState('')
+
+  // Estado de query
+  const [queryState, setQueryState] = useState<BitacoraQueryState>({
+    loading: false,
+    error: null,
+    lastUpdate: null,
+  })
+
+  // Cargar asignaciones activas
+  const loadAsignaciones = useCallback(async () => {
+    const { data } = await supabase
+      .from('asignaciones')
+      .select(`
+        vehiculo_id,
+        vehiculos!inner(patente),
+        conductores!inner(nombres, apellidos)
+      `)
+      .eq('estado', 'activa')
+
+    if (data) {
+      const map = new Map<string, AsignacionActiva>()
+      for (const row of data) {
+        const vehiculo = row.vehiculos as { patente: string } | null
+        const conductor = row.conductores as { nombres: string; apellidos: string } | null
+
+        if (vehiculo && conductor) {
+          const patenteNorm = vehiculo.patente.replace(/\s/g, '').toUpperCase()
+          map.set(patenteNorm, {
+            patente: vehiculo.patente,
+            patente_normalizada: patenteNorm,
+            conductor_nombre: conductor.nombres,
+            conductor_apellido: conductor.apellidos,
+            conductor_completo: `${conductor.nombres} ${conductor.apellidos}`,
+          })
+        }
+      }
+      setAsignaciones(map)
+    }
+  }, [])
+
+  // Cargar asignaciones al montar
+  useEffect(() => {
+    loadAsignaciones()
+  }, [loadAsignaciones])
+
+  // Cargar datos
+  const loadData = useCallback(async () => {
+    setQueryState((prev) => ({ ...prev, loading: true, error: null }))
+
+    try {
+      const offset = (page - 1) * pageSize
+
+      const [bitacoraResult, statsResult] = await Promise.all([
+        wialonBitacoraService.getBitacora(dateRange.startDate, dateRange.endDate, {
+          limit: pageSize,
+          offset,
+          patente: filterPatente || undefined,
+          conductor: filterConductor || undefined,
+          estado: filterEstado || undefined,
+        }),
+        wialonBitacoraService.getStats(dateRange.startDate, dateRange.endDate),
+      ])
+
+      // Cruzar con asignaciones
+      const registrosEnriquecidos = bitacoraResult.data.map((r) => {
+        const asignacion = asignaciones.get(r.patente_normalizada)
+        if (asignacion) {
+          return {
+            ...r,
+            conductor_wialon: asignacion.conductor_completo,
+          }
+        }
+        return r
+      })
+
+      setRegistros(registrosEnriquecidos)
+      setTotalCount(bitacoraResult.count)
+      setStats(statsResult)
+      setQueryState({
+        loading: false,
+        error: null,
+        lastUpdate: new Date(),
+      })
+    } catch (error) {
+      setQueryState({
+        loading: false,
+        error: error instanceof Error ? error.message : 'Error desconocido',
+        lastUpdate: null,
+      })
+    }
+  }, [dateRange, page, pageSize, filterPatente, filterConductor, filterEstado, asignaciones])
+
+  // Cargar datos cuando cambian los parámetros
+  useEffect(() => {
+    if (asignaciones.size > 0 || !queryState.loading) {
+      loadData()
+    }
+  }, [loadData, asignaciones.size])
+
+  // Cambiar rango de fecha predefinido
+  const setDateRangePreset = useCallback((preset: string) => {
+    const today = getToday()
+
+    switch (preset) {
+      case 'today':
+        setDateRange({ startDate: today, endDate: today, label: 'Hoy' })
+        break
+      case 'yesterday':
+        const yesterday = getYesterday()
+        setDateRange({ startDate: yesterday, endDate: yesterday, label: 'Ayer' })
+        break
+      case 'week':
+        setDateRange({ startDate: getStartOfWeek(), endDate: today, label: 'Esta semana' })
+        break
+      case 'month':
+        setDateRange({ startDate: getStartOfMonth(), endDate: today, label: 'Este mes' })
+        break
+    }
+    setPage(1)
+  }, [])
+
+  // Cambiar rango de fecha personalizado
+  const setCustomDateRange = useCallback((startDate: string, endDate: string) => {
+    setDateRange({ startDate, endDate, label: 'Personalizado' })
+    setPage(1)
+  }, [])
+
+  // Actualizar checklist
+  const updateChecklist = useCallback(
+    async (
+      id: string,
+      field: 'gnc_cargado' | 'lavado_realizado' | 'nafta_cargada',
+      value: boolean
+    ) => {
+      try {
+        await wialonBitacoraService.updateChecklist(id, { [field]: value })
+
+        setRegistros((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+        )
+      } catch (error) {
+        console.error('Error actualizando checklist:', error)
+        throw error
+      }
+    },
+    []
+  )
+
+  // Actualizar estado
+  const updateEstado = useCallback(async (id: string, estado: string) => {
+    try {
+      await wialonBitacoraService.updateEstado(id, estado)
+      setRegistros((prev) => prev.map((r) => (r.id === id ? { ...r, estado } : r)))
+    } catch (error) {
+      console.error('Error actualizando estado:', error)
+      throw error
+    }
+  }, [])
+
+  // Refrescar datos
+  const refresh = useCallback(() => {
+    wialonBitacoraService.clearCache()
+    loadAsignaciones()
+    loadData()
+  }, [loadData, loadAsignaciones])
+
+  // Sincronizar con Wialon
+  const triggerSync = useCallback(async () => {
+    setQueryState((prev) => ({ ...prev, loading: true }))
+    try {
+      const result = await wialonBitacoraService.triggerSync(
+        dateRange.startDate,
+        dateRange.endDate
+      )
+      if (result.success) {
+        await loadData()
+      } else {
+        setQueryState((prev) => ({
+          ...prev,
+          loading: false,
+          error: result.error || 'Error en sincronización',
+        }))
+      }
+      return result
+    } catch (error) {
+      setQueryState((prev) => ({
+        ...prev,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Error desconocido',
+      }))
+      return { success: false, error: String(error) }
+    }
+  }, [dateRange, loadData])
+
+  return {
+    // Datos
+    registros,
+    stats,
+    totalCount,
+
+    // Estado de query
+    queryState,
+
+    // Fechas
+    dateRange,
+    setDateRangePreset,
+    setCustomDateRange,
+
+    // Paginación
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+
+    // Filtros
+    filterPatente,
+    setFilterPatente,
+    filterConductor,
+    setFilterConductor,
+    filterEstado,
+    setFilterEstado,
+
+    // Acciones
+    updateChecklist,
+    updateEstado,
+    refresh,
+    triggerSync,
+  }
+}

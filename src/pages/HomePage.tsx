@@ -23,6 +23,7 @@ import { HistorialMovimientosPage } from './inventario/HistorialMovimientosPage'
 import { PedidosTransitoPage } from './inventario/PedidosTransitoPage'
 import { AprobacionesPendientesPage } from './inventario/AprobacionesPendientesPage'
 import { USSPage } from './integraciones/uss/USSPage'
+import { BitacoraPage } from './integraciones/uss/BitacoraPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
 import { RolesPage } from './administracion/RolesPage'
@@ -906,6 +907,11 @@ export function HomePage() {
               <Route path="/uss" element={
                 <ProtectedRoute submenuName="ctrl-exceso-vel" action="view">
                   <USSPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/uss/bitacora" element={
+                <ProtectedRoute submenuName="bitacora-uss" action="view">
+                  <BitacoraPage />
                 </ProtectedRoute>
               } />
               <Route path="/cabify" element={

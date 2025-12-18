@@ -418,9 +418,29 @@ export function VehicleManagement() {
           const estado = row.original.vehiculos_estados
           const codigo = estado?.codigo || 'N/A'
 
+          // Etiquetas cortas para el badge
+          const etiquetasCortas: Record<string, string> = {
+            'DISPONIBLE': 'Disponible',
+            'EN_USO': 'En Uso',
+            'CORPORATIVO': 'Corporativo',
+            'PKG_ON_BASE': 'PKG ON',
+            'PKG_OFF_BASE': 'PKG OFF',
+            'PKG_OFF_FRANCIA': 'PKG Francia',
+            'TALLER_AXIS': 'Taller Axis',
+            'TALLER_CHAPA_PINTURA': 'Chapa&Pintura',
+            'TALLER_ALLIANCE': 'Taller Alliance',
+            'TALLER_KALZALO': 'Taller Kalzalo',
+            'TALLER_BASE_VALIENTE': 'Base Valiente',
+            'INSTALACION_GNC': 'Inst. GNC',
+            'RETENIDO_COMISARIA': 'Retenido',
+            'ROBO': 'Robo',
+            'DESTRUCCION_TOTAL': 'Destrucción',
+            'JUBILADO': 'Jubilado',
+            'PROGRAMADO': 'Programado'
+          }
+
           let badgeClass = 'dt-badge dt-badge-solid-gray'
           switch (codigo) {
-            // Estados operativos principales
             case 'DISPONIBLE':
               badgeClass = 'dt-badge dt-badge-solid-green'
               break
@@ -430,13 +450,11 @@ export function VehicleManagement() {
             case 'CORPORATIVO':
               badgeClass = 'dt-badge dt-badge-solid-blue'
               break
-            // Estados PKG (parking/base)
             case 'PKG_ON_BASE':
             case 'PKG_OFF_BASE':
             case 'PKG_OFF_FRANCIA':
               badgeClass = 'dt-badge dt-badge-solid-gray'
               break
-            // Estados de taller/mantenimiento
             case 'TALLER_AXIS':
             case 'TALLER_CHAPA_PINTURA':
             case 'TALLER_ALLIANCE':
@@ -445,7 +463,6 @@ export function VehicleManagement() {
             case 'INSTALACION_GNC':
               badgeClass = 'dt-badge dt-badge-solid-yellow'
               break
-            // Estados críticos/baja
             case 'ROBO':
             case 'DESTRUCCION_TOTAL':
             case 'RETENIDO_COMISARIA':
@@ -455,8 +472,8 @@ export function VehicleManagement() {
           }
 
           return (
-            <span className={badgeClass} title={estado?.descripcion || 'N/A'}>
-              {codigo}
+            <span className={badgeClass} title={estado?.descripcion || codigo}>
+              {etiquetasCortas[codigo] || codigo}
             </span>
           )
         },
