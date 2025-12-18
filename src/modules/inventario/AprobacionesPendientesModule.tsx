@@ -92,14 +92,15 @@ export function AprobacionesPendientesModule() {
 
     setProcessing(movimiento.id)
     try {
-      const { error: rpcError } = await (supabase.rpc as any)('aprobar_rechazar_movimiento', {
+      const { data: rpcResult, error: rpcError } = await (supabase.rpc as any)('aprobar_rechazar_movimiento', {
         p_movimiento_id: movimiento.id,
-        p_aprobador_id: user?.id,
-        p_aprobado: true,
+        p_accion: 'aprobar',
+        p_usuario_id: user?.id,
         p_motivo_rechazo: null
       })
 
       if (rpcError) throw rpcError
+      if (rpcResult && !rpcResult.success) throw new Error(rpcResult.error)
 
       await Swal.fire({
         title: '¡Aprobado!',
@@ -157,14 +158,15 @@ export function AprobacionesPendientesModule() {
 
     setProcessing(movimiento.id)
     try {
-      const { error: rejectError } = await (supabase.rpc as any)('aprobar_rechazar_movimiento', {
+      const { data: rpcResult, error: rejectError } = await (supabase.rpc as any)('aprobar_rechazar_movimiento', {
         p_movimiento_id: movimiento.id,
-        p_aprobador_id: user?.id,
-        p_aprobado: false,
+        p_accion: 'rechazar',
+        p_usuario_id: user?.id,
         p_motivo_rechazo: motivo.trim()
       })
 
       if (rejectError) throw rejectError
+      if (rpcResult && !rpcResult.success) throw new Error(rpcResult.error)
 
       await Swal.fire({
         title: 'Rechazado',

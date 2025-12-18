@@ -10,7 +10,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react'
-import { Users } from 'lucide-react'
+import { Users, UserX, ChevronDown, ChevronUp } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable/DataTable'
 
@@ -139,13 +139,31 @@ export function CabifyModule() {
   const hasDrivers = drivers.length > 0
   const hasError = Boolean(queryState.error)
 
-  // Label del período actual para mostrar en UI
+  // Label del período actual para mostrar en UI (en hora Argentina)
   const periodLabel = useMemo(() => {
     if (!effectiveDateRange) return 'Sin período'
-    const startDate = new Date(effectiveDateRange.startDate).toLocaleDateString('es-AR')
-    const endDate = new Date(effectiveDateRange.endDate).toLocaleDateString('es-AR')
+    const formatOptions: Intl.DateTimeFormatOptions = {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }
+    const startDate = new Date(effectiveDateRange.startDate).toLocaleDateString('es-AR', formatOptions)
+    const endDate = new Date(effectiveDateRange.endDate).toLocaleDateString('es-AR', formatOptions)
     return `${startDate} - ${endDate}`
   }, [effectiveDateRange])
+
+  // Conductores sin asignación activa
+  const driversWithoutAssignment = useMemo(() => {
+    if (!drivers.length || !asignaciones) return []
+    return drivers.filter(driver => {
+      if (!driver.nationalIdNumber) return true // Sin DNI = sin asignación
+      return !asignaciones.has(driver.nationalIdNumber)
+    })
+  }, [drivers, asignaciones])
+
+  // Estado para expandir/colapsar la sección de sin asignación
+  const [showUnassigned, setShowUnassigned] = useState(false)
 
   return (
     <div className="module-container">
@@ -212,6 +230,15 @@ export function CabifyModule() {
           pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
         />
       </div>
+
+      {/* Sección de conductores sin asignación */}
+      {!isLoading && driversWithoutAssignment.length > 0 && (
+        <DriversWithoutAssignmentSection
+          drivers={driversWithoutAssignment}
+          isExpanded={showUnassigned}
+          onToggle={() => setShowUnassigned(!showUnassigned)}
+        />
+      )}
     </div>
   )
 }
@@ -277,6 +304,77 @@ function DataSourceInfo({ isVisible, dataSource, driverCount, periodLabel }: Dat
       </span>
       {isHistorical && (
         <span className="auto-sync">Sincronización automática cada 5 minutos</span>
+      )}
+    </div>
+  )
+}
+
+// =====================================================
+// SECCIÓN DE CONDUCTORES SIN ASIGNACIÓN
+// =====================================================
+
+interface DriversWithoutAssignmentSectionProps {
+  readonly drivers: CabifyDriver[]
+  readonly isExpanded: boolean
+  readonly onToggle: () => void
+}
+
+function DriversWithoutAssignmentSection({
+  drivers,
+  isExpanded,
+  onToggle
+}: DriversWithoutAssignmentSectionProps) {
+  // Calcular totales de la sección
+  const totals = useMemo(() => {
+    const totalGanancias = drivers.reduce((sum, d) => sum + (Number(d.gananciaTotal) || 0), 0)
+    const totalViajes = drivers.reduce((sum, d) => sum + (d.viajesFinalizados || 0), 0)
+    return { totalGanancias, totalViajes }
+  }, [drivers])
+
+  return (
+    <div className="cabify-unassigned-section">
+      <button
+        className="cabify-unassigned-header"
+        onClick={onToggle}
+        type="button"
+      >
+        <div className="cabify-unassigned-title">
+          <UserX size={20} />
+          <span>Conductores Sin Asignación Activa</span>
+          <span className="cabify-unassigned-count">{drivers.length}</span>
+        </div>
+        <div className="cabify-unassigned-summary">
+          <span className="summary-item">
+            ${totals.totalGanancias.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+          </span>
+          <span className="summary-separator">•</span>
+          <span className="summary-item">{totals.totalViajes} viajes</span>
+          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="cabify-unassigned-list">
+          {drivers.map((driver) => (
+            <div key={driver.id || driver.nationalIdNumber} className="cabify-unassigned-item">
+              <div className="driver-info">
+                <span className="driver-name">
+                  {driver.name} {driver.surname}
+                </span>
+                <span className="driver-dni">{driver.nationalIdNumber || 'Sin DNI'}</span>
+              </div>
+              <div className="driver-stats">
+                <span className="stat-viajes">{driver.viajesFinalizados || 0} viajes</span>
+                <span className="stat-separator">•</span>
+                <span className="stat-score">Score {driver.score ? Number(driver.score).toFixed(2) : '0.00'}</span>
+                <span className="stat-separator">•</span>
+                <span className="stat-ganancias">
+                  ${Number(driver.gananciaTotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )

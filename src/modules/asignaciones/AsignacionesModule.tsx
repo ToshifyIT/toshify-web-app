@@ -112,10 +112,24 @@ export function AsignacionesModule() {
     getCurrentUser()
   }, [])
 
-  // Filtrar por estado
+  // Filtrar por estado y ordenar (programados primero, luego por fecha_programada)
   const filteredAsignaciones = useMemo(() => {
-    if (!statusFilter) return asignaciones
-    return asignaciones.filter(a => a.estado === statusFilter)
+    let result = asignaciones
+    if (statusFilter) {
+      result = result.filter(a => a.estado === statusFilter)
+    }
+    // Ordenar: programados primero, luego por fecha_programada ascendente
+    return result.sort((a, b) => {
+      // Prioridad de estados: programado > activa > otros
+      const estadoPrioridad: Record<string, number> = { programado: 0, activa: 1, finalizada: 2, cancelada: 3 }
+      const prioA = estadoPrioridad[a.estado] ?? 99
+      const prioB = estadoPrioridad[b.estado] ?? 99
+      if (prioA !== prioB) return prioA - prioB
+      // Luego por fecha_programada ascendente (más próximas primero)
+      const fechaA = a.fecha_programada ? new Date(a.fecha_programada).getTime() : Infinity
+      const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : Infinity
+      return fechaA - fechaB
+    })
   }, [asignaciones, statusFilter])
 
   // Expandir asignaciones TURNO en filas separadas
@@ -444,6 +458,17 @@ export function AsignacionesModule() {
       )
     },
     {
+      id: 'hora_entrega',
+      header: 'Hora',
+      cell: ({ row }) => (
+        <span>
+          {row.original.fecha_programada
+            ? new Date(row.original.fecha_programada).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+            : '-'}
+        </span>
+      )
+    },
+    {
       accessorKey: 'fecha_fin',
       header: 'Fecha Fin',
       cell: ({ row }) => (
@@ -459,7 +484,7 @@ export function AsignacionesModule() {
       header: 'Estado',
       cell: ({ row }) => (
         <span className={getStatusBadgeClass(row.original.estado)}>
-          {row.original.estado}
+          {row.original.estado === 'finalizada' ? 'histórico' : row.original.estado}
         </span>
       )
     },
@@ -489,7 +514,7 @@ export function AsignacionesModule() {
                 }}
                 className="dt-btn-action asig-btn-cancel-prog"
                 title="Cancelar programación"
-                disabled={row.original.created_by !== currentUserId}
+                disabled={!canEdit}
               >
                 <XCircle size={16} />
               </button>
@@ -541,7 +566,7 @@ export function AsignacionesModule() {
           <option value="">Todos los estados</option>
           <option value="programado">Programado</option>
           <option value="activa">Activa</option>
-          <option value="finalizada">Finalizada</option>
+          <option value="finalizada">Histórico</option>
           <option value="cancelada">Cancelada</option>
         </select>
       </div>

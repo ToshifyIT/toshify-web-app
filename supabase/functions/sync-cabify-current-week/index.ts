@@ -183,6 +183,101 @@ async function getAssetsBatch(token: string, assetIds: string[], companyId: stri
 }
 
 /**
+ * Obtener TODOS los conductores de una compañía (con paginación correcta)
+ */
+async function fetchAllDrivers(token: string, companyId: string): Promise<any[]> {
+  const allDrivers: any[] = []
+  let page = 1
+  const perPage = 200
+
+  while (true) {
+    const driversQuery = `
+      query ($companyId: String!, $page: Int!, $perPage: Int!) {
+        paginatedDrivers(page: $page, perPage: $perPage, companyId: $companyId, disabled: false) {
+          page
+          pages
+          drivers { id name surname email nationalIdNumber driverLicense mobileNum mobileCc }
+        }
+      }
+    `
+
+    const driversRes = await fetch(CABIFY_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        query: driversQuery,
+        variables: { companyId, page, perPage },
+      }),
+    })
+
+    const driversJson = await driversRes.json()
+    const paginatedDrivers = driversJson.data?.paginatedDrivers
+
+    if (!paginatedDrivers || !paginatedDrivers.drivers) break
+
+    allDrivers.push(...paginatedDrivers.drivers)
+
+    // Verificar si hay más páginas
+    if (page >= (paginatedDrivers.pages || 0) || paginatedDrivers.pages === 0) break
+    page++
+  }
+
+  return allDrivers
+}
+
+/**
+ * Obtener TODOS los viajes de un conductor (con paginación correcta)
+ */
+async function fetchAllJourneys(token: string, companyId: string, driverId: string, startDate: string, endDate: string): Promise<any[]> {
+  const allJourneys: any[] = []
+  let page = 1
+  const perPage = 100
+
+  while (true) {
+    const journeysQuery = `
+      query ($companyId: String, $driverId: String!, $page: Int, $perPage: Int, $startAt: String!, $endAt: String!) {
+        paginatedJourneys(companyId: $companyId, driverId: $driverId, page: $page, perPage: $perPage, startAt: $startAt, endAt: $endAt) {
+          page
+          pages
+          journeys {
+            id assetId finishReason paymentMethod
+            totals { earningsTotal { amount currency } }
+          }
+        }
+      }
+    `
+
+    const journeysRes = await fetch(CABIFY_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        query: journeysQuery,
+        variables: { companyId, driverId, page, perPage, startAt: startDate, endAt: endDate },
+      }),
+    })
+
+    const journeysJson = await journeysRes.json()
+    const paginatedJourneys = journeysJson.data?.paginatedJourneys
+
+    if (!paginatedJourneys || !paginatedJourneys.journeys) break
+
+    allJourneys.push(...paginatedJourneys.journeys)
+
+    // Verificar si hay más páginas
+    if (page >= (paginatedJourneys.pages || 0) || paginatedJourneys.pages === 0) break
+    page++
+  }
+
+  return allJourneys
+}
+
+/**
  * Consultar datos de Cabify para un período
  */
 async function getCabifyData(token: string, startDate: string, endDate: string) {
@@ -206,29 +301,9 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
   const allDriversData: any[] = []
 
   for (const companyId of companyIds) {
-
-    const driversQuery = `
-      query ($companyId: String!, $page: Int!, $perPage: Int!) {
-        paginatedDrivers(page: $page, perPage: $perPage, companyId: $companyId) {
-          drivers { id name surname email nationalIdNumber driverLicense mobileNum mobileCc }
-        }
-      }
-    `
-
-    const driversRes = await fetch(CABIFY_GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        query: driversQuery,
-        variables: { companyId, page: 1, perPage: 500 },
-      }),
-    })
-
-    const driversJson = await driversRes.json()
-    const drivers = driversJson.data?.paginatedDrivers?.drivers || []
+    // Obtener TODOS los conductores con paginación correcta
+    const drivers = await fetchAllDrivers(token, companyId)
+    console.log(`  📋 Compañía ${companyId}: ${drivers.length} conductores encontrados`)
 
     if (drivers.length === 0) continue
 
@@ -249,54 +324,24 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
               }
             `
 
-            const journeysQuery = `
-              query ($companyId: String, $driverId: String!, $page: Int, $perPage: Int, $startAt: String!, $endAt: String!) {
-                paginatedJourneys(companyId: $companyId, driverId: $driverId, page: $page, perPage: $perPage, startAt: $startAt, endAt: $endAt) {
-                  journeys {
-                    id assetId finishReason paymentMethod
-                    totals { earningsTotal { amount currency } }
-                  }
-                }
-              }
-            `
-
-            const [driverRes, journeysRes] = await Promise.all([
-              fetch(CABIFY_GRAPHQL_URL, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                  query: driverQuery,
-                  variables: { companyId, driverId: driver.id, startAt: startDate, endAt: endDate },
-                }),
+            // Obtener stats del conductor
+            const driverRes = await fetch(CABIFY_GRAPHQL_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                query: driverQuery,
+                variables: { companyId, driverId: driver.id, startAt: startDate, endAt: endDate },
               }),
-              fetch(CABIFY_GRAPHQL_URL, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                  query: journeysQuery,
-                  variables: {
-                    companyId,
-                    driverId: driver.id,
-                    page: 1,
-                    perPage: 500,
-                    startAt: startDate,
-                    endAt: endDate,
-                  },
-                }),
-              }),
-            ])
+            })
 
             const driverData = await driverRes.json()
-            const journeysData = await journeysRes.json()
-
             const driverInfo = driverData.data?.driver
-            const journeys = journeysData.data?.paginatedJourneys?.journeys || []
+
+            // Obtener TODOS los viajes con paginación correcta
+            const journeys = await fetchAllJourneys(token, companyId, driver.id, startDate, endDate)
 
             // SIEMPRE guardar el conductor, aunque no tenga stats del período
             // Usar datos básicos del driver si no hay driverInfo

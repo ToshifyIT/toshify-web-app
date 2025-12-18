@@ -239,26 +239,28 @@ class CabifyHistoricalService {
     startDate: string,
     endDate: string
   ): Promise<DriverHistoricalData[]> {
-    // Extraer solo la fecha (sin hora) para comparación más robusta
-    // Los datos pueden estar guardados a las 00:00 o 03:00 UTC
-    const startDateOnly = startDate.split('T')[0]
-    const endDateOnly = endDate.split('T')[0]
+    // IMPORTANTE: Las fechas ya vienen correctamente calculadas desde cabifyService.getWeekRange()
+    // con la alineación a zona horaria de Argentina (UTC-3):
+    //
+    // - startDate: "2025-12-08T03:00:00Z" = Lunes 08/12 00:00 Argentina
+    // - endDate: "2025-12-15T02:59:59Z" = Domingo 14/12 23:59:59 Argentina (día+1 02:59:59 UTC)
+    //
+    // NO debemos modificar estas fechas, ya tienen el formato correcto de code.txt
 
     console.log('📅 Consultando histórico:', {
-      startDateOriginal: startDate,
-      endDateOriginal: endDate,
-      startDateOnly,
-      endDateOnly,
-      queryGte: `${startDateOnly}T00:00:00Z`,
-      queryLte: `${endDateOnly}T23:59:59Z`
+      startDate,
+      endDate,
+      explanation: 'Fechas ya vienen con offset correcto de cabifyService.getWeekRange()'
     })
 
-    // Consulta todos los registros dentro del rango de fechas (comparando por día)
+    // Consulta usando las fechas originales directamente
+    // startDate ya tiene T03:00:00Z (00:00 Argentina)
+    // endDate ya tiene T02:59:59Z del día siguiente (23:59:59 Argentina del día anterior)
     const { data, error } = await supabase
       .from('cabify_historico')
       .select('*')
-      .gte('fecha_inicio', `${startDateOnly}T00:00:00Z`)
-      .lte('fecha_inicio', `${endDateOnly}T23:59:59Z`)
+      .gte('fecha_inicio', startDate)
+      .lte('fecha_inicio', endDate)
       .order('ganancia_total', { ascending: false })
 
     if (error) {
@@ -273,10 +275,41 @@ class CabifyHistoricalService {
 
     console.log(`📦 ${data.length} registros históricos encontrados (múltiples días)`)
 
-    // Agrupar y sumar datos por conductor (dni)
-    const driverMap = new Map<string, any>()
+    // PASO 1: Eliminar duplicados - quedarse solo con el registro más reciente por (dni, fecha)
+    // Esto soluciona el problema de múltiples sincronizaciones por día
+    const uniqueRecordsMap = new Map<string, any>()
 
     for (const record of data as any[]) {
+      const dni = record.dni || record.cabify_driver_id
+      if (!dni) continue
+
+      // Crear key única: dni + fecha del día
+      const fechaDia = record.fecha_inicio ? record.fecha_inicio.split('T')[0] : ''
+      const uniqueKey = `${dni}_${fechaDia}`
+
+      const existing = uniqueRecordsMap.get(uniqueKey)
+
+      // Si no existe o el registro actual es más reciente, guardar
+      if (!existing) {
+        uniqueRecordsMap.set(uniqueKey, record)
+      } else {
+        // Comparar fecha_guardado para quedarse con el más reciente
+        const existingDate = new Date(existing.fecha_guardado || 0)
+        const currentDate = new Date(record.fecha_guardado || 0)
+
+        if (currentDate > existingDate) {
+          uniqueRecordsMap.set(uniqueKey, record)
+        }
+      }
+    }
+
+    const uniqueRecords = Array.from(uniqueRecordsMap.values())
+    console.log(`📊 ${uniqueRecords.length} registros únicos después de eliminar duplicados`)
+
+    // PASO 2: Agrupar y sumar datos por conductor (dni)
+    const driverMap = new Map<string, any>()
+
+    for (const record of uniqueRecords) {
       const dni = record.dni || record.cabify_driver_id
       if (!dni) continue
 
