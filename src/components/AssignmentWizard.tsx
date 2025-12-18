@@ -15,6 +15,14 @@ interface Vehicle {
     codigo: string
     descripcion: string
   }
+  // Información de disponibilidad
+  asignacionActiva?: {
+    id: string
+    horario: 'TURNO' | 'CARGO'
+    turnoDiurnoOcupado: boolean
+    turnoNocturnoOcupado: boolean
+  }
+  disponibilidad: 'disponible' | 'turno_diurno_libre' | 'turno_nocturno_libre' | 'ocupado'
 }
 
 interface Conductor {
@@ -66,6 +74,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   const [conductores, setConductores] = useState<Conductor[]>([])
   const [loading, setLoading] = useState(false)
   const [vehicleSearch, setVehicleSearch] = useState('')
+  const [vehicleAvailabilityFilter, setVehicleAvailabilityFilter] = useState<string>('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [conductorStatusFilter, setConductorStatusFilter] = useState<string>('')
 
@@ -88,11 +97,12 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     notas: ''
   })
 
-  // Cargar vehículos disponibles
+  // Cargar vehículos con información de disponibilidad
   useEffect(() => {
     const loadVehicles = async () => {
       try {
-        const { data, error } = await supabase
+        // 1. Obtener todos los vehículos (excepto reparación/mantenimiento)
+        const { data: vehiculosData, error: vehiculosError } = await supabase
           .from('vehiculos')
           .select(`
             id,
@@ -108,17 +118,108 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           `)
           .order('patente')
 
-        if (error) throw error
+        if (vehiculosError) throw vehiculosError
 
-        // Filtrar vehículos que NO estén en reparación ni en mantenimiento
+        // 2. Obtener asignaciones activas y programadas con sus conductores
+        const { data: asignacionesData, error: asignacionesError } = await supabase
+          .from('asignaciones')
+          .select(`
+            id,
+            vehiculo_id,
+            horario,
+            estado,
+            asignaciones_conductores (
+              horario
+            )
+          `)
+          .in('estado', ['activa', 'programado'])
+
+        if (asignacionesError) throw asignacionesError
+
+        // 3. Filtrar vehículos que NO estén en reparación ni en mantenimiento
         const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO']
-        const vehiculosDisponibles = (data || []).filter((v: any) =>
+        const vehiculosFiltrados = (vehiculosData || []).filter((v: any) =>
           !estadosNoDisponibles.includes(v.vehiculos_estados?.codigo)
-        ) as Vehicle[]
+        )
 
-        console.log('📋 Vehículos disponibles (sin reparación/mantenimiento):', vehiculosDisponibles)
+        // 4. Calcular disponibilidad de cada vehículo
+        const vehiculosConDisponibilidad: Vehicle[] = vehiculosFiltrados.map((vehiculo: any) => {
+          // Buscar asignación activa del vehículo
+          const asignacionActiva = asignacionesData?.find(
+            (a: any) => a.vehiculo_id === vehiculo.id && a.estado === 'activa'
+          ) as any
 
-        setVehicles(vehiculosDisponibles)
+          // Buscar asignación programada del vehículo
+          const asignacionProgramada = asignacionesData?.find(
+            (a: any) => a.vehiculo_id === vehiculo.id && a.estado === 'programado'
+          )
+
+          // Si tiene asignación programada, no mostrar (será filtrado después)
+          if (asignacionProgramada) {
+            return {
+              ...vehiculo,
+              disponibilidad: 'programado' as const,
+              asignacionActiva: undefined
+            }
+          }
+
+          // Si no tiene asignación activa, está disponible
+          if (!asignacionActiva) {
+            return {
+              ...vehiculo,
+              disponibilidad: 'disponible' as const,
+              asignacionActiva: undefined
+            }
+          }
+
+          // Si está A CARGO, está ocupado
+          if (asignacionActiva.horario === 'CARGO') {
+            return {
+              ...vehiculo,
+              disponibilidad: 'ocupado' as const,
+              asignacionActiva: {
+                id: asignacionActiva.id,
+                horario: 'CARGO' as const,
+                turnoDiurnoOcupado: true,
+                turnoNocturnoOcupado: true
+              }
+            }
+          }
+
+          // Si está en TURNO, verificar qué turnos están ocupados
+          const conductoresAsignados = asignacionActiva.asignaciones_conductores || []
+          const turnoDiurnoOcupado = conductoresAsignados.some((c: any) => c.horario === 'diurno')
+          const turnoNocturnoOcupado = conductoresAsignados.some((c: any) => c.horario === 'nocturno')
+
+          let disponibilidad: Vehicle['disponibilidad'] = 'ocupado'
+          if (!turnoDiurnoOcupado && !turnoNocturnoOcupado) {
+            disponibilidad = 'disponible'
+          } else if (!turnoDiurnoOcupado) {
+            disponibilidad = 'turno_diurno_libre'
+          } else if (!turnoNocturnoOcupado) {
+            disponibilidad = 'turno_nocturno_libre'
+          }
+
+          return {
+            ...vehiculo,
+            disponibilidad,
+            asignacionActiva: {
+              id: asignacionActiva.id,
+              horario: 'TURNO' as const,
+              turnoDiurnoOcupado,
+              turnoNocturnoOcupado
+            }
+          }
+        })
+
+        // 5. Excluir vehículos con asignaciones programadas
+        const vehiculosFinales = vehiculosConDisponibilidad.filter(
+          (v: any) => v.disponibilidad !== 'programado'
+        )
+
+        console.log('📋 Vehículos con disponibilidad:', vehiculosFinales)
+
+        setVehicles(vehiculosFinales)
       } catch (error) {
         console.error('Error loading vehicles:', error)
       }
@@ -384,17 +485,34 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
   const availableConductores = conductores.filter(c => !assignedConductorIds.includes(c.id))
 
-  // Filtrar y ordenar vehículos: disponibles primero, luego en uso, luego otros
+  // Filtrar y ordenar vehículos por disponibilidad
   const filteredVehicles = vehicles
-    .filter(v =>
-      v.patente.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
-      v.marca.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
-      v.modelo.toLowerCase().includes(vehicleSearch.toLowerCase())
-    )
+    .filter(v => {
+      // Filtro por búsqueda de texto
+      const matchesSearch = v.patente.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+        v.marca.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+        v.modelo.toLowerCase().includes(vehicleSearch.toLowerCase())
+
+      // Filtro por disponibilidad
+      const matchesAvailability = vehicleAvailabilityFilter === '' ||
+        vehicleAvailabilityFilter === v.disponibilidad ||
+        (vehicleAvailabilityFilter === 'con_turno_libre' &&
+          (v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre')) ||
+        (vehicleAvailabilityFilter === 'en_uso' &&
+          (v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre'))
+
+      return matchesSearch && matchesAvailability
+    })
     .sort((a, b) => {
-      const prioridad: Record<string, number> = { 'DISPONIBLE': 0, 'EN_USO': 1 }
-      const prioA = prioridad[a.vehiculos_estados?.codigo || ''] ?? 99
-      const prioB = prioridad[b.vehiculos_estados?.codigo || ''] ?? 99
+      // Prioridad: disponible > turno libre > ocupado
+      const prioridad: Record<string, number> = {
+        'disponible': 0,
+        'turno_diurno_libre': 1,
+        'turno_nocturno_libre': 1,
+        'ocupado': 2
+      }
+      const prioA = prioridad[a.disponibilidad] ?? 99
+      const prioB = prioridad[b.disponibilidad] ?? 99
       return prioA - prioB
     })
 
@@ -1190,58 +1308,120 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   <p>Selecciona el vehículo que deseas asignar.</p>
                 </div>
 
-                {/* Buscador de vehículos */}
-                <div style={{ marginBottom: '20px', maxWidth: '600px', margin: '0 auto 20px auto' }}>
+                {/* Buscador y Filtro de vehículos */}
+                <div style={{ marginBottom: '20px', maxWidth: '700px', margin: '0 auto 20px auto', display: 'flex', gap: '12px' }}>
                   <input
                     type="text"
                     placeholder="Buscar por patente, marca o modelo..."
                     value={vehicleSearch}
                     onChange={(e) => setVehicleSearch(e.target.value)}
                     style={{
-                      width: '100%',
+                      flex: 1,
                       padding: '12px 16px',
                       border: '2px solid #E5E7EB',
                       borderRadius: '8px',
-                      fontSize: '14px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit'
                     }}
                   />
+                  <select
+                    value={vehicleAvailabilityFilter}
+                    onChange={(e) => setVehicleAvailabilityFilter(e.target.value)}
+                    style={{
+                      padding: '12px 16px',
+                      border: '2px solid #E5E7EB',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit',
+                      background: 'white',
+                      cursor: 'pointer',
+                      minWidth: '180px'
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    <option value="disponible">Disponible</option>
+                    <option value="con_turno_libre">Con turno libre</option>
+                    <option value="en_uso">En Uso</option>
+                  </select>
                 </div>
 
                 <div className="vehicle-grid">
                   {filteredVehicles.length === 0 ? (
                     <div className="empty-state">
-                      {vehicleSearch ? 'No se encontraron vehículos con ese criterio' : 'No hay vehículos disponibles en este momento'}
+                      {vehicleSearch || vehicleAvailabilityFilter ? 'No se encontraron vehículos con ese criterio' : 'No hay vehículos disponibles en este momento'}
                     </div>
                   ) : (
-                    filteredVehicles.map((vehicle) => (
-                      <div
-                        key={vehicle.id}
-                        className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
-                        onClick={() => handleSelectVehicle(vehicle)}
-                      >
-                        <div className="vehicle-info">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                            <h4 className="vehicle-patente" style={{ margin: 0 }}>{vehicle.patente}</h4>
-                            <span style={{
-                              background: vehicle.vehiculos_estados?.codigo === 'DISPONIBLE' ? '#10B981' :
-                                         vehicle.vehiculos_estados?.codigo === 'EN_USO' ? '#F59E0B' : '#6B7280',
-                              color: 'white',
-                              padding: '2px 8px',
-                              borderRadius: '6px',
-                              fontSize: '11px',
-                              fontWeight: '600'
-                            }}>
-                              {vehicle.vehiculos_estados?.descripcion || 'N/A'}
-                            </span>
+                    filteredVehicles.map((vehicle) => {
+                      // Determinar badge y color según disponibilidad
+                      let badgeText = ''
+                      let badgeColor = ''
+                      let badgeBg = ''
+                      let detalleText = ''
+
+                      switch (vehicle.disponibilidad) {
+                        case 'disponible':
+                          badgeText = 'Disponible'
+                          badgeBg = '#10B981'
+                          badgeColor = 'white'
+                          detalleText = 'Libre para asignación'
+                          break
+                        case 'turno_diurno_libre':
+                          badgeText = 'En Uso'
+                          badgeBg = '#F59E0B'
+                          badgeColor = 'white'
+                          detalleText = '☀️ Diurno Libre'
+                          break
+                        case 'turno_nocturno_libre':
+                          badgeText = 'En Uso'
+                          badgeBg = '#F59E0B'
+                          badgeColor = 'white'
+                          detalleText = '🌙 Nocturno Libre'
+                          break
+                        case 'ocupado':
+                          badgeText = 'En Uso'
+                          badgeBg = '#F59E0B'
+                          badgeColor = 'white'
+                          detalleText = vehicle.asignacionActiva?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'
+                          break
+                      }
+
+                      return (
+                        <div
+                          key={vehicle.id}
+                          className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
+                          onClick={() => handleSelectVehicle(vehicle)}
+                        >
+                          <div className="vehicle-info">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                              <h4 className="vehicle-patente" style={{ margin: 0 }}>{vehicle.patente}</h4>
+                              <span style={{
+                                background: badgeBg,
+                                color: badgeColor,
+                                padding: '3px 10px',
+                                borderRadius: '6px',
+                                fontSize: 'clamp(9px, 0.8vw, 11px)',
+                                fontWeight: '600'
+                              }}>
+                                {badgeText}
+                              </span>
+                              {detalleText && (
+                                <span style={{
+                                  color: '#6B7280',
+                                  fontSize: 'clamp(9px, 0.8vw, 11px)',
+                                  fontWeight: '500'
+                                }}>
+                                  ({detalleText})
+                                </span>
+                              )}
+                            </div>
+                            <p className="vehicle-details">
+                              {vehicle.marca} {vehicle.modelo} • {vehicle.anio}
+                            </p>
                           </div>
-                          <p className="vehicle-details">
-                            {vehicle.marca} {vehicle.modelo} • {vehicle.anio}
-                          </p>
+                          <div className={`radio-circle ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`} />
                         </div>
-                        <div className={`radio-circle ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`} />
-                      </div>
-                    ))
+                      )
+                    })
                   )}
                 </div>
               </div>
