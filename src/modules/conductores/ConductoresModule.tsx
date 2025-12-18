@@ -78,6 +78,7 @@ export function ConductoresModule() {
     fecha_terminacion: "",
     motivo_baja: "",
     estado_id: "",
+    preferencia_turno: "SIN_PREFERENCIA",
   });
 
   useEffect(() => {
@@ -314,6 +315,7 @@ export function ConductoresModule() {
             fecha_terminacion: formData.fecha_terminacion || null,
             motivo_baja: formData.motivo_baja || null,
             estado_id: formData.estado_id || null,
+            preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
             created_by: user?.id,
           },
         ])
@@ -403,6 +405,7 @@ export function ConductoresModule() {
           fecha_terminacion: formData.fecha_terminacion || null,
           motivo_baja: formData.motivo_baja || null,
           estado_id: formData.estado_id || null,
+          preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
           updated_at: new Date().toISOString(),
         })
         .eq("id", selectedConductor.id);
@@ -533,6 +536,7 @@ export function ConductoresModule() {
       fecha_terminacion: conductor.fecha_terminacion || "",
       motivo_baja: conductor.motivo_baja || "",
       estado_id: conductor.estado_id || "",
+      preferencia_turno: (conductor as any).preferencia_turno || "SIN_PREFERENCIA",
     });
     setShowEditModal(true);
   };
@@ -571,6 +575,7 @@ export function ConductoresModule() {
       fecha_terminacion: "",
       motivo_baja: "",
       estado_id: "",
+      preferencia_turno: "SIN_PREFERENCIA",
     });
   };
 
@@ -614,19 +619,19 @@ export function ConductoresModule() {
       {
         accessorKey: "numero_dni",
         header: "DNI",
-        cell: ({ getValue }) => (getValue() as string) || "N/A",
+        cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
       {
         accessorKey: "cbu",
         header: "CBU",
-        cell: ({ getValue }) => (getValue() as string) || "N/A",
+        cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
       {
         accessorKey: "numero_licencia",
         header: "Licencia",
-        cell: ({ getValue }) => (getValue() as string) || "N/A",
+        cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
       {
@@ -645,7 +650,7 @@ export function ConductoresModule() {
               </div>
             );
           }
-          return "N/A";
+          return "-";
         },
         enableSorting: false,
       },
@@ -659,14 +664,15 @@ export function ConductoresModule() {
       {
         accessorKey: "telefono_contacto",
         header: "Teléfono",
-        cell: ({ getValue }) => (getValue() as string) || "N/A",
+        cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
       {
         accessorKey: "conductores_estados.codigo",
         header: "Estado",
         cell: ({ row }) => {
-          const codigo = row.original.conductores_estados?.codigo || "N/A";
+          const codigo = row.original.conductores_estados?.codigo;
+          if (!codigo) return "-";
           const codigoLower = codigo.toLowerCase();
 
           let badgeClass = "dt-badge dt-badge-solid-blue";
@@ -695,7 +701,7 @@ export function ConductoresModule() {
               </div>
             );
           }
-          return <span className="vehiculo-cell-na">N/A</span>;
+          return <span className="vehiculo-cell-na">-</span>;
         },
         enableSorting: false,
       },
@@ -1209,7 +1215,7 @@ function ModalCrear({
 
         <div className="section-title">Información Adicional</div>
 
-        <div className="form-row-3" style={{ marginBottom: "16px" }}>
+        <div className="form-row-3" style={{ marginBottom: "16px", alignItems: "center" }}>
           <div>
             <label
               style={{
@@ -1256,6 +1262,22 @@ function ModalCrear({
                 Cochera Propia
               </span>
             </label>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Preferencia de Turno</label>
+            <select
+              className="form-input"
+              value={formData.preferencia_turno}
+              onChange={(e) =>
+                setFormData({ ...formData, preferencia_turno: e.target.value })
+              }
+              disabled={saving}
+            >
+              <option value="SIN_PREFERENCIA">Ambos</option>
+              <option value="DIURNO">Diurno</option>
+              <option value="NOCTURNO">Nocturno</option>
+              <option value="A_CARGO">A Cargo</option>
+            </select>
           </div>
         </div>
 
@@ -1708,7 +1730,7 @@ function ModalEditar({
 
         <div className="section-title">Información Adicional</div>
 
-        <div className="form-row-3" style={{ marginBottom: "16px" }}>
+        <div className="form-row-3" style={{ marginBottom: "16px", alignItems: "center" }}>
           <div>
             <label
               style={{
@@ -1755,6 +1777,22 @@ function ModalEditar({
                 Cochera Propia
               </span>
             </label>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Preferencia de Turno</label>
+            <select
+              className="form-input"
+              value={formData.preferencia_turno}
+              onChange={(e) =>
+                setFormData({ ...formData, preferencia_turno: e.target.value })
+              }
+              disabled={saving}
+            >
+              <option value="SIN_PREFERENCIA">Ambos</option>
+              <option value="DIURNO">Diurno</option>
+              <option value="NOCTURNO">Nocturno</option>
+              <option value="A_CARGO">A Cargo</option>
+            </select>
           </div>
         </div>
 

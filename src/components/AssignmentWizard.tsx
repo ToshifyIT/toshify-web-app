@@ -33,11 +33,33 @@ interface Conductor {
   apellidos: string
   licencia_vencimiento: string
   estado_id: string
+  preferencia_turno?: string
   conductores_estados?: {
     codigo: string
     descripcion: string
   }
   tieneAsignacionActiva?: boolean
+}
+
+// Helper para formatear preferencia de turno
+const formatPreferencia = (preferencia?: string): string => {
+  switch (preferencia) {
+    case 'DIURNO': return 'Diurno'
+    case 'NOCTURNO': return 'Nocturno'
+    case 'A_CARGO': return 'A Cargo'
+    case 'SIN_PREFERENCIA': return 'Ambos'
+    default: return 'Ambos'
+  }
+}
+
+// Helper para obtener color de badge según preferencia
+const getPreferenciaBadge = (preferencia?: string): { bg: string; color: string } => {
+  switch (preferencia) {
+    case 'DIURNO': return { bg: '#FEF3C7', color: '#92400E' }
+    case 'NOCTURNO': return { bg: '#DBEAFE', color: '#1E40AF' }
+    case 'A_CARGO': return { bg: '#D1FAE5', color: '#065F46' }
+    default: return { bg: '#F3F4F6', color: '#6B7280' }
+  }
 }
 
 interface AssignmentData {
@@ -242,6 +264,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
             apellidos,
             licencia_vencimiento,
             estado_id,
+            preferencia_turno,
             conductores_estados (
               codigo,
               descripcion
@@ -1504,7 +1527,19 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                               <p className="conductor-name">
                                 {conductor.nombres} {conductor.apellidos}
                               </p>
-                              <p className="conductor-license">DNI: {conductor.numero_dni || 'N/A'}</p>
+                              <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span>DNI: {conductor.numero_dni || '-'}</span>
+                                <span style={{
+                                  fontSize: '9px',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontWeight: '600',
+                                  background: getPreferenciaBadge(conductor.preferencia_turno).bg,
+                                  color: getPreferenciaBadge(conductor.preferencia_turno).color
+                                }}>
+                                  {formatPreferencia(conductor.preferencia_turno)}
+                                </span>
+                              </p>
                               <span style={{
                                 fontSize: '10px',
                                 padding: '2px 6px',
@@ -1559,7 +1594,19 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                 <p className="conductor-name">
                                   {conductorDiurno.nombres} {conductorDiurno.apellidos}
                                 </p>
-                                <p className="conductor-license">DNI: {conductorDiurno.numero_dni || 'N/A'}</p>
+                                <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span>DNI: {conductorDiurno.numero_dni || '-'}</span>
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    background: getPreferenciaBadge(conductorDiurno.preferencia_turno).bg,
+                                    color: getPreferenciaBadge(conductorDiurno.preferencia_turno).color
+                                  }}>
+                                    {formatPreferencia(conductorDiurno.preferencia_turno)}
+                                  </span>
+                                </p>
                               </div>
                               <button
                                 className="remove-btn"
@@ -1609,7 +1656,19 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                 <p className="conductor-name">
                                   {conductorNocturno.nombres} {conductorNocturno.apellidos}
                                 </p>
-                                <p className="conductor-license">DNI: {conductorNocturno.numero_dni || 'N/A'}</p>
+                                <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span>DNI: {conductorNocturno.numero_dni || '-'}</span>
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    background: getPreferenciaBadge(conductorNocturno.preferencia_turno).bg,
+                                    color: getPreferenciaBadge(conductorNocturno.preferencia_turno).color
+                                  }}>
+                                    {formatPreferencia(conductorNocturno.preferencia_turno)}
+                                  </span>
+                                </p>
                               </div>
                               <button
                                 className="remove-btn"
@@ -1662,7 +1721,19 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                               <p className="conductor-name">
                                 {conductorCargo.nombres} {conductorCargo.apellidos}
                               </p>
-                              <p className="conductor-license">DNI: {conductorCargo.numero_dni || 'N/A'}</p>
+                              <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span>DNI: {conductorCargo.numero_dni || '-'}</span>
+                                <span style={{
+                                  fontSize: '9px',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontWeight: '600',
+                                  background: getPreferenciaBadge(conductorCargo.preferencia_turno).bg,
+                                  color: getPreferenciaBadge(conductorCargo.preferencia_turno).color
+                                }}>
+                                  {formatPreferencia(conductorCargo.preferencia_turno)}
+                                </span>
+                              </p>
                             </div>
                             <button
                               className="remove-btn"
