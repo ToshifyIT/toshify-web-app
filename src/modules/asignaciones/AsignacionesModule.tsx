@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText } from 'lucide-react'
+import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, Car, Users, Clock } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
@@ -74,6 +74,125 @@ export function AsignacionesModule() {
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
   const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [statsData, setStatsData] = useState({
+    totalVehiculos: 0,
+    vehiculosDisponibles: 0,
+    turnosDisponibles: 0,
+    conductoresDisponibles: 0,
+    totalConductores: 0,
+    entregasHoy: 0
+  })
+
+  const loadStatsData = async () => {
+    try {
+      // Total de vehículos
+      const { count: totalVehiculos } = await supabase
+        .from('vehiculos')
+        .select('*', { count: 'exact', head: true })
+
+      // Vehículos disponibles (estado = DISPONIBLE)
+      const { data: estadoDisponible } = await supabase
+        .from('vehiculos_estados')
+        .select('id')
+        .eq('codigo', 'DISPONIBLE')
+        .single() as { data: { id: string } | null }
+
+      let vehiculosDisponibles = 0
+      if (estadoDisponible) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado_id', estadoDisponible.id)
+        vehiculosDisponibles = count || 0
+      }
+
+      // Obtener todos los conductores con su estado (mismo filtro que el wizard)
+      const { data: todosConductores } = await supabase
+        .from('conductores')
+        .select('id, estado_id, conductores_estados(codigo)') as { data: Array<{ id: string; estado_id: string; conductores_estados: { codigo: string } | null }> | null }
+
+      // Filtrar conductores activos (cualquier variante del código que incluya 'activo')
+      // Esta es la misma lógica que usa el AssignmentWizard
+      const conductoresActivos = todosConductores?.filter(c =>
+        c.conductores_estados?.codigo?.toLowerCase().includes('activo')
+      ) || []
+      const totalConductores = conductoresActivos.length
+
+      // Obtener asignaciones activas
+      const { data: asignacionesActivasData } = await supabase
+        .from('asignaciones')
+        .select('id')
+        .eq('estado', 'activa')
+
+      const asignacionesActivasIds = asignacionesActivasData?.map(a => a.id) || []
+
+      // Obtener conductores en esas asignaciones activas
+      let conductoresOcupadosIds = new Set<string>()
+      if (asignacionesActivasIds.length > 0) {
+        const { data: conductoresOcupados } = await supabase
+          .from('asignaciones_conductores')
+          .select('conductor_id')
+          .in('asignacion_id', asignacionesActivasIds)
+
+        conductoresOcupadosIds = new Set(
+          conductoresOcupados?.map(c => c.conductor_id) || []
+        )
+      }
+
+      // Conductores disponibles = conductores activos que NO están en asignaciones activas
+      const conductoresDisponibles = conductoresActivos.filter(c =>
+        !conductoresOcupadosIds.has(c.id)
+      ).length
+
+      console.log('Stats debug:', {
+        totalConductores,
+        conductoresActivos: conductoresActivos.length,
+        asignacionesActivas: asignacionesActivasIds.length,
+        conductoresOcupados: conductoresOcupadosIds.size,
+        conductoresDisponibles
+      })
+
+      // Turnos disponibles: calcular basado en vehículos en uso que tienen turnos libres
+      // Un vehículo en modo TURNO tiene 2 turnos (diurno/nocturno)
+      const { data: asignacionesActivas } = await supabase
+        .from('asignaciones')
+        .select('id, horario, asignaciones_conductores(id, horario)')
+        .eq('estado', 'activa') as { data: Array<{ id: string; horario: string; asignaciones_conductores: any[] }> | null }
+
+      let turnosOcupados = 0
+      asignacionesActivas?.forEach(a => {
+        if (a.horario === 'TURNO') {
+          turnosOcupados += a.asignaciones_conductores?.length || 0
+        }
+      })
+
+      // Turnos potenciales = vehículos en uso con modo TURNO * 2
+      const vehiculosEnTurno = asignacionesActivas?.filter(a => a.horario === 'TURNO').length || 0
+      const turnosPotenciales = vehiculosEnTurno * 2
+      const turnosDisponibles = turnosPotenciales - turnosOcupados
+
+      // Entregas programadas para hoy
+      const hoy = new Date()
+      const hoyStr = hoy.toISOString().split('T')[0]
+      const { count: entregasHoy } = await supabase
+        .from('asignaciones')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'programado')
+        .gte('fecha_programada', `${hoyStr}T00:00:00`)
+        .lt('fecha_programada', `${hoyStr}T23:59:59`)
+
+      setStatsData({
+        totalVehiculos: totalVehiculos || 0,
+        vehiculosDisponibles,
+        turnosDisponibles: Math.max(0, turnosDisponibles),
+        conductoresDisponibles: Math.max(0, conductoresDisponibles),
+        totalConductores,
+        entregasHoy: entregasHoy || 0
+      })
+    } catch (err) {
+      console.error('Error loading stats:', err)
+    }
+  }
 
   const loadAsignaciones = async () => {
     try {
@@ -105,6 +224,7 @@ export function AsignacionesModule() {
 
   useEffect(() => {
     loadAsignaciones()
+    loadStatsData()
     const getCurrentUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setCurrentUserId(user?.id || null)
@@ -148,6 +268,11 @@ export function AsignacionesModule() {
       return [{ ...asignacion, conductorEspecifico: null, turnoEspecifico: '-' }]
     })
   }, [filteredAsignaciones])
+
+  // Estadísticas para los stat cards (solo programadas del listado actual)
+  const programadasCount = useMemo(() => {
+    return asignaciones.filter(a => a.estado === 'programado').length
+  }, [asignaciones])
 
   const handleDelete = async (id: string) => {
     if (isSubmitting || !canDelete) return
@@ -196,6 +321,7 @@ export function AsignacionesModule() {
 
         Swal.fire('Eliminado', 'La asignación ha sido eliminada', 'success')
         loadAsignaciones()
+        loadStatsData()
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
       } finally {
@@ -302,6 +428,7 @@ export function AsignacionesModule() {
       setConductoresToConfirm([])
       setSelectedAsignacion(null)
       loadAsignaciones()
+      loadStatsData()
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Error al confirmar', 'error')
     } finally {
@@ -339,6 +466,7 @@ export function AsignacionesModule() {
       setCancelMotivo('')
       setSelectedAsignacion(null)
       loadAsignaciones()
+      loadStatsData()
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Error al cancelar', 'error')
     } finally {
@@ -556,6 +684,69 @@ export function AsignacionesModule() {
         </div>
       </div>
 
+      {/* Stats Cards */}
+      <div className="asig-stats-container">
+        <div className="asig-stat-card">
+          <div className="asig-stat-icon yellow">
+            <Calendar size={24} />
+          </div>
+          <div className="asig-stat-content">
+            <span className="asig-stat-value">{programadasCount}</span>
+            <span className="asig-stat-label">Programadas</span>
+          </div>
+        </div>
+
+        <div className="asig-stat-card">
+          <div className="asig-stat-icon green">
+            <Car size={24} />
+          </div>
+          <div className="asig-stat-content">
+            <span className="asig-stat-value">{statsData.vehiculosDisponibles}</span>
+            <span className="asig-stat-label">Vehículos Disponibles</span>
+          </div>
+        </div>
+
+        <div className="asig-stat-card">
+          <div className="asig-stat-icon blue">
+            <Clock size={24} />
+          </div>
+          <div className="asig-stat-content">
+            <span className="asig-stat-value">{statsData.turnosDisponibles}</span>
+            <span className="asig-stat-label">Turnos Disponibles</span>
+          </div>
+        </div>
+
+        <div className="asig-stat-card">
+          <div className="asig-stat-icon purple">
+            <Users size={24} />
+          </div>
+          <div className="asig-stat-content">
+            <span className="asig-stat-value">{statsData.conductoresDisponibles}</span>
+            <span className="asig-stat-label">Conductores Disponibles</span>
+          </div>
+        </div>
+
+        <div className="asig-stat-card">
+          <div className="asig-stat-icon red">
+            <Calendar size={24} />
+          </div>
+          <div className="asig-stat-content">
+            <span className="asig-stat-value">{statsData.entregasHoy}</span>
+            <span className="asig-stat-label">Entregas Hoy</span>
+          </div>
+        </div>
+
+        <div className="asig-stat-card">
+          <div className="asig-stat-icon gray">
+            <Car size={24} />
+          </div>
+          <div className="asig-stat-content">
+            <span className="asig-stat-value">{statsData.totalVehiculos}</span>
+            <span className="asig-stat-label">Total Vehículos</span>
+          </div>
+        </div>
+      </div>
+
       {/* Filtro de estado */}
       <div className="asig-filters">
         <select
@@ -602,6 +793,7 @@ export function AsignacionesModule() {
           onClose={() => setShowWizard(false)}
           onSuccess={() => {
             loadAsignaciones()
+            loadStatsData()
             setShowWizard(false)
           }}
         />

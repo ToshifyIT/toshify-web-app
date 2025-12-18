@@ -387,6 +387,11 @@
   color: var(--text-inverse);
 }
 
+.dt-badge-solid-amber {
+  background: #F59E0B;
+  color: var(--text-inverse);
+}
+
 /* Responsive - Multi-resolution support */
 @media (max-width: 1440px) {
   .dt-table th,

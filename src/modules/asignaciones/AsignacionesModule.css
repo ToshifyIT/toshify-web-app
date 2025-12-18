@@ -2,6 +2,128 @@
 /* Estilos para el módulo de Asignaciones - Diseño compacto */
 /* Con soporte para Dark Mode mediante CSS Variables */
 
+/* Stats Cards Container */
+.asig-stats-container {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.asig-stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: all 0.2s ease;
+}
+
+.asig-stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.asig-stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.asig-stat-icon.yellow {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #92400E;
+}
+
+.asig-stat-icon.green {
+  background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+  color: #065F46;
+}
+
+.asig-stat-icon.blue {
+  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+  color: #1E40AF;
+}
+
+.asig-stat-icon.purple {
+  background: linear-gradient(135deg, #E9D5FF 0%, #DDD6FE 100%);
+  color: #6B21A8;
+}
+
+.asig-stat-icon.red {
+  background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+  color: #991B1B;
+}
+
+.asig-stat-icon.gray {
+  background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%);
+  color: #4B5563;
+}
+
+.asig-stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.asig-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.asig-stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+/* Responsive Stats */
+@media (max-width: 1400px) {
+  .asig-stats-container {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .asig-stats-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .asig-stats-container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .asig-stat-card {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .asig-stat-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .asig-stat-value {
+    font-size: 20px;
+  }
+
+  .asig-stat-label {
+    font-size: 11px;
+  }
+}
+
 /* Filtro de estado adicional */
 .asig-filters {
   margin-bottom: 10px;

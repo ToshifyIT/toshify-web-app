@@ -100,7 +100,19 @@ export function VehicleManagement() {
 
       // Los datos ya vienen con las relaciones, no necesitamos hacer más queries
       if (data && data.length > 0) {
-        setVehiculos(data as VehiculoWithRelations[])
+        // Ordenar: DISPONIBLE primero, luego el resto
+        const sortedData = [...data].sort((a, b) => {
+          const estadoA = (a as any).vehiculos_estados?.codigo || ''
+          const estadoB = (b as any).vehiculos_estados?.codigo || ''
+
+          // DISPONIBLE primero
+          if (estadoA === 'DISPONIBLE' && estadoB !== 'DISPONIBLE') return -1
+          if (estadoB === 'DISPONIBLE' && estadoA !== 'DISPONIBLE') return 1
+
+          // Luego ordenar alfabéticamente por estado
+          return estadoA.localeCompare(estadoB)
+        })
+        setVehiculos(sortedData as VehiculoWithRelations[])
       } else {
         setVehiculos([])
       }
@@ -408,16 +420,36 @@ export function VehicleManagement() {
 
           let badgeClass = 'dt-badge dt-badge-solid-gray'
           switch (codigo) {
+            // Estados operativos principales
             case 'DISPONIBLE':
               badgeClass = 'dt-badge dt-badge-solid-green'
               break
             case 'EN_USO':
+              badgeClass = 'dt-badge dt-badge-solid-amber'
+              break
+            case 'CORPORATIVO':
               badgeClass = 'dt-badge dt-badge-solid-blue'
               break
-            case 'MANTENIMIENTO':
+            // Estados PKG (parking/base)
+            case 'PKG_ON_BASE':
+            case 'PKG_OFF_BASE':
+            case 'PKG_OFF_FRANCIA':
+              badgeClass = 'dt-badge dt-badge-solid-gray'
+              break
+            // Estados de taller/mantenimiento
+            case 'TALLER_AXIS':
+            case 'TALLER_CHAPA_PINTURA':
+            case 'TALLER_ALLIANCE':
+            case 'TALLER_KALZALO':
+            case 'TALLER_BASE_VALIENTE':
+            case 'INSTALACION_GNC':
               badgeClass = 'dt-badge dt-badge-solid-yellow'
               break
-            case 'FUERA_SERVICIO':
+            // Estados críticos/baja
+            case 'ROBO':
+            case 'DESTRUCCION_TOTAL':
+            case 'RETENIDO_COMISARIA':
+            case 'JUBILADO':
               badgeClass = 'dt-badge dt-badge-solid-red'
               break
           }

@@ -718,6 +718,16 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           background: #FAFBFC;
         }
 
+        .wizard-content::-webkit-scrollbar {
+          width: 0px;
+          background: transparent;
+        }
+
+        .wizard-content {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
         .step-3-container {
           display: flex;
           flex-direction: column;
@@ -864,6 +874,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           max-height: 450px;
           overflow-y: auto;
           padding-right: 8px;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .vehicle-grid::-webkit-scrollbar {
+          width: 0px;
+          background: transparent;
         }
 
         .vehicle-card {
