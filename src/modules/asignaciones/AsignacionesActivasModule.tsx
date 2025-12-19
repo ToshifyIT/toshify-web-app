@@ -120,8 +120,8 @@ export function AsignacionesActivasModule() {
   // Expandir filas para TURNO (una fila por conductor) vs A CARGO (una fila con todos)
   const expandedAsignaciones = useMemo(() => {
     return asignaciones.flatMap((asignacion: any) => {
-      // Si es A CARGO, retornar una sola fila con todos los conductores
-      if (asignacion.horario === 'CARGO') {
+      // Si es A CARGO o modalidad no definida, retornar una sola fila
+      if (asignacion.horario === 'CARGO' || !asignacion.horario) {
         return [{
           ...asignacion,
           conductorEspecifico: null,
@@ -134,7 +134,7 @@ export function AsignacionesActivasModule() {
         return asignacion.asignaciones_conductores.map((ac: any) => ({
           ...asignacion,
           conductorEspecifico: ac,
-          turnoEspecifico: ac.horario
+          turnoEspecifico: ac.horario === 'todo_dia' ? '-' : ac.horario
         }))
       }
 

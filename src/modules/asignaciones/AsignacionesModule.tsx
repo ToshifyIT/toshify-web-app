@@ -255,14 +255,15 @@ export function AsignacionesModule() {
   // Expandir asignaciones TURNO en filas separadas
   const expandedAsignaciones = useMemo<ExpandedAsignacion[]>(() => {
     return filteredAsignaciones.flatMap((asignacion): ExpandedAsignacion[] => {
-      if (asignacion.horario === 'CARGO') {
+      // Si es A CARGO o modalidad no definida, retornar una sola fila
+      if (asignacion.horario === 'CARGO' || !asignacion.horario) {
         return [{ ...asignacion, conductorEspecifico: null, turnoEspecifico: '-' }]
       }
       if (asignacion.asignaciones_conductores && asignacion.asignaciones_conductores.length > 0) {
         return asignacion.asignaciones_conductores.map(ac => ({
           ...asignacion,
           conductorEspecifico: ac,
-          turnoEspecifico: ac.horario
+          turnoEspecifico: ac.horario === 'todo_dia' ? '-' : ac.horario
         }))
       }
       return [{ ...asignacion, conductorEspecifico: null, turnoEspecifico: '-' }]
@@ -534,11 +535,19 @@ export function AsignacionesModule() {
     {
       accessorKey: 'turnoEspecifico',
       header: 'Turno',
-      cell: ({ row }) => (
-        <span style={{ fontSize: '13px', fontWeight: 500 }}>
-          {row.original.turnoEspecifico === '-' ? '-' : row.original.turnoEspecifico || 'N/A'}
-        </span>
-      )
+      cell: ({ row }) => {
+        const turno = row.original.turnoEspecifico
+        const turnoLabels: Record<string, string> = {
+          'diurno': 'Diurno',
+          'nocturno': 'Nocturno',
+          '-': '-'
+        }
+        return (
+          <span style={{ fontSize: '13px', fontWeight: 500 }}>
+            {turnoLabels[turno] || turno || 'N/A'}
+          </span>
+        )
+      }
     },
     {
       id: 'conductor',
