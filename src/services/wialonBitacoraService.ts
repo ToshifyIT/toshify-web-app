@@ -1,6 +1,6 @@
 /**
  * Servicio para consultas de datos de Bitácora Wialon
- * Usa la tabla uss_historico que ya tiene datos sincronizados
+ * Usa la tabla wialon_bitacora con datos agrupados por turno (vehículo + día)
  */
 
 import { supabase } from '../lib/supabase'
@@ -9,16 +9,18 @@ import type {
   BitacoraQueryOptions,
 } from '../modules/integraciones/uss/bitacora/types/bitacora.types'
 
-// Tipo para registro transformado
+// Tipo para registro de wialon_bitacora
 export interface BitacoraRegistroTransformado {
   id: string
   patente: string
   patente_normalizada: string
   conductor_wialon: string | null
+  conductor_id: string | null
   ibutton: string | null
   fecha_turno: string
   hora_inicio: string | null
   hora_cierre: string | null
+  duracion_minutos: number | null
   kilometraje: number
   observaciones: string | null
   estado: string
@@ -29,6 +31,9 @@ export interface BitacoraRegistroTransformado {
 
 // Threshold para "Poco Km"
 const POCO_KM_THRESHOLD = 100
+
+// Nombre de la tabla
+const TABLE_NAME = 'wialon_bitacora'
 
 // =====================================================
 // CACHÉ EN MEMORIA
@@ -67,30 +72,11 @@ class SimpleCache<T> {
 const bitacoraCache = new SimpleCache<BitacoraRegistroTransformado[]>(5)
 const statsCache = new SimpleCache<BitacoraStats>(5)
 
-// Helper para calcular estado
+// Helper para calcular estado (usado solo si no viene de la BD)
 function calcularEstado(horaFinal: string | null, km: number): string {
   if (!horaFinal) return 'En Curso'
   if (km < POCO_KM_THRESHOLD) return 'Poco Km'
   return 'Turno Finalizado'
-}
-
-// Helper para extraer hora de timestamp
-function extraerHora(timestamp: string | null): string | null {
-  if (!timestamp) return null
-  // Formato: "2025-12-18 18:29:00" o ISO
-  const match = timestamp.match(/(\d{2}:\d{2}:\d{2})/)
-  if (match) return match[1]
-  const date = new Date(timestamp)
-  if (isNaN(date.getTime())) return null
-  return date.toTimeString().substring(0, 8)
-}
-
-// Helper para extraer fecha de timestamp
-function extraerFecha(timestamp: string): string {
-  // Formato: "2025-12-18 18:29:00" o ISO
-  const match = timestamp.match(/(\d{4}-\d{2}-\d{2})/)
-  if (match) return match[1]
-  return timestamp.split('T')[0]
 }
 
 // =====================================================
@@ -99,7 +85,7 @@ function extraerFecha(timestamp: string): string {
 
 export const wialonBitacoraService = {
   /**
-   * Obtiene registros de bitácora agrupados por turno (por vehículo y día)
+   * Obtiene registros de bitácora desde wialon_bitacora (ya agrupados por turno)
    */
   async getBitacora(
     startDate: string,
@@ -113,118 +99,53 @@ export const wialonBitacoraService = {
       return { data: cached, count: cached.length }
     }
 
-    // Query de uss_historico
-    const { data, error } = await supabase
-      .from('uss_historico')
+    // Query directa a wialon_bitacora (ya tiene datos agrupados por turno)
+    let query = supabase
+      .from(TABLE_NAME)
       .select('*')
-      .gte('fecha_hora_inicio', `${startDate} 00:00:00`)
-      .lte('fecha_hora_inicio', `${endDate} 23:59:59`)
-      .order('fecha_hora_inicio', { ascending: false })
+      .gte('fecha_turno', startDate)
+      .lte('fecha_turno', endDate)
+      .order('fecha_turno', { ascending: false })
+      .order('hora_inicio', { ascending: false })
+
+    // Aplicar filtros en la query si es posible
+    if (options?.patente) {
+      query = query.ilike('patente_normalizada', `%${options.patente.toUpperCase().replace(/\s/g, '')}%`)
+    }
+
+    if (options?.conductor) {
+      query = query.ilike('conductor_wialon', `%${options.conductor}%`)
+    }
+
+    if (options?.estado) {
+      query = query.eq('estado', options.estado)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       throw new Error(`Error obteniendo bitácora: ${error.message}`)
     }
 
-    // Agrupar por patente y fecha (un turno = todos los viajes del día de un vehículo)
-    const turnosMap = new Map<string, {
-      id: string
-      patente: string
-      conductor: string | null
-      ibutton: string | null
-      fecha_turno: string
-      hora_inicio: string
-      hora_cierre: string | null
-      kilometraje: number
-      observaciones: string | null
-    }>()
-
-    for (const row of data || []) {
-      const fecha = extraerFecha(row.fecha_hora_inicio)
-      const patenteNorm = (row.patente || '').replace(/\s/g, '').toUpperCase()
-      const key = `${patenteNorm}_${fecha}`
-
-      const existing = turnosMap.get(key)
-      const km = parseFloat(row.kilometraje) || 0
-      const horaInicio = extraerHora(row.fecha_hora_inicio)
-      const horaCierre = extraerHora(row.fecha_hora_final)
-
-      if (!existing) {
-        turnosMap.set(key, {
-          id: String(row.id),
-          patente: row.patente,
-          conductor: row.conductor,
-          ibutton: row.ibutton,
-          fecha_turno: fecha,
-          hora_inicio: horaInicio || '',
-          hora_cierre: horaCierre,
-          kilometraje: km,
-          observaciones: row.observaciones,
-        })
-      } else {
-        // Acumular km
-        existing.kilometraje += km
-        // Actualizar hora cierre si es más tarde
-        if (horaCierre && (!existing.hora_cierre || horaCierre > existing.hora_cierre)) {
-          existing.hora_cierre = horaCierre
-        }
-        // Actualizar hora inicio si es más temprana
-        if (horaInicio && horaInicio < existing.hora_inicio) {
-          existing.hora_inicio = horaInicio
-        }
-        // Actualizar conductor si no hay
-        if (!existing.conductor && row.conductor) {
-          existing.conductor = row.conductor
-        }
-        // Actualizar ibutton si no hay
-        if (!existing.ibutton && row.ibutton) {
-          existing.ibutton = row.ibutton
-        }
-      }
-    }
-
-    // Convertir a array y transformar
-    let registros: BitacoraRegistroTransformado[] = Array.from(turnosMap.values()).map((r) => ({
-      id: r.id,
-      patente: r.patente,
-      patente_normalizada: r.patente.replace(/\s/g, '').toUpperCase(),
-      conductor_wialon: r.conductor,
-      ibutton: r.ibutton,
-      fecha_turno: r.fecha_turno,
-      hora_inicio: r.hora_inicio || null,
-      hora_cierre: r.hora_cierre,
-      kilometraje: Math.round(r.kilometraje * 100) / 100,
-      observaciones: r.observaciones,
-      estado: calcularEstado(r.hora_cierre, r.kilometraje),
-      gnc_cargado: false,
-      lavado_realizado: false,
-      nafta_cargada: false,
+    // Transformar registros
+    let registros: BitacoraRegistroTransformado[] = (data || []).map((row) => ({
+      id: row.id,
+      patente: row.patente,
+      patente_normalizada: row.patente_normalizada,
+      conductor_wialon: row.conductor_wialon || null,
+      conductor_id: row.conductor_id || null,
+      ibutton: row.ibutton || null,
+      fecha_turno: row.fecha_turno,
+      hora_inicio: row.hora_inicio || null,
+      hora_cierre: row.hora_cierre || null,
+      duracion_minutos: row.duracion_minutos || null,
+      kilometraje: parseFloat(row.kilometraje) || 0,
+      observaciones: row.observaciones || null,
+      estado: row.estado || calcularEstado(row.hora_cierre, parseFloat(row.kilometraje) || 0),
+      gnc_cargado: row.gnc_cargado || false,
+      lavado_realizado: row.lavado_realizado || false,
+      nafta_cargada: row.nafta_cargada || false,
     }))
-
-    // Ordenar por fecha desc, hora inicio desc
-    registros.sort((a, b) => {
-      if (a.fecha_turno !== b.fecha_turno) {
-        return b.fecha_turno.localeCompare(a.fecha_turno)
-      }
-      return (b.hora_inicio || '').localeCompare(a.hora_inicio || '')
-    })
-
-    // Aplicar filtros
-    if (options?.patente) {
-      const term = options.patente.toLowerCase()
-      registros = registros.filter(r =>
-        r.patente.toLowerCase().includes(term) ||
-        r.patente_normalizada.toLowerCase().includes(term)
-      )
-    }
-
-    if (options?.conductor) {
-      const term = options.conductor.toLowerCase()
-      registros = registros.filter(r => r.conductor_wialon?.toLowerCase().includes(term))
-    }
-
-    if (options?.estado) {
-      registros = registros.filter(r => r.estado === options.estado)
-    }
 
     const total = registros.length
 
@@ -290,26 +211,48 @@ export const wialonBitacoraService = {
   },
 
   /**
-   * Placeholder para checklist
+   * Actualiza checklist de un turno
    */
   async updateChecklist(
-    _id: string,
-    _updates: {
+    id: string,
+    updates: {
       gnc_cargado?: boolean
       lavado_realizado?: boolean
       nafta_cargada?: boolean
     }
   ): Promise<void> {
-    // TODO: Implementar con tabla de checklist separada si se necesita
-    console.log('updateChecklist - pendiente de implementar')
+    const { error } = await supabase
+      .from(TABLE_NAME)
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (error) {
+      throw new Error(`Error actualizando checklist: ${error.message}`)
+    }
+
+    this.clearCache()
   },
 
   /**
-   * Placeholder para estado
+   * Actualiza estado de un turno
    */
-  async updateEstado(_id: string, _estado: string): Promise<void> {
-    // TODO: Implementar si se necesita cambiar estado manualmente
-    console.log('updateEstado - pendiente de implementar')
+  async updateEstado(id: string, estado: string): Promise<void> {
+    const { error } = await supabase
+      .from(TABLE_NAME)
+      .update({
+        estado,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (error) {
+      throw new Error(`Error actualizando estado: ${error.message}`)
+    }
+
+    this.clearCache()
   },
 
   /**
@@ -320,24 +263,51 @@ export const wialonBitacoraService = {
     totalRecords: number
     status: string
   }> {
-    const { count } = await supabase
-      .from('uss_historico')
-      .select('*', { count: 'exact', head: true })
+    // Obtener última sincronización y conteo
+    const { data, count } = await supabase
+      .from(TABLE_NAME)
+      .select('synced_at', { count: 'exact' })
+      .order('synced_at', { ascending: false })
+      .limit(1)
+
+    const lastSync = data && data.length > 0 ? data[0].synced_at : null
 
     return {
-      lastSync: new Date().toISOString(),
+      lastSync,
       totalRecords: count || 0,
       status: 'success',
     }
   },
 
   /**
-   * Trigger sync - uss_historico ya se sincroniza automáticamente
-   * Los parámetros se aceptan pero no se usan ya que la data viene de uss_historico
+   * Trigger sync - llama al Edge Function para sincronizar datos de Wialon
    */
-  async triggerSync(_startDate?: string, _endDate?: string): Promise<{ success: boolean; error?: string }> {
-    this.clearCache()
-    return { success: true }
+  async triggerSync(startDate?: string, _endDate?: string): Promise<{ success: boolean; error?: string; turnos?: number }> {
+    const fecha = startDate || new Date().toISOString().split('T')[0]
+
+    try {
+      const response = await fetch(
+        `https://beuuxepwljaljkprypey.supabase.co/functions/v1/sync-wialon-bitacora?fecha=${fecha}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      const result = await response.json()
+
+      this.clearCache()
+
+      if (result.success) {
+        return { success: true, turnos: result.turnos }
+      } else {
+        return { success: false, error: result.error || 'Error desconocido' }
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Error de conexion' }
+    }
   },
 
   clearCache(): void {
