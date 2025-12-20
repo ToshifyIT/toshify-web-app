@@ -1,11 +1,11 @@
 // src/modules/integraciones/uss/bitacora/components/BitacoraTable.tsx
 import { useState } from 'react'
 import { Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
-import type { BitacoraRegistro } from '../types/bitacora.types'
+import type { BitacoraRegistroTransformado } from '../../../../../services/wialonBitacoraService'
 import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 
 interface BitacoraTableProps {
-  registros: BitacoraRegistro[]
+  registros: BitacoraRegistroTransformado[]
   totalCount: number
   isLoading: boolean
   page: number

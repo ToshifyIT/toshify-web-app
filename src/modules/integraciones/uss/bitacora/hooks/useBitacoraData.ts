@@ -1,9 +1,11 @@
 // src/modules/integraciones/uss/bitacora/hooks/useBitacoraData.ts
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../../../lib/supabase'
-import { wialonBitacoraService } from '../../../../../services/wialonBitacoraService'
+import {
+  wialonBitacoraService,
+  type BitacoraRegistroTransformado,
+} from '../../../../../services/wialonBitacoraService'
 import type {
-  BitacoraRegistro,
   BitacoraStats,
   BitacoraDateRange,
   BitacoraQueryState,
@@ -53,14 +55,14 @@ export function useBitacoraData() {
   })
 
   // Estado de datos
-  const [registros, setRegistros] = useState<BitacoraRegistro[]>([])
+  const [registros, setRegistros] = useState<BitacoraRegistroTransformado[]>([])
   const [stats, setStats] = useState<BitacoraStats | null>(null)
   const [totalCount, setTotalCount] = useState(0)
   const [asignaciones, setAsignaciones] = useState<Map<string, AsignacionActiva>>(new Map())
 
   // Estado de paginación
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(BITACORA_CONSTANTS.DEFAULT_PAGE_SIZE)
+  const [pageSize, setPageSize] = useState<number>(BITACORA_CONSTANTS.DEFAULT_PAGE_SIZE)
 
   // Estado de filtros
   const [filterPatente, setFilterPatente] = useState('')
@@ -83,13 +85,19 @@ export function useBitacoraData() {
         vehiculos!inner(patente),
         conductores!inner(nombres, apellidos)
       `)
-      .eq('estado', 'activa')
+      .eq('estado', 'activa') as {
+      data: Array<{
+        vehiculo_id: string
+        vehiculos: { patente: string }
+        conductores: { nombres: string; apellidos: string }
+      }> | null
+    }
 
     if (data) {
       const map = new Map<string, AsignacionActiva>()
       for (const row of data) {
-        const vehiculo = row.vehiculos as { patente: string } | null
-        const conductor = row.conductores as { nombres: string; apellidos: string } | null
+        const vehiculo = row.vehiculos
+        const conductor = row.conductores
 
         if (vehiculo && conductor) {
           const patenteNorm = vehiculo.patente.replace(/\s/g, '').toUpperCase()

@@ -122,7 +122,7 @@ export function AsignacionesModule() {
       const { data: asignacionesActivasData } = await supabase
         .from('asignaciones')
         .select('id')
-        .eq('estado', 'activa')
+        .eq('estado', 'activa') as { data: Array<{ id: string }> | null }
 
       const asignacionesActivasIds = asignacionesActivasData?.map(a => a.id) || []
 
@@ -132,7 +132,7 @@ export function AsignacionesModule() {
         const { data: conductoresOcupados } = await supabase
           .from('asignaciones_conductores')
           .select('conductor_id')
-          .in('asignacion_id', asignacionesActivasIds)
+          .in('asignacion_id', asignacionesActivasIds) as { data: Array<{ conductor_id: string }> | null }
 
         conductoresOcupadosIds = new Set(
           conductoresOcupados?.map(c => c.conductor_id) || []

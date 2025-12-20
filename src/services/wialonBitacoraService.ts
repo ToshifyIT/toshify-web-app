@@ -35,6 +35,31 @@ const POCO_KM_THRESHOLD = 100
 // Nombre de la tabla
 const TABLE_NAME = 'wialon_bitacora'
 
+// Tipo para fila de base de datos (Supabase)
+interface WialonBitacoraRow {
+  id: string
+  patente: string
+  patente_normalizada: string
+  conductor_wialon: string | null
+  conductor_id: string | null
+  ibutton: string | null
+  fecha_turno: string
+  hora_inicio: string | null
+  hora_cierre: string | null
+  duracion_minutos: number | null
+  kilometraje: string
+  observaciones: string | null
+  estado: string | null
+  gnc_cargado: boolean
+  lavado_realizado: boolean
+  nafta_cargada: boolean
+  synced_at: string | null
+  updated_at?: string
+}
+
+// Tipo para updates
+type BitacoraUpdate = Partial<Pick<WialonBitacoraRow, 'gnc_cargado' | 'lavado_realizado' | 'nafta_cargada' | 'estado' | 'updated_at'>>
+
 // =====================================================
 // CACHÉ EN MEMORIA
 // =====================================================
@@ -42,9 +67,11 @@ const TABLE_NAME = 'wialon_bitacora'
 class SimpleCache<T> {
   private cache = new Map<string, { data: T; expires: number }>()
   private TTL: number
+  private maxSize: number
 
-  constructor(ttlMinutes: number = 5) {
+  constructor(ttlMinutes: number = 5, maxSize: number = 50) {
     this.TTL = ttlMinutes * 60 * 1000
+    this.maxSize = maxSize
   }
 
   get(key: string): T | null {
@@ -58,6 +85,11 @@ class SimpleCache<T> {
   }
 
   set(key: string, data: T): void {
+    // Evitar memory leak: eliminar entrada más antigua si se excede el límite
+    if (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value
+      if (oldestKey) this.cache.delete(oldestKey)
+    }
     this.cache.set(key, {
       data,
       expires: Date.now() + this.TTL,
@@ -127,8 +159,9 @@ export const wialonBitacoraService = {
       throw new Error(`Error obteniendo bitácora: ${error.message}`)
     }
 
-    // Transformar registros
-    let registros: BitacoraRegistroTransformado[] = (data || []).map((row) => ({
+    // Transformar registros (cast para tipado correcto)
+    const rows = (data || []) as WialonBitacoraRow[]
+    let registros: BitacoraRegistroTransformado[] = rows.map((row) => ({
       id: row.id,
       patente: row.patente,
       patente_normalizada: row.patente_normalizada,
@@ -263,12 +296,14 @@ export const wialonBitacoraService = {
       nafta_cargada?: boolean
     }
   ): Promise<void> {
+    const updateData: BitacoraUpdate = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    }
+
     const { error } = await supabase
       .from(TABLE_NAME)
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData as never)
       .eq('id', id)
 
     if (error) {
@@ -282,12 +317,14 @@ export const wialonBitacoraService = {
    * Actualiza estado de un turno
    */
   async updateEstado(id: string, estado: string): Promise<void> {
+    const updateData: BitacoraUpdate = {
+      estado,
+      updated_at: new Date().toISOString(),
+    }
+
     const { error } = await supabase
       .from(TABLE_NAME)
-      .update({
-        estado,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData as never)
       .eq('id', id)
 
     if (error) {
@@ -310,7 +347,7 @@ export const wialonBitacoraService = {
       .from(TABLE_NAME)
       .select('synced_at', { count: 'exact' })
       .order('synced_at', { ascending: false })
-      .limit(1)
+      .limit(1) as { data: Array<{ synced_at: string | null }> | null; count: number | null }
 
     const lastSync = data && data.length > 0 ? data[0].synced_at : null
 
@@ -342,6 +379,10 @@ export const wialonBitacoraService = {
         return { success: false, error: 'Sesión no válida. Por favor, inicie sesión nuevamente.' }
       }
 
+      // Timeout de 60 segundos para evitar que la request cuelgue indefinidamente
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000)
+
       const response = await fetch(
         `https://beuuxepwljaljkprypey.supabase.co/functions/v1/sync-wialon-bitacora?fecha=${encodeURIComponent(fecha)}`,
         {
@@ -350,8 +391,11 @@ export const wialonBitacoraService = {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
           },
+          signal: controller.signal,
         }
       )
+
+      clearTimeout(timeoutId)
 
       const result = await response.json()
 
@@ -363,6 +407,9 @@ export const wialonBitacoraService = {
         return { success: false, error: result.error || 'Error desconocido' }
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return { success: false, error: 'Timeout: la sincronización tardó demasiado. Intente nuevamente.' }
+      }
       return { success: false, error: error instanceof Error ? error.message : 'Error de conexion' }
     }
   },
