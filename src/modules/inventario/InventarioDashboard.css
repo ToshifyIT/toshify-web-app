@@ -76,63 +76,54 @@
   border-color: var(--color-primary);
 }
 
-/* Cards de Resumen */
-.inv-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 10px;
-  margin-bottom: 14px;
-}
+/* =====================================================
+   STATS - Estilo Bitacora
+   ===================================================== */
 
-.inv-summary-card {
+.inv-stats {
   background: var(--bg-primary);
   border-radius: 8px;
-  padding: 12px;
+  padding: 16px;
   border: 1px solid var(--border-primary);
-  box-shadow: var(--shadow-sm);
 }
 
-.inv-summary-content {
+.inv-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+.inv-stats .stat-card {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
 }
 
-.inv-summary-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+.inv-stats .stat-card .stat-icon {
+  color: #DC2626;
+  flex-shrink: 0;
+}
+
+.inv-stats .stat-content {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.inv-summary-icon.total { background: var(--badge-blue-bg); color: var(--color-info); }
-.inv-summary-icon.disponible { background: var(--badge-green-bg); color: var(--color-success); }
-.inv-summary-icon.en-uso { background: var(--badge-yellow-bg); color: var(--color-warning); }
-.inv-summary-icon.en-transito { background: var(--badge-purple-bg); color: var(--color-purple); }
-.inv-summary-icon.dañado { background: var(--badge-red-bg); color: var(--color-danger); }
-.inv-summary-icon.perdido { background: var(--badge-gray-bg); color: var(--text-secondary); }
-
-.inv-summary-label {
-  font-size: 10px;
-  color: var(--text-secondary);
+.inv-stats .stat-value {
+  font-size: 16px;
   font-weight: 600;
-  margin-bottom: 1px;
+  color: var(--text-primary);
 }
 
-.inv-summary-value {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0;
+.inv-stats .stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
-
-.inv-summary-value.total { color: var(--color-info); }
-.inv-summary-value.disponible { color: var(--color-success); }
-.inv-summary-value.en-uso { color: var(--color-warning); }
-.inv-summary-value.en-transito { color: var(--color-purple); }
-.inv-summary-value.dañado { color: var(--color-danger); }
-.inv-summary-value.perdido { color: var(--text-secondary); }
 
 /* Tabla Header */
 .inv-table-header {
@@ -188,26 +179,30 @@
 .inv-dañado { color: var(--color-danger); font-weight: 600; }
 .inv-perdido { color: var(--text-secondary); font-weight: 600; }
 
-/* Responsive - Multi-resolution support */
+/* Responsive Stats */
 @media (max-width: 1440px) {
-  .inv-summary-grid {
-    gap: 8px;
-  }
-
-  .inv-summary-value {
-    font-size: 16px;
+  .inv-stats-grid {
+    gap: 10px;
   }
 }
 
 @media (max-width: 1200px) {
-  .inv-summary-grid {
+  .inv-stats-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (max-width: 768px) {
-  .inv-summary-grid {
+  .inv-stats-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .inv-header {
+    padding: 16px;
+  }
+
+  .inv-header-title h1 {
+    font-size: 16px;
   }
 
   .inv-filters {
@@ -222,36 +217,32 @@
 
 /* Mobile devices (< 480px) */
 @media (max-width: 480px) {
+  .inv-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .inv-stats .stat-card {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .inv-stats .stat-value {
+    font-size: 14px;
+  }
+
+  .inv-stats .stat-label {
+    font-size: 10px;
+  }
+
   .inv-filters {
     gap: 4px;
     margin-bottom: 8px;
   }
 
   .inv-filter-btn {
-    padding: 10px 14px; /* Touch-friendly */
+    padding: 10px 14px;
     font-size: 13px;
-  }
-
-  .inv-summary-grid {
-    gap: 6px;
-    margin-bottom: 10px;
-  }
-
-  .inv-summary-card {
-    padding: 10px;
-  }
-
-  .inv-summary-icon {
-    width: 32px;
-    height: 32px;
-  }
-
-  .inv-summary-label {
-    font-size: 9px;
-  }
-
-  .inv-summary-value {
-    font-size: 16px;
   }
 
   .inv-table-header {
@@ -286,26 +277,5 @@
   .inv-dañado,
   .inv-perdido {
     font-size: 11px;
-  }
-}
-
-/* Extra small devices (< 360px) */
-@media (max-width: 360px) {
-  .inv-summary-grid {
-    grid-template-columns: 1fr;
-    gap: 4px;
-  }
-
-  .inv-summary-content {
-    gap: 8px;
-  }
-
-  .inv-summary-value {
-    font-size: 14px;
-  }
-
-  .inv-filter-btn {
-    padding: 10px 12px;
-    font-size: 12px;
   }
 }

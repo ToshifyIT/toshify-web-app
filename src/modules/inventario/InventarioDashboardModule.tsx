@@ -191,76 +191,49 @@ export function InventarioDashboardModule() {
         </button>
       </div>
 
-      {/* Cards de Resumen */}
-      <div className="inv-summary-grid">
-        <div className="inv-summary-card">
-          <div className="inv-summary-content">
-            <div className="inv-summary-icon total">
-              <Package size={22} />
-            </div>
-            <div>
-              <p className="inv-summary-label">Stock Total</p>
-              <p className="inv-summary-value total">{totales.total}</p>
+      {/* Stats Cards - Estilo Bitacora */}
+      <div className="inv-stats">
+        <div className="inv-stats-grid">
+          <div className="stat-card">
+            <Package size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{totales.total}</span>
+              <span className="stat-label">Stock Total</span>
             </div>
           </div>
-        </div>
-
-        <div className="inv-summary-card">
-          <div className="inv-summary-content">
-            <div className="inv-summary-icon disponible">
-              <CheckCircle size={22} />
-            </div>
-            <div>
-              <p className="inv-summary-label">Disponible</p>
-              <p className="inv-summary-value disponible">{totales.disponible}</p>
+          <div className="stat-card">
+            <CheckCircle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{totales.disponible}</span>
+              <span className="stat-label">Disponible</span>
             </div>
           </div>
-        </div>
-
-        <div className="inv-summary-card">
-          <div className="inv-summary-content">
-            <div className="inv-summary-icon en-uso">
-              <Activity size={22} />
-            </div>
-            <div>
-              <p className="inv-summary-label">En Uso</p>
-              <p className="inv-summary-value en-uso">{totales.en_uso}</p>
+          <div className="stat-card">
+            <Activity size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{totales.en_uso}</span>
+              <span className="stat-label">En Uso</span>
             </div>
           </div>
-        </div>
-
-        <div className="inv-summary-card">
-          <div className="inv-summary-content">
-            <div className="inv-summary-icon en-transito">
-              <Truck size={22} />
-            </div>
-            <div>
-              <p className="inv-summary-label">En Tránsito</p>
-              <p className="inv-summary-value en-transito">{totales.en_transito}</p>
+          <div className="stat-card">
+            <Truck size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{totales.en_transito}</span>
+              <span className="stat-label">En Tránsito</span>
             </div>
           </div>
-        </div>
-
-        <div className="inv-summary-card">
-          <div className="inv-summary-content">
-            <div className="inv-summary-icon dañado">
-              <AlertTriangle size={22} />
-            </div>
-            <div>
-              <p className="inv-summary-label">Dañado</p>
-              <p className="inv-summary-value dañado">{totales.dañado}</p>
+          <div className="stat-card">
+            <AlertTriangle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{totales.dañado}</span>
+              <span className="stat-label">Dañado</span>
             </div>
           </div>
-        </div>
-
-        <div className="inv-summary-card">
-          <div className="inv-summary-content">
-            <div className="inv-summary-icon perdido">
-              <XCircle size={22} />
-            </div>
-            <div>
-              <p className="inv-summary-label">Perdido</p>
-              <p className="inv-summary-value perdido">{totales.perdido}</p>
+          <div className="stat-card">
+            <XCircle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{totales.perdido}</span>
+              <span className="stat-label">Perdido</span>
             </div>
           </div>
         </div>

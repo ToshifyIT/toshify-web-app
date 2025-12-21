@@ -61,6 +61,7 @@ export function VehicleManagement() {
     tipo_combustible: '',
     tipo_gps: '',
     gps_uss: false,
+    traccar: false,
     numero_motor: '',
     numero_chasis: '',
     provisoria: '',
@@ -274,6 +275,7 @@ export function VehicleManagement() {
           tipo_combustible: formData.tipo_combustible || null,
           tipo_gps: formData.tipo_gps || null,
           gps_uss: formData.gps_uss,
+          traccar: formData.traccar,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           provisoria: formData.provisoria || null,
@@ -342,6 +344,7 @@ export function VehicleManagement() {
           tipo_combustible: formData.tipo_combustible || null,
           tipo_gps: formData.tipo_gps || null,
           gps_uss: formData.gps_uss,
+          traccar: formData.traccar,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           provisoria: formData.provisoria || null,
@@ -441,6 +444,7 @@ export function VehicleManagement() {
       tipo_combustible: (vehiculo as any).tipo_combustible || '',
       tipo_gps: (vehiculo as any).tipo_gps || '',
       gps_uss: vehiculo.gps_uss,
+      traccar: (vehiculo as any).traccar || false,
       numero_motor: vehiculo.numero_motor || '',
       numero_chasis: vehiculo.numero_chasis || '',
       provisoria: vehiculo.provisoria || '',
@@ -473,6 +477,7 @@ export function VehicleManagement() {
       tipo_combustible: '',
       tipo_gps: '',
       gps_uss: false,
+      traccar: false,
       numero_motor: '',
       numero_chasis: '',
       provisoria: '',
@@ -1033,8 +1038,8 @@ export function VehicleManagement() {
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginTop: '28px' }}>
+              <div className="form-group" style={{ display: 'flex', gap: '24px', marginTop: '28px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     className="form-checkbox"
@@ -1043,6 +1048,16 @@ export function VehicleManagement() {
                     disabled={saving}
                   />
                   <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>GPS USS</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    className="form-checkbox"
+                    checked={formData.traccar}
+                    onChange={(e) => setFormData({ ...formData, traccar: e.target.checked })}
+                    disabled={saving}
+                  />
+                  <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>Traccar</span>
                 </label>
               </div>
             </div>
@@ -1340,8 +1355,8 @@ export function VehicleManagement() {
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginTop: '28px' }}>
+              <div className="form-group" style={{ display: 'flex', gap: '24px', marginTop: '28px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     className="form-checkbox"
@@ -1350,6 +1365,16 @@ export function VehicleManagement() {
                     disabled={saving}
                   />
                   <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>GPS USS</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    className="form-checkbox"
+                    checked={formData.traccar}
+                    onChange={(e) => setFormData({ ...formData, traccar: e.target.checked })}
+                    disabled={saving}
+                  />
+                  <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>Traccar</span>
                 </label>
               </div>
             </div>
