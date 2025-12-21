@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import { Eye, Edit, Trash2, Package, Tag, Info, Calendar } from 'lucide-react'
+import { Eye, Edit, Trash2, Package, Tag, Info, Calendar, Filter } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
 
@@ -85,12 +85,52 @@ export function ProductosModule() {
     observacion: ''
   })
 
+  // Column filter states
+  const [codigoFilter, setCodigoFilter] = useState('')
+  const [nombreFilter, setNombreFilter] = useState('')
+  const [tipoFilter, setTipoFilter] = useState('')
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+
   useEffect(() => {
     loadProductos()
     loadUnidadesMedida()
     loadEstados()
     loadCategorias()
   }, [])
+
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter])
+
+  // Filtrar productos según los filtros de columna
+  const filteredProductos = useMemo(() => {
+    let result = productos
+
+    if (codigoFilter) {
+      result = result.filter(p =>
+        p.codigo?.toLowerCase().includes(codigoFilter.toLowerCase())
+      )
+    }
+
+    if (nombreFilter) {
+      result = result.filter(p =>
+        p.nombre?.toLowerCase().includes(nombreFilter.toLowerCase())
+      )
+    }
+
+    if (tipoFilter) {
+      result = result.filter(p => p.tipo === tipoFilter)
+    }
+
+    return result
+  }, [productos, codigoFilter, nombreFilter, tipoFilter])
 
   const loadProductos = async () => {
     console.log('🔵 loadProductos - INICIO')
@@ -449,7 +489,46 @@ export function ProductosModule() {
     () => [
       {
         accessorKey: 'codigo',
-        header: 'Código',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Código</span>
+            <button
+              className={`dt-column-filter-btn ${codigoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'codigo' ? null : 'codigo')
+              }}
+              title="Filtrar por código"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'codigo' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar código..."
+                  value={codigoFilter}
+                  onChange={(e) => setCodigoFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {codigoFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setCodigoFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
             {getValue() as string}
@@ -458,7 +537,46 @@ export function ProductosModule() {
       },
       {
         accessorKey: 'nombre',
-        header: 'Nombre',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Nombre</span>
+            <button
+              className={`dt-column-filter-btn ${nombreFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'nombre' ? null : 'nombre')
+              }}
+              title="Filtrar por nombre"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'nombre' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar nombre..."
+                  value={nombreFilter}
+                  onChange={(e) => setNombreFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {nombreFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setNombreFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 500 }}>{getValue() as string}</span>
         ),
@@ -477,7 +595,55 @@ export function ProductosModule() {
       },
       {
         id: 'tipo',
-        header: 'Tipo',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Tipo</span>
+            <button
+              className={`dt-column-filter-btn ${tipoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo')
+              }}
+              title="Filtrar por tipo"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'tipo' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '150px' }}>
+                <button
+                  className={`dt-column-filter-option ${tipoFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setTipoFilter('')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Todos
+                </button>
+                <button
+                  className={`dt-column-filter-option ${tipoFilter === 'REPUESTOS' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setTipoFilter('REPUESTOS')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Repuestos
+                </button>
+                <button
+                  className={`dt-column-filter-option ${tipoFilter === 'HERRAMIENTAS' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setTipoFilter('HERRAMIENTAS')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Herramientas
+                </button>
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => {
           const tipo = row.original.tipo
           return tipo === 'HERRAMIENTAS' ? (
@@ -555,7 +721,7 @@ export function ProductosModule() {
         ),
       },
     ],
-    [canView, canEdit, canDelete]
+    [canView, canEdit, canDelete, codigoFilter, nombreFilter, tipoFilter, openColumnFilter]
   )
 
   return (
@@ -570,7 +736,7 @@ export function ProductosModule() {
 
       {/* DataTable with integrated action button */}
       <DataTable
-        data={productos}
+        data={filteredProductos}
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por codigo, nombre, proveedor, categoria..."

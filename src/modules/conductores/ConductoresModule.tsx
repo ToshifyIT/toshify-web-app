@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import Swal from "sweetalert2";
@@ -53,6 +53,12 @@ export function ConductoresModule() {
   const [estadosLicencia, setEstadosLicencia] = useState<LicenciaEstado[]>([]);
   const [tiposLicencia, setTiposLicencia] = useState<LicenciaTipo[]>([]);
 
+  // Column filter states
+  const [nombreFilter, setNombreFilter] = useState('');
+  const [dniFilter, setDniFilter] = useState('');
+  const [estadoFilter, setEstadoFilter] = useState('');
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
+
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions();
 
   // Permisos específicos para el menú de conductores
@@ -96,6 +102,17 @@ export function ConductoresModule() {
     loadCatalogs();
     loadStatsData();
   }, []);
+
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openColumnFilter]);
 
   const loadStatsData = async () => {
     try {
@@ -686,12 +703,87 @@ export function ConductoresModule() {
     }
   };
 
+  // Filtrar conductores según los filtros de columna
+  const filteredConductores = useMemo(() => {
+    let result = conductores;
+
+    if (nombreFilter) {
+      result = result.filter(c =>
+        `${c.nombres} ${c.apellidos}`.toLowerCase().includes(nombreFilter.toLowerCase())
+      );
+    }
+
+    if (dniFilter) {
+      result = result.filter(c =>
+        c.numero_dni?.toLowerCase().includes(dniFilter.toLowerCase())
+      );
+    }
+
+    if (estadoFilter) {
+      result = result.filter(c =>
+        c.conductores_estados?.codigo === estadoFilter
+      );
+    }
+
+    return result;
+  }, [conductores, nombreFilter, dniFilter, estadoFilter]);
+
+  // Obtener lista única de estados para el filtro
+  const uniqueEstados = useMemo(() => {
+    const estados = new Map<string, string>();
+    conductores.forEach(c => {
+      if (c.conductores_estados?.codigo) {
+        estados.set(c.conductores_estados.codigo, c.conductores_estados.descripcion || c.conductores_estados.codigo);
+      }
+    });
+    return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [conductores]);
+
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<ConductorWithRelations>[]>(
     () => [
       {
         accessorKey: "nombres",
-        header: "Nombre",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Nombre</span>
+            <button
+              className={`dt-column-filter-btn ${nombreFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'nombre' ? null : 'nombre');
+              }}
+              title="Filtrar por nombre"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'nombre' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar nombre..."
+                  value={nombreFilter}
+                  onChange={(e) => setNombreFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {nombreFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setNombreFilter('');
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => (
           <strong>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
         ),
@@ -699,7 +791,46 @@ export function ConductoresModule() {
       },
       {
         accessorKey: "numero_dni",
-        header: "DNI",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>DNI</span>
+            <button
+              className={`dt-column-filter-btn ${dniFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'dni' ? null : 'dni');
+              }}
+              title="Filtrar por DNI"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'dni' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar DNI..."
+                  value={dniFilter}
+                  onChange={(e) => setDniFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {dniFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDniFilter('');
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
@@ -750,7 +881,48 @@ export function ConductoresModule() {
       },
       {
         accessorKey: "conductores_estados.codigo",
-        header: "Estado",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Estado</span>
+            <button
+              className={`dt-column-filter-btn ${estadoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado');
+              }}
+              title="Filtrar por estado"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'estado' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <button
+                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEstadoFilter('');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  Todos
+                </button>
+                {uniqueEstados.map(([codigo, descripcion]) => (
+                  <button
+                    key={codigo}
+                    className={`dt-column-filter-option ${estadoFilter === codigo ? 'selected' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEstadoFilter(codigo);
+                      setOpenColumnFilter(null);
+                    }}
+                  >
+                    {descripcion}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => {
           const codigo = row.original.conductores_estados?.codigo;
           if (!codigo) return "-";
@@ -830,7 +1002,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete],
+    [canUpdate, canDelete, nombreFilter, dniFilter, estadoFilter, openColumnFilter, uniqueEstados],
   );
 
   return (
@@ -894,7 +1066,7 @@ export function ConductoresModule() {
 
       {/* DataTable with integrated action button */}
       <DataTable
-        data={conductores}
+        data={filteredConductores}
         columns={columns}
         loading={loading}
         error={error}

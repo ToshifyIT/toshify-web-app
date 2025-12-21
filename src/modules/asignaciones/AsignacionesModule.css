@@ -2,11 +2,186 @@
 /* Estilos para el módulo de Asignaciones - Diseño compacto */
 /* Con soporte para Dark Mode mediante CSS Variables */
 
-/* Filtro de estado adicional */
-.asig-filters {
-  margin-bottom: 10px;
+/* Filtros de asignaciones - Barra compacta */
+.asig-filter-bar {
   display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.asig-filter-group {
+  display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.asig-filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.asig-filter-select {
+  padding: 6px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 120px;
+}
+
+.asig-filter-select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.asig-filter-date {
+  padding: 6px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: 5px;
+  font-size: 12px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  width: 130px;
+}
+
+.asig-filter-date:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.asig-filter-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-primary);
+}
+
+.asig-filter-clear {
+  padding: 6px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.asig-filter-clear:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Column header filters */
+.asig-column-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.asig-column-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.asig-column-filter-btn:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.asig-column-filter-btn.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.asig-column-filter-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 150px;
+  padding: 8px;
+  background: var(--modal-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+}
+
+.asig-column-filter-option {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.asig-column-filter-option:hover {
+  background: var(--bg-tertiary);
+}
+
+.asig-column-filter-option.selected {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.asig-column-filter-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.asig-column-filter-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* Legacy support */
+.asig-filters {
+  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .asig-status-select {
@@ -18,12 +193,17 @@
   background: var(--input-bg);
   color: var(--text-primary);
   cursor: pointer;
-  min-width: 180px;
+  min-width: 160px;
 }
 
 .asig-status-select:focus {
   outline: none;
   border-color: var(--border-focus);
+}
+
+/* Input type date específico */
+input[type="date"].asig-status-select {
+  min-width: 130px;
 }
 
 /* Badges de estado */
@@ -412,9 +592,34 @@
   .asig-modal-content {
     padding: 16px 20px;
   }
+
+  .asig-filter-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .asig-filter-divider {
+    display: none;
+  }
 }
 
 @media (max-width: 768px) {
+  .asig-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .asig-filter-group {
+    justify-content: space-between;
+  }
+
+  .asig-filter-select,
+  .asig-filter-date {
+    flex: 1;
+    min-width: 0;
+  }
+
   .asig-filters {
     flex-direction: column;
   }

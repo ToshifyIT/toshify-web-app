@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, Clock, CalendarRange, Activity } from 'lucide-react'
+import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, Clock, CalendarRange, Activity, Filter } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
@@ -68,7 +68,12 @@ export function AsignacionesModule() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showWizard, setShowWizard] = useState(false)
+  // Filtros (usados en cabeceras de columnas)
   const [statusFilter, setStatusFilter] = useState<string>('')
+  const [modalityFilter, setModalityFilter] = useState<string>('')
+  const [vehicleFilter, setVehicleFilter] = useState<string>('')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [selectedAsignacion, setSelectedAsignacion] = useState<Asignacion | null>(null)
@@ -79,6 +84,7 @@ export function AsignacionesModule() {
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
   const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [statsData, setStatsData] = useState({
     totalVehiculos: 0,
     vehiculosDisponibles: 0,
@@ -309,12 +315,59 @@ export function AsignacionesModule() {
     getCurrentUser()
   }, [])
 
-  // Filtrar por estado y ordenar (programados primero, luego por fecha_programada)
+  // Cerrar dropdown de filtro de columna al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter])
+
+  // Filtrar por estado, modalidad, vehículo y rango de fecha de entrega
   const filteredAsignaciones = useMemo(() => {
     let result = asignaciones
+
+    // Filtro por estado
     if (statusFilter) {
       result = result.filter(a => a.estado === statusFilter)
     }
+
+    // Filtro por modalidad (TURNO / CARGO)
+    if (modalityFilter) {
+      result = result.filter(a => a.horario === modalityFilter)
+    }
+
+    // Filtro por vehículo (patente)
+    if (vehicleFilter) {
+      result = result.filter(a =>
+        a.vehiculos?.patente?.toLowerCase().includes(vehicleFilter.toLowerCase())
+      )
+    }
+
+    // Filtro por rango de fecha de entrega (fecha_programada)
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom)
+      fromDate.setHours(0, 0, 0, 0)
+      result = result.filter(a => {
+        if (!a.fecha_programada) return false
+        const fechaEntrega = new Date(a.fecha_programada)
+        return fechaEntrega >= fromDate
+      })
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo)
+      toDate.setHours(23, 59, 59, 999)
+      result = result.filter(a => {
+        if (!a.fecha_programada) return false
+        const fechaEntrega = new Date(a.fecha_programada)
+        return fechaEntrega <= toDate
+      })
+    }
+
     // Ordenar: programados primero, luego por fecha_programada ascendente
     return result.sort((a, b) => {
       // Prioridad de estados: programado > activa > otros
@@ -327,7 +380,7 @@ export function AsignacionesModule() {
       const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : Infinity
       return fechaA - fechaB
     })
-  }, [asignaciones, statusFilter])
+  }, [asignaciones, statusFilter, modalityFilter, vehicleFilter, dateFrom, dateTo])
 
   // Procesar asignaciones - UNA fila por asignación
   const expandedAsignaciones = useMemo<ExpandedAsignacion[]>(() => {
@@ -614,7 +667,46 @@ export function AsignacionesModule() {
     {
       accessorFn: (row) => row.vehiculos?.patente || '',
       id: 'vehiculo',
-      header: 'Vehículo',
+      header: () => (
+        <div className="asig-column-filter">
+          <span>Vehículo</span>
+          <button
+            className={`asig-column-filter-btn ${vehicleFilter ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'vehiculo' ? null : 'vehiculo')
+            }}
+            title="Filtrar por vehículo"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'vehiculo' && (
+            <div className="asig-column-filter-dropdown" style={{ minWidth: '180px' }}>
+              <input
+                type="text"
+                placeholder="Buscar patente..."
+                value={vehicleFilter}
+                onChange={(e) => setVehicleFilter(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="asig-column-filter-input"
+                autoFocus
+              />
+              {vehicleFilter && (
+                <button
+                  className="asig-column-filter-option"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setVehicleFilter('')
+                  }}
+                  style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <div className="asig-vehiculo-cell">
           <span className="asig-vehiculo-patente">{row.original.vehiculos?.patente || 'N/A'}</span>
@@ -626,7 +718,55 @@ export function AsignacionesModule() {
     },
     {
       accessorKey: 'horario',
-      header: 'Modalidad',
+      header: () => (
+        <div className="asig-column-filter">
+          <span>Modalidad</span>
+          <button
+            className={`asig-column-filter-btn ${modalityFilter ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'modalidad' ? null : 'modalidad')
+            }}
+            title="Filtrar por modalidad"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'modalidad' && (
+            <div className="asig-column-filter-dropdown">
+              <button
+                className={`asig-column-filter-option ${modalityFilter === '' ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setModalityFilter('')
+                  setOpenColumnFilter(null)
+                }}
+              >
+                Todas
+              </button>
+              <button
+                className={`asig-column-filter-option ${modalityFilter === 'TURNO' ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setModalityFilter('TURNO')
+                  setOpenColumnFilter(null)
+                }}
+              >
+                Turno
+              </button>
+              <button
+                className={`asig-column-filter-option ${modalityFilter === 'CARGO' ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setModalityFilter('CARGO')
+                  setOpenColumnFilter(null)
+                }}
+              >
+                A Cargo
+              </button>
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span className={getHorarioBadgeClass(row.original.horario)}>
           {row.original.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
@@ -675,7 +815,58 @@ export function AsignacionesModule() {
     },
     {
       accessorKey: 'fecha_programada',
-      header: 'Fecha Entrega',
+      header: () => (
+        <div className="asig-column-filter">
+          <span>Fecha Entrega</span>
+          <button
+            className={`asig-column-filter-btn ${dateFrom || dateTo ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'fecha' ? null : 'fecha')
+            }}
+            title="Filtrar por fecha"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'fecha' && (
+            <div className="asig-column-filter-dropdown" style={{ minWidth: '200px' }}>
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Desde</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="asig-column-filter-input"
+                />
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Hasta</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="asig-column-filter-input"
+                />
+              </div>
+              {(dateFrom || dateTo) && (
+                <button
+                  className="asig-column-filter-option"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setDateFrom('')
+                    setDateTo('')
+                  }}
+                  style={{ color: 'var(--color-danger)' }}
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span>
           {row.original.fecha_programada
@@ -708,7 +899,75 @@ export function AsignacionesModule() {
     },
     {
       accessorKey: 'estado',
-      header: 'Estado',
+      header: () => (
+        <div className="asig-column-filter">
+          <span>Estado</span>
+          <button
+            className={`asig-column-filter-btn ${statusFilter ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado')
+            }}
+            title="Filtrar por estado"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'estado' && (
+            <div className="asig-column-filter-dropdown">
+              <button
+                className={`asig-column-filter-option ${statusFilter === '' ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setStatusFilter('')
+                  setOpenColumnFilter(null)
+                }}
+              >
+                Todos
+              </button>
+              <button
+                className={`asig-column-filter-option ${statusFilter === 'programado' ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setStatusFilter('programado')
+                  setOpenColumnFilter(null)
+                }}
+              >
+                Programado
+              </button>
+              <button
+                className={`asig-column-filter-option ${statusFilter === 'activa' ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setStatusFilter('activa')
+                  setOpenColumnFilter(null)
+                }}
+              >
+                Activa
+              </button>
+              <button
+                className={`asig-column-filter-option ${statusFilter === 'finalizada' ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setStatusFilter('finalizada')
+                  setOpenColumnFilter(null)
+                }}
+              >
+                Histórico
+              </button>
+              <button
+                className={`asig-column-filter-option ${statusFilter === 'cancelada' ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setStatusFilter('cancelada')
+                  setOpenColumnFilter(null)
+                }}
+              >
+                Cancelada
+              </button>
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span className={getStatusBadgeClass(row.original.estado)}>
           {row.original.estado === 'finalizada' ? 'histórico' : row.original.estado}
@@ -768,7 +1027,7 @@ export function AsignacionesModule() {
         </div>
       )
     }
-  ], [canEdit, canDelete, currentUserId])
+  ], [canEdit, canDelete, currentUserId, statusFilter, modalityFilter, vehicleFilter, dateFrom, dateTo, openColumnFilter])
 
   return (
     <div className="module-container">
@@ -821,21 +1080,6 @@ export function AsignacionesModule() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Filtro de estado */}
-      <div className="asig-filters">
-        <select
-          className="asig-status-select"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="">Todos los estados</option>
-          <option value="programado">Programado</option>
-          <option value="activa">Activa</option>
-          <option value="finalizada">Histórico</option>
-          <option value="cancelada">Cancelada</option>
-        </select>
       </div>
 
       {/* DataTable with integrated action button */}

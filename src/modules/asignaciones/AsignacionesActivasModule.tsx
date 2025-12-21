@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, Users, CheckCircle } from 'lucide-react'
+import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, Users, CheckCircle, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
@@ -48,9 +48,26 @@ export function AsignacionesActivasModule() {
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
 
+  // Column filter states
+  const [codigoFilter, setCodigoFilter] = useState('')
+  const [vehiculoFilter, setVehiculoFilter] = useState('')
+  const [modalidadFilter, setModalidadFilter] = useState('')
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+
   useEffect(() => {
     loadAsignacionesActivas()
   }, [])
+
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter])
 
   const loadAsignacionesActivas = async () => {
     setLoading(true)
@@ -153,9 +170,32 @@ export function AsignacionesActivasModule() {
     }
   }, [asignaciones])
 
+  // Filtrar asignaciones según los filtros de columna
+  const filteredAsignaciones = useMemo(() => {
+    let result = asignaciones
+
+    if (codigoFilter) {
+      result = result.filter(a =>
+        a.codigo?.toLowerCase().includes(codigoFilter.toLowerCase())
+      )
+    }
+
+    if (vehiculoFilter) {
+      result = result.filter(a =>
+        a.vehiculos?.patente?.toLowerCase().includes(vehiculoFilter.toLowerCase())
+      )
+    }
+
+    if (modalidadFilter) {
+      result = result.filter(a => a.horario === modalidadFilter)
+    }
+
+    return result
+  }, [asignaciones, codigoFilter, vehiculoFilter, modalidadFilter])
+
   // Procesar asignaciones - UNA fila por asignación (no expandir)
   const processedAsignaciones = useMemo(() => {
-    return asignaciones.map((asignacion: any) => {
+    return filteredAsignaciones.map((asignacion: any) => {
       // Para TURNO, organizar conductores por turno
       if (asignacion.horario === 'TURNO') {
         const diurno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'diurno')
@@ -191,13 +231,52 @@ export function AsignacionesActivasModule() {
         } : null
       }
     })
-  }, [asignaciones])
+  }, [filteredAsignaciones])
 
   const columns = useMemo<ColumnDef<AsignacionActiva>[]>(
     () => [
       {
         accessorKey: 'codigo',
-        header: 'Número',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Número</span>
+            <button
+              className={`dt-column-filter-btn ${codigoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'codigo' ? null : 'codigo')
+              }}
+              title="Filtrar por número"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'codigo' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar número..."
+                  value={codigoFilter}
+                  onChange={(e) => setCodigoFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {codigoFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setCodigoFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
             {getValue() as string}
@@ -207,7 +286,46 @@ export function AsignacionesActivasModule() {
       },
       {
         accessorKey: 'vehiculos.patente',
-        header: 'Vehículo',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Vehículo</span>
+            <button
+              className={`dt-column-filter-btn ${vehiculoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'vehiculo' ? null : 'vehiculo')
+              }}
+              title="Filtrar por vehículo"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'vehiculo' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar patente..."
+                  value={vehiculoFilter}
+                  onChange={(e) => setVehiculoFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {vehiculoFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setVehiculoFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => {
           const vehiculo = row.original.vehiculos
           return vehiculo ? (
@@ -268,7 +386,55 @@ export function AsignacionesActivasModule() {
       },
       {
         accessorKey: 'horario',
-        header: 'Modalidad',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Modalidad</span>
+            <button
+              className={`dt-column-filter-btn ${modalidadFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'modalidad' ? null : 'modalidad')
+              }}
+              title="Filtrar por modalidad"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'modalidad' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '140px' }}>
+                <button
+                  className={`dt-column-filter-option ${modalidadFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setModalidadFilter('')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Todos
+                </button>
+                <button
+                  className={`dt-column-filter-option ${modalidadFilter === 'TURNO' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setModalidadFilter('TURNO')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Turno
+                </button>
+                <button
+                  className={`dt-column-filter-option ${modalidadFilter === 'CARGO' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setModalidadFilter('CARGO')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  A Cargo
+                </button>
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => {
           const horario = getValue() as string
           return (
@@ -314,7 +480,7 @@ export function AsignacionesActivasModule() {
         enableSorting: false,
       },
     ],
-    []
+    [codigoFilter, vehiculoFilter, modalidadFilter, openColumnFilter]
   )
 
   return (

@@ -1,6 +1,6 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -36,6 +36,13 @@ export function VehicleManagement() {
 
   // Catalog states
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
+
+  // Column filter states
+  const [patenteFilter, setPatenteFilter] = useState('')
+  const [marcaFilter, setMarcaFilter] = useState('')
+  const [modeloFilter, setModeloFilter] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState('')
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
 
@@ -73,6 +80,17 @@ export function VehicleManagement() {
     loadCatalogs()
     loadStatsData()
   }, [])
+
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter])
 
   const loadStatsData = async () => {
     try {
@@ -470,12 +488,93 @@ export function VehicleManagement() {
     })
   }
 
+  // Filtrar vehículos según los filtros de columna
+  const filteredVehiculos = useMemo(() => {
+    let result = vehiculos
+
+    if (patenteFilter) {
+      result = result.filter(v =>
+        v.patente?.toLowerCase().includes(patenteFilter.toLowerCase())
+      )
+    }
+
+    if (marcaFilter) {
+      result = result.filter(v =>
+        v.marca?.toLowerCase().includes(marcaFilter.toLowerCase())
+      )
+    }
+
+    if (modeloFilter) {
+      result = result.filter(v =>
+        v.modelo?.toLowerCase().includes(modeloFilter.toLowerCase())
+      )
+    }
+
+    if (estadoFilter) {
+      result = result.filter(v =>
+        v.vehiculos_estados?.codigo === estadoFilter
+      )
+    }
+
+    return result
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, estadoFilter])
+
+  // Obtener lista única de estados para el filtro
+  const uniqueEstados = useMemo(() => {
+    const estados = new Map<string, string>()
+    vehiculos.forEach(v => {
+      if (v.vehiculos_estados?.codigo) {
+        estados.set(v.vehiculos_estados.codigo, v.vehiculos_estados.descripcion || v.vehiculos_estados.codigo)
+      }
+    })
+    return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]))
+  }, [vehiculos])
+
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<VehiculoWithRelations>[]>(
     () => [
       {
         accessorKey: 'patente',
-        header: 'Patente',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Patente</span>
+            <button
+              className={`dt-column-filter-btn ${patenteFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente')
+              }}
+              title="Filtrar por patente"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'patente' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar patente..."
+                  value={patenteFilter}
+                  onChange={(e) => setPatenteFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {patenteFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setPatenteFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (
           <span className="patente-badge">{getValue() as string}</span>
         ),
@@ -483,13 +582,91 @@ export function VehicleManagement() {
       },
       {
         accessorKey: 'marca',
-        header: 'Marca',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Marca</span>
+            <button
+              className={`dt-column-filter-btn ${marcaFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'marca' ? null : 'marca')
+              }}
+              title="Filtrar por marca"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'marca' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar marca..."
+                  value={marcaFilter}
+                  onChange={(e) => setMarcaFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {marcaFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setMarcaFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => <strong>{getValue() as string}</strong>,
         enableSorting: true,
       },
       {
         accessorKey: 'modelo',
-        header: 'Modelo',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Modelo</span>
+            <button
+              className={`dt-column-filter-btn ${modeloFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'modelo' ? null : 'modelo')
+              }}
+              title="Filtrar por modelo"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'modelo' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar modelo..."
+                  value={modeloFilter}
+                  onChange={(e) => setModeloFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {modeloFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setModeloFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (getValue() as string) || 'N/A',
         enableSorting: true,
       },
@@ -507,7 +684,48 @@ export function VehicleManagement() {
       },
       {
         accessorKey: 'vehiculos_estados.codigo',
-        header: 'Estado',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Estado</span>
+            <button
+              className={`dt-column-filter-btn ${estadoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado')
+              }}
+              title="Filtrar por estado"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'estado' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px', maxHeight: '250px', overflowY: 'auto' }}>
+                <button
+                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEstadoFilter('')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Todos
+                </button>
+                {uniqueEstados.map(([codigo, descripcion]) => (
+                  <button
+                    key={codigo}
+                    className={`dt-column-filter-option ${estadoFilter === codigo ? 'selected' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEstadoFilter(codigo)
+                      setOpenColumnFilter(null)
+                    }}
+                  >
+                    {descripcion}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => {
           const estado = row.original.vehiculos_estados
           const codigo = estado?.codigo || 'N/A'
@@ -609,7 +827,7 @@ export function VehicleManagement() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete]
+    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, estadoFilter, openColumnFilter, uniqueEstados]
   )
 
   return (
@@ -672,7 +890,7 @@ export function VehicleManagement() {
 
       {/* DataTable with integrated action button */}
       <DataTable
-        data={vehiculos}
+        data={filteredVehiculos}
         columns={columns}
         loading={loading}
         error={error}

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar } from 'lucide-react'
+import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
 
@@ -49,9 +49,43 @@ export function ProveedoresModule() {
     observaciones: ''
   })
 
+  // Column filter states
+  const [razonSocialFilter, setRazonSocialFilter] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState<string>('')
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+
   useEffect(() => {
     loadProveedores()
   }, [])
+
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter])
+
+  // Filtrar proveedores según los filtros de columna
+  const filteredProveedores = useMemo(() => {
+    let result = proveedores
+
+    if (razonSocialFilter) {
+      result = result.filter(p =>
+        p.razon_social?.toLowerCase().includes(razonSocialFilter.toLowerCase())
+      )
+    }
+
+    if (estadoFilter !== '') {
+      const isActivo = estadoFilter === 'true'
+      result = result.filter(p => p.activo === isActivo)
+    }
+
+    return result
+  }, [proveedores, razonSocialFilter, estadoFilter])
 
   const loadProveedores = async () => {
     try {
@@ -266,7 +300,46 @@ export function ProveedoresModule() {
     () => [
       {
         accessorKey: 'razon_social',
-        header: 'Razón Social',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Razón Social</span>
+            <button
+              className={`dt-column-filter-btn ${razonSocialFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'razon_social' ? null : 'razon_social')
+              }}
+              title="Filtrar por razón social"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'razon_social' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '200px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar razón social..."
+                  value={razonSocialFilter}
+                  onChange={(e) => setRazonSocialFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {razonSocialFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setRazonSocialFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
             {getValue() as string}
@@ -307,7 +380,55 @@ export function ProveedoresModule() {
       },
       {
         accessorKey: 'activo',
-        header: 'Estado',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Estado</span>
+            <button
+              className={`dt-column-filter-btn ${estadoFilter !== '' ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado')
+              }}
+              title="Filtrar por estado"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'estado' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '130px' }}>
+                <button
+                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEstadoFilter('')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Todos
+                </button>
+                <button
+                  className={`dt-column-filter-option ${estadoFilter === 'true' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEstadoFilter('true')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Activo
+                </button>
+                <button
+                  className={`dt-column-filter-option ${estadoFilter === 'false' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEstadoFilter('false')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Inactivo
+                </button>
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => {
           const activo = getValue() as boolean
           return (
@@ -353,7 +474,7 @@ export function ProveedoresModule() {
         ),
       },
     ],
-    [canView, canEdit, canDelete]
+    [canView, canEdit, canDelete, razonSocialFilter, estadoFilter, openColumnFilter]
   )
 
   return (
@@ -368,7 +489,7 @@ export function ProveedoresModule() {
 
       {/* DataTable with integrated action button */}
       <DataTable
-        data={proveedores}
+        data={filteredProveedores}
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por razon social, documento, email, telefono..."

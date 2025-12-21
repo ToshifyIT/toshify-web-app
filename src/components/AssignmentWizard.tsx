@@ -74,13 +74,13 @@ interface AssignmentData {
   // Distancia compartida para todos
   distancia: string
   // Datos para conductor diurno
-  documento_diurno: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
+  documento_diurno: 'CARTA_OFERTA' | 'ANEXO' | 'N/A' | ''
   ubicacion_diurno: string
   // Datos para conductor nocturno
-  documento_nocturno: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
+  documento_nocturno: 'CARTA_OFERTA' | 'ANEXO' | 'N/A' | ''
   ubicacion_nocturno: string
   // Datos para conductor A CARGO
-  documento_cargo: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
+  documento_cargo: 'CARTA_OFERTA' | 'ANEXO' | 'N/A' | ''
   ubicacion_cargo: string
   notas: string
 }
@@ -1886,20 +1886,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
-                          <option value="CONTRATO">CONTRATO</option>
+                          <option value="CARTA_OFERTA">CARTA OFERTA</option>
                           <option value="ANEXO">ANEXO</option>
                           <option value="N/A">N/A</option>
                         </select>
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                          Ubicación *
+                          Zona *
                         </label>
                         <input
                           type="text"
                           value={formData.ubicacion_diurno}
                           onChange={(e) => setFormData({ ...formData, ubicacion_diurno: e.target.value })}
-                          placeholder="Ingrese la ubicación"
+                          placeholder="Ingrese la zona"
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
                       </div>
@@ -1928,20 +1928,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
-                          <option value="CONTRATO">CONTRATO</option>
+                          <option value="CARTA_OFERTA">CARTA OFERTA</option>
                           <option value="ANEXO">ANEXO</option>
                           <option value="N/A">N/A</option>
                         </select>
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                          Ubicación *
+                          Zona *
                         </label>
                         <input
                           type="text"
                           value={formData.ubicacion_nocturno}
                           onChange={(e) => setFormData({ ...formData, ubicacion_nocturno: e.target.value })}
-                          placeholder="Ingrese la ubicación"
+                          placeholder="Ingrese la zona"
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
                       </div>
@@ -1970,20 +1970,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
-                          <option value="CONTRATO">CONTRATO</option>
+                          <option value="CARTA_OFERTA">CARTA OFERTA</option>
                           <option value="ANEXO">ANEXO</option>
                           <option value="N/A">N/A</option>
                         </select>
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                          Ubicación *
+                          Zona *
                         </label>
                         <input
                           type="text"
                           value={formData.ubicacion_cargo}
                           onChange={(e) => setFormData({ ...formData, ubicacion_cargo: e.target.value })}
-                          placeholder="Ingrese la ubicación"
+                          placeholder="Ingrese la zona"
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
                       </div>
