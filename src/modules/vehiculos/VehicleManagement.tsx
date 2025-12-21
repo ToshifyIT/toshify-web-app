@@ -622,55 +622,43 @@ export function VehicleManagement() {
         </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="stats-container">
-        <div className="stat-card">
-          <div className="stat-icon gray">
-            <Car size={24} />
+      {/* Stats Cards - Estilo Bitácora */}
+      <div className="bitacora-stats">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.totalVehiculos}</span>
+              <span className="stat-label">Total</span>
+            </div>
           </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.totalVehiculos}</span>
-            <span className="stat-label">Total</span>
+          <div className="stat-card">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.vehiculosDisponibles}</span>
+              <span className="stat-label">Disponibles</span>
+            </div>
           </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon green">
-            <Car size={24} />
+          <div className="stat-card">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.vehiculosEnUso}</span>
+              <span className="stat-label">En Uso</span>
+            </div>
           </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.vehiculosDisponibles}</span>
-            <span className="stat-label">Disponibles</span>
+          <div className="stat-card">
+            <Wrench size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.vehiculosEnTaller}</span>
+              <span className="stat-label">En Taller</span>
+            </div>
           </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon blue">
-            <Car size={24} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.vehiculosEnUso}</span>
-            <span className="stat-label">En Uso</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon orange">
-            <Wrench size={24} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.vehiculosEnTaller}</span>
-            <span className="stat-label">En Taller</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon red">
-            <AlertTriangle size={24} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.vehiculosFueraServicio}</span>
-            <span className="stat-label">Fuera de Servicio</span>
+          <div className="stat-card">
+            <AlertTriangle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.vehiculosFueraServicio}</span>
+              <span className="stat-label">Fuera de Servicio</span>
+            </div>
           </div>
         </div>
       </div>

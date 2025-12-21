@@ -844,65 +844,50 @@ export function ConductoresModule() {
         </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="stats-container">
-        <div className="stat-card">
-          <div className="stat-icon gray">
-            <Users size={24} />
+      {/* Stats Cards - Estilo Bitácora */}
+      <div className="bitacora-stats">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.totalConductores}</span>
+              <span className="stat-label">Total</span>
+            </div>
           </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.totalConductores}</span>
-            <span className="stat-label">Total</span>
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresActivos}</span>
+              <span className="stat-label">Activos</span>
+            </div>
           </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon green">
-            <Users size={24} />
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresDisponibles}</span>
+              <span className="stat-label">Disponibles</span>
+            </div>
           </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.conductoresActivos}</span>
-            <span className="stat-label">Activos</span>
+          <div className="stat-card">
+            <UserCheck size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresAsignados}</span>
+              <span className="stat-label">Asignados</span>
+            </div>
           </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon blue">
-            <Users size={24} />
+          <div className="stat-card">
+            <UserX size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresBaja}</span>
+              <span className="stat-label">Baja</span>
+            </div>
           </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.conductoresDisponibles}</span>
-            <span className="stat-label">Disponibles</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon purple">
-            <UserCheck size={24} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.conductoresAsignados}</span>
-            <span className="stat-label">Asignados</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon red">
-            <UserX size={24} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.conductoresBaja}</span>
-            <span className="stat-label">Baja</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon yellow">
-            <Clock size={24} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{statsData.licenciasPorVencer}</span>
-            <span className="stat-label">Lic. por Vencer</span>
+          <div className="stat-card">
+            <Clock size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.licenciasPorVencer}</span>
+              <span className="stat-label">Lic. por Vencer</span>
+            </div>
           </div>
         </div>
       </div>

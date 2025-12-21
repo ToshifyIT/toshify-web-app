@@ -1,10 +1,11 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, User, Car, Calendar, Clock, Info, ClipboardList } from 'lucide-react'
+import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, Users, CheckCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
 import { DataTable } from '../../components/ui/DataTable'
+import './AsignacionesModule.css'
 
 interface AsignacionActiva {
   id: string
@@ -117,33 +118,78 @@ export function AsignacionesActivasModule() {
     setShowDetailsModal(true)
   }
 
-  // Expandir filas para TURNO (una fila por conductor) vs A CARGO (una fila con todos)
-  const expandedAsignaciones = useMemo(() => {
-    return asignaciones.flatMap((asignacion: any) => {
-      // Si es A CARGO o modalidad no definida, retornar una sola fila
-      if (asignacion.horario === 'CARGO' || !asignacion.horario) {
-        return [{
+  // Calcular estadísticas
+  const stats = useMemo(() => {
+    const turnoCount = asignaciones.filter(a => a.horario === 'TURNO').length
+    const cargoCount = asignaciones.filter(a => a.horario === 'CARGO' || !a.horario).length
+
+    // Conductores únicos
+    const conductoresSet = new Set<string>()
+    asignaciones.forEach(a => {
+      a.asignaciones_conductores?.forEach(ac => {
+        if (ac.conductor_id) conductoresSet.add(ac.conductor_id)
+      })
+    })
+
+    // Vehículos únicos
+    const vehiculosSet = new Set<string>()
+    asignaciones.forEach(a => {
+      if (a.vehiculo_id) vehiculosSet.add(a.vehiculo_id)
+    })
+
+    // Confirmados (asignaciones donde todos los conductores están confirmados)
+    const confirmadosCount = asignaciones.filter(a => {
+      if (!a.asignaciones_conductores || a.asignaciones_conductores.length === 0) return false
+      return a.asignaciones_conductores.every(ac => ac.confirmado)
+    }).length
+
+    return {
+      total: asignaciones.length,
+      turno: turnoCount,
+      cargo: cargoCount,
+      conductores: conductoresSet.size,
+      vehiculos: vehiculosSet.size,
+      confirmados: confirmadosCount
+    }
+  }, [asignaciones])
+
+  // Procesar asignaciones - UNA fila por asignación (no expandir)
+  const processedAsignaciones = useMemo(() => {
+    return asignaciones.map((asignacion: any) => {
+      // Para TURNO, organizar conductores por turno
+      if (asignacion.horario === 'TURNO') {
+        const diurno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'diurno')
+        const nocturno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'nocturno')
+
+        return {
           ...asignacion,
-          conductorEspecifico: null,
-          turnoEspecifico: '-'
-        }]
+          conductoresTurno: {
+            diurno: diurno ? {
+              id: diurno.conductores.id,
+              nombre: `${diurno.conductores.nombres} ${diurno.conductores.apellidos}`,
+              confirmado: diurno.confirmado
+            } : null,
+            nocturno: nocturno ? {
+              id: nocturno.conductores.id,
+              nombre: `${nocturno.conductores.nombres} ${nocturno.conductores.apellidos}`,
+              confirmado: nocturno.confirmado
+            } : null
+          },
+          conductorCargo: null
+        }
       }
 
-      // Si es TURNO con conductores, retornar una fila por cada conductor
-      if (asignacion.asignaciones_conductores && asignacion.asignaciones_conductores.length > 0) {
-        return asignacion.asignaciones_conductores.map((ac: any) => ({
-          ...asignacion,
-          conductorEspecifico: ac,
-          turnoEspecifico: ac.horario === 'todo_dia' ? '-' : ac.horario
-        }))
-      }
-
-      // Si no hay conductores, retornar una fila vacía
-      return [{
+      // Para A CARGO, tomar el primer conductor
+      const conductor = asignacion.asignaciones_conductores?.[0]
+      return {
         ...asignacion,
-        conductorEspecifico: null,
-        turnoEspecifico: '-'
-      }]
+        conductoresTurno: null,
+        conductorCargo: conductor ? {
+          id: conductor.conductores.id,
+          nombre: `${conductor.conductores.nombres} ${conductor.conductores.apellidos}`,
+          confirmado: conductor.confirmado
+        } : null
+      }
     })
   }, [asignaciones])
 
@@ -178,60 +224,47 @@ export function AsignacionesActivasModule() {
         enableSorting: true,
       },
       {
-        id: 'turno',
-        header: 'Turno',
+        id: 'asignados',
+        header: 'Asignados',
+        accessorFn: (row) => {
+          const data = row as any
+          if (data.horario === 'CARGO' || !data.horario) {
+            return data.conductorCargo?.nombre || ''
+          }
+          const d = data.conductoresTurno?.diurno?.nombre || ''
+          const n = data.conductoresTurno?.nocturno?.nombre || ''
+          return `${d} ${n}`.trim()
+        },
         cell: ({ row }) => {
-          const turno = (row.original as any).turnoEspecifico
+          const data = row.original as any
+          const { conductoresTurno, conductorCargo, horario } = data
 
-          const turnoLabels: Record<string, string> = {
-            'todo_dia': '-',
-            'diurno': 'Diurno',
-            'nocturno': 'Nocturno'
+          // Para A CARGO o sin horario definido
+          if (horario === 'CARGO' || !horario) {
+            if (conductorCargo) {
+              return <span className="asig-conductor-compacto">{conductorCargo.nombre}</span>
+            }
+            return <span className="asig-sin-conductor">Sin asignar</span>
           }
 
-          const label = turno === '-' ? '-' : (turnoLabels[turno] || turno || 'N/A')
+          // Para TURNO - mostrar D/N con etiquetas
+          const diurno = conductoresTurno?.diurno
+          const nocturno = conductoresTurno?.nocturno
 
           return (
-            <span style={{ fontSize: '13px', fontWeight: '500' }}>
-              {label}
-            </span>
-          )
-        },
-        enableSorting: false,
-      },
-      {
-        id: 'conductor',
-        header: 'Conductor',
-        cell: ({ row }) => {
-          const conductorEsp = (row.original as any).conductorEspecifico
-
-          // Si hay conductor específico (TURNO), mostrar solo ese
-          if (conductorEsp) {
-            return (
-              <span style={{ fontSize: '13px', fontWeight: '500' }}>
-                {conductorEsp.conductores.nombres} {conductorEsp.conductores.apellidos}
+            <div className="asig-conductores-compact">
+              <span className={diurno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
+                <span className="asig-turno-label">D</span>
+                {diurno ? diurno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
               </span>
-            )
-          }
-
-          // Si es A CARGO, mostrar todos los conductores
-          if (row.original.horario === 'CARGO' && row.original.asignaciones_conductores && row.original.asignaciones_conductores.length > 0) {
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {row.original.asignaciones_conductores.map((ac, idx) => (
-                  <span key={idx} style={{ fontSize: '13px', fontWeight: '500' }}>
-                    {ac.conductores.nombres} {ac.conductores.apellidos}
-                  </span>
-                ))}
-              </div>
-            )
-          }
-
-          return (
-            <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>Sin conductor</span>
+              <span className={nocturno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
+                <span className="asig-turno-label">N</span>
+                {nocturno ? nocturno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+              </span>
+            </div>
           )
         },
-        enableSorting: false,
+        enableSorting: true,
       },
       {
         accessorKey: 'horario',
@@ -372,13 +405,61 @@ export function AsignacionesActivasModule() {
       <div className="module-header">
         <h3 className="module-title">Asignaciones Activas</h3>
         <p className="module-subtitle">
-          {expandedAsignaciones.length} fila{expandedAsignaciones.length !== 1 ? 's' : ''} ({asignaciones.length} asignacion{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''})
+          {asignaciones.length} asignacion{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''}
         </p>
+      </div>
+
+      {/* Stats Cards - Estilo Bitácora */}
+      <div className="bitacora-stats">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <ClipboardList size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.total}</span>
+              <span className="stat-label">Total Activas</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Clock size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.turno}</span>
+              <span className="stat-label">Por Turno</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <User size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.cargo}</span>
+              <span className="stat-label">A Cargo</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.conductores}</span>
+              <span className="stat-label">Conductores</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.vehiculos}</span>
+              <span className="stat-label">Vehículos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <CheckCircle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.confirmados}</span>
+              <span className="stat-label">Confirmadas</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* DataTable */}
       <DataTable
-        data={expandedAsignaciones}
+        data={processedAsignaciones}
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por vehiculo, conductor, numero de asignacion..."

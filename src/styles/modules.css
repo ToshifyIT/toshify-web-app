@@ -502,79 +502,35 @@
 }
 
 /* ========================================
-   Stats Cards - Tarjetas de resumen
+   Stats Cards - Estilo Bitácora (Minimalista)
    ======================================== */
 
-.stats-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
+.bitacora-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
   margin-bottom: 16px;
 }
 
-.stat-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-primary);
-  border-radius: 12px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
-  transition: all 0.2s ease;
 }
 
-.stat-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.stat-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+.stat-card {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.stat-card .stat-icon {
+  color: #10B981;
   flex-shrink: 0;
-}
-
-.stat-icon.green {
-  background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
-  color: #065F46;
-}
-
-.stat-icon.blue {
-  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
-  color: #1E40AF;
-}
-
-.stat-icon.yellow {
-  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
-  color: #92400E;
-}
-
-.stat-icon.red {
-  background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
-  color: #991B1B;
-}
-
-.stat-icon.purple {
-  background: linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%);
-  color: #5B21B6;
-}
-
-.stat-icon.gray {
-  background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%);
-  color: #4B5563;
-}
-
-.stat-icon.orange {
-  background: linear-gradient(135deg, #FFEDD5 0%, #FED7AA 100%);
-  color: #C2410C;
-}
-
-.stat-icon.cyan {
-  background: linear-gradient(135deg, #CFFAFE 0%, #A5F3FC 100%);
-  color: #0E7490;
 }
 
 .stat-content {
@@ -584,77 +540,40 @@
 }
 
 .stat-value {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.1;
 }
 
 .stat-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 500;
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
-/* Stats Cards Responsive */
+/* Stats Responsive */
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
-  .stats-container {
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 8px;
+  .bitacora-stats {
+    padding: 12px;
   }
 
-  .stat-card {
-    padding: 10px 12px;
-    gap: 10px;
-  }
-
-  .stat-icon {
-    width: 38px;
-    height: 38px;
-  }
-
-  .stat-icon svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .stat-value {
-    font-size: 18px;
-  }
-
-  .stat-label {
-    font-size: 11px;
-  }
-}
-
-@media (max-width: 480px) {
-  .stats-container {
+  .stats-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
-  }
-
-  .stat-card {
-    padding: 8px 10px;
     gap: 8px;
   }
 
-  .stat-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-  }
-
-  .stat-icon svg {
-    width: 16px;
-    height: 16px;
+  .stat-card {
+    padding: 10px;
+    gap: 8px;
   }
 
   .stat-value {
-    font-size: 16px;
+    font-size: 14px;
   }
 
   .stat-label {

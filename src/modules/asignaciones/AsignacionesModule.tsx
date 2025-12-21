@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, Car, Users, Clock, Wrench, AlertTriangle, UserCheck, CalendarRange, Activity } from 'lucide-react'
+import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, Clock, CalendarRange, Activity } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
@@ -48,9 +48,14 @@ interface Asignacion {
   }>
 }
 
+interface ConductorTurno {
+  diurno: { id: string; nombre: string; confirmado: boolean } | null
+  nocturno: { id: string; nombre: string; confirmado: boolean } | null
+}
+
 interface ExpandedAsignacion extends Asignacion {
-  conductorEspecifico: any
-  turnoEspecifico: string
+  conductoresTurno: ConductorTurno | null
+  conductorCargo: { id: string; nombre: string; confirmado: boolean } | null
 }
 
 export function AsignacionesModule() {
@@ -324,21 +329,45 @@ export function AsignacionesModule() {
     })
   }, [asignaciones, statusFilter])
 
-  // Expandir asignaciones TURNO en filas separadas
+  // Procesar asignaciones - UNA fila por asignación
   const expandedAsignaciones = useMemo<ExpandedAsignacion[]>(() => {
-    return filteredAsignaciones.flatMap((asignacion): ExpandedAsignacion[] => {
-      // Si es A CARGO o modalidad no definida, retornar una sola fila
-      if (asignacion.horario === 'CARGO' || !asignacion.horario) {
-        return [{ ...asignacion, conductorEspecifico: null, turnoEspecifico: '-' }]
-      }
-      if (asignacion.asignaciones_conductores && asignacion.asignaciones_conductores.length > 0) {
-        return asignacion.asignaciones_conductores.map(ac => ({
+    return filteredAsignaciones.map((asignacion): ExpandedAsignacion => {
+      const conductores = asignacion.asignaciones_conductores || []
+
+      // Para modalidad TURNO: extraer conductor diurno y nocturno
+      if (asignacion.horario === 'TURNO') {
+        const diurno = conductores.find(ac => ac.horario === 'diurno')
+        const nocturno = conductores.find(ac => ac.horario === 'nocturno')
+
+        return {
           ...asignacion,
-          conductorEspecifico: ac,
-          turnoEspecifico: ac.horario === 'todo_dia' ? '-' : ac.horario
-        }))
+          conductoresTurno: {
+            diurno: diurno ? {
+              id: diurno.id,
+              nombre: `${diurno.conductores.nombres} ${diurno.conductores.apellidos}`,
+              confirmado: diurno.confirmado || false
+            } : null,
+            nocturno: nocturno ? {
+              id: nocturno.id,
+              nombre: `${nocturno.conductores.nombres} ${nocturno.conductores.apellidos}`,
+              confirmado: nocturno.confirmado || false
+            } : null
+          },
+          conductorCargo: null
+        }
       }
-      return [{ ...asignacion, conductorEspecifico: null, turnoEspecifico: '-' }]
+
+      // Para modalidad A CARGO: solo un conductor
+      const primerConductor = conductores[0]
+      return {
+        ...asignacion,
+        conductoresTurno: null,
+        conductorCargo: primerConductor ? {
+          id: primerConductor.id,
+          nombre: `${primerConductor.conductores.nombres} ${primerConductor.conductores.apellidos}`,
+          confirmado: primerConductor.confirmado || false
+        } : null
+      }
     })
   }, [filteredAsignaciones])
 
@@ -605,54 +634,43 @@ export function AsignacionesModule() {
       )
     },
     {
-      accessorKey: 'turnoEspecifico',
-      header: 'Turno',
-      cell: ({ row }) => {
-        const turno = row.original.turnoEspecifico
-        const turnoLabels: Record<string, string> = {
-          'diurno': 'Diurno',
-          'nocturno': 'Nocturno',
-          '-': '-'
-        }
-        return (
-          <span style={{ fontSize: '13px', fontWeight: 500 }}>
-            {turnoLabels[turno] || turno || 'N/A'}
-          </span>
-        )
-      }
-    },
-    {
-      id: 'conductor',
-      header: 'Conductor',
+      id: 'asignados',
+      header: 'Asignados',
       accessorFn: (row) => {
-        if (row.conductorEspecifico) {
-          return `${row.conductorEspecifico.conductores.nombres} ${row.conductorEspecifico.conductores.apellidos}`
+        if (row.horario === 'CARGO' || !row.horario) {
+          return row.conductorCargo?.nombre || ''
         }
-        if (row.horario === 'CARGO' && row.asignaciones_conductores?.length) {
-          return row.asignaciones_conductores.map(ac => `${ac.conductores.nombres} ${ac.conductores.apellidos}`).join(', ')
-        }
-        return 'Sin conductor'
+        const d = row.conductoresTurno?.diurno?.nombre || ''
+        const n = row.conductoresTurno?.nocturno?.nombre || ''
+        return `${d} ${n}`.trim()
       },
       cell: ({ row }) => {
-        if (row.original.conductorEspecifico) {
-          return (
-            <span style={{ fontSize: '13px' }}>
-              {row.original.conductorEspecifico.conductores.nombres} {row.original.conductorEspecifico.conductores.apellidos}
+        const { conductoresTurno, conductorCargo, horario } = row.original
+
+        // Si es A CARGO, mostrar solo el conductor
+        if (horario === 'CARGO' || !horario) {
+          if (conductorCargo) {
+            return <span className="asig-conductor-compacto">{conductorCargo.nombre}</span>
+          }
+          return <span className="asig-sin-conductor">Sin asignar</span>
+        }
+
+        // Si es TURNO, mostrar ambos conductores compacto
+        const diurno = conductoresTurno?.diurno
+        const nocturno = conductoresTurno?.nocturno
+
+        return (
+          <div className="asig-conductores-compact">
+            <span className={diurno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
+              <span className="asig-turno-label">D</span>
+              {diurno ? diurno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
             </span>
-          )
-        }
-        if (row.original.horario === 'CARGO' && row.original.asignaciones_conductores?.length) {
-          return (
-            <div className="asig-conductores-list">
-              {row.original.asignaciones_conductores.map(ac => (
-                <span key={ac.id} className="asig-conductor-item">
-                  {ac.conductores.nombres} {ac.conductores.apellidos}
-                </span>
-              ))}
-            </div>
-          )
-        }
-        return <span className="asig-sin-conductor">Sin conductor</span>
+            <span className={nocturno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
+              <span className="asig-turno-label">N</span>
+              {nocturno ? nocturno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+            </span>
+          </div>
+        )
       }
     },
     {
@@ -760,154 +778,46 @@ export function AsignacionesModule() {
           <h1 className="module-title">Gestión de Asignaciones</h1>
           <p className="module-subtitle">
             {filteredAsignaciones.length} asignación{filteredAsignaciones.length !== 1 ? 'es' : ''}
-            {expandedAsignaciones.length !== filteredAsignaciones.length && ` (${expandedAsignaciones.length} filas)`}
           </p>
         </div>
       </div>
 
-      {/* Stats Cards - Asignaciones */}
-      <div className="asig-stats-section">
-        <h3 className="asig-stats-section-title">Asignaciones</h3>
-        <div className="asig-stats-container">
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon yellow">
-              <Calendar size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{programadasCount}</span>
-              <span className="asig-stat-label">Programadas</span>
+      {/* Stats Cards - Estilo Bitácora */}
+      <div className="bitacora-stats">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <Calendar size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{programadasCount}</span>
+              <span className="stat-label">Programadas</span>
             </div>
           </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon green">
-              <Activity size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.asignacionesActivas}</span>
-              <span className="asig-stat-label">Activas</span>
+          <div className="stat-card">
+            <Activity size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.asignacionesActivas}</span>
+              <span className="stat-label">Activas</span>
             </div>
           </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon red">
-              <Calendar size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.entregasHoy}</span>
-              <span className="asig-stat-label">Entregas Hoy</span>
+          <div className="stat-card">
+            <Calendar size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.entregasHoy}</span>
+              <span className="stat-label">Entregas Hoy</span>
             </div>
           </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon blue">
-              <CalendarRange size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.entregasSemana}</span>
-              <span className="asig-stat-label">Entregas Semana</span>
+          <div className="stat-card">
+            <CalendarRange size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.entregasSemana}</span>
+              <span className="stat-label">Entregas Semana</span>
             </div>
           </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon cyan">
-              <Clock size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.turnosDisponibles}</span>
-              <span className="asig-stat-label">Turnos Disponibles</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards - Vehículos */}
-      <div className="asig-stats-section">
-        <h3 className="asig-stats-section-title">Vehículos</h3>
-        <div className="asig-stats-container">
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon gray">
-              <Car size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.totalVehiculos}</span>
-              <span className="asig-stat-label">Total</span>
-            </div>
-          </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon green">
-              <Car size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.vehiculosDisponibles}</span>
-              <span className="asig-stat-label">Disponibles</span>
-            </div>
-          </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon blue">
-              <Car size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.vehiculosEnUso}</span>
-              <span className="asig-stat-label">En Uso</span>
-            </div>
-          </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon orange">
-              <Wrench size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.vehiculosEnTaller}</span>
-              <span className="asig-stat-label">En Taller</span>
-            </div>
-          </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon red">
-              <AlertTriangle size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.vehiculosFueraServicio}</span>
-              <span className="asig-stat-label">Fuera de Servicio</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards - Conductores */}
-      <div className="asig-stats-section">
-        <h3 className="asig-stats-section-title">Conductores</h3>
-        <div className="asig-stats-container">
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon gray">
-              <Users size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.totalConductores}</span>
-              <span className="asig-stat-label">Total Activos</span>
-            </div>
-          </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon green">
-              <Users size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.conductoresDisponibles}</span>
-              <span className="asig-stat-label">Disponibles</span>
-            </div>
-          </div>
-
-          <div className="asig-stat-card">
-            <div className="asig-stat-icon blue">
-              <UserCheck size={24} />
-            </div>
-            <div className="asig-stat-content">
-              <span className="asig-stat-value">{statsData.conductoresAsignados}</span>
-              <span className="asig-stat-label">Asignados</span>
+          <div className="stat-card">
+            <Clock size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.turnosDisponibles}</span>
+              <span className="stat-label">Turnos Libres</span>
             </div>
           </div>
         </div>
