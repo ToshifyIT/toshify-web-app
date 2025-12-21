@@ -374,15 +374,22 @@ export function PedidosTransitoModule() {
   }
 
   return (
-    <div style={{ padding: '24px' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-          Productos en Tránsito
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-          Confirma la recepción de productos para agregarlos al inventario
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Header - Estilo Bitacora */}
+      <div style={{
+        background: 'var(--bg-primary)',
+        borderRadius: '8px',
+        padding: '20px',
+        border: '1px solid var(--border-primary)'
+      }}>
+        <div style={{ borderLeft: '4px solid #DC2626', paddingLeft: '16px' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            Productos en Transito
+          </h1>
+          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'block', marginTop: '2px' }}>
+            Confirma la recepcion de productos para agregarlos al inventario
+          </span>
+        </div>
       </div>
 
       {/* Tabs */}

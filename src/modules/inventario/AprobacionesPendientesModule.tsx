@@ -563,33 +563,53 @@ export function AprobacionesPendientesModule() {
         }
       `}</style>
 
-      <div className="aprobaciones-container">
-        <div className="aprobaciones-header">
-          <div className="aprobaciones-title">
-            <Clock size={28} />
-            Aprobaciones Pendientes
-            {movimientos.length > 0 && (
-              <span className="pending-badge">{movimientos.length}</span>
-            )}
-          </div>
-          <div className="header-actions">
-            <div className="filter-select">
-              <Filter size={16} />
-              <select
-                value={filtroTipo}
-                onChange={(e) => setFiltroTipo(e.target.value as FiltroTipo)}
-              >
-                <option value="todos">Todos los tipos</option>
-                <option value="entrada">Entradas</option>
-                <option value="salida">Salidas</option>
-                <option value="asignacion">Asignaciones</option>
-                <option value="devolucion">Devoluciones</option>
-              </select>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Header - Estilo Bitacora */}
+        <div style={{
+          background: 'var(--bg-primary)',
+          borderRadius: '8px',
+          padding: '20px',
+          border: '1px solid var(--border-primary)'
+        }}>
+          <div style={{
+            borderLeft: '4px solid #DC2626',
+            paddingLeft: '16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '16px'
+          }}>
+            <div>
+              <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                Aprobaciones Pendientes
+                {movimientos.length > 0 && (
+                  <span className="pending-badge">{movimientos.length}</span>
+                )}
+              </h1>
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'block', marginTop: '2px' }}>
+                Revisar y aprobar movimientos de inventario
+              </span>
             </div>
-            <button className="refresh-btn" onClick={cargarMovimientosPendientes}>
-              <RefreshCw size={16} />
-              Actualizar
-            </button>
+            <div className="header-actions">
+              <div className="filter-select">
+                <Filter size={16} />
+                <select
+                  value={filtroTipo}
+                  onChange={(e) => setFiltroTipo(e.target.value as FiltroTipo)}
+                >
+                  <option value="todos">Todos los tipos</option>
+                  <option value="entrada">Entradas</option>
+                  <option value="salida">Salidas</option>
+                  <option value="asignacion">Asignaciones</option>
+                  <option value="devolucion">Devoluciones</option>
+                </select>
+              </div>
+              <button className="refresh-btn" onClick={cargarMovimientosPendientes}>
+                <RefreshCw size={16} />
+                Actualizar
+              </button>
+            </div>
           </div>
         </div>
 

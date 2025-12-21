@@ -484,7 +484,7 @@ export function AsignacionesActivasModule() {
   )
 
   return (
-    <div className="module-container">
+    <div className="asig-module">
       <style>{`
         .modal-header {
           padding: 24px 32px;
@@ -567,17 +567,19 @@ export function AsignacionesActivasModule() {
         }
       `}</style>
 
-      {/* Header */}
-      <div className="module-header">
-        <h3 className="module-title">Asignaciones Activas</h3>
-        <p className="module-subtitle">
-          {asignaciones.length} asignacion{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''}
-        </p>
+      {/* Header - Estilo Bitácora */}
+      <div className="asig-header">
+        <div className="asig-header-title">
+          <h1>Asignaciones Activas</h1>
+          <span className="asig-header-subtitle">
+            {asignaciones.length} asignación{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''}
+          </span>
+        </div>
       </div>
 
       {/* Stats Cards - Estilo Bitácora */}
-      <div className="bitacora-stats">
-        <div className="stats-grid">
+      <div className="asig-stats">
+        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
           <div className="stat-card">
             <ClipboardList size={18} className="stat-icon" />
             <div className="stat-content">

@@ -2,9 +2,10 @@ import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter } from 'lucide-react'
+import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
+import './ProveedoresModule.css'
 
 interface Proveedor {
   id: string
@@ -477,14 +478,51 @@ export function ProveedoresModule() {
     [canView, canEdit, canDelete, razonSocialFilter, estadoFilter, openColumnFilter]
   )
 
+  // Calcular estadísticas
+  const statsData = useMemo(() => {
+    const total = proveedores.length
+    const activos = proveedores.filter(p => p.activo).length
+    const inactivos = proveedores.filter(p => !p.activo).length
+    return { total, activos, inactivos }
+  }, [proveedores])
+
   return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <h3 className="module-title">Gestion de Proveedores</h3>
-        <p className="module-subtitle">
-          {proveedores.length} proveedor{proveedores.length !== 1 ? 'es' : ''} registrado{proveedores.length !== 1 ? 's' : ''}
-        </p>
+    <div className="prov-module">
+      {/* Header - Estilo Bitacora */}
+      <div className="prov-header">
+        <div className="prov-header-title">
+          <h1>Gestion de Proveedores</h1>
+          <span className="prov-header-subtitle">
+            {proveedores.length} proveedor{proveedores.length !== 1 ? 'es' : ''} registrado{proveedores.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
+      {/* Stats Cards - Estilo Bitacora */}
+      <div className="prov-stats">
+        <div className="prov-stats-grid">
+          <div className="stat-card">
+            <Building2 size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.total}</span>
+              <span className="stat-label">Total</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <CheckCircle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.activos}</span>
+              <span className="stat-label">Activos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <XCircle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.inactivos}</span>
+              <span className="stat-label">Inactivos</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* DataTable with integrated action button */}

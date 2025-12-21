@@ -1,41 +1,41 @@
-/* src/modules/vehiculos/VehicleManagement.css */
-/* Estilos para el módulo de Vehículos - Diseño Bitácora */
+/* src/modules/productos/ProductosModule.css */
+/* Estilos para el modulo de Productos - Diseno Bitacora */
 /* Con soporte para Dark Mode mediante CSS Variables */
 
 /* =====================================================
    MODULE CONTAINER
    ===================================================== */
 
-.veh-module {
+.prod-module {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
 /* =====================================================
-   HEADER - Estilo Bitácora
+   HEADER - Estilo Bitacora
    ===================================================== */
 
-.veh-header {
+.prod-header {
   background: var(--bg-primary);
   border-radius: 8px;
   padding: 20px;
   border: 1px solid var(--border-primary);
 }
 
-.veh-header-title {
+.prod-header-title {
   border-left: 4px solid #DC2626;
   padding-left: 16px;
 }
 
-.veh-header-title h1 {
+.prod-header-title h1 {
   font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
 
-.veh-header-subtitle {
+.prod-header-subtitle {
   font-size: 12px;
   color: var(--text-tertiary);
   display: block;
@@ -43,23 +43,23 @@
 }
 
 /* =====================================================
-   STATS - Estilo Bitácora
+   STATS - Estilo Bitacora
    ===================================================== */
 
-.veh-stats {
+.prod-stats {
   background: var(--bg-primary);
   border-radius: 8px;
   padding: 16px;
   border: 1px solid var(--border-primary);
 }
 
-.veh-stats-grid {
+.prod-stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
 
-.veh-stats .stat-card {
+.prod-stats .stat-card {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -68,24 +68,24 @@
   border-radius: 6px;
 }
 
-.veh-stats .stat-card .stat-icon {
+.prod-stats .stat-card .stat-icon {
   color: #DC2626;
   flex-shrink: 0;
 }
 
-.veh-stats .stat-content {
+.prod-stats .stat-content {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
 
-.veh-stats .stat-value {
+.prod-stats .stat-value {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.veh-stats .stat-label {
+.prod-stats .stat-label {
   font-size: 11px;
   color: var(--text-tertiary);
   white-space: nowrap;
@@ -93,41 +93,41 @@
 
 /* Responsive Stats */
 @media (max-width: 1200px) {
-  .veh-stats-grid {
-    grid-template-columns: repeat(3, 1fr);
+  .prod-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 768px) {
-  .veh-stats-grid {
+  .prod-stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .veh-header {
+  .prod-header {
     padding: 16px;
   }
 
-  .veh-header-title h1 {
+  .prod-header-title h1 {
     font-size: 16px;
   }
 }
 
 @media (max-width: 480px) {
-  .veh-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .prod-stats-grid {
+    grid-template-columns: 1fr;
     gap: 8px;
   }
 
-  .veh-stats .stat-card {
+  .prod-stats .stat-card {
     padding: 10px;
     gap: 8px;
   }
 
-  .veh-stats .stat-value {
+  .prod-stats .stat-value {
     font-size: 14px;
   }
 
-  .veh-stats .stat-label {
+  .prod-stats .stat-label {
     font-size: 10px;
   }
 }

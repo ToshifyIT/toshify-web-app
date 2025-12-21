@@ -831,18 +831,20 @@ export function VehicleManagement() {
   )
 
   return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <h3 className="module-title">Gestion de Vehiculos</h3>
-        <p className="module-subtitle">
-          {vehiculos.length} vehiculo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
-        </p>
+    <div className="veh-module">
+      {/* Header - Estilo Bitácora */}
+      <div className="veh-header">
+        <div className="veh-header-title">
+          <h1>Gestión de Vehículos</h1>
+          <span className="veh-header-subtitle">
+            {vehiculos.length} vehículo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
+          </span>
+        </div>
       </div>
 
       {/* Stats Cards - Estilo Bitácora */}
-      <div className="bitacora-stats">
-        <div className="stats-grid">
+      <div className="veh-stats">
+        <div className="veh-stats-grid">
           <div className="stat-card">
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
@@ -850,32 +852,32 @@ export function VehicleManagement() {
               <span className="stat-label">Total</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title="Vehículos con estado DISPONIBLE, listos para ser asignados">
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosDisponibles}</span>
-              <span className="stat-label">Disponibles</span>
+              <span className="stat-label">Sin Asignar</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title="Vehículos con asignación activa actualmente">
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosEnUso}</span>
               <span className="stat-label">En Uso</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title="Vehículos en taller de mecánica o chapa y pintura">
             <Wrench size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosEnTaller}</span>
               <span className="stat-label">En Taller</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title="Vehículos fuera de servicio (robo, destrucción total, PKG off)">
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosFueraServicio}</span>
-              <span className="stat-label">Fuera de Servicio</span>
+              <span className="stat-label">Fuera Servicio</span>
             </div>
           </div>
         </div>

@@ -4,9 +4,10 @@ import { supabase } from '../../lib/supabase'
 import type { UserWithRole, Role } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { Users } from 'lucide-react'
+import { Users, UserCheck, UserX, Shield } from 'lucide-react'
 import Swal from 'sweetalert2'
 import './UserManagement.css'
+import './AdminStyles.css'
 
 export function UserManagement() {
   const [users, setUsers] = useState<UserWithRole[]>([])
@@ -275,15 +276,58 @@ export function UserManagement() {
     [roles]
   )
 
+  // Calcular estadísticas
+  const statsData = useMemo(() => {
+    const total = users.length
+    const activos = users.filter(u => u.is_active !== false).length
+    const inactivos = users.filter(u => u.is_active === false).length
+    const rolesCount = new Set(users.map(u => u.role_id)).size
+    return { total, activos, inactivos, rolesCount }
+  }, [users])
+
   return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <div>
-          <h1 className="module-title">Gestión de Usuarios</h1>
-          <p className="module-subtitle">
+    <div className="admin-module">
+      {/* Header - Estilo Bitacora */}
+      <div className="admin-header">
+        <div className="admin-header-title">
+          <h1>Gestion de Usuarios</h1>
+          <span className="admin-header-subtitle">
             {users.length} usuario{users.length !== 1 ? 's' : ''} registrado{users.length !== 1 ? 's' : ''}
-          </p>
+          </span>
+        </div>
+      </div>
+
+      {/* Stats Cards - Estilo Bitacora */}
+      <div className="admin-stats">
+        <div className="admin-stats-grid">
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.total}</span>
+              <span className="stat-label">Total</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <UserCheck size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.activos}</span>
+              <span className="stat-label">Activos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <UserX size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.inactivos}</span>
+              <span className="stat-label">Inactivos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Shield size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.rolesCount}</span>
+              <span className="stat-label">Roles</span>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, Clock, CalendarRange, Activity, Filter } from 'lucide-react'
+import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, CalendarRange, Activity, Filter, Car } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
@@ -97,7 +97,8 @@ export function AsignacionesModule() {
     totalConductores: 0,
     entregasHoy: 0,
     entregasSemana: 0,
-    asignacionesActivas: 0
+    asignacionesActivas: 0,
+    unidadesDisponibles: 0  // Vehículos sin asignar + vehículos TURNO con al menos 1 vacante
   })
 
   const loadStatsData = async () => {
@@ -228,6 +229,12 @@ export function AsignacionesModule() {
       const turnosPotenciales = vehiculosEnTurno * 2
       const turnosDisponibles = turnosPotenciales - turnosOcupados
 
+      // Unidades disponibles = vehículos DISPONIBLE + vehículos TURNO con al menos 1 vacante
+      const vehiculosTurnoConVacante = asignacionesActivasParaTurnos?.filter(a =>
+        a.horario === 'TURNO' && (a.asignaciones_conductores?.length || 0) < 2
+      ).length || 0
+      const unidadesDisponibles = vehiculosDisponibles + vehiculosTurnoConVacante
+
       // Entregas programadas para hoy
       const hoy = new Date()
       const hoyStr = hoy.toISOString().split('T')[0]
@@ -270,7 +277,8 @@ export function AsignacionesModule() {
         totalConductores,
         entregasHoy: entregasHoy || 0,
         entregasSemana: entregasSemana || 0,
-        asignacionesActivas: totalAsignacionesActivas || 0
+        asignacionesActivas: totalAsignacionesActivas || 0,
+        unidadesDisponibles
       })
     } catch (err) {
       console.error('Error loading stats:', err)
@@ -1030,53 +1038,53 @@ export function AsignacionesModule() {
   ], [canEdit, canDelete, currentUserId, statusFilter, modalityFilter, vehicleFilter, dateFrom, dateTo, openColumnFilter])
 
   return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <div>
-          <h1 className="module-title">Gestión de Asignaciones</h1>
-          <p className="module-subtitle">
-            {filteredAsignaciones.length} asignación{filteredAsignaciones.length !== 1 ? 'es' : ''}
-          </p>
+    <div className="asig-module">
+      {/* Header - Estilo Bitácora */}
+      <div className="asig-header">
+        <div className="asig-header-title">
+          <h1>Gestión de Asignaciones</h1>
+          <span className="asig-header-subtitle">
+            {filteredAsignaciones.length} asignación{filteredAsignaciones.length !== 1 ? 'es' : ''} registradas
+          </span>
         </div>
       </div>
 
       {/* Stats Cards - Estilo Bitácora */}
-      <div className="bitacora-stats">
-        <div className="stats-grid">
-          <div className="stat-card">
+      <div className="asig-stats">
+        <div className="asig-stats-grid">
+          <div className="stat-card" title="Asignaciones en estado programado pendientes de confirmación">
             <Calendar size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{programadasCount}</span>
               <span className="stat-label">Programadas</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title="Asignaciones actualmente en curso">
             <Activity size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.asignacionesActivas}</span>
               <span className="stat-label">Activas</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title="Entregas de vehículos programadas para hoy">
             <Calendar size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.entregasHoy}</span>
               <span className="stat-label">Entregas Hoy</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title="Entregas de vehículos programadas para los próximos 7 días">
             <CalendarRange size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.entregasSemana}</span>
               <span className="stat-label">Entregas Semana</span>
             </div>
           </div>
-          <div className="stat-card">
-            <Clock size={18} className="stat-icon" />
+          <div className="stat-card" title="Vehículos sin asignar + vehículos TURNO con al menos 1 turno vacante">
+            <Car size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.turnosDisponibles}</span>
-              <span className="stat-label">Turnos Libres</span>
+              <span className="stat-value">{statsData.unidadesDisponibles}</span>
+              <span className="stat-label">Unidades Disp.</span>
             </div>
           </div>
         </div>

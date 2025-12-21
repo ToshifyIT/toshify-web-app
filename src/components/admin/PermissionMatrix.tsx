@@ -1,8 +1,9 @@
 // src/components/admin/PermissionMatrix.tsx
 import { useState, useEffect } from 'react'
-import { Lightbulb, Check, X } from 'lucide-react'
+import { Lightbulb, Check, X, Lock } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { PermissionWithRole } from '../../types/database.types'
+import './AdminStyles.css'
 
 export function PermissionMatrix() {
   const [permissions, setPermissions] = useState<PermissionWithRole[]>([])
@@ -66,7 +67,17 @@ export function PermissionMatrix() {
   }
 
   return (
-    <div>
+    <div className="admin-module">
+      {/* Header - Estilo Bitacora */}
+      <div className="admin-header">
+        <div className="admin-header-title">
+          <h1>Matriz de Permisos</h1>
+          <span className="admin-header-subtitle">
+            Configuracion de permisos por modulo y rol
+          </span>
+        </div>
+      </div>
+
       <style>{`
         .permission-matrix {
           overflow-x: auto;

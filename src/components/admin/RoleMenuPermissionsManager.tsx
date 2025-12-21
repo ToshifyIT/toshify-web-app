@@ -1,8 +1,9 @@
 // src/components/admin/RoleMenuPermissionsManager.tsx
-import { useState, useEffect, useMemo } from 'react'
-import { Check, AlertTriangle, Shield } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Check, AlertTriangle, Shield, ChevronRight, ChevronDown } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import './AdminStyles.css'
 import type { Role, Menu, Submenu } from '../../types/database.types'
 import {
   useReactTable,
@@ -61,6 +62,9 @@ interface PermissionRow {
   can_delete: boolean
   menu_id?: string
   submenu_id?: string
+  submenuCount?: number
+  parentMenuId?: string
+  level?: number // 0 = menu, 1 = submenu nivel 1, 2 = sub-submenu, etc.
 }
 
 export function RoleMenuPermissionsManager() {
@@ -84,6 +88,7 @@ export function RoleMenuPermissionsManager() {
   const [roleSearchTerm, setRoleSearchTerm] = useState('')
   const [showRoleDropdown, setShowRoleDropdown] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set())
 
   // =====================================================
   // VERIFICACIÓN DE PERMISOS
@@ -510,12 +515,52 @@ export function RoleMenuPermissionsManager() {
     return perm ? perm[field] : false
   }
 
-  // Crear estructura de datos plana para la tabla
+  // Función recursiva para agregar submenús en orden jerárquico
+  const addSubmenusHierarchically = (
+    parentId: string | null,
+    menuSubmenus: any[],
+    menu: any,
+    rows: PermissionRow[],
+    level: number
+  ) => {
+    // Filtrar submenús que tienen este parent_id
+    const children = menuSubmenus.filter((sm: any) => {
+      if (parentId === null) {
+        // Submenús de nivel 1: no tienen parent_id
+        return !sm.parent_id
+      }
+      return sm.parent_id === parentId
+    })
+
+    children.forEach((submenu: any) => {
+      rows.push({
+        id: submenu.id,
+        type: 'submenu',
+        name: submenu.name,
+        label: submenu.label,
+        parentLabel: menu.label,
+        can_view: getSubmenuPermission(submenu.id, 'can_view') as boolean,
+        can_create: getSubmenuPermission(submenu.id, 'can_create') as boolean,
+        can_edit: getSubmenuPermission(submenu.id, 'can_edit') as boolean,
+        can_delete: getSubmenuPermission(submenu.id, 'can_delete') as boolean,
+        submenu_id: submenu.id,
+        parentMenuId: menu.id,
+        level: level
+      })
+
+      // Recursivamente agregar los hijos de este submenú
+      addSubmenusHierarchically(submenu.id, menuSubmenus, menu, rows, level + 1)
+    })
+  }
+
+  // Crear estructura de datos plana para la tabla - con jerarquía de niveles
   const tableData = useMemo<PermissionRow[]>(() => {
     const rows: PermissionRow[] = []
 
     menus.forEach(menu => {
-      // Agregar fila del menú
+      const menuSubmenus = submenus.filter((sm: any) => sm.menus?.name === menu.name)
+
+      // Agregar fila del menú (nivel 0)
       rows.push({
         id: menu.id,
         type: 'menu',
@@ -525,25 +570,13 @@ export function RoleMenuPermissionsManager() {
         can_create: getMenuPermission(menu.id, 'can_create') as boolean,
         can_edit: getMenuPermission(menu.id, 'can_edit') as boolean,
         can_delete: getMenuPermission(menu.id, 'can_delete') as boolean,
-        menu_id: menu.id
+        menu_id: menu.id,
+        submenuCount: menuSubmenus.length,
+        level: 0
       })
 
-      // Agregar filas de submenús
-      const menuSubmenus = submenus.filter((sm: any) => sm.menus?.name === menu.name)
-      menuSubmenus.forEach((submenu: any) => {
-        rows.push({
-          id: submenu.id,
-          type: 'submenu',
-          name: submenu.name,
-          label: submenu.label,
-          parentLabel: menu.label,
-          can_view: getSubmenuPermission(submenu.id, 'can_view') as boolean,
-          can_create: getSubmenuPermission(submenu.id, 'can_create') as boolean,
-          can_edit: getSubmenuPermission(submenu.id, 'can_edit') as boolean,
-          can_delete: getSubmenuPermission(submenu.id, 'can_delete') as boolean,
-          submenu_id: submenu.id
-        })
-      })
+      // Agregar submenús jerárquicamente (nivel 1, 2, 3...)
+      addSubmenusHierarchically(null, menuSubmenus, menu, rows, 1)
     })
 
     return rows
@@ -553,50 +586,18 @@ export function RoleMenuPermissionsManager() {
   const columns = useMemo<ColumnDef<PermissionRow>[]>(
     () => [
       {
-        accessorKey: 'type',
-        header: 'Tipo',
-        cell: ({ getValue }) => {
-          const type = getValue() as string
-          return (
-            <span
-              style={{
-                display: 'inline-block',
-                padding: '4px 12px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 600,
-                background: type === 'menu' ? '#DBEAFE' : '#E9D5FF',
-                color: type === 'menu' ? '#1E40AF' : '#6B21A8',
-              }}
-            >
-              {type === 'menu' ? 'Menú' : 'Submenú'}
-            </span>
-          )
-        },
-        enableSorting: true,
-      },
-      {
         accessorKey: 'label',
-        header: 'Elemento',
+        header: 'Módulo',
         cell: ({ row }) => {
           const isSubmenu = row.original.type === 'submenu'
+          const level = row.original.level || 0
+
           return (
-            <div>
-              {isSubmenu && (
-                <div style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '2px' }}>
-                  {row.original.parentLabel}
-                </div>
-              )}
-              <div
-                style={{
-                  fontWeight: isSubmenu ? 400 : 600,
-                  color: isSubmenu ? '#6B7280' : '#1F2937',
-                  paddingLeft: isSubmenu ? '20px' : '0',
-                }}
-              >
-                {isSubmenu && '↳ '}
+            <div className={`module-cell ${isSubmenu ? 'is-submenu' : 'is-menu'} level-${level}`}>
+              {isSubmenu && <span className="submenu-indicator">└─</span>}
+              <span className="module-name">
                 {row.original.label}
-              </div>
+              </span>
             </div>
           )
         },
@@ -747,21 +748,28 @@ export function RoleMenuPermissionsManager() {
   }
 
   return (
-    <div>
+    <div className="admin-module">
+      {/* Header - Estilo Bitacora */}
+      <div className="admin-header">
+        <div className="admin-header-title">
+          <h1>Permisos de Menu por Rol</h1>
+          <span className="admin-header-subtitle">
+            Configura permisos de menu para cada rol del sistema
+          </span>
+        </div>
+      </div>
+
       <style>{`
         .permissions-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 20px;
+          width: 100%;
         }
 
         .role-selector {
-          margin-bottom: 30px;
-          padding: 24px;
-          background: white;
-          border-radius: 12px;
-          border: 1px solid #E5E7EB;
-          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+          margin-bottom: 16px;
+          padding: 20px;
+          background: var(--bg-primary);
+          border-radius: 8px;
+          border: 1px solid var(--border-primary);
         }
 
         .role-search-container {
@@ -771,18 +779,19 @@ export function RoleMenuPermissionsManager() {
         .select-input {
           width: 100%;
           padding: 12px 16px;
-          font-size: 15px;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          background: white;
+          font-size: 14px;
+          border: 1px solid var(--border-primary);
+          border-radius: 6px;
+          background: var(--input-bg);
+          color: var(--text-primary);
           transition: border-color 0.2s;
           cursor: pointer;
         }
 
         .select-input:focus {
           outline: none;
-          border-color: #E63946;
-          box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+          border-color: var(--color-primary);
+          box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
         }
 
         .role-dropdown {
@@ -791,10 +800,10 @@ export function RoleMenuPermissionsManager() {
           left: 0;
           right: 0;
           margin-top: 4px;
-          background: white;
-          border: 1px solid #E5E7EB;
+          background: var(--modal-bg);
+          border: 1px solid var(--border-primary);
           border-radius: 8px;
-          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          box-shadow: var(--shadow-lg);
           max-height: 300px;
           overflow-y: auto;
           z-index: 1000;
@@ -804,7 +813,8 @@ export function RoleMenuPermissionsManager() {
           padding: 12px 16px;
           cursor: pointer;
           transition: background 0.2s;
-          border-bottom: 1px solid #F3F4F6;
+          border-bottom: 1px solid var(--border-primary);
+          color: var(--text-primary);
         }
 
         .role-option:last-child {
@@ -812,19 +822,19 @@ export function RoleMenuPermissionsManager() {
         }
 
         .role-option:hover {
-          background: #F9FAFB;
+          background: var(--bg-secondary);
         }
 
         .role-option.selected {
-          background: #FEF2F2;
-          color: #E63946;
+          background: var(--badge-red-bg);
+          color: var(--color-primary);
           font-weight: 600;
         }
 
         .role-info-banner {
           margin-top: 16px;
           padding: 16px;
-          background: #F9FAFB;
+          background: var(--bg-secondary);
           border-radius: 8px;
           display: flex;
           align-items: center;
@@ -832,31 +842,31 @@ export function RoleMenuPermissionsManager() {
         }
 
         .search-filter-container {
-          margin-bottom: 20px;
+          margin-bottom: 16px;
         }
 
         .search-input {
           width: 100%;
           padding: 12px 16px 12px 42px;
-          font-size: 15px;
-          border: 1px solid #E5E7EB;
-          border-radius: 8px;
-          background: white;
+          font-size: 14px;
+          border: 1px solid var(--border-primary);
+          border-radius: 6px;
+          background: var(--input-bg);
+          color: var(--text-primary);
           transition: border-color 0.2s;
         }
 
         .search-input:focus {
           outline: none;
-          border-color: #E63946;
+          border-color: var(--color-primary);
           box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
         }
 
         .table-container {
-          background: white;
-          border: 1px solid #E5E7EB;
-          border-radius: 12px;
+          background: var(--bg-primary);
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
           overflow: hidden;
-          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
         .data-table {
@@ -865,74 +875,193 @@ export function RoleMenuPermissionsManager() {
         }
 
         .data-table th {
-          background: #F9FAFB;
-          padding: 14px 16px;
+          background: var(--bg-secondary);
+          padding: 12px 16px;
           text-align: left;
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 600;
-          color: #6B7280;
+          color: var(--text-secondary);
           text-transform: uppercase;
-          border-bottom: 2px solid #E5E7EB;
+          letter-spacing: 0.5px;
+          border-bottom: 1px solid var(--border-primary);
           cursor: pointer;
           user-select: none;
         }
 
-        .data-table th.sortable:hover {
-          background: #F3F4F6;
+        .data-table th:first-child {
+          width: 45%;
         }
 
+        .data-table th.sortable:hover {
+          background: var(--bg-tertiary);
+        }
+
+        .data-table th:nth-child(2),
         .data-table th:nth-child(3),
         .data-table th:nth-child(4),
-        .data-table th:nth-child(5),
-        .data-table th:nth-child(6) {
+        .data-table th:nth-child(5) {
           text-align: center;
-          width: 100px;
+          width: 80px;
         }
 
         .data-table td {
-          padding: 12px 16px;
-          border-bottom: 1px solid #F3F4F6;
-          color: #1F2937;
+          padding: 0;
+          border-bottom: 1px solid var(--border-primary);
+          color: var(--text-primary);
+          vertical-align: middle;
         }
 
+        .data-table td:nth-child(2),
         .data-table td:nth-child(3),
         .data-table td:nth-child(4),
-        .data-table td:nth-child(5),
-        .data-table td:nth-child(6) {
+        .data-table td:nth-child(5) {
           text-align: center;
+          padding: 12px 16px;
         }
 
         .data-table tbody tr {
-          transition: background 0.2s;
+          transition: background 0.15s;
         }
 
         .data-table tbody tr:hover {
-          background: #F9FAFB;
+          background: var(--bg-hover, rgba(0,0,0,0.02));
+        }
+
+        /* Menu Row - Principal */
+        .data-table tbody tr.menu-row {
+          background: var(--bg-primary);
+        }
+
+        .data-table tbody tr.menu-row:hover {
+          background: var(--bg-hover, rgba(0,0,0,0.02));
+        }
+
+        /* Submenu Row - Indentado con borde izquierdo */
+        .data-table tbody tr.submenu-row {
+          background: var(--bg-secondary);
+        }
+
+        .data-table tbody tr.submenu-row:hover {
+          background: var(--bg-tertiary, var(--bg-secondary));
+        }
+
+        /* Row styling por nivel */
+        .data-table tbody tr.submenu-row.level-2 {
+          background: rgba(249, 115, 22, 0.03);
+        }
+
+        .data-table tbody tr.submenu-row.level-2:hover {
+          background: rgba(249, 115, 22, 0.08);
+        }
+
+        .data-table tbody tr.submenu-row.level-3 {
+          background: rgba(234, 179, 8, 0.03);
+        }
+
+        .data-table tbody tr.submenu-row.level-3:hover {
+          background: rgba(234, 179, 8, 0.08);
+        }
+
+        /* Module Cell */
+        .module-cell {
+          display: flex;
+          align-items: center;
+          min-height: 48px;
+          padding: 12px 16px;
+        }
+
+        .module-cell.is-menu {
+          padding-left: 16px;
+        }
+
+        /* Nivel 1: Submenú directo del menú */
+        .module-cell.is-submenu.level-1 {
+          padding-left: 40px;
+          border-left: 3px solid #E63946;
+          background: linear-gradient(90deg, rgba(230, 57, 70, 0.05) 0%, transparent 100%);
+        }
+
+        /* Nivel 2: Sub-submenú */
+        .module-cell.is-submenu.level-2 {
+          padding-left: 70px;
+          border-left: 3px solid #F97316;
+          background: linear-gradient(90deg, rgba(249, 115, 22, 0.05) 0%, transparent 100%);
+        }
+
+        /* Nivel 3+: Sub-sub-submenú */
+        .module-cell.is-submenu.level-3 {
+          padding-left: 100px;
+          border-left: 3px solid #EAB308;
+          background: linear-gradient(90deg, rgba(234, 179, 8, 0.05) 0%, transparent 100%);
+        }
+
+        .module-name {
+          font-size: 14px;
+          line-height: 1.4;
+        }
+
+        .module-cell.is-menu .module-name {
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .module-cell.is-submenu .module-name {
+          font-weight: 400;
+          color: var(--text-secondary);
+        }
+
+        /* Indicadores por nivel */
+        .module-cell.level-1 .submenu-indicator {
+          color: #E63946;
+          font-weight: 600;
+          margin-right: 8px;
+          font-family: monospace;
+        }
+
+        .module-cell.level-2 .submenu-indicator {
+          color: #F97316;
+          font-weight: 600;
+          margin-right: 8px;
+          font-family: monospace;
+        }
+
+        .module-cell.level-3 .submenu-indicator {
+          color: #EAB308;
+          font-weight: 600;
+          margin-right: 8px;
+          font-family: monospace;
+        }
+
+        .submenu-indicator {
+          color: #E63946;
+          font-weight: 600;
+          margin-right: 8px;
+          font-family: monospace;
         }
 
         .sort-indicator {
-          margin-left: 8px;
-          color: #9CA3AF;
-          font-size: 14px;
+          margin-left: 6px;
+          color: var(--text-tertiary);
+          font-size: 12px;
         }
 
         .perm-checkbox {
-          width: 36px;
-          height: 36px;
-          border: 2px solid #D1D5DB;
-          border-radius: 8px;
+          width: 32px;
+          height: 32px;
+          border: 2px solid var(--border-primary);
+          border-radius: 6px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          transition: all 0.2s;
-          background: white;
-          font-size: 16px;
+          transition: all 0.15s;
+          background: var(--input-bg);
+          font-size: 14px;
         }
 
         .perm-checkbox:hover {
           border-color: #E63946;
-          background: #FEF2F2;
+          background: rgba(230, 57, 70, 0.08);
         }
 
         .perm-checkbox.checked {
@@ -950,36 +1079,36 @@ export function RoleMenuPermissionsManager() {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 16px 20px;
-          border-top: 1px solid #E5E7EB;
-          background: #FAFAFA;
+          padding: 12px 16px;
+          border-top: 1px solid var(--border-primary);
+          background: var(--bg-secondary);
         }
 
         .pagination-info {
-          font-size: 14px;
-          color: #6B7280;
+          font-size: 13px;
+          color: var(--text-secondary);
         }
 
         .pagination-controls {
           display: flex;
-          gap: 8px;
+          gap: 6px;
           align-items: center;
         }
 
         .pagination-controls button {
-          padding: 8px 12px;
-          border: 1px solid #E5E7EB;
-          background: white;
-          border-radius: 6px;
+          padding: 6px 10px;
+          border: 1px solid var(--border-primary);
+          background: var(--bg-primary);
+          border-radius: 4px;
           cursor: pointer;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 500;
-          color: #374151;
-          transition: all 0.2s;
+          color: var(--text-primary);
+          transition: all 0.15s;
         }
 
         .pagination-controls button:hover:not(:disabled) {
-          background: #F9FAFB;
+          background: var(--bg-hover, var(--bg-secondary));
           border-color: #E63946;
           color: #E63946;
         }
@@ -990,18 +1119,19 @@ export function RoleMenuPermissionsManager() {
         }
 
         .pagination-controls select {
-          padding: 8px 12px;
-          border: 1px solid #E5E7EB;
-          border-radius: 6px;
-          font-size: 14px;
-          background: white;
+          padding: 6px 10px;
+          border: 1px solid var(--border-primary);
+          border-radius: 4px;
+          font-size: 13px;
+          background: var(--input-bg);
+          color: var(--text-primary);
           cursor: pointer;
         }
 
         .empty-state {
-          padding: 80px 20px;
+          padding: 60px 20px;
           text-align: center;
-          color: #9CA3AF;
+          color: var(--text-muted);
         }
 
         .empty-state-icon {
@@ -1067,19 +1197,9 @@ export function RoleMenuPermissionsManager() {
       )}
 
       <div className="permissions-container">
-        {/* Header */}
-        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
-            Menú por Rol
-          </h3>
-          <p style={{ margin: '8px 0 0 0', fontSize: '15px', color: '#6B7280' }}>
-            Configura los permisos de menús y submenús para cada rol del sistema
-          </p>
-        </div>
-
         {/* Role Selector with Search */}
         <div className="role-selector">
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: '#374151' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
             Seleccionar Rol
           </label>
           <div className="role-search-container">
@@ -1095,7 +1215,7 @@ export function RoleMenuPermissionsManager() {
             {showRoleDropdown && (
               <div className="role-dropdown">
                 {filteredRoles.length === 0 ? (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#9CA3AF' }}>
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
                     No se encontraron roles
                   </div>
                 ) : (
@@ -1112,7 +1232,7 @@ export function RoleMenuPermissionsManager() {
                       <div style={{ fontWeight: 600, marginBottom: '2px', textTransform: 'capitalize' }}>
                         {sanitizeHTML(role.name)}
                       </div>
-                      <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                         {sanitizeHTML(role.description || 'Sin descripción')}
                       </div>
                     </div>
@@ -1129,10 +1249,10 @@ export function RoleMenuPermissionsManager() {
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
               <div>
-                <div style={{ fontWeight: 600, color: '#1F2937', fontSize: '14px', textTransform: 'capitalize' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '14px', textTransform: 'capitalize' }}>
                   {sanitizeHTML(selectedRoleData.name)}
                 </div>
-                <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                   {sanitizeHTML(selectedRoleData.description || 'Sin descripción')}
                 </div>
               </div>
@@ -1148,7 +1268,7 @@ export function RoleMenuPermissionsManager() {
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
             </div>
-            <h3 style={{ margin: '0 0 8px 0', color: '#6B7280', fontSize: '18px' }}>
+            <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-secondary)', fontSize: '18px' }}>
               Selecciona un rol
             </h3>
             <p style={{ margin: 0, fontSize: '14px' }}>
@@ -1194,7 +1314,7 @@ export function RoleMenuPermissionsManager() {
                           onClick={header.column.getToggleSortingHandler()}
                           className={header.column.getCanSort() ? 'sortable' : ''}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: header.index > 1 ? 'center' : 'flex-start' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: header.index > 0 ? 'center' : 'flex-start' }}>
                             {flexRender(header.column.columnDef.header, header.getContext())}
                             {header.column.getCanSort() && (
                               <span className="sort-indicator">
@@ -1213,20 +1333,26 @@ export function RoleMenuPermissionsManager() {
                 <tbody>
                   {table.getRowModel().rows.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                         No se encontraron resultados
                       </td>
                     </tr>
                   ) : (
-                    table.getRowModel().rows.map(row => (
-                      <tr key={row.id}>
-                        {row.getVisibleCells().map(cell => (
-                          <td key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
+                    table.getRowModel().rows.map(row => {
+                      const level = row.original.level || 0
+                      const rowClass = row.original.type === 'submenu'
+                        ? `submenu-row level-${level}`
+                        : 'menu-row'
+                      return (
+                        <tr key={row.id} className={rowClass}>
+                          {row.getVisibleCells().map(cell => (
+                            <td key={cell.id}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>

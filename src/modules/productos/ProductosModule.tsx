@@ -2,9 +2,10 @@ import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import { Eye, Edit, Trash2, Package, Tag, Info, Calendar, Filter } from 'lucide-react'
+import { Eye, Edit, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
+import './ProductosModule.css'
 
 interface UnidadMedida {
   id: string
@@ -724,14 +725,59 @@ export function ProductosModule() {
     [canView, canEdit, canDelete, codigoFilter, nombreFilter, tipoFilter, openColumnFilter]
   )
 
+  // Calcular estadísticas
+  const statsData = useMemo(() => {
+    const total = productos.length
+    const herramientas = productos.filter(p => p.tipo === 'HERRAMIENTAS').length
+    const repuestos = productos.filter(p => p.tipo === 'REPUESTOS').length
+    const retornables = productos.filter(p => p.es_retornable).length
+    return { total, herramientas, repuestos, retornables }
+  }, [productos])
+
   return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <h3 className="module-title">Gestion de Productos</h3>
-        <p className="module-subtitle">
-          {productos.length} producto{productos.length !== 1 ? 's' : ''} registrado{productos.length !== 1 ? 's' : ''}
-        </p>
+    <div className="prod-module">
+      {/* Header - Estilo Bitacora */}
+      <div className="prod-header">
+        <div className="prod-header-title">
+          <h1>Gestion de Productos</h1>
+          <span className="prod-header-subtitle">
+            {productos.length} producto{productos.length !== 1 ? 's' : ''} registrado{productos.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
+      {/* Stats Cards - Estilo Bitacora */}
+      <div className="prod-stats">
+        <div className="prod-stats-grid">
+          <div className="stat-card">
+            <Package size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.total}</span>
+              <span className="stat-label">Total</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Wrench size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.herramientas}</span>
+              <span className="stat-label">Herramientas</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Box size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.repuestos}</span>
+              <span className="stat-label">Repuestos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Tag size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.retornables}</span>
+              <span className="stat-label">Retornables</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* DataTable with integrated action button */}

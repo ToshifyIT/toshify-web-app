@@ -1,9 +1,10 @@
 // src/components/admin/RoleManagement.tsx
 import { useState, useEffect } from 'react'
-import { AlertTriangle, Edit2, Trash2, Info } from 'lucide-react'
+import { AlertTriangle, Edit2, Trash2, Info, Shield } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { Role } from '../../types/database.types'
 import Swal from 'sweetalert2'
+import './AdminStyles.css'
 
 // @ts-nocheck en operaciones de base de datos por problemas de tipos generados
 
@@ -228,7 +229,7 @@ export function RoleManagement() {
   }
 
   return (
-    <div className="module-container">
+    <div className="admin-module">
       <style>{`
         .roles-grid {
           display: grid;
@@ -466,22 +467,22 @@ export function RoleManagement() {
         }
       `}</style>
 
-      {/* Header */}
-      <div className="module-header">
-        <h3 className="module-title">Roles del Sistema</h3>
-        <p className="module-subtitle">
-          {roles.length} rol{roles.length !== 1 ? 'es' : ''} configurado{roles.length !== 1 ? 's' : ''}
-        </p>
-      </div>
-
-      {/* Action Button */}
-      <div className="rm-action-bar">
-        <button
-          className="btn-primary"
-          onClick={() => setShowCreateModal(true)}
-        >
-          + Crear Rol
-        </button>
+      {/* Header - Estilo Bitacora */}
+      <div className="admin-header">
+        <div className="admin-header-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h1>Roles del Sistema</h1>
+            <span className="admin-header-subtitle">
+              {roles.length} rol{roles.length !== 1 ? 'es' : ''} configurado{roles.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <button
+            className="btn-primary"
+            onClick={() => setShowCreateModal(true)}
+          >
+            + Crear Rol
+          </button>
+        </div>
       </div>
 
       {/* Grid de roles */}

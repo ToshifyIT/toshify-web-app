@@ -238,11 +238,13 @@ export function HistorialMovimientosModule() {
   ], [])
 
   return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <h1 className="module-title">Historial de Movimientos</h1>
-        <p className="module-subtitle">Últimos 100 movimientos del inventario</p>
+    <div className="hist-module">
+      {/* Header - Estilo Bitacora */}
+      <div className="hist-header">
+        <div className="hist-header-title">
+          <h1>Historial de Movimientos</h1>
+          <span className="hist-header-subtitle">Ultimos 100 movimientos del inventario</span>
+        </div>
       </div>
 
       {/* Filtro de tipo (adicional al buscador del DataTable) */}

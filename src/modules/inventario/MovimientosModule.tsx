@@ -684,15 +684,22 @@ export function MovimientosModule() {
   const productoSeleccionado = productos.find(p => p.id === productoId)
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-          Gestión de Movimientos
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-          Registrar entradas, salidas, uso y devolución de herramientas
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '1200px', margin: '0 auto' }}>
+      {/* Header - Estilo Bitacora */}
+      <div style={{
+        background: 'var(--bg-primary)',
+        borderRadius: '8px',
+        padding: '20px',
+        border: '1px solid var(--border-primary)'
+      }}>
+        <div style={{ borderLeft: '4px solid #DC2626', paddingLeft: '16px' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            Gestion de Movimientos
+          </h1>
+          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'block', marginTop: '2px' }}>
+            Registrar entradas, salidas, uso y devolucion de herramientas
+          </span>
+        </div>
         {requiereAprobacion() && (
           <div style={{
             marginTop: '12px',
@@ -707,7 +714,7 @@ export function MovimientosModule() {
             gap: '8px'
           }}>
             <Clock size={16} />
-            Los movimientos de salida, uso y devolución requieren aprobación de un encargado
+            Los movimientos de salida, uso y devolucion requieren aprobacion de un encargado
           </div>
         )}
       </div>
