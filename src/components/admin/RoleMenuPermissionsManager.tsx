@@ -1,6 +1,6 @@
 // src/components/admin/RoleMenuPermissionsManager.tsx
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Check, AlertTriangle, Shield, ChevronRight, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Check, AlertTriangle, Shield } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import './AdminStyles.css'
@@ -88,7 +88,6 @@ export function RoleMenuPermissionsManager() {
   const [roleSearchTerm, setRoleSearchTerm] = useState('')
   const [showRoleDropdown, setShowRoleDropdown] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null)
-  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set())
 
   // =====================================================
   // VERIFICACIÓN DE PERMISOS

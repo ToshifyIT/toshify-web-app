@@ -20,6 +20,7 @@ export interface ExcesoVelocidad {
   conductor_wialon: string | null
   conductor_id: string | null
   wialon_unit_id: number | null
+  ibutton: string | null
   periodo_inicio: string
   periodo_fin: string
   created_at: string

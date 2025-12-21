@@ -84,17 +84,7 @@ function HeaderInfo({ lastUpdate }: HeaderInfoProps) {
     <div className="cabify-header-info">
       <h1>{UI_TEXT.TITLE}</h1>
       <p>{UI_TEXT.SUBTITLE}</p>
-      <SyncStatus />
       {lastUpdate && <LastUpdate date={lastUpdate} />}
-    </div>
-  )
-}
-
-function SyncStatus() {
-  return (
-    <div className="cabify-sync-status">
-      <span className="cabify-sync-dot" />
-      <strong>{UI_TEXT.SYNC_STATUS}</strong> - {UI_TEXT.SYNC_INTERVAL}
     </div>
   )
 }

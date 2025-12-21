@@ -1,6 +1,6 @@
 // src/components/admin/PermissionMatrix.tsx
 import { useState, useEffect } from 'react'
-import { Lightbulb, Check, X, Lock } from 'lucide-react'
+import { Lightbulb, Check, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { PermissionWithRole } from '../../types/database.types'
 import './AdminStyles.css'

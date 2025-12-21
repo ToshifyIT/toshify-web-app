@@ -1,6 +1,6 @@
 // src/components/admin/RoleManagement.tsx
 import { useState, useEffect } from 'react'
-import { AlertTriangle, Edit2, Trash2, Info, Shield } from 'lucide-react'
+import { AlertTriangle, Edit2, Trash2, Info } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { Role } from '../../types/database.types'
 import Swal from 'sweetalert2'

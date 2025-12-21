@@ -293,18 +293,12 @@ interface DataSourceInfoProps {
 function DataSourceInfo({ isVisible, dataSource, driverCount, periodLabel }: DataSourceInfoProps) {
   if (!isVisible) return null
 
-  const isHistorical = dataSource === 'historical'
-
   return (
     <div className={`cabify-info-card ${dataSource}`}>
       <strong>{DATA_SOURCE_LABELS[dataSource]}</strong>
       <span>
         {driverCount} conductores - {periodLabel}
-        {isHistorical && ' (consulta instantánea)'}
       </span>
-      {isHistorical && (
-        <span className="auto-sync">Sincronización automática cada 5 minutos</span>
-      )}
     </div>
   )
 }

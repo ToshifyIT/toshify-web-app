@@ -22,43 +22,45 @@ export function ExcesosStats({ stats, isLoading }: ExcesosStatsProps) {
   }
 
   return (
-    <div className="uss-stats-grid">
-      <StatCard
-        icon={<AlertTriangle size={24} />}
-        label="Total Excesos"
-        value={stats.totalExcesos.toLocaleString()}
-        color="red"
-      />
-      <StatCard
-        icon={<Car size={24} />}
-        label="Vehículos"
-        value={stats.vehiculosUnicos.toString()}
-        color="blue"
-      />
-      <StatCard
-        icon={<User size={24} />}
-        label="Conductores"
-        value={stats.conductoresUnicos.toString()}
-        color="purple"
-      />
-      <StatCard
-        icon={<Gauge size={24} />}
-        label="Vel. Máxima"
-        value={formatSpeed(stats.velocidadMaxima)}
-        color="orange"
-      />
-      <StatCard
-        icon={<TrendingUp size={24} />}
-        label="Exceso Promedio"
-        value={formatSpeed(stats.excesoPromedio)}
-        color="yellow"
-      />
-      <StatCard
-        icon={<Clock size={24} />}
-        label="Duración Prom."
-        value={formatDuration(Math.round(stats.duracionPromedio))}
-        color="green"
-      />
+    <div className="uss-stats">
+      <div className="uss-stats-grid">
+        <StatCard
+          icon={<AlertTriangle size={22} />}
+          label="Total Excesos"
+          value={stats.totalExcesos.toLocaleString()}
+          color="red"
+        />
+        <StatCard
+          icon={<Car size={22} />}
+          label="Vehículos"
+          value={stats.vehiculosUnicos.toString()}
+          color="blue"
+        />
+        <StatCard
+          icon={<User size={22} />}
+          label="Conductores"
+          value={stats.conductoresUnicos.toString()}
+          color="purple"
+        />
+        <StatCard
+          icon={<Gauge size={22} />}
+          label="Vel. Máxima"
+          value={formatSpeed(stats.velocidadMaxima)}
+          color="orange"
+        />
+        <StatCard
+          icon={<TrendingUp size={22} />}
+          label="Exceso Promedio"
+          value={formatSpeed(stats.excesoPromedio)}
+          color="yellow"
+        />
+        <StatCard
+          icon={<Clock size={22} />}
+          label="Duración Prom."
+          value={formatDuration(Math.round(stats.duracionPromedio))}
+          color="green"
+        />
+      </div>
     </div>
   )
 }
@@ -84,12 +86,14 @@ function StatCard({ icon, label, value, color }: StatCardProps) {
 
 function StatsLoading() {
   return (
-    <div className="uss-stats-grid">
-      {[...Array(6)].map((_, i) => (
-        <div key={i} className="uss-stat-card uss-stat-loading">
-          <div className="uss-stat-skeleton" />
-        </div>
-      ))}
+    <div className="uss-stats">
+      <div className="uss-stats-grid">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="uss-stat-card uss-stat-loading">
+            <div className="uss-stat-skeleton" />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

@@ -25,14 +25,16 @@ export function USSHeader({
 }: USSHeaderProps) {
   return (
     <div className="uss-header">
-      <div className="uss-header-info">
+      <div className="uss-header-title">
         <h1>Excesos de Velocidad</h1>
-        <p>Monitoreo de infracciones de velocidad desde USS/Wialon</p>
-        {lastUpdate && (
-          <p className="uss-last-update">
-            Última consulta: {lastUpdate.toLocaleString('es-AR')}
-          </p>
-        )}
+        <span className="uss-header-subtitle">
+          Monitoreo de infracciones de velocidad desde USS/Wialon
+          {lastUpdate && (
+            <span className="uss-last-update">
+              {' '}• Última consulta: {lastUpdate.toLocaleString('es-AR')}
+            </span>
+          )}
+        </span>
       </div>
 
       <div className="uss-controls">
