@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import Swal from "sweetalert2";
@@ -28,6 +28,16 @@ export function ConductoresModule() {
   const [saving, setSaving] = useState(false);
   const [selectedConductor, setSelectedConductor] =
     useState<ConductorWithRelations | null>(null);
+
+  // Stats data para tarjetas de resumen
+  const [statsData, setStatsData] = useState({
+    totalConductores: 0,
+    conductoresActivos: 0,
+    conductoresDisponibles: 0,
+    conductoresAsignados: 0,
+    conductoresBaja: 0,
+    licenciasPorVencer: 0,
+  });
 
   // Removed TanStack Table states - now handled by DataTable component
 
@@ -84,7 +94,78 @@ export function ConductoresModule() {
   useEffect(() => {
     loadConductores();
     loadCatalogs();
+    loadStatsData();
   }, []);
+
+  const loadStatsData = async () => {
+    try {
+      // Total de conductores
+      const { count: totalConductores } = await supabase
+        .from("conductores")
+        .select("*", { count: "exact", head: true });
+
+      // Obtener estados de conductores
+      const { data: estadosCond } = await supabase
+        .from("conductores_estados")
+        .select("id, codigo") as { data: Array<{ id: string; codigo: string }> | null };
+
+      const estadoActivoId = estadosCond?.find((e) => e.codigo.toLowerCase() === "activo")?.id;
+      const estadoBajaId = estadosCond?.find((e) => e.codigo.toLowerCase() === "baja")?.id;
+
+      // Conductores activos
+      let conductoresActivos = 0;
+      if (estadoActivoId) {
+        const { count } = await supabase
+          .from("conductores")
+          .select("*", { count: "exact", head: true })
+          .eq("estado_id", estadoActivoId);
+        conductoresActivos = count || 0;
+      }
+
+      // Conductores de baja
+      let conductoresBaja = 0;
+      if (estadoBajaId) {
+        const { count } = await supabase
+          .from("conductores")
+          .select("*", { count: "exact", head: true })
+          .eq("estado_id", estadoBajaId);
+        conductoresBaja = count || 0;
+      }
+
+      // Conductores asignados (en asignaciones activas)
+      const { data: asignacionesActivas } = await supabase
+        .from("asignaciones_conductores")
+        .select("conductor_id")
+        .in("estado", ["asignado", "activo"]) as { data: Array<{ conductor_id: string }> | null };
+
+      const conductoresAsignadosIds = new Set(asignacionesActivas?.map((a) => a.conductor_id) || []);
+      const conductoresAsignados = conductoresAsignadosIds.size;
+
+      // Conductores disponibles = activos - asignados
+      const conductoresDisponibles = Math.max(0, conductoresActivos - conductoresAsignados);
+
+      // Licencias por vencer (próximos 30 días)
+      const hoy = new Date();
+      const en30Dias = new Date();
+      en30Dias.setDate(en30Dias.getDate() + 30);
+      const { count: licenciasPorVencer } = await supabase
+        .from("conductores")
+        .select("*", { count: "exact", head: true })
+        .gte("licencia_vencimiento", hoy.toISOString().split("T")[0])
+        .lte("licencia_vencimiento", en30Dias.toISOString().split("T")[0]);
+
+      setStatsData({
+        totalConductores: totalConductores || 0,
+        conductoresActivos,
+        conductoresDisponibles,
+        conductoresAsignados,
+        conductoresBaja,
+        licenciasPorVencer: licenciasPorVencer || 0,
+      });
+    } catch (err) {
+      console.error("Error loading stats:", err);
+    }
+  };
 
   const loadCatalogs = async () => {
     try {
@@ -761,6 +842,69 @@ export function ConductoresModule() {
           {conductores.length} conductor{conductores.length !== 1 ? "es" : ""}{" "}
           registrado{conductores.length !== 1 ? "s" : ""}
         </p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="stats-container">
+        <div className="stat-card">
+          <div className="stat-icon gray">
+            <Users size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.totalConductores}</span>
+            <span className="stat-label">Total</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon green">
+            <Users size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.conductoresActivos}</span>
+            <span className="stat-label">Activos</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon blue">
+            <Users size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.conductoresDisponibles}</span>
+            <span className="stat-label">Disponibles</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon purple">
+            <UserCheck size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.conductoresAsignados}</span>
+            <span className="stat-label">Asignados</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon red">
+            <UserX size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.conductoresBaja}</span>
+            <span className="stat-label">Baja</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon yellow">
+            <Clock size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.licenciasPorVencer}</span>
+            <span className="stat-label">Lic. por Vencer</span>
+          </div>
+        </div>
       </div>
 
       {/* DataTable with integrated action button */}

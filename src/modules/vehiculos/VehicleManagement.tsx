@@ -1,6 +1,6 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -22,6 +22,15 @@ export function VehicleManagement() {
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
+
+  // Stats data para tarjetas de resumen
+  const [statsData, setStatsData] = useState({
+    totalVehiculos: 0,
+    vehiculosDisponibles: 0,
+    vehiculosEnUso: 0,
+    vehiculosEnTaller: 0,
+    vehiculosFueraServicio: 0,
+  })
 
   // Removed TanStack Table states - now handled by DataTable component
 
@@ -62,7 +71,92 @@ export function VehicleManagement() {
   useEffect(() => {
     loadVehiculos()
     loadCatalogs()
+    loadStatsData()
   }, [])
+
+  const loadStatsData = async () => {
+    try {
+      // Total de vehículos
+      const { count: totalVehiculos } = await supabase
+        .from('vehiculos')
+        .select('*', { count: 'exact', head: true })
+
+      // Obtener estados de vehículos
+      const { data: estadosVeh } = await supabase
+        .from('vehiculos_estados')
+        .select('id, codigo') as { data: Array<{ id: string; codigo: string }> | null }
+
+      const estadoIdMap = new Map<string, string>()
+      estadosVeh?.forEach(e => estadoIdMap.set(e.codigo, e.id))
+
+      // Vehículos disponibles
+      let vehiculosDisponibles = 0
+      const estadoDisponibleId = estadoIdMap.get('DISPONIBLE')
+      if (estadoDisponibleId) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado_id', estadoDisponibleId)
+        vehiculosDisponibles = count || 0
+      }
+
+      // Vehículos en uso
+      let vehiculosEnUso = 0
+      const estadoEnUsoId = estadoIdMap.get('EN_USO')
+      if (estadoEnUsoId) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado_id', estadoEnUsoId)
+        vehiculosEnUso = count || 0
+      }
+
+      // Vehículos en taller
+      let vehiculosEnTaller = 0
+      const tallerIds = [
+        estadoIdMap.get('TALLER_AXIS'),
+        estadoIdMap.get('TALLER_CHAPA_PINTURA'),
+        estadoIdMap.get('TALLER_ALLIANCE'),
+        estadoIdMap.get('TALLER_KALZALO'),
+        estadoIdMap.get('TALLER_BASE_VALIENTE'),
+        estadoIdMap.get('INSTALACION_GNC')
+      ].filter(Boolean) as string[]
+      if (tallerIds.length > 0) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .in('estado_id', tallerIds)
+        vehiculosEnTaller = count || 0
+      }
+
+      // Vehículos fuera de servicio
+      let vehiculosFueraServicio = 0
+      const fueraServicioIds = [
+        estadoIdMap.get('ROBO'),
+        estadoIdMap.get('DESTRUCCION_TOTAL'),
+        estadoIdMap.get('RETENIDO_COMISARIA'),
+        estadoIdMap.get('JUBILADO'),
+        estadoIdMap.get('PKG_OFF_BASE')
+      ].filter(Boolean) as string[]
+      if (fueraServicioIds.length > 0) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .in('estado_id', fueraServicioIds)
+        vehiculosFueraServicio = count || 0
+      }
+
+      setStatsData({
+        totalVehiculos: totalVehiculos || 0,
+        vehiculosDisponibles,
+        vehiculosEnUso,
+        vehiculosEnTaller,
+        vehiculosFueraServicio,
+      })
+    } catch (err) {
+      console.error('Error loading stats:', err)
+    }
+  }
 
   const loadCatalogs = async () => {
     try {
@@ -526,6 +620,59 @@ export function VehicleManagement() {
         <p className="module-subtitle">
           {vehiculos.length} vehiculo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
         </p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="stats-container">
+        <div className="stat-card">
+          <div className="stat-icon gray">
+            <Car size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.totalVehiculos}</span>
+            <span className="stat-label">Total</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon green">
+            <Car size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.vehiculosDisponibles}</span>
+            <span className="stat-label">Disponibles</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon blue">
+            <Car size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.vehiculosEnUso}</span>
+            <span className="stat-label">En Uso</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon orange">
+            <Wrench size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.vehiculosEnTaller}</span>
+            <span className="stat-label">En Taller</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon red">
+            <AlertTriangle size={24} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{statsData.vehiculosFueraServicio}</span>
+            <span className="stat-label">Fuera de Servicio</span>
+          </div>
+        </div>
       </div>
 
       {!canCreate && (

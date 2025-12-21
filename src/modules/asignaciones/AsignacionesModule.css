@@ -2,12 +2,26 @@
 /* Estilos para el módulo de Asignaciones - Diseño compacto */
 /* Con soporte para Dark Mode mediante CSS Variables */
 
+/* Stats Section */
+.asig-stats-section {
+  margin-bottom: 16px;
+}
+
+.asig-stats-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 10px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 /* Stats Cards Container */
 .asig-stats-container {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
 .asig-stat-card {
@@ -66,6 +80,16 @@
   color: #4B5563;
 }
 
+.asig-stat-icon.orange {
+  background: linear-gradient(135deg, #FFEDD5 0%, #FED7AA 100%);
+  color: #C2410C;
+}
+
+.asig-stat-icon.cyan {
+  background: linear-gradient(135deg, #CFFAFE 0%, #A5F3FC 100%);
+  color: #0E7490;
+}
+
 .asig-stat-content {
   display: flex;
   flex-direction: column;
@@ -87,40 +111,78 @@
 }
 
 /* Responsive Stats */
-@media (max-width: 1400px) {
+@media (max-width: 1200px) {
   .asig-stats-container {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   }
 }
 
-@media (max-width: 900px) {
-  .asig-stats-container {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 768px) {
+  .asig-stats-section {
+    margin-bottom: 12px;
   }
-}
 
-@media (max-width: 600px) {
+  .asig-stats-section-title {
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+
   .asig-stats-container {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
   }
 
   .asig-stat-card {
-    padding: 12px;
-    gap: 10px;
+    padding: 10px;
+    gap: 8px;
   }
 
   .asig-stat-icon {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .asig-stat-icon svg {
+    width: 18px;
+    height: 18px;
   }
 
   .asig-stat-value {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .asig-stat-label {
-    font-size: 11px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .asig-stats-container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .asig-stat-card {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .asig-stat-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .asig-stat-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .asig-stat-value {
+    font-size: 16px;
+  }
+
+  .asig-stat-label {
+    font-size: 9px;
   }
 }
 

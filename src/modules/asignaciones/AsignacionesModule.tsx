@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, Car, Users, Clock } from 'lucide-react'
+import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, Car, Users, Clock, Wrench, AlertTriangle, UserCheck, CalendarRange, Activity } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
@@ -77,10 +77,16 @@ export function AsignacionesModule() {
   const [statsData, setStatsData] = useState({
     totalVehiculos: 0,
     vehiculosDisponibles: 0,
+    vehiculosEnUso: 0,
+    vehiculosEnTaller: 0,
+    vehiculosFueraServicio: 0,
     turnosDisponibles: 0,
     conductoresDisponibles: 0,
+    conductoresAsignados: 0,
     totalConductores: 0,
-    entregasHoy: 0
+    entregasHoy: 0,
+    entregasSemana: 0,
+    asignacionesActivas: 0
   })
 
   const loadStatsData = async () => {
@@ -90,20 +96,60 @@ export function AsignacionesModule() {
         .from('vehiculos')
         .select('*', { count: 'exact', head: true })
 
-      // Vehículos disponibles (estado = DISPONIBLE)
-      const { data: estadoDisponible } = await supabase
+      // Obtener todos los estados de vehículos
+      const { data: estadosVehiculos } = await supabase
         .from('vehiculos_estados')
-        .select('id')
-        .eq('codigo', 'DISPONIBLE')
-        .single() as { data: { id: string } | null }
+        .select('id, codigo') as { data: Array<{ id: string; codigo: string }> | null }
 
+      const estadoIdMap = new Map<string, string>()
+      estadosVehiculos?.forEach(e => estadoIdMap.set(e.codigo, e.id))
+
+      // Vehículos disponibles (estado = DISPONIBLE)
       let vehiculosDisponibles = 0
-      if (estadoDisponible) {
+      const estadoDisponibleId = estadoIdMap.get('DISPONIBLE')
+      if (estadoDisponibleId) {
         const { count } = await supabase
           .from('vehiculos')
           .select('*', { count: 'exact', head: true })
-          .eq('estado_id', estadoDisponible.id)
+          .eq('estado_id', estadoDisponibleId)
         vehiculosDisponibles = count || 0
+      }
+
+      // Vehículos en uso (estado = EN_USO)
+      let vehiculosEnUso = 0
+      const estadoEnUsoId = estadoIdMap.get('EN_USO')
+      if (estadoEnUsoId) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado_id', estadoEnUsoId)
+        vehiculosEnUso = count || 0
+      }
+
+      // Vehículos en taller (TALLER_AXIS + TALLER_CHAPA_PINTURA)
+      let vehiculosEnTaller = 0
+      const tallerIds = [estadoIdMap.get('TALLER_AXIS'), estadoIdMap.get('TALLER_CHAPA_PINTURA')].filter(Boolean) as string[]
+      if (tallerIds.length > 0) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .in('estado_id', tallerIds)
+        vehiculosEnTaller = count || 0
+      }
+
+      // Vehículos fuera de servicio (ROBO, DESTRUCCION_TOTAL, PKG_OFF_BASE)
+      let vehiculosFueraServicio = 0
+      const fueraServicioIds = [
+        estadoIdMap.get('ROBO'),
+        estadoIdMap.get('DESTRUCCION_TOTAL'),
+        estadoIdMap.get('PKG_OFF_BASE')
+      ].filter(Boolean) as string[]
+      if (fueraServicioIds.length > 0) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .in('estado_id', fueraServicioIds)
+        vehiculosFueraServicio = count || 0
       }
 
       // Obtener todos los conductores con su estado (mismo filtro que el wizard)
@@ -154,20 +200,20 @@ export function AsignacionesModule() {
 
       // Turnos disponibles: calcular basado en vehículos en uso que tienen turnos libres
       // Un vehículo en modo TURNO tiene 2 turnos (diurno/nocturno)
-      const { data: asignacionesActivas } = await supabase
+      const { data: asignacionesActivasParaTurnos } = await supabase
         .from('asignaciones')
         .select('id, horario, asignaciones_conductores(id, horario)')
         .eq('estado', 'activa') as { data: Array<{ id: string; horario: string; asignaciones_conductores: any[] }> | null }
 
       let turnosOcupados = 0
-      asignacionesActivas?.forEach(a => {
+      asignacionesActivasParaTurnos?.forEach(a => {
         if (a.horario === 'TURNO') {
           turnosOcupados += a.asignaciones_conductores?.length || 0
         }
       })
 
       // Turnos potenciales = vehículos en uso con modo TURNO * 2
-      const vehiculosEnTurno = asignacionesActivas?.filter(a => a.horario === 'TURNO').length || 0
+      const vehiculosEnTurno = asignacionesActivasParaTurnos?.filter(a => a.horario === 'TURNO').length || 0
       const turnosPotenciales = vehiculosEnTurno * 2
       const turnosDisponibles = turnosPotenciales - turnosOcupados
 
@@ -181,13 +227,39 @@ export function AsignacionesModule() {
         .gte('fecha_programada', `${hoyStr}T00:00:00`)
         .lt('fecha_programada', `${hoyStr}T23:59:59`)
 
+      // Entregas programadas para los próximos 7 días
+      const finSemana = new Date(hoy)
+      finSemana.setDate(finSemana.getDate() + 7)
+      const finSemanaStr = finSemana.toISOString().split('T')[0]
+      const { count: entregasSemana } = await supabase
+        .from('asignaciones')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'programado')
+        .gte('fecha_programada', `${hoyStr}T00:00:00`)
+        .lt('fecha_programada', `${finSemanaStr}T23:59:59`)
+
+      // Asignaciones activas (count)
+      const { count: totalAsignacionesActivas } = await supabase
+        .from('asignaciones')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'activa')
+
+      // Conductores asignados (en asignaciones activas)
+      const conductoresAsignados = conductoresOcupadosIds.size
+
       setStatsData({
         totalVehiculos: totalVehiculos || 0,
         vehiculosDisponibles,
+        vehiculosEnUso,
+        vehiculosEnTaller,
+        vehiculosFueraServicio,
         turnosDisponibles: Math.max(0, turnosDisponibles),
         conductoresDisponibles: Math.max(0, conductoresDisponibles),
+        conductoresAsignados,
         totalConductores,
-        entregasHoy: entregasHoy || 0
+        entregasHoy: entregasHoy || 0,
+        entregasSemana: entregasSemana || 0,
+        asignacionesActivas: totalAsignacionesActivas || 0
       })
     } catch (err) {
       console.error('Error loading stats:', err)
@@ -693,65 +765,150 @@ export function AsignacionesModule() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="asig-stats-container">
-        <div className="asig-stat-card">
-          <div className="asig-stat-icon yellow">
-            <Calendar size={24} />
+      {/* Stats Cards - Asignaciones */}
+      <div className="asig-stats-section">
+        <h3 className="asig-stats-section-title">Asignaciones</h3>
+        <div className="asig-stats-container">
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon yellow">
+              <Calendar size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{programadasCount}</span>
+              <span className="asig-stat-label">Programadas</span>
+            </div>
           </div>
-          <div className="asig-stat-content">
-            <span className="asig-stat-value">{programadasCount}</span>
-            <span className="asig-stat-label">Programadas</span>
+
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon green">
+              <Activity size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.asignacionesActivas}</span>
+              <span className="asig-stat-label">Activas</span>
+            </div>
+          </div>
+
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon red">
+              <Calendar size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.entregasHoy}</span>
+              <span className="asig-stat-label">Entregas Hoy</span>
+            </div>
+          </div>
+
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon blue">
+              <CalendarRange size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.entregasSemana}</span>
+              <span className="asig-stat-label">Entregas Semana</span>
+            </div>
+          </div>
+
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon cyan">
+              <Clock size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.turnosDisponibles}</span>
+              <span className="asig-stat-label">Turnos Disponibles</span>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="asig-stat-card">
-          <div className="asig-stat-icon green">
-            <Car size={24} />
+      {/* Stats Cards - Vehículos */}
+      <div className="asig-stats-section">
+        <h3 className="asig-stats-section-title">Vehículos</h3>
+        <div className="asig-stats-container">
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon gray">
+              <Car size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.totalVehiculos}</span>
+              <span className="asig-stat-label">Total</span>
+            </div>
           </div>
-          <div className="asig-stat-content">
-            <span className="asig-stat-value">{statsData.vehiculosDisponibles}</span>
-            <span className="asig-stat-label">Vehículos Disponibles</span>
+
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon green">
+              <Car size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.vehiculosDisponibles}</span>
+              <span className="asig-stat-label">Disponibles</span>
+            </div>
+          </div>
+
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon blue">
+              <Car size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.vehiculosEnUso}</span>
+              <span className="asig-stat-label">En Uso</span>
+            </div>
+          </div>
+
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon orange">
+              <Wrench size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.vehiculosEnTaller}</span>
+              <span className="asig-stat-label">En Taller</span>
+            </div>
+          </div>
+
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon red">
+              <AlertTriangle size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.vehiculosFueraServicio}</span>
+              <span className="asig-stat-label">Fuera de Servicio</span>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="asig-stat-card">
-          <div className="asig-stat-icon blue">
-            <Clock size={24} />
+      {/* Stats Cards - Conductores */}
+      <div className="asig-stats-section">
+        <h3 className="asig-stats-section-title">Conductores</h3>
+        <div className="asig-stats-container">
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon gray">
+              <Users size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.totalConductores}</span>
+              <span className="asig-stat-label">Total Activos</span>
+            </div>
           </div>
-          <div className="asig-stat-content">
-            <span className="asig-stat-value">{statsData.turnosDisponibles}</span>
-            <span className="asig-stat-label">Turnos Disponibles</span>
-          </div>
-        </div>
 
-        <div className="asig-stat-card">
-          <div className="asig-stat-icon purple">
-            <Users size={24} />
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon green">
+              <Users size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.conductoresDisponibles}</span>
+              <span className="asig-stat-label">Disponibles</span>
+            </div>
           </div>
-          <div className="asig-stat-content">
-            <span className="asig-stat-value">{statsData.conductoresDisponibles}</span>
-            <span className="asig-stat-label">Conductores Disponibles</span>
-          </div>
-        </div>
 
-        <div className="asig-stat-card">
-          <div className="asig-stat-icon red">
-            <Calendar size={24} />
-          </div>
-          <div className="asig-stat-content">
-            <span className="asig-stat-value">{statsData.entregasHoy}</span>
-            <span className="asig-stat-label">Entregas Hoy</span>
-          </div>
-        </div>
-
-        <div className="asig-stat-card">
-          <div className="asig-stat-icon gray">
-            <Car size={24} />
-          </div>
-          <div className="asig-stat-content">
-            <span className="asig-stat-value">{statsData.totalVehiculos}</span>
-            <span className="asig-stat-label">Total Vehículos</span>
+          <div className="asig-stat-card">
+            <div className="asig-stat-icon blue">
+              <UserCheck size={24} />
+            </div>
+            <div className="asig-stat-content">
+              <span className="asig-stat-value">{statsData.conductoresAsignados}</span>
+              <span className="asig-stat-label">Asignados</span>
+            </div>
           </div>
         </div>
       </div>
