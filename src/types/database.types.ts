@@ -27,6 +27,10 @@ export interface Database {
           full_name: string | null
           role_id: string | null
           is_active: boolean
+          phone: string | null
+          avatar_url: string | null
+          bio: string | null
+          preferences: Record<string, unknown> | null
           created_at: string
           updated_at: string
         }
@@ -35,6 +39,10 @@ export interface Database {
           full_name?: string | null
           role_id?: string | null
           is_active?: boolean
+          phone?: string | null
+          avatar_url?: string | null
+          bio?: string | null
+          preferences?: Record<string, unknown> | null
           created_at?: string
           updated_at?: string
         }
@@ -43,6 +51,10 @@ export interface Database {
           full_name?: string | null
           role_id?: string | null
           is_active?: boolean
+          phone?: string | null
+          avatar_url?: string | null
+          bio?: string | null
+          preferences?: Record<string, unknown> | null
           created_at?: string
           updated_at?: string
         }

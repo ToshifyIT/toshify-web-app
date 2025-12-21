@@ -1,10 +1,11 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, User, Car, Calendar, Clock, Info, ClipboardList } from 'lucide-react'
+import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, Users, CheckCircle, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
 import { DataTable } from '../../components/ui/DataTable'
+import './AsignacionesModule.css'
 
 interface AsignacionActiva {
   id: string
@@ -47,9 +48,26 @@ export function AsignacionesActivasModule() {
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
 
+  // Column filter states
+  const [codigoFilter, setCodigoFilter] = useState('')
+  const [vehiculoFilter, setVehiculoFilter] = useState('')
+  const [modalidadFilter, setModalidadFilter] = useState('')
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+
   useEffect(() => {
     loadAsignacionesActivas()
   }, [])
+
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter])
 
   const loadAsignacionesActivas = async () => {
     setLoading(true)
@@ -117,41 +135,148 @@ export function AsignacionesActivasModule() {
     setShowDetailsModal(true)
   }
 
-  // Expandir filas para TURNO (una fila por conductor) vs A CARGO (una fila con todos)
-  const expandedAsignaciones = useMemo(() => {
-    return asignaciones.flatMap((asignacion: any) => {
-      // Si es A CARGO, retornar una sola fila con todos los conductores
-      if (asignacion.horario === 'CARGO') {
-        return [{
-          ...asignacion,
-          conductorEspecifico: null,
-          turnoEspecifico: '-'
-        }]
-      }
+  // Calcular estadísticas
+  const stats = useMemo(() => {
+    const turnoCount = asignaciones.filter(a => a.horario === 'TURNO').length
+    const cargoCount = asignaciones.filter(a => a.horario === 'CARGO' || !a.horario).length
 
-      // Si es TURNO con conductores, retornar una fila por cada conductor
-      if (asignacion.asignaciones_conductores && asignacion.asignaciones_conductores.length > 0) {
-        return asignacion.asignaciones_conductores.map((ac: any) => ({
-          ...asignacion,
-          conductorEspecifico: ac,
-          turnoEspecifico: ac.horario
-        }))
-      }
-
-      // Si no hay conductores, retornar una fila vacía
-      return [{
-        ...asignacion,
-        conductorEspecifico: null,
-        turnoEspecifico: '-'
-      }]
+    // Conductores únicos
+    const conductoresSet = new Set<string>()
+    asignaciones.forEach(a => {
+      a.asignaciones_conductores?.forEach(ac => {
+        if (ac.conductor_id) conductoresSet.add(ac.conductor_id)
+      })
     })
+
+    // Vehículos únicos
+    const vehiculosSet = new Set<string>()
+    asignaciones.forEach(a => {
+      if (a.vehiculo_id) vehiculosSet.add(a.vehiculo_id)
+    })
+
+    // Confirmados (asignaciones donde todos los conductores están confirmados)
+    const confirmadosCount = asignaciones.filter(a => {
+      if (!a.asignaciones_conductores || a.asignaciones_conductores.length === 0) return false
+      return a.asignaciones_conductores.every(ac => ac.confirmado)
+    }).length
+
+    return {
+      total: asignaciones.length,
+      turno: turnoCount,
+      cargo: cargoCount,
+      conductores: conductoresSet.size,
+      vehiculos: vehiculosSet.size,
+      confirmados: confirmadosCount
+    }
   }, [asignaciones])
+
+  // Filtrar asignaciones según los filtros de columna
+  const filteredAsignaciones = useMemo(() => {
+    let result = asignaciones
+
+    if (codigoFilter) {
+      result = result.filter(a =>
+        a.codigo?.toLowerCase().includes(codigoFilter.toLowerCase())
+      )
+    }
+
+    if (vehiculoFilter) {
+      result = result.filter(a =>
+        a.vehiculos?.patente?.toLowerCase().includes(vehiculoFilter.toLowerCase())
+      )
+    }
+
+    if (modalidadFilter) {
+      result = result.filter(a => a.horario === modalidadFilter)
+    }
+
+    return result
+  }, [asignaciones, codigoFilter, vehiculoFilter, modalidadFilter])
+
+  // Procesar asignaciones - UNA fila por asignación (no expandir)
+  const processedAsignaciones = useMemo(() => {
+    return filteredAsignaciones.map((asignacion: any) => {
+      // Para TURNO, organizar conductores por turno
+      if (asignacion.horario === 'TURNO') {
+        const diurno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'diurno')
+        const nocturno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'nocturno')
+
+        return {
+          ...asignacion,
+          conductoresTurno: {
+            diurno: diurno ? {
+              id: diurno.conductores.id,
+              nombre: `${diurno.conductores.nombres} ${diurno.conductores.apellidos}`,
+              confirmado: diurno.confirmado
+            } : null,
+            nocturno: nocturno ? {
+              id: nocturno.conductores.id,
+              nombre: `${nocturno.conductores.nombres} ${nocturno.conductores.apellidos}`,
+              confirmado: nocturno.confirmado
+            } : null
+          },
+          conductorCargo: null
+        }
+      }
+
+      // Para A CARGO, tomar el primer conductor
+      const conductor = asignacion.asignaciones_conductores?.[0]
+      return {
+        ...asignacion,
+        conductoresTurno: null,
+        conductorCargo: conductor ? {
+          id: conductor.conductores.id,
+          nombre: `${conductor.conductores.nombres} ${conductor.conductores.apellidos}`,
+          confirmado: conductor.confirmado
+        } : null
+      }
+    })
+  }, [filteredAsignaciones])
 
   const columns = useMemo<ColumnDef<AsignacionActiva>[]>(
     () => [
       {
         accessorKey: 'codigo',
-        header: 'Número',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Número</span>
+            <button
+              className={`dt-column-filter-btn ${codigoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'codigo' ? null : 'codigo')
+              }}
+              title="Filtrar por número"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'codigo' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar número..."
+                  value={codigoFilter}
+                  onChange={(e) => setCodigoFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {codigoFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setCodigoFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
             {getValue() as string}
@@ -161,7 +286,46 @@ export function AsignacionesActivasModule() {
       },
       {
         accessorKey: 'vehiculos.patente',
-        header: 'Vehículo',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Vehículo</span>
+            <button
+              className={`dt-column-filter-btn ${vehiculoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'vehiculo' ? null : 'vehiculo')
+              }}
+              title="Filtrar por vehículo"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'vehiculo' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar patente..."
+                  value={vehiculoFilter}
+                  onChange={(e) => setVehiculoFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {vehiculoFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setVehiculoFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => {
           const vehiculo = row.original.vehiculos
           return vehiculo ? (
@@ -178,55 +342,99 @@ export function AsignacionesActivasModule() {
         enableSorting: true,
       },
       {
-        id: 'turno',
-        header: 'Turno',
-        cell: ({ row }) => {
-          const turno = (row.original as any).turnoEspecifico
-          return (
-            <span style={{ fontSize: '13px', fontWeight: '500' }}>
-              {turno === '-' ? '-' : turno || 'N/A'}
-            </span>
-          )
+        id: 'asignados',
+        header: 'Asignados',
+        accessorFn: (row) => {
+          const data = row as any
+          if (data.horario === 'CARGO' || !data.horario) {
+            return data.conductorCargo?.nombre || ''
+          }
+          const d = data.conductoresTurno?.diurno?.nombre || ''
+          const n = data.conductoresTurno?.nocturno?.nombre || ''
+          return `${d} ${n}`.trim()
         },
-        enableSorting: false,
-      },
-      {
-        id: 'conductor',
-        header: 'Conductor',
         cell: ({ row }) => {
-          const conductorEsp = (row.original as any).conductorEspecifico
+          const data = row.original as any
+          const { conductoresTurno, conductorCargo, horario } = data
 
-          // Si hay conductor específico (TURNO), mostrar solo ese
-          if (conductorEsp) {
-            return (
-              <span style={{ fontSize: '13px', fontWeight: '500' }}>
-                {conductorEsp.conductores.nombres} {conductorEsp.conductores.apellidos}
+          // Para A CARGO o sin horario definido
+          if (horario === 'CARGO' || !horario) {
+            if (conductorCargo) {
+              return <span className="asig-conductor-compacto">{conductorCargo.nombre}</span>
+            }
+            return <span className="asig-sin-conductor">Sin asignar</span>
+          }
+
+          // Para TURNO - mostrar D/N con etiquetas
+          const diurno = conductoresTurno?.diurno
+          const nocturno = conductoresTurno?.nocturno
+
+          return (
+            <div className="asig-conductores-compact">
+              <span className={diurno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
+                <span className="asig-turno-label">D</span>
+                {diurno ? diurno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
               </span>
-            )
-          }
-
-          // Si es A CARGO, mostrar todos los conductores
-          if (row.original.horario === 'CARGO' && row.original.asignaciones_conductores && row.original.asignaciones_conductores.length > 0) {
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {row.original.asignaciones_conductores.map((ac, idx) => (
-                  <span key={idx} style={{ fontSize: '13px', fontWeight: '500' }}>
-                    {ac.conductores.nombres} {ac.conductores.apellidos}
-                  </span>
-                ))}
-              </div>
-            )
-          }
-
-          return (
-            <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>Sin conductor</span>
+              <span className={nocturno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
+                <span className="asig-turno-label">N</span>
+                {nocturno ? nocturno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+              </span>
+            </div>
           )
         },
-        enableSorting: false,
+        enableSorting: true,
       },
       {
         accessorKey: 'horario',
-        header: 'Modalidad',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Modalidad</span>
+            <button
+              className={`dt-column-filter-btn ${modalidadFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'modalidad' ? null : 'modalidad')
+              }}
+              title="Filtrar por modalidad"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'modalidad' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '140px' }}>
+                <button
+                  className={`dt-column-filter-option ${modalidadFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setModalidadFilter('')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Todos
+                </button>
+                <button
+                  className={`dt-column-filter-option ${modalidadFilter === 'TURNO' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setModalidadFilter('TURNO')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Turno
+                </button>
+                <button
+                  className={`dt-column-filter-option ${modalidadFilter === 'CARGO' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setModalidadFilter('CARGO')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  A Cargo
+                </button>
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => {
           const horario = getValue() as string
           return (
@@ -272,11 +480,11 @@ export function AsignacionesActivasModule() {
         enableSorting: false,
       },
     ],
-    []
+    [codigoFilter, vehiculoFilter, modalidadFilter, openColumnFilter]
   )
 
   return (
-    <div className="module-container">
+    <div className="asig-module">
       <style>{`
         .modal-header {
           padding: 24px 32px;
@@ -359,17 +567,67 @@ export function AsignacionesActivasModule() {
         }
       `}</style>
 
-      {/* Header */}
-      <div className="module-header">
-        <h3 className="module-title">Asignaciones Activas</h3>
-        <p className="module-subtitle">
-          {expandedAsignaciones.length} fila{expandedAsignaciones.length !== 1 ? 's' : ''} ({asignaciones.length} asignacion{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''})
-        </p>
+      {/* Header - Estilo Bitácora */}
+      <div className="asig-header">
+        <div className="asig-header-title">
+          <h1>Asignaciones Activas</h1>
+          <span className="asig-header-subtitle">
+            {asignaciones.length} asignación{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
+      {/* Stats Cards - Estilo Bitácora */}
+      <div className="asig-stats">
+        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+          <div className="stat-card">
+            <ClipboardList size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.total}</span>
+              <span className="stat-label">Total Activas</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Clock size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.turno}</span>
+              <span className="stat-label">Por Turno</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <User size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.cargo}</span>
+              <span className="stat-label">A Cargo</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.conductores}</span>
+              <span className="stat-label">Conductores</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.vehiculos}</span>
+              <span className="stat-label">Vehículos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <CheckCircle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.confirmados}</span>
+              <span className="stat-label">Confirmadas</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* DataTable */}
       <DataTable
-        data={expandedAsignaciones}
+        data={processedAsignaciones}
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por vehiculo, conductor, numero de asignacion..."

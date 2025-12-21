@@ -1,6 +1,6 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
@@ -23,10 +23,26 @@ export function VehicleManagement() {
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
 
+  // Stats data para tarjetas de resumen
+  const [statsData, setStatsData] = useState({
+    totalVehiculos: 0,
+    vehiculosDisponibles: 0,
+    vehiculosEnUso: 0,
+    vehiculosEnTaller: 0,
+    vehiculosFueraServicio: 0,
+  })
+
   // Removed TanStack Table states - now handled by DataTable component
 
   // Catalog states
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
+
+  // Column filter states
+  const [patenteFilter, setPatenteFilter] = useState('')
+  const [marcaFilter, setMarcaFilter] = useState('')
+  const [modeloFilter, setModeloFilter] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState('')
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
 
@@ -45,6 +61,7 @@ export function VehicleManagement() {
     tipo_combustible: '',
     tipo_gps: '',
     gps_uss: false,
+    traccar: false,
     numero_motor: '',
     numero_chasis: '',
     provisoria: '',
@@ -62,7 +79,103 @@ export function VehicleManagement() {
   useEffect(() => {
     loadVehiculos()
     loadCatalogs()
+    loadStatsData()
   }, [])
+
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter])
+
+  const loadStatsData = async () => {
+    try {
+      // Total de vehículos
+      const { count: totalVehiculos } = await supabase
+        .from('vehiculos')
+        .select('*', { count: 'exact', head: true })
+
+      // Obtener estados de vehículos
+      const { data: estadosVeh } = await supabase
+        .from('vehiculos_estados')
+        .select('id, codigo') as { data: Array<{ id: string; codigo: string }> | null }
+
+      const estadoIdMap = new Map<string, string>()
+      estadosVeh?.forEach(e => estadoIdMap.set(e.codigo, e.id))
+
+      // Vehículos disponibles
+      let vehiculosDisponibles = 0
+      const estadoDisponibleId = estadoIdMap.get('DISPONIBLE')
+      if (estadoDisponibleId) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado_id', estadoDisponibleId)
+        vehiculosDisponibles = count || 0
+      }
+
+      // Vehículos en uso
+      let vehiculosEnUso = 0
+      const estadoEnUsoId = estadoIdMap.get('EN_USO')
+      if (estadoEnUsoId) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado_id', estadoEnUsoId)
+        vehiculosEnUso = count || 0
+      }
+
+      // Vehículos en taller
+      let vehiculosEnTaller = 0
+      const tallerIds = [
+        estadoIdMap.get('TALLER_AXIS'),
+        estadoIdMap.get('TALLER_CHAPA_PINTURA'),
+        estadoIdMap.get('TALLER_ALLIANCE'),
+        estadoIdMap.get('TALLER_KALZALO'),
+        estadoIdMap.get('TALLER_BASE_VALIENTE'),
+        estadoIdMap.get('INSTALACION_GNC')
+      ].filter(Boolean) as string[]
+      if (tallerIds.length > 0) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .in('estado_id', tallerIds)
+        vehiculosEnTaller = count || 0
+      }
+
+      // Vehículos fuera de servicio
+      let vehiculosFueraServicio = 0
+      const fueraServicioIds = [
+        estadoIdMap.get('ROBO'),
+        estadoIdMap.get('DESTRUCCION_TOTAL'),
+        estadoIdMap.get('RETENIDO_COMISARIA'),
+        estadoIdMap.get('JUBILADO'),
+        estadoIdMap.get('PKG_OFF_BASE')
+      ].filter(Boolean) as string[]
+      if (fueraServicioIds.length > 0) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .in('estado_id', fueraServicioIds)
+        vehiculosFueraServicio = count || 0
+      }
+
+      setStatsData({
+        totalVehiculos: totalVehiculos || 0,
+        vehiculosDisponibles,
+        vehiculosEnUso,
+        vehiculosEnTaller,
+        vehiculosFueraServicio,
+      })
+    } catch (err) {
+      console.error('Error loading stats:', err)
+    }
+  }
 
   const loadCatalogs = async () => {
     try {
@@ -100,7 +213,19 @@ export function VehicleManagement() {
 
       // Los datos ya vienen con las relaciones, no necesitamos hacer más queries
       if (data && data.length > 0) {
-        setVehiculos(data as VehiculoWithRelations[])
+        // Ordenar: DISPONIBLE primero, luego el resto
+        const sortedData = [...data].sort((a, b) => {
+          const estadoA = (a as any).vehiculos_estados?.codigo || ''
+          const estadoB = (b as any).vehiculos_estados?.codigo || ''
+
+          // DISPONIBLE primero
+          if (estadoA === 'DISPONIBLE' && estadoB !== 'DISPONIBLE') return -1
+          if (estadoB === 'DISPONIBLE' && estadoA !== 'DISPONIBLE') return 1
+
+          // Luego ordenar alfabéticamente por estado
+          return estadoA.localeCompare(estadoB)
+        })
+        setVehiculos(sortedData as VehiculoWithRelations[])
       } else {
         setVehiculos([])
       }
@@ -150,6 +275,7 @@ export function VehicleManagement() {
           tipo_combustible: formData.tipo_combustible || null,
           tipo_gps: formData.tipo_gps || null,
           gps_uss: formData.gps_uss,
+          traccar: formData.traccar,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           provisoria: formData.provisoria || null,
@@ -218,6 +344,7 @@ export function VehicleManagement() {
           tipo_combustible: formData.tipo_combustible || null,
           tipo_gps: formData.tipo_gps || null,
           gps_uss: formData.gps_uss,
+          traccar: formData.traccar,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           provisoria: formData.provisoria || null,
@@ -317,6 +444,7 @@ export function VehicleManagement() {
       tipo_combustible: (vehiculo as any).tipo_combustible || '',
       tipo_gps: (vehiculo as any).tipo_gps || '',
       gps_uss: vehiculo.gps_uss,
+      traccar: (vehiculo as any).traccar || false,
       numero_motor: vehiculo.numero_motor || '',
       numero_chasis: vehiculo.numero_chasis || '',
       provisoria: vehiculo.provisoria || '',
@@ -349,6 +477,7 @@ export function VehicleManagement() {
       tipo_combustible: '',
       tipo_gps: '',
       gps_uss: false,
+      traccar: false,
       numero_motor: '',
       numero_chasis: '',
       provisoria: '',
@@ -364,12 +493,93 @@ export function VehicleManagement() {
     })
   }
 
+  // Filtrar vehículos según los filtros de columna
+  const filteredVehiculos = useMemo(() => {
+    let result = vehiculos
+
+    if (patenteFilter) {
+      result = result.filter(v =>
+        v.patente?.toLowerCase().includes(patenteFilter.toLowerCase())
+      )
+    }
+
+    if (marcaFilter) {
+      result = result.filter(v =>
+        v.marca?.toLowerCase().includes(marcaFilter.toLowerCase())
+      )
+    }
+
+    if (modeloFilter) {
+      result = result.filter(v =>
+        v.modelo?.toLowerCase().includes(modeloFilter.toLowerCase())
+      )
+    }
+
+    if (estadoFilter) {
+      result = result.filter(v =>
+        v.vehiculos_estados?.codigo === estadoFilter
+      )
+    }
+
+    return result
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, estadoFilter])
+
+  // Obtener lista única de estados para el filtro
+  const uniqueEstados = useMemo(() => {
+    const estados = new Map<string, string>()
+    vehiculos.forEach(v => {
+      if (v.vehiculos_estados?.codigo) {
+        estados.set(v.vehiculos_estados.codigo, v.vehiculos_estados.descripcion || v.vehiculos_estados.codigo)
+      }
+    })
+    return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]))
+  }, [vehiculos])
+
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<VehiculoWithRelations>[]>(
     () => [
       {
         accessorKey: 'patente',
-        header: 'Patente',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Patente</span>
+            <button
+              className={`dt-column-filter-btn ${patenteFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente')
+              }}
+              title="Filtrar por patente"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'patente' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar patente..."
+                  value={patenteFilter}
+                  onChange={(e) => setPatenteFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {patenteFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setPatenteFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (
           <span className="patente-badge">{getValue() as string}</span>
         ),
@@ -377,13 +587,91 @@ export function VehicleManagement() {
       },
       {
         accessorKey: 'marca',
-        header: 'Marca',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Marca</span>
+            <button
+              className={`dt-column-filter-btn ${marcaFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'marca' ? null : 'marca')
+              }}
+              title="Filtrar por marca"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'marca' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar marca..."
+                  value={marcaFilter}
+                  onChange={(e) => setMarcaFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {marcaFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setMarcaFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => <strong>{getValue() as string}</strong>,
         enableSorting: true,
       },
       {
         accessorKey: 'modelo',
-        header: 'Modelo',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Modelo</span>
+            <button
+              className={`dt-column-filter-btn ${modeloFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'modelo' ? null : 'modelo')
+              }}
+              title="Filtrar por modelo"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'modelo' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar modelo..."
+                  value={modeloFilter}
+                  onChange={(e) => setModeloFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {modeloFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setModeloFilter('')
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (getValue() as string) || 'N/A',
         enableSorting: true,
       },
@@ -401,10 +689,72 @@ export function VehicleManagement() {
       },
       {
         accessorKey: 'vehiculos_estados.codigo',
-        header: 'Estado',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Estado</span>
+            <button
+              className={`dt-column-filter-btn ${estadoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado')
+              }}
+              title="Filtrar por estado"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'estado' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px', maxHeight: '250px', overflowY: 'auto' }}>
+                <button
+                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEstadoFilter('')
+                    setOpenColumnFilter(null)
+                  }}
+                >
+                  Todos
+                </button>
+                {uniqueEstados.map(([codigo, descripcion]) => (
+                  <button
+                    key={codigo}
+                    className={`dt-column-filter-option ${estadoFilter === codigo ? 'selected' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEstadoFilter(codigo)
+                      setOpenColumnFilter(null)
+                    }}
+                  >
+                    {descripcion}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => {
           const estado = row.original.vehiculos_estados
           const codigo = estado?.codigo || 'N/A'
+
+          // Etiquetas cortas para el badge
+          const etiquetasCortas: Record<string, string> = {
+            'DISPONIBLE': 'Disponible',
+            'EN_USO': 'En Uso',
+            'CORPORATIVO': 'Corporativo',
+            'PKG_ON_BASE': 'PKG ON',
+            'PKG_OFF_BASE': 'PKG OFF',
+            'PKG_OFF_FRANCIA': 'PKG Francia',
+            'TALLER_AXIS': 'Taller Axis',
+            'TALLER_CHAPA_PINTURA': 'Chapa&Pintura',
+            'TALLER_ALLIANCE': 'Taller Alliance',
+            'TALLER_KALZALO': 'Taller Kalzalo',
+            'TALLER_BASE_VALIENTE': 'Base Valiente',
+            'INSTALACION_GNC': 'Inst. GNC',
+            'RETENIDO_COMISARIA': 'Retenido',
+            'ROBO': 'Robo',
+            'DESTRUCCION_TOTAL': 'Destrucción',
+            'JUBILADO': 'Jubilado',
+            'PROGRAMADO': 'Programado'
+          }
 
           let badgeClass = 'dt-badge dt-badge-solid-gray'
           switch (codigo) {
@@ -412,19 +762,35 @@ export function VehicleManagement() {
               badgeClass = 'dt-badge dt-badge-solid-green'
               break
             case 'EN_USO':
+              badgeClass = 'dt-badge dt-badge-solid-amber'
+              break
+            case 'CORPORATIVO':
               badgeClass = 'dt-badge dt-badge-solid-blue'
               break
-            case 'MANTENIMIENTO':
+            case 'PKG_ON_BASE':
+            case 'PKG_OFF_BASE':
+            case 'PKG_OFF_FRANCIA':
+              badgeClass = 'dt-badge dt-badge-solid-gray'
+              break
+            case 'TALLER_AXIS':
+            case 'TALLER_CHAPA_PINTURA':
+            case 'TALLER_ALLIANCE':
+            case 'TALLER_KALZALO':
+            case 'TALLER_BASE_VALIENTE':
+            case 'INSTALACION_GNC':
               badgeClass = 'dt-badge dt-badge-solid-yellow'
               break
-            case 'FUERA_SERVICIO':
+            case 'ROBO':
+            case 'DESTRUCCION_TOTAL':
+            case 'RETENIDO_COMISARIA':
+            case 'JUBILADO':
               badgeClass = 'dt-badge dt-badge-solid-red'
               break
           }
 
           return (
-            <span className={badgeClass} title={estado?.descripcion || 'N/A'}>
-              {codigo}
+            <span className={badgeClass} title={estado?.descripcion || codigo}>
+              {etiquetasCortas[codigo] || codigo}
             </span>
           )
         },
@@ -466,17 +832,60 @@ export function VehicleManagement() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete]
+    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, estadoFilter, openColumnFilter, uniqueEstados]
   )
 
   return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <h3 className="module-title">Gestion de Vehiculos</h3>
-        <p className="module-subtitle">
-          {vehiculos.length} vehiculo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
-        </p>
+    <div className="veh-module">
+      {/* Header - Estilo Bitácora */}
+      <div className="veh-header">
+        <div className="veh-header-title">
+          <h1>Gestión de Vehículos</h1>
+          <span className="veh-header-subtitle">
+            {vehiculos.length} vehículo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
+      {/* Stats Cards - Estilo Bitácora */}
+      <div className="veh-stats">
+        <div className="veh-stats-grid">
+          <div className="stat-card">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.totalVehiculos}</span>
+              <span className="stat-label">Total</span>
+            </div>
+          </div>
+          <div className="stat-card" title="Vehículos con estado DISPONIBLE, listos para ser asignados">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.vehiculosDisponibles}</span>
+              <span className="stat-label">Sin Asignar</span>
+            </div>
+          </div>
+          <div className="stat-card" title="Vehículos con asignación activa actualmente">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.vehiculosEnUso}</span>
+              <span className="stat-label">En Uso</span>
+            </div>
+          </div>
+          <div className="stat-card" title="Vehículos en taller de mecánica o chapa y pintura">
+            <Wrench size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.vehiculosEnTaller}</span>
+              <span className="stat-label">En Taller</span>
+            </div>
+          </div>
+          <div className="stat-card" title="Vehículos fuera de servicio (robo, destrucción total, PKG off)">
+            <AlertTriangle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.vehiculosFueraServicio}</span>
+              <span className="stat-label">Fuera Servicio</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {!canCreate && (
@@ -488,7 +897,7 @@ export function VehicleManagement() {
 
       {/* DataTable with integrated action button */}
       <DataTable
-        data={vehiculos}
+        data={filteredVehiculos}
         columns={columns}
         loading={loading}
         error={error}
@@ -629,8 +1038,8 @@ export function VehicleManagement() {
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginTop: '28px' }}>
+              <div className="form-group" style={{ display: 'flex', gap: '24px', marginTop: '28px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     className="form-checkbox"
@@ -639,6 +1048,16 @@ export function VehicleManagement() {
                     disabled={saving}
                   />
                   <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>GPS USS</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    className="form-checkbox"
+                    checked={formData.traccar}
+                    onChange={(e) => setFormData({ ...formData, traccar: e.target.checked })}
+                    disabled={saving}
+                  />
+                  <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>Traccar</span>
                 </label>
               </div>
             </div>
@@ -936,8 +1355,8 @@ export function VehicleManagement() {
                 />
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginTop: '28px' }}>
+              <div className="form-group" style={{ display: 'flex', gap: '24px', marginTop: '28px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     className="form-checkbox"
@@ -946,6 +1365,16 @@ export function VehicleManagement() {
                     disabled={saving}
                   />
                   <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>GPS USS</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    className="form-checkbox"
+                    checked={formData.traccar}
+                    onChange={(e) => setFormData({ ...formData, traccar: e.target.checked })}
+                    disabled={saving}
+                  />
+                  <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>Traccar</span>
                 </label>
               </div>
             </div>

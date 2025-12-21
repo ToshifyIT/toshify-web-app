@@ -21,7 +21,6 @@ import { extractValidDNIs } from '../utils/cabify.utils'
 import {
   WEEKS_TO_LOAD,
   INITIAL_LOADING_PROGRESS,
-  createSourceMessages,
 } from '../constants/cabify.constants'
 
 // =====================================================
@@ -172,8 +171,6 @@ export function useCabifyData(): UseCabifyDataReturn {
       error: null,
     }))
 
-    // Mostrar notificación de éxito
-    showSuccessNotification(stats.source, driverData.length, week.label)
   }
 
   const loadAsignaciones = async (driverData: CabifyDriver[]): Promise<void> => {
@@ -214,24 +211,6 @@ export function useCabifyData(): UseCabifyDataReturn {
     if (error instanceof Error) return error.message
     if (typeof error === 'string') return error
     return 'No se pudieron cargar los conductores'
-  }
-
-  // =====================================================
-  // NOTIFICACIONES
-  // =====================================================
-
-  const showSuccessNotification = (
-    source: DataSource,
-    driverCount: number,
-    weekLabel: string
-  ): void => {
-    const messages = createSourceMessages(driverCount, weekLabel)
-    const message = messages[source]
-
-    Swal.fire({
-      ...message,
-      showConfirmButton: false,
-    })
   }
 
   // =====================================================

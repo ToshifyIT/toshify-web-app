@@ -1,6 +1,46 @@
 /* src/modules/inventario/HistorialMovimientos.css */
-/* Estilos para el módulo de Historial de Movimientos - Diseño compacto */
+/* Estilos para el modulo de Historial de Movimientos - Diseno Bitacora */
 /* Con soporte para Dark Mode mediante CSS Variables */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.hist-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   HEADER - Estilo Bitacora
+   ===================================================== */
+
+.hist-header {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.hist-header-title {
+  border-left: 4px solid #DC2626;
+  padding-left: 16px;
+}
+
+.hist-header-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.hist-header-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}
 
 /* Filtros */
 .hist-filters {

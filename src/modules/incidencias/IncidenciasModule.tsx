@@ -1,16 +1,37 @@
 // src/modules/incidencias/IncidenciasModule.tsx
+import { AlertTriangle } from 'lucide-react'
+
 export function IncidenciasModule() {
   return (
-    <div>
-      <div className="card-header">
-        <h2 className="card-title">Incidencias</h2>
-        <p className="card-description">
-          Reportes de incidencias operativas
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Header - Estilo Bitacora */}
+      <div style={{
+        background: 'var(--bg-primary)',
+        borderRadius: '8px',
+        padding: '20px',
+        border: '1px solid var(--border-primary)'
+      }}>
+        <div style={{ borderLeft: '4px solid #DC2626', paddingLeft: '16px' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            Incidencias
+          </h1>
+          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'block', marginTop: '2px' }}>
+            Reportes de incidencias operativas
+          </span>
+        </div>
       </div>
-      <div style={{ marginTop: '24px' }}>
-        <p style={{ color: '#6B7280', fontSize: '14px' }}>
-          Módulo en desarrollo...
+
+      {/* Contenido */}
+      <div style={{
+        background: 'var(--bg-primary)',
+        borderRadius: '8px',
+        padding: '40px',
+        border: '1px solid var(--border-primary)',
+        textAlign: 'center'
+      }}>
+        <AlertTriangle size={48} style={{ color: 'var(--text-tertiary)', marginBottom: '16px' }} />
+        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: 0 }}>
+          Modulo en desarrollo...
         </p>
       </div>
     </div>

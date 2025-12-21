@@ -15,20 +15,51 @@ interface Vehicle {
     codigo: string
     descripcion: string
   }
+  // Información de disponibilidad
+  asignacionActiva?: {
+    id: string
+    horario: 'TURNO' | 'CARGO'
+    turnoDiurnoOcupado: boolean
+    turnoNocturnoOcupado: boolean
+  }
+  disponibilidad: 'disponible' | 'turno_diurno_libre' | 'turno_nocturno_libre' | 'ocupado'
 }
 
 interface Conductor {
   id: string
   numero_licencia: string
+  numero_dni: string
   nombres: string
   apellidos: string
   licencia_vencimiento: string
   estado_id: string
+  preferencia_turno?: string
   conductores_estados?: {
     codigo: string
     descripcion: string
   }
   tieneAsignacionActiva?: boolean
+}
+
+// Helper para formatear preferencia de turno
+const formatPreferencia = (preferencia?: string): string => {
+  switch (preferencia) {
+    case 'DIURNO': return 'Diurno'
+    case 'NOCTURNO': return 'Nocturno'
+    case 'A_CARGO': return 'A Cargo'
+    case 'SIN_PREFERENCIA': return 'Ambos'
+    default: return 'Ambos'
+  }
+}
+
+// Helper para obtener color de badge según preferencia
+const getPreferenciaBadge = (preferencia?: string): { bg: string; color: string } => {
+  switch (preferencia) {
+    case 'DIURNO': return { bg: '#FEF3C7', color: '#92400E' }
+    case 'NOCTURNO': return { bg: '#DBEAFE', color: '#1E40AF' }
+    case 'A_CARGO': return { bg: '#D1FAE5', color: '#065F46' }
+    default: return { bg: '#F3F4F6', color: '#6B7280' }
+  }
 }
 
 interface AssignmentData {
@@ -39,16 +70,17 @@ interface AssignmentData {
   conductor_diurno_id: string  // Para modo Turno
   conductor_nocturno_id: string  // Para modo Turno
   fecha_programada: string  // Fecha cuando se entregará el vehículo
+  hora_programada: string   // Hora cuando se entregará el vehículo
   // Distancia compartida para todos
   distancia: string
   // Datos para conductor diurno
-  documento_diurno: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
+  documento_diurno: 'CARTA_OFERTA' | 'ANEXO' | 'N/A' | ''
   ubicacion_diurno: string
   // Datos para conductor nocturno
-  documento_nocturno: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
+  documento_nocturno: 'CARTA_OFERTA' | 'ANEXO' | 'N/A' | ''
   ubicacion_nocturno: string
   // Datos para conductor A CARGO
-  documento_cargo: 'CONTRATO' | 'ANEXO' | 'N/A' | ''
+  documento_cargo: 'CARTA_OFERTA' | 'ANEXO' | 'N/A' | ''
   ubicacion_cargo: string
   notas: string
 }
@@ -64,7 +96,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   const [conductores, setConductores] = useState<Conductor[]>([])
   const [loading, setLoading] = useState(false)
   const [vehicleSearch, setVehicleSearch] = useState('')
+  const [vehicleAvailabilityFilter, setVehicleAvailabilityFilter] = useState<string>('')
   const [conductorSearch, setConductorSearch] = useState('')
+  const [conductorStatusFilter, setConductorStatusFilter] = useState<string>('')
 
   const [formData, setFormData] = useState<AssignmentData>({
     modalidad: '',
@@ -74,6 +108,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     conductor_diurno_id: '',
     conductor_nocturno_id: '',
     fecha_programada: new Date().toISOString().split('T')[0],
+    hora_programada: '09:00',
     distancia: '',
     documento_diurno: '',
     ubicacion_diurno: '',
@@ -84,11 +119,12 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     notas: ''
   })
 
-  // Cargar vehículos disponibles
+  // Cargar vehículos con información de disponibilidad
   useEffect(() => {
     const loadVehicles = async () => {
       try {
-        const { data, error } = await supabase
+        // 1. Obtener todos los vehículos (excepto reparación/mantenimiento)
+        const { data: vehiculosData, error: vehiculosError } = await supabase
           .from('vehiculos')
           .select(`
             id,
@@ -104,17 +140,108 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           `)
           .order('patente')
 
-        if (error) throw error
+        if (vehiculosError) throw vehiculosError
 
-        // Filtrar vehículos que NO estén en reparación ni en mantenimiento
+        // 2. Obtener asignaciones activas y programadas con sus conductores
+        const { data: asignacionesData, error: asignacionesError } = await supabase
+          .from('asignaciones')
+          .select(`
+            id,
+            vehiculo_id,
+            horario,
+            estado,
+            asignaciones_conductores (
+              horario
+            )
+          `)
+          .in('estado', ['activa', 'programado'])
+
+        if (asignacionesError) throw asignacionesError
+
+        // 3. Filtrar vehículos que NO estén en reparación ni en mantenimiento
         const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO']
-        const vehiculosDisponibles = (data || []).filter((v: any) =>
+        const vehiculosFiltrados = (vehiculosData || []).filter((v: any) =>
           !estadosNoDisponibles.includes(v.vehiculos_estados?.codigo)
-        ) as Vehicle[]
+        )
 
-        console.log('📋 Vehículos disponibles (sin reparación/mantenimiento):', vehiculosDisponibles)
+        // 4. Calcular disponibilidad de cada vehículo
+        const vehiculosConDisponibilidad: Vehicle[] = vehiculosFiltrados.map((vehiculo: any) => {
+          // Buscar asignación activa del vehículo
+          const asignacionActiva = asignacionesData?.find(
+            (a: any) => a.vehiculo_id === vehiculo.id && a.estado === 'activa'
+          ) as any
 
-        setVehicles(vehiculosDisponibles)
+          // Buscar asignación programada del vehículo
+          const asignacionProgramada = asignacionesData?.find(
+            (a: any) => a.vehiculo_id === vehiculo.id && a.estado === 'programado'
+          )
+
+          // Si tiene asignación programada, no mostrar (será filtrado después)
+          if (asignacionProgramada) {
+            return {
+              ...vehiculo,
+              disponibilidad: 'programado' as const,
+              asignacionActiva: undefined
+            }
+          }
+
+          // Si no tiene asignación activa, está disponible
+          if (!asignacionActiva) {
+            return {
+              ...vehiculo,
+              disponibilidad: 'disponible' as const,
+              asignacionActiva: undefined
+            }
+          }
+
+          // Si está A CARGO, está ocupado
+          if (asignacionActiva.horario === 'CARGO') {
+            return {
+              ...vehiculo,
+              disponibilidad: 'ocupado' as const,
+              asignacionActiva: {
+                id: asignacionActiva.id,
+                horario: 'CARGO' as const,
+                turnoDiurnoOcupado: true,
+                turnoNocturnoOcupado: true
+              }
+            }
+          }
+
+          // Si está en TURNO, verificar qué turnos están ocupados
+          const conductoresAsignados = asignacionActiva.asignaciones_conductores || []
+          const turnoDiurnoOcupado = conductoresAsignados.some((c: any) => c.horario === 'diurno')
+          const turnoNocturnoOcupado = conductoresAsignados.some((c: any) => c.horario === 'nocturno')
+
+          let disponibilidad: Vehicle['disponibilidad'] = 'ocupado'
+          if (!turnoDiurnoOcupado && !turnoNocturnoOcupado) {
+            disponibilidad = 'disponible'
+          } else if (!turnoDiurnoOcupado) {
+            disponibilidad = 'turno_diurno_libre'
+          } else if (!turnoNocturnoOcupado) {
+            disponibilidad = 'turno_nocturno_libre'
+          }
+
+          return {
+            ...vehiculo,
+            disponibilidad,
+            asignacionActiva: {
+              id: asignacionActiva.id,
+              horario: 'TURNO' as const,
+              turnoDiurnoOcupado,
+              turnoNocturnoOcupado
+            }
+          }
+        })
+
+        // 5. Excluir vehículos con asignaciones programadas
+        const vehiculosFinales = vehiculosConDisponibilidad.filter(
+          (v: any) => v.disponibilidad !== 'programado'
+        )
+
+        console.log('📋 Vehículos con disponibilidad:', vehiculosFinales)
+
+        setVehicles(vehiculosFinales)
       } catch (error) {
         console.error('Error loading vehicles:', error)
       }
@@ -132,10 +259,12 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           .select(`
             id,
             numero_licencia,
+            numero_dni,
             nombres,
             apellidos,
             licencia_vencimiento,
             estado_id,
+            preferencia_turno,
             conductores_estados (
               codigo,
               descripcion
@@ -279,12 +408,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       }
 
       // 3. Crear la asignación principal con estado PROGRAMADO
+      // Combinar fecha y hora programada
+      const fechaHoraProgramada = new Date(`${formData.fecha_programada}T${formData.hora_programada}:00`)
+
       const { data: asignacion, error: asignacionError } = await supabase
         .from('asignaciones')
         .insert({
           vehiculo_id: formData.vehiculo_id,
           conductor_id: conductorPrincipalId,
-          fecha_programada: new Date(formData.fecha_programada).toISOString(),
+          fecha_programada: fechaHoraProgramada.toISOString(),
           modalidad: formData.modalidad,
           horario: formData.horario,
           estado: 'programado',  // Estado inicial PROGRAMADO
@@ -376,19 +508,57 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
   const availableConductores = conductores.filter(c => !assignedConductorIds.includes(c.id))
 
-  // Filtrar vehículos por búsqueda
-  const filteredVehicles = vehicles.filter(v =>
-    v.patente.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
-    v.marca.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
-    v.modelo.toLowerCase().includes(vehicleSearch.toLowerCase())
-  )
+  // Filtrar y ordenar vehículos por disponibilidad
+  const filteredVehicles = vehicles
+    .filter(v => {
+      // Filtro por búsqueda de texto
+      const matchesSearch = v.patente.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+        v.marca.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+        v.modelo.toLowerCase().includes(vehicleSearch.toLowerCase())
 
-  // Filtrar conductores por búsqueda
-  const filteredAvailableConductores = availableConductores.filter(c =>
-    c.nombres.toLowerCase().includes(conductorSearch.toLowerCase()) ||
-    c.apellidos.toLowerCase().includes(conductorSearch.toLowerCase()) ||
-    c.numero_licencia.toLowerCase().includes(conductorSearch.toLowerCase())
-  )
+      // Filtro por disponibilidad
+      const matchesAvailability = vehicleAvailabilityFilter === '' ||
+        vehicleAvailabilityFilter === v.disponibilidad ||
+        (vehicleAvailabilityFilter === 'con_turno_libre' &&
+          (v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre')) ||
+        (vehicleAvailabilityFilter === 'en_uso' &&
+          (v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre'))
+
+      return matchesSearch && matchesAvailability
+    })
+    .sort((a, b) => {
+      // Prioridad: disponible > turno libre > ocupado
+      const prioridad: Record<string, number> = {
+        'disponible': 0,
+        'turno_diurno_libre': 1,
+        'turno_nocturno_libre': 1,
+        'ocupado': 2
+      }
+      const prioA = prioridad[a.disponibilidad] ?? 99
+      const prioB = prioridad[b.disponibilidad] ?? 99
+      return prioA - prioB
+    })
+
+  // Filtrar y ordenar conductores: disponibles primero, luego activos
+  const filteredAvailableConductores = availableConductores
+    .filter(c => {
+      // Filtro por búsqueda de texto (nombre, apellido o DNI)
+      const matchesSearch = c.nombres.toLowerCase().includes(conductorSearch.toLowerCase()) ||
+        c.apellidos.toLowerCase().includes(conductorSearch.toLowerCase()) ||
+        (c.numero_dni && c.numero_dni.toLowerCase().includes(conductorSearch.toLowerCase()))
+
+      // Filtro por estado
+      const matchesStatus = conductorStatusFilter === '' ||
+        (conductorStatusFilter === 'disponible' && !c.tieneAsignacionActiva) ||
+        (conductorStatusFilter === 'activo' && c.tieneAsignacionActiva)
+
+      return matchesSearch && matchesStatus
+    })
+    .sort((a, b) => {
+      // Disponibles primero (sin asignación activa), luego activos
+      if (a.tieneAsignacionActiva === b.tieneAsignacionActiva) return 0
+      return a.tieneAsignacionActiva ? 1 : -1
+    })
 
   return (
     <>
@@ -409,10 +579,11 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
         .wizard-container {
           background: white;
-          border-radius: 20px;
+          border-radius: 16px;
           width: 100%;
-          max-width: 1100px;
-          max-height: 90vh;
+          max-width: 1200px;
+          height: 92vh;
+          max-height: 850px;
           overflow: hidden;
           display: flex;
           flex-direction: column;
@@ -420,25 +591,26 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .wizard-header {
-          padding: 28px 40px;
+          padding: 16px 28px;
           border-bottom: 1px solid #E5E7EB;
           display: flex;
           align-items: center;
           justify-content: space-between;
           background: linear-gradient(to bottom, #FFFFFF 0%, #F9FAFB 100%);
+          flex-shrink: 0;
         }
 
         .wizard-title {
           margin: 0;
-          font-size: 26px;
+          font-size: clamp(16px, 1.5vw, 20px);
           font-weight: 700;
           color: #111827;
           letter-spacing: -0.5px;
         }
 
         .wizard-subtitle {
-          margin: 6px 0 0 0;
-          font-size: 14px;
+          margin: 4px 0 0 0;
+          font-size: clamp(10px, 1vw, 12px);
           color: #6B7280;
           font-weight: 400;
         }
@@ -462,29 +634,30 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 36px 32px;
+          padding: 20px 24px;
           background: white;
           border-bottom: 1px solid #E5E7EB;
+          flex-shrink: 0;
         }
 
         .step-item {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 10px;
+          gap: 6px;
           position: relative;
         }
 
         .step-circle {
-          width: 52px;
-          height: 52px;
+          width: clamp(32px, 3vw, 40px);
+          height: clamp(32px, 3vw, 40px);
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
           font-weight: 700;
-          font-size: 18px;
-          border: 3px solid #E5E7EB;
+          font-size: clamp(11px, 1vw, 14px);
+          border: 2px solid #E5E7EB;
           background: white;
           color: #9CA3AF;
           transition: all 0.25s ease;
@@ -507,12 +680,12 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .step-label {
-          font-size: 13px;
+          font-size: clamp(9px, 0.8vw, 11px);
           font-weight: 600;
           color: #9CA3AF;
           white-space: nowrap;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 0.3px;
         }
 
         .step-label.active {
@@ -524,11 +697,11 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .step-connector {
-          width: 140px;
-          height: 3px;
+          width: 80px;
+          height: 2px;
           background: #E5E7EB;
-          margin: 0 20px;
-          margin-bottom: 42px;
+          margin: 0 12px;
+          margin-bottom: 28px;
           border-radius: 2px;
           transition: all 0.3s ease;
         }
@@ -540,8 +713,25 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         .wizard-content {
           flex: 1;
           overflow-y: auto;
-          padding: 40px 48px;
+          overflow-x: hidden;
+          padding: 20px 28px;
           background: #FAFBFC;
+        }
+
+        .wizard-content::-webkit-scrollbar {
+          width: 0px;
+          background: transparent;
+        }
+
+        .wizard-content {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .step-3-container {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
         }
 
         .wizard-footer {
@@ -665,14 +855,14 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .modality-title {
-          font-size: 20px;
+          font-size: clamp(16px, 1.5vw, 20px);
           font-weight: 700;
           color: #1F2937;
           margin: 0 0 8px 0;
         }
 
         .modality-description {
-          font-size: 13px;
+          font-size: clamp(11px, 1vw, 13px);
           color: #6B7280;
           margin: 0;
           line-height: 1.5;
@@ -684,6 +874,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           max-height: 450px;
           overflow-y: auto;
           padding-right: 8px;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .vehicle-grid::-webkit-scrollbar {
+          width: 0px;
+          background: transparent;
         }
 
         .vehicle-card {
@@ -717,7 +914,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .vehicle-patente {
-          font-size: 17px;
+          font-size: clamp(14px, 1.3vw, 17px);
           font-weight: 700;
           color: #111827;
           margin: 0 0 6px 0;
@@ -725,7 +922,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .vehicle-details {
-          font-size: 13px;
+          font-size: clamp(11px, 1vw, 13px);
           color: #6B7280;
           margin: 0;
         }
@@ -760,67 +957,101 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         .conductores-layout {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 24px;
-          max-height: 450px;
+          gap: 16px;
         }
 
         .conductores-layout.turno-mode {
           grid-template-columns: 1fr 1fr 1fr;
-          gap: 20px;
+          gap: 12px;
         }
 
         .conductores-column {
           border: 2px solid #E5E7EB;
-          border-radius: 16px;
-          padding: 20px;
-          overflow-y: auto;
+          border-radius: 12px;
+          padding: 14px;
+          display: flex;
+          flex-direction: column;
           background: white;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          min-height: 350px;
+          max-height: 420px;
+        }
+
+        .conductores-list {
+          flex: 1;
+          overflow-y: auto;
+          padding-right: 6px;
+          margin-right: -6px;
+        }
+
+        .conductores-list::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .conductores-list::-webkit-scrollbar-track {
+          background: #F3F4F6;
+          border-radius: 3px;
+        }
+
+        .conductores-list::-webkit-scrollbar-thumb {
+          background: #D1D5DB;
+          border-radius: 3px;
+        }
+
+        .conductores-list::-webkit-scrollbar-thumb:hover {
+          background: #9CA3AF;
         }
 
         .conductores-column.turno-diurno {
           border-color: #FBBF24;
           background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
           box-shadow: 0 4px 12px rgba(251, 191, 36, 0.15);
+          overflow: hidden;
+          min-height: auto;
+          max-height: none;
         }
 
         .conductores-column.turno-nocturno {
           border-color: #3B82F6;
           background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
           box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+          overflow: hidden;
+          min-height: auto;
+          max-height: none;
         }
 
         .conductores-column.a-cargo {
           border-color: #10B981;
           background: linear-gradient(135deg, #F0FDF4 0%, #D1FAE5 100%);
           box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+          overflow: hidden;
+          min-height: auto;
+          max-height: none;
         }
 
         .conductores-column h4 {
-          margin: 0 0 16px 0;
-          font-size: 16px;
+          margin: 0 0 10px 0;
+          font-size: clamp(11px, 1vw, 13px);
           font-weight: 700;
           color: #1F2937;
-          position: sticky;
-          top: 0;
-          background: transparent;
-          padding-bottom: 12px;
+          padding-bottom: 8px;
           border-bottom: 2px solid rgba(0, 0, 0, 0.1);
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
+          flex-shrink: 0;
         }
 
         .turno-badge {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          padding: 6px 14px;
-          border-radius: 8px;
-          font-size: 13px;
+          gap: 4px;
+          padding: 4px 10px;
+          border-radius: 6px;
+          font-size: clamp(9px, 0.8vw, 11px);
           font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 0.3px;
         }
 
         .turno-badge.diurno {
@@ -845,13 +1076,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .conductor-item {
-          border: 2px solid #E5E7EB;
-          border-radius: 10px;
-          padding: 14px;
-          margin-bottom: 10px;
+          border: 1px solid #E5E7EB;
+          border-radius: 8px;
+          padding: 10px;
+          margin-bottom: 8px;
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
           cursor: grab;
           transition: all 0.2s ease;
           background: white;
@@ -866,8 +1097,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         .conductor-item:hover {
           border-color: #E63946;
           background: #FFF;
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
-          transform: translateX(4px);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+          transform: translateX(2px);
         }
 
         .conductor-item.selected {
@@ -880,15 +1111,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .conductor-avatar {
-          width: 44px;
-          height: 44px;
+          width: 36px;
+          height: 36px;
           border-radius: 50%;
           background: linear-gradient(135deg, #E5E7EB 0%, #D1D5DB 100%);
           display: flex;
           align-items: center;
           justify-content: center;
           font-weight: 700;
-          font-size: 14px;
+          font-size: 12px;
           color: #6B7280;
           flex-shrink: 0;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -900,17 +1131,17 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .conductor-name {
-          font-size: 14px;
+          font-size: clamp(10px, 0.9vw, 12px);
           font-weight: 600;
           color: #111827;
-          margin: 0 0 4px 0;
+          margin: 0 0 2px 0;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
         .conductor-license {
-          font-size: 12px;
+          font-size: clamp(9px, 0.8vw, 11px);
           color: #9CA3AF;
           margin: 0;
           font-weight: 500;
@@ -932,21 +1163,21 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
         .step-description {
           text-align: center;
-          margin-bottom: 40px;
+          margin-bottom: clamp(12px, 1.5vw, 20px);
         }
 
         .step-description h3 {
-          font-size: 22px;
+          font-size: clamp(14px, 1.3vw, 18px);
           font-weight: 700;
           color: #1F2937;
-          margin: 0 0 12px 0;
+          margin: 0 0 6px 0;
         }
 
         .step-description p {
-          font-size: 14px;
+          font-size: clamp(10px, 0.9vw, 13px);
           color: #6B7280;
           margin: 0;
-          line-height: 1.6;
+          line-height: 1.5;
         }
 
         .empty-state {
@@ -957,16 +1188,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .drop-zone {
-          border: 3px dashed rgba(0, 0, 0, 0.15);
-          border-radius: 12px;
-          padding: 24px;
+          border: 2px dashed rgba(0, 0, 0, 0.15);
+          border-radius: 10px;
+          padding: 16px;
           text-align: center;
-          min-height: 110px;
+          min-height: 80px;
           display: flex;
           align-items: center;
           justify-content: center;
           background: rgba(255, 255, 255, 0.6);
-          margin-bottom: 16px;
           transition: all 0.2s ease;
         }
 
@@ -979,26 +1209,26 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         .drop-zone.drag-over {
           border-color: #E63946;
           background: rgba(230, 57, 70, 0.05);
-          transform: scale(1.02);
-          box-shadow: 0 4px 12px rgba(230, 57, 70, 0.15);
+          transform: scale(1.01);
+          box-shadow: 0 2px 8px rgba(230, 57, 70, 0.15);
         }
 
         .drop-zone-empty {
           color: #9CA3AF;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 500;
         }
 
         .assigned-conductor-card {
           width: 100%;
           border: 2px solid #E63946;
-          border-radius: 12px;
-          padding: 16px;
+          border-radius: 10px;
+          padding: 12px;
           background: white;
           display: flex;
           align-items: center;
-          gap: 14px;
-          box-shadow: 0 4px 12px rgba(230, 57, 70, 0.15);
+          gap: 10px;
+          box-shadow: 0 2px 8px rgba(230, 57, 70, 0.15);
         }
 
         @media (max-width: 768px) {
@@ -1118,58 +1348,120 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   <p>Selecciona el vehículo que deseas asignar.</p>
                 </div>
 
-                {/* Buscador de vehículos */}
-                <div style={{ marginBottom: '20px', maxWidth: '600px', margin: '0 auto 20px auto' }}>
+                {/* Buscador y Filtro de vehículos */}
+                <div style={{ marginBottom: '20px', maxWidth: '700px', margin: '0 auto 20px auto', display: 'flex', gap: '12px' }}>
                   <input
                     type="text"
                     placeholder="Buscar por patente, marca o modelo..."
                     value={vehicleSearch}
                     onChange={(e) => setVehicleSearch(e.target.value)}
                     style={{
-                      width: '100%',
+                      flex: 1,
                       padding: '12px 16px',
                       border: '2px solid #E5E7EB',
                       borderRadius: '8px',
-                      fontSize: '14px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
                       fontFamily: 'inherit'
                     }}
                   />
+                  <select
+                    value={vehicleAvailabilityFilter}
+                    onChange={(e) => setVehicleAvailabilityFilter(e.target.value)}
+                    style={{
+                      padding: '12px 16px',
+                      border: '2px solid #E5E7EB',
+                      borderRadius: '8px',
+                      fontSize: 'clamp(12px, 1vw, 14px)',
+                      fontFamily: 'inherit',
+                      background: 'white',
+                      cursor: 'pointer',
+                      minWidth: '180px'
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    <option value="disponible">Disponible</option>
+                    <option value="con_turno_libre">Con turno libre</option>
+                    <option value="en_uso">En Uso</option>
+                  </select>
                 </div>
 
                 <div className="vehicle-grid">
                   {filteredVehicles.length === 0 ? (
                     <div className="empty-state">
-                      {vehicleSearch ? 'No se encontraron vehículos con ese criterio' : 'No hay vehículos disponibles en este momento'}
+                      {vehicleSearch || vehicleAvailabilityFilter ? 'No se encontraron vehículos con ese criterio' : 'No hay vehículos disponibles en este momento'}
                     </div>
                   ) : (
-                    filteredVehicles.map((vehicle) => (
-                      <div
-                        key={vehicle.id}
-                        className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
-                        onClick={() => handleSelectVehicle(vehicle)}
-                      >
-                        <div className="vehicle-info">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                            <h4 className="vehicle-patente" style={{ margin: 0 }}>{vehicle.patente}</h4>
-                            <span style={{
-                              background: vehicle.vehiculos_estados?.codigo === 'DISPONIBLE' ? '#10B981' :
-                                         vehicle.vehiculos_estados?.codigo === 'EN_USO' ? '#F59E0B' : '#6B7280',
-                              color: 'white',
-                              padding: '2px 8px',
-                              borderRadius: '6px',
-                              fontSize: '11px',
-                              fontWeight: '600'
-                            }}>
-                              {vehicle.vehiculos_estados?.descripcion || 'N/A'}
-                            </span>
+                    filteredVehicles.map((vehicle) => {
+                      // Determinar badge y color según disponibilidad
+                      let badgeText = ''
+                      let badgeColor = ''
+                      let badgeBg = ''
+                      let detalleText = ''
+
+                      switch (vehicle.disponibilidad) {
+                        case 'disponible':
+                          badgeText = 'Disponible'
+                          badgeBg = '#10B981'
+                          badgeColor = 'white'
+                          detalleText = 'Libre para asignación'
+                          break
+                        case 'turno_diurno_libre':
+                          badgeText = 'En Uso'
+                          badgeBg = '#F59E0B'
+                          badgeColor = 'white'
+                          detalleText = '☀️ Diurno Libre'
+                          break
+                        case 'turno_nocturno_libre':
+                          badgeText = 'En Uso'
+                          badgeBg = '#F59E0B'
+                          badgeColor = 'white'
+                          detalleText = '🌙 Nocturno Libre'
+                          break
+                        case 'ocupado':
+                          badgeText = 'En Uso'
+                          badgeBg = '#F59E0B'
+                          badgeColor = 'white'
+                          detalleText = vehicle.asignacionActiva?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'
+                          break
+                      }
+
+                      return (
+                        <div
+                          key={vehicle.id}
+                          className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
+                          onClick={() => handleSelectVehicle(vehicle)}
+                        >
+                          <div className="vehicle-info">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                              <h4 className="vehicle-patente" style={{ margin: 0 }}>{vehicle.patente}</h4>
+                              <span style={{
+                                background: badgeBg,
+                                color: badgeColor,
+                                padding: '3px 10px',
+                                borderRadius: '6px',
+                                fontSize: 'clamp(9px, 0.8vw, 11px)',
+                                fontWeight: '600'
+                              }}>
+                                {badgeText}
+                              </span>
+                              {detalleText && (
+                                <span style={{
+                                  color: '#6B7280',
+                                  fontSize: 'clamp(9px, 0.8vw, 11px)',
+                                  fontWeight: '500'
+                                }}>
+                                  ({detalleText})
+                                </span>
+                              )}
+                            </div>
+                            <p className="vehicle-details">
+                              {vehicle.marca} {vehicle.modelo} • {vehicle.anio}
+                            </p>
                           </div>
-                          <p className="vehicle-details">
-                            {vehicle.marca} {vehicle.modelo} • {vehicle.anio}
-                          </p>
+                          <div className={`radio-circle ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`} />
                         </div>
-                        <div className={`radio-circle ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`} />
-                      </div>
-                    ))
+                      )
+                    })
                   )}
                 </div>
               </div>
@@ -1192,64 +1484,96 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   <div className="conductores-column">
                     <h4>Conductores Disponibles</h4>
 
-                    {/* Buscador de conductores */}
-                    <div style={{ marginBottom: '12px' }}>
+                    {/* Filtros: Buscador y Estado */}
+                    <div style={{ marginBottom: '8px', flexShrink: 0, display: 'flex', gap: '8px' }}>
                       <input
                         type="text"
-                        placeholder="Buscar por nombre o licencia..."
+                        placeholder="Buscar por nombre o DNI..."
                         value={conductorSearch}
                         onChange={(e) => setConductorSearch(e.target.value)}
                         style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          border: '2px solid #E5E7EB',
-                          borderRadius: '8px',
-                          fontSize: '13px',
+                          flex: 1,
+                          padding: '8px 10px',
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '6px',
+                          fontSize: 'clamp(10px, 0.9vw, 12px)',
                           fontFamily: 'inherit'
                         }}
                       />
+                      <select
+                        value={conductorStatusFilter}
+                        onChange={(e) => setConductorStatusFilter(e.target.value)}
+                        style={{
+                          padding: '8px 10px',
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '6px',
+                          fontSize: 'clamp(10px, 0.9vw, 12px)',
+                          fontFamily: 'inherit',
+                          background: 'white',
+                          cursor: 'pointer',
+                          minWidth: '100px'
+                        }}
+                      >
+                        <option value="">Todos</option>
+                        <option value="disponible">Disponible</option>
+                        <option value="activo">Activo</option>
+                      </select>
                     </div>
 
-                    {filteredAvailableConductores.length === 0 ? (
-                      <div className="empty-state">
-                        {conductorSearch ? 'No se encontraron conductores' : 'No hay conductores disponibles'}
-                      </div>
-                    ) : (
-                      filteredAvailableConductores.map((conductor) => (
-                        <div
-                          key={conductor.id}
-                          className="conductor-item"
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('conductorId', conductor.id)
-                            e.dataTransfer.effectAllowed = 'move'
-                          }}
-                          style={{ cursor: 'grab' }}
-                        >
-                          <div className="conductor-avatar">
-                            {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
-                          </div>
-                          <div className="conductor-info">
-                            <p className="conductor-name">
-                              {conductor.nombres} {conductor.apellidos}
-                            </p>
-                            <p className="conductor-license">Lic: {conductor.numero_licencia}</p>
-                            <span style={{
-                              fontSize: '11px',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontWeight: '600',
-                              marginTop: '4px',
-                              display: 'inline-block',
-                              background: conductor.tieneAsignacionActiva ? '#FEE2E2' : '#D1FAE5',
-                              color: conductor.tieneAsignacionActiva ? '#991B1B' : '#065F46'
-                            }}>
-                              {conductor.tieneAsignacionActiva ? 'Asignado' : 'Disponible'}
-                            </span>
-                          </div>
+                    <div className="conductores-list">
+                      {filteredAvailableConductores.length === 0 ? (
+                        <div className="empty-state">
+                          {conductorSearch ? 'No se encontraron conductores' : 'No hay conductores disponibles'}
                         </div>
-                      ))
-                    )}
+                      ) : (
+                        filteredAvailableConductores.map((conductor) => (
+                          <div
+                            key={conductor.id}
+                            className="conductor-item"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('conductorId', conductor.id)
+                              e.dataTransfer.effectAllowed = 'move'
+                            }}
+                            style={{ cursor: 'grab' }}
+                          >
+                            <div className="conductor-avatar">
+                              {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
+                            </div>
+                            <div className="conductor-info">
+                              <p className="conductor-name">
+                                {conductor.nombres} {conductor.apellidos}
+                              </p>
+                              <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span>DNI: {conductor.numero_dni || '-'}</span>
+                                <span style={{
+                                  fontSize: '9px',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontWeight: '600',
+                                  background: getPreferenciaBadge(conductor.preferencia_turno).bg,
+                                  color: getPreferenciaBadge(conductor.preferencia_turno).color
+                                }}>
+                                  {formatPreferencia(conductor.preferencia_turno)}
+                                </span>
+                              </p>
+                              <span style={{
+                                fontSize: '10px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontWeight: '600',
+                                marginTop: '4px',
+                                display: 'inline-block',
+                                background: conductor.tieneAsignacionActiva ? '#D1FAE5' : '#FEF3C7',
+                                color: conductor.tieneAsignacionActiva ? '#065F46' : '#92400E'
+                              }}>
+                                {conductor.tieneAsignacionActiva ? 'Activo' : 'Disponible'}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
 
                   {/* Modo TURNO: Mostrar dos columnas (Diurno y Nocturno) */}
@@ -1287,7 +1611,19 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                 <p className="conductor-name">
                                   {conductorDiurno.nombres} {conductorDiurno.apellidos}
                                 </p>
-                                <p className="conductor-license">Lic: {conductorDiurno.numero_licencia}</p>
+                                <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span>DNI: {conductorDiurno.numero_dni || '-'}</span>
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    background: getPreferenciaBadge(conductorDiurno.preferencia_turno).bg,
+                                    color: getPreferenciaBadge(conductorDiurno.preferencia_turno).color
+                                  }}>
+                                    {formatPreferencia(conductorDiurno.preferencia_turno)}
+                                  </span>
+                                </p>
                               </div>
                               <button
                                 className="remove-btn"
@@ -1337,7 +1673,19 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                 <p className="conductor-name">
                                   {conductorNocturno.nombres} {conductorNocturno.apellidos}
                                 </p>
-                                <p className="conductor-license">Lic: {conductorNocturno.numero_licencia}</p>
+                                <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span>DNI: {conductorNocturno.numero_dni || '-'}</span>
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    background: getPreferenciaBadge(conductorNocturno.preferencia_turno).bg,
+                                    color: getPreferenciaBadge(conductorNocturno.preferencia_turno).color
+                                  }}>
+                                    {formatPreferencia(conductorNocturno.preferencia_turno)}
+                                  </span>
+                                </p>
                               </div>
                               <button
                                 className="remove-btn"
@@ -1390,7 +1738,19 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                               <p className="conductor-name">
                                 {conductorCargo.nombres} {conductorCargo.apellidos}
                               </p>
-                              <p className="conductor-license">Lic: {conductorCargo.numero_licencia}</p>
+                              <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span>DNI: {conductorCargo.numero_dni || '-'}</span>
+                                <span style={{
+                                  fontSize: '9px',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontWeight: '600',
+                                  background: getPreferenciaBadge(conductorCargo.preferencia_turno).bg,
+                                  color: getPreferenciaBadge(conductorCargo.preferencia_turno).color
+                                }}>
+                                  {formatPreferencia(conductorCargo.preferencia_turno)}
+                                </span>
+                              </p>
                             </div>
                             <button
                               className="remove-btn"
@@ -1421,33 +1781,59 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                 </div>
 
                 <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-                  <div style={{ marginBottom: '24px' }}>
-                    <label style={{
-                      display: 'block',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#374151',
-                      marginBottom: '8px'
-                    }}>
-                      Fecha Programada de Entrega *
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.fecha_programada}
-                      onChange={(e) => setFormData({ ...formData, fecha_programada: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        border: '2px solid #E5E7EB',
-                        borderRadius: '8px',
-                        fontSize: '14px',
-                        fontFamily: 'inherit'
-                      }}
-                    />
-                    <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
-                      Fecha en la que se entregará el vehículo al conductor
-                    </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#374151',
+                        marginBottom: '6px'
+                      }}>
+                        Fecha de Entrega *
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.fecha_programada}
+                        onChange={(e) => setFormData({ ...formData, fecha_programada: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '2px solid #E5E7EB',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#374151',
+                        marginBottom: '6px'
+                      }}>
+                        Hora de Entrega *
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.hora_programada}
+                        onChange={(e) => setFormData({ ...formData, hora_programada: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '2px solid #E5E7EB',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    </div>
                   </div>
+                  <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '-16px', marginBottom: '20px' }}>
+                    Fecha y hora programada para la entrega del vehículo
+                  </p>
 
                   {/* Campo de Distancia Compartido */}
                   <div style={{ marginBottom: '24px' }}>
@@ -1500,20 +1886,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
-                          <option value="CONTRATO">CONTRATO</option>
+                          <option value="CARTA_OFERTA">CARTA OFERTA</option>
                           <option value="ANEXO">ANEXO</option>
                           <option value="N/A">N/A</option>
                         </select>
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                          Ubicación *
+                          Zona *
                         </label>
                         <input
                           type="text"
                           value={formData.ubicacion_diurno}
                           onChange={(e) => setFormData({ ...formData, ubicacion_diurno: e.target.value })}
-                          placeholder="Ingrese la ubicación"
+                          placeholder="Ingrese la zona"
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
                       </div>
@@ -1542,20 +1928,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
-                          <option value="CONTRATO">CONTRATO</option>
+                          <option value="CARTA_OFERTA">CARTA OFERTA</option>
                           <option value="ANEXO">ANEXO</option>
                           <option value="N/A">N/A</option>
                         </select>
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                          Ubicación *
+                          Zona *
                         </label>
                         <input
                           type="text"
                           value={formData.ubicacion_nocturno}
                           onChange={(e) => setFormData({ ...formData, ubicacion_nocturno: e.target.value })}
-                          placeholder="Ingrese la ubicación"
+                          placeholder="Ingrese la zona"
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
                       </div>
@@ -1584,20 +1970,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
-                          <option value="CONTRATO">CONTRATO</option>
+                          <option value="CARTA_OFERTA">CARTA OFERTA</option>
                           <option value="ANEXO">ANEXO</option>
                           <option value="N/A">N/A</option>
                         </select>
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                          Ubicación *
+                          Zona *
                         </label>
                         <input
                           type="text"
                           value={formData.ubicacion_cargo}
                           onChange={(e) => setFormData({ ...formData, ubicacion_cargo: e.target.value })}
-                          placeholder="Ingrese la ubicación"
+                          placeholder="Ingrese la zona"
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
                       </div>

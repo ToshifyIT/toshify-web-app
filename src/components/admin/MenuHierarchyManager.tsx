@@ -7,6 +7,7 @@ import { DataTable } from '../ui/DataTable/DataTable'
 import { Menu as MenuIcon } from 'lucide-react'
 import Swal from 'sweetalert2'
 import './MenuHierarchyManager.css'
+import './AdminStyles.css'
 
 interface MenuRow {
   id: string
@@ -418,14 +419,14 @@ export function MenuHierarchyManager() {
   )
 
   return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <div>
-          <h1 className="module-title">Gestor de Menús</h1>
-          <p className="module-subtitle">
-            Administra la estructura de navegación del sistema
-          </p>
+    <div className="admin-module">
+      {/* Header - Estilo Bitacora */}
+      <div className="admin-header">
+        <div className="admin-header-title">
+          <h1>Gestor de Menus</h1>
+          <span className="admin-header-subtitle">
+            Administra la estructura de navegacion del sistema
+          </span>
         </div>
       </div>
 

@@ -1,20 +1,20 @@
 /* src/components/admin/MenuHierarchyManager.css */
-/* Estilos para el Gestor de Menús */
+/* Estilos para el Gestor de Menús - Diseño minimalista */
 
 /* Badges de tipo */
 .mhm-type-menu {
-  background: #DBEAFE;
-  color: #1E40AF;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
 }
 
 .mhm-type-submenu {
-  background: #F3E8FF;
-  color: #6B21A8;
+  background: rgba(139, 92, 246, 0.1);
+  color: #8B5CF6;
 }
 
 /* Indentación visual para submenús */
 .mhm-submenu-indicator {
-  color: #9CA3AF;
+  color: var(--text-muted, #9CA3AF);
   margin-right: 8px;
 }
 
@@ -22,8 +22,8 @@
 .mhm-route-code {
   font-size: 12px;
   font-family: monospace;
-  color: #6B7280;
-  background: #F3F4F6;
+  color: var(--text-secondary, #6B7280);
+  background: var(--bg-secondary, #F3F4F6);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -31,7 +31,7 @@
 /* Botones de acción en header */
 .mhm-header-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
 /* Modal */
@@ -49,70 +49,73 @@
 }
 
 .mhm-modal-content {
-  background: white;
-  padding: 32px;
-  border-radius: 16px;
-  max-width: 600px;
+  background: var(--bg-primary, white);
+  padding: 24px;
+  border-radius: 8px;
+  max-width: 500px;
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-primary, #E5E7EB);
 }
 
 .mhm-modal-title {
-  margin: 0 0 24px 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: #1F2937;
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #1F2937);
 }
 
 /* Formularios en modal */
 .mhm-form-group {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .mhm-form-label {
   display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-  font-size: 14px;
-  color: #1F2937;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary, #1F2937);
 }
 
 .mhm-form-input {
   width: 100%;
-  padding: 10px 14px;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary, #E5E7EB);
+  border-radius: 6px;
   font-size: 14px;
   font-family: inherit;
   box-sizing: border-box;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--input-bg, #fff);
+  color: var(--text-primary, #1F2937);
+  transition: border-color 0.15s;
 }
 
 .mhm-form-input:focus {
   outline: none;
   border-color: #E63946;
-  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+  box-shadow: 0 0 0 2px rgba(230, 57, 70, 0.1);
 }
 
 .mhm-form-input:disabled {
-  background: #F9FAFB;
+  background: var(--bg-secondary, #F9FAFB);
   cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .mhm-form-hint {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
-  color: #6B7280;
+  color: var(--text-secondary, #6B7280);
 }
 
 .mhm-modal-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   justify-content: flex-end;
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
 /* Responsive */
@@ -127,7 +130,7 @@
   }
 
   .mhm-modal-content {
-    padding: 24px;
+    padding: 20px;
     margin: 16px;
   }
 

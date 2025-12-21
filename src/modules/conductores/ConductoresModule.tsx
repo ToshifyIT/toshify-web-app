@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import Swal from "sweetalert2";
@@ -29,6 +29,16 @@ export function ConductoresModule() {
   const [selectedConductor, setSelectedConductor] =
     useState<ConductorWithRelations | null>(null);
 
+  // Stats data para tarjetas de resumen
+  const [statsData, setStatsData] = useState({
+    totalConductores: 0,
+    conductoresActivos: 0,
+    conductoresDisponibles: 0,
+    conductoresAsignados: 0,
+    conductoresBaja: 0,
+    licenciasPorVencer: 0,
+  });
+
   // Removed TanStack Table states - now handled by DataTable component
 
   // Catalog states
@@ -42,6 +52,14 @@ export function ConductoresModule() {
   );
   const [estadosLicencia, setEstadosLicencia] = useState<LicenciaEstado[]>([]);
   const [tiposLicencia, setTiposLicencia] = useState<LicenciaTipo[]>([]);
+
+  // Column filter states
+  const [nombreFilter, setNombreFilter] = useState('');
+  const [dniFilter, setDniFilter] = useState('');
+  const [estadoFilter, setEstadoFilter] = useState('');
+  const [turnoFilter, setTurnoFilter] = useState('');
+  const [asignacionFilter, setAsignacionFilter] = useState('');
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions();
 
@@ -78,12 +96,95 @@ export function ConductoresModule() {
     fecha_terminacion: "",
     motivo_baja: "",
     estado_id: "",
+    preferencia_turno: "SIN_PREFERENCIA",
   });
 
   useEffect(() => {
     loadConductores();
     loadCatalogs();
+    loadStatsData();
   }, []);
+
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openColumnFilter]);
+
+  const loadStatsData = async () => {
+    try {
+      // Total de conductores
+      const { count: totalConductores } = await supabase
+        .from("conductores")
+        .select("*", { count: "exact", head: true });
+
+      // Obtener estados de conductores
+      const { data: estadosCond } = await supabase
+        .from("conductores_estados")
+        .select("id, codigo") as { data: Array<{ id: string; codigo: string }> | null };
+
+      const estadoActivoId = estadosCond?.find((e) => e.codigo.toLowerCase() === "activo")?.id;
+      const estadoBajaId = estadosCond?.find((e) => e.codigo.toLowerCase() === "baja")?.id;
+
+      // Conductores activos
+      let conductoresActivos = 0;
+      if (estadoActivoId) {
+        const { count } = await supabase
+          .from("conductores")
+          .select("*", { count: "exact", head: true })
+          .eq("estado_id", estadoActivoId);
+        conductoresActivos = count || 0;
+      }
+
+      // Conductores de baja
+      let conductoresBaja = 0;
+      if (estadoBajaId) {
+        const { count } = await supabase
+          .from("conductores")
+          .select("*", { count: "exact", head: true })
+          .eq("estado_id", estadoBajaId);
+        conductoresBaja = count || 0;
+      }
+
+      // Conductores asignados (en asignaciones activas)
+      const { data: asignacionesActivas } = await supabase
+        .from("asignaciones_conductores")
+        .select("conductor_id")
+        .in("estado", ["asignado", "activo"]) as { data: Array<{ conductor_id: string }> | null };
+
+      const conductoresAsignadosIds = new Set(asignacionesActivas?.map((a) => a.conductor_id) || []);
+      const conductoresAsignados = conductoresAsignadosIds.size;
+
+      // Conductores disponibles = activos - asignados
+      const conductoresDisponibles = Math.max(0, conductoresActivos - conductoresAsignados);
+
+      // Licencias por vencer (próximos 30 días)
+      const hoy = new Date();
+      const en30Dias = new Date();
+      en30Dias.setDate(en30Dias.getDate() + 30);
+      const { count: licenciasPorVencer } = await supabase
+        .from("conductores")
+        .select("*", { count: "exact", head: true })
+        .gte("licencia_vencimiento", hoy.toISOString().split("T")[0])
+        .lte("licencia_vencimiento", en30Dias.toISOString().split("T")[0]);
+
+      setStatsData({
+        totalConductores: totalConductores || 0,
+        conductoresActivos,
+        conductoresDisponibles,
+        conductoresAsignados,
+        conductoresBaja,
+        licenciasPorVencer: licenciasPorVencer || 0,
+      });
+    } catch (err) {
+      console.error("Error loading stats:", err);
+    }
+  };
 
   const loadCatalogs = async () => {
     try {
@@ -314,6 +415,7 @@ export function ConductoresModule() {
             fecha_terminacion: formData.fecha_terminacion || null,
             motivo_baja: formData.motivo_baja || null,
             estado_id: formData.estado_id || null,
+            preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
             created_by: user?.id,
           },
         ])
@@ -403,6 +505,7 @@ export function ConductoresModule() {
           fecha_terminacion: formData.fecha_terminacion || null,
           motivo_baja: formData.motivo_baja || null,
           estado_id: formData.estado_id || null,
+          preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
           updated_at: new Date().toISOString(),
         })
         .eq("id", selectedConductor.id);
@@ -533,6 +636,7 @@ export function ConductoresModule() {
       fecha_terminacion: conductor.fecha_terminacion || "",
       motivo_baja: conductor.motivo_baja || "",
       estado_id: conductor.estado_id || "",
+      preferencia_turno: (conductor as any).preferencia_turno || "SIN_PREFERENCIA",
     });
     setShowEditModal(true);
   };
@@ -571,6 +675,7 @@ export function ConductoresModule() {
       fecha_terminacion: "",
       motivo_baja: "",
       estado_id: "",
+      preferencia_turno: "SIN_PREFERENCIA",
     });
   };
 
@@ -600,12 +705,104 @@ export function ConductoresModule() {
     }
   };
 
+  // Filtrar conductores según los filtros de columna
+  const filteredConductores = useMemo(() => {
+    let result = conductores;
+
+    if (nombreFilter) {
+      result = result.filter(c =>
+        `${c.nombres} ${c.apellidos}`.toLowerCase().includes(nombreFilter.toLowerCase())
+      );
+    }
+
+    if (dniFilter) {
+      result = result.filter(c =>
+        c.numero_dni?.toLowerCase().includes(dniFilter.toLowerCase())
+      );
+    }
+
+    if (estadoFilter) {
+      result = result.filter(c =>
+        c.conductores_estados?.codigo === estadoFilter
+      );
+    }
+
+    if (turnoFilter) {
+      result = result.filter(c =>
+        (c as any).preferencia_turno === turnoFilter
+      );
+    }
+
+    if (asignacionFilter) {
+      if (asignacionFilter === 'asignado') {
+        result = result.filter(c => (c as any).vehiculo_asignado);
+      } else if (asignacionFilter === 'disponible') {
+        result = result.filter(c =>
+          !(c as any).vehiculo_asignado &&
+          c.conductores_estados?.codigo?.toLowerCase() === 'activo'
+        );
+      }
+    }
+
+    return result;
+  }, [conductores, nombreFilter, dniFilter, estadoFilter, turnoFilter, asignacionFilter]);
+
+  // Obtener lista única de estados para el filtro
+  const uniqueEstados = useMemo(() => {
+    const estados = new Map<string, string>();
+    conductores.forEach(c => {
+      if (c.conductores_estados?.codigo) {
+        estados.set(c.conductores_estados.codigo, c.conductores_estados.descripcion || c.conductores_estados.codigo);
+      }
+    });
+    return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [conductores]);
+
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<ConductorWithRelations>[]>(
     () => [
       {
         accessorKey: "nombres",
-        header: "Nombre",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Nombre</span>
+            <button
+              className={`dt-column-filter-btn ${nombreFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'nombre' ? null : 'nombre');
+              }}
+              title="Filtrar por nombre"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'nombre' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar nombre..."
+                  value={nombreFilter}
+                  onChange={(e) => setNombreFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {nombreFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setNombreFilter('');
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => (
           <strong>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
         ),
@@ -613,20 +810,129 @@ export function ConductoresModule() {
       },
       {
         accessorKey: "numero_dni",
-        header: "DNI",
-        cell: ({ getValue }) => (getValue() as string) || "N/A",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>DNI</span>
+            <button
+              className={`dt-column-filter-btn ${dniFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'dni' ? null : 'dni');
+              }}
+              title="Filtrar por DNI"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'dni' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar DNI..."
+                  value={dniFilter}
+                  onChange={(e) => setDniFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {dniFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDniFilter('');
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
+        cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
       {
-        accessorKey: "cbu",
-        header: "CBU",
-        cell: ({ getValue }) => (getValue() as string) || "N/A",
+        accessorKey: "preferencia_turno",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Turno</span>
+            <button
+              className={`dt-column-filter-btn ${turnoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'turno' ? null : 'turno');
+              }}
+              title="Filtrar por turno"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'turno' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <button
+                  className={`dt-column-filter-option ${turnoFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTurnoFilter('');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  Todos
+                </button>
+                <button
+                  className={`dt-column-filter-option ${turnoFilter === 'DIURNO' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTurnoFilter('DIURNO');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  Diurno
+                </button>
+                <button
+                  className={`dt-column-filter-option ${turnoFilter === 'NOCTURNO' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTurnoFilter('NOCTURNO');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  Nocturno
+                </button>
+                <button
+                  className={`dt-column-filter-option ${turnoFilter === 'SIN_PREFERENCIA' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTurnoFilter('SIN_PREFERENCIA');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  Sin Preferencia
+                </button>
+              </div>
+            )}
+          </div>
+        ),
+        cell: ({ getValue }) => {
+          const turno = getValue() as string;
+          if (!turno || turno === 'SIN_PREFERENCIA') {
+            return <span className="dt-badge dt-badge-gray">Sin Pref.</span>;
+          }
+          if (turno === 'DIURNO') {
+            return <span className="dt-badge dt-badge-yellow">Diurno</span>;
+          }
+          if (turno === 'NOCTURNO') {
+            return <span className="dt-badge dt-badge-blue">Nocturno</span>;
+          }
+          return <span className="dt-badge dt-badge-gray">{turno}</span>;
+        },
         enableSorting: true,
       },
       {
         accessorKey: "numero_licencia",
         header: "Licencia",
-        cell: ({ getValue }) => (getValue() as string) || "N/A",
+        cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
       {
@@ -645,7 +951,7 @@ export function ConductoresModule() {
               </div>
             );
           }
-          return "N/A";
+          return "-";
         },
         enableSorting: false,
       },
@@ -659,14 +965,56 @@ export function ConductoresModule() {
       {
         accessorKey: "telefono_contacto",
         header: "Teléfono",
-        cell: ({ getValue }) => (getValue() as string) || "N/A",
+        cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
       {
         accessorKey: "conductores_estados.codigo",
-        header: "Estado",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Estado</span>
+            <button
+              className={`dt-column-filter-btn ${estadoFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado');
+              }}
+              title="Filtrar por estado"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'estado' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <button
+                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEstadoFilter('');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  Todos
+                </button>
+                {uniqueEstados.map(([codigo, descripcion]) => (
+                  <button
+                    key={codigo}
+                    className={`dt-column-filter-option ${estadoFilter === codigo ? 'selected' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEstadoFilter(codigo);
+                      setOpenColumnFilter(null);
+                    }}
+                  >
+                    {descripcion}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => {
-          const codigo = row.original.conductores_estados?.codigo || "N/A";
+          const codigo = row.original.conductores_estados?.codigo;
+          if (!codigo) return "-";
           const codigoLower = codigo.toLowerCase();
 
           let badgeClass = "dt-badge dt-badge-solid-blue";
@@ -682,7 +1030,55 @@ export function ConductoresModule() {
       },
       {
         id: "vehiculo_asignado",
-        header: "Vehiculo Asignado",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Asignación</span>
+            <button
+              className={`dt-column-filter-btn ${asignacionFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'asignacion' ? null : 'asignacion');
+              }}
+              title="Filtrar por asignación"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'asignacion' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+                <button
+                  className={`dt-column-filter-option ${asignacionFilter === '' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAsignacionFilter('');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  Todos
+                </button>
+                <button
+                  className={`dt-column-filter-option ${asignacionFilter === 'asignado' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAsignacionFilter('asignado');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  Asignados
+                </button>
+                <button
+                  className={`dt-column-filter-option ${asignacionFilter === 'disponible' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAsignacionFilter('disponible');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  Disponibles
+                </button>
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row }) => {
           const vehiculo = (row.original as any).vehiculo_asignado;
           if (vehiculo) {
@@ -695,7 +1091,12 @@ export function ConductoresModule() {
               </div>
             );
           }
-          return <span className="vehiculo-cell-na">N/A</span>;
+          // Mostrar "Disponible" si está activo y no tiene asignación
+          const isActivo = (row.original as any).conductores_estados?.codigo?.toLowerCase() === 'activo';
+          if (isActivo) {
+            return <span className="dt-badge dt-badge-green">Disponible</span>;
+          }
+          return <span className="vehiculo-cell-na">-</span>;
         },
         enableSorting: false,
       },
@@ -743,23 +1144,73 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete],
+    [canUpdate, canDelete, nombreFilter, dniFilter, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
   );
 
   return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <h3 className="module-title">Gestion de Conductores</h3>
-        <p className="module-subtitle">
-          {conductores.length} conductor{conductores.length !== 1 ? "es" : ""}{" "}
-          registrado{conductores.length !== 1 ? "s" : ""}
-        </p>
+    <div className="cond-module">
+      {/* Header - Estilo Bitácora */}
+      <div className="cond-header">
+        <div className="cond-header-title">
+          <h1>Gestión de Conductores</h1>
+          <span className="cond-header-subtitle">
+            {conductores.length} conductor{conductores.length !== 1 ? "es" : ""}{" "}
+            registrado{conductores.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      </div>
+
+      {/* Stats Cards - Estilo Bitácora */}
+      <div className="cond-stats">
+        <div className="cond-stats-grid">
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.totalConductores}</span>
+              <span className="stat-label">Total</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresActivos}</span>
+              <span className="stat-label">Activos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresDisponibles}</span>
+              <span className="stat-label">Disponibles</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <UserCheck size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresAsignados}</span>
+              <span className="stat-label">Asignados</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <UserX size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresBaja}</span>
+              <span className="stat-label">Baja</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Clock size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.licenciasPorVencer}</span>
+              <span className="stat-label">Lic. Vencer</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* DataTable with integrated action button */}
       <DataTable
-        data={conductores}
+        data={filteredConductores}
         columns={columns}
         loading={loading}
         error={error}
@@ -1209,7 +1660,7 @@ function ModalCrear({
 
         <div className="section-title">Información Adicional</div>
 
-        <div className="form-row-3" style={{ marginBottom: "16px" }}>
+        <div className="form-row-3" style={{ marginBottom: "16px", alignItems: "center" }}>
           <div>
             <label
               style={{
@@ -1256,6 +1707,22 @@ function ModalCrear({
                 Cochera Propia
               </span>
             </label>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Preferencia de Turno</label>
+            <select
+              className="form-input"
+              value={formData.preferencia_turno}
+              onChange={(e) =>
+                setFormData({ ...formData, preferencia_turno: e.target.value })
+              }
+              disabled={saving}
+            >
+              <option value="SIN_PREFERENCIA">Ambos</option>
+              <option value="DIURNO">Diurno</option>
+              <option value="NOCTURNO">Nocturno</option>
+              <option value="A_CARGO">A Cargo</option>
+            </select>
           </div>
         </div>
 
@@ -1708,7 +2175,7 @@ function ModalEditar({
 
         <div className="section-title">Información Adicional</div>
 
-        <div className="form-row-3" style={{ marginBottom: "16px" }}>
+        <div className="form-row-3" style={{ marginBottom: "16px", alignItems: "center" }}>
           <div>
             <label
               style={{
@@ -1755,6 +2222,22 @@ function ModalEditar({
                 Cochera Propia
               </span>
             </label>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Preferencia de Turno</label>
+            <select
+              className="form-input"
+              value={formData.preferencia_turno}
+              onChange={(e) =>
+                setFormData({ ...formData, preferencia_turno: e.target.value })
+              }
+              disabled={saving}
+            >
+              <option value="SIN_PREFERENCIA">Ambos</option>
+              <option value="DIURNO">Diurno</option>
+              <option value="NOCTURNO">Nocturno</option>
+              <option value="A_CARGO">A Cargo</option>
+            </select>
           </div>
         </div>
 

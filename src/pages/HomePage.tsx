@@ -23,6 +23,7 @@ import { HistorialMovimientosPage } from './inventario/HistorialMovimientosPage'
 import { PedidosTransitoPage } from './inventario/PedidosTransitoPage'
 import { AprobacionesPendientesPage } from './inventario/AprobacionesPendientesPage'
 import { USSPage } from './integraciones/uss/USSPage'
+import { BitacoraPage } from './integraciones/uss/BitacoraPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
 import { RolesPage } from './administracion/RolesPage'
@@ -30,6 +31,7 @@ import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
 import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
+import { ProfilePage } from './profile/ProfilePage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 
@@ -388,6 +390,23 @@ export function HomePage() {
           padding: 10px;
           background: var(--bg-secondary);
           border-radius: 6px;
+        }
+
+        .user-card-clickable {
+          width: 100%;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s;
+          text-align: left;
+        }
+
+        .user-card-clickable:hover {
+          background: var(--bg-tertiary);
+          transform: translateY(-1px);
+        }
+
+        .user-card-clickable:active {
+          transform: translateY(0);
         }
 
         .user-avatar {
@@ -790,7 +809,11 @@ export function HomePage() {
           </nav>
 
           <div className="sidebar-footer">
-            <div className="user-card">
+            <button
+              className="user-card user-card-clickable"
+              onClick={() => navigate('/perfil')}
+              title="Ver mi perfil"
+            >
               <div className="user-avatar">
                 {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
               </div>
@@ -800,7 +823,7 @@ export function HomePage() {
                   {profile?.roles?.name || 'Sin rol'}
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </aside>
 
@@ -908,6 +931,11 @@ export function HomePage() {
                   <USSPage />
                 </ProtectedRoute>
               } />
+              <Route path="/uss/bitacora" element={
+                <ProtectedRoute submenuName="bitacora-uss" action="view">
+                  <BitacoraPage />
+                </ProtectedRoute>
+              } />
               <Route path="/cabify" element={
                 <ProtectedRoute submenuName="cabify" action="view">
                   <CabifyPage />
@@ -947,6 +975,9 @@ export function HomePage() {
                   <GestorMenusPage />
                 </ProtectedRoute>
               } />
+
+              {/* Perfil de usuario */}
+              <Route path="/perfil" element={<ProfilePage />} />
 
               {/* Ruta por defecto */}
               <Route path="/" element={

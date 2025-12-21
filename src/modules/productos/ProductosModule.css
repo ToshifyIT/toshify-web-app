@@ -1,0 +1,133 @@
+/* src/modules/productos/ProductosModule.css */
+/* Estilos para el modulo de Productos - Diseno Bitacora */
+/* Con soporte para Dark Mode mediante CSS Variables */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.prod-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   HEADER - Estilo Bitacora
+   ===================================================== */
+
+.prod-header {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.prod-header-title {
+  border-left: 4px solid #DC2626;
+  padding-left: 16px;
+}
+
+.prod-header-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.prod-header-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}
+
+/* =====================================================
+   STATS - Estilo Bitacora
+   ===================================================== */
+
+.prod-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
+}
+
+.prod-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.prod-stats .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.prod-stats .stat-card .stat-icon {
+  color: #DC2626;
+  flex-shrink: 0;
+}
+
+.prod-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prod-stats .stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prod-stats .stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* Responsive Stats */
+@media (max-width: 1200px) {
+  .prod-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .prod-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .prod-header {
+    padding: 16px;
+  }
+
+  .prod-header-title h1 {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .prod-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .prod-stats .stat-card {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .prod-stats .stat-value {
+    font-size: 14px;
+  }
+
+  .prod-stats .stat-label {
+    font-size: 10px;
+  }
+}

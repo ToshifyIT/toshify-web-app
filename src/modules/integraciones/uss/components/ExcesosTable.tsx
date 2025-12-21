@@ -3,8 +3,8 @@
  * Tabla de excesos de velocidad
  */
 
-import { useState, useMemo } from 'react'
-import { ChevronUp, ChevronDown, MapPin, Search } from 'lucide-react'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { ChevronUp, ChevronDown, MapPin, Search, Filter } from 'lucide-react'
 import type { ExcesoVelocidad } from '../types/uss.types'
 import {
   formatDateTime,
@@ -31,6 +31,11 @@ interface ExcesosTableProps {
 type SortField = 'fecha_evento' | 'patente' | 'conductor_wialon' | 'velocidad_maxima' | 'limite_velocidad' | 'exceso' | 'duracion_segundos'
 type SortDirection = 'asc' | 'desc'
 
+interface ColumnFilters {
+  patente: string
+  conductor: string
+}
+
 export function ExcesosTable({
   excesos,
   totalCount,
@@ -44,6 +49,10 @@ export function ExcesosTable({
 }: ExcesosTableProps) {
   const [sortField, setSortField] = useState<SortField>('fecha_evento')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
+    patente: '',
+    conductor: '',
+  })
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -54,9 +63,28 @@ export function ExcesosTable({
     }
   }
 
-  // Ordenar
+  const handleColumnFilterChange = (column: keyof ColumnFilters, value: string) => {
+    setColumnFilters(prev => ({ ...prev, [column]: value }))
+  }
+
+  // Filtrar y ordenar
   const sortedExcesos = useMemo(() => {
-    return [...excesos].sort((a, b) => {
+    let filtered = [...excesos]
+
+    // Aplicar filtros de columna
+    if (columnFilters.patente) {
+      filtered = filtered.filter(e =>
+        e.patente.toLowerCase().includes(columnFilters.patente.toLowerCase())
+      )
+    }
+    if (columnFilters.conductor) {
+      filtered = filtered.filter(e =>
+        (e.conductor_wialon || '').toLowerCase().includes(columnFilters.conductor.toLowerCase())
+      )
+    }
+
+    // Ordenar
+    return filtered.sort((a, b) => {
       const aValue = a[sortField]
       const bValue = b[sortField]
 
@@ -70,7 +98,7 @@ export function ExcesosTable({
         ? aStr.localeCompare(bStr)
         : bStr.localeCompare(aStr)
     })
-  }, [excesos, sortField, sortDirection])
+  }, [excesos, sortField, sortDirection, columnFilters])
 
   const displayCount = totalCount
   const totalPages = Math.ceil(displayCount / pageSize)
@@ -116,19 +144,24 @@ export function ExcesosTable({
               direction={sortDirection}
               onSort={handleSort}
             />
-            <SortableHeader
+            <FilterableHeader
               field="patente"
               label="Patente"
               currentField={sortField}
               direction={sortDirection}
               onSort={handleSort}
+              filterValue={columnFilters.patente}
+              onFilterChange={(val) => handleColumnFilterChange('patente', val)}
             />
-            <SortableHeader
+            <th>iButton</th>
+            <FilterableHeader
               field="conductor_wialon"
               label="Conductor"
               currentField={sortField}
               direction={sortDirection}
               onSort={handleSort}
+              filterValue={columnFilters.conductor}
+              onFilterChange={(val) => handleColumnFilterChange('conductor', val)}
             />
             <SortableHeader
               field="velocidad_maxima"
@@ -209,6 +242,85 @@ function SortableHeader({
   )
 }
 
+interface FilterableHeaderProps extends SortableHeaderProps {
+  readonly filterValue: string
+  readonly onFilterChange: (value: string) => void
+}
+
+function FilterableHeader({
+  field,
+  label,
+  currentField,
+  direction,
+  onSort,
+  filterValue,
+  onFilterChange,
+}: FilterableHeaderProps) {
+  const isActive = field === currentField
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <th className="uss-sortable uss-filterable">
+      <div className="uss-header-with-filter">
+        <span className="uss-sortable-content" onClick={() => onSort(field)}>
+          {label}
+          {isActive && (
+            direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+          )}
+        </span>
+        <div className="uss-column-filter" ref={dropdownRef}>
+          <button
+            type="button"
+            className={`uss-column-filter-btn ${filterValue ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsOpen(!isOpen)
+            }}
+          >
+            <Filter size={12} />
+          </button>
+          {isOpen && (
+            <div className="uss-column-filter-dropdown">
+              <input
+                type="text"
+                value={filterValue}
+                onChange={(e) => onFilterChange(e.target.value)}
+                placeholder={`Filtrar ${label.toLowerCase()}...`}
+                className="uss-column-filter-input"
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
+              {filterValue && (
+                <button
+                  type="button"
+                  className="uss-column-filter-clear"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onFilterChange('')
+                  }}
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </th>
+  )
+}
+
 interface ExcesoRowProps {
   readonly exceso: ExcesoVelocidad
 }
@@ -219,7 +331,8 @@ function ExcesoRow({ exceso }: ExcesoRowProps) {
   return (
     <tr>
       <td>{formatDateTime(exceso.fecha_evento)}</td>
-      <td className="uss-patente">{exceso.patente}</td>
+      <td className="uss-patente">{exceso.patente.replace(/\s/g, '')}</td>
+      <td className="uss-ibutton">{exceso.ibutton || '-'}</td>
       <td>{extractConductorName(exceso.conductor_wialon)}</td>
       <td className="uss-velocidad">{formatSpeed(exceso.velocidad_maxima)}</td>
       <td>{formatSpeed(exceso.limite_velocidad)}</td>
