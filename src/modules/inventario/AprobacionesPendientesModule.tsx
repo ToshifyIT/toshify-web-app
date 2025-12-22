@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
-import { Check, X, Eye, Clock, Package, ArrowUpRight, ArrowDownLeft, RotateCcw, Filter, RefreshCw } from 'lucide-react'
+import { Check, X, Eye, Clock, Package, ArrowUpRight, ArrowDownLeft, RotateCcw, Filter, RefreshCw, History, CheckCircle, XCircle } from 'lucide-react'
 
 interface MovimientoPendiente {
   id: string
@@ -26,13 +26,31 @@ interface MovimientoPendiente {
 }
 
 type FiltroTipo = 'todos' | 'entrada' | 'salida' | 'asignacion' | 'devolucion'
+type TabActiva = 'pendientes' | 'historico'
+
+interface MovimientoHistorico {
+  id: string
+  tipo: string
+  cantidad: number
+  observaciones: string | null
+  created_at: string
+  estado_aprobacion: 'aprobado' | 'rechazado'
+  fecha_aprobacion: string | null
+  motivo_rechazo: string | null
+  producto_nombre: string
+  usuario_registrador_nombre: string
+  usuario_aprobador_nombre: string | null
+}
 
 export function AprobacionesPendientesModule() {
   const { user, profile } = useAuth()
   const [movimientos, setMovimientos] = useState<MovimientoPendiente[]>([])
+  const [historico, setHistorico] = useState<MovimientoHistorico[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [processing, setProcessing] = useState<string | null>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>('todos')
+  const [tabActiva, setTabActiva] = useState<TabActiva>('pendientes')
 
   const userRole = profile?.roles?.name || ''
   const canApprove = userRole === 'encargado' || userRole === 'admin'
@@ -44,6 +62,12 @@ export function AprobacionesPendientesModule() {
       setLoading(false)
     }
   }, [canApprove])
+
+  useEffect(() => {
+    if (tabActiva === 'historico' && historico.length === 0 && canApprove) {
+      cargarHistorico()
+    }
+  }, [tabActiva, canApprove])
 
   const cargarMovimientosPendientes = async () => {
     setLoading(true)
@@ -60,6 +84,53 @@ export function AprobacionesPendientesModule() {
       Swal.fire('Error', 'No se pudieron cargar los movimientos pendientes', 'error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const cargarHistorico = async () => {
+    setLoadingHistorico(true)
+    try {
+      const { data, error } = await supabase
+        .from('movimientos')
+        .select(`
+          id,
+          tipo_movimiento,
+          cantidad,
+          observaciones,
+          created_at,
+          estado_aprobacion,
+          fecha_aprobacion,
+          motivo_rechazo,
+          productos (nombre),
+          usuario:usuario_id (email),
+          aprobador:usuario_aprobador_id (email)
+        `)
+        .in('estado_aprobacion', ['aprobado', 'rechazado'])
+        .order('fecha_aprobacion', { ascending: false, nullsFirst: false })
+        .limit(50)
+
+      if (error) throw error
+
+      const historicoFormateado: MovimientoHistorico[] = (data || []).map((mov: any) => ({
+        id: mov.id,
+        tipo: mov.tipo_movimiento,
+        cantidad: mov.cantidad,
+        observaciones: mov.observaciones,
+        created_at: mov.created_at,
+        estado_aprobacion: mov.estado_aprobacion,
+        fecha_aprobacion: mov.fecha_aprobacion,
+        motivo_rechazo: mov.motivo_rechazo,
+        producto_nombre: mov.productos?.nombre || 'Producto eliminado',
+        usuario_registrador_nombre: mov.usuario?.email || 'Usuario desconocido',
+        usuario_aprobador_nombre: mov.aprobador?.email || null
+      }))
+
+      setHistorico(historicoFormateado)
+    } catch (error) {
+      console.error('Error cargando histórico:', error)
+      Swal.fire('Error', 'No se pudo cargar el histórico de aprobaciones', 'error')
+    } finally {
+      setLoadingHistorico(false)
     }
   }
 
@@ -543,6 +614,142 @@ export function AprobacionesPendientesModule() {
           to { transform: rotate(360deg); }
         }
 
+        .tabs-container {
+          display: flex;
+          gap: 4px;
+          background: var(--bg-secondary);
+          padding: 4px;
+          border-radius: 10px;
+          margin-bottom: 16px;
+        }
+
+        .tab-btn {
+          flex: 1;
+          padding: 10px 16px;
+          border: none;
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+          color: var(--text-primary);
+        }
+
+        .tab-btn.active {
+          background: var(--card-bg);
+          color: var(--color-primary);
+          box-shadow: var(--shadow-sm);
+        }
+
+        .tab-badge {
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .tab-btn.active .tab-badge {
+          background: var(--color-primary);
+          color: white;
+        }
+
+        .tab-btn:not(.active) .tab-badge {
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+        }
+
+        .historico-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .historico-item {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding: 16px;
+          background: var(--card-bg);
+          border: 1px solid var(--border-primary);
+          border-radius: 10px;
+        }
+
+        .historico-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .historico-icon.aprobado {
+          background: var(--badge-green-bg);
+          color: var(--color-success);
+        }
+
+        .historico-icon.rechazado {
+          background: var(--badge-red-bg);
+          color: var(--color-danger);
+        }
+
+        .historico-content {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .historico-producto {
+          font-weight: 600;
+          color: var(--text-primary);
+          font-size: 14px;
+        }
+
+        .historico-meta {
+          font-size: 12px;
+          color: var(--text-secondary);
+          margin-top: 4px;
+        }
+
+        .historico-estado {
+          text-align: right;
+        }
+
+        .historico-estado-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 10px;
+          border-radius: 16px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .historico-estado-badge.aprobado {
+          background: var(--badge-green-bg);
+          color: var(--badge-green-text);
+        }
+
+        .historico-estado-badge.rechazado {
+          background: var(--badge-red-bg);
+          color: var(--badge-red-text);
+        }
+
+        .historico-fecha {
+          font-size: 11px;
+          color: var(--text-tertiary);
+          margin-top: 4px;
+        }
+
         @media (max-width: 768px) {
           .aprobaciones-header {
             flex-direction: column;
@@ -560,129 +767,242 @@ export function AprobacionesPendientesModule() {
           .btn-detalles {
             flex: 1;
           }
+
+          .historico-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+          }
+
+          .historico-estado {
+            text-align: left;
+            width: 100%;
+          }
         }
       `}</style>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Controles */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
-          {movimientos.length > 0 && (
-            <span className="pending-badge">{movimientos.length} pendientes</span>
-          )}
-          <div className="filter-select">
-            <Filter size={16} />
-            <select
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value as FiltroTipo)}
-            >
-              <option value="todos">Todos los tipos</option>
-              <option value="entrada">Entradas</option>
-              <option value="salida">Salidas</option>
-              <option value="asignacion">Asignaciones</option>
-              <option value="devolucion">Devoluciones</option>
-            </select>
-          </div>
-          <button className="refresh-btn" onClick={cargarMovimientosPendientes}>
-            <RefreshCw size={16} />
-            Actualizar
+        {/* Tabs */}
+        <div className="tabs-container">
+          <button
+            className={`tab-btn ${tabActiva === 'pendientes' ? 'active' : ''}`}
+            onClick={() => setTabActiva('pendientes')}
+          >
+            <Clock size={18} />
+            Pendientes
+            {movimientos.length > 0 && (
+              <span className="tab-badge">{movimientos.length}</span>
+            )}
+          </button>
+          <button
+            className={`tab-btn ${tabActiva === 'historico' ? 'active' : ''}`}
+            onClick={() => setTabActiva('historico')}
+          >
+            <History size={18} />
+            Histórico
           </button>
         </div>
 
-        {loading ? (
-          <div className="loading-spinner">
-            <div className="spinner"></div>
+        {/* Controles - Solo para pestaña pendientes */}
+        {tabActiva === 'pendientes' && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+            <div className="filter-select">
+              <Filter size={16} />
+              <select
+                value={filtroTipo}
+                onChange={(e) => setFiltroTipo(e.target.value as FiltroTipo)}
+              >
+                <option value="todos">Todos los tipos</option>
+                <option value="entrada">Entradas</option>
+                <option value="salida">Salidas</option>
+                <option value="asignacion">Asignaciones</option>
+                <option value="devolucion">Devoluciones</option>
+              </select>
+            </div>
+            <button className="refresh-btn" onClick={cargarMovimientosPendientes}>
+              <RefreshCw size={16} />
+              Actualizar
+            </button>
           </div>
-        ) : movimientosFiltrados.length === 0 ? (
-          <div className="empty-state">
-            <Check size={48} />
-            <h3>No hay movimientos pendientes</h3>
-            <p>
-              {filtroTipo === 'todos'
-                ? 'Todos los movimientos han sido procesados'
-                : `No hay ${getTipoLabel(filtroTipo).toLowerCase()}s pendientes de aprobación`}
-            </p>
+        )}
+
+        {/* Controles - Solo para pestaña histórico */}
+        {tabActiva === 'historico' && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+            <button className="refresh-btn" onClick={cargarHistorico}>
+              <RefreshCw size={16} />
+              Actualizar
+            </button>
           </div>
-        ) : (
-          <div className="movimientos-grid">
-            {movimientosFiltrados.map((movimiento) => (
-              <div key={movimiento.id} className="movimiento-card">
-                <div className="movimiento-header">
-                  <div
-                    className="movimiento-tipo"
-                    style={{
-                      background: `${getTipoColor(movimiento.tipo)}15`,
-                      color: getTipoColor(movimiento.tipo)
-                    }}
-                  >
-                    {getTipoIcon(movimiento.tipo)}
-                    {getTipoLabel(movimiento.tipo)}
-                  </div>
-                  <div className="movimiento-fecha">
-                    {new Date(movimiento.created_at).toLocaleString('es-CL')}
-                  </div>
-                </div>
+        )}
 
-                <div className="movimiento-body">
-                  <div className="movimiento-field">
-                    <span className="field-label">Producto</span>
-                    <span className="field-value">{movimiento.producto_nombre}</span>
-                  </div>
-                  <div className="movimiento-field">
-                    <span className="field-label">Cantidad</span>
-                    <span className="field-value">{movimiento.cantidad}</span>
-                  </div>
-                  {movimiento.vehiculo_patente && (
-                    <div className="movimiento-field">
-                      <span className="field-label">Vehículo</span>
-                      <span className="field-value">{movimiento.vehiculo_patente}</span>
-                    </div>
-                  )}
-                  {movimiento.motivo_salida && (
-                    <div className="movimiento-field">
-                      <span className="field-label">Motivo</span>
-                      <span className="field-value">{getMotivoSalidaLabel(movimiento.motivo_salida)}</span>
-                    </div>
-                  )}
-                  <div className="movimiento-field full-width">
-                    <span className="field-label">Registrado por</span>
-                    <span className="field-value">{movimiento.usuario_registrador_nombre}</span>
-                  </div>
-                  {movimiento.observaciones && (
-                    <div className="movimiento-field full-width">
-                      <span className="field-label">Observaciones</span>
-                      <span className="field-value">{movimiento.observaciones}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="movimiento-actions">
-                  <button
-                    className="action-btn btn-detalles"
-                    onClick={() => verDetalles(movimiento)}
-                  >
-                    <Eye size={16} />
-                    Detalles
-                  </button>
-                  <button
-                    className="action-btn btn-rechazar"
-                    onClick={() => rechazarMovimiento(movimiento)}
-                    disabled={processing === movimiento.id}
-                  >
-                    <X size={16} />
-                    Rechazar
-                  </button>
-                  <button
-                    className="action-btn btn-aprobar"
-                    onClick={() => aprobarMovimiento(movimiento)}
-                    disabled={processing === movimiento.id}
-                  >
-                    <Check size={16} />
-                    Aprobar
-                  </button>
-                </div>
+        {/* Tab: Pendientes */}
+        {tabActiva === 'pendientes' && (
+          <>
+            {loading ? (
+              <div className="loading-spinner">
+                <div className="spinner"></div>
               </div>
-            ))}
-          </div>
+            ) : movimientosFiltrados.length === 0 ? (
+              <div className="empty-state">
+                <Check size={48} />
+                <h3>No hay movimientos pendientes</h3>
+                <p>
+                  {filtroTipo === 'todos'
+                    ? 'Todos los movimientos han sido procesados'
+                    : `No hay ${getTipoLabel(filtroTipo).toLowerCase()}s pendientes de aprobación`}
+                </p>
+              </div>
+            ) : (
+              <div className="movimientos-grid">
+                {movimientosFiltrados.map((movimiento) => (
+                  <div key={movimiento.id} className="movimiento-card">
+                    <div className="movimiento-header">
+                      <div
+                        className="movimiento-tipo"
+                        style={{
+                          background: `${getTipoColor(movimiento.tipo)}15`,
+                          color: getTipoColor(movimiento.tipo)
+                        }}
+                      >
+                        {getTipoIcon(movimiento.tipo)}
+                        {getTipoLabel(movimiento.tipo)}
+                      </div>
+                      <div className="movimiento-fecha">
+                        {new Date(movimiento.created_at).toLocaleString('es-CL')}
+                      </div>
+                    </div>
+
+                    <div className="movimiento-body">
+                      <div className="movimiento-field">
+                        <span className="field-label">Producto</span>
+                        <span className="field-value">{movimiento.producto_nombre}</span>
+                      </div>
+                      <div className="movimiento-field">
+                        <span className="field-label">Cantidad</span>
+                        <span className="field-value">{movimiento.cantidad}</span>
+                      </div>
+                      {movimiento.vehiculo_patente && (
+                        <div className="movimiento-field">
+                          <span className="field-label">Vehículo</span>
+                          <span className="field-value">{movimiento.vehiculo_patente}</span>
+                        </div>
+                      )}
+                      {movimiento.motivo_salida && (
+                        <div className="movimiento-field">
+                          <span className="field-label">Motivo</span>
+                          <span className="field-value">{getMotivoSalidaLabel(movimiento.motivo_salida)}</span>
+                        </div>
+                      )}
+                      <div className="movimiento-field full-width">
+                        <span className="field-label">Registrado por</span>
+                        <span className="field-value">{movimiento.usuario_registrador_nombre}</span>
+                      </div>
+                      {movimiento.observaciones && (
+                        <div className="movimiento-field full-width">
+                          <span className="field-label">Observaciones</span>
+                          <span className="field-value">{movimiento.observaciones}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="movimiento-actions">
+                      <button
+                        className="action-btn btn-detalles"
+                        onClick={() => verDetalles(movimiento)}
+                      >
+                        <Eye size={16} />
+                        Detalles
+                      </button>
+                      <button
+                        className="action-btn btn-rechazar"
+                        onClick={() => rechazarMovimiento(movimiento)}
+                        disabled={processing === movimiento.id}
+                      >
+                        <X size={16} />
+                        Rechazar
+                      </button>
+                      <button
+                        className="action-btn btn-aprobar"
+                        onClick={() => aprobarMovimiento(movimiento)}
+                        disabled={processing === movimiento.id}
+                      >
+                        <Check size={16} />
+                        Aprobar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Tab: Histórico */}
+        {tabActiva === 'historico' && (
+          <>
+            {loadingHistorico ? (
+              <div className="loading-spinner">
+                <div className="spinner"></div>
+              </div>
+            ) : historico.length === 0 ? (
+              <div className="empty-state">
+                <History size={48} />
+                <h3>No hay histórico de aprobaciones</h3>
+                <p>Aún no se han procesado movimientos</p>
+              </div>
+            ) : (
+              <div className="historico-grid">
+                {historico.map((item) => (
+                  <div key={item.id} className="historico-item">
+                    <div className={`historico-icon ${item.estado_aprobacion}`}>
+                      {item.estado_aprobacion === 'aprobado' ? (
+                        <CheckCircle size={20} />
+                      ) : (
+                        <XCircle size={20} />
+                      )}
+                    </div>
+                    <div className="historico-content">
+                      <div className="historico-producto">
+                        {item.producto_nombre} ({item.cantidad} uds)
+                      </div>
+                      <div className="historico-meta">
+                        {getTipoLabel(item.tipo)} • Registrado por: {item.usuario_registrador_nombre}
+                        {item.usuario_aprobador_nombre && (
+                          <> • Procesado por: {item.usuario_aprobador_nombre}</>
+                        )}
+                      </div>
+                      {item.motivo_rechazo && (
+                        <div className="historico-meta" style={{ color: 'var(--color-danger)', marginTop: '4px' }}>
+                          Motivo: {item.motivo_rechazo}
+                        </div>
+                      )}
+                    </div>
+                    <div className="historico-estado">
+                      <span className={`historico-estado-badge ${item.estado_aprobacion}`}>
+                        {item.estado_aprobacion === 'aprobado' ? (
+                          <>
+                            <CheckCircle size={12} />
+                            Aprobado
+                          </>
+                        ) : (
+                          <>
+                            <XCircle size={12} />
+                            Rechazado
+                          </>
+                        )}
+                      </span>
+                      <div className="historico-fecha">
+                        {item.fecha_aprobacion
+                          ? new Date(item.fecha_aprobacion).toLocaleString('es-CL')
+                          : new Date(item.created_at).toLocaleString('es-CL')}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </>

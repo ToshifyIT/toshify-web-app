@@ -7,6 +7,16 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
 import './ProveedoresModule.css'
 
+type CategoriaProveedor = 'maquinaria' | 'herramientas' | 'repuestos' | 'insumos' | 'otro'
+
+const CATEGORIAS_PROVEEDOR: { value: CategoriaProveedor; label: string }[] = [
+  { value: 'maquinaria', label: 'Maquinaria' },
+  { value: 'herramientas', label: 'Herramientas' },
+  { value: 'repuestos', label: 'Repuestos' },
+  { value: 'insumos', label: 'Insumos' },
+  { value: 'otro', label: 'Otro' },
+]
+
 interface Proveedor {
   id: string
   razon_social: string
@@ -18,6 +28,7 @@ interface Proveedor {
   informacion_pago?: string
   activo: boolean
   observaciones?: string
+  categoria?: CategoriaProveedor
   created_at: string
   updated_at: string
 }
@@ -47,7 +58,8 @@ export function ProveedoresModule() {
     email: '',
     direccion: '',
     informacion_pago: '',
-    observaciones: ''
+    observaciones: '',
+    categoria: '' as CategoriaProveedor | ''
   })
 
   // Column filter states
@@ -134,6 +146,7 @@ export function ProveedoresModule() {
           direccion: formData.direccion || null,
           informacion_pago: formData.informacion_pago || null,
           observaciones: formData.observaciones || null,
+          categoria: formData.categoria || null,
           created_by: userData.user?.id
         })
 
@@ -179,6 +192,7 @@ export function ProveedoresModule() {
         direccion: formData.direccion || null,
         informacion_pago: formData.informacion_pago || null,
         observaciones: formData.observaciones || null,
+        categoria: formData.categoria || null,
         updated_at: new Date().toISOString()
       }
 
@@ -273,7 +287,8 @@ export function ProveedoresModule() {
       email: proveedor.email || '',
       direccion: proveedor.direccion || '',
       informacion_pago: proveedor.informacion_pago || '',
-      observaciones: proveedor.observaciones || ''
+      observaciones: proveedor.observaciones || '',
+      categoria: proveedor.categoria || ''
     })
     setShowEditModal(true)
   }
@@ -292,7 +307,8 @@ export function ProveedoresModule() {
       email: '',
       direccion: '',
       informacion_pago: '',
-      observaciones: ''
+      observaciones: '',
+      categoria: ''
     })
     setSelectedProveedor(null)
   }
@@ -362,6 +378,20 @@ export function ProveedoresModule() {
             {getValue() as string}
           </span>
         ),
+      },
+      {
+        accessorKey: 'categoria',
+        header: 'Categoría',
+        cell: ({ getValue }) => {
+          const value = getValue() as CategoriaProveedor | null
+          if (!value) return <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>-</span>
+          const cat = CATEGORIAS_PROVEEDOR.find(c => c.value === value)
+          return (
+            <span className="dt-badge dt-badge-purple">
+              {cat?.label || value}
+            </span>
+          )
+        },
       },
       {
         accessorKey: 'telefono',
@@ -628,6 +658,30 @@ export function ProveedoresModule() {
                 </div>
               </div>
 
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                  Categoría de Proveedor
+                </label>
+                <select
+                  value={formData.categoria}
+                  onChange={(e) => setFormData({ ...formData, categoria: e.target.value as CategoriaProveedor | '' })}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <option value="">Seleccionar categoría...</option>
+                  {CATEGORIAS_PROVEEDOR.map((cat) => (
+                    <option key={cat.value} value={cat.value}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
@@ -866,6 +920,30 @@ export function ProveedoresModule() {
                 </div>
               </div>
 
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                  Categoría de Proveedor
+                </label>
+                <select
+                  value={formData.categoria}
+                  onChange={(e) => setFormData({ ...formData, categoria: e.target.value as CategoriaProveedor | '' })}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <option value="">Seleccionar categoría...</option>
+                  {CATEGORIAS_PROVEEDOR.map((cat) => (
+                    <option key={cat.value} value={cat.value}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
@@ -1078,6 +1156,26 @@ export function ProveedoresModule() {
                   <div>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Número de Documento</span>
                     <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-primary)' }}>{selectedProveedor.numero_documento}</span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Categoría</span>
+                    {selectedProveedor.categoria ? (
+                      <span
+                        style={{
+                          background: 'var(--badge-purple-bg, #f3e8ff)',
+                          color: 'var(--badge-purple-text, #7c3aed)',
+                          padding: '4px 12px',
+                          borderRadius: '12px',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          display: 'inline-block'
+                        }}
+                      >
+                        {CATEGORIAS_PROVEEDOR.find(c => c.value === selectedProveedor.categoria)?.label || selectedProveedor.categoria}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>-</span>
+                    )}
                   </div>
                 </div>
               </div>

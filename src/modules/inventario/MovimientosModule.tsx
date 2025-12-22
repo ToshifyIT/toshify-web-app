@@ -70,6 +70,16 @@ type EstadoRetorno = 'operativa' | 'dañada' | 'perdida'
 // Estado inicial para entradas
 type EstadoInicial = 'disponible' | 'en_transito'
 
+// Categoría de servicio
+type CategoriaServicio = 'mantenimiento' | 'mecanica' | 'chapa_pintura' | 'otro'
+
+const CATEGORIAS_SERVICIO: { value: CategoriaServicio; label: string }[] = [
+  { value: 'mantenimiento', label: 'Mantenimiento' },
+  { value: 'mecanica', label: 'Mecánica' },
+  { value: 'chapa_pintura', label: 'Chapa y Pintura' },
+  { value: 'otro', label: 'Otro' },
+]
+
 interface ProductoLote {
   producto_id: string
   cantidad: number
@@ -115,11 +125,11 @@ export function MovimientosModule() {
 
   // Form data - Salida
   const [motivoSalida, setMotivoSalida] = useState<MotivoSalida>('consumo_servicio')
-  const [servicioVinculado, setServicioVinculado] = useState('')
+  const [categoriaServicio, setCategoriaServicio] = useState<CategoriaServicio | ''>('')
 
   // Form data - Devolución
   const [estadoRetorno, setEstadoRetorno] = useState<EstadoRetorno>('operativa')
-  const [servicioVinculadoDevolucion, setServicioVinculadoDevolucion] = useState('')
+  const [categoriaServicioDevolucion, setCategoriaServicioDevolucion] = useState<CategoriaServicio | ''>('')
 
   // =====================================================
   // EFECTOS
@@ -370,9 +380,9 @@ export function MovimientosModule() {
     setNumeroPedido('')
     setFechaEstimadaLlegada('')
     setMotivoSalida('consumo_servicio')
-    setServicioVinculado('')
+    setCategoriaServicio('')
     setEstadoRetorno('operativa')
-    setServicioVinculadoDevolucion('')
+    setCategoriaServicioDevolucion('')
   }
 
   // Determinar si requiere aprobación
@@ -478,8 +488,8 @@ export function MovimientosModule() {
         Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un motivo de salida' })
         return
       }
-      if (motivoSalida === 'consumo_servicio' && !servicioVinculado.trim()) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes indicar el servicio vinculado' })
+      if (motivoSalida === 'consumo_servicio' && !categoriaServicio) {
+        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar una categoría de servicio' })
         return
       }
     }
@@ -494,8 +504,8 @@ export function MovimientosModule() {
         Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un vehículo' })
         return
       }
-      if (!servicioVinculado.trim()) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes indicar el servicio vinculado' })
+      if (!categoriaServicio) {
+        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar una categoría de servicio' })
         return
       }
       if (!proveedorId) {
@@ -535,15 +545,13 @@ export function MovimientosModule() {
     try {
       const { data: userData } = await supabase.auth.getUser()
 
-      // Construir observaciones con servicio vinculado incluido
+      // Construir observaciones (ahora categoría se guarda aparte)
       let observacionesFinal = observaciones || ''
-      if (tipoMovimiento === 'salida' && servicioVinculado.trim()) {
-        observacionesFinal = `Servicio: ${servicioVinculado.trim()}${observaciones ? '. ' + observaciones : ''}`
-      } else if (tipoMovimiento === 'asignacion' && servicioVinculado.trim()) {
-        observacionesFinal = `Servicio: ${servicioVinculado.trim()}${observaciones ? '. ' + observaciones : ''}`
-      } else if (tipoMovimiento === 'devolucion' && servicioVinculadoDevolucion.trim()) {
-        observacionesFinal = `Servicio: ${servicioVinculadoDevolucion.trim()}${observaciones ? '. ' + observaciones : ''}`
-      }
+
+      // Obtener la categoría de servicio a guardar
+      const categoriaServicioFinal = (tipoMovimiento === 'salida' || tipoMovimiento === 'asignacion')
+        ? categoriaServicio
+        : (tipoMovimiento === 'devolucion' ? categoriaServicioDevolucion : null)
 
       // Para ENTRADA: usar el RPC (va a tránsito)
       // Para SALIDA/ASIGNACION/DEVOLUCION: insertar directamente con estado pendiente
@@ -585,7 +593,8 @@ export function MovimientosModule() {
           observaciones: observacionesFinal || null,
           motivo_salida: tipoMovimiento === 'salida' ? motivoSalida : null,
           estado_aprobacion: 'pendiente',
-          estado_retorno: tipoMovimiento === 'devolucion' ? estadoRetorno : null
+          estado_retorno: tipoMovimiento === 'devolucion' ? estadoRetorno : null,
+          categoria_servicio: categoriaServicioFinal || null
         }
 
         const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
@@ -944,17 +953,15 @@ export function MovimientosModule() {
                 </select>
               </div>
 
-              {/* Servicio vinculado (obligatorio si es consumo) */}
+              {/* Categoría de servicio (obligatorio si es consumo) */}
               {motivoSalida === 'consumo_servicio' && (
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Servicio Vinculado *
+                    Categoría de Servicio *
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Ej: Mantenimiento preventivo, Reparación motor, etc."
-                    value={servicioVinculado}
-                    onChange={(e) => setServicioVinculado(e.target.value)}
+                  <select
+                    value={categoriaServicio}
+                    onChange={(e) => setCategoriaServicio(e.target.value as CategoriaServicio)}
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -964,7 +971,14 @@ export function MovimientosModule() {
                       background: 'var(--input-bg)',
                       color: 'var(--text-primary)'
                     }}
-                  />
+                  >
+                    <option value="">Seleccionar categoría...</option>
+                    {CATEGORIAS_SERVICIO.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
             </>
@@ -1011,16 +1025,14 @@ export function MovimientosModule() {
                 </select>
               </div>
 
-              {/* Servicio vinculado (obligatorio) */}
+              {/* Categoría de servicio (obligatorio) */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  Servicio Vinculado *
+                  Categoría de Servicio *
                 </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Mantenimiento preventivo, Reparación frenos, etc."
-                  value={servicioVinculado}
-                  onChange={(e) => setServicioVinculado(e.target.value)}
+                <select
+                  value={categoriaServicio}
+                  onChange={(e) => setCategoriaServicio(e.target.value as CategoriaServicio)}
                   style={{
                     width: '100%',
                     padding: '10px',
@@ -1030,7 +1042,14 @@ export function MovimientosModule() {
                     background: 'var(--input-bg)',
                     color: 'var(--text-primary)'
                   }}
-                />
+                >
+                  <option value="">Seleccionar categoría...</option>
+                  {CATEGORIAS_SERVICIO.map((cat) => (
+                    <option key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </>
           )}
@@ -1103,17 +1122,15 @@ export function MovimientosModule() {
                 </div>
               )}
 
-              {/* Servicio vinculado (opcional) */}
+              {/* Categoría de servicio (opcional) */}
               {vehiculoId && productoId && (
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Servicio Vinculado
+                    Categoría de Servicio
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Ej: Mantenimiento completado, Fin de servicio, etc."
-                    value={servicioVinculadoDevolucion}
-                    onChange={(e) => setServicioVinculadoDevolucion(e.target.value)}
+                  <select
+                    value={categoriaServicioDevolucion}
+                    onChange={(e) => setCategoriaServicioDevolucion(e.target.value as CategoriaServicio)}
                     style={{
                       width: '100%',
                       padding: '10px',
@@ -1123,7 +1140,14 @@ export function MovimientosModule() {
                       background: 'var(--input-bg)',
                       color: 'var(--text-primary)'
                     }}
-                  />
+                  >
+                    <option value="">Sin categoría</option>
+                    {CATEGORIAS_SERVICIO.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 
