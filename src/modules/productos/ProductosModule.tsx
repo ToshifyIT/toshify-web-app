@@ -404,6 +404,11 @@ export function ProductosModule() {
 
   const openCreateModal = () => {
     resetForm()
+    // Establecer estado "Stock disponible" por defecto
+    const estadoStock = estados.find(e => e.codigo === 'STOCK')
+    if (estadoStock) {
+      setFormData(prev => ({ ...prev, estado_id: estadoStock.id }))
+    }
     setShowCreateModal(true)
   }
 
@@ -915,58 +920,31 @@ export function ProductosModule() {
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Estado *
-                  </label>
-                  <select
-                    value={formData.estado_id}
-                    onChange={(e) => setFormData({ ...formData, estado_id: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {estados.map((est) => (
-                      <option key={est.id} value={est.id}>
-                        {est.descripcion}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Categoría *
-                  </label>
-                  <select
-                    value={formData.categoria_id}
-                    onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {categorias.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* Estado se asigna automáticamente como "Stock disponible" al crear */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                  Categoría *
+                </label>
+                <select
+                  value={formData.categoria_id}
+                  onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <option value="">Seleccionar...</option>
+                  {categorias.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.nombre}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -1099,14 +1077,14 @@ export function ProductosModule() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id || !formData.categoria_id}
+                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.categoria_id}
                 style={{
                   padding: '10px 20px',
-                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id && formData.categoria_id ? 'var(--color-primary)' : 'var(--border-primary)',
+                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.categoria_id ? 'var(--color-primary)' : 'var(--border-primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
-                  cursor: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id && formData.categoria_id ? 'pointer' : 'not-allowed',
+                  cursor: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.categoria_id ? 'pointer' : 'not-allowed',
                   fontSize: '14px',
                   fontWeight: 600,
                 }}
