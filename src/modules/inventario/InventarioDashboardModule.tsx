@@ -87,15 +87,21 @@ export function InventarioDashboardModule() {
     }
   }
 
-  // Contar por categoría
+  // Helper: verificar si producto tiene stock (disponible + en_uso + en_transito > 0)
+  const tieneStock = (p: StockProducto) => (p.disponible + p.en_uso + p.en_transito) > 0
+
+  // Solo productos con stock para conteos y tabla
+  const productosConStock = stockProductos.filter(tieneStock)
+
+  // Contar por categoría (solo productos con stock)
   const conteosPorCategoria = {
-    maquinaria: stockProductos.filter(p => p.categoria_codigo === 'maquinaria').length,
-    herramientas: stockProductos.filter(p => p.categoria_codigo === 'herramientas' || p.es_retornable).length,
-    repuestos: stockProductos.filter(p => p.categoria_codigo === 'repuestos' || (!p.es_retornable && p.categoria_codigo !== 'insumos' && p.categoria_codigo !== 'maquinaria')).length,
-    insumos: stockProductos.filter(p => p.categoria_codigo === 'insumos').length,
+    maquinaria: productosConStock.filter(p => p.categoria_codigo === 'maquinaria').length,
+    herramientas: productosConStock.filter(p => p.categoria_codigo === 'herramientas' || p.es_retornable).length,
+    repuestos: productosConStock.filter(p => p.categoria_codigo === 'repuestos' || (!p.es_retornable && p.categoria_codigo !== 'insumos' && p.categoria_codigo !== 'maquinaria')).length,
+    insumos: productosConStock.filter(p => p.categoria_codigo === 'insumos').length,
   }
 
-  const filteredData = stockProductos.filter((item) => {
+  const filteredData = productosConStock.filter((item) => {
     if (filter === 'herramientas') return item.categoria_codigo === 'herramientas' || item.es_retornable
     if (filter === 'repuestos') return item.categoria_codigo === 'repuestos' || (!item.es_retornable && item.categoria_codigo !== 'insumos' && item.categoria_codigo !== 'maquinaria')
     if (filter === 'maquinaria') return item.categoria_codigo === 'maquinaria'
@@ -227,7 +233,7 @@ export function InventarioDashboardModule() {
         >
           <Package size={20} className="inv-cat-icon" />
           <div className="inv-cat-info">
-            <span className="inv-cat-count">{stockProductos.length}</span>
+            <span className="inv-cat-count">{productosConStock.length}</span>
             <span className="inv-cat-label">Todos</span>
           </div>
         </button>
