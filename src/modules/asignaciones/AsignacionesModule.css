@@ -433,9 +433,21 @@ input[type="date"].asig-status-select {
 }
 
 .asig-turno-vacante {
-  color: var(--color-warning);
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   font-style: italic;
+}
+
+/* Vacante Diurno - Amarillo */
+.asig-turno-vacante.asig-turno-diurno {
+  color: var(--badge-yellow-text);
+}
+
+/* Vacante Nocturno - Azul */
+.asig-turno-vacante.asig-turno-nocturno {
+  color: var(--badge-blue-text);
 }
 
 /* Columna Asignados compacta */
@@ -472,14 +484,16 @@ input[type="date"].asig-status-select {
   flex-shrink: 0;
 }
 
-.asig-conductor-turno .asig-turno-label {
-  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
-  color: #1E40AF;
-}
-
-.asig-turno-vacante .asig-turno-label {
+/* Diurno (D) - Amarillo */
+.asig-turno-label.asig-label-diurno {
   background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
   color: #92400E;
+}
+
+/* Nocturno (N) - Azul (mismo que badge Nocturno en Conductores) */
+.asig-turno-label.asig-label-nocturno {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
 }
 
 /* Botones de acción específicos */
