@@ -319,6 +319,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         Swal.fire('Error', 'Debes seleccionar un vehículo', 'error')
         return
       }
+    } else if (step === 3) {
+      // Validar conductores según el modo
+      if (formData.horario === 'CARGO') {
+        if (formData.conductores_ids.length === 0) {
+          Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
+          return
+        }
+      } else {
+        // Modo TURNO - requiere al menos 1 conductor
+        if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
+          Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
+          return
+        }
+      }
     }
     setStep(step + 1)
   }
