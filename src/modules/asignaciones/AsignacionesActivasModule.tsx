@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, Users, CheckCircle, Filter } from 'lucide-react'
+import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, Users, Filter, TrendingUp, UserX } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
@@ -140,6 +140,43 @@ export function AsignacionesActivasModule() {
     const turnoCount = asignaciones.filter(a => a.horario === 'TURNO').length
     const cargoCount = asignaciones.filter(a => a.horario === 'CARGO' || !a.horario).length
 
+    // Cupos totales: TURNO tiene 2 cupos (D+N), CARGO tiene 1 cupo
+    const cuposTotales = (turnoCount * 2) + cargoCount
+
+    // Contar cupos ocupados y vacantes
+    let cuposOcupados = 0
+    let vacantesD = 0
+    let vacantesN = 0
+
+    asignaciones.forEach(a => {
+      if (a.horario === 'TURNO') {
+        // Para TURNO, revisar cada slot (D y N)
+        const conductorD = a.asignaciones_conductores?.find(ac => ac.horario === 'DIURNO' || ac.horario === 'D')
+        const conductorN = a.asignaciones_conductores?.find(ac => ac.horario === 'NOCTURNO' || ac.horario === 'N')
+
+        if (conductorD?.conductor_id) {
+          cuposOcupados++
+        } else {
+          vacantesD++
+        }
+
+        if (conductorN?.conductor_id) {
+          cuposOcupados++
+        } else {
+          vacantesN++
+        }
+      } else {
+        // Para CARGO, solo hay 1 cupo
+        const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
+        if (tieneConductor) {
+          cuposOcupados++
+        }
+      }
+    })
+
+    const cuposDisponibles = cuposTotales - cuposOcupados
+    const porcentajeOcupacion = cuposTotales > 0 ? ((cuposOcupados / cuposTotales) * 100).toFixed(1) : '0'
+
     // Conductores únicos
     const conductoresSet = new Set<string>()
     asignaciones.forEach(a => {
@@ -154,19 +191,18 @@ export function AsignacionesActivasModule() {
       if (a.vehiculo_id) vehiculosSet.add(a.vehiculo_id)
     })
 
-    // Confirmados (asignaciones donde todos los conductores están confirmados)
-    const confirmadosCount = asignaciones.filter(a => {
-      if (!a.asignaciones_conductores || a.asignaciones_conductores.length === 0) return false
-      return a.asignaciones_conductores.every(ac => ac.confirmado)
-    }).length
-
     return {
       total: asignaciones.length,
       turno: turnoCount,
       cargo: cargoCount,
       conductores: conductoresSet.size,
       vehiculos: vehiculosSet.size,
-      confirmados: confirmadosCount
+      cuposTotales,
+      cuposOcupados,
+      cuposDisponibles,
+      vacantesD,
+      vacantesN,
+      porcentajeOcupacion
     }
   }, [asignaciones])
 
@@ -371,12 +407,12 @@ export function AsignacionesActivasModule() {
 
           return (
             <div className="asig-conductores-compact">
-              <span className={diurno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
-                <span className="asig-turno-label">D</span>
+              <span className={diurno ? 'asig-conductor-turno asig-turno-diurno' : 'asig-turno-vacante asig-turno-diurno'}>
+                <span className="asig-turno-label asig-label-diurno">D</span>
                 {diurno ? diurno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
               </span>
-              <span className={nocturno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
-                <span className="asig-turno-label">N</span>
+              <span className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}>
+                <span className="asig-turno-label asig-label-nocturno">N</span>
                 {nocturno ? nocturno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
               </span>
             </div>
@@ -567,47 +603,9 @@ export function AsignacionesActivasModule() {
         }
       `}</style>
 
-      {/* Header - Estilo Bitácora */}
-      <div className="asig-header">
-        <div className="asig-header-title">
-          <h1>Asignaciones Activas</h1>
-          <span className="asig-header-subtitle">
-            {asignaciones.length} asignación{asignaciones.length !== 1 ? 'es' : ''} activa{asignaciones.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
-
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
         <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
-          <div className="stat-card">
-            <ClipboardList size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.total}</span>
-              <span className="stat-label">Total Activas</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <Clock size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.turno}</span>
-              <span className="stat-label">Por Turno</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <User size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.cargo}</span>
-              <span className="stat-label">A Cargo</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <Users size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.conductores}</span>
-              <span className="stat-label">Conductores</span>
-            </div>
-          </div>
           <div className="stat-card">
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
@@ -616,10 +614,38 @@ export function AsignacionesActivasModule() {
             </div>
           </div>
           <div className="stat-card">
-            <CheckCircle size={18} className="stat-icon" />
+            <ClipboardList size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.confirmados}</span>
-              <span className="stat-label">Confirmadas</span>
+              <span className="stat-value">{stats.cuposTotales}</span>
+              <span className="stat-label">Cupos Totales</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <UserX size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.cuposDisponibles}</span>
+              <span className="stat-label">Cupos Disponibles</span>
+            </div>
+          </div>
+          <div className="stat-card" title={`Diurno: ${stats.vacantesD} | Nocturno: ${stats.vacantesN}`}>
+            <Clock size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.vacantesD + stats.vacantesN}</span>
+              <span className="stat-label">Turnos Vacantes</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.cuposOcupados}</span>
+              <span className="stat-label">Cupos Ocupados</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <TrendingUp size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.porcentajeOcupacion}%</span>
+              <span className="stat-label">% Ocupación</span>
             </div>
           </div>
         </div>

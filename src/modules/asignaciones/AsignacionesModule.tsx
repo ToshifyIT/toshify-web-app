@@ -809,12 +809,12 @@ export function AsignacionesModule() {
 
         return (
           <div className="asig-conductores-compact">
-            <span className={diurno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
-              <span className="asig-turno-label">D</span>
+            <span className={diurno ? 'asig-conductor-turno asig-turno-diurno' : 'asig-turno-vacante asig-turno-diurno'}>
+              <span className="asig-turno-label asig-label-diurno">D</span>
               {diurno ? diurno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
             </span>
-            <span className={nocturno ? 'asig-conductor-turno' : 'asig-turno-vacante'}>
-              <span className="asig-turno-label">N</span>
+            <span className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}>
+              <span className="asig-turno-label asig-label-nocturno">N</span>
               {nocturno ? nocturno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
             </span>
           </div>
@@ -1039,16 +1039,6 @@ export function AsignacionesModule() {
 
   return (
     <div className="asig-module">
-      {/* Header - Estilo Bitácora */}
-      <div className="asig-header">
-        <div className="asig-header-title">
-          <h1>Gestión de Asignaciones</h1>
-          <span className="asig-header-subtitle">
-            {filteredAsignaciones.length} asignación{filteredAsignaciones.length !== 1 ? 'es' : ''} registradas
-          </span>
-        </div>
-      </div>
-
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
         <div className="asig-stats-grid">

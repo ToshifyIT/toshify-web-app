@@ -467,22 +467,14 @@ export function RoleManagement() {
         }
       `}</style>
 
-      {/* Header - Estilo Bitacora */}
-      <div className="admin-header">
-        <div className="admin-header-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h1>Roles del Sistema</h1>
-            <span className="admin-header-subtitle">
-              {roles.length} rol{roles.length !== 1 ? 'es' : ''} configurado{roles.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-          <button
-            className="btn-primary"
-            onClick={() => setShowCreateModal(true)}
-          >
-            + Crear Rol
-          </button>
-        </div>
+      {/* Action buttons */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+        <button
+          className="btn-primary"
+          onClick={() => setShowCreateModal(true)}
+        >
+          + Crear Rol
+        </button>
       </div>
 
       {/* Grid de roles */}

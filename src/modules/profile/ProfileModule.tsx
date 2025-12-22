@@ -206,14 +206,6 @@ export function ProfileModule() {
 
   return (
     <div className="profile-module">
-      {/* Header */}
-      <div className="profile-header">
-        <div className="profile-header-title">
-          <h1>Mi Perfil</h1>
-          <span className="profile-header-subtitle">Gestiona tu información personal y seguridad</span>
-        </div>
-      </div>
-
       <div className="profile-content">
         {/* Card de Perfil */}
         <div className="profile-card">

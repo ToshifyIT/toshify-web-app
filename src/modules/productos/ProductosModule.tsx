@@ -38,6 +38,8 @@ interface Producto {
   tipo: 'REPUESTOS' | 'HERRAMIENTAS'
   proveedor?: string
   observacion?: string
+  stock_minimo?: number
+  alerta_reposicion?: number
   created_at: string
   updated_at: string
   unidades_medida?: UnidadMedida
@@ -83,7 +85,9 @@ export function ProductosModule() {
     categoria_id: '',
     tipo: 'REPUESTOS' as 'REPUESTOS' | 'HERRAMIENTAS',
     proveedor: '',
-    observacion: ''
+    observacion: '',
+    stock_minimo: 0,
+    alerta_reposicion: 0
   })
 
   // Column filter states
@@ -231,6 +235,8 @@ export function ProductosModule() {
           tipo: formData.tipo,
           proveedor: formData.proveedor,
           observacion: formData.observacion,
+          stock_minimo: formData.stock_minimo || 0,
+          alerta_reposicion: formData.alerta_reposicion || 0,
           created_by: userData.user?.id
         })
 
@@ -278,6 +284,8 @@ export function ProductosModule() {
         tipo: formData.tipo,
         proveedor: formData.proveedor,
         observacion: formData.observacion,
+        stock_minimo: formData.stock_minimo || 0,
+        alerta_reposicion: formData.alerta_reposicion || 0,
         updated_at: new Date().toISOString()
       }
 
@@ -410,7 +418,9 @@ export function ProductosModule() {
       categoria_id: producto.categoria_id || '',
       tipo: producto.tipo,
       proveedor: producto.proveedor || '',
-      observacion: producto.observacion || ''
+      observacion: producto.observacion || '',
+      stock_minimo: producto.stock_minimo || 0,
+      alerta_reposicion: producto.alerta_reposicion || 0
     })
     setShowEditModal(true)
   }
@@ -481,7 +491,9 @@ export function ProductosModule() {
       categoria_id: '',
       tipo: 'REPUESTOS',
       proveedor: '',
-      observacion: ''
+      observacion: '',
+      stock_minimo: 0,
+      alerta_reposicion: 0
     })
     setSelectedProducto(null)
   }
@@ -736,16 +748,6 @@ export function ProductosModule() {
 
   return (
     <div className="prod-module">
-      {/* Header - Estilo Bitacora */}
-      <div className="prod-header">
-        <div className="prod-header-title">
-          <h1>Gestion de Productos</h1>
-          <span className="prod-header-subtitle">
-            {productos.length} producto{productos.length !== 1 ? 's' : ''} registrado{productos.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
-
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prod-stats">
         <div className="prod-stats-grid">
@@ -942,7 +944,7 @@ export function ProductosModule() {
 
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Categoría
+                    Categoría *
                   </label>
                   <select
                     value={formData.categoria_id}
@@ -957,7 +959,7 @@ export function ProductosModule() {
                       color: 'var(--text-primary)',
                     }}
                   >
-                    <option value="">Ninguna</option>
+                    <option value="">Seleccionar...</option>
                     {categorias.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.nombre}
@@ -1012,6 +1014,50 @@ export function ProductosModule() {
                 </div>
               </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                    Stock Mínimo
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.stock_minimo}
+                    onChange={(e) => setFormData({ ...formData, stock_minimo: Number(e.target.value) || 0 })}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                    Alerta de Reposición
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.alerta_reposicion}
+                    onChange={(e) => setFormData({ ...formData, alerta_reposicion: Number(e.target.value) || 0 })}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                </div>
+              </div>
+
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
                   Observación
@@ -1053,14 +1099,14 @@ export function ProductosModule() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id}
+                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id || !formData.categoria_id}
                 style={{
                   padding: '10px 20px',
-                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id ? 'var(--color-primary)' : 'var(--border-primary)',
+                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id && formData.categoria_id ? 'var(--color-primary)' : 'var(--border-primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
-                  cursor: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id ? 'pointer' : 'not-allowed',
+                  cursor: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id && formData.categoria_id ? 'pointer' : 'not-allowed',
                   fontSize: '14px',
                   fontWeight: 600,
                 }}
@@ -1216,7 +1262,7 @@ export function ProductosModule() {
 
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Categoría
+                    Categoría *
                   </label>
                   <select
                     value={formData.categoria_id}
@@ -1231,7 +1277,7 @@ export function ProductosModule() {
                       color: 'var(--text-primary)',
                     }}
                   >
-                    <option value="">Ninguna</option>
+                    <option value="">Seleccionar...</option>
                     {categorias.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.nombre}
@@ -1286,6 +1332,50 @@ export function ProductosModule() {
                 </div>
               </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                    Stock Mínimo
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.stock_minimo}
+                    onChange={(e) => setFormData({ ...formData, stock_minimo: Number(e.target.value) || 0 })}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
+                    Alerta de Reposición
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.alerta_reposicion}
+                    onChange={(e) => setFormData({ ...formData, alerta_reposicion: Number(e.target.value) || 0 })}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                </div>
+              </div>
+
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
                   Observación
@@ -1327,14 +1417,14 @@ export function ProductosModule() {
               </button>
               <button
                 onClick={handleEdit}
-                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id}
+                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id || !formData.categoria_id}
                 style={{
                   padding: '10px 20px',
-                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id ? 'var(--color-success)' : 'var(--border-primary)',
+                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id && formData.categoria_id ? 'var(--color-success)' : 'var(--border-primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
-                  cursor: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id ? 'pointer' : 'not-allowed',
+                  cursor: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id && formData.categoria_id ? 'pointer' : 'not-allowed',
                   fontSize: '14px',
                   fontWeight: 600,
                 }}

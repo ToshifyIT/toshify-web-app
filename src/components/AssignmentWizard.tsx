@@ -99,6 +99,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   const [vehicleAvailabilityFilter, setVehicleAvailabilityFilter] = useState<string>('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [conductorStatusFilter, setConductorStatusFilter] = useState<string>('')
+  const [conductorTurnoFilter, setConductorTurnoFilter] = useState<string>('')
 
   const [formData, setFormData] = useState<AssignmentData>({
     modalidad: '',
@@ -318,6 +319,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         Swal.fire('Error', 'Debes seleccionar un vehículo', 'error')
         return
       }
+    } else if (step === 3) {
+      // Validar conductores según el modo
+      if (formData.horario === 'CARGO') {
+        if (formData.conductores_ids.length === 0) {
+          Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
+          return
+        }
+      } else {
+        // Modo TURNO - requiere al menos 1 conductor
+        if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
+          Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
+          return
+        }
+      }
     }
     setStep(step + 1)
   }
@@ -327,7 +342,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   }
 
   const handleSelectModality = (modalidad: AssignmentData['modalidad'], horario: AssignmentData['horario']) => {
-    setFormData({ ...formData, modalidad, horario })
+    setFormData({
+      ...formData,
+      modalidad,
+      horario,
+      // Distancia por defecto: 0 para A Cargo, vacío para Turno
+      distancia: horario === 'CARGO' ? '0' : ''
+    })
   }
 
   const handleSelectVehicle = (vehicle: Vehicle) => {
@@ -552,7 +573,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         (conductorStatusFilter === 'disponible' && !c.tieneAsignacionActiva) ||
         (conductorStatusFilter === 'activo' && c.tieneAsignacionActiva)
 
-      return matchesSearch && matchesStatus
+      // Filtro por preferencia de turno (solo cuando está en modo TURNO)
+      const matchesTurno = conductorTurnoFilter === '' ||
+        (conductorTurnoFilter === 'diurno' && (c.preferencia_turno === 'DIURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno)) ||
+        (conductorTurnoFilter === 'nocturno' && (c.preferencia_turno === 'NOCTURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno)) ||
+        (conductorTurnoFilter === 'cargo' && (c.preferencia_turno === 'A_CARGO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno))
+
+      return matchesSearch && matchesStatus && matchesTurno
     })
     .sort((a, b) => {
       // Disponibles primero (sin asignación activa), luego activos
@@ -1484,8 +1511,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                   <div className="conductores-column">
                     <h4>Conductores Disponibles</h4>
 
-                    {/* Filtros: Buscador y Estado */}
-                    <div style={{ marginBottom: '8px', flexShrink: 0, display: 'flex', gap: '8px' }}>
+                    {/* Filtros: Buscador, Estado y Turno */}
+                    <div style={{ marginBottom: '8px', flexShrink: 0, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       <input
                         type="text"
                         placeholder="Buscar por nombre o DNI..."
@@ -1493,6 +1520,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         onChange={(e) => setConductorSearch(e.target.value)}
                         style={{
                           flex: 1,
+                          minWidth: '120px',
                           padding: '8px 10px',
                           border: '1px solid #E5E7EB',
                           borderRadius: '6px',
@@ -1511,13 +1539,33 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           fontFamily: 'inherit',
                           background: 'white',
                           cursor: 'pointer',
-                          minWidth: '100px'
+                          minWidth: '90px'
                         }}
                       >
                         <option value="">Todos</option>
                         <option value="disponible">Disponible</option>
                         <option value="activo">Activo</option>
                       </select>
+                      {isTurnoMode && (
+                        <select
+                          value={conductorTurnoFilter}
+                          onChange={(e) => setConductorTurnoFilter(e.target.value)}
+                          style={{
+                            padding: '8px 10px',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '6px',
+                            fontSize: 'clamp(10px, 0.9vw, 12px)',
+                            fontFamily: 'inherit',
+                            background: 'white',
+                            cursor: 'pointer',
+                            minWidth: '90px'
+                          }}
+                        >
+                          <option value="">Turno</option>
+                          <option value="diurno">Diurno</option>
+                          <option value="nocturno">Nocturno</option>
+                        </select>
+                      )}
                     </div>
 
                     <div className="conductores-list">

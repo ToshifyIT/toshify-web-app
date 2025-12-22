@@ -71,14 +71,6 @@ export function USSModule() {
 
   return (
     <div className="uss-module">
-      <USSHeader
-        lastUpdate={queryState.lastUpdate}
-        isLoading={queryState.loading}
-        dateRange={dateRange}
-        onDateRangeChange={setDateRange}
-        onRefresh={refresh}
-      />
-
       {queryState.error && (
         <div className="uss-error">
           <p>{queryState.error}</p>
@@ -97,6 +89,15 @@ export function USSModule() {
         onPageSizeChange={setPageSize}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
+        headerControls={
+          <USSHeader
+            lastUpdate={queryState.lastUpdate}
+            isLoading={queryState.loading}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            onRefresh={refresh}
+          />
+        }
       />
     </div>
   )

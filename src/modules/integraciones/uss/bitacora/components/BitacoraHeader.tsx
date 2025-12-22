@@ -58,33 +58,8 @@ export function BitacoraHeader({
 
   return (
     <div className="bitacora-header">
-      <div className="header-top">
-        <div className="header-title">
-          <h1>Bitácora de Vehículos</h1>
-          <span className="header-subtitle">Control de turnos y kilometraje - Wialon</span>
-        </div>
-
-        <div className="header-actions">
-          <button
-            className="btn-secondary"
-            onClick={onRefresh}
-            disabled={isLoading}
-          >
-            <RefreshCw size={16} className={isLoading ? 'spinning' : ''} />
-            {isLoading ? 'Cargando...' : 'Actualizar'}
-          </button>
-          <button
-            className="btn-primary"
-            onClick={handleSync}
-            disabled={syncing || isLoading}
-          >
-            <Zap size={16} />
-            {syncing ? 'Sincronizando...' : 'Sincronizar'}
-          </button>
-        </div>
-      </div>
-
-      <div className="header-filters">
+      <div className="header-controls">
+        {/* Filtros de fecha */}
         <div className="date-range-selector">
           <span className="filter-label">Período:</span>
           <div className="date-presets">
@@ -100,6 +75,7 @@ export function BitacoraHeader({
           </div>
         </div>
 
+        {/* Rango personalizado */}
         {showCustomRange && (
           <div className="custom-range">
             <input
@@ -121,9 +97,30 @@ export function BitacoraHeader({
           </div>
         )}
 
-        <div className="header-meta">
-          <span className="current-date">{dateRange.startDate === dateRange.endDate ? dateRange.startDate : `${dateRange.startDate} - ${dateRange.endDate}`}</span>
-          <span className="last-update">Última actualización: {formatLastUpdate(lastUpdate)}</span>
+        {/* Metadata y acciones */}
+        <div className="header-right">
+          <div className="header-meta">
+            <span className="current-date">{dateRange.startDate === dateRange.endDate ? dateRange.startDate : `${dateRange.startDate} - ${dateRange.endDate}`}</span>
+            <span className="last-update">Última actualización: {formatLastUpdate(lastUpdate)}</span>
+          </div>
+          <div className="header-actions">
+            <button
+              className="btn-secondary"
+              onClick={onRefresh}
+              disabled={isLoading}
+            >
+              <RefreshCw size={16} className={isLoading ? 'spinning' : ''} />
+              Actualizar
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleSync}
+              disabled={syncing || isLoading}
+            >
+              <Zap size={16} />
+              {syncing ? 'Sincronizando...' : 'Sincronizar'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
