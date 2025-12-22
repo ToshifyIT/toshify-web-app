@@ -56,6 +56,9 @@ interface EntradaTransito {
   observaciones: string | null
   created_at: string
   usuario_registro: string | null
+  estado_aprobacion: string
+  fecha_aprobacion: string | null
+  aprobador_nombre: string | null
 }
 
 export function PedidosTransitoModule() {
@@ -352,6 +355,23 @@ export function PedidosTransitoModule() {
       )
     },
     {
+      accessorKey: 'aprobador_nombre',
+      header: 'Aprobado por',
+      cell: ({ row }) => (
+        <div style={{ fontSize: '13px' }}>
+          <div style={{ color: 'var(--color-success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <CheckCircle size={14} />
+            {row.original.aprobador_nombre || 'Sistema'}
+          </div>
+          {row.original.fecha_aprobacion && (
+            <div style={{ color: 'var(--text-tertiary)', fontSize: '11px', marginTop: '2px' }}>
+              {new Date(row.original.fecha_aprobacion).toLocaleDateString('es-CL')}
+            </div>
+          )}
+        </div>
+      )
+    },
+    {
       id: 'acciones',
       header: 'Accion',
       cell: ({ row }) => (
@@ -375,7 +395,7 @@ export function PedidosTransitoModule() {
             }}
           >
             <CheckCircle size={15} />
-            {processingItem === row.original.id ? 'Procesando...' : 'Confirmar'}
+            {processingItem === row.original.id ? 'Procesando...' : 'Recepcionar'}
           </button>
         </div>
       )
@@ -474,8 +494,8 @@ export function PedidosTransitoModule() {
           loading={loading}
           searchPlaceholder="Buscar por producto o proveedor..."
           emptyIcon={<ArrowDownCircle size={48} />}
-          emptyTitle="No hay entradas en transito"
-          emptyDescription="Las entradas simples pendientes de confirmar apareceran aqui"
+          emptyTitle="No hay entradas pendientes de recepcion"
+          emptyDescription="Las entradas aprobadas pendientes de recepcionar apareceran aqui"
           pageSize={20}
           pageSizeOptions={[10, 20, 50]}
         />

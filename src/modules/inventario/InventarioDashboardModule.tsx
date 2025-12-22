@@ -9,8 +9,7 @@ import {
   CheckCircle,
   Activity,
   Settings,
-  Droplets,
-  Bell
+  Droplets
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -23,6 +22,7 @@ interface StockProducto {
   es_retornable: boolean
   categoria: string
   categoria_codigo?: string
+  unidad_medida?: string
   stock_total: number
   disponible: number
   en_uso: number
@@ -33,7 +33,7 @@ interface StockProducto {
   alerta_reposicion?: number
 }
 
-type FilterCategoria = 'all' | 'maquinaria' | 'herramientas' | 'repuestos' | 'insumos' | 'alerta'
+type FilterCategoria = 'all' | 'maquinaria' | 'herramientas' | 'repuestos' | 'insumos'
 
 export function InventarioDashboardModule() {
   const [stockProductos, setStockProductos] = useState<StockProducto[]>([])
@@ -47,33 +47,35 @@ export function InventarioDashboardModule() {
   const loadStockData = async () => {
     try {
       setLoading(true)
-      // Cargar vista de stock con datos de productos para stock_minimo
+      // Cargar vista de stock con datos de productos para stock_minimo y unidad_medida
       const [stockRes, productosRes] = await Promise.all([
         supabase.from('v_stock_productos').select('*').order('nombre'),
-        supabase.from('productos').select('id, stock_minimo, alerta_reposicion, categorias(codigo)')
+        supabase.from('productos').select('id, stock_minimo, alerta_reposicion, categorias(codigo), unidades_medida(abreviatura)')
       ])
 
       if (stockRes.error) throw stockRes.error
 
       // Combinar datos de stock con datos de productos
-      const productosMap = new Map<string, { stock_minimo: number; alerta_reposicion: number; categoria_codigo: string }>()
+      const productosMap = new Map<string, { stock_minimo: number; alerta_reposicion: number; categoria_codigo: string; unidad_medida: string }>()
       if (productosRes.data) {
         productosRes.data.forEach((p: any) => {
           productosMap.set(p.id, {
             stock_minimo: p.stock_minimo || 0,
             alerta_reposicion: p.alerta_reposicion || 0,
-            categoria_codigo: p.categorias?.codigo || ''
+            categoria_codigo: p.categorias?.codigo || '',
+            unidad_medida: p.unidades_medida?.abreviatura || 'Uds'
           })
         })
       }
 
       const dataConStock = (stockRes.data || []).map((item: any) => {
-        const productoInfo = productosMap.get(item.id) || { stock_minimo: 0, alerta_reposicion: 0, categoria_codigo: '' }
+        const productoInfo = productosMap.get(item.id) || { stock_minimo: 0, alerta_reposicion: 0, categoria_codigo: '', unidad_medida: 'Uds' }
         return {
           ...item,
           stock_minimo: productoInfo.stock_minimo,
           alerta_reposicion: productoInfo.alerta_reposicion,
-          categoria_codigo: productoInfo.categoria_codigo
+          categoria_codigo: productoInfo.categoria_codigo,
+          unidad_medida: productoInfo.unidad_medida
         }
       })
 
@@ -84,12 +86,6 @@ export function InventarioDashboardModule() {
       setLoading(false)
     }
   }
-
-  // Contar productos con alerta de stock bajo
-  const productosConAlerta = stockProductos.filter((item) => {
-    const stockMinimo = item.stock_minimo || 0
-    return stockMinimo > 0 && item.disponible <= stockMinimo
-  })
 
   // Contar por categoría
   const conteosPorCategoria = {
@@ -104,10 +100,6 @@ export function InventarioDashboardModule() {
     if (filter === 'repuestos') return item.categoria_codigo === 'repuestos' || (!item.es_retornable && item.categoria_codigo !== 'insumos' && item.categoria_codigo !== 'maquinaria')
     if (filter === 'maquinaria') return item.categoria_codigo === 'maquinaria'
     if (filter === 'insumos') return item.categoria_codigo === 'insumos'
-    if (filter === 'alerta') {
-      const stockMinimo = item.stock_minimo || 0
-      return stockMinimo > 0 && item.disponible <= stockMinimo
-    }
     return true
   })
 
@@ -143,6 +135,14 @@ export function InventarioDashboardModule() {
           <span className="inv-nombre">{getValue() as string}</span>
         ),
         enableSorting: true,
+      },
+      {
+        accessorKey: 'unidad_medida',
+        header: 'Unidad',
+        cell: ({ getValue }) => (
+          <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{getValue() as string}</span>
+        ),
+        enableSorting: false,
       },
       {
         accessorKey: 'es_retornable',
@@ -271,16 +271,6 @@ export function InventarioDashboardModule() {
             <span className="inv-cat-label">Insumos</span>
           </div>
         </button>
-        <button
-          onClick={() => setFilter('alerta')}
-          className={`inv-category-card alerta ${filter === 'alerta' ? 'active' : ''}`}
-        >
-          <Bell size={20} className="inv-cat-icon" />
-          <div className="inv-cat-info">
-            <span className="inv-cat-count">{productosConAlerta.length}</span>
-            <span className="inv-cat-label">Stock Bajo</span>
-          </div>
-        </button>
       </div>
 
       {/* Stats Cards - Estilo Bitacora */}
@@ -289,8 +279,8 @@ export function InventarioDashboardModule() {
           <div className="stat-card">
             <Package size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{totales.total}</span>
-              <span className="stat-label">Stock Total</span>
+              <span className="stat-value">{filteredData.length}</span>
+              <span className="stat-label">Productos</span>
             </div>
           </div>
           <div className="stat-card">

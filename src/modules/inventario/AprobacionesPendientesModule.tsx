@@ -53,7 +53,7 @@ export function AprobacionesPendientesModule() {
   const [tabActiva, setTabActiva] = useState<TabActiva>('pendientes')
 
   const userRole = profile?.roles?.name || ''
-  const canApprove = userRole === 'encargado' || userRole === 'admin'
+  const canApprove = userRole === 'encargado' || userRole === 'admin' || userRole === 'supervisor'
 
   useEffect(() => {
     if (canApprove) {
@@ -101,15 +101,24 @@ export function AprobacionesPendientesModule() {
           estado_aprobacion,
           fecha_aprobacion,
           motivo_rechazo,
+          usuario_id,
           productos (nombre),
-          usuario:usuario_id (email),
-          aprobador:usuario_aprobador_id (email)
+          aprobador:usuario_aprobador_id (full_name)
         `)
         .in('estado_aprobacion', ['aprobado', 'rechazado'])
         .order('fecha_aprobacion', { ascending: false, nullsFirst: false })
         .limit(50)
 
       if (error) throw error
+
+      // Obtener nombres de usuarios registradores
+      const usuarioIds = [...new Set((data || []).map((m: any) => m.usuario_id).filter(Boolean))]
+      const { data: perfiles } = await supabase
+        .from('user_profiles')
+        .select('id, full_name')
+        .in('id', usuarioIds)
+
+      const perfilesMap = new Map((perfiles || []).map((p: any) => [p.id, p.full_name]))
 
       const historicoFormateado: MovimientoHistorico[] = (data || []).map((mov: any) => ({
         id: mov.id,
@@ -121,8 +130,8 @@ export function AprobacionesPendientesModule() {
         fecha_aprobacion: mov.fecha_aprobacion,
         motivo_rechazo: mov.motivo_rechazo,
         producto_nombre: mov.productos?.nombre || 'Producto eliminado',
-        usuario_registrador_nombre: mov.usuario?.email || 'Usuario desconocido',
-        usuario_aprobador_nombre: mov.aprobador?.email || null
+        usuario_registrador_nombre: perfilesMap.get(mov.usuario_id) || 'Usuario desconocido',
+        usuario_aprobador_nombre: mov.aprobador?.full_name || null
       }))
 
       setHistorico(historicoFormateado)
