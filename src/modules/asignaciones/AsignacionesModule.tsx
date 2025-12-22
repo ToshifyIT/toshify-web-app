@@ -1039,16 +1039,6 @@ export function AsignacionesModule() {
 
   return (
     <div className="asig-module">
-      {/* Header - Estilo Bitácora */}
-      <div className="asig-header">
-        <div className="asig-header-title">
-          <h1>Gestión de Asignaciones</h1>
-          <span className="asig-header-subtitle">
-            {filteredAsignaciones.length} asignación{filteredAsignaciones.length !== 1 ? 'es' : ''} registradas
-          </span>
-        </div>
-      </div>
-
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
         <div className="asig-stats-grid">

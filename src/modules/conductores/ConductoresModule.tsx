@@ -19,7 +19,7 @@ import "./ConductoresModule.css";
 
 // Helper para normalizar la visualización de estados de conductor
 // Mantiene consistencia en el frontend independientemente de cómo se guarde en BD
-const getEstadoConductorDisplay = (estado: { codigo?: string; descripcion?: string } | null | undefined): string => {
+const getEstadoConductorDisplay = (estado: { codigo?: string; descripcion?: string | null } | null | undefined): string => {
   if (!estado) return "N/A";
   const codigo = estado.codigo?.toLowerCase();
   // Mapeo consistente para el frontend
@@ -88,6 +88,7 @@ export function ConductoresModule() {
   // Column filter states
   const [nombreFilter, setNombreFilter] = useState('');
   const [dniFilter, setDniFilter] = useState('');
+  const [cbuFilter, setCbuFilter] = useState('');
   const [estadoFilter, setEstadoFilter] = useState('');
   const [turnoFilter, setTurnoFilter] = useState('');
   const [asignacionFilter, setAsignacionFilter] = useState('');
@@ -615,7 +616,7 @@ export function ConductoresModule() {
   };
 
   // Función para procesar la cancelación de asignaciones por baja
-  const processConductorBaja = async (conductorId: string, conductorNombre: string) => {
+  const processConductorBaja = async (_conductorId: string, conductorNombre: string) => {
     const ahora = new Date().toISOString();
     const motivoBaja = `[BAJA CONDUCTOR] Conductor dado de baja: ${conductorNombre}`;
 
@@ -1022,6 +1023,12 @@ export function ConductoresModule() {
       );
     }
 
+    if (cbuFilter) {
+      result = result.filter(c =>
+        (c as any).cbu?.toLowerCase().includes(cbuFilter.toLowerCase())
+      );
+    }
+
     if (estadoFilter) {
       result = result.filter(c =>
         c.conductores_estados?.codigo === estadoFilter
@@ -1046,7 +1053,7 @@ export function ConductoresModule() {
     }
 
     return result;
-  }, [conductores, nombreFilter, dniFilter, estadoFilter, turnoFilter, asignacionFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -1156,6 +1163,51 @@ export function ConductoresModule() {
         enableSorting: true,
       },
       {
+        accessorKey: "cbu",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>CBU</span>
+            <button
+              className={`dt-column-filter-btn ${cbuFilter ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'cbu' ? null : 'cbu');
+              }}
+              title="Filtrar por CBU"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'cbu' && (
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar CBU..."
+                  value={cbuFilter}
+                  onChange={(e) => setCbuFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                {cbuFilter && (
+                  <button
+                    className="dt-column-filter-option"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCbuFilter('');
+                    }}
+                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
+        cell: ({ row }) => (row.original as any).cbu || "-",
+        enableSorting: true,
+      },
+      {
         accessorKey: "preferencia_turno",
         header: () => (
           <div className="dt-column-filter">
@@ -1212,6 +1264,16 @@ export function ConductoresModule() {
                 >
                   Sin Preferencia
                 </button>
+                <button
+                  className={`dt-column-filter-option ${turnoFilter === 'A_CARGO' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTurnoFilter('A_CARGO');
+                    setOpenColumnFilter(null);
+                  }}
+                >
+                  A Cargo
+                </button>
               </div>
             )}
           </div>
@@ -1226,6 +1288,9 @@ export function ConductoresModule() {
           }
           if (turno === 'NOCTURNO') {
             return <span className="dt-badge dt-badge-blue">Nocturno</span>;
+          }
+          if (turno === 'A_CARGO') {
+            return <span className="dt-badge dt-badge-purple">A Cargo</span>;
           }
           return <span className="dt-badge dt-badge-gray">{turno}</span>;
         },
@@ -1446,22 +1511,11 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, dniFilter, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
+    [canUpdate, canDelete, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
   );
 
   return (
     <div className="cond-module">
-      {/* Header - Estilo Bitácora */}
-      <div className="cond-header">
-        <div className="cond-header-title">
-          <h1>Gestión de Conductores</h1>
-          <span className="cond-header-subtitle">
-            {conductores.length} conductor{conductores.length !== 1 ? "es" : ""}{" "}
-            registrado{conductores.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-      </div>
-
       {/* Stats Cards - Estilo Bitácora */}
       <div className="cond-stats">
         <div className="cond-stats-grid">

@@ -159,14 +159,6 @@ export function InventarioDashboardModule() {
 
   return (
     <div className="inv-module">
-      {/* Header - Estilo Bitacora */}
-      <div className="inv-header">
-        <div className="inv-header-title">
-          <h1>Dashboard de Inventario</h1>
-          <span className="inv-header-subtitle">Vista general del stock y movimientos</span>
-        </div>
-      </div>
-
       {/* Filtros */}
       <div className="inv-filters">
         <button

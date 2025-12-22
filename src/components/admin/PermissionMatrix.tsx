@@ -68,16 +68,6 @@ export function PermissionMatrix() {
 
   return (
     <div className="admin-module">
-      {/* Header - Estilo Bitacora */}
-      <div className="admin-header">
-        <div className="admin-header-title">
-          <h1>Matriz de Permisos</h1>
-          <span className="admin-header-subtitle">
-            Configuracion de permisos por modulo y rol
-          </span>
-        </div>
-      </div>
-
       <style>{`
         .permission-matrix {
           overflow-x: auto;

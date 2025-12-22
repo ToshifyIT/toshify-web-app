@@ -837,16 +837,6 @@ export function VehicleManagement() {
 
   return (
     <div className="veh-module">
-      {/* Header - Estilo Bitácora */}
-      <div className="veh-header">
-        <div className="veh-header-title">
-          <h1>Gestión de Vehículos</h1>
-          <span className="veh-header-subtitle">
-            {vehiculos.length} vehículo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
-
       {/* Stats Cards - Estilo Bitácora */}
       <div className="veh-stats">
         <div className="veh-stats-grid">

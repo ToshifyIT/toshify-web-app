@@ -736,16 +736,6 @@ export function ProductosModule() {
 
   return (
     <div className="prod-module">
-      {/* Header - Estilo Bitacora */}
-      <div className="prod-header">
-        <div className="prod-header-title">
-          <h1>Gestion de Productos</h1>
-          <span className="prod-header-subtitle">
-            {productos.length} producto{productos.length !== 1 ? 's' : ''} registrado{productos.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
-
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prod-stats">
         <div className="prod-stats-grid">

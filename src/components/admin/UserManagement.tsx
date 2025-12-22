@@ -287,16 +287,6 @@ export function UserManagement() {
 
   return (
     <div className="admin-module">
-      {/* Header - Estilo Bitacora */}
-      <div className="admin-header">
-        <div className="admin-header-title">
-          <h1>Gestion de Usuarios</h1>
-          <span className="admin-header-subtitle">
-            {users.length} usuario{users.length !== 1 ? 's' : ''} registrado{users.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
-
       {/* Stats Cards - Estilo Bitacora */}
       <div className="admin-stats">
         <div className="admin-stats-grid">

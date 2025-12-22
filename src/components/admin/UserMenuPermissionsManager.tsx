@@ -917,16 +917,6 @@ export function UserMenuPermissionsManager() {
 
   return (
     <div className="admin-module">
-      {/* Header - Estilo Bitacora */}
-      <div className="admin-header">
-        <div className="admin-header-title">
-          <h1>Permisos de Menu por Usuario</h1>
-          <span className="admin-header-subtitle">
-            Configura permisos especificos de menu para cada usuario
-          </span>
-        </div>
-      </div>
-
       <style>{`
         .permissions-container {
           width: 100%;

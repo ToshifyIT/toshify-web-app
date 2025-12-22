@@ -748,16 +748,6 @@ export function RoleMenuPermissionsManager() {
 
   return (
     <div className="admin-module">
-      {/* Header - Estilo Bitacora */}
-      <div className="admin-header">
-        <div className="admin-header-title">
-          <h1>Permisos de Menu por Rol</h1>
-          <span className="admin-header-subtitle">
-            Configura permisos de menu para cada rol del sistema
-          </span>
-        </div>
-      </div>
-
       <style>{`
         .permissions-container {
           width: 100%;

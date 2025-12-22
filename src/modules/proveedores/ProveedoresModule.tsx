@@ -488,16 +488,6 @@ export function ProveedoresModule() {
 
   return (
     <div className="prov-module">
-      {/* Header - Estilo Bitacora */}
-      <div className="prov-header">
-        <div className="prov-header-title">
-          <h1>Gestion de Proveedores</h1>
-          <span className="prov-header-subtitle">
-            {proveedores.length} proveedor{proveedores.length !== 1 ? 'es' : ''} registrado{proveedores.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
-
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prov-stats">
         <div className="prov-stats-grid">

@@ -420,16 +420,6 @@ export function MenuHierarchyManager() {
 
   return (
     <div className="admin-module">
-      {/* Header - Estilo Bitacora */}
-      <div className="admin-header">
-        <div className="admin-header-title">
-          <h1>Gestor de Menus</h1>
-          <span className="admin-header-subtitle">
-            Administra la estructura de navegacion del sistema
-          </span>
-        </div>
-      </div>
-
       {/* DataTable with integrated action buttons */}
       <DataTable
         data={tableData}
