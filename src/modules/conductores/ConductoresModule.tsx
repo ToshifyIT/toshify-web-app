@@ -17,6 +17,38 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "../../components/ui/DataTable";
 import "./ConductoresModule.css";
 
+// Helper para normalizar la visualización de estados de conductor
+// Mantiene consistencia en el frontend independientemente de cómo se guarde en BD
+const getEstadoConductorDisplay = (estado: { codigo?: string; descripcion?: string } | null | undefined): string => {
+  if (!estado) return "N/A";
+  const codigo = estado.codigo?.toLowerCase();
+  // Mapeo consistente para el frontend
+  const displayMap: Record<string, string> = {
+    'activo': 'Activo',
+    'baja': 'Baja',
+    'suspendido': 'Suspendido',
+    'vacaciones': 'Vacaciones',
+    'licencia': 'Licencia',
+    'inactivo': 'Inactivo',
+  };
+  return displayMap[codigo || ''] || estado.codigo || estado.descripcion || "N/A";
+};
+
+// Helper para obtener el estilo del badge de estado
+const getEstadoConductorBadgeStyle = (estado: { codigo?: string } | null | undefined): { bg: string; color: string } => {
+  if (!estado?.codigo) return { bg: '#3B82F6', color: 'white' };
+  const codigo = estado.codigo.toLowerCase();
+  const styles: Record<string, { bg: string; color: string }> = {
+    'activo': { bg: '#22C55E', color: 'white' },
+    'baja': { bg: '#6B7280', color: 'white' },
+    'suspendido': { bg: '#F59E0B', color: 'white' },
+    'vacaciones': { bg: '#8B5CF6', color: 'white' },
+    'licencia': { bg: '#3B82F6', color: 'white' },
+    'inactivo': { bg: '#6B7280', color: 'white' },
+  };
+  return styles[codigo] || { bg: '#3B82F6', color: 'white' };
+};
+
 export function ConductoresModule() {
   const [conductores, setConductores] = useState<ConductorWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +92,11 @@ export function ConductoresModule() {
   const [turnoFilter, setTurnoFilter] = useState('');
   const [asignacionFilter, setAsignacionFilter] = useState('');
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
+
+  // Estados para modal de confirmación de baja
+  const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
+  const [affectedAssignments, setAffectedAssignments] = useState<any[]>([]);
+  const [pendingBajaUpdate, setPendingBajaUpdate] = useState(false);
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions();
 
@@ -474,62 +511,30 @@ export function ConductoresModule() {
 
     if (!selectedConductor) return;
 
+    // Detectar si está cambiando a estado "Baja"
+    const bajaEstadoId = estadosConductor.find(e => e.codigo?.toLowerCase() === 'baja')?.id;
+    const isChangingToBaja = bajaEstadoId &&
+      formData.estado_id === bajaEstadoId &&
+      selectedConductor.estado_id !== bajaEstadoId;
+
+    if (isChangingToBaja) {
+      // Buscar asignaciones afectadas
+      setSaving(true);
+      const affected = await fetchAffectedAssignments(selectedConductor.id);
+      setSaving(false);
+
+      if (affected && affected.length > 0) {
+        // Mostrar modal de confirmación
+        setAffectedAssignments(affected);
+        setShowBajaConfirmModal(true);
+        return; // Detener aquí, continuar después de confirmar
+      }
+    }
+
+    // No hay asignaciones afectadas o no está cambiando a Baja - proceder normalmente
     setSaving(true);
     try {
-      const { error: updateError } = await (supabase as any)
-        .from("conductores")
-        .update({
-          nombres: formData.nombres,
-          apellidos: formData.apellidos,
-          numero_dni: formData.numero_dni || null,
-          numero_cuit: formData.numero_cuit || null,
-          cbu: formData.cbu || null,
-          monotributo: formData.monotributo,
-          numero_licencia: formData.numero_licencia || null,
-          licencia_vencimiento: formData.licencia_vencimiento,
-          licencia_estado_id: formData.licencia_estado_id || null,
-          licencia_tipo_id: formData.licencia_tipo_id || null,
-          telefono_contacto: formData.telefono_contacto || null,
-          email: formData.email || null,
-          direccion: formData.direccion || null,
-          zona: formData.zona || null,
-          fecha_nacimiento: formData.fecha_nacimiento || null,
-          estado_civil_id: formData.estado_civil_id || null,
-          nacionalidad_id: formData.nacionalidad_id || null,
-          contacto_emergencia: formData.contacto_emergencia || null,
-          telefono_emergencia: formData.telefono_emergencia || null,
-          antecedentes_penales: formData.antecedentes_penales,
-          cochera_propia: formData.cochera_propia,
-          fecha_contratacion: formData.fecha_contratacion || null,
-          fecha_reincorpoaracion: formData.fecha_reincorpoaracion || null,
-          fecha_terminacion: formData.fecha_terminacion || null,
-          motivo_baja: formData.motivo_baja || null,
-          estado_id: formData.estado_id || null,
-          preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", selectedConductor.id);
-
-      if (updateError) throw updateError;
-
-      // Actualizar categorías de licencia: eliminar las existentes e insertar las nuevas
-      await (supabase as any)
-        .from("conductores_licencias_categorias")
-        .delete()
-        .eq("conductor_id", selectedConductor.id);
-
-      if (formData.licencia_categorias_ids.length > 0) {
-        const categoriasRelacion = formData.licencia_categorias_ids.map((categoriaId) => ({
-          conductor_id: selectedConductor.id,
-          licencia_categoria_id: categoriaId,
-        }));
-
-        const { error: categoriasError } = await (supabase as any)
-          .from("conductores_licencias_categorias")
-          .insert(categoriasRelacion);
-
-        if (categoriasError) throw categoriasError;
-      }
+      await performConductorUpdate();
 
       Swal.fire({
         icon: "success",
@@ -552,6 +557,302 @@ export function ConductoresModule() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Función para buscar asignaciones afectadas por la baja del conductor
+  const fetchAffectedAssignments = async (conductorId: string) => {
+    const { data, error } = await (supabase as any)
+      .from('asignaciones_conductores')
+      .select(`
+        id,
+        asignacion_id,
+        conductor_id,
+        horario,
+        estado,
+        asignaciones!inner (
+          id,
+          codigo,
+          horario,
+          estado,
+          vehiculo_id,
+          notas,
+          vehiculos (
+            id,
+            patente,
+            marca,
+            modelo
+          )
+        )
+      `)
+      .eq('conductor_id', conductorId)
+      .in('estado', ['asignado', 'activo'])
+      .in('asignaciones.estado', ['activa', 'programado']);
+
+    if (error) {
+      console.error('Error fetching affected assignments:', error);
+      return [];
+    }
+
+    // Para cada asignación, obtener los otros conductores (para determinar si queda vacante)
+    const assignmentsWithOthers = await Promise.all(
+      (data || []).map(async (ac: any) => {
+        const { data: otherConductors } = await (supabase as any)
+          .from('asignaciones_conductores')
+          .select('id, conductor_id, horario, estado')
+          .eq('asignacion_id', ac.asignacion_id)
+          .neq('conductor_id', conductorId)
+          .in('estado', ['asignado', 'activo']);
+
+        return {
+          ...ac,
+          otherConductors: otherConductors || []
+        };
+      })
+    );
+
+    return assignmentsWithOthers;
+  };
+
+  // Función para procesar la cancelación de asignaciones por baja
+  const processConductorBaja = async (conductorId: string, conductorNombre: string) => {
+    const ahora = new Date().toISOString();
+    const motivoBaja = `[BAJA CONDUCTOR] Conductor dado de baja: ${conductorNombre}`;
+
+    for (const asignacionConductor of affectedAssignments) {
+      const asignacion = asignacionConductor.asignaciones;
+      const horarioAsignacion = asignacion.horario; // TURNO or CARGO
+
+      if (horarioAsignacion === 'CARGO') {
+        // CARGO MODE: Cancelar asignación completa
+        await handleCargoCancellation(asignacion, asignacionConductor, motivoBaja, ahora);
+      } else {
+        // TURNO MODE: Remover conductor del turno
+        await handleTurnoCancellation(asignacionConductor, asignacion, motivoBaja, ahora);
+      }
+    }
+  };
+
+  // Cancelación para modo CARGO
+  const handleCargoCancellation = async (
+    asignacion: any,
+    asignacionConductor: any,
+    motivoBaja: string,
+    ahora: string
+  ) => {
+    // 1. Cancelar la asignación
+    const notasActualizadas = asignacion.notas
+      ? `${asignacion.notas}\n\n${motivoBaja}`
+      : motivoBaja;
+
+    await (supabase as any)
+      .from('asignaciones')
+      .update({
+        estado: 'cancelada',
+        notas: notasActualizadas,
+        updated_at: ahora
+      })
+      .eq('id', asignacion.id);
+
+    // 2. Actualizar registro del conductor en junction table
+    await (supabase as any)
+      .from('asignaciones_conductores')
+      .update({
+        estado: 'cancelado',
+        fecha_fin: ahora
+      })
+      .eq('id', asignacionConductor.id);
+
+    // 3. Devolver vehículo a DISPONIBLE
+    const { data: estadoDisponible } = await (supabase as any)
+      .from('vehiculos_estados')
+      .select('id')
+      .eq('codigo', 'DISPONIBLE')
+      .single();
+
+    if (estadoDisponible && asignacion.vehiculo_id) {
+      await (supabase as any)
+        .from('vehiculos')
+        .update({ estado_id: estadoDisponible.id })
+        .eq('id', asignacion.vehiculo_id);
+    }
+
+    // 4. Limpiar turnos ocupados
+    await (supabase as any)
+      .from('vehiculos_turnos_ocupados')
+      .delete()
+      .eq('asignacion_conductor_id', asignacionConductor.id);
+  };
+
+  // Cancelación para modo TURNO
+  const handleTurnoCancellation = async (
+    asignacionConductor: any,
+    asignacion: any,
+    motivoBaja: string,
+    ahora: string
+  ) => {
+    // 1. Cancelar registro específico del conductor
+    await (supabase as any)
+      .from('asignaciones_conductores')
+      .update({
+        estado: 'cancelado',
+        fecha_fin: ahora
+      })
+      .eq('id', asignacionConductor.id);
+
+    // 2. Limpiar turnos ocupados de este conductor
+    await (supabase as any)
+      .from('vehiculos_turnos_ocupados')
+      .delete()
+      .eq('asignacion_conductor_id', asignacionConductor.id);
+
+    // 3. Verificar si hay otro conductor activo
+    const otherConductors = asignacionConductor.otherConductors || [];
+
+    if (otherConductors.length === 0) {
+      // No hay otros conductores - cancelar asignación completa
+      const notasActualizadas = asignacion.notas
+        ? `${asignacion.notas}\n\n${motivoBaja}`
+        : motivoBaja;
+
+      await (supabase as any)
+        .from('asignaciones')
+        .update({
+          estado: 'cancelada',
+          notas: notasActualizadas,
+          updated_at: ahora
+        })
+        .eq('id', asignacion.id);
+
+      // Devolver vehículo a DISPONIBLE
+      const { data: estadoDisponible } = await (supabase as any)
+        .from('vehiculos_estados')
+        .select('id')
+        .eq('codigo', 'DISPONIBLE')
+        .single();
+
+      if (estadoDisponible && asignacion.vehiculo_id) {
+        await (supabase as any)
+          .from('vehiculos')
+          .update({ estado_id: estadoDisponible.id })
+          .eq('id', asignacion.vehiculo_id);
+      }
+    } else {
+      // Hay otro conductor - solo agregar nota de vacante
+      const turnoVacante = asignacionConductor.horario === 'diurno' ? 'Turno Diurno' : 'Turno Nocturno';
+      const notaVacante = `[VACANTE] ${turnoVacante} - ${motivoBaja}`;
+      const notasActualizadas = asignacion.notas
+        ? `${asignacion.notas}\n\n${notaVacante}`
+        : notaVacante;
+
+      await (supabase as any)
+        .from('asignaciones')
+        .update({
+          notas: notasActualizadas,
+          updated_at: ahora
+        })
+        .eq('id', asignacion.id);
+    }
+  };
+
+  // Función que ejecuta la actualización del conductor
+  const performConductorUpdate = async () => {
+    const { error: updateError } = await (supabase as any)
+      .from("conductores")
+      .update({
+        nombres: formData.nombres,
+        apellidos: formData.apellidos,
+        numero_dni: formData.numero_dni || null,
+        numero_cuit: formData.numero_cuit || null,
+        cbu: formData.cbu || null,
+        monotributo: formData.monotributo,
+        numero_licencia: formData.numero_licencia || null,
+        licencia_vencimiento: formData.licencia_vencimiento,
+        licencia_estado_id: formData.licencia_estado_id || null,
+        licencia_tipo_id: formData.licencia_tipo_id || null,
+        telefono_contacto: formData.telefono_contacto || null,
+        email: formData.email || null,
+        direccion: formData.direccion || null,
+        zona: formData.zona || null,
+        fecha_nacimiento: formData.fecha_nacimiento || null,
+        estado_civil_id: formData.estado_civil_id || null,
+        nacionalidad_id: formData.nacionalidad_id || null,
+        contacto_emergencia: formData.contacto_emergencia || null,
+        telefono_emergencia: formData.telefono_emergencia || null,
+        antecedentes_penales: formData.antecedentes_penales,
+        cochera_propia: formData.cochera_propia,
+        fecha_contratacion: formData.fecha_contratacion || null,
+        fecha_reincorpoaracion: formData.fecha_reincorpoaracion || null,
+        fecha_terminacion: formData.fecha_terminacion || null,
+        motivo_baja: formData.motivo_baja || null,
+        estado_id: formData.estado_id || null,
+        preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedConductor!.id);
+
+    if (updateError) throw updateError;
+
+    // Actualizar categorías de licencia
+    await (supabase as any)
+      .from("conductores_licencias_categorias")
+      .delete()
+      .eq("conductor_id", selectedConductor!.id);
+
+    if (formData.licencia_categorias_ids.length > 0) {
+      const categoriasRelacion = formData.licencia_categorias_ids.map((categoriaId) => ({
+        conductor_id: selectedConductor!.id,
+        licencia_categoria_id: categoriaId,
+      }));
+
+      const { error: categoriasError } = await (supabase as any)
+        .from("conductores_licencias_categorias")
+        .insert(categoriasRelacion);
+
+      if (categoriasError) throw categoriasError;
+    }
+  };
+
+  // Handler para confirmar baja con asignaciones
+  const handleConfirmBaja = async () => {
+    if (!selectedConductor) return;
+
+    setPendingBajaUpdate(true);
+    try {
+      // 1. Procesar cancelaciones de asignaciones
+      await processConductorBaja(
+        selectedConductor.id,
+        `${selectedConductor.nombres} ${selectedConductor.apellidos}`
+      );
+
+      // 2. Ejecutar actualización del conductor
+      await performConductorUpdate();
+
+      // 3. Cerrar modales y refrescar
+      setShowBajaConfirmModal(false);
+      setAffectedAssignments([]);
+      setShowEditModal(false);
+      setSelectedConductor(null);
+      resetForm();
+      await loadConductores();
+
+      Swal.fire({
+        icon: "success",
+        title: "¡Baja procesada!",
+        text: "El conductor ha sido dado de baja y sus asignaciones han sido actualizadas",
+        confirmButtonColor: "#E63946",
+        timer: 3000,
+      });
+    } catch (err: any) {
+      console.error("Error procesando baja:", err);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: err.message,
+        confirmButtonColor: "#E63946",
+      });
+    } finally {
+      setPendingBajaUpdate(false);
     }
   };
 
@@ -752,7 +1053,8 @@ export function ConductoresModule() {
     const estados = new Map<string, string>();
     conductores.forEach(c => {
       if (c.conductores_estados?.codigo) {
-        estados.set(c.conductores_estados.codigo, c.conductores_estados.descripcion || c.conductores_estados.codigo);
+        // Usar el helper para display consistente en el filtro
+        estados.set(c.conductores_estados.codigo, getEstadoConductorDisplay(c.conductores_estados));
       }
     });
     return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]));
@@ -1013,9 +1315,9 @@ export function ConductoresModule() {
           </div>
         ),
         cell: ({ row }) => {
-          const codigo = row.original.conductores_estados?.codigo;
-          if (!codigo) return "-";
-          const codigoLower = codigo.toLowerCase();
+          const estado = row.original.conductores_estados;
+          if (!estado?.codigo) return "-";
+          const codigoLower = estado.codigo.toLowerCase();
 
           let badgeClass = "dt-badge dt-badge-solid-blue";
           if (codigoLower === "baja") {
@@ -1024,7 +1326,7 @@ export function ConductoresModule() {
             badgeClass = "dt-badge dt-badge-solid-green";
           }
 
-          return <span className={badgeClass}>{codigo}</span>;
+          return <span className={badgeClass}>{getEstadoConductorDisplay(estado)}</span>;
         },
         enableSorting: true,
       },
@@ -1286,6 +1588,18 @@ export function ConductoresModule() {
           setShowDetailsModal={setShowDetailsModal}
           getEstadoBadgeClass={getEstadoBadgeClass}
           getEstadoLabel={getEstadoLabel}
+        />
+      )}
+      {showBajaConfirmModal && selectedConductor && (
+        <ModalConfirmBaja
+          conductor={selectedConductor}
+          affectedAssignments={affectedAssignments}
+          onConfirm={handleConfirmBaja}
+          onCancel={() => {
+            setShowBajaConfirmModal(false);
+            setAffectedAssignments([]);
+          }}
+          processing={pendingBajaUpdate}
         />
       )}
     </div>
@@ -2396,9 +2710,80 @@ function ModalDetalles({
   getEstadoBadgeClass: _getEstadoBadgeClass,
   getEstadoLabel: _getEstadoLabel,
 }: any) {
+  const [vehiculosAsignados, setVehiculosAsignados] = useState<any[]>([]);
+  const [loadingVehiculos, setLoadingVehiculos] = useState(true);
+
+  // Cargar historial de vehículos asignados
+  useEffect(() => {
+    const fetchVehiculosAsignados = async () => {
+      if (!selectedConductor?.id) return;
+
+      setLoadingVehiculos(true);
+      try {
+        const { data, error } = await supabase
+          .from('asignaciones_conductores')
+          .select(`
+            id,
+            horario,
+            estado,
+            created_at,
+            asignaciones!inner (
+              id,
+              codigo,
+              estado,
+              modalidad,
+              horario,
+              fecha_inicio,
+              fecha_fin,
+              vehiculos (
+                id,
+                patente,
+                marca,
+                modelo,
+                anio
+              )
+            )
+          `)
+          .eq('conductor_id', selectedConductor.id)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setVehiculosAsignados(data || []);
+      } catch (err) {
+        console.error('Error cargando vehículos asignados:', err);
+      } finally {
+        setLoadingVehiculos(false);
+      }
+    };
+
+    fetchVehiculosAsignados();
+  }, [selectedConductor?.id]);
+
+  // Helper para obtener el estado badge de asignación
+  const getAsignacionEstadoBadge = (estado: string) => {
+    const estados: Record<string, { bg: string; color: string; label: string }> = {
+      activa: { bg: 'rgba(34, 197, 94, 0.1)', color: '#22C55E', label: 'Activa' },
+      programado: { bg: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', label: 'Programada' },
+      cancelada: { bg: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', label: 'Cancelada' },
+      finalizada: { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: 'Finalizada' },
+    };
+    return estados[estado] || { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: estado };
+  };
+
+  // Helper para obtener el turno badge
+  const getTurnoBadge = (turno: string) => {
+    if (turno === 'diurno') {
+      return { bg: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', color: '#92400E', label: 'Diurno' };
+    }
+    if (turno === 'nocturno') {
+      return { bg: '#DBEAFE', color: '#1E40AF', label: 'Nocturno' };
+    }
+    return { bg: '#F3F4F6', color: '#374151', label: 'Todo el día' };
+  };
+
   return (
     <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
         <h2
           style={{
             marginTop: 0,
@@ -2545,19 +2930,120 @@ function ModalDetalles({
 
         <div className="section-title">Estado</div>
         <div>
-          <span
-            className={`badge`}
-            style={{
-              backgroundColor: "#3B82F6",
-              color: "white",
-              padding: "4px 12px",
-              borderRadius: "12px",
-              fontSize: "12px",
-              fontWeight: "600",
-            }}
-          >
-            {selectedConductor.conductores_estados?.descripcion || "N/A"}
-          </span>
+          {(() => {
+            const badgeStyle = getEstadoConductorBadgeStyle(selectedConductor.conductores_estados);
+            return (
+              <span
+                className="badge"
+                style={{
+                  backgroundColor: badgeStyle.bg,
+                  color: badgeStyle.color,
+                  padding: "4px 12px",
+                  borderRadius: "12px",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                }}
+              >
+                {getEstadoConductorDisplay(selectedConductor.conductores_estados)}
+              </span>
+            );
+          })()}
+        </div>
+
+        {/* Historial de Vehículos Asignados */}
+        <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          Historial de Vehículos
+          {!loadingVehiculos && (
+            <span style={{
+              fontSize: '12px',
+              color: 'var(--text-tertiary)',
+              fontWeight: 'normal'
+            }}>
+              ({vehiculosAsignados.length})
+            </span>
+          )}
+        </div>
+
+        <div className="vehiculos-historial-container">
+          {loadingVehiculos ? (
+            <div style={{
+              padding: '20px',
+              textAlign: 'center',
+              color: 'var(--text-tertiary)',
+              fontSize: '13px'
+            }}>
+              Cargando historial...
+            </div>
+          ) : vehiculosAsignados.length === 0 ? (
+            <div style={{
+              padding: '20px',
+              textAlign: 'center',
+              color: 'var(--text-tertiary)',
+              fontSize: '13px',
+              background: 'var(--bg-secondary)',
+              borderRadius: '8px'
+            }}>
+              Sin vehículos asignados
+            </div>
+          ) : (
+            <div className="vehiculos-historial-list">
+              {vehiculosAsignados.map((item) => {
+                const asig = item.asignaciones;
+                const vehiculo = asig?.vehiculos;
+                const estadoBadge = getAsignacionEstadoBadge(asig?.estado);
+                const turnoBadge = getTurnoBadge(item.horario);
+                const isActiva = asig?.estado === 'activa';
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`vehiculo-historial-item ${isActiva ? 'activa' : ''}`}
+                  >
+                    <div className="vehiculo-info">
+                      <div className="vehiculo-codigo">
+                        {vehiculo?.patente || asig?.codigo || 'N/A'}
+                      </div>
+                      <div className="vehiculo-detalle">
+                        {vehiculo?.marca && vehiculo?.modelo && (
+                          <span className="vehiculo-modelo">
+                            {vehiculo.marca} {vehiculo.modelo} {vehiculo.anio ? `(${vehiculo.anio})` : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="vehiculo-asignacion-info">
+                      <span
+                        className="turno-badge"
+                        style={{
+                          background: turnoBadge.bg,
+                          color: turnoBadge.color
+                        }}
+                      >
+                        {turnoBadge.label}
+                      </span>
+                      <span
+                        className="estado-asig-badge"
+                        style={{
+                          background: estadoBadge.bg,
+                          color: estadoBadge.color
+                        }}
+                      >
+                        {estadoBadge.label}
+                      </span>
+                    </div>
+                    <div className="vehiculo-fecha">
+                      {asig?.fecha_inicio && (
+                        <span>
+                          {new Date(asig.fecha_inicio).toLocaleDateString('es-AR')}
+                          {asig?.fecha_fin && ` - ${new Date(asig.fecha_fin).toLocaleDateString('es-AR')}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div
@@ -2572,6 +3058,155 @@ function ModalDetalles({
             onClick={() => setShowDetailsModal(false)}
           >
             Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal de confirmación para baja de conductor con asignaciones
+function ModalConfirmBaja({
+  conductor,
+  affectedAssignments,
+  onConfirm,
+  onCancel,
+  processing,
+}: {
+  conductor: ConductorWithRelations;
+  affectedAssignments: any[];
+  onConfirm: () => void;
+  onCancel: () => void;
+  processing: boolean;
+}) {
+  // Agrupar por tipo de asignación
+  const turnoAssignments = affectedAssignments.filter(
+    (a) => a.asignaciones?.horario === 'TURNO'
+  );
+  const cargoAssignments = affectedAssignments.filter(
+    (a) => a.asignaciones?.horario === 'CARGO'
+  );
+
+  return (
+    <div className="modal-overlay" onClick={() => !processing && onCancel()}>
+      <div
+        className="modal-content baja-confirm-modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: '600px' }}
+      >
+        <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700', color: '#DC2626' }}>
+          Confirmar Baja de Conductor
+        </h2>
+
+        <div className="delete-warning" style={{ marginBottom: '20px' }}>
+          <AlertTriangle size={24} />
+          <div>
+            <p style={{ margin: 0, fontWeight: '600' }}>
+              El conductor <strong>{conductor.nombres} {conductor.apellidos}</strong> tiene{' '}
+              {affectedAssignments.length} asignación(es) activa(s) o programada(s).
+            </p>
+            <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: '#6B7280' }}>
+              Al confirmar la baja, estas asignaciones serán actualizadas automáticamente.
+            </p>
+          </div>
+        </div>
+
+        <div className="affected-assignments-list">
+          {cargoAssignments.length > 0 && (
+            <div className="assignment-group">
+              <h4>
+                <span className="assignment-group-badge cargo">A CARGO</span>
+                {cargoAssignments.length} asignación(es)
+              </h4>
+              <p className="info-text">
+                Estas asignaciones serán <strong>canceladas</strong> y los vehículos volverán a estado DISPONIBLE.
+              </p>
+              <div className="assignment-items">
+                {cargoAssignments.map((a: any) => (
+                  <div key={a.id} className="assignment-item">
+                    <span className="assignment-item-code">{a.asignaciones?.codigo}</span>
+                    <span className="assignment-item-vehicle">
+                      {a.asignaciones?.vehiculos?.patente} - {a.asignaciones?.vehiculos?.marca} {a.asignaciones?.vehiculos?.modelo}
+                    </span>
+                    <span className={`assignment-item-estado ${a.asignaciones?.estado}`}>
+                      {a.asignaciones?.estado === 'activa' ? 'Activa' : 'Programada'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {turnoAssignments.length > 0 && (
+            <div className="assignment-group">
+              <h4>
+                <span className="assignment-group-badge turno">TURNO</span>
+                {turnoAssignments.length} asignación(es)
+              </h4>
+              <p className="info-text">
+                El conductor será removido de su turno.{' '}
+                {turnoAssignments.some((a: any) => a.otherConductors?.length > 0)
+                  ? 'Las asignaciones con otro conductor continuarán con el turno vacante.'
+                  : 'Si no hay otro conductor, la asignación será cancelada.'}
+              </p>
+              <div className="assignment-items">
+                {turnoAssignments.map((a: any) => (
+                  <div key={a.id} className="assignment-item">
+                    <span className="assignment-item-code">{a.asignaciones?.codigo}</span>
+                    <span className="assignment-item-vehicle">
+                      {a.asignaciones?.vehiculos?.patente} - {a.asignaciones?.vehiculos?.marca} {a.asignaciones?.vehiculos?.modelo}
+                    </span>
+                    <span className={`assignment-item-turno ${a.horario}`}>
+                      {a.horario === 'diurno' ? 'Diurno' : 'Nocturno'}
+                    </span>
+                    <span className={`assignment-item-estado ${a.asignaciones?.estado}`}>
+                      {a.asignaciones?.estado === 'activa' ? 'Activa' : 'Programada'}
+                    </span>
+                    {a.otherConductors?.length > 0 && (
+                      <span className="assignment-item-info">
+                        (Hay otro conductor asignado)
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '12px',
+            justifyContent: 'flex-end',
+            marginTop: '24px',
+            borderTop: '1px solid var(--border-primary)',
+            paddingTop: '16px',
+          }}
+        >
+          <button
+            className="btn-secondary"
+            onClick={onCancel}
+            disabled={processing}
+          >
+            Cancelar
+          </button>
+          <button
+            className="btn-danger"
+            onClick={onConfirm}
+            disabled={processing}
+            style={{
+              background: '#DC2626',
+              color: 'white',
+              border: 'none',
+              padding: '10px 20px',
+              borderRadius: '6px',
+              fontWeight: '600',
+              cursor: processing ? 'not-allowed' : 'pointer',
+              opacity: processing ? 0.7 : 1,
+            }}
+          >
+            {processing ? 'Procesando...' : 'Confirmar Baja'}
           </button>
         </div>
       </div>
