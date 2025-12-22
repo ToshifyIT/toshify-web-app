@@ -50,7 +50,7 @@ export function InventarioDashboardModule() {
       // Cargar vista de stock con datos de productos para stock_minimo y unidad_medida
       const [stockRes, productosRes] = await Promise.all([
         supabase.from('v_stock_productos').select('*').order('nombre'),
-        supabase.from('productos').select('id, stock_minimo, alerta_reposicion, categorias(codigo), unidades_medida(abreviatura)')
+        supabase.from('productos').select('id, stock_minimo, alerta_reposicion, categorias(codigo), unidades_medida(descripcion)')
       ])
 
       if (stockRes.error) throw stockRes.error
@@ -63,7 +63,7 @@ export function InventarioDashboardModule() {
             stock_minimo: p.stock_minimo || 0,
             alerta_reposicion: p.alerta_reposicion || 0,
             categoria_codigo: p.categorias?.codigo || '',
-            unidad_medida: p.unidades_medida?.abreviatura || 'Uds'
+            unidad_medida: p.unidades_medida?.descripcion || 'Uds'
           })
         })
       }
