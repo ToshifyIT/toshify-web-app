@@ -1,5 +1,5 @@
 // src/modules/integraciones/uss/bitacora/hooks/useBitacoraData.ts
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../../../../lib/supabase'
 import {
   wialonBitacoraService,
@@ -47,7 +47,7 @@ function getStartOfMonth(): string {
 }
 
 export function useBitacoraData() {
-  // Estado de fechas
+  // Estado de fechas - Default a "Hoy" para datos en tiempo real
   const [dateRange, setDateRange] = useState<BitacoraDateRange>({
     startDate: getToday(),
     endDate: getToday(),
@@ -166,8 +166,20 @@ export function useBitacoraData() {
     }
   }, [dateRange, page, pageSize, filterPatente, filterConductor, filterEstado, asignaciones])
 
-  // Cargar datos cuando cambian los parámetros
+  // Cargar datos automáticamente al montar
+  // uss_historico se sincroniza automáticamente por cron job, no necesita llamar Edge Function
   useEffect(() => {
+    loadAsignaciones().then(() => loadData())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Solo al montar
+
+  // Cargar datos cuando cambian los parámetros (excepto al montar)
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
     if (asignaciones.size > 0 || !queryState.loading) {
       loadData()
     }
@@ -240,33 +252,13 @@ export function useBitacoraData() {
     loadData()
   }, [loadData, loadAsignaciones])
 
-  // Sincronizar con Wialon
+  // Sincronizar - Solo recarga datos (uss_historico se sincroniza automáticamente)
   const triggerSync = useCallback(async () => {
     setQueryState((prev) => ({ ...prev, loading: true }))
-    try {
-      const result = await wialonBitacoraService.triggerSync(
-        dateRange.startDate,
-        dateRange.endDate
-      )
-      if (result.success) {
-        await loadData()
-      } else {
-        setQueryState((prev) => ({
-          ...prev,
-          loading: false,
-          error: result.error || 'Error en sincronización',
-        }))
-      }
-      return result
-    } catch (error) {
-      setQueryState((prev) => ({
-        ...prev,
-        loading: false,
-        error: error instanceof Error ? error.message : 'Error desconocido',
-      }))
-      return { success: false, error: String(error) }
-    }
-  }, [dateRange, loadData])
+    wialonBitacoraService.clearCache()
+    await loadData()
+    return { success: true }
+  }, [loadData])
 
   return {
     // Datos

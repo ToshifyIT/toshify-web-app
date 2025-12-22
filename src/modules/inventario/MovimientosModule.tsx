@@ -685,39 +685,22 @@ export function MovimientosModule() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header - Estilo Bitacora */}
-      <div style={{
-        background: 'var(--bg-primary)',
-        borderRadius: '8px',
-        padding: '20px',
-        border: '1px solid var(--border-primary)'
-      }}>
-        <div style={{ borderLeft: '4px solid #DC2626', paddingLeft: '16px' }}>
-          <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Gestion de Movimientos
-          </h1>
-          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'block', marginTop: '2px' }}>
-            Registrar entradas, salidas, uso y devolucion de herramientas
-          </span>
+      {requiereAprobacion() && (
+        <div style={{
+          padding: '8px 12px',
+          background: 'var(--badge-yellow-bg)',
+          border: '1px solid var(--color-warning)',
+          borderRadius: '6px',
+          fontSize: '13px',
+          color: 'var(--badge-yellow-text)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <Clock size={16} />
+          Los movimientos de salida, uso y devolucion requieren aprobacion de un encargado
         </div>
-        {requiereAprobacion() && (
-          <div style={{
-            marginTop: '12px',
-            padding: '8px 12px',
-            background: 'var(--badge-yellow-bg)',
-            border: '1px solid var(--color-warning)',
-            borderRadius: '6px',
-            fontSize: '13px',
-            color: 'var(--badge-yellow-text)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <Clock size={16} />
-            Los movimientos de salida, uso y devolucion requieren aprobacion de un encargado
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Selector de Tipo de Movimiento (sin Daño ni Pérdida) */}
       <div style={{ marginBottom: '24px' }}>

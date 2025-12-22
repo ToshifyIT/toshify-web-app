@@ -26,6 +26,7 @@ interface ExcesosTableProps {
   readonly onPageSizeChange: (size: number) => void
   readonly searchTerm: string
   readonly onSearchChange: (term: string) => void
+  readonly headerControls?: React.ReactNode
 }
 
 type SortField = 'fecha_evento' | 'patente' | 'conductor_wialon' | 'velocidad_maxima' | 'limite_velocidad' | 'exceso' | 'duracion_segundos'
@@ -46,6 +47,7 @@ export function ExcesosTable({
   onPageSizeChange,
   searchTerm,
   onSearchChange,
+  headerControls,
 }: ExcesosTableProps) {
   const [sortField, setSortField] = useState<SortField>('fecha_evento')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
@@ -117,21 +119,24 @@ export function ExcesosTable({
 
   return (
     <div className="uss-table-container">
-      {/* Buscador */}
-      <div className="uss-table-search">
-        <Search size={18} className="uss-search-icon" />
-        <input
-          type="text"
-          placeholder="Buscar por patente, conductor o ubicación..."
-          value={searchTerm}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="uss-search-input"
-        />
-        {searchTerm && (
-          <span className="uss-search-results">
-            {excesos.length} resultado{excesos.length !== 1 ? 's' : ''}
-          </span>
-        )}
+      {/* Barra de controles: buscador + filtros de fecha */}
+      <div className="uss-table-toolbar">
+        <div className="uss-table-search">
+          <Search size={18} className="uss-search-icon" />
+          <input
+            type="text"
+            placeholder="Buscar por patente, conductor o ubicación..."
+            value={searchTerm}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="uss-search-input"
+          />
+          {searchTerm && (
+            <span className="uss-search-results">
+              {excesos.length} resultado{excesos.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        {headerControls}
       </div>
 
       <table className="uss-table">

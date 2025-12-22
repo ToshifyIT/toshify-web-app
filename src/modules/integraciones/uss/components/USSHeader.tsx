@@ -17,42 +17,28 @@ interface USSHeaderProps {
 }
 
 export function USSHeader({
-  lastUpdate,
+  lastUpdate: _lastUpdate,
   isLoading,
   dateRange,
   onDateRangeChange,
   onRefresh,
 }: USSHeaderProps) {
   return (
-    <div className="uss-header">
-      <div className="uss-header-title">
-        <h1>Excesos de Velocidad</h1>
-        <span className="uss-header-subtitle">
-          Monitoreo de infracciones de velocidad desde USS/Wialon
-          {lastUpdate && (
-            <span className="uss-last-update">
-              {' '}• Última consulta: {lastUpdate.toLocaleString('es-AR')}
-            </span>
-          )}
-        </span>
-      </div>
+    <div className="uss-controls">
+      <DateRangeSelector
+        dateRange={dateRange}
+        isLoading={isLoading}
+        onChange={onDateRangeChange}
+      />
 
-      <div className="uss-controls">
-        <DateRangeSelector
-          dateRange={dateRange}
-          isLoading={isLoading}
-          onChange={onDateRangeChange}
-        />
-
-        <button
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="btn-primary uss-refresh-btn"
-        >
-          <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
-          {isLoading ? 'Cargando...' : 'Actualizar'}
-        </button>
-      </div>
+      <button
+        onClick={onRefresh}
+        disabled={isLoading}
+        className="btn-primary uss-refresh-btn"
+      >
+        <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+        {isLoading ? 'Cargando...' : 'Actualizar'}
+      </button>
     </div>
   )
 }

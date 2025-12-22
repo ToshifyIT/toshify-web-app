@@ -914,12 +914,12 @@ export function HomePage() {
                   <InformesPage />
                 </ProtectedRoute>
               } />
-              <Route path="/asignaciones" element={
-                <ProtectedRoute menuName="asignaciones" action="view">
+              <Route path="/programacion" element={
+                <ProtectedRoute submenuName="programacion" action="view">
                   <AsignacionesPage />
                 </ProtectedRoute>
               } />
-              <Route path="/asignaciones-activas" element={
+              <Route path="/estado-de-flota" element={
                 <ProtectedRoute submenuName="asignaciones-activas" action="view">
                   <AsignacionesActivasPage />
                 </ProtectedRoute>

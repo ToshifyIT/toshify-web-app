@@ -55,18 +55,30 @@ export function CabifyHeader({
   const isDisabled = isLoading || availableWeeks.length === 0
 
   return (
-    <div className="cabify-header">
-      <HeaderInfo lastUpdate={lastUpdate} />
-      <HeaderControls
-        selectedWeek={selectedWeek}
-        availableWeeks={availableWeeks}
-        customDateRange={customDateRange}
-        isLoading={isLoading}
-        isDisabled={isDisabled}
-        onWeekChange={handleWeekChange}
-        onCustomDateChange={onCustomDateChange}
-        onRefresh={onRefresh}
-      />
+    <div className="cabify-header cabify-header-compact">
+      <div className="cabify-controls">
+        <WeekSelector
+          selectedWeek={selectedWeek}
+          availableWeeks={availableWeeks}
+          isDisabled={isDisabled}
+          onChange={handleWeekChange}
+        />
+        <DateRangePicker
+          dateRange={customDateRange}
+          isDisabled={isDisabled}
+          onChange={onCustomDateChange}
+        />
+        <RefreshButton
+          isLoading={isLoading}
+          isDisabled={isLoading || !selectedWeek}
+          onClick={onRefresh}
+        />
+      </div>
+      {lastUpdate && (
+        <span className="cabify-last-update-compact">
+          {lastUpdate.toLocaleString('es-AR')}
+        </span>
+      )}
     </div>
   )
 }
