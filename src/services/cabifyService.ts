@@ -35,8 +35,6 @@ class CabifyService {
         return this.accessToken
       }
 
-      console.log('🔐 Autenticando con Cabify...')
-
       const response = await fetch(this.config.authUrl, {
         method: 'POST',
         headers: {
@@ -62,7 +60,6 @@ class CabifyService {
       // Restar 5 minutos de margen al tiempo de expiración
       this.tokenExpiry = Date.now() + (data.expires_in * 1000) - (5 * 60 * 1000)
 
-      console.log('✅ Autenticación exitosa')
       return this.accessToken
 
     } catch (error) {
@@ -109,7 +106,6 @@ class CabifyService {
       }
 
       const companyIds = data.data.metafleetCompanies?.companyIds || []
-      console.log(`✅ ${companyIds.length} compañías encontradas:`, companyIds)
       return companyIds
 
     } catch (error) {
@@ -186,8 +182,6 @@ class CabifyService {
         allDrivers = allDrivers.concat(paginatedData.drivers)
         totalPages = paginatedData.pages
         currentPage++
-
-        console.log(`  📄 Página ${currentPage - 1}/${totalPages}: ${paginatedData.drivers.length} conductores`)
       }
 
       return allDrivers
@@ -236,8 +230,6 @@ class CabifyService {
 
       // Paginar hasta obtener todos los conductores de esta compañía
       while (currentPage <= totalPages) {
-        console.log(`📄 Fetching page ${currentPage} of drivers for company ${companyId}`)
-
         const response = await fetch(this.config.graphqlUrl, {
           method: 'POST',
           headers: {
@@ -266,15 +258,12 @@ class CabifyService {
         }
 
         const paginatedData = data.data.paginatedDrivers
-        console.log(`📊 Page ${currentPage}: ${paginatedData.drivers.length} drivers received, Total pages: ${paginatedData.pages}`)
-        console.log(`🔍 Drivers on this page:`, paginatedData.drivers.map((d: any) => `${d.name} ${d.surname}`))
 
         allDrivers = allDrivers.concat(paginatedData.drivers)
         totalPages = paginatedData.pages
         currentPage++
       }
 
-      console.log(`✅ Total drivers fetched from company ${companyId}: ${allDrivers.length}`)
       return allDrivers
 
     } catch (error) {
@@ -288,10 +277,7 @@ class CabifyService {
    */
   async getAllDrivers(): Promise<any[]> {
     try {
-      console.log('🔄 Iniciando obtención de conductores...')
-
       // Paso 1: Obtener todas las compañías disponibles
-      console.log('🏢 Obteniendo lista de compañías...')
       const companyIds = await this.getMetafleetCompanies()
 
       if (companyIds.length === 0) {
@@ -304,18 +290,14 @@ class CabifyService {
         }))
       }
 
-      console.log(`📋 Se encontraron ${companyIds.length} compañías`)
-
       // Paso 2: Obtener conductores de cada compañía
       const allDrivers: any[] = []
 
       for (let i = 0; i < companyIds.length; i++) {
         const companyId = companyIds[i]
-        console.log(`  🔄 Procesando compañía ${i + 1}/${companyIds.length}: ${companyId}`)
 
         try {
           const drivers = await this.getDriversByCompany(companyId)
-          console.log(`    ✅ ${drivers.length} conductores encontrados en ${companyId}`)
 
           // Agregar companyId a cada conductor
           const driversWithCompany = drivers.map(driver => ({
@@ -331,7 +313,6 @@ class CabifyService {
         }
       }
 
-      console.log(`✅ Total: ${allDrivers.length} conductores obtenidos de ${companyIds.length} compañías`)
       return allDrivers
 
     } catch (error) {
@@ -908,8 +889,6 @@ class CabifyService {
         }
       `
 
-      console.log(`  📤 Enviando queries para conductor ${driverId}...`)
-
       // Ejecutar queries en paralelo
       const [driverResponse, journeysResponse] = await Promise.all([
         fetch(this.config.graphqlUrl, {
@@ -948,8 +927,6 @@ class CabifyService {
         }),
       ])
 
-      console.log(`  ✅ Respuestas: Driver ${driverResponse.status}, Journeys ${journeysResponse.status}`)
-
       if (!driverResponse.ok || !journeysResponse.ok) {
         const driverText = await driverResponse.text()
         const journeysText = await journeysResponse.text()
@@ -962,15 +939,6 @@ class CabifyService {
         driverResponse.json(),
         journeysResponse.json(),
       ])
-
-      // LOG COMPLETO para debugging
-      const driverInfo = driverData.data?.driver
-      console.log(`  📊 Driver data:`, JSON.stringify(driverInfo, null, 2))
-      console.log(`  📋 DNI: ${driverInfo?.nationalIdNumber || 'NULL'}`)
-      console.log(`  📋 License: ${driverInfo?.driverLicense || 'NULL'}`)
-      console.log(`  📋 Phone: ${driverInfo?.mobileNum || 'NULL'}`)
-      console.log(`  📋 Email: ${driverInfo?.email || 'NULL'}`)
-      console.log(`  📊 Journeys count:`, journeysData.data?.paginatedJourneys?.journeys?.length || 0)
 
       if (driverData.errors) {
         console.error(`  ❌ Errores en driver query:`, JSON.stringify(driverData.errors, null, 2))
@@ -986,7 +954,6 @@ class CabifyService {
       const totalPages = journeysData.data?.paginatedJourneys?.pages || 1
 
       if (totalPages > 1) {
-        console.log(`  📄 Obteniendo ${totalPages - 1} páginas adicionales de journeys...`)
         const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2)
         const additionalJourneys = await Promise.all(
           remainingPages.map(async (page) => {
@@ -1037,8 +1004,6 @@ class CabifyService {
     onProgress?: (current: number, total: number, newDrivers: any[], message: string) => void
   ): Promise<any[]> {
     try {
-      console.log('🔄 Iniciando obtención de conductores con detalles completos...')
-
       // Calcular rango de fechas EXACTAMENTE como script.gs.txt
       let startDate: string, endDate: string
 
@@ -1051,8 +1016,6 @@ class CabifyService {
         endDate = range.endDate
       }
 
-      console.log(`📅 Rango: ${startDate} - ${endDate}`)
-
       // PASO 1: Obtener TODAS las compañías (como script.gs línea 834)
       const companyIds = await this.getMetafleetCompanies()
 
@@ -1061,18 +1024,13 @@ class CabifyService {
         return []
       }
 
-      console.log(`🏢 Procesando ${companyIds.length} compañías en paralelo`)
-
       const allDriversData: any[] = []
 
       // OPTIMIZACIÓN 1: Procesar TODAS las compañías en paralelo
       const companyPromises = companyIds.map(async (companyId, companyIndex) => {
         try {
-          console.log(`  🔄 Compañía ${companyIndex + 1}/${companyIds.length}: ${companyId}`)
-
           // Obtener conductores de esta compañía
           const drivers = await this.getDriversByCompany(companyId)
-          console.log(`    ✅ ${drivers.length} conductores encontrados`)
 
           const companyDriversData: any[] = []
 
@@ -1080,7 +1038,6 @@ class CabifyService {
           const BATCH_SIZE = 100
           for (let j = 0; j < drivers.length; j += BATCH_SIZE) {
             const batch = drivers.slice(j, j + BATCH_SIZE)
-            console.log(`    📦 Batch ${Math.floor(j / BATCH_SIZE) + 1}/${Math.ceil(drivers.length / BATCH_SIZE)} (${batch.length} conductores)`)
 
             // Paso 1: Obtener datos de todos los conductores del batch en paralelo
             const batchDataPromises = batch.map(async (driver) => {
@@ -1140,7 +1097,7 @@ class CabifyService {
                       }
                     }
                   } catch (journeyError) {
-                    console.log(`      ⚠️ Error en journey ${j.id}:`, journeyError)
+                    // Error silencioso en journey individual
                   }
                 })
 
@@ -1282,7 +1239,6 @@ class CabifyService {
             }
           }
 
-          console.log(`    ✅ Compañía ${companyId}: ${companyDriversData.length} conductores procesados`)
           return companyDriversData
 
         } catch (error) {
@@ -1295,7 +1251,6 @@ class CabifyService {
       await Promise.all(companyPromises)
 
       // allDriversData ya contiene todos los resultados gracias al callback incremental
-      console.log(`✅ TOTAL: ${allDriversData.length} conductores de ${companyIds.length} compañías`)
       return allDriversData
 
     } catch (error) {
@@ -1311,9 +1266,6 @@ class CabifyService {
     try {
       // Calcular rango de fechas
       const { startDate, endDate } = this.getDateRange(period)
-
-      console.log(`📊 Consultando datos de Cabify para período: ${period}`)
-      console.log(`📅 Rango: ${startDate} - ${endDate}`)
 
       // 1. Obtener todos los conductores
       const drivers = await this.getAllDrivers()
@@ -1387,7 +1339,6 @@ class CabifyService {
         }
       }
 
-      console.log(`✅ ${driversData.length} conductores procesados exitosamente`)
       return driversData
 
     } catch (error) {

@@ -7,8 +7,6 @@ export function RoleBasedRedirect() {
   const { isAdmin } = usePermissions()
   const { getVisibleMenus, loading } = useEffectivePermissions()
 
-  console.log('🔀 RoleBasedRedirect - isAdmin:', isAdmin())
-
   if (loading) {
     return <div>Cargando...</div>
   }
@@ -19,7 +17,6 @@ export function RoleBasedRedirect() {
 
   // Si tiene menús visibles, redirigir al primero
   if (firstMenu?.menu_route) {
-    console.log('🔀 Redirigiendo a:', firstMenu.menu_route)
     return <Navigate to={firstMenu.menu_route} replace />
   }
 

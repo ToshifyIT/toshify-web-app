@@ -103,7 +103,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
     try {
       // TEMPORAL: Usar fallback directo hasta que edge function se actualice
-      console.warn('⚠️ Usando fallback directo (edge function deshabilitada temporalmente)')
       await loadPermissionsFallback()
 
       /* Edge function temporalmente deshabilitada
@@ -130,7 +129,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       }
 
       const data: UserPermissionsResponse = await response.json()
-      console.log('✅ Permisos cargados desde edge function:', data)
       setUserPermissions(data)
       */
     } catch (error) {
@@ -157,8 +155,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
       // Verificar si es admin
       const isUserAdmin = (profileData as any).roles?.name === 'admin'
-      console.log('🔐 Usuario:', user!.email, '| Rol:', (profileData as any).roles?.name, '| Es admin:', isUserAdmin)
-      console.log('🔐 Role ID:', (profileData as any).role_id)
 
       let menusData: MenuPermission[] = []
       let submenusData: SubmenuPermission[] = []
@@ -215,7 +211,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         const roleId = (profileData as any).role_id
 
         if (roleId) {
-          console.log('🔐 Cargando permisos para roleId:', roleId)
           // Cargar permisos de menús del rol
           const { data: roleMenuPerms, error: menuError } = await supabase
             .from('role_menu_permissions')
@@ -226,7 +221,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             .eq('role_id', roleId)
             .eq('can_view', true)
 
-          console.log('🔐 roleMenuPerms raw:', roleMenuPerms)
           if (menuError) console.error('🔐 Error cargando menús:', menuError)
 
           // Cargar permisos de submenús del rol
@@ -239,12 +233,10 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             .eq('role_id', roleId)
             .eq('can_view', true)
 
-          console.log('🔐 roleSubmenuPerms raw:', roleSubmenuPerms)
           if (submenuError) console.error('🔐 Error cargando submenús:', submenuError)
 
           // Convertir permisos de menús
           const filteredMenuPerms = (roleMenuPerms || []).filter((p: any) => p.menus?.is_active)
-          console.log('🔐 Menús después de filtrar is_active:', filteredMenuPerms.length, 'de', (roleMenuPerms || []).length)
 
           menusData = filteredMenuPerms.map((p: any) => ({
               id: p.menus.id,
@@ -263,7 +255,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
           // Convertir permisos de submenús
           const filteredSubmenuPerms = (roleSubmenuPerms || []).filter((p: any) => p.submenus?.is_active)
-          console.log('🔐 Submenús después de filtrar is_active:', filteredSubmenuPerms.length, 'de', (roleSubmenuPerms || []).length)
 
           submenusData = filteredSubmenuPerms.map((p: any) => ({
               id: p.submenus.id,
@@ -282,16 +273,11 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
               },
               permission_source: 'role_inherited' as const
             }))
-
-          console.log('📋 Permisos de rol cargados - Menús:', menusData.length, 'Submenús:', submenusData.length)
-          console.log('📋 Menús finales:', menusData.map(m => m.name))
-          console.log('📋 Submenús finales:', submenusData.map(s => s.name))
         } else {
           console.warn('⚠️ Usuario sin role_id asignado - no se cargarán permisos')
         }
       }
 
-      console.log('✅ Permisos finales a guardar:', { menus: menusData.length, submenus: submenusData.length })
       setUserPermissions({
         user_id: user!.id,
         email: user!.email || '',
@@ -303,10 +289,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         menus: menusData,
         submenus: submenusData
       })
-
-      console.log('✅ Modo fallback activado - Rol:', (profileData as any).roles?.name)
-      console.log('📋 Menús cargados:', menusData.length)
-      console.log('📋 Submenús cargados:', submenusData.length)
     } catch (error) {
       console.error('Error en fallback:', error)
       setUserPermissions(null)

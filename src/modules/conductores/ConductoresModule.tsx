@@ -242,15 +242,6 @@ export function ConductoresModule() {
         supabase.from("licencias_tipos").select("*").order("descripcion"),
       ]);
 
-      console.log("Catálogos conductores:", {
-        estadosCivilesRes,
-        nacionalidadesRes,
-        categoriasRes,
-        estadosConductorRes,
-        estadosLicenciaRes,
-        tiposLicenciaRes,
-      });
-
       if (estadosCivilesRes.data) setEstadosCiviles(estadosCivilesRes.data);
       if (nacionalidadesRes.data) setNacionalidades(nacionalidadesRes.data);
       if (categoriasRes.data) setCategoriasLicencia(categoriasRes.data);

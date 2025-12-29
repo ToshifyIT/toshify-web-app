@@ -187,7 +187,6 @@ class CabifyHistoricalService {
     if (!options.forceAPI && !isToday) {
       const cached = this.cache.get(cacheKey)
       if (cached) {
-        console.log('✅ Datos desde caché en memoria (0ms)')
         return {
           drivers: cached,
           stats: {
@@ -203,16 +202,13 @@ class CabifyHistoricalService {
     }
 
     // 2. Consultar histórico en BD
-    console.log('🔍 Consultando datos históricos...')
     const historical = await this.queryHistorical(startDate, endDate)
 
     // 3. Analizar cobertura
     const coverage = this.analyzeCoverage(historical, startDate, endDate)
-    console.log(`📊 Cobertura histórica: ${coverage.percentage.toFixed(1)}%`)
 
     // 4. SIEMPRE retornar datos del histórico (NUNCA llamar a la API desde el frontend)
     // El Edge Function se encarga de mantener el histórico actualizado cada 5 minutos
-    console.log(`✅ Datos desde histórico: ${historical.length} conductores`)
 
     // Cachear resultado (incluso si está vacío, para evitar consultas repetidas)
     if (historical.length > 0) {
@@ -247,12 +243,6 @@ class CabifyHistoricalService {
     //
     // NO debemos modificar estas fechas, ya tienen el formato correcto de code.txt
 
-    console.log('📅 Consultando histórico:', {
-      startDate,
-      endDate,
-      explanation: 'Fechas ya vienen con offset correcto de cabifyService.getWeekRange()'
-    })
-
     // Consulta usando las fechas originales directamente
     // startDate ya tiene T03:00:00Z (00:00 Argentina)
     // endDate ya tiene T02:59:59Z del día siguiente (23:59:59 Argentina del día anterior)
@@ -269,11 +259,8 @@ class CabifyHistoricalService {
     }
 
     if (!data || data.length === 0) {
-      console.log('📭 Sin datos históricos para este período')
       return []
     }
-
-    console.log(`📦 ${data.length} registros históricos encontrados (múltiples días)`)
 
     // PASO 1: Eliminar duplicados - quedarse solo con el registro más reciente por (dni, fecha)
     // Esto soluciona el problema de múltiples sincronizaciones por día
@@ -304,7 +291,6 @@ class CabifyHistoricalService {
     }
 
     const uniqueRecords = Array.from(uniqueRecordsMap.values())
-    console.log(`📊 ${uniqueRecords.length} registros únicos después de eliminar duplicados`)
 
     // PASO 2: Agrupar y sumar datos por conductor (dni)
     const driverMap = new Map<string, any>()
@@ -439,8 +425,6 @@ class CabifyHistoricalService {
     // Ordenar por ganancia total descendente
     aggregatedDrivers.sort((a, b) => b.gananciaTotal - a.gananciaTotal)
 
-    console.log(`📊 ${aggregatedDrivers.length} conductores únicos agregados`)
-
     return aggregatedDrivers
   }
 
@@ -482,7 +466,6 @@ class CabifyHistoricalService {
   clearCache() {
     this.cache.clear()
     this.statsCache.clear()
-    console.log('🗑️  Caché limpiado')
   }
 
   /**
@@ -491,7 +474,6 @@ class CabifyHistoricalService {
   invalidateCache(pattern: string) {
     this.cache.invalidatePattern(pattern)
     this.statsCache.invalidatePattern(pattern)
-    console.log(`🗑️  Caché invalidado para: ${pattern}`)
   }
 
   /**

@@ -202,14 +202,6 @@ export function AsignacionesModule() {
         !conductoresOcupadosIds.has(c.id)
       ).length
 
-      console.log('Stats debug:', {
-        totalConductores,
-        conductoresActivos: conductoresActivos.length,
-        asignacionesActivas: asignacionesActivasIds.length,
-        conductoresOcupados: conductoresOcupadosIds.size,
-        conductoresDisponibles
-      })
-
       // Turnos disponibles: calcular basado en vehículos en uso que tienen turnos libres
       // Un vehículo en modo TURNO tiene 2 turnos (diurno/nocturno)
       const { data: asignacionesActivasParaTurnos } = await supabase
