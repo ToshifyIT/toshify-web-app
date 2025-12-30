@@ -247,7 +247,11 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
               nombre: driverInfo.name || driver.name || '',
               apellido: driverInfo.surname || driver.surname || '',
               email: driverInfo.email || driver.email || '',
-              dni: driverInfo.nationalIdNumber || driver.nationalIdNumber || '',
+              // DNI: usar placeholder con cabify_driver_id si está vacío
+              // Cabify manda - incluir TODOS los conductores
+              dni: (driverInfo.nationalIdNumber || driver.nationalIdNumber || '').trim() !== ''
+                ? (driverInfo.nationalIdNumber || driver.nationalIdNumber)
+                : `CABIFY_${driver.id}`,
               licencia: driverInfo.driverLicense || driver.driverLicense || '',
               telefono_codigo: driverInfo.mobileNum ? driver.mobileCc || '' : '',
               telefono_numero: driverInfo.mobileNum || driver.mobileNum || '',

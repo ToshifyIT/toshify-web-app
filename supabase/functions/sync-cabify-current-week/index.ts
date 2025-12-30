@@ -390,7 +390,11 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
               nombre: effectiveDriver.name || '',
               apellido: effectiveDriver.surname || '',
               email: effectiveDriver.email || '',
-              dni: effectiveDriver.nationalIdNumber || '',
+              // DNI: usar placeholder con cabify_driver_id si está vacío
+              // Cabify manda - incluir TODOS los conductores
+              dni: (effectiveDriver.nationalIdNumber && effectiveDriver.nationalIdNumber.trim() !== '')
+                ? effectiveDriver.nationalIdNumber
+                : `CABIFY_${driver.id}`,
               licencia: effectiveDriver.driverLicense || '',
               telefono_codigo: effectiveDriver.mobileCc || '',
               telefono_numero: effectiveDriver.mobileNum || '',
@@ -518,29 +522,22 @@ serve(async (req) => {
         console.log(`  📥 Sincronizando día faltante...`)
       }
 
-      // Consultar datos
+      // Consultar datos - Cabify manda, incluir TODOS los conductores
       const driversData = await getCabifyData(token, day.startDate, day.endDate)
       console.log(`  📊 ${driversData.length} conductores obtenidos de API`)
 
-      // Filtrar conductores sin DNI (requerido por constraint de BD)
-      const validDrivers = driversData.filter(d => d.dni && d.dni.trim() !== '')
-      const filteredCount = driversData.length - validDrivers.length
-      if (filteredCount > 0) {
-        console.log(`  ⚠️  ${filteredCount} conductores filtrados (sin DNI)`)
-      }
-
-      if (validDrivers.length > 0) {
-        // Guardar en BD
+      if (driversData.length > 0) {
+        // Guardar en BD - todos los conductores (ya tienen DNI o placeholder)
         const { error: insertError } = await supabase
           .from('cabify_historico')
-          .insert(validDrivers)
+          .insert(driversData)
 
         if (insertError) {
           console.error(`  ❌ Error guardando: ${insertError.message}`)
         } else {
-          totalSynced += validDrivers.length
+          totalSynced += driversData.length
           daysProcessed++
-          console.log(`  ✅ ${validDrivers.length} conductores guardados exitosamente`)
+          console.log(`  ✅ ${driversData.length} conductores guardados exitosamente`)
         }
       }
     }
