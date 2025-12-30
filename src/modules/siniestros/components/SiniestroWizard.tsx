@@ -1,6 +1,6 @@
 // src/modules/siniestros/components/SiniestroWizard.tsx
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Check, X, Car, AlertTriangle, FileText, Users } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, X, Car, AlertTriangle, FileText, Users, Briefcase } from 'lucide-react'
 import type { SiniestroFormData, SiniestroCategoria, SiniestroEstado, VehiculoSimple, ConductorSimple } from '../../../types/siniestros.types'
 
 // =====================================================
@@ -20,6 +20,7 @@ const WIZARD_STEPS: WizardStep[] = [
   { id: 2, title: 'Clasificación', shortTitle: 'Clasif.', icon: <AlertTriangle size={16} /> },
   { id: 3, title: 'Descripción', shortTitle: 'Descr.', icon: <FileText size={16} /> },
   { id: 4, title: 'Datos del Tercero', shortTitle: 'Tercero', icon: <Users size={16} />, isOptional: true },
+  { id: 5, title: 'Gestión', shortTitle: 'Gestión', icon: <Briefcase size={16} />, isOptional: true },
 ]
 
 interface SiniestroWizardProps {
@@ -180,6 +181,13 @@ export function SiniestroWizard({
 
         {currentStep === 4 && (
           <Step4Tercero
+            formData={formData}
+            setFormData={setFormData}
+          />
+        )}
+
+        {currentStep === 5 && (
+          <Step5Gestion
             formData={formData}
             setFormData={setFormData}
           />
@@ -380,7 +388,8 @@ function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculo
       </div>
 
       <div className="form-row">
-        <div className="form-group">
+        {/* Campo oculto temporalmente */}
+        <div className="form-group" style={{ display: 'none' }}>
           <label>Conductor (texto libre)</label>
           <input
             type="text"
@@ -617,6 +626,61 @@ function Step4Tercero({ formData, setFormData }: Step4Props) {
             value={formData.tercero_poliza || ''}
             onChange={(e) => setFormData(prev => ({ ...prev, tercero_poliza: e.target.value }))}
             placeholder="Número de póliza"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
+// PASO 5: GESTIÓN
+// =====================================================
+
+interface Step5Props {
+  formData: SiniestroFormData
+  setFormData: React.Dispatch<React.SetStateAction<SiniestroFormData>>
+}
+
+function Step5Gestion({ formData, setFormData }: Step5Props) {
+  return (
+    <div className="wizard-step-content">
+      <p className="step-description">
+        Indique si el siniestro fue enviado a la abogada o a la rentadora para su gestión.
+      </p>
+
+      <div className="form-row">
+        <div className="form-group">
+          <label>Envío para gestión</label>
+          <div className="checkbox-group">
+            <label className="checkbox-option">
+              <input
+                type="checkbox"
+                checked={formData.enviado_abogada || false}
+                onChange={(e) => setFormData(prev => ({ ...prev, enviado_abogada: e.target.checked }))}
+              />
+              <span>Enviado a Abogada</span>
+            </label>
+            <label className="checkbox-option">
+              <input
+                type="checkbox"
+                checked={formData.enviado_alliance || false}
+                onChange={(e) => setFormData(prev => ({ ...prev, enviado_alliance: e.target.checked }))}
+              />
+              <span>Enviado a Rentadora</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-row">
+        <div className="form-group full-width">
+          <label>URL Carpeta Drive</label>
+          <input
+            type="url"
+            value={formData.carpeta_drive_url || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, carpeta_drive_url: e.target.value }))}
+            placeholder="https://drive.google.com/..."
           />
         </div>
       </div>

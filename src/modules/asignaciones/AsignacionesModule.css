@@ -55,8 +55,8 @@
 
 .asig-stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
 }
 
 .asig-stats .stat-card {
@@ -92,15 +92,16 @@
 }
 
 /* Responsive Stats */
-@media (max-width: 1200px) {
+@media (max-width: 1400px) {
   .asig-stats-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   }
 }
 
 @media (max-width: 768px) {
   .asig-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 8px;
   }
 
   .asig-header {
@@ -115,12 +116,12 @@
 @media (max-width: 480px) {
   .asig-stats-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    gap: 6px;
   }
 
   .asig-stats .stat-card {
-    padding: 10px;
-    gap: 8px;
+    padding: 8px;
+    gap: 6px;
   }
 
   .asig-stats .stat-value {
@@ -128,7 +129,7 @@
   }
 
   .asig-stats .stat-label {
-    font-size: 10px;
+    font-size: 9px;
   }
 }
 

@@ -448,7 +448,8 @@ export function SiniestrosModule() {
               <span className="stat-label">Conductores</span>
             </div>
           </div>
-          <div className="stat-card">
+          {/* Oculto temporalmente */}
+          <div className="stat-card" style={{ display: 'none' }}>
             <DollarSign size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">
@@ -457,7 +458,8 @@ export function SiniestrosModule() {
               <span className="stat-label">Presupuesto</span>
             </div>
           </div>
-          <div className="stat-card">
+          {/* Oculto temporalmente */}
+          <div className="stat-card" style={{ display: 'none' }}>
             <TrendingUp size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">
@@ -1392,7 +1394,7 @@ function SiniestroForm({
                   onChange={(e) => setFormData(prev => ({ ...prev, enviado_alliance: e.target.checked }))}
                   disabled={disabled}
                 />
-                <span>Enviado a Alliance</span>
+                <span>Enviado a Rentadora</span>
               </label>
             </div>
           </div>
@@ -1607,7 +1609,7 @@ function SiniestroDetailView({ siniestro, onEdit }: SiniestroDetailViewProps) {
             <span className="detail-item-value">{siniestro.enviado_abogada ? 'Sí' : 'No'}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-item-label">Enviado a Alliance</span>
+            <span className="detail-item-label">Enviado a Rentadora</span>
             <span className="detail-item-value">{siniestro.enviado_alliance ? 'Sí' : 'No'}</span>
           </div>
           {siniestro.carpeta_drive_url && (

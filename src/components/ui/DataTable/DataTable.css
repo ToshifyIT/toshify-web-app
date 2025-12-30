@@ -432,26 +432,36 @@
   left: 0;
   margin-top: 4px;
   min-width: 150px;
-  padding: 8px;
-  background: var(--modal-bg);
+  padding: 6px;
+  background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 100;
+}
+
+[data-theme="dark"] .dt-column-filter-dropdown {
+  background: var(--bg-secondary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .dt-column-filter-option {
   display: block;
   width: 100%;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
   border-radius: 4px;
-  transition: background 0.15s;
+  transition: all 0.15s;
+  margin-bottom: 2px;
+}
+
+.dt-column-filter-option:last-child {
+  margin-bottom: 0;
 }
 
 .dt-column-filter-option:hover {
@@ -459,9 +469,22 @@
 }
 
 .dt-column-filter-option.selected {
-  background: var(--color-primary-light);
-  color: var(--color-primary);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
   font-weight: 600;
+  position: relative;
+  padding-left: 24px;
+}
+
+.dt-column-filter-option.selected::before {
+  content: '✓';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-success);
+  font-weight: 700;
+  font-size: 12px;
 }
 
 .dt-column-filter-input {
