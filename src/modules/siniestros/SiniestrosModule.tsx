@@ -35,6 +35,7 @@ import type {
   SiniestroStats
 } from '../../types/siniestros.types'
 import './SiniestrosModule.css'
+import { SiniestroWizard } from './components/SiniestroWizard'
 
 type TabType = 'dashboard' | 'listado' | 'por_cobrar' | 'historico'
 
@@ -419,19 +420,65 @@ export function SiniestrosModule() {
 
   return (
     <div className="siniestros-module">
-      {/* Header Actions */}
-      <div className="siniestros-header">
-        <button className="btn-primary" onClick={handleNuevoSiniestro}>
-          <Plus size={16} />
-          Nuevo Siniestro
-        </button>
+      {/* Stats rápidos - Arriba de todo */}
+      <div className="siniestros-stats">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <FileText size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{siniestros.length}</span>
+              <span className="stat-label">Total</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Car size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">
+                {new Set(siniestros.map(s => s.vehiculo_patente)).size}
+              </span>
+              <span className="stat-label">Vehículos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Users size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">
+                {new Set(siniestros.map(s => s.conductor_display)).size}
+              </span>
+              <span className="stat-label">Conductores</span>
+            </div>
+          </div>
+          {/* Oculto temporalmente */}
+          <div className="stat-card" style={{ display: 'none' }}>
+            <DollarSign size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">
+                {formatMoney(siniestros.reduce((sum, s) => sum + (s.presupuesto_real || 0), 0))}
+              </span>
+              <span className="stat-label">Presupuesto</span>
+            </div>
+          </div>
+          {/* Oculto temporalmente */}
+          <div className="stat-card" style={{ display: 'none' }}>
+            <TrendingUp size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">
+                {formatMoney(siniestros.reduce((sum, s) => sum + (s.total_pagado || 0), 0))}
+              </span>
+              <span className="stat-label">Cobrado</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="siniestros-tabs">
+      {/* Tabs + Action Button */}
+      <div className="siniestros-tabs-row">
+        <div className="siniestros-tabs">
+        {/* Dashboard tab oculto temporalmente */}
         <button
           className={`siniestros-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
           onClick={() => setActiveTab('dashboard')}
+          style={{ display: 'none' }}
         >
           <TrendingUp size={16} />
           Dashboard
@@ -459,6 +506,11 @@ export function SiniestrosModule() {
           Histórico
           {countHistorico > 0 && <span className="tab-badge">{countHistorico}</span>}
         </button>
+        </div>
+        <button className="btn-primary" onClick={handleNuevoSiniestro}>
+          <Plus size={16} />
+          Nuevo Siniestro
+        </button>
       </div>
 
       {/* Alertas de conductores reincidentes */}
@@ -483,55 +535,6 @@ export function SiniestrosModule() {
         />
       ) : (
         <>
-          {/* Stats rápidos */}
-          <div className="siniestros-stats">
-            <div className="stats-grid">
-              <div className="stat-card">
-                <FileText size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{siniestrosFiltrados.length}</span>
-                  <span className="stat-label">Total</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <Car size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">
-                    {new Set(siniestrosFiltrados.map(s => s.vehiculo_patente)).size}
-                  </span>
-                  <span className="stat-label">Vehículos</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <Users size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">
-                    {new Set(siniestrosFiltrados.map(s => s.conductor_display)).size}
-                  </span>
-                  <span className="stat-label">Conductores</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <DollarSign size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">
-                    {formatMoney(siniestrosFiltrados.reduce((sum, s) => sum + (s.presupuesto_real || 0), 0))}
-                  </span>
-                  <span className="stat-label">Presupuesto</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <TrendingUp size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">
-                    {formatMoney(siniestrosFiltrados.reduce((sum, s) => sum + (s.total_pagado || 0), 0))}
-                  </span>
-                  <span className="stat-label">Cobrado</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Filtros */}
           <div className="siniestros-filters">
             <div className="filter-group">
@@ -791,6 +794,19 @@ export function SiniestrosModule() {
                   siniestro={selectedSiniestro}
                   onEdit={() => handleEditarSiniestro(selectedSiniestro)}
                 />
+              ) : modalMode === 'create' ? (
+                <SiniestroWizard
+                  formData={formData}
+                  setFormData={setFormData}
+                  categorias={categorias}
+                  estados={estados}
+                  vehiculos={vehiculos}
+                  conductores={conductores}
+                  onVehiculoChange={handleVehiculoChange}
+                  onCancel={() => setShowModal(false)}
+                  onSubmit={handleGuardar}
+                  saving={saving}
+                />
               ) : (
                 <SiniestroForm
                   formData={formData}
@@ -806,7 +822,7 @@ export function SiniestrosModule() {
               )}
             </div>
 
-            {modalMode !== 'view' && (
+            {modalMode === 'edit' && (
               <div className="modal-footer">
                 <button
                   className="btn-secondary"
@@ -820,7 +836,7 @@ export function SiniestrosModule() {
                   onClick={handleGuardar}
                   disabled={saving}
                 >
-                  {saving ? 'Guardando...' : modalMode === 'create' ? 'Registrar Siniestro' : 'Guardar Cambios'}
+                  {saving ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
               </div>
             )}
@@ -1378,7 +1394,7 @@ function SiniestroForm({
                   onChange={(e) => setFormData(prev => ({ ...prev, enviado_alliance: e.target.checked }))}
                   disabled={disabled}
                 />
-                <span>Enviado a Alliance</span>
+                <span>Enviado a Rentadora</span>
               </label>
             </div>
           </div>
@@ -1593,7 +1609,7 @@ function SiniestroDetailView({ siniestro, onEdit }: SiniestroDetailViewProps) {
             <span className="detail-item-value">{siniestro.enviado_abogada ? 'Sí' : 'No'}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-item-label">Enviado a Alliance</span>
+            <span className="detail-item-label">Enviado a Rentadora</span>
             <span className="detail-item-value">{siniestro.enviado_alliance ? 'Sí' : 'No'}</span>
           </div>
           {siniestro.carpeta_drive_url && (

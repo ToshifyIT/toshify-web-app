@@ -4,6 +4,9 @@ import { Menu } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Routes, Route, useLocation } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
+import { useTheme } from '../contexts/ThemeContext'
+import logoRed from '../assets/logo-toshify-red.svg'
+import logoWhite from '../assets/logo-toshify-white.svg'
 
 // Importar páginas
 import { UsuariosPage } from './usuarios/UsuariosPage'
@@ -51,6 +54,7 @@ export function HomePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
+  const { resolvedTheme } = useTheme()
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -182,33 +186,21 @@ export function HomePage() {
 
         .sidebar-logo {
           display: flex;
-          align-items: center;
-          gap: 10px;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 4px;
         }
 
-        .sidebar-logo-icon {
-          width: 32px;
-          height: 32px;
-          background: var(--color-gray-800);
-          border-radius: 6px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--text-inverse);
-          font-size: 16px;
-          font-weight: 600;
+        .sidebar-logo-img {
+          height: 22px;
+          width: auto;
         }
 
-        .sidebar-logo-text h1 {
-          color: var(--text-primary);
-          font-size: 16px;
-          font-weight: 600;
-        }
-
-        .sidebar-logo-text p {
-          color: var(--text-secondary);
+        .sidebar-logo-subtitle {
+          color: var(--text-tertiary, #6B7280);
           font-size: 11px;
-          margin-top: 2px;
+          margin: 0;
+          font-weight: 500;
         }
 
         .sidebar-nav {
@@ -649,15 +641,10 @@ export function HomePage() {
           .sidebar-header {
             padding: 14px 16px;
           }
-          .sidebar-logo-icon {
-            width: 30px;
-            height: 30px;
-            font-size: 14px;
+          .sidebar-logo-img {
+            height: 20px;
           }
-          .sidebar-logo-text h1 {
-            font-size: 15px;
-          }
-          .sidebar-logo-text p {
+          .sidebar-logo-subtitle {
             font-size: 10px;
           }
           .nav-item {
@@ -750,11 +737,11 @@ export function HomePage() {
           <div className="sidebar-header">
             <div className="sidebar-header-row">
               <div className="sidebar-logo">
-                <div className="sidebar-logo-icon">T</div>
-                <div className="sidebar-logo-text">
-                  <h1>Toshify</h1>
-                  <p>Admin Panel</p>
-                </div>
+                <img
+                  src={resolvedTheme === 'dark' ? logoWhite : logoRed}
+                  alt="Toshify"
+                  className="sidebar-logo-img"
+                />
               </div>
               <ThemeToggle />
             </div>

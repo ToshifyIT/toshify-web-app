@@ -26,6 +26,13 @@
    TABS
    ===================================================== */
 
+.siniestros-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .siniestros-tabs {
   display: flex;
   gap: 4px;
@@ -1151,5 +1158,308 @@
   .radio-group {
     flex-direction: column;
     gap: 8px;
+  }
+}
+
+/* =====================================================
+   WIZARD
+   ===================================================== */
+
+.siniestro-wizard {
+  display: flex;
+  flex-direction: column;
+  min-height: 450px;
+}
+
+/* Progress Steps */
+.wizard-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px 20px;
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: 20px;
+}
+
+.wizard-step-container {
+  display: flex;
+  align-items: center;
+}
+
+.wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wizard-step-number {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  border: 2px solid var(--border-primary);
+  transition: all 0.2s;
+}
+
+.wizard-step.active .wizard-step-number {
+  background: #DC2626;
+  color: white;
+  border-color: #DC2626;
+}
+
+.wizard-step.completed .wizard-step-number {
+  background: #059669;
+  color: white;
+  border-color: #059669;
+}
+
+.wizard-step-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.wizard-step.active .wizard-step-title {
+  color: #DC2626;
+  font-weight: 600;
+}
+
+.wizard-step.completed .wizard-step-title {
+  color: #059669;
+}
+
+.wizard-step-optional {
+  font-size: 9px;
+  color: var(--text-tertiary);
+}
+
+.wizard-step-line {
+  width: 40px;
+  height: 2px;
+  background: var(--border-primary);
+  margin: 0 4px;
+}
+
+/* Wizard Content */
+.wizard-content {
+  flex: 1;
+  padding: 0 20px;
+}
+
+.wizard-step-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.wizard-step-header svg {
+  color: #DC2626;
+}
+
+.wizard-step-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.optional-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  border-radius: 10px;
+}
+
+.wizard-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.step-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 8px 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border-left: 3px solid #DC2626;
+}
+
+/* Radio Cards for Responsable */
+.radio-group-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.radio-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 16px 12px;
+  border: 2px solid var(--border-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-primary);
+}
+
+.radio-card:hover {
+  border-color: var(--text-tertiary);
+  background: var(--bg-secondary);
+}
+
+.radio-card.selected {
+  border-color: #DC2626;
+  background: #FEF2F2;
+}
+
+.radio-card input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+}
+
+.radio-card-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.radio-card.selected .radio-card-label {
+  color: #DC2626;
+}
+
+.radio-card-desc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.3;
+}
+
+/* Checkbox lesionados */
+.checkbox-lesionados {
+  padding: 12px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.checkbox-lesionados span {
+  color: #DC2626;
+  font-weight: 500;
+}
+
+/* Wizard Footer */
+.wizard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary);
+  margin-top: 20px;
+  background: var(--bg-secondary);
+  border-radius: 0 0 12px 12px;
+}
+
+.wizard-nav-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid #059669;
+  background: #059669;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #047857;
+  border-color: #047857;
+}
+
+.btn-success:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Form validation */
+.input-error {
+  border-color: #DC2626 !important;
+  background: #FEF2F2 !important;
+}
+
+.error-message {
+  font-size: 11px;
+  color: #DC2626;
+  margin-top: 2px;
+}
+
+/* Responsive Wizard */
+@media (max-width: 768px) {
+  .wizard-progress {
+    padding: 0 10px 16px;
+  }
+
+  .wizard-step {
+    padding: 6px 8px;
+  }
+
+  .wizard-step-number {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .wizard-step-title {
+    font-size: 10px;
+  }
+
+  .wizard-step-line {
+    width: 20px;
+  }
+
+  .radio-group-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .wizard-footer {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .wizard-nav-buttons {
+    width: 100%;
+    justify-content: flex-end;
   }
 }

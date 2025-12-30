@@ -10,6 +10,7 @@ import type {
 } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { VehiculoWizard } from './components/VehiculoWizard'
 import './VehicleManagement.css'
 
 export function VehicleManagement() {
@@ -908,328 +909,30 @@ export function VehicleManagement() {
         }
       />
 
-      {/* MODALS - Se mantienen exactamente iguales */}
-      {/* Modal Crear */}
+      {/* MODALS */}
+      {/* Modal Crear - Wizard */}
       {showCreateModal && (
         <div className="modal-overlay" onClick={() => !saving && setShowCreateModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>
+          <div className="modal-content modal-wizard" onClick={(e) => e.stopPropagation()}>
             <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700' }}>
               Crear Nuevo Vehículo
             </h2>
-
-            <div className="section-title">Información Básica</div>
-
-            <div className="form-group">
-              <label className="form-label">Patente *</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.patente}
-                onChange={(e) => setFormData({ ...formData, patente: e.target.value.toUpperCase() })}
-                placeholder="ABC-123"
-                disabled={saving}
-                maxLength={10}
-              />
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Marca</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.marca}
-                  onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
-                  placeholder="Toyota, Ford, etc."
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Modelo</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.modelo}
-                  onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
-                  placeholder="Hilux, Ranger, etc."
-                  disabled={saving}
-                />
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Año</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={formData.anio}
-                  onChange={(e) => setFormData({ ...formData, anio: parseInt(e.target.value) })}
-                  min="1900"
-                  max={new Date().getFullYear() + 1}
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Color</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.color}
-                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                  placeholder="Blanco, Negro, etc."
-                  disabled={saving}
-                />
-              </div>
-            </div>
-
-            <div className="section-title">Tipo y Características</div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Tipo</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.tipo_vehiculo}
-                  onChange={(e) => setFormData({ ...formData, tipo_vehiculo: e.target.value })}
-                  disabled={saving}
-                  placeholder="Ej: Camion, Auto, Moto, Utilitario..."
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Tipo Combustible</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.tipo_combustible}
-                  onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
-                  disabled={saving}
-                  placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
-                />
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Tipo GPS</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.tipo_gps}
-                  onChange={(e) => setFormData({ ...formData, tipo_gps: e.target.value })}
-                  disabled={saving}
-                  placeholder="Ej: GPS Tracker, GPS Satelital, GPS Móvil..."
-                />
-              </div>
-
-              <div className="form-group" style={{ display: 'flex', gap: '24px', marginTop: '28px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    className="form-checkbox"
-                    checked={formData.gps_uss}
-                    onChange={(e) => setFormData({ ...formData, gps_uss: e.target.checked })}
-                    disabled={saving}
-                  />
-                  <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>GPS USS</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    className="form-checkbox"
-                    checked={formData.traccar}
-                    onChange={(e) => setFormData({ ...formData, traccar: e.target.checked })}
-                    disabled={saving}
-                  />
-                  <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>Traccar</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="section-title">Datos Técnicos</div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Número Motor</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.numero_motor}
-                  onChange={(e) => setFormData({ ...formData, numero_motor: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Número Chasis</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.numero_chasis}
-                  onChange={(e) => setFormData({ ...formData, numero_chasis: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Provisoria</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.provisoria}
-                  onChange={(e) => setFormData({ ...formData, provisoria: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Kilometraje Actual</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={formData.kilometraje_actual}
-                  onChange={(e) => setFormData({ ...formData, kilometraje_actual: parseInt(e.target.value) || 0 })}
-                  min="0"
-                  disabled={saving}
-                />
-              </div>
-            </div>
-
-            <div className="section-title">Estado y Fechas</div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Estado</label>
-                <select
-                  className="form-input"
-                  value={formData.estado_id}
-                  onChange={(e) => setFormData({ ...formData, estado_id: e.target.value })}
-                  disabled={saving}
-                >
-                  <option value="">Seleccionar...</option>
-                  {vehiculosEstados.map((estado: any) => (
-                    <option key={estado.id} value={estado.id}>{estado.descripcion}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Fecha Adquisición</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={formData.fecha_adquisicion}
-                  onChange={(e) => setFormData({ ...formData, fecha_adquisicion: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Fecha Última Inspección</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={formData.fecha_ulti_inspeccion}
-                  onChange={(e) => setFormData({ ...formData, fecha_ulti_inspeccion: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Fecha Próxima Inspección</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={formData.fecha_prox_inspeccion}
-                  onChange={(e) => setFormData({ ...formData, fecha_prox_inspeccion: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-            </div>
-
-            <div className="section-title">Seguro</div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Número Seguro</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.seguro_numero}
-                  onChange={(e) => setFormData({ ...formData, seguro_numero: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Vigencia Seguro</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={formData.seguro_vigencia}
-                  onChange={(e) => setFormData({ ...formData, seguro_vigencia: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-            </div>
-
-            <div className="section-title">Información Adicional</div>
-
-            <div className="form-group">
-              <label className="form-label">Titular</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.titular}
-                onChange={(e) => setFormData({ ...formData, titular: e.target.value })}
-                disabled={saving}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Notas</label>
-              <textarea
-                className="form-input"
-                value={formData.notas}
-                onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
-                disabled={saving}
-                rows={3}
-                style={{ resize: 'vertical' }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  setShowCreateModal(false)
-                  resetForm()
-                }}
-                disabled={saving}
-              >
-                Cancelar
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleCreate}
-                disabled={saving}
-              >
-                {saving ? 'Creando...' : 'Crear Vehículo'}
-              </button>
-            </div>
+            <VehiculoWizard
+              formData={formData}
+              setFormData={setFormData}
+              vehiculosEstados={vehiculosEstados}
+              onCancel={() => {
+                setShowCreateModal(false)
+                resetForm()
+              }}
+              onSubmit={handleCreate}
+              saving={saving}
+            />
           </div>
         </div>
       )}
 
-      {/* Modal Editar - Mismo contenido que crear, solo cambia el título y la acción */}
+      {/* Modal Editar - Formulario completo */}
       {showEditModal && selectedVehiculo && (
         <div className="modal-overlay" onClick={() => !saving && setShowEditModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>

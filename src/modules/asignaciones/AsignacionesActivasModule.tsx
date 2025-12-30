@@ -90,7 +90,12 @@ export function AsignacionesActivasModule() {
             marca,
             modelo,
             anio,
+            estado_id,
             vehiculos_tipos (
+              descripcion
+            ),
+            vehiculos_estados (
+              codigo,
               descripcion
             )
           ),
@@ -140,17 +145,28 @@ export function AsignacionesActivasModule() {
     const turnoCount = asignaciones.filter(a => a.horario === 'TURNO').length
     const cargoCount = asignaciones.filter(a => a.horario === 'CARGO' || !a.horario).length
 
+    // Estados de vehículos NO operacionales
+    const estadosNoOperacionales = ['REPARACION', 'MANTENIMIENTO', 'BAJA', 'VENDIDO']
+
     // Cupos totales: TURNO tiene 2 cupos (D+N), CARGO tiene 1 cupo
     const cuposTotales = (turnoCount * 2) + cargoCount
 
-    // Contar cupos ocupados y vacantes
+    // Filtrar solo vehículos operacionales (disponibles)
+    const asignacionesOperacionales = asignaciones.filter(a => {
+      const estadoVehiculo = (a.vehiculos as any)?.vehiculos_estados?.codigo
+      return !estadosNoOperacionales.includes(estadoVehiculo)
+    })
+    const turnoCountOp = asignacionesOperacionales.filter(a => a.horario === 'TURNO').length
+    const cargoCountOp = asignacionesOperacionales.filter(a => a.horario === 'CARGO' || !a.horario).length
+    const cuposTotalesOperacionales = (turnoCountOp * 2) + cargoCountOp
+
+    // Contar cupos ocupados y vacantes (TODOS los vehículos)
     let cuposOcupados = 0
     let vacantesD = 0
     let vacantesN = 0
 
     asignaciones.forEach(a => {
       if (a.horario === 'TURNO') {
-        // Para TURNO, revisar cada slot (D y N)
         const conductorD = a.asignaciones_conductores?.find(ac => ac.horario === 'DIURNO' || ac.horario === 'D')
         const conductorN = a.asignaciones_conductores?.find(ac => ac.horario === 'NOCTURNO' || ac.horario === 'N')
 
@@ -166,7 +182,6 @@ export function AsignacionesActivasModule() {
           vacantesN++
         }
       } else {
-        // Para CARGO, solo hay 1 cupo
         const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
         if (tieneConductor) {
           cuposOcupados++
@@ -174,8 +189,31 @@ export function AsignacionesActivasModule() {
       }
     })
 
+    // Contar cupos ocupados SOLO de vehículos operacionales
+    let cuposOcupadosOperacionales = 0
+    asignacionesOperacionales.forEach(a => {
+      if (a.horario === 'TURNO') {
+        const conductorD = a.asignaciones_conductores?.find(ac => ac.horario === 'DIURNO' || ac.horario === 'D')
+        const conductorN = a.asignaciones_conductores?.find(ac => ac.horario === 'NOCTURNO' || ac.horario === 'N')
+        if (conductorD?.conductor_id) cuposOcupadosOperacionales++
+        if (conductorN?.conductor_id) cuposOcupadosOperacionales++
+      } else {
+        const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
+        if (tieneConductor) cuposOcupadosOperacionales++
+      }
+    })
+
     const cuposDisponibles = cuposTotales - cuposOcupados
-    const porcentajeOcupacion = cuposTotales > 0 ? ((cuposOcupados / cuposTotales) * 100).toFixed(1) : '0'
+
+    // % Ocupación General: Todos los vehículos
+    const porcentajeOcupacionGeneral = cuposTotales > 0
+      ? ((cuposOcupados / cuposTotales) * 100).toFixed(1)
+      : '0'
+
+    // % Ocupación Operacional: Solo vehículos disponibles/operacionales
+    const porcentajeOcupacionOperacional = cuposTotalesOperacionales > 0
+      ? ((cuposOcupadosOperacionales / cuposTotalesOperacionales) * 100).toFixed(1)
+      : '0'
 
     // Conductores únicos
     const conductoresSet = new Set<string>()
@@ -202,7 +240,11 @@ export function AsignacionesActivasModule() {
       cuposDisponibles,
       vacantesD,
       vacantesN,
-      porcentajeOcupacion
+      vehiculosOperacionales: asignacionesOperacionales.length,
+      cuposTotalesOperacionales,
+      cuposOcupadosOperacionales,
+      porcentajeOcupacionGeneral,
+      porcentajeOcupacionOperacional
     }
   }, [asignaciones])
 
@@ -605,7 +647,7 @@ export function AsignacionesActivasModule() {
 
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
-        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+        <div className="asig-stats-grid">
           <div className="stat-card">
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
@@ -641,11 +683,18 @@ export function AsignacionesActivasModule() {
               <span className="stat-label">Cupos Ocupados</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title={`${stats.cuposOcupados} ocupados de ${stats.cuposTotales} totales`}>
             <TrendingUp size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.porcentajeOcupacion}%</span>
-              <span className="stat-label">% Ocupación</span>
+              <span className="stat-value">{stats.porcentajeOcupacionGeneral}%</span>
+              <span className="stat-label">% Ocup. General</span>
+            </div>
+          </div>
+          <div className="stat-card" title={`${stats.cuposOcupadosOperacionales} ocupados de ${stats.cuposTotalesOperacionales} operacionales (excluye vehículos en reparación/mantenimiento)`}>
+            <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
+            <div className="stat-content">
+              <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionOperacional}%</span>
+              <span className="stat-label">% Ocup. Operacional</span>
             </div>
           </div>
         </div>

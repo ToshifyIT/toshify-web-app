@@ -616,3 +616,268 @@
     text-align: left;
   }
 }
+
+/* =====================================================
+   WIZARD - Crear Conductor
+   ===================================================== */
+
+.conductor-wizard {
+  display: flex;
+  flex-direction: column;
+  min-height: 500px;
+}
+
+/* Progress Steps */
+.conductor-wizard .wizard-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px 20px;
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: 20px;
+}
+
+.conductor-wizard .wizard-step-container {
+  display: flex;
+  align-items: center;
+}
+
+.conductor-wizard .wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.conductor-wizard .wizard-step-number {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  border: 2px solid var(--border-primary);
+  transition: all 0.2s;
+}
+
+.conductor-wizard .wizard-step.active .wizard-step-number {
+  background: #DC2626;
+  color: white;
+  border-color: #DC2626;
+}
+
+.conductor-wizard .wizard-step.completed .wizard-step-number {
+  background: #059669;
+  color: white;
+  border-color: #059669;
+}
+
+.conductor-wizard .wizard-step-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.conductor-wizard .wizard-step.active .wizard-step-title {
+  color: #DC2626;
+  font-weight: 600;
+}
+
+.conductor-wizard .wizard-step.completed .wizard-step-title {
+  color: #059669;
+}
+
+.conductor-wizard .wizard-step-line {
+  width: 30px;
+  height: 2px;
+  background: var(--border-primary);
+  margin: 0 4px;
+}
+
+/* Wizard Content */
+.conductor-wizard .wizard-content {
+  flex: 1;
+  padding: 0 20px;
+  overflow-y: auto;
+}
+
+.conductor-wizard .wizard-step-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.conductor-wizard .wizard-step-header svg {
+  color: #DC2626;
+}
+
+.conductor-wizard .wizard-step-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.conductor-wizard .optional-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  border-radius: 10px;
+}
+
+.conductor-wizard .wizard-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.conductor-wizard .step-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 8px 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border-left: 3px solid #DC2626;
+}
+
+.conductor-wizard .section-divider {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 12px 0 8px;
+  border-top: 1px solid var(--border-primary);
+  margin-top: 8px;
+}
+
+.conductor-wizard .checkbox-container {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.conductor-wizard .checkbox-container input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  accent-color: #DC2626;
+}
+
+.conductor-wizard .checkbox-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.conductor-wizard .input-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  display: block;
+}
+
+.conductor-wizard .input-error {
+  border-color: #DC2626 !important;
+  background: #FEF2F2 !important;
+}
+
+.conductor-wizard .error-message {
+  font-size: 11px;
+  color: #DC2626;
+  margin-top: 2px;
+}
+
+/* Wizard Footer */
+.conductor-wizard .wizard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary);
+  margin-top: 20px;
+  background: var(--bg-secondary);
+  border-radius: 0 0 12px 12px;
+}
+
+.conductor-wizard .wizard-nav-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.conductor-wizard .btn-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid #059669;
+  background: #059669;
+  color: white;
+}
+
+.conductor-wizard .btn-success:hover:not(:disabled) {
+  background: #047857;
+  border-color: #047857;
+}
+
+.conductor-wizard .btn-success:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsive Wizard */
+@media (max-width: 768px) {
+  .conductor-wizard .wizard-progress {
+    padding: 0 10px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .conductor-wizard .wizard-step {
+    padding: 6px 8px;
+  }
+
+  .conductor-wizard .wizard-step-number {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .conductor-wizard .wizard-step-title {
+    font-size: 9px;
+  }
+
+  .conductor-wizard .wizard-step-line {
+    width: 15px;
+  }
+
+  .conductor-wizard .wizard-footer {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .conductor-wizard .wizard-nav-buttons {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
