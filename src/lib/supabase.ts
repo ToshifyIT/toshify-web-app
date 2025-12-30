@@ -11,9 +11,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Usar sessionStorage para que la sesión expire al cerrar el navegador
-    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+    // Usar localStorage para persistir sesión entre pestañas y reinicios del navegador
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     persistSession: true,
     autoRefreshToken: true,
+    // Detectar sesión automáticamente desde URL (para magic links, OAuth, etc.)
+    detectSessionInUrl: true,
   }
 })
