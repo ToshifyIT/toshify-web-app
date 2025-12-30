@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react'
 import { User, Mail, Phone, FileText, Lock, Save, X, Camera, Check, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { AvatarUploadModal } from '../../components/ui/AvatarUploadModal'
 import Swal from 'sweetalert2'
 import './ProfileModule.css'
 
@@ -58,6 +59,9 @@ export function ProfileModule() {
     confirmPassword: '',
   })
   const [changingPassword, setChangingPassword] = useState(false)
+
+  // Estado para modal de avatar
+  const [showAvatarModal, setShowAvatarModal] = useState(false)
 
   // Cargar datos del perfil
   useEffect(() => {
@@ -204,6 +208,60 @@ export function ProfileModule() {
     return name.charAt(0).toUpperCase()
   }
 
+  // Guardar foto de perfil (recibe blob del modal de recorte)
+  const handleAvatarSave = async (croppedBlob: Blob) => {
+    if (!user) throw new Error('Usuario no autenticado')
+
+    // Generar nombre único para el archivo
+    const fileName = `${user.id}-${Date.now()}.jpg`
+    const filePath = `avatars/${fileName}`
+
+    // Eliminar avatar anterior si existe
+    if (profile?.avatar_url) {
+      const oldPath = profile.avatar_url.split('/').pop()
+      if (oldPath) {
+        await supabase.storage.from('avatars').remove([`avatars/${oldPath}`])
+      }
+    }
+
+    // Subir nuevo avatar
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, croppedBlob, {
+        cacheControl: '3600',
+        upsert: true,
+        contentType: 'image/jpeg',
+      })
+
+    if (uploadError) throw uploadError
+
+    // Obtener URL pública
+    const { data: urlData } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(filePath)
+
+    // Actualizar perfil con nueva URL
+    const { error: updateError } = await (supabase
+      .from('user_profiles') as any)
+      .update({
+        avatar_url: urlData.publicUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+
+    if (updateError) throw updateError
+
+    await refreshProfile()
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Foto actualizada',
+      text: 'Tu foto de perfil ha sido actualizada',
+      timer: 2000,
+      showConfirmButton: false,
+    })
+  }
+
   return (
     <div className="profile-module">
       <div className="profile-content">
@@ -212,10 +270,25 @@ export function ProfileModule() {
           {/* Avatar Section */}
           <div className="profile-avatar-section">
             <div className="profile-avatar-wrapper">
-              <div className="profile-avatar">
-                {getInitials()}
+              <div
+                className={`profile-avatar ${profile?.avatar_url ? 'has-image' : ''}`}
+                onClick={() => setShowAvatarModal(true)}
+              >
+                {profile?.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt="Avatar"
+                    className="profile-avatar-image"
+                  />
+                ) : (
+                  getInitials()
+                )}
               </div>
-              <button className="profile-avatar-edit" title="Cambiar foto (próximamente)">
+              <button
+                className="profile-avatar-edit"
+                title="Cambiar foto de perfil"
+                onClick={() => setShowAvatarModal(true)}
+              >
                 <Camera size={14} />
               </button>
             </div>
@@ -225,6 +298,14 @@ export function ProfileModule() {
               <p className="profile-email">{user?.email}</p>
             </div>
           </div>
+
+          {/* Modal de Avatar */}
+          <AvatarUploadModal
+            isOpen={showAvatarModal}
+            onClose={() => setShowAvatarModal(false)}
+            onSave={handleAvatarSave}
+            currentAvatarUrl={profile?.avatar_url}
+          />
 
           <div className="profile-divider" />
 
