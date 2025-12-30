@@ -711,7 +711,7 @@ export function UserMenuPermissionsManager() {
           return (
             <div
               className={`perm-checkbox ${row.original.can_view ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
-              onClick={(e) => {
+              onClick={() => {
                 if (saving) return
                 if (!selectedUser) return
                 if (row.original.type === 'menu' && row.original.menu_id) {

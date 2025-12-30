@@ -283,7 +283,7 @@ function createModalidadDistribution(
  */
 export function calculateTopDrivers(
   drivers: readonly CabifyDriver[],
-  asignaciones: Map<string, AsignacionActiva>
+  _asignaciones: Map<string, AsignacionActiva>
 ): TopDriversResult {
   // Usar TODOS los conductores de Cabify (no filtrar por asignación)
   // El cruce con asignaciones es solo para mostrar info adicional

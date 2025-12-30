@@ -127,7 +127,7 @@ export function UserManagement() {
         return
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('user_profiles')
         // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .update({ role_id: newRoleId })

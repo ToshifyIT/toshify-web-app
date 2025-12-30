@@ -204,8 +204,8 @@ class CabifyHistoricalService {
     // 2. Consultar histórico en BD
     const historical = await this.queryHistorical(startDate, endDate)
 
-    // 3. Analizar cobertura
-    const coverage = this.analyzeCoverage(historical, startDate, endDate)
+    // 3. Analizar cobertura (para logging/debug)
+    this.analyzeCoverage(historical, startDate, endDate)
 
     // 4. SIEMPRE retornar datos del histórico (NUNCA llamar a la API desde el frontend)
     // El Edge Function se encarga de mantener el histórico actualizado cada 5 minutos

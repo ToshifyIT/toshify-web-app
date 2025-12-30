@@ -1027,7 +1027,7 @@ class CabifyService {
       const allDriversData: any[] = []
 
       // OPTIMIZACIÓN 1: Procesar TODAS las compañías en paralelo
-      const companyPromises = companyIds.map(async (companyId, companyIndex) => {
+      const companyPromises = companyIds.map(async (companyId) => {
         try {
           // Obtener conductores de esta compañía
           const drivers = await this.getDriversByCompany(companyId)
