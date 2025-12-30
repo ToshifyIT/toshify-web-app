@@ -1084,6 +1084,35 @@ export interface Database {
           created_at?: string
         }
       }
+      user_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          session_token: string
+          device_info: string | null
+          ip_address: string | null
+          created_at: string
+          last_activity: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          session_token: string
+          device_info?: string | null
+          ip_address?: string | null
+          created_at?: string
+          last_activity?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          session_token?: string
+          device_info?: string | null
+          ip_address?: string | null
+          created_at?: string
+          last_activity?: string
+        }
+      }
     }
     Views: {}
     Functions: {}
@@ -1122,6 +1151,7 @@ export type UnidadMedida = Database['public']['Tables']['unidades_medida']['Row'
 export type ProductoEstado = Database['public']['Tables']['productos_estados']['Row']
 export type Producto = Database['public']['Tables']['productos']['Row']
 export type ProductoCategoria = Database['public']['Tables']['productos_categorias']['Row']
+export type UserSession = Database['public']['Tables']['user_sessions']['Row']
 
 // Tipo para usuario con rol y permisos
 export interface UserWithRole extends UserProfile {
