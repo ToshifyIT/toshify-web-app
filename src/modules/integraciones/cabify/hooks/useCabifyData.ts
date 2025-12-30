@@ -3,13 +3,16 @@
  * Custom hook para manejo de datos de Cabify
  * Principio: Single Responsibility - Solo manejo de datos y fetch
  * Principio: Dependency Inversion - Depende de abstracciones (servicios)
+ *
+ * Incluye suscripción Realtime para actualización automática
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Swal from 'sweetalert2'
 import { cabifyService } from '../../../../services/cabifyService'
 import { cabifyHistoricalService } from '../../../../services/cabifyHistoricalService'
 import { asignacionesService, type AsignacionActiva } from '../../../../services/asignacionesService'
+import { supabase } from '../../../../lib/supabase'
 import type { CabifyQueryState } from '../../../../types/cabify.types'
 import type {
   CabifyDriver,
@@ -86,16 +89,77 @@ export function useCabifyData(): UseCabifyDataReturn {
   // CARGA DE DATOS
   // =====================================================
 
+  // Referencia para evitar múltiples recargas simultáneas
+  const isReloadingRef = useRef(false)
+
   useEffect(() => {
     if (selectedWeek) {
       loadData()
     }
   }, [selectedWeek])
 
+  // =====================================================
+  // SUSCRIPCIÓN REALTIME
+  // =====================================================
+
+  useEffect(() => {
+    if (!selectedWeek) return
+
+    // Suscribirse a cambios en cabify_historico
+    const channel = supabase
+      .channel('cabify_historico_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'cabify_historico',
+        },
+        (payload) => {
+          // Verificar si el cambio corresponde al período seleccionado
+          const newRecord = payload.new as { fecha_inicio?: string } | undefined
+          const oldRecord = payload.old as { fecha_inicio?: string } | undefined
+          const recordDate = newRecord?.fecha_inicio || oldRecord?.fecha_inicio
+
+          if (recordDate && selectedWeek) {
+            const recordTime = new Date(recordDate).getTime()
+            const startTime = new Date(selectedWeek.startDate).getTime()
+            const endTime = new Date(selectedWeek.endDate).getTime()
+
+            // Si el registro está dentro del período seleccionado, recargar
+            if (recordTime >= startTime && recordTime <= endTime) {
+              // Evitar múltiples recargas simultáneas
+              if (!isReloadingRef.current) {
+                isReloadingRef.current = true
+                console.log('📡 Realtime: Cambio detectado, actualizando datos...')
+
+                // Pequeño delay para agrupar múltiples cambios
+                setTimeout(() => {
+                  loadData().finally(() => {
+                    isReloadingRef.current = false
+                  })
+                }, 500)
+              }
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('📡 Realtime: Suscripción activa a cabify_historico')
+        }
+      })
+
+    // Cleanup: desuscribirse al desmontar o cambiar semana
+    return () => {
+      console.log('📡 Realtime: Desuscribiendo...')
+      supabase.removeChannel(channel)
+    }
+  }, [selectedWeek])
+
   const loadData = useCallback(async () => {
     // Early return: No hay semana seleccionada
     if (!selectedWeek) {
-      console.log('No hay semana seleccionada')
       return
     }
 
@@ -112,14 +176,6 @@ export function useCabifyData(): UseCabifyDataReturn {
     setDrivers([])
     setLoadingProgress(INITIAL_LOADING_PROGRESS)
 
-    // Debug: Ver qué fechas estamos consultando
-    console.log('🔍 Consultando datos para:', {
-      weekLabel: week.label,
-      weeksAgo: week.weeksAgo,
-      startDate: week.startDate,
-      endDate: week.endDate
-    })
-
     // Obtener datos históricos
     const { drivers: driverData, stats } = await cabifyHistoricalService.getDriversData(
       week.startDate,
@@ -131,14 +187,6 @@ export function useCabifyData(): UseCabifyDataReturn {
       }
     )
 
-    // Debug: Ver resultado
-    console.log('📊 Datos cargados:', {
-      driversCount: driverData.length,
-      weeksAgo: week.weeksAgo,
-      weekLabel: week.label,
-      source: stats.source
-    })
-
     // Si es la semana actual (weeksAgo === 0) y no hay datos, cargar semana anterior silenciosamente
     if (driverData.length === 0 && week.weeksAgo === 0) {
       // Obtener semanas directamente del servicio (no del estado que puede estar desactualizado)
@@ -146,8 +194,6 @@ export function useCabifyData(): UseCabifyDataReturn {
 
       if (freshWeeks.length > 1) {
         const previousWeek = freshWeeks[1] // Semana anterior
-
-        console.log('⚠️ Semana actual sin datos, cargando semana anterior silenciosamente:', previousWeek.label)
 
         // Cambiar a la semana anterior directamente (sin popup molesto)
         setSelectedWeek(previousWeek)

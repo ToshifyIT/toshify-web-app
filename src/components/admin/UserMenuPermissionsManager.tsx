@@ -711,32 +711,13 @@ export function UserMenuPermissionsManager() {
           return (
             <div
               className={`perm-checkbox ${row.original.can_view ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
-              onClick={(e) => {
-                console.log('🖱️ Click en checkbox Ver', {
-                  saving,
-                  type: row.original.type,
-                  menu_id: row.original.menu_id,
-                  submenu_id: row.original.submenu_id,
-                  selectedUser,
-                  isInherited,
-                  event: e
-                })
-                if (saving) {
-                  console.log('⏸️ Click ignorado: saving=true')
-                  return
-                }
-                if (!selectedUser) {
-                  console.log('⏸️ Click ignorado: no selectedUser')
-                  return
-                }
+              onClick={() => {
+                if (saving) return
+                if (!selectedUser) return
                 if (row.original.type === 'menu' && row.original.menu_id) {
-                  console.log('✅ Llamando toggleMenuPermission')
                   toggleMenuPermission(row.original.menu_id, 'can_view')
                 } else if (row.original.type === 'submenu' && row.original.submenu_id) {
-                  console.log('✅ Llamando toggleSubmenuPermission')
                   toggleSubmenuPermission(row.original.submenu_id, 'can_view')
-                } else {
-                  console.log('⚠️ No se pudo determinar tipo o ID')
                 }
               }}
               title={isInherited ? 'Permiso heredado del rol' : 'Permiso específico del usuario'}
@@ -764,7 +745,6 @@ export function UserMenuPermissionsManager() {
             <div
               className={`perm-checkbox ${row.original.can_create ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
               onClick={() => {
-                console.log('🖱️ Click en checkbox Crear', { saving, selectedUser, isInherited })
                 if (saving) return
                 if (!selectedUser) return
                 if (row.original.type === 'menu' && row.original.menu_id) {
@@ -798,7 +778,6 @@ export function UserMenuPermissionsManager() {
             <div
               className={`perm-checkbox ${row.original.can_edit ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
               onClick={() => {
-                console.log('🖱️ Click en checkbox Editar', { saving, selectedUser, isInherited })
                 if (saving) return
                 if (!selectedUser) return
                 if (row.original.type === 'menu' && row.original.menu_id) {
@@ -832,7 +811,6 @@ export function UserMenuPermissionsManager() {
             <div
               className={`perm-checkbox ${row.original.can_delete ? 'checked' : ''} ${isInherited ? 'inherited' : ''} ${saving ? 'disabled' : ''}`}
               onClick={() => {
-                console.log('🖱️ Click en checkbox Eliminar', { saving, selectedUser, isInherited })
                 if (saving) return
                 if (!selectedUser) return
                 if (row.original.type === 'menu' && row.original.menu_id) {

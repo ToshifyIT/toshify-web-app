@@ -97,10 +97,6 @@ export function CabifyModule() {
   const rankingProps = useMemo(
     () => {
       if (!effectiveDateRange) return undefined
-      console.log('🎯 rankingProps actualizados:', {
-        fechaInicio: effectiveDateRange.startDate,
-        fechaFin: effectiveDateRange.endDate
-      })
       return {
         fechaInicio: effectiveDateRange.startDate,
         fechaFin: effectiveDateRange.endDate
@@ -175,7 +171,6 @@ export function CabifyModule() {
         customDateRange={customDateRange}
         onWeekChange={setSelectedWeek}
         onCustomDateChange={handleCustomDateChange}
-        onRefresh={refreshData}
       />
 
       <ProgressBanner

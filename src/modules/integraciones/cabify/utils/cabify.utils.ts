@@ -175,23 +175,24 @@ export function calculateDriverStatistics(
   drivers: readonly CabifyDriver[],
   asignaciones: Map<string, AsignacionActiva>
 ): DriverStatistics {
-  const conductoresConAsignacion = filterDriversWithAssignment(drivers, asignaciones)
+  // Usar TODOS los conductores de Cabify (no filtrar por asignación)
+  const allDrivers = [...drivers]
 
   // Early return: Sin conductores
-  if (conductoresConAsignacion.length === 0) {
+  if (allDrivers.length === 0) {
     return createEmptyStatistics()
   }
 
-  const ganancias = conductoresConAsignacion.map((d) => parseNumericValue(d.gananciaTotal))
+  const ganancias = allDrivers.map((d) => parseNumericValue(d.gananciaTotal))
   const totalRecaudado = ganancias.reduce((sum, g) => sum + g, 0)
-  const promedioRecaudacion = totalRecaudado / conductoresConAsignacion.length
+  const promedioRecaudacion = totalRecaudado / allDrivers.length
 
-  const viajes = conductoresConAsignacion.map((d) => d.viajesFinalizados || 0)
+  const viajes = allDrivers.map((d) => d.viajesFinalizados || 0)
   const totalViajes = viajes.reduce((sum, v) => sum + v, 0)
-  const promedioViajes = totalViajes / conductoresConAsignacion.length
+  const promedioViajes = totalViajes / allDrivers.length
 
-  const { conductoresCargo, conductoresTurno } = countDriversByModalidad(
-    conductoresConAsignacion,
+  const { conductoresCargo, conductoresTurno, conductoresSinAsignacion } = countDriversByModalidad(
+    allDrivers,
     asignaciones
   )
 
@@ -202,8 +203,8 @@ export function calculateDriverStatistics(
     promedioViajes,
     conductoresCargo,
     conductoresTurno,
-    totalConductores: conductoresConAsignacion.length,
-    distribucionModalidad: createModalidadDistribution(conductoresCargo, conductoresTurno),
+    totalConductores: allDrivers.length,
+    distribucionModalidad: createModalidadDistribution(conductoresCargo, conductoresTurno, conductoresSinAsignacion),
   }
 }
 
@@ -229,9 +230,10 @@ function createEmptyStatistics(): DriverStatistics {
 function countDriversByModalidad(
   drivers: CabifyDriver[],
   asignaciones: Map<string, AsignacionActiva>
-): { conductoresCargo: number; conductoresTurno: number } {
+): { conductoresCargo: number; conductoresTurno: number; conductoresSinAsignacion: number } {
   let conductoresCargo = 0
   let conductoresTurno = 0
+  let conductoresSinAsignacion = 0
 
   for (const driver of drivers) {
     const asig = driver.nationalIdNumber
@@ -240,9 +242,10 @@ function countDriversByModalidad(
 
     if (asig?.horario === 'CARGO') conductoresCargo++
     else if (asig?.horario === 'TURNO') conductoresTurno++
+    else conductoresSinAsignacion++
   }
 
-  return { conductoresCargo, conductoresTurno }
+  return { conductoresCargo, conductoresTurno, conductoresSinAsignacion }
 }
 
 /**
@@ -250,7 +253,8 @@ function countDriversByModalidad(
  */
 function createModalidadDistribution(
   cargo: number,
-  turno: number
+  turno: number,
+  sinAsignacion: number = 0
 ): ModalidadDistribution[] {
   const distribution: ModalidadDistribution[] = []
 
@@ -259,6 +263,9 @@ function createModalidadDistribution(
   }
   if (turno > 0) {
     distribution.push({ name: 'Turno', value: turno, color: CHART_COLORS.MODALIDAD.TURNO })
+  }
+  if (sinAsignacion > 0) {
+    distribution.push({ name: 'Sin asignación', value: sinAsignacion, color: '#9CA3AF' })
   }
 
   return distribution
@@ -276,12 +283,13 @@ function createModalidadDistribution(
  */
 export function calculateTopDrivers(
   drivers: readonly CabifyDriver[],
-  asignaciones: Map<string, AsignacionActiva>
+  _asignaciones: Map<string, AsignacionActiva>
 ): TopDriversResult {
-  const conductoresConAsignacion = filterDriversWithAssignment(drivers, asignaciones)
+  // Usar TODOS los conductores de Cabify (no filtrar por asignación)
+  // El cruce con asignaciones es solo para mostrar info adicional
 
   // Filtrar solo conductores con al menos 1 viaje para rankings
-  const conductoresConViajes = conductoresConAsignacion.filter(
+  const conductoresConViajes = drivers.filter(
     (driver) => (driver.viajesFinalizados || 0) > 0
   )
 

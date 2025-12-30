@@ -101,8 +101,14 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
     body: JSON.stringify({ query: companiesQuery }),
   })
 
-  const { data: { metafleetCompanies } } = await companiesRes.json()
-  const companyIds = metafleetCompanies?.companyIds || []
+  const companiesJson = await companiesRes.json()
+
+  // Manejar errores de API
+  if (companiesJson.errors) {
+    throw new Error(`Companies API error: ${JSON.stringify(companiesJson.errors)}`)
+  }
+
+  const companyIds = companiesJson.data?.metafleetCompanies?.companyIds || []
 
   if (companyIds.length === 0) {
     throw new Error('No companies found')
@@ -133,7 +139,15 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
       }),
     })
 
-    const { data: { paginatedDrivers } } = await driversRes.json()
+    const driversJson = await driversRes.json()
+
+    // Manejar errores de API
+    if (driversJson.errors) {
+      console.error(`Error obteniendo conductores de compañía ${companyId}:`, driversJson.errors)
+      continue // Saltar a la siguiente compañía
+    }
+
+    const paginatedDrivers = driversJson.data?.paginatedDrivers
     const drivers = paginatedDrivers?.drivers || []
 
     // Procesar conductores en batches de 50
@@ -247,7 +261,11 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
               nombre: driverInfo.name || driver.name || '',
               apellido: driverInfo.surname || driver.surname || '',
               email: driverInfo.email || driver.email || '',
-              dni: driverInfo.nationalIdNumber || driver.nationalIdNumber || '',
+              // DNI: usar placeholder con cabify_driver_id si está vacío
+              // Cabify manda - incluir TODOS los conductores
+              dni: (driverInfo.nationalIdNumber || driver.nationalIdNumber || '').trim() !== ''
+                ? (driverInfo.nationalIdNumber || driver.nationalIdNumber)
+                : `CABIFY_${driver.id}`,
               licencia: driverInfo.driverLicense || driver.driverLicense || '',
               telefono_codigo: driverInfo.mobileNum ? driver.mobileCc || '' : '',
               telefono_numero: driverInfo.mobileNum || driver.mobileNum || '',

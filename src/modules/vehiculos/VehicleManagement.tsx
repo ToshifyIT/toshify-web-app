@@ -181,8 +181,6 @@ export function VehicleManagement() {
     try {
       const estadosRes = await supabase.from('vehiculos_estados').select('*').order('descripcion')
 
-      console.log('Catálogos cargados:', { estadosRes })
-
       if (estadosRes.data) setVehiculosEstados(estadosRes.data)
 
       if (estadosRes.error) console.error('Error vehiculos_estados:', estadosRes.error)

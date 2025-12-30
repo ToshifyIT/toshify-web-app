@@ -83,7 +83,6 @@ class AsignacionesService {
         }
       }
 
-      console.log(`✅ ${asignacionesMap.size} asignaciones activas encontradas de ${dnis.length} DNIs`)
       return asignacionesMap
 
     } catch (error) {

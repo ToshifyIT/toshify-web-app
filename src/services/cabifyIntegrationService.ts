@@ -32,11 +32,8 @@ class CabifyIntegrationService {
    */
   async getEnrichedDriversData(period: CabifyPeriod = 'semana'): Promise<CabifyDriverEnriched[]> {
     try {
-      console.log('🔄 Iniciando integración Cabify...')
-
       // 1. Obtener datos de Cabify
       const cabifyDrivers = await cabifyService.getDriversData(period)
-      console.log(`📊 ${cabifyDrivers.length} conductores obtenidos de Cabify`)
 
       // 2. Obtener asignaciones activas con conductores y vehículos
       const { data: asignacionesData, error } = await supabase
@@ -72,7 +69,6 @@ class CabifyIntegrationService {
       }
 
       const asignaciones = asignacionesData as any[]
-      console.log(`📋 ${asignaciones?.length || 0} asignaciones activas encontradas`)
 
       // 3. Crear un mapa de DNI -> Asignación para búsqueda rápida
       const asignacionesPorDNI = new Map<string, any>()
@@ -134,7 +130,6 @@ class CabifyIntegrationService {
         })
       }
 
-      console.log(`✅ ${enrichedDrivers.length} conductores enriquecidos`)
       return enrichedDrivers
 
     } catch (error) {
@@ -219,8 +214,6 @@ class CabifyIntegrationService {
     // Si no se especifica período, usar la semana actual
     const { startDate, endDate } = this.getDefaultPeriod(fechaInicio, fechaFin)
 
-    console.log('📊 getTopMejoresFromHistorico - Consultando con:', { startDate, endDate })
-
     // @ts-expect-error - RPC function not in generated types
     const { data, error } = await supabase.rpc('get_cabify_top_mejores', {
       p_fecha_inicio: startDate,
@@ -232,8 +225,6 @@ class CabifyIntegrationService {
       // Fallback a la vista si la función falla
       return this.getTopMejoresFallback()
     }
-
-    console.log('📊 getTopMejoresFromHistorico - Resultado:', data?.length || 0, 'registros')
 
     return (data || []).map((row: RankingRow) => this.mapRankingDriver(row))
   }

@@ -20,8 +20,7 @@ import { InventarioDashboardPage } from './inventario/InventarioDashboardPage'
 import { MovimientosPage } from './inventario/MovimientosPage'
 import { AsignacionesActivasPage as AsignacionesActivasInventarioPage } from './inventario/AsignacionesActivasPage'
 import { HistorialMovimientosPage } from './inventario/HistorialMovimientosPage'
-import { PedidosTransitoPage } from './inventario/PedidosTransitoPage'
-import { AprobacionesPendientesPage } from './inventario/AprobacionesPendientesPage'
+import { PedidosPage } from './inventario/PedidosPage'
 import { USSPage } from './integraciones/uss/USSPage'
 import { BitacoraPage } from './integraciones/uss/BitacoraPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
@@ -888,14 +887,9 @@ export function HomePage() {
                   <HistorialMovimientosPage />
                 </ProtectedRoute>
               } />
-              <Route path="/inventario/pedidos-transito" element={
-                <ProtectedRoute submenuName="inventario-pedidos-transito" action="view">
-                  <PedidosTransitoPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/inventario/aprobaciones" element={
-                <ProtectedRoute submenuName="inventario-aprobaciones" action="view">
-                  <AprobacionesPendientesPage />
+              <Route path="/inventario/pedidos" element={
+                <ProtectedRoute submenuName="inventario-pedidos" action="view">
+                  <PedidosPage />
                 </ProtectedRoute>
               } />
 

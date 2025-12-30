@@ -173,3 +173,13 @@ nul
 *.tar.gz
 *.rar
 !public/*.zip
+.mcp.json
+code.txt
+control_conductores_20251218.xlsx
+CORRECCIONES_LOGISTICA_STOCK.md
+data-flota.xlsx
+fetch_wialon_data_preview.py
+PREVIEW_wialon_20251218.xlsx
+sync_wialon_bitacora.py
+update_database.py
+

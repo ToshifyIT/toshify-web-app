@@ -28,7 +28,6 @@ export function UserManagement() {
   }, [])
 
   const loadData = async () => {
-    console.log('📥 Cargando datos...')
     setLoading(true)
     setError(null)
 
@@ -41,9 +40,6 @@ export function UserManagement() {
         `)
         .order('created_at', { ascending: false })
 
-      console.log('👥 Usuarios cargados:', usersData)
-      console.log('⚠️ Error usuarios:', usersError)
-
       if (usersError) throw usersError
 
       const { data: rolesData, error: rolesError } = await supabase
@@ -51,14 +47,10 @@ export function UserManagement() {
         .select('*')
         .order('name')
 
-      console.log('🏷️ Roles cargados:', rolesData)
-      console.log('⚠️ Error roles:', rolesError)
-
       if (rolesError) throw rolesError
 
       setUsers(usersData as UserWithRole[])
       setRoles(rolesData)
-      console.log('✅ Estado actualizado')
     } catch (err: any) {
       console.error('❌ Error cargando datos:', err)
       setError(err.message)
@@ -125,11 +117,8 @@ export function UserManagement() {
   }
 
   const handleRoleChange = async (userId: string, newRoleId: string) => {
-    console.log('🔄 Intentando cambiar rol:', { userId, newRoleId })
-
     try {
       if (!newRoleId) {
-        console.log('⚠️ No se seleccionó rol')
         Swal.fire({
           icon: 'warning',
           title: 'Rol no seleccionado',
@@ -138,23 +127,18 @@ export function UserManagement() {
         return
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('user_profiles')
         // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .update({ role_id: newRoleId })
         .eq('id', userId)
         .select()
 
-      console.log('📦 Respuesta de Supabase:', { data, error })
-
       if (error) {
-        console.error('❌ Error de Supabase:', error)
         throw error
       }
 
-      console.log('✅ Rol actualizado en DB')
       await loadData()
-      console.log('✅ Datos recargados')
 
       Swal.fire({
         icon: 'success',

@@ -240,8 +240,6 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           (v: any) => v.disponibilidad !== 'programado'
         )
 
-        console.log('📋 Vehículos con disponibilidad:', vehiculosFinales)
-
         setVehicles(vehiculosFinales)
       } catch (error) {
         console.error('Error loading vehicles:', error)
@@ -295,9 +293,6 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           ...conductor,
           tieneAsignacionActiva: asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false
         }))
-
-        console.log('👥 Conductores cargados:', data)
-        console.log('✅ Conductores con estado:', conductoresConEstado)
 
         setConductores(conductoresConEstado)
       } catch (error) {

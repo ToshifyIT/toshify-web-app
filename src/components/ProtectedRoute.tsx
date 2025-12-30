@@ -43,19 +43,16 @@ export function ProtectedRoute({
 
   // Si la ruta requiere admin y el usuario no es admin, redirigir al dashboard
   if (requireAdmin && !isAdmin()) {
-    console.log('⚠️ Acceso denegado: se requiere rol admin')
     return <Navigate to="/dashboard" replace />
   }
 
   // Verificar permisos de menú si se especificó
   if (menuName && !canViewMenu(menuName)) {
-    console.log(`⚠️ Acceso denegado al menú: ${menuName}`)
     return <Navigate to="/unauthorized" replace />
   }
 
   // Verificar permisos de submenú si se especificó
   if (submenuName && !canViewSubmenu(submenuName)) {
-    console.log(`⚠️ Acceso denegado al submenú: ${submenuName}`)
     return <Navigate to="/unauthorized" replace />
   }
 
@@ -63,7 +60,6 @@ export function ProtectedRoute({
   if ((menuName || submenuName) && action !== 'view') {
     const targetName = submenuName || menuName
     if (targetName && !canAccess(targetName, action)) {
-      console.log(`⚠️ Acceso denegado: no tiene permiso para ${action} en ${targetName}`)
       return <Navigate to="/unauthorized" replace />
     }
   }

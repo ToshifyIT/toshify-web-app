@@ -27,11 +27,6 @@ export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRank
   const [error, setError] = useState<string | null>(null)
 
   const fetchRankings = useCallback(async () => {
-    console.log('🏆 useCabifyRankings - fetchRankings llamado con:', {
-      fechaInicio: props?.fechaInicio,
-      fechaFin: props?.fechaFin
-    })
-
     try {
       setIsLoading(true)
       setError(null)
@@ -46,12 +41,6 @@ export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRank
           props?.fechaFin
         )
       ])
-
-      console.log('🏆 Rankings obtenidos:', {
-        mejores: mejores.length,
-        peores: peores.length,
-        mejoresData: mejores.slice(0, 2)
-      })
 
       // Ordenar en frontend para garantizar el orden correcto
       // Mejores: de mayor a menor ganancia (DESC)
