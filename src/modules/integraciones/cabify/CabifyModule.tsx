@@ -171,7 +171,6 @@ export function CabifyModule() {
         customDateRange={customDateRange}
         onWeekChange={setSelectedWeek}
         onCustomDateChange={handleCustomDateChange}
-        onRefresh={refreshData}
       />
 
       <ProgressBanner

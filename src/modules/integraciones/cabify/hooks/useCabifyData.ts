@@ -3,13 +3,16 @@
  * Custom hook para manejo de datos de Cabify
  * Principio: Single Responsibility - Solo manejo de datos y fetch
  * Principio: Dependency Inversion - Depende de abstracciones (servicios)
+ *
+ * Incluye suscripción Realtime para actualización automática
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Swal from 'sweetalert2'
 import { cabifyService } from '../../../../services/cabifyService'
 import { cabifyHistoricalService } from '../../../../services/cabifyHistoricalService'
 import { asignacionesService, type AsignacionActiva } from '../../../../services/asignacionesService'
+import { supabase } from '../../../../lib/supabase'
 import type { CabifyQueryState } from '../../../../types/cabify.types'
 import type {
   CabifyDriver,
@@ -86,9 +89,71 @@ export function useCabifyData(): UseCabifyDataReturn {
   // CARGA DE DATOS
   // =====================================================
 
+  // Referencia para evitar múltiples recargas simultáneas
+  const isReloadingRef = useRef(false)
+
   useEffect(() => {
     if (selectedWeek) {
       loadData()
+    }
+  }, [selectedWeek])
+
+  // =====================================================
+  // SUSCRIPCIÓN REALTIME
+  // =====================================================
+
+  useEffect(() => {
+    if (!selectedWeek) return
+
+    // Suscribirse a cambios en cabify_historico
+    const channel = supabase
+      .channel('cabify_historico_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'cabify_historico',
+        },
+        (payload) => {
+          // Verificar si el cambio corresponde al período seleccionado
+          const newRecord = payload.new as { fecha_inicio?: string } | undefined
+          const oldRecord = payload.old as { fecha_inicio?: string } | undefined
+          const recordDate = newRecord?.fecha_inicio || oldRecord?.fecha_inicio
+
+          if (recordDate && selectedWeek) {
+            const recordTime = new Date(recordDate).getTime()
+            const startTime = new Date(selectedWeek.startDate).getTime()
+            const endTime = new Date(selectedWeek.endDate).getTime()
+
+            // Si el registro está dentro del período seleccionado, recargar
+            if (recordTime >= startTime && recordTime <= endTime) {
+              // Evitar múltiples recargas simultáneas
+              if (!isReloadingRef.current) {
+                isReloadingRef.current = true
+                console.log('📡 Realtime: Cambio detectado, actualizando datos...')
+
+                // Pequeño delay para agrupar múltiples cambios
+                setTimeout(() => {
+                  loadData().finally(() => {
+                    isReloadingRef.current = false
+                  })
+                }, 500)
+              }
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('📡 Realtime: Suscripción activa a cabify_historico')
+        }
+      })
+
+    // Cleanup: desuscribirse al desmontar o cambiar semana
+    return () => {
+      console.log('📡 Realtime: Desuscribiendo...')
+      supabase.removeChannel(channel)
     }
   }, [selectedWeek])
 

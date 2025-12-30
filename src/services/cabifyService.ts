@@ -1557,12 +1557,16 @@ class CabifyService {
 
     const weekNum = getWeekNumber(monday)
 
+    // Calcular el domingo real de la semana (para el label)
+    const actualSunday = new Date(monday)
+    actualSunday.setDate(monday.getDate() + 6)
+
     let label: string
     if (weeksAgo === 0) {
-      label = `Sem ${weekNum} - Actual`
+      // Semana actual: mostrar rango completo lunes-domingo
+      label = `Semana en curso (${formatDate(monday)} - ${formatDate(actualSunday)})`
     } else {
-      const endDate = new Date(sunday)
-      label = `Sem ${weekNum} (${formatDate(monday)} - ${formatDate(endDate)})`
+      label = `Sem ${weekNum} (${formatDate(monday)} - ${formatDate(actualSunday)})`
     }
 
     return {

@@ -5,9 +5,8 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { RefreshCw, Calendar, ChevronDown } from 'lucide-react'
+import { Calendar, ChevronDown } from 'lucide-react'
 import type { WeekOption } from '../types/cabify.types'
-import { UI_TEXT } from '../constants/cabify.constants'
 
 // =====================================================
 // TIPOS
@@ -26,7 +25,6 @@ interface CabifyHeaderProps {
   readonly customDateRange: DateRange | null
   readonly onWeekChange: (week: WeekOption) => void
   readonly onCustomDateChange: (range: DateRange) => void
-  readonly onRefresh: () => void
 }
 
 // =====================================================
@@ -41,7 +39,6 @@ export function CabifyHeader({
   customDateRange,
   onWeekChange,
   onCustomDateChange,
-  onRefresh,
 }: CabifyHeaderProps) {
   const handleWeekChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const weeksAgo = Number(event.target.value)
@@ -68,15 +65,16 @@ export function CabifyHeader({
           isDisabled={isDisabled}
           onChange={onCustomDateChange}
         />
-        <RefreshButton
-          isLoading={isLoading}
-          isDisabled={isLoading || !selectedWeek}
-          onClick={onRefresh}
-        />
+        {isLoading && (
+          <div className="cabify-loading-indicator">
+            <div className="dt-loading-spinner" style={{ width: 16, height: 16 }} />
+            <span>Sincronizando...</span>
+          </div>
+        )}
       </div>
       {lastUpdate && (
         <span className="cabify-last-update-compact">
-          {lastUpdate.toLocaleString('es-AR')}
+          Última actualización: {lastUpdate.toLocaleString('es-AR')}
         </span>
       )}
     </div>
@@ -218,21 +216,3 @@ function DateRangePicker({
   )
 }
 
-interface RefreshButtonProps {
-  readonly isLoading: boolean
-  readonly isDisabled: boolean
-  readonly onClick: () => void
-}
-
-function RefreshButton({ isLoading, isDisabled, onClick }: RefreshButtonProps) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={isDisabled}
-      className="btn-primary cabify-refresh-btn"
-    >
-      <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
-      {isLoading ? UI_TEXT.LOADING : UI_TEXT.REFRESH}
-    </button>
-  )
-}

@@ -61,10 +61,21 @@
   opacity: 0.6;
 }
 
-.cabify-refresh-btn {
+.cabify-loading-indicator {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 /* Date Range Picker - Dropdown Style */
@@ -797,7 +808,7 @@
     padding: 10px 12px;
   }
 
-  .cabify-refresh-btn {
+  .cabify-loading-indicator {
     width: 100%;
     justify-content: center;
   }
@@ -867,7 +878,7 @@
     font-size: 14px;
   }
 
-  .cabify-refresh-btn {
+  .cabify-loading-indicator {
     padding: 10px 14px; /* Touch-friendly */
     font-size: 14px;
   }
