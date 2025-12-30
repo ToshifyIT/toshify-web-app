@@ -3,6 +3,8 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import logoWhite from '../assets/logo-toshify-white.svg'
+import logoRed from '../assets/logo-toshify-red.svg'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -40,7 +42,7 @@ export function LoginPage() {
           min-height: 100vh;
           display: flex;
           font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          background: linear-gradient(135deg, #333333 0%, #1a1a1a 100%);
+          background: linear-gradient(160deg, #1a1a1a 0%, #0d0d0d 100%);
           position: relative;
           overflow: hidden;
         }
@@ -90,24 +92,12 @@ export function LoginPage() {
         }
 
         .brand-logo {
-          width: 80px;
-          height: 80px;
-          background: white;
-          border-radius: 20px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
           margin-bottom: 32px;
-          box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
 
-        .brand-logo-text {
-          font-size: 36px;
-          font-weight: 700;
-          background: linear-gradient(135deg, #333333 0%, #1a1a1a 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+        .brand-logo img {
+          height: 40px;
+          width: auto;
         }
 
         .brand-title {
@@ -118,37 +108,10 @@ export function LoginPage() {
         }
 
         .brand-subtitle {
-          font-size: 20px;
-          opacity: 0.9;
+          font-size: 18px;
+          opacity: 0.8;
           line-height: 1.6;
-          margin: 0 0 32px 0;
-        }
-
-        .brand-features {
-          list-style: none;
-          padding: 0;
           margin: 0;
-        }
-
-        .brand-features li {
-          padding: 12px 0;
-          display: flex;
-          align-items: center;
-          font-size: 16px;
-          opacity: 0.9;
-        }
-
-        .brand-features li::before {
-          content: '✓';
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 24px;
-          height: 24px;
-          background: rgba(255,255,255,0.2);
-          border-radius: 50%;
-          margin-right: 12px;
-          font-weight: bold;
         }
 
         .login-form-container {
@@ -158,6 +121,16 @@ export function LoginPage() {
 
         .form-header {
           margin-bottom: 40px;
+        }
+
+        .form-logo-mobile {
+          display: none;
+          margin-bottom: 24px;
+        }
+
+        .form-logo-mobile img {
+          height: 32px;
+          width: auto;
         }
 
         .form-title {
@@ -199,9 +172,9 @@ export function LoginPage() {
 
         .input-field:focus {
           outline: none;
-          border-color: #333333;
+          border-color: #FF0033;
           background: white;
-          box-shadow: 0 0 0 4px rgba(51, 51, 51, 0.1);
+          box-shadow: 0 0 0 4px rgba(255, 0, 51, 0.08);
         }
 
         .input-field::placeholder {
@@ -229,24 +202,24 @@ export function LoginPage() {
         .submit-button {
           width: 100%;
           padding: 16px;
-          background: linear-gradient(135deg, #333333 0%, #1a1a1a 100%);
+          background: #FF0033;
           color: white;
           border: none;
           border-radius: 10px;
           font-size: 16px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.3s;
-          box-shadow: 0 4px 15px rgba(51, 51, 51, 0.4);
+          transition: all 0.2s;
+          box-shadow: 0 2px 8px rgba(255, 0, 51, 0.25);
         }
 
         .submit-button:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(51, 51, 51, 0.5);
+          background: #E6002E;
+          box-shadow: 0 4px 12px rgba(255, 0, 51, 0.35);
         }
 
         .submit-button:active:not(:disabled) {
-          transform: translateY(0);
+          background: #CC0029;
         }
 
         .submit-button:disabled {
@@ -269,7 +242,7 @@ export function LoginPage() {
         }
 
         .footer-link {
-          color: #333333;
+          color: #FF0033;
           text-decoration: none;
           font-weight: 600;
         }
@@ -286,6 +259,10 @@ export function LoginPage() {
           .login-right {
             flex: 1;
             padding: 40px 20px;
+          }
+
+          .form-logo-mobile {
+            display: block;
           }
         }
 
@@ -308,24 +285,21 @@ export function LoginPage() {
         <div className="login-left">
           <div className="brand-content">
             <div className="brand-logo">
-              <span className="brand-logo-text">T</span>
+              <img src={logoWhite} alt="Toshify" />
             </div>
             <h1 className="brand-title">Bienvenido a Toshify</h1>
             <p className="brand-subtitle">
               Sistema integral de gestión de flotas vehiculares con control total de tu operación
             </p>
-            <ul className="brand-features">
-              <li>Gestión completa de vehículos y conductores</li>
-              <li>Control de siniestros e incidencias</li>
-              <li>Reportes y análisis en tiempo real</li>
-              <li>Integraciones con USS y Cabify</li>
-            </ul>
           </div>
         </div>
 
         <div className="login-right">
           <div className="login-form-container">
             <div className="form-header">
+              <div className="form-logo-mobile">
+                <img src={logoRed} alt="Toshify" />
+              </div>
               <h2 className="form-title">Iniciar Sesión</h2>
               <p className="form-subtitle">Ingresa tus credenciales para acceder</p>
             </div>

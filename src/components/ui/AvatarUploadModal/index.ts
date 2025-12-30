@@ -1,0 +1,1 @@
+export { AvatarUploadModal } from './AvatarUploadModal'

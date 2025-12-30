@@ -88,6 +88,32 @@
   font-size: 32px;
   font-weight: 700;
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.profile-avatar:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.4);
+}
+
+.profile-avatar.has-image {
+  background: var(--bg-secondary);
+}
+
+.profile-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-loading {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .profile-avatar-edit {
