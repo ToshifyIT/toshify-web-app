@@ -8,7 +8,6 @@ import {
   Search,
   Eye,
   Edit2,
-  AlertTriangle,
   FileText,
   ChevronLeft,
   ChevronRight,
@@ -31,9 +30,7 @@ import type {
   TipoPenalidad,
   PenalidadFormData,
   VehiculoSimple,
-  ConductorSimple,
-  IncidenciaStats,
-  PenalidadStats
+  ConductorSimple
 } from '../../types/incidencias.types'
 import './IncidenciasModule.css'
 
@@ -139,55 +136,6 @@ export function IncidenciasModule() {
       setLoading(false)
     }
   }
-
-  // Stats
-  const incidenciaStats = useMemo((): IncidenciaStats => {
-    const porEstado = estados.map(e => ({
-      estado: e.nombre,
-      color: e.color,
-      cantidad: incidencias.filter(i => i.estado_id === e.id).length
-    })).filter(e => e.cantidad > 0)
-
-    const areas = [...new Set(incidencias.map(i => i.area).filter(Boolean))]
-    const porArea = areas.map(a => ({
-      area: a!,
-      cantidad: incidencias.filter(i => i.area === a).length
-    }))
-
-    const turnos = [...new Set(incidencias.map(i => i.turno).filter(Boolean))]
-    const porTurno = turnos.map(t => ({
-      turno: t!,
-      cantidad: incidencias.filter(i => i.turno === t).length
-    }))
-
-    const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')
-    const estadoResuelto = estados.find(e => e.codigo === 'RESUELTO')
-
-    return {
-      total: incidencias.length,
-      por_estado: porEstado,
-      por_area: porArea,
-      por_turno: porTurno,
-      pendientes: estadoPendiente ? incidencias.filter(i => i.estado_id === estadoPendiente.id).length : 0,
-      resueltas: estadoResuelto ? incidencias.filter(i => i.estado_id === estadoResuelto.id).length : 0
-    }
-  }, [incidencias, estados])
-
-  const penalidadStats = useMemo((): PenalidadStats => {
-    const porTipo = tiposPenalidad.map(t => ({
-      tipo: t.nombre,
-      cantidad: penalidades.filter(p => p.tipo_penalidad_id === t.id).length,
-      monto: penalidades.filter(p => p.tipo_penalidad_id === t.id).reduce((sum, p) => sum + (p.monto || 0), 0)
-    })).filter(t => t.cantidad > 0)
-
-    return {
-      total: penalidades.length,
-      total_monto: penalidades.reduce((sum, p) => sum + (p.monto || 0), 0),
-      aplicadas: penalidades.filter(p => p.aplicado).length,
-      pendientes: penalidades.filter(p => !p.aplicado).length,
-      por_tipo: porTipo
-    }
-  }, [penalidades, tiposPenalidad])
 
   // Filtrar incidencias
   const incidenciasFiltradas = useMemo(() => {
