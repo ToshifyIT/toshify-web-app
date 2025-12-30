@@ -1,0 +1,36 @@
+# CD Workflow - Deploy a Dokploy
+# Se ejecuta cuando se mergea a main
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Permite deploy manual
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    # Solo ejecutar si CI pasó (en push a main, CI corre primero)
+    needs: []
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger Dokploy Deploy
+        run: |
+          echo "Triggering deploy to Dokploy..."
+          curl -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            --fail --silent --show-error
+          echo "Deploy triggered successfully!"
+
+      - name: Notify Success
+        if: success()
+        run: echo "Deployment to production triggered successfully!"
+
+      - name: Notify Failure
+        if: failure()
+        run: echo "Deployment failed! Check Dokploy logs."
