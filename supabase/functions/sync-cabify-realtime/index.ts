@@ -101,8 +101,14 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
     body: JSON.stringify({ query: companiesQuery }),
   })
 
-  const { data: { metafleetCompanies } } = await companiesRes.json()
-  const companyIds = metafleetCompanies?.companyIds || []
+  const companiesJson = await companiesRes.json()
+
+  // Manejar errores de API
+  if (companiesJson.errors) {
+    throw new Error(`Companies API error: ${JSON.stringify(companiesJson.errors)}`)
+  }
+
+  const companyIds = companiesJson.data?.metafleetCompanies?.companyIds || []
 
   if (companyIds.length === 0) {
     throw new Error('No companies found')
@@ -133,7 +139,15 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
       }),
     })
 
-    const { data: { paginatedDrivers } } = await driversRes.json()
+    const driversJson = await driversRes.json()
+
+    // Manejar errores de API
+    if (driversJson.errors) {
+      console.error(`Error obteniendo conductores de compañía ${companyId}:`, driversJson.errors)
+      continue // Saltar a la siguiente compañía
+    }
+
+    const paginatedDrivers = driversJson.data?.paginatedDrivers
     const drivers = paginatedDrivers?.drivers || []
 
     // Procesar conductores en batches de 50
