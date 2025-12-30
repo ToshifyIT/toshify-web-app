@@ -3,6 +3,9 @@ import { useState } from 'react'
 import { Crown } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
+import { useTheme } from '../contexts/ThemeContext'
+import logoRed from '../assets/logo-toshify-red.svg'
+import logoWhite from '../assets/logo-toshify-white.svg'
 import { useNavigate } from 'react-router-dom'
 import { UserManagement } from '../components/admin/UserManagement'
 import { RoleManagement } from '../components/admin/RoleManagement'
@@ -29,6 +32,7 @@ type TabType =
 export function AdminPage() {
   const { profile, signOut } = useAuth()
   const { isAdmin, canViewMenu } = usePermissions()
+  const { resolvedTheme } = useTheme()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabType>('vehiculos')
   const [administracionMenuOpen, setAdministracionMenuOpen] = useState(false)
@@ -67,33 +71,21 @@ export function AdminPage() {
 
         .sidebar-logo {
           display: flex;
-          align-items: center;
-          gap: 10px;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 4px;
         }
 
-        .sidebar-logo-icon {
-          width: 32px;
-          height: 32px;
-          background: #1F2937;
-          border-radius: 6px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-size: 16px;
-          font-weight: 600;
+        .sidebar-logo-img {
+          height: 22px;
+          width: auto;
         }
 
-        .sidebar-logo-text h1 {
-          color: #1F2937;
-          font-size: 16px;
-          font-weight: 600;
-        }
-
-        .sidebar-logo-text p {
-          color: #6B7280;
+        .sidebar-logo-subtitle {
+          color: var(--text-tertiary, #6B7280);
           font-size: 11px;
-          margin-top: 2px;
+          margin: 0;
+          font-weight: 500;
         }
 
         .sidebar-nav {
@@ -339,7 +331,8 @@ export function AdminPage() {
           .sidebar {
             width: 70px;
           }
-          .sidebar-logo-text,
+          .sidebar-logo-img,
+          .sidebar-logo-subtitle,
           .nav-label,
           .user-info,
           .nav-section-arrow {
@@ -348,10 +341,18 @@ export function AdminPage() {
           .sidebar-header {
             padding: 16px;
           }
-          .sidebar-logo-icon {
+          .sidebar-logo::before {
+            content: 'T';
+            display: flex;
+            align-items: center;
+            justify-content: center;
             width: 38px;
             height: 38px;
+            background: #DC2626;
+            border-radius: 6px;
+            color: white;
             font-size: 16px;
+            font-weight: 700;
           }
           .nav-item {
             padding: 12px;
@@ -395,7 +396,7 @@ export function AdminPage() {
           .sidebar-header {
             padding: 12px;
           }
-          .sidebar-logo-icon {
+          .sidebar-logo::before {
             width: 36px;
             height: 36px;
             font-size: 14px;
@@ -427,11 +428,12 @@ export function AdminPage() {
         <aside className="sidebar">
           <div className="sidebar-header">
             <div className="sidebar-logo">
-              <div className="sidebar-logo-icon">T</div>
-              <div className="sidebar-logo-text">
-                <h1>Toshify</h1>
-                <p>Admin Panel</p>
-              </div>
+              <img
+                src={resolvedTheme === 'dark' ? logoWhite : logoRed}
+                alt="Toshify"
+                className="sidebar-logo-img"
+              />
+              <p className="sidebar-logo-subtitle">Admin Panel</p>
             </div>
           </div>
 

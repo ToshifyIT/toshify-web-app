@@ -472,9 +472,11 @@ export function SiniestrosModule() {
       {/* Tabs + Action Button */}
       <div className="siniestros-tabs-row">
         <div className="siniestros-tabs">
+        {/* Dashboard tab oculto temporalmente */}
         <button
           className={`siniestros-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
           onClick={() => setActiveTab('dashboard')}
+          style={{ display: 'none' }}
         >
           <TrendingUp size={16} />
           Dashboard
