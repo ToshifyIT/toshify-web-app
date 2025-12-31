@@ -138,11 +138,26 @@ export function ProfileModule() {
       return
     }
 
-    if (passwordData.newPassword.length < 6) {
+    // Validación de contraseña segura (OWASP)
+    const passwordErrors: string[] = []
+    if (passwordData.newPassword.length < 8) {
+      passwordErrors.push('Mínimo 8 caracteres')
+    }
+    if (!/[A-Z]/.test(passwordData.newPassword)) {
+      passwordErrors.push('Al menos una mayúscula')
+    }
+    if (!/[a-z]/.test(passwordData.newPassword)) {
+      passwordErrors.push('Al menos una minúscula')
+    }
+    if (!/[0-9]/.test(passwordData.newPassword)) {
+      passwordErrors.push('Al menos un número')
+    }
+
+    if (passwordErrors.length > 0) {
       Swal.fire({
         icon: 'warning',
-        title: 'Contraseña muy corta',
-        text: 'La nueva contraseña debe tener al menos 6 caracteres',
+        title: 'Contraseña débil',
+        html: `La contraseña debe cumplir:<br>• ${passwordErrors.join('<br>• ')}`,
       })
       return
     }
@@ -484,7 +499,7 @@ export function ProfileModule() {
                     type="password"
                     value={passwordData.newPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mínimo 8 caracteres, mayúscula, minúscula y número"
                     disabled={changingPassword}
                   />
                 </div>

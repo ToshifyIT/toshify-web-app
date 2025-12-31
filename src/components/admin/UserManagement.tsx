@@ -69,6 +69,30 @@ export function UserManagement() {
       return
     }
 
+    // Validación de contraseña segura (OWASP)
+    const passwordErrors: string[] = []
+    if (newUser.password.length < 8) {
+      passwordErrors.push('Mínimo 8 caracteres')
+    }
+    if (!/[A-Z]/.test(newUser.password)) {
+      passwordErrors.push('Al menos una mayúscula')
+    }
+    if (!/[a-z]/.test(newUser.password)) {
+      passwordErrors.push('Al menos una minúscula')
+    }
+    if (!/[0-9]/.test(newUser.password)) {
+      passwordErrors.push('Al menos un número')
+    }
+
+    if (passwordErrors.length > 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Contraseña débil',
+        html: `La contraseña debe cumplir:<br>• ${passwordErrors.join('<br>• ')}`
+      })
+      return
+    }
+
     setCreating(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -367,7 +391,7 @@ export function UserManagement() {
                 className="um-form-input"
                 value={newUser.password}
                 onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres, mayúscula, minúscula y número"
                 disabled={creating}
               />
             </div>
