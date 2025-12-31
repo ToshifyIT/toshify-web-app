@@ -12,16 +12,17 @@ class CabifyService {
   private assetsCache: Map<string, any> = new Map()
 
   constructor() {
-    // Cargar configuración desde variables de entorno
+    // SEGURIDAD: Las credenciales de Cabify están SOLO en las Edge Functions (servidor)
+    // El frontend NO debe tener acceso a credenciales de API
+    // Este servicio ahora solo contiene funciones helper para cálculo de fechas
     this.config = {
-      username: import.meta.env.VITE_CABIFY_USERNAME || '',
-      password: import.meta.env.VITE_CABIFY_PASSWORD || '',
-      clientId: import.meta.env.VITE_CABIFY_CLIENT_ID || '',
-      clientSecret: import.meta.env.VITE_CABIFY_CLIENT_SECRET || '',
-      companyId: import.meta.env.VITE_CABIFY_COMPANY_ID || '', // ID de la flota
-      // SIEMPRE usar proxy de Vite (evita CORS)
-      authUrl: '/cabify-auth',
-      graphqlUrl: '/cabify-graphql'
+      username: '', // Movido a Edge Functions
+      password: '', // Movido a Edge Functions
+      clientId: '', // Movido a Edge Functions
+      clientSecret: '', // Movido a Edge Functions
+      companyId: '', // Movido a Edge Functions
+      authUrl: '',
+      graphqlUrl: ''
     }
   }
 
