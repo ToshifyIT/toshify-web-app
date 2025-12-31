@@ -11,6 +11,7 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: any }>
+  signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
@@ -199,6 +200,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error }
   }
 
+  const signInWithGoogle = async () => {
+    sessionRegisteredRef.current = false // Permitir nuevo registro de sesión
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + '/admin'
+      }
+    })
+  }
+
   const signOut = async () => {
     try {
       // Eliminar sesión de la BD
@@ -230,6 +241,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     loading,
     signIn,
+    signInWithGoogle,
     signOut,
     refreshProfile,
   }
