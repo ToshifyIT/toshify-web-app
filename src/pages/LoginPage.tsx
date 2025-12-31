@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import Swal from 'sweetalert2'
 
 export function LoginPage() {
@@ -47,6 +48,78 @@ export function LoginPage() {
       confirmButtonText: 'Entendido',
       confirmButtonColor: '#FF0033'
     })
+  }
+
+  const handleForgotPassword = async (e: React.MouseEvent) => {
+    e.preventDefault()
+
+    const { value: forgotEmail } = await Swal.fire({
+      title: 'Recuperar contraseña',
+      input: 'email',
+      inputLabel: 'Ingresá tu correo electrónico',
+      inputPlaceholder: 'tu@toshify.com.ar',
+      inputValue: email, // Pre-fill with email if already entered
+      showCancelButton: true,
+      confirmButtonText: 'Enviar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#FF0033',
+      inputValidator: (value) => {
+        if (!value) {
+          return 'Debés ingresar un correo electrónico'
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          return 'Ingresá un correo electrónico válido'
+        }
+        return null
+      }
+    })
+
+    if (forgotEmail) {
+      try {
+        // Verificar si el email existe en auth.users
+        const { data: emailExists } = await (supabase.rpc as any)('check_email_exists', {
+          email_to_check: forgotEmail
+        })
+
+        if (!emailExists) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Email no registrado',
+            text: 'No existe una cuenta con este correo electrónico.',
+            confirmButtonColor: '#FF0033'
+          })
+          return
+        }
+
+        const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+          redirectTo: `${window.location.origin}/reset-password`
+        })
+
+        if (error) {
+          await Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: error.message,
+            confirmButtonColor: '#FF0033'
+          })
+        } else {
+          await Swal.fire({
+            icon: 'success',
+            title: 'Correo enviado',
+            text: 'Revisá tu bandeja de entrada. Te enviamos un enlace para restablecer tu contraseña.',
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#FF0033'
+          })
+        }
+      } catch {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'No se pudo enviar el correo. Intentá de nuevo.',
+          confirmButtonColor: '#FF0033'
+        })
+      }
+    }
   }
 
   return (
@@ -477,7 +550,7 @@ export function LoginPage() {
                 />
                 <span>Recordarme</span>
               </label>
-              <a href="#" className="forgot-link">¿Olvidaste tu contraseña?</a>
+              <a href="#" className="forgot-link" onClick={handleForgotPassword}>¿Olvidaste tu contraseña?</a>
             </div>
 
             {error && (
