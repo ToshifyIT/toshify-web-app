@@ -22,8 +22,6 @@ export function BitacoraModule() {
     pageSize,
     setPageSize,
     updateChecklist,
-    refresh,
-    triggerSync,
   } = useBitacoraData()
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -46,8 +44,6 @@ export function BitacoraModule() {
         dateRange={dateRange}
         onDateRangePreset={setDateRangePreset}
         onCustomDateRange={setCustomDateRange}
-        onRefresh={refresh}
-        onSync={triggerSync}
         isLoading={queryState.loading}
         lastUpdate={queryState.lastUpdate}
       />

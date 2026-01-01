@@ -1,7 +1,6 @@
 /**
  * Servicio para consultas de datos de Bitácora Wialon
- * Usa la tabla uss_historico (sincronizada automáticamente desde Wialon)
- * Agrupa datos por vehículo+día para mostrar turnos
+ * Usa la tabla wialon_bitacora (sincronizada desde Wialon)
  */
 
 import { supabase } from '../lib/supabase'
@@ -10,7 +9,7 @@ import type {
   BitacoraQueryOptions,
 } from '../modules/integraciones/uss/bitacora/types/bitacora.types'
 
-// Tipo para registro transformado (turno = todos los viajes de un vehículo en un día)
+// Tipo para registro de bitácora
 export interface BitacoraRegistroTransformado {
   id: string
   patente: string
@@ -30,19 +29,42 @@ export interface BitacoraRegistroTransformado {
   nafta_cargada: boolean
 }
 
-// Threshold para "Poco Km"
-const POCO_KM_THRESHOLD = 100
-
-// Tipo para fila de uss_historico
-interface UssHistoricoRow {
-  id: number
+// Tipo para fila de wialon_bitacora
+interface WialonBitacoraRow {
+  id: string
   patente: string
-  conductor: string | null
+  patente_normalizada: string
+  conductor_wialon: string | null
+  conductor_id: string | null
   ibutton: string | null
+  fecha_turno: string
+  hora_inicio: string | null
+  hora_cierre: string | null
+  duracion_minutos: number | null
+  kilometraje: number
   observaciones: string | null
-  fecha_hora_inicio: string
-  fecha_hora_final: string | null
-  kilometraje: string | null
+  estado: string
+  gnc_cargado: boolean
+  lavado_realizado: boolean
+  nafta_cargada: boolean
+  created_at: string
+}
+
+// Tipo para stats query (campos seleccionados)
+interface WialonBitacoraStatsRow {
+  patente_normalizada: string
+  conductor_wialon: string | null
+  kilometraje: number
+  estado: string
+  gnc_cargado: boolean
+  lavado_realizado: boolean
+  nafta_cargada: boolean
+}
+
+// Tipo para sync log
+interface SyncLogRow {
+  completed_at: string | null
+  status: string
 }
 
 // =====================================================
@@ -88,24 +110,13 @@ class SimpleCache<T> {
 const bitacoraCache = new SimpleCache<BitacoraRegistroTransformado[]>(2) // Cache de 2 min para datos en tiempo real
 const statsCache = new SimpleCache<BitacoraStats>(2)
 
-// Helper para calcular estado
-function calcularEstado(horaFinal: string | null, km: number): string {
-  if (!horaFinal) return 'En Curso'
-  if (km < POCO_KM_THRESHOLD) return 'Poco Km'
-  return 'Turno Finalizado'
-}
-
-// Helper para extraer fecha de timestamp
-function extraerFecha(timestamp: string): string {
-  if (!timestamp) return ''
-  // Formato: "2025-12-22T14:30:00" o "2025-12-22 14:30:00"
-  return timestamp.split(/[T\s]/)[0]
-}
-
-// Helper para extraer hora de timestamp
-function extraerHora(timestamp: string | null): string | null {
-  if (!timestamp) return null
-  const match = timestamp.match(/(\d{2}:\d{2})(:\d{2})?/)
+// Helper para formatear hora (HH:MM)
+function formatearHora(hora: string | null): string | null {
+  if (!hora) return null
+  // Si ya es HH:MM, devolverlo
+  if (/^\d{2}:\d{2}$/.test(hora)) return hora
+  // Si es HH:MM:SS, extraer HH:MM
+  const match = hora.match(/(\d{2}:\d{2})/)
   return match ? match[1] : null
 }
 
@@ -115,8 +126,8 @@ function extraerHora(timestamp: string | null): string | null {
 
 export const wialonBitacoraService = {
   /**
-   * Obtiene registros de bitácora desde uss_historico, agrupados por turno
-   * DATOS EN TIEMPO REAL - uss_historico se sincroniza automáticamente
+   * Obtiene registros de bitácora desde wialon_bitacora
+   * La tabla ya contiene los turnos procesados y agrupados
    */
   async getBitacora(
     startDate: string,
@@ -130,134 +141,67 @@ export const wialonBitacoraService = {
       return { data: cached, count: cached.length }
     }
 
-    // Query directa a uss_historico (datos en tiempo real)
-    const { data, error } = await supabase
-      .from('uss_historico')
-      .select('*')
-      .gte('fecha_hora_inicio', `${startDate} 00:00:00`)
-      .lte('fecha_hora_inicio', `${endDate} 23:59:59`)
-      .order('fecha_hora_inicio', { ascending: false })
+    // Query a wialon_bitacora (tabla con turnos ya procesados)
+    let query = supabase
+      .from('wialon_bitacora')
+      .select('*', { count: 'exact' })
+      .gte('fecha_turno', startDate)
+      .lte('fecha_turno', endDate)
+      .order('fecha_turno', { ascending: false })
+      .order('hora_inicio', { ascending: false })
+
+    // Aplicar filtros en la query
+    if (options?.patente) {
+      query = query.ilike('patente', `%${options.patente}%`)
+    }
+
+    if (options?.conductor) {
+      query = query.ilike('conductor_wialon', `%${options.conductor}%`)
+    }
+
+    if (options?.estado) {
+      query = query.eq('estado', options.estado)
+    }
+
+    // Aplicar paginación
+    if (options?.offset !== undefined && options?.limit !== undefined) {
+      query = query.range(options.offset, options.offset + options.limit - 1)
+    } else if (options?.limit) {
+      query = query.limit(options.limit)
+    }
+
+    const { data, error, count } = await query
 
     if (error) {
       throw new Error(`Error obteniendo bitácora: ${error.message}`)
     }
 
-    // Agrupar por patente + fecha (un turno = todos los viajes del día de un vehículo)
-    const turnosMap = new Map<string, {
-      id: string
-      patente: string
-      patenteNorm: string
-      conductor: string | null
-      ibutton: string | null
-      fecha: string
-      horaInicio: string | null
-      horaCierre: string | null
-      km: number
-      observaciones: string | null
-    }>()
-
-    for (const row of (data || []) as UssHistoricoRow[]) {
-      const fecha = extraerFecha(row.fecha_hora_inicio)
-      const patenteNorm = (row.patente || '').replace(/\s/g, '').toUpperCase()
-      const key = `${patenteNorm}_${fecha}`
-
-      const km = parseFloat(row.kilometraje || '0') || 0
-      const horaInicio = extraerHora(row.fecha_hora_inicio)
-      const horaCierre = extraerHora(row.fecha_hora_final)
-
-      const existing = turnosMap.get(key)
-
-      if (!existing) {
-        turnosMap.set(key, {
-          id: String(row.id),
-          patente: row.patente,
-          patenteNorm,
-          conductor: row.conductor,
-          ibutton: row.ibutton,
-          fecha,
-          horaInicio,
-          horaCierre,
-          km,
-          observaciones: row.observaciones,
-        })
-      } else {
-        // Acumular km
-        existing.km += km
-        // Actualizar hora inicio si es más temprano
-        if (horaInicio && (!existing.horaInicio || horaInicio < existing.horaInicio)) {
-          existing.horaInicio = horaInicio
-        }
-        // Actualizar hora cierre si es más tarde
-        if (horaCierre && (!existing.horaCierre || horaCierre > existing.horaCierre)) {
-          existing.horaCierre = horaCierre
-        }
-        // Actualizar conductor si no tenía
-        if (!existing.conductor && row.conductor) {
-          existing.conductor = row.conductor
-        }
-        if (!existing.ibutton && row.ibutton) {
-          existing.ibutton = row.ibutton
-        }
-      }
-    }
-
     // Transformar a registros
-    let registros: BitacoraRegistroTransformado[] = Array.from(turnosMap.values()).map((t) => ({
-      id: t.id,
-      patente: t.patente,
-      patente_normalizada: t.patenteNorm,
-      conductor_wialon: t.conductor || null,
-      conductor_id: null,
-      ibutton: t.ibutton || null,
-      fecha_turno: t.fecha,
-      hora_inicio: t.horaInicio,
-      hora_cierre: t.horaCierre,
-      duracion_minutos: null,
-      kilometraje: Math.round(t.km * 100) / 100,
-      observaciones: t.observaciones || null,
-      estado: calcularEstado(t.horaCierre, t.km),
-      gnc_cargado: false,
-      lavado_realizado: false,
-      nafta_cargada: false,
+    const registros: BitacoraRegistroTransformado[] = ((data || []) as WialonBitacoraRow[]).map((row) => ({
+      id: row.id,
+      patente: row.patente,
+      patente_normalizada: row.patente_normalizada,
+      conductor_wialon: row.conductor_wialon,
+      conductor_id: row.conductor_id,
+      ibutton: row.ibutton,
+      fecha_turno: row.fecha_turno,
+      hora_inicio: formatearHora(row.hora_inicio),
+      hora_cierre: formatearHora(row.hora_cierre),
+      duracion_minutos: row.duracion_minutos,
+      kilometraje: Number(row.kilometraje) || 0,
+      observaciones: row.observaciones,
+      estado: row.estado,
+      gnc_cargado: row.gnc_cargado,
+      lavado_realizado: row.lavado_realizado,
+      nafta_cargada: row.nafta_cargada,
     }))
 
-    // Ordenar por fecha y hora descendente
-    registros.sort((a, b) => {
-      const fechaComp = b.fecha_turno.localeCompare(a.fecha_turno)
-      if (fechaComp !== 0) return fechaComp
-      return (b.hora_inicio || '').localeCompare(a.hora_inicio || '')
-    })
-
-    // Aplicar filtros
-    if (options?.patente) {
-      const filtro = options.patente.toUpperCase().replace(/\s/g, '')
-      registros = registros.filter((r) => r.patente_normalizada.includes(filtro))
-    }
-
-    if (options?.conductor) {
-      const filtro = options.conductor.toLowerCase()
-      registros = registros.filter((r) => r.conductor_wialon?.toLowerCase().includes(filtro))
-    }
-
-    if (options?.estado) {
-      registros = registros.filter((r) => r.estado === options.estado)
-    }
-
-    const total = registros.length
-
-    // Aplicar paginación
-    if (options?.offset !== undefined && options?.limit !== undefined) {
-      registros = registros.slice(options.offset, options.offset + options.limit)
-    } else if (options?.limit) {
-      registros = registros.slice(0, options.limit)
-    }
-
     bitacoraCache.set(cacheKey, registros)
-    return { data: registros, count: total }
+    return { data: registros, count: count || registros.length }
   },
 
   /**
-   * Obtiene estadísticas agregadas
+   * Obtiene estadísticas agregadas desde wialon_bitacora
    */
   async getStats(startDate: string, endDate: string): Promise<BitacoraStats> {
     const cacheKey = `stats_${startDate}_${endDate}`
@@ -265,9 +209,17 @@ export const wialonBitacoraService = {
 
     if (cached) return cached
 
-    const { data: registros } = await this.getBitacora(startDate, endDate, {})
+    // Query directa para stats (sin paginación)
+    const { data: rawData, error } = await supabase
+      .from('wialon_bitacora')
+      .select('patente_normalizada, conductor_wialon, kilometraje, estado, gnc_cargado, lavado_realizado, nafta_cargada')
+      .gte('fecha_turno', startDate)
+      .lte('fecha_turno', endDate)
 
-    if (!registros || registros.length === 0) {
+    // Cast a tipo conocido
+    const data = (rawData || []) as WialonBitacoraStatsRow[]
+
+    if (error || data.length === 0) {
       return {
         totalTurnos: 0,
         vehiculosUnicos: 0,
@@ -290,12 +242,15 @@ export const wialonBitacoraService = {
     let turnosFinalizados = 0
     let turnosPocaKm = 0
     let turnosEnCurso = 0
+    let conGnc = 0
+    let conLavado = 0
+    let conNafta = 0
 
-    for (const r of registros) {
+    for (const r of data) {
       vehiculos.add(r.patente_normalizada)
       if (r.conductor_wialon) conductores.add(r.conductor_wialon)
 
-      kmTotal += r.kilometraje
+      kmTotal += Number(r.kilometraje) || 0
 
       switch (r.estado) {
         case 'Turno Finalizado':
@@ -308,20 +263,24 @@ export const wialonBitacoraService = {
           turnosEnCurso++
           break
       }
+
+      if (r.gnc_cargado) conGnc++
+      if (r.lavado_realizado) conLavado++
+      if (r.nafta_cargada) conNafta++
     }
 
     const stats: BitacoraStats = {
-      totalTurnos: registros.length,
+      totalTurnos: data.length,
       vehiculosUnicos: vehiculos.size,
       conductoresUnicos: conductores.size,
       kilometrajeTotal: Math.round(kmTotal * 100) / 100,
-      kilometrajePromedio: Math.round((kmTotal / registros.length) * 100) / 100,
+      kilometrajePromedio: Math.round((kmTotal / data.length) * 100) / 100,
       turnosFinalizados,
       turnosPocaKm,
       turnosEnCurso,
-      conGnc: 0,
-      conLavado: 0,
-      conNafta: 0,
+      conGnc,
+      conLavado,
+      conNafta,
     }
 
     statsCache.set(cacheKey, stats)
@@ -329,52 +288,88 @@ export const wialonBitacoraService = {
   },
 
   /**
-   * Actualiza checklist - Placeholder (uss_historico no tiene estas columnas)
+   * Actualiza checklist en wialon_bitacora
    */
   async updateChecklist(
-    _id: string,
-    _updates: {
+    id: string,
+    updates: {
       gnc_cargado?: boolean
       lavado_realizado?: boolean
       nafta_cargada?: boolean
     }
   ): Promise<void> {
-    // TODO: Implementar con tabla separada si se necesita
-    console.warn('updateChecklist pendiente de implementar')
+    const { error } = await supabase
+      .from('wialon_bitacora')
+      // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (error) {
+      throw new Error(`Error actualizando checklist: ${error.message}`)
+    }
+
+    this.clearCache()
   },
 
   /**
-   * Actualiza estado - Placeholder
+   * Actualiza estado en wialon_bitacora
    */
-  async updateEstado(_id: string, _estado: string): Promise<void> {
-    console.warn('updateEstado pendiente de implementar')
+  async updateEstado(id: string, estado: string): Promise<void> {
+    const { error } = await supabase
+      .from('wialon_bitacora')
+      // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
+      .update({
+        estado,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (error) {
+      throw new Error(`Error actualizando estado: ${error.message}`)
+    }
+
+    this.clearCache()
   },
 
   /**
-   * Estado de sincronización - uss_historico se sincroniza automáticamente
+   * Estado de sincronización desde wialon_bitacora
    */
   async getSyncStatus(): Promise<{
     lastSync: string | null
     totalRecords: number
     status: string
   }> {
+    // Obtener último registro de sync
+    const { data: syncLogRaw } = await supabase
+      .from('wialon_bitacora_sync_log')
+      .select('completed_at, status')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    // Cast a tipo conocido
+    const syncLog = syncLogRaw as SyncLogRow | null
+
     const { count } = await supabase
-      .from('uss_historico')
+      .from('wialon_bitacora')
       .select('*', { count: 'exact', head: true })
 
     return {
-      lastSync: new Date().toISOString(),
+      lastSync: syncLog?.completed_at || null,
       totalRecords: count || 0,
-      status: 'success',
+      status: syncLog?.status || 'unknown',
     }
   },
 
   /**
-   * Trigger sync - Solo limpia cache (uss_historico se sincroniza automáticamente)
+   * Trigger sync - Solo limpia cache (wialon_bitacora se sincroniza por Edge Function)
    */
   async triggerSync(_startDate?: string, _endDate?: string): Promise<{ success: boolean; error?: string; turnos?: number }> {
     this.clearCache()
-    // uss_historico se sincroniza automáticamente por cron job
+    // wialon_bitacora se sincroniza por Edge Function (cron job)
     return { success: true }
   },
 

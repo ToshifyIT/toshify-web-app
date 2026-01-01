@@ -12,6 +12,9 @@ import type {
 } from '../types/bitacora.types'
 import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 
+// Intervalo de auto-refresh en ms (30 segundos)
+const AUTO_REFRESH_INTERVAL = 30000
+
 // Tipo para asignaciones
 interface AsignacionActiva {
   patente: string
@@ -167,7 +170,6 @@ export function useBitacoraData() {
   }, [dateRange, page, pageSize, filterPatente, filterConductor, filterEstado, asignaciones])
 
   // Cargar datos automáticamente al montar
-  // uss_historico se sincroniza automáticamente por cron job, no necesita llamar Edge Function
   useEffect(() => {
     loadAsignaciones().then(() => loadData())
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,6 +186,45 @@ export function useBitacoraData() {
       loadData()
     }
   }, [loadData, asignaciones.size])
+
+  // Auto-refresh: Suscripción a Supabase Realtime para cambios en wialon_bitacora
+  useEffect(() => {
+    // Solo auto-refresh si estamos viendo "Hoy"
+    if (dateRange.label !== 'Hoy') return
+
+    const channel = supabase
+      .channel('wialon_bitacora_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wialon_bitacora',
+        },
+        () => {
+          // Cuando hay cambios en la tabla, recargar datos
+          wialonBitacoraService.clearCache()
+          loadData()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [dateRange.label, loadData])
+
+  // Auto-refresh con intervalo como fallback (cada 30 segundos cuando vemos "Hoy")
+  useEffect(() => {
+    if (dateRange.label !== 'Hoy') return
+
+    const intervalId = setInterval(() => {
+      wialonBitacoraService.clearCache()
+      loadData()
+    }, AUTO_REFRESH_INTERVAL)
+
+    return () => clearInterval(intervalId)
+  }, [dateRange.label, loadData])
 
   // Cambiar rango de fecha predefinido
   const setDateRangePreset = useCallback((preset: string) => {
