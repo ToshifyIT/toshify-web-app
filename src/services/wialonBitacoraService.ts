@@ -50,6 +50,23 @@ interface WialonBitacoraRow {
   created_at: string
 }
 
+// Tipo para stats query (campos seleccionados)
+interface WialonBitacoraStatsRow {
+  patente_normalizada: string
+  conductor_wialon: string | null
+  kilometraje: number
+  estado: string
+  gnc_cargado: boolean
+  lavado_realizado: boolean
+  nafta_cargada: boolean
+}
+
+// Tipo para sync log
+interface SyncLogRow {
+  completed_at: string | null
+  status: string
+}
+
 // =====================================================
 // CACHÉ EN MEMORIA
 // =====================================================
@@ -193,13 +210,16 @@ export const wialonBitacoraService = {
     if (cached) return cached
 
     // Query directa para stats (sin paginación)
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('wialon_bitacora')
       .select('patente_normalizada, conductor_wialon, kilometraje, estado, gnc_cargado, lavado_realizado, nafta_cargada')
       .gte('fecha_turno', startDate)
       .lte('fecha_turno', endDate)
 
-    if (error || !data || data.length === 0) {
+    // Cast a tipo conocido
+    const data = (rawData || []) as WialonBitacoraStatsRow[]
+
+    if (error || data.length === 0) {
       return {
         totalTurnos: 0,
         vehiculosUnicos: 0,
@@ -280,6 +300,7 @@ export const wialonBitacoraService = {
   ): Promise<void> {
     const { error } = await supabase
       .from('wialon_bitacora')
+      // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
       .update({
         ...updates,
         updated_at: new Date().toISOString(),
@@ -299,6 +320,7 @@ export const wialonBitacoraService = {
   async updateEstado(id: string, estado: string): Promise<void> {
     const { error } = await supabase
       .from('wialon_bitacora')
+      // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
       .update({
         estado,
         updated_at: new Date().toISOString(),
@@ -321,12 +343,15 @@ export const wialonBitacoraService = {
     status: string
   }> {
     // Obtener último registro de sync
-    const { data: syncLog } = await supabase
+    const { data: syncLogRaw } = await supabase
       .from('wialon_bitacora_sync_log')
       .select('completed_at, status')
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
+
+    // Cast a tipo conocido
+    const syncLog = syncLogRaw as SyncLogRow | null
 
     const { count } = await supabase
       .from('wialon_bitacora')
