@@ -21,7 +21,7 @@ export function USSModule() {
     setPage,
     pageSize,
     setPageSize,
-    refresh,
+    isRealtime,
   } = useUSSData()
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -95,7 +95,7 @@ export function USSModule() {
             isLoading={queryState.loading}
             dateRange={dateRange}
             onDateRangeChange={setDateRange}
-            onRefresh={refresh}
+            isRealtime={isRealtime}
           />
         }
       />

@@ -1,6 +1,6 @@
 // src/modules/integraciones/uss/bitacora/components/BitacoraHeader.tsx
 import { useState } from 'react'
-import { RefreshCw, Zap } from 'lucide-react'
+import { Radio } from 'lucide-react'
 import type { BitacoraDateRange } from '../types/bitacora.types'
 import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 
@@ -8,8 +8,6 @@ interface BitacoraHeaderProps {
   dateRange: BitacoraDateRange
   onDateRangePreset: (preset: string) => void
   onCustomDateRange: (startDate: string, endDate: string) => void
-  onRefresh: () => void
-  onSync: () => Promise<{ success: boolean; error?: string }>
   isLoading: boolean
   lastUpdate: Date | null
 }
@@ -18,15 +16,12 @@ export function BitacoraHeader({
   dateRange,
   onDateRangePreset,
   onCustomDateRange,
-  onRefresh,
-  onSync,
   isLoading,
   lastUpdate,
 }: BitacoraHeaderProps) {
   const [showCustomRange, setShowCustomRange] = useState(false)
   const [customStart, setCustomStart] = useState(dateRange.startDate)
   const [customEnd, setCustomEnd] = useState(dateRange.endDate)
-  const [syncing, setSyncing] = useState(false)
 
   const handlePresetChange = (preset: string) => {
     if (preset === 'custom') {
@@ -42,19 +37,12 @@ export function BitacoraHeader({
     setShowCustomRange(false)
   }
 
-  const handleSync = async () => {
-    setSyncing(true)
-    try {
-      await onSync()
-    } finally {
-      setSyncing(false)
-    }
-  }
-
   const formatLastUpdate = (date: Date | null) => {
     if (!date) return 'Nunca'
-    return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }
+
+  const isRealtime = dateRange.label === 'Hoy'
 
   return (
     <div className="bitacora-header">
@@ -97,30 +85,21 @@ export function BitacoraHeader({
           </div>
         )}
 
-        {/* Metadata y acciones */}
+        {/* Metadata y estado */}
         <div className="header-right">
           <div className="header-meta">
             <span className="current-date">{dateRange.startDate === dateRange.endDate ? dateRange.startDate : `${dateRange.startDate} - ${dateRange.endDate}`}</span>
-            <span className="last-update">Última actualización: {formatLastUpdate(lastUpdate)}</span>
+            <span className="last-update">
+              Última actualización: {formatLastUpdate(lastUpdate)}
+              {isLoading && <span className="loading-indicator"> (cargando...)</span>}
+            </span>
           </div>
-          <div className="header-actions">
-            <button
-              className="btn-secondary"
-              onClick={onRefresh}
-              disabled={isLoading}
-            >
-              <RefreshCw size={16} className={isLoading ? 'spinning' : ''} />
-              Actualizar
-            </button>
-            <button
-              className="btn-primary"
-              onClick={handleSync}
-              disabled={syncing || isLoading}
-            >
-              <Zap size={16} />
-              {syncing ? 'Sincronizando...' : 'Sincronizar'}
-            </button>
-          </div>
+          {isRealtime && (
+            <div className="realtime-indicator">
+              <Radio size={14} className="pulse-icon" />
+              <span>Tiempo real</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

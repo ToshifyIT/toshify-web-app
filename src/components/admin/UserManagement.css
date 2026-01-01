@@ -1,36 +1,38 @@
 /* src/components/admin/UserManagement.css */
 /* Estilos específicos para el módulo de Gestión de Usuarios */
+/* Con soporte completo para Dark Mode y Responsive */
 
 /* Celdas específicas */
 .um-user-name {
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .um-user-id {
   font-size: 12px;
-  color: #6B7280;
+  color: var(--text-secondary);
   font-family: monospace;
 }
 
 .um-select-role {
   padding: 6px 10px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
-  background: white;
+  background: var(--input-bg);
+  color: var(--text-primary);
   transition: border-color 0.2s;
 }
 
 .um-select-role:hover {
-  border-color: #D1D5DB;
+  border-color: var(--text-tertiary);
 }
 
 .um-select-role:focus {
   outline: none;
-  border-color: #E63946;
-  box-shadow: 0 0 0 2px rgba(230, 57, 70, 0.1);
+  border-color: var(--border-focus);
+  box-shadow: var(--input-focus-shadow);
 }
 
 /* Modal */
@@ -40,33 +42,35 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 16px;
 }
 
 .um-modal-content {
-  background: white;
+  background: var(--modal-bg);
   padding: 40px;
   border-radius: 16px;
   max-width: 500px;
-  width: 90%;
+  width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-primary);
 }
 
 .um-modal-title {
   margin: 0 0 8px 0;
   font-size: 20px;
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .um-modal-subtitle {
-  color: #6B7280;
+  color: var(--text-secondary);
   font-size: 14px;
   margin: 0 0 24px 0;
 }
@@ -81,28 +85,35 @@
   margin-bottom: 8px;
   font-weight: 600;
   font-size: 14px;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .um-form-input {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   font-size: 14px;
   font-family: inherit;
   box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.um-form-input::placeholder {
+  color: var(--text-tertiary);
 }
 
 .um-form-input:focus {
   outline: none;
-  border-color: #E63946;
-  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+  border-color: var(--border-focus);
+  box-shadow: var(--input-focus-shadow);
 }
 
 .um-form-input:disabled {
-  background-color: #F9FAFB;
+  background-color: var(--bg-secondary);
+  color: var(--text-tertiary);
   cursor: not-allowed;
 }
 
@@ -113,22 +124,146 @@
   margin-top: 24px;
 }
 
-/* Responsive */
+/* =====================================================
+   RESPONSIVE - Multi-resolution support
+   ===================================================== */
+
+/* Large tablets and small desktops */
+@media (max-width: 1024px) {
+  .um-select-role {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+}
+
+/* Tablets */
 @media (max-width: 768px) {
+  .um-modal-overlay {
+    padding: 12px;
+  }
+
   .um-modal-content {
     padding: 24px;
     margin: 16px;
+    border-radius: 12px;
+  }
+
+  .um-modal-title {
+    font-size: 18px;
+  }
+
+  .um-modal-subtitle {
+    font-size: 13px;
+    margin-bottom: 20px;
   }
 
   .um-form-group {
     margin-bottom: 12px;
   }
 
+  .um-form-label {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  .um-form-input {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
   .um-modal-actions {
     flex-direction: column-reverse;
+    gap: 8px;
   }
 
   .um-modal-actions button {
     width: 100%;
+    padding: 12px 16px;
+  }
+
+  .um-select-role {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+}
+
+/* Mobile phones */
+@media (max-width: 480px) {
+  .um-modal-overlay {
+    padding: 8px;
+  }
+
+  .um-modal-content {
+    padding: 20px 16px;
+    max-height: 95vh;
+    border-radius: 10px;
+  }
+
+  .um-modal-title {
+    font-size: 16px;
+  }
+
+  .um-modal-subtitle {
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+
+  .um-form-group {
+    margin-bottom: 10px;
+  }
+
+  .um-form-label {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .um-form-input {
+    padding: 12px 14px; /* Touch-friendly - min 44px height */
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+
+  .um-user-name {
+    font-size: 13px;
+  }
+
+  .um-user-id {
+    font-size: 11px;
+  }
+
+  .um-select-role {
+    padding: 12px 14px; /* Touch-friendly */
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+
+  .um-modal-actions {
+    margin-top: 20px;
+  }
+
+  .um-modal-actions button {
+    padding: 14px 16px; /* Touch-friendly */
+    font-size: 15px;
+  }
+}
+
+/* Extra small devices */
+@media (max-width: 360px) {
+  .um-modal-content {
+    padding: 16px 12px;
+  }
+
+  .um-modal-title {
+    font-size: 15px;
+  }
+
+  .um-form-input,
+  .um-select-role {
+    padding: 10px 12px;
+    font-size: 15px;
+  }
+
+  .um-modal-actions button {
+    padding: 12px 14px;
+    font-size: 14px;
   }
 }

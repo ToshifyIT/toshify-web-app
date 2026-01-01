@@ -1,10 +1,10 @@
 // src/modules/integraciones/uss/components/USSHeader.tsx
 /**
- * Header del módulo USS con controles de fecha
+ * Header del módulo USS con controles de fecha y indicador de tiempo real
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { RefreshCw, Calendar, ChevronDown } from 'lucide-react'
+import { Calendar, ChevronDown, Radio } from 'lucide-react'
 import type { DateRange } from '../types/uss.types'
 import { DATE_RANGES } from '../constants/uss.constants'
 
@@ -13,16 +13,21 @@ interface USSHeaderProps {
   readonly isLoading: boolean
   readonly dateRange: DateRange
   readonly onDateRangeChange: (range: DateRange) => void
-  readonly onRefresh: () => void
+  readonly isRealtime: boolean
 }
 
 export function USSHeader({
-  lastUpdate: _lastUpdate,
+  lastUpdate,
   isLoading,
   dateRange,
   onDateRangeChange,
-  onRefresh,
+  isRealtime,
 }: USSHeaderProps) {
+  const formatLastUpdate = (date: Date | null) => {
+    if (!date) return 'Nunca'
+    return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  }
+
   return (
     <div className="uss-controls">
       <DateRangeSelector
@@ -31,14 +36,18 @@ export function USSHeader({
         onChange={onDateRangeChange}
       />
 
-      <button
-        onClick={onRefresh}
-        disabled={isLoading}
-        className="btn-primary uss-refresh-btn"
-      >
-        <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
-        {isLoading ? 'Cargando...' : 'Actualizar'}
-      </button>
+      <div className="uss-status">
+        <span className="uss-last-update">
+          Actualizado: {formatLastUpdate(lastUpdate)}
+          {isLoading && <span className="uss-loading"> (cargando...)</span>}
+        </span>
+        {isRealtime && (
+          <div className="uss-realtime-indicator">
+            <Radio size={14} className="pulse-icon" />
+            <span>Tiempo real</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

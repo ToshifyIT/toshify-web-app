@@ -1,9 +1,11 @@
 // src/modules/integraciones/uss/hooks/useUSSData.ts
 /**
  * Hook principal para datos de USS (Excesos de Velocidad)
+ * Con soporte para tiempo real
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../../../../lib/supabase'
 import { ussService } from '../../../../services/ussService'
 import type {
   ExcesoVelocidad,
@@ -14,6 +16,9 @@ import type {
   DateRange,
 } from '../types/uss.types'
 import { getDateRangeForPeriod } from '../utils/uss.utils'
+
+// Intervalo de auto-refresh en ms (30 segundos)
+const AUTO_REFRESH_INTERVAL = 30000
 
 interface UseUSSDataOptions {
   autoLoad?: boolean
@@ -48,6 +53,9 @@ interface UseUSSDataReturn {
   // Acciones
   refresh: () => Promise<void>
   loadMore: () => Promise<void>
+
+  // Realtime
+  isRealtime: boolean
 }
 
 const DEFAULT_PAGE_SIZE = 50
@@ -166,6 +174,45 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
     setPage(1)
   }, [dateRange, patenteFilter, conductorFilter, minExcesoFilter])
 
+  // Determinar si estamos en modo realtime (Hoy o Última semana)
+  const isRealtime = dateRange.label === 'Hoy' || dateRange.label === 'Última semana'
+
+  // Auto-refresh: Suscripción a Supabase Realtime para cambios en uss_excesos_velocidad
+  useEffect(() => {
+    if (!isRealtime) return
+
+    const channel = supabase
+      .channel('uss_excesos_velocidad_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'uss_excesos_velocidad',
+        },
+        () => {
+          // Cuando hay cambios en la tabla, recargar datos
+          loadData()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [isRealtime, loadData])
+
+  // Auto-refresh con intervalo como fallback (cada 30 segundos cuando vemos datos recientes)
+  useEffect(() => {
+    if (!isRealtime) return
+
+    const intervalId = setInterval(() => {
+      loadData()
+    }, AUTO_REFRESH_INTERVAL)
+
+    return () => clearInterval(intervalId)
+  }, [isRealtime, loadData])
+
   return {
     excesos,
     stats,
@@ -187,5 +234,6 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
     setPageSize,
     refresh: loadData,
     loadMore,
+    isRealtime,
   }
 }

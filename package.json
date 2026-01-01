@@ -16,7 +16,10 @@
     "sync:uss": "npx tsx scripts/sync-uss-kilometraje.ts",
     "sync:uss:dry": "npx tsx scripts/sync-uss-kilometraje.ts --dry-run",
     "sync:uss:excesos": "npx tsx scripts/backfill-uss-excesos.ts",
-    "sync:uss:excesos:week": "npx tsx scripts/backfill-uss-excesos.ts --days 7"
+    "sync:uss:excesos:week": "npx tsx scripts/backfill-uss-excesos.ts --days 7",
+    "sync:wialon:bitacora": "npx tsx scripts/sync-wialon-bitacora-direct.ts",
+    "sync:wialon:bitacora:realtime": "npx tsx scripts/sync-wialon-bitacora-realtime.ts",
+    "sync:wialon:bitacora:once": "npx tsx scripts/sync-wialon-bitacora-realtime.ts --once"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",
