@@ -24,15 +24,24 @@ interface AsignacionActiva {
   conductor_completo: string
 }
 
-// Helpers para fechas
+// Helpers para fechas - Usando zona horaria Argentina
+const TIMEZONE_ARGENTINA = 'America/Argentina/Buenos_Aires'
+
+/**
+ * Convierte una fecha a string YYYY-MM-DD en zona horaria Argentina
+ */
+function toArgentinaDateString(date: Date): string {
+  return date.toLocaleDateString('en-CA', { timeZone: TIMEZONE_ARGENTINA })
+}
+
 function getToday(): string {
-  return new Date().toISOString().split('T')[0]
+  return toArgentinaDateString(new Date())
 }
 
 function getYesterday(): string {
   const date = new Date()
   date.setDate(date.getDate() - 1)
-  return date.toISOString().split('T')[0]
+  return toArgentinaDateString(date)
 }
 
 function getStartOfWeek(): string {
@@ -40,13 +49,13 @@ function getStartOfWeek(): string {
   const day = date.getDay()
   const diff = date.getDate() - day + (day === 0 ? -6 : 1)
   date.setDate(diff)
-  return date.toISOString().split('T')[0]
+  return toArgentinaDateString(date)
 }
 
 function getStartOfMonth(): string {
   const date = new Date()
   date.setDate(1)
-  return date.toISOString().split('T')[0]
+  return toArgentinaDateString(date)
 }
 
 export function useBitacoraData() {
