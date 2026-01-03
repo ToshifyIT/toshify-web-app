@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
+import { useAuth } from "../../contexts/AuthContext";
 import Swal from "sweetalert2";
 import type {
   ConductorWithRelations,
@@ -101,6 +102,7 @@ export function ConductoresModule() {
   const [pendingBajaUpdate, setPendingBajaUpdate] = useState(false);
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions();
+  const { profile } = useAuth();
 
   // Permisos específicos para el menú de conductores
   const canCreate = canCreateInMenu("conductores");
@@ -447,6 +449,7 @@ export function ConductoresModule() {
             estado_id: formData.estado_id || null,
             preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
             created_by: user?.id,
+            created_by_name: profile?.full_name || "Sistema",
           },
         ])
         .select();
@@ -781,6 +784,7 @@ export function ConductoresModule() {
         estado_id: formData.estado_id || null,
         preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
         updated_at: new Date().toISOString(),
+        updated_by: profile?.full_name || "Sistema",
       })
       .eq("id", selectedConductor!.id);
 

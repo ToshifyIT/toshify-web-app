@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
 import {
   Plus,
@@ -40,6 +41,8 @@ const INITIAL_FORM_DATA: ConceptoNominaFormData = {
 }
 
 export function ConceptosTab() {
+  const { profile } = useAuth()
+
   // Data states
   const [conceptos, setConceptos] = useState<ConceptoNomina[]>([])
   const [stats, setStats] = useState<ConceptosNominaStats | null>(null)
@@ -186,7 +189,7 @@ export function ConceptosTab() {
       if (modalMode === 'create') {
         const { error } = await (supabase
           .from('conceptos_nomina') as any)
-          .insert(dataToSave)
+          .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
 
         if (error) {
           if (error.code === '23505') {
@@ -205,7 +208,7 @@ export function ConceptosTab() {
       } else if (modalMode === 'edit' && selectedConcepto) {
         const { error } = await (supabase
           .from('conceptos_nomina') as any)
-          .update(dataToSave)
+          .update({ ...dataToSave, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedConcepto.id)
 
         if (error) throw error
