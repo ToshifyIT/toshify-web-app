@@ -1673,10 +1673,17 @@ function ModalCrear({
       onClick={() => !saving && setShowCreateModal(false)}
     >
       <div className="modal-content modal-wizard" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0, fontSize: "20px", fontWeight: "700" }}>
-          Crear Nuevo Conductor
-        </h2>
-
+        <div className="modal-header">
+          <h2>Crear Nuevo Conductor</h2>
+          <button
+            className="modal-close"
+            onClick={() => !saving && setShowCreateModal(false)}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+        <div className="modal-body" style={{ padding: 0 }}>
         <ConductorWizard
           formData={formData}
           setFormData={setFormData}
@@ -1693,6 +1700,7 @@ function ModalCrear({
           onSubmit={handleCreate}
           saving={saving}
         />
+        </div>
       </div>
     </div>
   );
@@ -1720,10 +1728,17 @@ function ModalEditar({
       onClick={() => !saving && setShowEditModal(false)}
     >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0, fontSize: "20px", fontWeight: "700" }}>
-          Editar Conductor
-        </h2>
-
+        <div className="modal-header">
+          <h2>Editar Conductor</h2>
+          <button
+            className="modal-close"
+            onClick={() => !saving && setShowEditModal(false)}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+        <div className="modal-body">
         <div className="section-title">Información Personal</div>
 
         <div className="form-row">
@@ -2183,14 +2198,8 @@ function ModalEditar({
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            justifyContent: "flex-end",
-            marginTop: "24px",
-          }}
-        >
+        </div>
+        <div className="modal-footer">
           <button
             className="btn-secondary"
             onClick={() => {
@@ -2228,16 +2237,17 @@ function ModalEliminar({
       onClick={() => !saving && setShowDeleteModal(false)}
     >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h2
-          style={{
-            marginTop: 0,
-            fontSize: "20px",
-            fontWeight: "700",
-            color: "#DC2626",
-          }}
-        >
-          Eliminar Conductor
-        </h2>
+        <div className="modal-header">
+          <h2 style={{ color: "#DC2626" }}>Eliminar Conductor</h2>
+          <button
+            className="modal-close"
+            onClick={() => !saving && setShowDeleteModal(false)}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+        <div className="modal-body">
         <div className="delete-warning">
           <div
             className="delete-warning-title"
@@ -2252,12 +2262,11 @@ function ModalEliminar({
             <strong>irreversible</strong>.
           </div>
         </div>
-        <p style={{ color: "#6B7280", fontSize: "14px", marginBottom: "24px" }}>
+        <p style={{ color: "#6B7280", fontSize: "14px" }}>
           ¿Estás seguro de que deseas continuar?
         </p>
-        <div
-          style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}
-        >
+        </div>
+        <div className="modal-footer">
           <button
             className="btn-secondary"
             onClick={() => {
@@ -2362,17 +2371,17 @@ function ModalDetalles({
   return (
     <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
-        <h2
-          style={{
-            marginTop: 0,
-            fontSize: "20px",
-            fontWeight: "700",
-            marginBottom: "24px",
-          }}
-        >
-          Detalles del Conductor
-        </h2>
-
+        <div className="modal-header">
+          <h2>Detalles del Conductor</h2>
+          <button
+            className="modal-close"
+            onClick={() => setShowDetailsModal(false)}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+        <div className="modal-body">
         <div className="section-title">Información Personal</div>
         <div className="details-grid">
           <div>
@@ -2623,14 +2632,8 @@ function ModalDetalles({
             </div>
           )}
         </div>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            marginTop: "24px",
-          }}
-        >
+        </div>
+        <div className="modal-footer">
           <button
             className="btn-secondary"
             onClick={() => setShowDetailsModal(false)}
@@ -2672,10 +2675,17 @@ function ModalConfirmBaja({
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: '600px' }}
       >
-        <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700', color: '#DC2626' }}>
-          Confirmar Baja de Conductor
-        </h2>
-
+        <div className="modal-header">
+          <h2 style={{ color: '#DC2626' }}>Confirmar Baja de Conductor</h2>
+          <button
+            className="modal-close"
+            onClick={() => !processing && onCancel()}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+        <div className="modal-body">
         <div className="delete-warning" style={{ marginBottom: '20px' }}>
           <AlertTriangle size={24} />
           <div>
@@ -2751,17 +2761,8 @@ function ModalConfirmBaja({
             </div>
           )}
         </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: '12px',
-            justifyContent: 'flex-end',
-            marginTop: '24px',
-            borderTop: '1px solid var(--border-primary)',
-            paddingTop: '16px',
-          }}
-        >
+        </div>
+        <div className="modal-footer">
           <button
             className="btn-secondary"
             onClick={onCancel}

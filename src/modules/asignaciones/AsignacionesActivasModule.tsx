@@ -156,9 +156,10 @@ export function AsignacionesActivasModule() {
       const estadoVehiculo = (a.vehiculos as any)?.vehiculos_estados?.codigo
       return !estadosNoOperacionales.includes(estadoVehiculo)
     })
-    const turnoCountOp = asignacionesOperacionales.filter(a => a.horario === 'TURNO').length
-    const cargoCountOp = asignacionesOperacionales.filter(a => a.horario === 'CARGO' || !a.horario).length
-    const cuposTotalesOperacionales = (turnoCountOp * 2) + cargoCountOp
+    // Variables para futura referencia - cupos operacionales
+    // const turnoCountOp = asignacionesOperacionales.filter(a => a.horario === 'TURNO').length
+    // const cargoCountOp = asignacionesOperacionales.filter(a => a.horario === 'CARGO' || !a.horario).length
+    // const cuposTotalesOperacionales = (turnoCountOp * 2) + cargoCountOp
 
     // Contar cupos ocupados y vacantes (TODOS los vehículos)
     let cuposOcupados = 0
@@ -167,8 +168,14 @@ export function AsignacionesActivasModule() {
 
     asignaciones.forEach(a => {
       if (a.horario === 'TURNO') {
-        const conductorD = a.asignaciones_conductores?.find(ac => ac.horario === 'DIURNO' || ac.horario === 'D')
-        const conductorN = a.asignaciones_conductores?.find(ac => ac.horario === 'NOCTURNO' || ac.horario === 'N')
+        // Buscar conductor diurno (minúsculas)
+        const conductorD = a.asignaciones_conductores?.find(ac =>
+          ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D'
+        )
+        // Buscar conductor nocturno (minúsculas)
+        const conductorN = a.asignaciones_conductores?.find(ac =>
+          ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N'
+        )
 
         if (conductorD?.conductor_id) {
           cuposOcupados++
@@ -182,6 +189,7 @@ export function AsignacionesActivasModule() {
           vacantesN++
         }
       } else {
+        // CARGO: tiene 1 cupo, contar si está ocupado
         const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
         if (tieneConductor) {
           cuposOcupados++
@@ -189,30 +197,31 @@ export function AsignacionesActivasModule() {
       }
     })
 
-    // Contar cupos ocupados SOLO de vehículos operacionales
-    let cuposOcupadosOperacionales = 0
+    // Contar VEHÍCULOS ocupados (con al menos 1 conductor) - para % Operacional
+    let vehiculosOcupados = 0
+    let vehiculosOcupadosOperacionales = 0
+
+    asignaciones.forEach(a => {
+      const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
+      if (tieneConductor) vehiculosOcupados++
+    })
+
     asignacionesOperacionales.forEach(a => {
-      if (a.horario === 'TURNO') {
-        const conductorD = a.asignaciones_conductores?.find(ac => ac.horario === 'DIURNO' || ac.horario === 'D')
-        const conductorN = a.asignaciones_conductores?.find(ac => ac.horario === 'NOCTURNO' || ac.horario === 'N')
-        if (conductorD?.conductor_id) cuposOcupadosOperacionales++
-        if (conductorN?.conductor_id) cuposOcupadosOperacionales++
-      } else {
-        const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
-        if (tieneConductor) cuposOcupadosOperacionales++
-      }
+      const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
+      if (tieneConductor) vehiculosOcupadosOperacionales++
     })
 
     const cuposDisponibles = cuposTotales - cuposOcupados
 
-    // % Ocupación General: Todos los vehículos
+    // % Ocupación General: (Turnos ocupados / Turnos totales) × 100
     const porcentajeOcupacionGeneral = cuposTotales > 0
       ? ((cuposOcupados / cuposTotales) * 100).toFixed(1)
       : '0'
 
-    // % Ocupación Operacional: Solo vehículos disponibles/operacionales
-    const porcentajeOcupacionOperacional = cuposTotalesOperacionales > 0
-      ? ((cuposOcupadosOperacionales / cuposTotalesOperacionales) * 100).toFixed(1)
+    // % Ocupación Operacional: (Vehículos ocupados / Vehículos disponibles) × 100
+    const vehiculosDisponibles = asignacionesOperacionales.length
+    const porcentajeOcupacionOperacional = vehiculosDisponibles > 0
+      ? ((vehiculosOcupadosOperacionales / vehiculosDisponibles) * 100).toFixed(1)
       : '0'
 
     // Conductores únicos
@@ -241,8 +250,8 @@ export function AsignacionesActivasModule() {
       vacantesD,
       vacantesN,
       vehiculosOperacionales: asignacionesOperacionales.length,
-      cuposTotalesOperacionales,
-      cuposOcupadosOperacionales,
+      vehiculosOcupados,
+      vehiculosOcupadosOperacionales,
       porcentajeOcupacionGeneral,
       porcentajeOcupacionOperacional
     }
@@ -570,10 +579,16 @@ export function AsignacionesActivasModule() {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          background: var(--modal-bg);
+          flex-shrink: 0;
+          border-radius: 12px 12px 0 0;
         }
 
         .modal-body {
           padding: 32px;
+          overflow-y: auto;
+          flex: 1;
+          min-height: 0;
         }
 
         .asignacion-section-title {
@@ -690,7 +705,7 @@ export function AsignacionesActivasModule() {
               <span className="stat-label">% Ocup. General</span>
             </div>
           </div>
-          <div className="stat-card" title={`${stats.cuposOcupadosOperacionales} ocupados de ${stats.cuposTotalesOperacionales} operacionales (excluye vehículos en reparación/mantenimiento)`}>
+          <div className="stat-card" title={`${stats.vehiculosOcupadosOperacionales} vehículos ocupados de ${stats.vehiculosOperacionales} disponibles (excluye vehículos en reparación/mantenimiento)`}>
             <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
               <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionOperacional}%</span>

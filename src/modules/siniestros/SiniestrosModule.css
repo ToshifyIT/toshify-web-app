@@ -80,6 +80,11 @@
   color: var(--text-tertiary);
 }
 
+.tabs-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* =====================================================
    STATS
    ===================================================== */
@@ -278,16 +283,17 @@
 }
 
 .siniestros-table th {
-  padding: 10px 12px;
+  padding: 8px 12px;
   text-align: left;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-tertiary);
-  background: var(--bg-secondary);
+  letter-spacing: 0.025em;
+  color: var(--text-secondary);
+  background: var(--table-header-bg);
   border-bottom: 1px solid var(--border-primary);
   white-space: nowrap;
+  user-select: none;
 }
 
 .siniestros-table th.sortable {
@@ -306,9 +312,10 @@
 }
 
 .siniestros-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-primary);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--table-border);
   color: var(--text-primary);
+  vertical-align: middle;
 }
 
 .siniestros-table tbody tr {
@@ -317,7 +324,11 @@
 }
 
 .siniestros-table tbody tr:hover {
-  background: var(--bg-secondary);
+  background: var(--table-row-hover);
+}
+
+.siniestros-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .patente {
@@ -464,71 +475,89 @@
 }
 
 /* =====================================================
-   PAGINATION
+   PAGINATION (estilo homologado con DataTable)
    ===================================================== */
 
 .table-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 8px 12px;
   border-top: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pagination-info {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .page-size {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.page-size label {
-  font-size: 12px;
-  color: var(--text-tertiary);
+  gap: 6px;
 }
 
 .page-size select {
-  padding: 6px 8px;
+  padding: 5px 8px;
   border: 1px solid var(--border-primary);
   border-radius: 4px;
   font-size: 12px;
   background: var(--bg-primary);
   color: var(--text-primary);
+  cursor: pointer;
+}
+
+.page-size select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.page-size span {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .pagination {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .pagination button {
-  width: 28px;
-  height: 28px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: all 0.15s;
+  min-width: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-primary);
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s;
 }
 
 .pagination button:hover:not(:disabled) {
-  border-color: #DC2626;
-  color: #DC2626;
+  background: var(--bg-secondary);
+  border-color: var(--color-primary, #DC2626);
+  color: var(--color-primary, #DC2626);
 }
 
 .pagination button:disabled {
-  opacity: 0.3;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .page-info {
   font-size: 12px;
-  color: var(--text-tertiary);
-  padding: 0 12px;
+  color: var(--text-secondary);
+  padding: 0 6px;
 }
 
 /* =====================================================
@@ -607,7 +636,8 @@
   width: 100%;
   max-width: 800px;
   max-height: 90vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
 }
 
@@ -617,10 +647,9 @@
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-primary);
-  position: sticky;
-  top: 0;
   background: var(--bg-primary);
-  z-index: 1;
+  flex-shrink: 0;
+  border-radius: 12px 12px 0 0;
 }
 
 .modal-header h2 {
@@ -650,6 +679,9 @@
 
 .modal-body {
   padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .modal-footer {
@@ -658,9 +690,9 @@
   gap: 8px;
   padding: 16px 20px;
   border-top: 1px solid var(--border-primary);
-  position: sticky;
-  bottom: 0;
   background: var(--bg-primary);
+  flex-shrink: 0;
+  border-radius: 0 0 12px 12px;
 }
 
 /* Form sections */
@@ -673,11 +705,11 @@
 }
 
 .form-section-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-primary);
@@ -1059,17 +1091,25 @@
 }
 
 .top-conductores-table th {
-  padding: 8px;
+  padding: 8px 12px;
   text-align: left;
+  font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  letter-spacing: 0.025em;
+  color: var(--text-secondary);
+  background: var(--table-header-bg);
   border-bottom: 1px solid var(--border-primary);
 }
 
 .top-conductores-table td {
-  padding: 10px 8px;
-  border-bottom: 1px solid var(--border-primary);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--table-border);
+  vertical-align: middle;
+}
+
+.top-conductores-table tbody tr:hover {
+  background: var(--table-row-hover);
 }
 
 .top-conductores-table tr:last-child td {
@@ -1461,5 +1501,239 @@
   .wizard-nav-buttons {
     width: 100%;
     justify-content: flex-end;
+  }
+}
+
+/* =====================================================
+   DETAIL VIEW TABS
+   ===================================================== */
+
+.detail-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-secondary);
+  padding: 4px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.detail-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.detail-tab:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.detail-tab.active {
+  background: var(--bg-primary);
+  color: #DC2626;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tab-dot {
+  width: 6px;
+  height: 6px;
+  background: #059669;
+  border-radius: 50%;
+}
+
+/* =====================================================
+   DIAS BADGE
+   ===================================================== */
+
+.dias-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: #FEF3C7;
+  color: #92400E;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.dias-badge.danger {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.dias-badge.success {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+/* =====================================================
+   NO CIRCULAR BADGE
+   ===================================================== */
+
+.no-circular-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: #FEE2E2;
+  color: #991B1B;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* =====================================================
+   HABILITADO CHECKBOX IN TABLE
+   ===================================================== */
+
+.habilitado-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: #059669;
+  cursor: pointer;
+}
+
+.habilitado-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* =====================================================
+   REPARACION TICKET
+   ===================================================== */
+
+.reparacion-ticket {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.reparacion-ticket .form-section {
+  margin-bottom: 0;
+}
+
+.reparacion-ticket .form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+}
+
+.reparacion-ticket .form-section-title svg {
+  color: #DC2626;
+}
+
+.reparacion-dias {
+  margin-top: 12px;
+}
+
+.info-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #EFF6FF;
+  color: #1E40AF;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.info-badge.reparacion-dias {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.info-badge svg {
+  flex-shrink: 0;
+}
+
+.reparacion-ticket .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-primary);
+}
+
+/* =====================================================
+   STAT CARD HIGHLIGHT
+   ===================================================== */
+
+.stat-card.highlight {
+  background: #FEF3C7;
+  border: 1px solid #FCD34D;
+}
+
+.stat-card.highlight .stat-icon {
+  color: #D97706;
+}
+
+.stat-card.highlight .stat-value {
+  color: #92400E;
+}
+
+/* =====================================================
+   NEW STATE COLORS
+   ===================================================== */
+
+.estado-indigo {
+  background: #E0E7FF;
+  color: #4338CA;
+}
+
+/* =====================================================
+   FORM DISABLED INDICATOR
+   ===================================================== */
+
+.edit-mode-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: #1E40AF;
+}
+
+.edit-mode-notice svg {
+  flex-shrink: 0;
+  color: #3B82F6;
+}
+
+/* =====================================================
+   RESPONSIVE UPDATES
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .detail-tabs {
+    flex-direction: column;
+  }
+
+  .detail-tab {
+    justify-content: center;
+  }
+
+  .reparacion-ticket {
+    padding: 16px;
   }
 }

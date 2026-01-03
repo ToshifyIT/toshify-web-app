@@ -914,9 +914,17 @@ export function VehicleManagement() {
       {showCreateModal && (
         <div className="modal-overlay" onClick={() => !saving && setShowCreateModal(false)}>
           <div className="modal-content modal-wizard" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700' }}>
-              Crear Nuevo Vehículo
-            </h2>
+            <div className="modal-header">
+              <h2>Crear Nuevo Vehículo</h2>
+              <button
+                className="modal-close"
+                onClick={() => !saving && setShowCreateModal(false)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: 0 }}>
             <VehiculoWizard
               formData={formData}
               setFormData={setFormData}
@@ -928,6 +936,7 @@ export function VehicleManagement() {
               onSubmit={handleCreate}
               saving={saving}
             />
+            </div>
           </div>
         </div>
       )}
@@ -936,10 +945,17 @@ export function VehicleManagement() {
       {showEditModal && selectedVehiculo && (
         <div className="modal-overlay" onClick={() => !saving && setShowEditModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>
-            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700' }}>
-              Editar Vehículo
-            </h2>
-
+            <div className="modal-header">
+              <h2>Editar Vehículo</h2>
+              <button
+                className="modal-close"
+                onClick={() => !saving && setShowEditModal(false)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
             {/* Mismo formulario que en crear, solo cambia el botón final */}
             <div className="section-title">Información Básica</div>
 
@@ -1226,7 +1242,8 @@ export function VehicleManagement() {
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+            </div>
+            <div className="modal-footer">
               <button
                 className="btn-secondary"
                 onClick={() => {
@@ -1254,10 +1271,17 @@ export function VehicleManagement() {
       {showDetailsModal && selectedVehiculo && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700', marginBottom: '24px' }}>
-              Detalles del Vehículo
-            </h2>
-
+            <div className="modal-header">
+              <h2>Detalles del Vehículo</h2>
+              <button
+                className="modal-close"
+                onClick={() => setShowDetailsModal(false)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
@@ -1336,8 +1360,8 @@ export function VehicleManagement() {
                 </div>
               </div>
             </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            </div>
+            <div className="modal-footer">
               <button
                 className="btn-secondary"
                 onClick={() => setShowDetailsModal(false)}
@@ -1353,10 +1377,17 @@ export function VehicleManagement() {
       {showDeleteModal && selectedVehiculo && (
         <div className="modal-overlay" onClick={() => !saving && setShowDeleteModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, fontSize: '20px', fontWeight: '700', color: '#DC2626' }}>
-              Eliminar Vehículo
-            </h2>
-
+            <div className="modal-header">
+              <h2 style={{ color: '#DC2626' }}>Eliminar Vehículo</h2>
+              <button
+                className="modal-close"
+                onClick={() => !saving && setShowDeleteModal(false)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
             <div className="delete-warning">
               <div className="delete-warning-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <AlertTriangle size={20} /> Advertencia
@@ -1367,11 +1398,11 @@ export function VehicleManagement() {
               </div>
             </div>
 
-            <p style={{ color: '#6B7280', fontSize: '14px', marginBottom: '24px' }}>
+            <p style={{ color: '#6B7280', fontSize: '14px' }}>
               ¿Estás seguro de que deseas continuar?
             </p>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+            </div>
+            <div className="modal-footer">
               <button
                 className="btn-secondary"
                 onClick={() => {

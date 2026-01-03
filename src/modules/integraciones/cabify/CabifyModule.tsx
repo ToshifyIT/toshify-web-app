@@ -10,7 +10,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react'
-import { Users, UserX, ChevronDown, ChevronUp } from 'lucide-react'
+import { Users, UserX, ChevronDown, ChevronUp, Database } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable/DataTable'
 
@@ -290,9 +290,9 @@ function DataSourceInfo({ isVisible, dataSource, driverCount, periodLabel }: Dat
 
   return (
     <div className={`cabify-info-card ${dataSource}`}>
-      <strong>{DATA_SOURCE_LABELS[dataSource]}</strong>
+      <Database size={14} />
       <span>
-        {driverCount} conductores - {periodLabel}
+        <strong>{DATA_SOURCE_LABELS[dataSource]}</strong> {driverCount} conductores - {periodLabel}
       </span>
     </div>
   )
