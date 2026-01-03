@@ -902,12 +902,12 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
               <Route path="/estado-de-flota" element={
-                <ProtectedRoute menuName="asignaciones-activas" action="view">
+                <ProtectedRoute menuName="estado-de-flota" action="view">
                   <AsignacionesActivasPage />
                 </ProtectedRoute>
               } />
-              <Route path="/onboarding" element={
-                <ProtectedRoute submenuName="onboarding" action="view">
+              <Route path="/asignaciones" element={
+                <ProtectedRoute submenuName="asignaciones" action="view">
                   <AsignacionesPage />
                 </ProtectedRoute>
               } />
@@ -936,9 +936,9 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
 
-              {/* Nóminas */}
-              <Route path="/nominas" element={
-                <ProtectedRoute submenuName="nominas" action="view">
+              {/* Facturación */}
+              <Route path="/facturacion" element={
+                <ProtectedRoute submenuName="facturacion" action="view">
                   <NominasPage />
                 </ProtectedRoute>
               } />

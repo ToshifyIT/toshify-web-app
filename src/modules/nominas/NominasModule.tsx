@@ -18,7 +18,7 @@ export function NominasModule() {
           onClick={() => setActiveTab('reporte')}
         >
           <FileText size={16} />
-          Reporte de Nóminas
+          Reporte de Facturación
         </button>
         <button
           className={`nom-tab ${activeTab === 'conceptos' ? 'active' : ''}`}
