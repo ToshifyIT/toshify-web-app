@@ -735,37 +735,42 @@ export function IncidenciasModule() {
       {/* Penalidades / Por Aplicar Tab */}
       {(activeTab === 'penalidades' || activeTab === 'por_aplicar') && (
         <>
-          {/* Stats */}
+          {/* Stats - diferentes según tab */}
           <div className="incidencias-stats">
             <div className="stats-grid">
               <div className="stat-card">
                 <FileText size={20} className="stat-icon" />
                 <div className="stat-content">
                   <span className="stat-value">{penalidadesFiltradas.length}</span>
-                  <span className="stat-label">Total</span>
+                  <span className="stat-label">{activeTab === 'por_aplicar' ? 'Pendientes' : 'Total'}</span>
                 </div>
               </div>
               <div className="stat-card">
                 <DollarSign size={20} className="stat-icon" />
                 <div className="stat-content">
                   <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
-                  <span className="stat-label">Monto Total</span>
+                  <span className="stat-label">{activeTab === 'por_aplicar' ? 'Monto Pendiente' : 'Monto Total'}</span>
                 </div>
               </div>
-              <div className="stat-card">
-                <CheckCircle size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{penalidadesFiltradas.filter(p => p.aplicado).length}</span>
-                  <span className="stat-label">Aplicadas</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <Clock size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{penalidadesFiltradas.filter(p => !p.aplicado).length}</span>
-                  <span className="stat-label">Pendientes</span>
-                </div>
-              </div>
+              {/* Solo mostrar Aplicadas/Pendientes en tab Penalidades (no en Por Aplicar) */}
+              {activeTab === 'penalidades' && (
+                <>
+                  <div className="stat-card">
+                    <CheckCircle size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{penalidadesFiltradas.filter(p => p.aplicado).length}</span>
+                      <span className="stat-label">Aplicadas</span>
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <Clock size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{penalidadesFiltradas.filter(p => !p.aplicado).length}</span>
+                      <span className="stat-label">Pendientes</span>
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="stat-card">
                 <Users size={20} className="stat-icon" />
                 <div className="stat-content">

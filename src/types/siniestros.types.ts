@@ -193,9 +193,7 @@ export interface SiniestroStats {
   presupuesto_total: number
   total_cobrado: number
   con_lesionados: number
-  // Nuevas métricas
   total_recuperados: number
-  total_reparacion_pagada: number
   procesando_pago_total: number
 }
 

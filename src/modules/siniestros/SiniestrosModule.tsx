@@ -185,9 +185,7 @@ export function SiniestrosModule() {
       presupuesto_total: data.reduce((sum, s) => sum + (s.presupuesto_real || 0), 0),
       total_cobrado: data.reduce((sum, s) => sum + (s.total_pagado || 0), 0),
       con_lesionados: data.filter(s => s.hay_lesionados).length,
-      // Nuevas métricas
       total_recuperados: data.reduce((sum, s) => sum + (s.presupuesto_aprobado_seguro || 0), 0),
-      total_reparacion_pagada: data.reduce((sum, s) => sum + ((s as any).total_reparacion_pagada || 0), 0),
       procesando_pago_total: estadoProcesando
         ? data.filter(s => s.estado_id === estadoProcesando.id).reduce((sum, s) => sum + (s.presupuesto_real || 0), 0)
         : 0
@@ -549,8 +547,8 @@ export function SiniestrosModule() {
           <div className="stat-card">
             <Car size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{formatMoney(stats?.total_reparacion_pagada || 0)}</span>
-              <span className="stat-label">Total Rep. Pagada</span>
+              <span className="stat-value">{formatMoney(stats?.total_cobrado || 0)}</span>
+              <span className="stat-label">Total Cobrado</span>
             </div>
           </div>
           <div className="stat-card highlight">
