@@ -44,6 +44,7 @@ interface AsignacionActiva {
 
 export function AsignacionesActivasModule() {
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
+  const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
   const [loading, setLoading] = useState(true)
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -56,6 +57,7 @@ export function AsignacionesActivasModule() {
 
   useEffect(() => {
     loadAsignacionesActivas()
+    loadTotalVehiculos()
   }, [])
 
   // Cerrar dropdown de filtro al hacer click fuera
@@ -68,6 +70,17 @@ export function AsignacionesActivasModule() {
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
   }, [openColumnFilter])
+
+  const loadTotalVehiculos = async () => {
+    try {
+      const { count } = await supabase
+        .from('vehiculos')
+        .select('*', { count: 'exact', head: true })
+      setTotalVehiculosFlota(count || 0)
+    } catch (err) {
+      console.error('Error cargando total vehículos:', err)
+    }
+  }
 
   const loadAsignacionesActivas = async () => {
     setLoading(true)
@@ -238,12 +251,22 @@ export function AsignacionesActivasModule() {
       if (a.vehiculo_id) vehiculosSet.add(a.vehiculo_id)
     })
 
+    // Vehículos sin asignación
+    const vehiculosSinAsignar = totalVehiculosFlota - vehiculosSet.size
+
+    // % de ocupación de la flota (vehículos con asignación / total flota)
+    const porcentajeOcupacionFlota = totalVehiculosFlota > 0
+      ? ((vehiculosSet.size / totalVehiculosFlota) * 100).toFixed(1)
+      : '0'
+
     return {
       total: asignaciones.length,
       turno: turnoCount,
       cargo: cargoCount,
       conductores: conductoresSet.size,
       vehiculos: vehiculosSet.size,
+      totalFlota: totalVehiculosFlota,
+      vehiculosSinAsignar,
       cuposTotales,
       cuposOcupados,
       cuposDisponibles,
@@ -253,9 +276,10 @@ export function AsignacionesActivasModule() {
       vehiculosOcupados,
       vehiculosOcupadosOperacionales,
       porcentajeOcupacionGeneral,
-      porcentajeOcupacionOperacional
+      porcentajeOcupacionOperacional,
+      porcentajeOcupacionFlota
     }
-  }, [asignaciones])
+  }, [asignaciones, totalVehiculosFlota])
 
   // Filtrar asignaciones según los filtros de columna
   const filteredAsignaciones = useMemo(() => {
@@ -663,7 +687,14 @@ export function AsignacionesActivasModule() {
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
         <div className="asig-stats-grid">
-          <div className="stat-card">
+          <div className="stat-card" title="Total de vehículos en la flota">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.totalFlota}</span>
+              <span className="stat-label">Total Flota</span>
+            </div>
+          </div>
+          <div className="stat-card" title={`${stats.vehiculos} vehículos tienen asignación activa`}>
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.vehiculos}</span>
