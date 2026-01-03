@@ -39,7 +39,7 @@ import './IncidenciasModule.css'
 type TabType = 'incidencias' | 'penalidades' | 'por_aplicar'
 
 export function IncidenciasModule() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('incidencias')
   const [loading, setLoading] = useState(true)
 
@@ -322,13 +322,13 @@ export function IncidenciasModule() {
 
       if (modalMode === 'edit' && selectedIncidencia) {
         const { error } = await (supabase.from('incidencias' as any) as any)
-          .update(dataToSave)
+          .update({ ...dataToSave, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedIncidencia.id)
         if (error) throw error
         Swal.fire('Guardado', 'Incidencia actualizada correctamente', 'success')
       } else {
         const { error } = await (supabase.from('incidencias' as any) as any)
-          .insert(dataToSave)
+          .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
         if (error) throw error
         Swal.fire('Guardado', 'Incidencia registrada correctamente', 'success')
       }
@@ -358,13 +358,13 @@ export function IncidenciasModule() {
 
       if (modalMode === 'edit' && selectedPenalidad) {
         const { error } = await (supabase.from('penalidades' as any) as any)
-          .update(dataToSave)
+          .update({ ...dataToSave, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedPenalidad.id)
         if (error) throw error
         Swal.fire('Guardado', 'Penalidad actualizada correctamente', 'success')
       } else {
         const { error } = await (supabase.from('penalidades' as any) as any)
-          .insert(dataToSave)
+          .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
         if (error) throw error
         Swal.fire('Guardado', 'Penalidad registrada correctamente', 'success')
       }
@@ -393,7 +393,7 @@ export function IncidenciasModule() {
     if (result.isConfirmed) {
       try {
         const { error } = await (supabase.from('penalidades' as any) as any)
-          .update({ aplicado: true, fecha_aplicacion: new Date().toISOString().split('T')[0] })
+          .update({ aplicado: true, fecha_aplicacion: new Date().toISOString().split('T')[0], updated_by: profile?.full_name || 'Sistema' })
           .eq('id', penalidad.id)
         if (error) throw error
         Swal.fire('Aplicado', 'La penalidad fue marcada como aplicada', 'success')

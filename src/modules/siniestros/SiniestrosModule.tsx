@@ -43,7 +43,7 @@ import { ReparacionTicket } from './components/ReparacionTicket'
 type TabType = 'dashboard' | 'listado' | 'por_cobrar' | 'historico'
 
 export function SiniestrosModule() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('listado')
   const [loading, setLoading] = useState(true)
   const [siniestros, setSiniestros] = useState<SiniestroCompleto[]>([])
@@ -370,7 +370,10 @@ export function SiniestrosModule() {
       }
 
       if (modalMode === 'create') {
-        const { error } = await (supabase.from('siniestros' as any) as any).insert(dataToSave)
+        const { error } = await (supabase.from('siniestros' as any) as any).insert({
+          ...dataToSave,
+          created_by_name: profile?.full_name || 'Sistema'
+        })
         if (error) throw error
 
         Swal.fire({
@@ -380,7 +383,10 @@ export function SiniestrosModule() {
           showConfirmButton: false
         })
       } else if (modalMode === 'edit' && selectedSiniestro) {
-        const { error } = await (supabase.from('siniestros' as any) as any).update(dataToSave).eq('id', selectedSiniestro.id)
+        const { error } = await (supabase.from('siniestros' as any) as any).update({
+          ...dataToSave,
+          updated_by: profile?.full_name || 'Sistema'
+        }).eq('id', selectedSiniestro.id)
         if (error) throw error
 
         Swal.fire({

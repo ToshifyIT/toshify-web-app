@@ -5,6 +5,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
 import Swal from 'sweetalert2'
 import './AsignacionesModule.css'
@@ -60,6 +61,7 @@ interface ExpandedAsignacion extends Asignacion {
 
 export function AsignacionesModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+  const { profile } = useAuth()
   const canCreate = canCreateInMenu('asignaciones')
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
@@ -608,7 +610,7 @@ export function AsignacionesModule() {
 
         await (supabase as any)
           .from('asignaciones')
-          .update({ estado: 'activa', fecha_inicio: ahora, notas: confirmComentarios || selectedAsignacion.notas })
+          .update({ estado: 'activa', fecha_inicio: ahora, notas: confirmComentarios || selectedAsignacion.notas, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedAsignacion.id)
 
         // Actualizar estado del vehículo a EN_USO
@@ -674,7 +676,7 @@ export function AsignacionesModule() {
 
       await (supabase as any)
         .from('asignaciones')
-        .update({ estado: 'cancelada', notas: `${selectedAsignacion.notas || ''}\n\n[CANCELADA] Motivo: ${cancelMotivo}` })
+        .update({ estado: 'cancelada', notas: `${selectedAsignacion.notas || ''}\n\n[CANCELADA] Motivo: ${cancelMotivo}`, updated_by: profile?.full_name || 'Sistema' })
         .eq('id', selectedAsignacion.id)
 
       const { data: estadoDisponible } = await supabase

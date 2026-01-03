@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { X, Calendar, User, ChevronRight, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import Swal from 'sweetalert2'
 
 interface Vehicle {
@@ -91,6 +92,7 @@ interface Props {
 }
 
 export function AssignmentWizard({ onClose, onSuccess }: Props) {
+  const { profile } = useAuth()
   const [step, setStep] = useState(1)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
@@ -438,7 +440,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           estado: 'programado',  // Estado inicial PROGRAMADO
           notas: formData.notas.trim() || null,  // Solo guardar si hay contenido
           codigo: codigoAsignacion,
-          created_by: user?.id
+          created_by: user?.id,
+          created_by_name: profile?.full_name || 'Sistema'
         } as any)
         .select()
         .single()

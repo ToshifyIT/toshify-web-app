@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
 import type {
   VehiculoWithRelations,
@@ -46,6 +47,7 @@ export function VehicleManagement() {
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+  const { profile } = useAuth()
 
   // Permisos específicos para el menú de vehículos
   const canCreate = canCreateInMenu('vehiculos')
@@ -287,7 +289,8 @@ export function VehicleManagement() {
           seguro_vigencia: formData.seguro_vigencia || null,
           titular: formData.titular || null,
           notas: formData.notas || null,
-          created_by: user?.id
+          created_by: user?.id,
+          created_by_name: profile?.full_name || 'Sistema'
         }])
 
       if (insertError) throw insertError
@@ -356,7 +359,8 @@ export function VehicleManagement() {
           seguro_vigencia: formData.seguro_vigencia || null,
           titular: formData.titular || null,
           notas: formData.notas || null,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          updated_by: profile?.full_name || 'Sistema'
         })
         .eq('id', selectedVehiculo.id)
 
