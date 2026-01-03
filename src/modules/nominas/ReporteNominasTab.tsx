@@ -307,7 +307,7 @@ export function ReporteNominasTab() {
 
     } catch (error) {
       console.error('Error cargando nóminas:', error)
-      Swal.fire('Error', 'No se pudieron cargar las nóminas', 'error')
+      Swal.fire('Error', 'No se pudo cargar la facturación', 'error')
     } finally {
       setLoading(false)
     }
@@ -478,7 +478,7 @@ export function ReporteNominasTab() {
       setNominaDetalle(detalle)
     } catch (error) {
       console.error('Error cargando detalle:', error)
-      Swal.fire('Error', 'No se pudo cargar el detalle de la nómina', 'error')
+      Swal.fire('Error', 'No se pudo cargar el detalle de facturación', 'error')
       setShowDetalle(false)
     } finally {
       setLoadingDetalle(false)
@@ -532,7 +532,7 @@ export function ReporteNominasTab() {
       pdf.setFontSize(14)
       pdf.setTextColor(negro)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('LIQUIDACIÓN DE NÓMINA', pageWidth - margin, y, { align: 'right' })
+      pdf.text('LIQUIDACIÓN DE FACTURACIÓN', pageWidth - margin, y, { align: 'right' })
 
       pdf.setFontSize(10)
       pdf.setTextColor(rojo)
@@ -720,7 +720,7 @@ export function ReporteNominasTab() {
       pdf.text('TOSHIFY - Sistema de Gestión de Flota', pageWidth - margin, pdf.internal.pageSize.getHeight() - 10, { align: 'right' })
 
       // Guardar PDF
-      const nombreArchivo = `Nomina_${nominaDetalle.conductor_nombre.replace(/\s+/g, '_')}_Semana${nominaDetalle.semana}_${nominaDetalle.anio}.pdf`
+      const nombreArchivo = `Facturacion_${nominaDetalle.conductor_nombre.replace(/\s+/g, '_')}_Semana${nominaDetalle.semana}_${nominaDetalle.anio}.pdf`
       pdf.save(nombreArchivo)
 
       Swal.fire({
@@ -788,7 +788,7 @@ export function ReporteNominasTab() {
 
       // ========== HOJA 1: RESUMEN ==========
       const resumenData: (string | number)[][] = [
-        ['TOSHIFY - REPORTE DE NÓMINAS'],
+        ['TOSHIFY - REPORTE DE FACTURACIÓN'],
         [`Semana ${semana} del ${anio}`],
         [`Período: ${fechaInicio} al ${fechaFin}`],
         [''],
@@ -975,7 +975,7 @@ export function ReporteNominasTab() {
       XLSX.utils.book_append_sheet(wb, wsFacturacion, 'Facturación')
 
       // Generar nombre del archivo
-      const nombreArchivo = `Reporte_Nominas_Semana${semana}_${anio}.xlsx`
+      const nombreArchivo = `Reporte_Facturacion_Semana${semana}_${anio}.xlsx`
 
       // Descargar
       XLSX.writeFile(wb, nombreArchivo)
@@ -1241,7 +1241,7 @@ export function ReporteNominasTab() {
         loading={loading}
         searchPlaceholder="Buscar por conductor, DNI, patente..."
         emptyIcon={<FileText size={48} />}
-        emptyTitle="No hay nóminas"
+        emptyTitle="No hay facturación"
         emptyDescription="No hay conductores con asignaciones activas para esta semana"
         pageSize={20}
         pageSizeOptions={[10, 20, 50, 100]}
@@ -1253,7 +1253,7 @@ export function ReporteNominasTab() {
         <div className="nom-modal-overlay" onClick={() => setShowDetalle(false)}>
           <div className="nom-modal-content nom-modal-detalle" onClick={(e) => e.stopPropagation()}>
             <div className="nom-modal-header">
-              <h2>Detalle de Nómina</h2>
+              <h2>Detalle de Facturación</h2>
               <button className="nom-modal-close" onClick={() => setShowDetalle(false)}>
                 <X size={20} />
               </button>
