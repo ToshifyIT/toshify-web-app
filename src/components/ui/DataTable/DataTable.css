@@ -362,6 +362,16 @@
   color: var(--badge-gray-text);
 }
 
+.dt-badge-orange {
+  background: #FFF7ED;
+  color: #C2410C;
+}
+
+[data-theme="dark"] .dt-badge-orange {
+  background: rgba(251, 146, 60, 0.15);
+  color: #FB923C;
+}
+
 .dt-badge-solid-green {
   background: var(--color-success);
   color: var(--text-inverse);
