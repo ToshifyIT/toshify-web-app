@@ -532,7 +532,7 @@ export function ReporteNominasTab() {
       pdf.setFontSize(14)
       pdf.setTextColor(negro)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('LIQUIDACIÓN DE FACTURACIÓN', pageWidth - margin, y, { align: 'right' })
+      pdf.text('FACTURACIÓN', pageWidth - margin, y, { align: 'right' })
 
       pdf.setFontSize(10)
       pdf.setTextColor(rojo)
@@ -1253,7 +1253,7 @@ export function ReporteNominasTab() {
         <div className="nom-modal-overlay" onClick={() => setShowDetalle(false)}>
           <div className="nom-modal-content nom-modal-detalle" onClick={(e) => e.stopPropagation()}>
             <div className="nom-modal-header">
-              <h2>Detalle de Facturación</h2>
+              <h2>Facturación</h2>
               <button className="nom-modal-close" onClick={() => setShowDetalle(false)}>
                 <X size={20} />
               </button>
