@@ -20,8 +20,10 @@ import {
   CheckCircle,
   XCircle,
   Users,
-  Car
+  Car,
+  Download
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import type {
   IncidenciaCompleta,
   IncidenciaEstado,
@@ -421,6 +423,81 @@ export function IncidenciasModule() {
     })
   }
 
+  function handleExportarIncidencias() {
+    if (incidenciasFiltradas.length === 0) {
+      Swal.fire('Sin datos', 'No hay incidencias para exportar', 'info')
+      return
+    }
+
+    const dataExport = incidenciasFiltradas.map(i => ({
+      'Fecha': formatDate(i.fecha),
+      'Semana': i.semana || '',
+      'Patente': i.patente_display || '',
+      'Vehículo': `${i.vehiculo_marca || ''} ${i.vehiculo_modelo || ''}`.trim(),
+      'Conductor': i.conductor_display || '',
+      'Turno': i.turno || '',
+      'Área': i.area || '',
+      'Estado': i.estado_nombre || '',
+      'Estado Vehículo': i.estado_vehiculo || '',
+      'Descripción': i.descripcion || '',
+      'Acción Ejecutada': i.accion_ejecutada || '',
+      'Registrado por': i.registrado_por || '',
+      'Total Penalidades': i.total_penalidades || 0
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(dataExport)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Incidencias')
+
+    const colWidths = [
+      { wch: 12 }, { wch: 8 }, { wch: 10 }, { wch: 20 }, { wch: 25 },
+      { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 35 },
+      { wch: 35 }, { wch: 15 }, { wch: 12 }
+    ]
+    ws['!cols'] = colWidths
+
+    const fecha = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `Incidencias_${fecha}.xlsx`)
+  }
+
+  function handleExportarPenalidades() {
+    if (penalidadesFiltradas.length === 0) {
+      Swal.fire('Sin datos', 'No hay penalidades para exportar', 'info')
+      return
+    }
+
+    const dataExport = penalidadesFiltradas.map(p => ({
+      'Fecha': formatDate(p.fecha),
+      'Semana': p.semana || '',
+      'Patente': p.patente_display || '',
+      'Conductor': p.conductor_display || '',
+      'Tipo': p.tipo_nombre || '',
+      'Detalle': p.detalle || '',
+      'Monto': p.monto || 0,
+      'Turno': p.turno || '',
+      'Área Responsable': p.area_responsable || '',
+      'Aplicado': p.aplicado ? 'Sí' : 'No',
+      'Fecha Aplicación': formatDate(p.fecha_aplicacion),
+      'Observaciones': p.observaciones || '',
+      'Nota Administrativa': p.nota_administrativa || ''
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(dataExport)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Penalidades')
+
+    const colWidths = [
+      { wch: 12 }, { wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 15 },
+      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 10 },
+      { wch: 12 }, { wch: 30 }, { wch: 30 }
+    ]
+    ws['!cols'] = colWidths
+
+    const tabName = activeTab === 'por_aplicar' ? 'PorAplicar' : 'Todas'
+    const fecha = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `Penalidades_${tabName}_${fecha}.xlsx`)
+  }
+
   // Areas únicas para filtro
   const areasUnicas = [...new Set(incidencias.map(i => i.area).filter(Boolean))]
 
@@ -483,10 +560,20 @@ export function IncidenciasModule() {
             {countPorAplicar > 0 && <span className="tab-badge">{countPorAplicar}</span>}
           </button>
         </div>
-        <button className="btn-primary" onClick={activeTab === 'penalidades' || activeTab === 'por_aplicar' ? handleNuevaPenalidad : handleNuevaIncidencia}>
-          <Plus size={16} />
-          {activeTab === 'penalidades' || activeTab === 'por_aplicar' ? 'Nueva Penalidad' : 'Nueva Incidencia'}
-        </button>
+        <div className="tabs-actions">
+          <button
+            className="btn-secondary"
+            onClick={activeTab === 'incidencias' ? handleExportarIncidencias : handleExportarPenalidades}
+            title="Exportar a Excel"
+          >
+            <Download size={16} />
+            Exportar
+          </button>
+          <button className="btn-primary" onClick={activeTab === 'penalidades' || activeTab === 'por_aplicar' ? handleNuevaPenalidad : handleNuevaIncidencia}>
+            <Plus size={16} />
+            {activeTab === 'penalidades' || activeTab === 'por_aplicar' ? 'Nueva Penalidad' : 'Nueva Incidencia'}
+          </button>
+        </div>
       </div>
 
       {/* Incidencias Tab */}
@@ -617,22 +704,27 @@ export function IncidenciasModule() {
             {/* Paginación */}
             {incidenciasFiltradas.length > 0 && (
               <div className="table-footer">
-                <div className="page-size">
-                  <label>Filas:</label>
-                  <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                </div>
+                <span className="pagination-info">
+                  Mostrando {((page - 1) * pageSize) + 1} a {Math.min(page * pageSize, incidenciasFiltradas.length)} de {incidenciasFiltradas.length} registros
+                </span>
                 <div className="pagination">
+                  <button className="pagination-btn" disabled={page <= 1} onClick={() => setPage(1)}>«</button>
                   <button className="pagination-btn" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                    <ChevronLeft size={16} />
+                    <ChevronLeft size={14} />
                   </button>
-                  <span className="page-info">Página {page} de {totalPages}</span>
+                  <span className="page-info">Pagina {page} de {totalPages}</span>
                   <button className="pagination-btn" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
-                    <ChevronRight size={16} />
+                    <ChevronRight size={14} />
                   </button>
+                  <button className="pagination-btn" disabled={page >= totalPages} onClick={() => setPage(totalPages)}>»</button>
+                  <div className="page-size">
+                    <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span>por pagina</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -643,37 +735,42 @@ export function IncidenciasModule() {
       {/* Penalidades / Por Aplicar Tab */}
       {(activeTab === 'penalidades' || activeTab === 'por_aplicar') && (
         <>
-          {/* Stats */}
+          {/* Stats - diferentes según tab */}
           <div className="incidencias-stats">
             <div className="stats-grid">
               <div className="stat-card">
                 <FileText size={20} className="stat-icon" />
                 <div className="stat-content">
                   <span className="stat-value">{penalidadesFiltradas.length}</span>
-                  <span className="stat-label">Total</span>
+                  <span className="stat-label">{activeTab === 'por_aplicar' ? 'Pendientes' : 'Total'}</span>
                 </div>
               </div>
               <div className="stat-card">
                 <DollarSign size={20} className="stat-icon" />
                 <div className="stat-content">
                   <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
-                  <span className="stat-label">Monto Total</span>
+                  <span className="stat-label">{activeTab === 'por_aplicar' ? 'Monto Pendiente' : 'Monto Total'}</span>
                 </div>
               </div>
-              <div className="stat-card">
-                <CheckCircle size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{penalidadesFiltradas.filter(p => p.aplicado).length}</span>
-                  <span className="stat-label">Aplicadas</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <Clock size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{penalidadesFiltradas.filter(p => !p.aplicado).length}</span>
-                  <span className="stat-label">Pendientes</span>
-                </div>
-              </div>
+              {/* Solo mostrar Aplicadas/Pendientes en tab Penalidades (no en Por Aplicar) */}
+              {activeTab === 'penalidades' && (
+                <>
+                  <div className="stat-card">
+                    <CheckCircle size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{penalidadesFiltradas.filter(p => p.aplicado).length}</span>
+                      <span className="stat-label">Aplicadas</span>
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <Clock size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{penalidadesFiltradas.filter(p => !p.aplicado).length}</span>
+                      <span className="stat-label">Pendientes</span>
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="stat-card">
                 <Users size={20} className="stat-icon" />
                 <div className="stat-content">
@@ -790,22 +887,27 @@ export function IncidenciasModule() {
             {/* Paginación */}
             {penalidadesFiltradas.length > 0 && (
               <div className="table-footer">
-                <div className="page-size">
-                  <label>Filas:</label>
-                  <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                </div>
+                <span className="pagination-info">
+                  Mostrando {((page - 1) * pageSize) + 1} a {Math.min(page * pageSize, penalidadesFiltradas.length)} de {penalidadesFiltradas.length} registros
+                </span>
                 <div className="pagination">
+                  <button className="pagination-btn" disabled={page <= 1} onClick={() => setPage(1)}>«</button>
                   <button className="pagination-btn" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                    <ChevronLeft size={16} />
+                    <ChevronLeft size={14} />
                   </button>
-                  <span className="page-info">Página {page} de {Math.ceil(penalidadesFiltradas.length / pageSize)}</span>
+                  <span className="page-info">Pagina {page} de {Math.ceil(penalidadesFiltradas.length / pageSize)}</span>
                   <button className="pagination-btn" disabled={page >= Math.ceil(penalidadesFiltradas.length / pageSize)} onClick={() => setPage(p => p + 1)}>
-                    <ChevronRight size={16} />
+                    <ChevronRight size={14} />
                   </button>
+                  <button className="pagination-btn" disabled={page >= Math.ceil(penalidadesFiltradas.length / pageSize)} onClick={() => setPage(Math.ceil(penalidadesFiltradas.length / pageSize))}>»</button>
+                  <div className="page-size">
+                    <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span>por pagina</span>
+                  </div>
                 </div>
               </div>
             )}

@@ -29,6 +29,7 @@ import { BitacoraPage } from './integraciones/uss/BitacoraPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
 import { RolesPage } from './administracion/RolesPage'
+import { NominasPage } from './nominas/NominasPage'
 import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
 import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
@@ -901,8 +902,13 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
               <Route path="/estado-de-flota" element={
-                <ProtectedRoute submenuName="asignaciones-activas" action="view">
+                <ProtectedRoute menuName="asignaciones-activas" action="view">
                   <AsignacionesActivasPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/onboarding" element={
+                <ProtectedRoute submenuName="onboarding" action="view">
+                  <AsignacionesPage />
                 </ProtectedRoute>
               } />
 
@@ -927,6 +933,13 @@ export function HomePage() {
               <Route path="/reportes" element={
                 <ProtectedRoute menuName="reportes" action="view">
                   <ReportesPage />
+                </ProtectedRoute>
+              } />
+
+              {/* Nóminas */}
+              <Route path="/nominas" element={
+                <ProtectedRoute submenuName="nominas" action="view">
+                  <NominasPage />
                 </ProtectedRoute>
               } />
 

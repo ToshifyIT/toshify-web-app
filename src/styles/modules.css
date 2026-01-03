@@ -131,6 +131,57 @@
   border: 1px solid var(--border-primary);
 }
 
+/* Modal con estructura header/body/footer - quita padding y overflow del content */
+.modal-content:has(.modal-header) {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--modal-bg);
+  flex-shrink: 0;
+  border-radius: 12px 12px 0 0;
+}
+
+.modal-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.modal-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
 .modal-title {
   margin: 0 0 16px 0;
   font-size: 18px;
@@ -280,9 +331,11 @@
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  margin-top: 16px;
-  padding-top: 12px;
+  padding: 16px 20px;
   border-top: 1px solid var(--border-primary);
+  background: var(--modal-bg);
+  flex-shrink: 0;
+  border-radius: 0 0 12px 12px;
 }
 
 /* Custom Badges */
@@ -349,7 +402,7 @@
     grid-template-columns: 1fr;
   }
 
-  .modal-content {
+  .modal-content:not(:has(.modal-header)) {
     padding: 16px 20px;
     margin: 8px;
   }
@@ -409,7 +462,7 @@
     padding: 8px;
   }
 
-  .modal-content {
+  .modal-content:not(:has(.modal-header)) {
     padding: 14px 16px;
     border-radius: 10px;
     max-height: 95vh;
@@ -492,7 +545,7 @@
     font-size: 13px;
   }
 
-  .modal-content {
+  .modal-content:not(:has(.modal-header)) {
     padding: 12px 14px;
   }
 

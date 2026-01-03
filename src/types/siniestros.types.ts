@@ -68,6 +68,11 @@ export interface Siniestro {
   total_pagado?: number
   porcentaje_abogada?: number
   observaciones?: string
+  // Nuevos campos
+  habilitado_circular?: boolean
+  costos_reparacion?: number
+  total_reparacion_pagada?: number
+  fecha_cierre?: string
   created_by?: string
   created_at: string
   updated_at: string
@@ -87,6 +92,16 @@ export interface SiniestroCompleto extends Siniestro {
   conductor_nombre_sistema?: string
   conductor_apellido_sistema?: string
   conductor_display: string
+  // Campos calculados
+  dias_siniestrado?: number
+  // Datos de reparación
+  reparacion_id?: string
+  reparacion_taller?: string
+  reparacion_fecha_inicio?: string
+  reparacion_fecha_finalizacion?: string
+  reparacion_estado?: 'INICIADO' | 'FINALIZADO'
+  reparacion_observaciones?: string
+  reparacion_dias?: number
 }
 
 export interface SiniestroSeguimiento {
@@ -104,6 +119,20 @@ export interface SiniestroSeguimiento {
 export interface SiniestroSeguimientoConEstados extends SiniestroSeguimiento {
   estado_anterior_nombre?: string
   estado_nuevo_nombre?: string
+}
+
+// Tipo para ticket de reparación
+export interface SiniestroReparacion {
+  id: string
+  siniestro_id: string
+  taller?: string
+  fecha_inicio?: string
+  fecha_finalizacion?: string
+  estado: 'INICIADO' | 'FINALIZADO'
+  observaciones?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
 }
 
 // Tipos para formularios
@@ -138,6 +167,11 @@ export interface SiniestroFormData {
   total_pagado?: number
   porcentaje_abogada?: number
   observaciones?: string
+  // Nuevos campos
+  habilitado_circular?: boolean
+  costos_reparacion?: number
+  total_reparacion_pagada?: number
+  fecha_cierre?: string
 }
 
 // Tipos para filtros
@@ -159,6 +193,8 @@ export interface SiniestroStats {
   presupuesto_total: number
   total_cobrado: number
   con_lesionados: number
+  total_recuperados: number
+  procesando_pago_total: number
 }
 
 // Tipo para vehículo simplificado (para selects)

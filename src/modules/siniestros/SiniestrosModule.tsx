@@ -22,8 +22,10 @@ import {
   Shield,
   Clock,
   ExternalLink,
-  FolderOpen
+  FolderOpen,
+  Download
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import type {
   SiniestroCompleto,
   SiniestroCategoria,
@@ -36,6 +38,7 @@ import type {
 } from '../../types/siniestros.types'
 import './SiniestrosModule.css'
 import { SiniestroWizard } from './components/SiniestroWizard'
+import { ReparacionTicket } from './components/ReparacionTicket'
 
 type TabType = 'dashboard' | 'listado' | 'por_cobrar' | 'historico'
 
@@ -90,6 +93,12 @@ export function SiniestrosModule() {
     setLoading(true)
     try {
       // Cargar catálogos en paralelo
+      // Primero obtener el ID del estado activo de conductores
+      const { data: estadosCond } = await supabase
+        .from('conductores_estados')
+        .select('id, codigo') as { data: { id: string; codigo: string }[] | null }
+      const estadoActivoId = estadosCond?.find(e => e.codigo.toLowerCase() === 'activo')?.id
+
       const [
         categoriasRes,
         estadosRes,
@@ -102,7 +111,9 @@ export function SiniestrosModule() {
         supabase.from('siniestros_estados' as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('seguros' as any).select('*').eq('is_active', true).order('nombre'),
         supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
-        supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
+        estadoActivoId
+          ? supabase.from('conductores').select('id, nombres, apellidos').eq('estado_id', estadoActivoId).order('apellidos')
+          : supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
         supabase.from('v_siniestros_completos' as any).select('*').order('fecha_siniestro', { ascending: false })
       ])
 
@@ -163,6 +174,9 @@ export function SiniestrosModule() {
       { responsable: 'Compartida', cantidad: data.filter(s => s.responsable === 'compartida').length }
     ].filter(r => r.cantidad > 0)
 
+    // Buscar estado PROCESANDO_COBRO para métricas
+    const estadoProcesando = estadosData.find(e => e.codigo === 'PROCESANDO_COBRO')
+
     setStats({
       total: data.length,
       por_estado: porEstado,
@@ -170,7 +184,11 @@ export function SiniestrosModule() {
       por_responsable: porResponsable,
       presupuesto_total: data.reduce((sum, s) => sum + (s.presupuesto_real || 0), 0),
       total_cobrado: data.reduce((sum, s) => sum + (s.total_pagado || 0), 0),
-      con_lesionados: data.filter(s => s.hay_lesionados).length
+      con_lesionados: data.filter(s => s.hay_lesionados).length,
+      total_recuperados: data.reduce((sum, s) => sum + (s.presupuesto_aprobado_seguro || 0), 0),
+      procesando_pago_total: estadoProcesando
+        ? data.filter(s => s.estado_id === estadoProcesando.id).reduce((sum, s) => sum + (s.presupuesto_real || 0), 0)
+        : 0
     })
   }
 
@@ -311,7 +329,6 @@ export function SiniestrosModule() {
       hay_lesionados: siniestro.hay_lesionados,
       descripcion_danos: siniestro.descripcion_danos || undefined,
       relato: siniestro.relato || undefined,
-      conductor_nombre: siniestro.conductor_nombre || undefined,
       tercero_nombre: siniestro.tercero_nombre || undefined,
       tercero_dni: siniestro.tercero_dni || undefined,
       tercero_telefono: siniestro.tercero_telefono || undefined,
@@ -328,7 +345,11 @@ export function SiniestrosModule() {
       fecha_pago_estimada: siniestro.fecha_pago_estimada || undefined,
       total_pagado: siniestro.total_pagado || undefined,
       porcentaje_abogada: siniestro.porcentaje_abogada || undefined,
-      observaciones: siniestro.observaciones || undefined
+      observaciones: siniestro.observaciones || undefined,
+      habilitado_circular: (siniestro as any).habilitado_circular ?? true,
+      costos_reparacion: (siniestro as any).costos_reparacion || undefined,
+      total_reparacion_pagada: (siniestro as any).total_reparacion_pagada || undefined,
+      fecha_cierre: (siniestro as any).fecha_cierre || undefined
     })
     setModalMode('edit')
     setShowModal(true)
@@ -386,6 +407,29 @@ export function SiniestrosModule() {
     // TODO: Auto-seleccionar conductor asignado y seguro del vehículo
   }
 
+  async function handleToggleHabilitado(siniestroId: string, habilitado: boolean) {
+    try {
+      const { error } = await (supabase.from('siniestros' as any) as any)
+        .update({ habilitado_circular: habilitado })
+        .eq('id', siniestroId)
+
+      if (error) throw error
+
+      // El trigger de BD actualiza automáticamente el estado del vehículo
+      cargarDatos()
+
+      Swal.fire({
+        icon: 'success',
+        title: habilitado ? 'Vehículo habilitado para circular' : 'Vehículo marcado como siniestrado',
+        timer: 1500,
+        showConfirmButton: false
+      })
+    } catch (error) {
+      console.error('Error:', error)
+      Swal.fire('Error', 'No se pudo actualizar el estado', 'error')
+    }
+  }
+
   function formatMoney(value: number | undefined | null) {
     if (!value) return '-'
     return new Intl.NumberFormat('es-AR', {
@@ -402,6 +446,69 @@ export function SiniestrosModule() {
       month: '2-digit',
       year: 'numeric'
     })
+  }
+
+  function handleExportarExcel() {
+    if (siniestrosFiltrados.length === 0) {
+      Swal.fire('Sin datos', 'No hay siniestros para exportar', 'info')
+      return
+    }
+
+    const dataExport = siniestrosFiltrados.map(s => ({
+      'Fecha': formatDate(s.fecha_siniestro),
+      'Patente': s.vehiculo_patente || '',
+      'Vehículo': `${s.vehiculo_marca || ''} ${s.vehiculo_modelo || ''}`.trim(),
+      'Conductor': s.conductor_display || '',
+      'Categoría': s.categoria_nombre || '',
+      'Estado': s.estado_nombre || '',
+      'Responsable': s.responsable === 'tercero' ? 'Tercero' : s.responsable === 'conductor' ? 'Conductor' : s.responsable === 'compartida' ? 'Compartida' : '',
+      'Lesionados': s.hay_lesionados ? 'Sí' : 'No',
+      'Presupuesto Real': s.presupuesto_real || 0,
+      'Pres. Aprobado': s.presupuesto_aprobado_seguro || 0,
+      'Total Rep. Pagada': (s as any).total_reparacion_pagada || 0,
+      'Total Pagado': s.total_pagado || 0,
+      'Días Siniestrado': s.dias_siniestrado || 0,
+      'Habilitado': (s as any).habilitado_circular !== false ? 'Sí' : 'No',
+      'Seguro': s.seguro_nombre || '',
+      'Nro. Siniestro': s.nro_siniestro_seguro || '',
+      'Ubicación': s.ubicacion || '',
+      'Descripción Daños': s.descripcion_danos || '',
+      'Relato': s.relato || '',
+      'Observaciones': s.observaciones || ''
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(dataExport)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Siniestros')
+
+    // Ajustar anchos de columna
+    const colWidths = [
+      { wch: 12 }, // Fecha
+      { wch: 10 }, // Patente
+      { wch: 20 }, // Vehículo
+      { wch: 25 }, // Conductor
+      { wch: 15 }, // Categoría
+      { wch: 15 }, // Estado
+      { wch: 12 }, // Responsable
+      { wch: 10 }, // Lesionados
+      { wch: 15 }, // Presupuesto Real
+      { wch: 15 }, // Pres. Aprobado
+      { wch: 15 }, // Total Rep. Pagada
+      { wch: 15 }, // Total Pagado
+      { wch: 12 }, // Días Siniestrado
+      { wch: 10 }, // Habilitado
+      { wch: 15 }, // Seguro
+      { wch: 15 }, // Nro. Siniestro
+      { wch: 25 }, // Ubicación
+      { wch: 30 }, // Descripción Daños
+      { wch: 30 }, // Relato
+      { wch: 30 }  // Observaciones
+    ]
+    ws['!cols'] = colWidths
+
+    const tabName = activeTab === 'por_cobrar' ? 'PorCobrar' : activeTab === 'historico' ? 'Historico' : 'Listado'
+    const fecha = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `Siniestros_${tabName}_${fecha}.xlsx`)
   }
 
   // Contadores para tabs
@@ -424,48 +531,31 @@ export function SiniestrosModule() {
       <div className="siniestros-stats">
         <div className="stats-grid">
           <div className="stat-card">
-            <FileText size={20} className="stat-icon" />
+            <DollarSign size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{siniestros.length}</span>
-              <span className="stat-label">Total</span>
+              <span className="stat-value">{formatMoney(stats?.presupuesto_total || 0)}</span>
+              <span className="stat-label">Total Presupuesto</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <TrendingUp size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{formatMoney(stats?.total_recuperados || 0)}</span>
+              <span className="stat-label">Total Recuperados</span>
             </div>
           </div>
           <div className="stat-card">
             <Car size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">
-                {new Set(siniestros.map(s => s.vehiculo_patente)).size}
-              </span>
-              <span className="stat-label">Vehículos</span>
+              <span className="stat-value">{formatMoney(stats?.total_cobrado || 0)}</span>
+              <span className="stat-label">Total Cobrado</span>
             </div>
           </div>
-          <div className="stat-card">
-            <Users size={20} className="stat-icon" />
+          <div className="stat-card highlight">
+            <Clock size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">
-                {new Set(siniestros.map(s => s.conductor_display)).size}
-              </span>
-              <span className="stat-label">Conductores</span>
-            </div>
-          </div>
-          {/* Oculto temporalmente */}
-          <div className="stat-card" style={{ display: 'none' }}>
-            <DollarSign size={20} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">
-                {formatMoney(siniestros.reduce((sum, s) => sum + (s.presupuesto_real || 0), 0))}
-              </span>
-              <span className="stat-label">Presupuesto</span>
-            </div>
-          </div>
-          {/* Oculto temporalmente */}
-          <div className="stat-card" style={{ display: 'none' }}>
-            <TrendingUp size={20} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">
-                {formatMoney(siniestros.reduce((sum, s) => sum + (s.total_pagado || 0), 0))}
-              </span>
-              <span className="stat-label">Cobrado</span>
+              <span className="stat-value">{formatMoney(stats?.procesando_pago_total || 0)}</span>
+              <span className="stat-label">Procesando Pago</span>
             </div>
           </div>
         </div>
@@ -507,10 +597,16 @@ export function SiniestrosModule() {
           {countHistorico > 0 && <span className="tab-badge">{countHistorico}</span>}
         </button>
         </div>
-        <button className="btn-primary" onClick={handleNuevoSiniestro}>
-          <Plus size={16} />
-          Nuevo Siniestro
-        </button>
+        <div className="tabs-actions">
+          <button className="btn-secondary" onClick={handleExportarExcel} title="Exportar a Excel">
+            <Download size={16} />
+            Exportar
+          </button>
+          <button className="btn-primary" onClick={handleNuevoSiniestro}>
+            <Plus size={16} />
+            Nuevo Siniestro
+          </button>
+        </div>
       </div>
 
       {/* Alertas de conductores reincidentes */}
@@ -617,12 +713,6 @@ export function SiniestrosModule() {
                         sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
                       )}
                     </th>
-                    <th className="sortable" onClick={() => handleSort('categoria_nombre')}>
-                      Categoría
-                      {sortColumn === 'categoria_nombre' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </th>
                     <th className="sortable" onClick={() => handleSort('responsable')}>
                       Responsable
                       {sortColumn === 'responsable' && (
@@ -636,11 +726,15 @@ export function SiniestrosModule() {
                       )}
                     </th>
                     <th className="sortable" onClick={() => handleSort('presupuesto_real')}>
-                      Presupuesto
+                      Pres. Real
                       {sortColumn === 'presupuesto_real' && (
                         sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
                       )}
                     </th>
+                    <th>Pres. Aprobado</th>
+                    <th>Total Rep. Pagada</th>
+                    <th>Habilitado</th>
+                    <th>Días</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -648,14 +742,14 @@ export function SiniestrosModule() {
                   {loading ? (
                     [...Array(5)].map((_, i) => (
                       <tr key={i} className="loading-row">
-                        {[...Array(8)].map((_, j) => (
+                        {[...Array(11)].map((_, j) => (
                           <td key={j}><div className="skeleton-cell" style={{ width: '80%' }} /></td>
                         ))}
                       </tr>
                     ))
                   ) : siniestrosPaginados.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="empty-state">
+                      <td colSpan={11} className="empty-state">
                         <Shield size={40} />
                         <p>No hay siniestros para mostrar</p>
                       </td>
@@ -668,11 +762,6 @@ export function SiniestrosModule() {
                           <span className="patente">{s.vehiculo_patente || '-'}</span>
                         </td>
                         <td className="text-truncate">{s.conductor_display || '-'}</td>
-                        <td>
-                          <span className={`categoria-badge ${s.categoria_es_robo ? 'es-robo' : ''}`}>
-                            {s.categoria_nombre}
-                          </span>
-                        </td>
                         <td>
                           <span className={`responsable-${s.responsable}`}>
                             {s.responsable === 'tercero' ? 'Tercero' :
@@ -687,6 +776,23 @@ export function SiniestrosModule() {
                         </td>
                         <td className="monto">
                           {formatMoney(s.presupuesto_real)}
+                        </td>
+                        <td className="monto">
+                          {formatMoney(s.presupuesto_aprobado_seguro)}
+                        </td>
+                        <td className="monto">
+                          {formatMoney((s as any).total_reparacion_pagada)}
+                        </td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={(s as any).habilitado_circular !== false}
+                            onChange={(e) => handleToggleHabilitado(s.id, e.target.checked)}
+                            title={`Vehículo ${(s as any).habilitado_circular !== false ? 'habilitado' : 'no habilitado'} para circular`}
+                          />
+                        </td>
+                        <td className="dias">
+                          {s.dias_siniestrado || 0}
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div className="table-actions">
@@ -727,46 +833,31 @@ export function SiniestrosModule() {
             {/* Paginación */}
             {siniestrosFiltrados.length > 0 && (
               <div className="table-footer">
-                <div className="page-size">
-                  <label>Filas:</label>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </div>
+                <span className="pagination-info">
+                  Mostrando {((page - 1) * pageSize) + 1} a {Math.min(page * pageSize, siniestrosFiltrados.length)} de {siniestrosFiltrados.length} registros
+                </span>
                 <div className="pagination">
-                  <button
-                    onClick={() => setPage(1)}
-                    disabled={page === 1}
-                  >
-                    «
-                  </button>
-                  <button
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                  >
+                  <button onClick={() => setPage(1)} disabled={page === 1}>«</button>
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                     <ChevronLeft size={14} />
                   </button>
-                  <span className="page-info">
-                    Página {page} de {totalPages || 1}
-                  </span>
-                  <button
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
-                  >
+                  <span className="page-info">Pagina {page} de {totalPages || 1}</span>
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
                     <ChevronRight size={14} />
                   </button>
-                  <button
-                    onClick={() => setPage(totalPages)}
-                    disabled={page >= totalPages}
-                  >
-                    »
-                  </button>
+                  <button onClick={() => setPage(totalPages)} disabled={page >= totalPages}>»</button>
+                  <div className="page-size">
+                    <select
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                    <span>por pagina</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -793,6 +884,7 @@ export function SiniestrosModule() {
                 <SiniestroDetailView
                   siniestro={selectedSiniestro}
                   onEdit={() => handleEditarSiniestro(selectedSiniestro)}
+                  onReload={cargarDatos}
                 />
               ) : modalMode === 'create' ? (
                 <SiniestroWizard
@@ -818,6 +910,7 @@ export function SiniestrosModule() {
                   conductores={conductores}
                   onVehiculoChange={handleVehiculoChange}
                   disabled={modalMode === 'view'}
+                  isEditMode={modalMode === 'edit'}
                 />
               )}
             </div>
@@ -1003,6 +1096,7 @@ interface SiniestroFormProps {
   conductores: ConductorSimple[]
   onVehiculoChange: (id: string) => void
   disabled?: boolean
+  isEditMode?: boolean // Solo permite editar estado y responsable
 }
 
 function SiniestroForm({
@@ -1014,8 +1108,16 @@ function SiniestroForm({
   vehiculos,
   conductores,
   onVehiculoChange,
-  disabled
+  disabled,
+  isEditMode = false
 }: SiniestroFormProps) {
+  // En modo edición solo se puede modificar estado_id y responsable
+  const isFieldDisabled = (fieldName: string) => {
+    if (disabled) return true
+    if (!isEditMode) return false
+    // En modo edición, solo estado_id y responsable son editables
+    return !['estado_id', 'responsable'].includes(fieldName)
+  }
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -1056,7 +1158,7 @@ function SiniestroForm({
                 onFocus={() => setShowVehiculoDropdown(true)}
                 onBlur={() => setTimeout(() => setShowVehiculoDropdown(false), 200)}
                 placeholder="Buscar por patente..."
-                disabled={disabled}
+                disabled={isFieldDisabled('vehiculo_id')}
               />
               {showVehiculoDropdown && vehiculoSearch && filteredVehiculos.length > 0 && (
                 <div className="searchable-dropdown">
@@ -1103,7 +1205,7 @@ function SiniestroForm({
                 onFocus={() => setShowConductorDropdown(true)}
                 onBlur={() => setTimeout(() => setShowConductorDropdown(false), 200)}
                 placeholder="Buscar conductor..."
-                disabled={disabled}
+                disabled={isFieldDisabled('conductor_id')}
               />
               {showConductorDropdown && conductorSearch && filteredConductores.length > 0 && (
                 <div className="searchable-dropdown">
@@ -1139,22 +1241,12 @@ function SiniestroForm({
         </div>
         <div className="form-row">
           <div className="form-group">
-            <label>Conductor (texto libre)</label>
-            <input
-              type="text"
-              value={formData.conductor_nombre || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, conductor_nombre: e.target.value }))}
-              placeholder="Si no está en el sistema"
-              disabled={disabled}
-            />
-          </div>
-          <div className="form-group">
             <label>Fecha <span className="required">*</span></label>
             <input
               type="date"
               value={formData.fecha_siniestro}
               onChange={(e) => setFormData(prev => ({ ...prev, fecha_siniestro: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('fecha_siniestro')}
             />
           </div>
         </div>
@@ -1165,7 +1257,7 @@ function SiniestroForm({
               type="time"
               value={formData.hora_siniestro || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, hora_siniestro: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('hora_siniestro')}
             />
           </div>
           <div className="form-group">
@@ -1175,7 +1267,7 @@ function SiniestroForm({
               value={formData.ubicacion || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, ubicacion: e.target.value }))}
               placeholder="Dirección o referencia"
-              disabled={disabled}
+              disabled={isFieldDisabled('ubicacion')}
             />
           </div>
         </div>
@@ -1190,7 +1282,7 @@ function SiniestroForm({
             <select
               value={formData.categoria_id}
               onChange={(e) => setFormData(prev => ({ ...prev, categoria_id: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('categoria_id')}
             >
               <option value="">Seleccionar categoría</option>
               {categorias.map(c => (
@@ -1203,7 +1295,7 @@ function SiniestroForm({
             <select
               value={formData.estado_id}
               onChange={(e) => setFormData(prev => ({ ...prev, estado_id: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('estado_id')}
             >
               <option value="">Seleccionar estado</option>
               {estados.map(e => (
@@ -1224,7 +1316,7 @@ function SiniestroForm({
                     value={r}
                     checked={formData.responsable === r}
                     onChange={(e) => setFormData(prev => ({ ...prev, responsable: e.target.value as any }))}
-                    disabled={disabled}
+                    disabled={isFieldDisabled('responsable')}
                   />
                   <span>{r.charAt(0).toUpperCase() + r.slice(1)}</span>
                 </label>
@@ -1238,7 +1330,7 @@ function SiniestroForm({
                 type="checkbox"
                 checked={formData.hay_lesionados}
                 onChange={(e) => setFormData(prev => ({ ...prev, hay_lesionados: e.target.checked }))}
-                disabled={disabled}
+                disabled={isFieldDisabled('other')}
               />
               <span>Hay lesionados</span>
             </label>
@@ -1256,7 +1348,7 @@ function SiniestroForm({
               value={formData.descripcion_danos || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, descripcion_danos: e.target.value }))}
               placeholder="Detalle los daños del vehículo..."
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
         </div>
@@ -1268,7 +1360,7 @@ function SiniestroForm({
               onChange={(e) => setFormData(prev => ({ ...prev, relato: e.target.value }))}
               placeholder="Describa cómo ocurrió el siniestro..."
               style={{ minHeight: '100px' }}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
         </div>
@@ -1284,7 +1376,7 @@ function SiniestroForm({
               type="text"
               value={formData.tercero_nombre || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, tercero_nombre: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
           <div className="form-group">
@@ -1293,7 +1385,7 @@ function SiniestroForm({
               type="text"
               value={formData.tercero_dni || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, tercero_dni: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
           <div className="form-group">
@@ -1302,7 +1394,7 @@ function SiniestroForm({
               type="text"
               value={formData.tercero_telefono || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, tercero_telefono: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
         </div>
@@ -1313,7 +1405,7 @@ function SiniestroForm({
               type="text"
               value={formData.tercero_vehiculo || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, tercero_vehiculo: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
           <div className="form-group">
@@ -1322,7 +1414,7 @@ function SiniestroForm({
               type="text"
               value={formData.tercero_seguro || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, tercero_seguro: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
           <div className="form-group">
@@ -1331,7 +1423,7 @@ function SiniestroForm({
               type="text"
               value={formData.tercero_poliza || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, tercero_poliza: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
         </div>
@@ -1346,7 +1438,7 @@ function SiniestroForm({
             <select
               value={formData.seguro_id || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, seguro_id: e.target.value || undefined }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             >
               <option value="">Seleccionar seguro</option>
               {seguros.map(s => (
@@ -1360,7 +1452,7 @@ function SiniestroForm({
               type="text"
               value={formData.nro_siniestro_seguro || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, nro_siniestro_seguro: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
         </div>
@@ -1372,7 +1464,7 @@ function SiniestroForm({
               value={formData.carpeta_drive_url || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, carpeta_drive_url: e.target.value }))}
               placeholder="https://drive.google.com/..."
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
           <div className="form-group">
@@ -1383,7 +1475,7 @@ function SiniestroForm({
                   type="checkbox"
                   checked={formData.enviado_abogada}
                   onChange={(e) => setFormData(prev => ({ ...prev, enviado_abogada: e.target.checked }))}
-                  disabled={disabled}
+                  disabled={isFieldDisabled('other')}
                 />
                 <span>Enviado a abogada</span>
               </label>
@@ -1392,7 +1484,7 @@ function SiniestroForm({
                   type="checkbox"
                   checked={formData.enviado_alliance}
                   onChange={(e) => setFormData(prev => ({ ...prev, enviado_alliance: e.target.checked }))}
-                  disabled={disabled}
+                  disabled={isFieldDisabled('other')}
                 />
                 <span>Enviado a Rentadora</span>
               </label>
@@ -1412,7 +1504,7 @@ function SiniestroForm({
               value={formData.presupuesto_real || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, presupuesto_real: Number(e.target.value) || undefined }))}
               placeholder="0"
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
           <div className="form-group">
@@ -1422,7 +1514,7 @@ function SiniestroForm({
               value={formData.presupuesto_enviado_seguro || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, presupuesto_enviado_seguro: Number(e.target.value) || undefined }))}
               placeholder="0"
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
         </div>
@@ -1434,7 +1526,7 @@ function SiniestroForm({
               value={formData.presupuesto_aprobado_seguro || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, presupuesto_aprobado_seguro: Number(e.target.value) || undefined }))}
               placeholder="0"
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
           <div className="form-group">
@@ -1444,7 +1536,7 @@ function SiniestroForm({
               value={formData.total_pagado || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, total_pagado: Number(e.target.value) || undefined }))}
               placeholder="0"
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
         </div>
@@ -1455,7 +1547,7 @@ function SiniestroForm({
               type="date"
               value={formData.fecha_pago_estimada || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, fecha_pago_estimada: e.target.value }))}
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
           <div className="form-group">
@@ -1466,7 +1558,7 @@ function SiniestroForm({
               value={formData.porcentaje_abogada || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, porcentaje_abogada: Number(e.target.value) || undefined }))}
               placeholder="0"
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
         </div>
@@ -1481,7 +1573,7 @@ function SiniestroForm({
               value={formData.observaciones || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, observaciones: e.target.value }))}
               placeholder="Notas adicionales..."
-              disabled={disabled}
+              disabled={isFieldDisabled('other')}
             />
           </div>
         </div>
@@ -1494,9 +1586,12 @@ function SiniestroForm({
 interface SiniestroDetailViewProps {
   siniestro: SiniestroCompleto
   onEdit: () => void
+  onReload: () => void
 }
 
-function SiniestroDetailView({ siniestro, onEdit }: SiniestroDetailViewProps) {
+function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailViewProps) {
+  const [activeTab, setActiveTab] = useState<'info' | 'reparacion'>('info')
+
   function formatMoney(value: number | undefined | null) {
     if (!value) return '-'
     return new Intl.NumberFormat('es-AR', {
@@ -1524,9 +1619,19 @@ function SiniestroDetailView({ siniestro, onEdit }: SiniestroDetailViewProps) {
             <h3 className="detail-title">
               {siniestro.vehiculo_patente || 'Sin patente'} - {siniestro.categoria_nombre}
             </h3>
-            <span className={`estado-badge estado-${siniestro.estado_color}`}>
-              {siniestro.estado_nombre}
-            </span>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+              <span className={`estado-badge estado-${siniestro.estado_color}`}>
+                {siniestro.estado_nombre}
+              </span>
+              {siniestro.dias_siniestrado !== undefined && (
+                <span className="dias-badge">
+                  <Clock size={12} /> {siniestro.dias_siniestrado} dias
+                </span>
+              )}
+              {(siniestro as any).habilitado_circular === false && (
+                <span className="no-circular-badge">No habilitado</span>
+              )}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {siniestro.carpeta_drive_url && (
@@ -1549,6 +1654,24 @@ function SiniestroDetailView({ siniestro, onEdit }: SiniestroDetailViewProps) {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="detail-tabs">
+        <button
+          className={`detail-tab ${activeTab === 'info' ? 'active' : ''}`}
+          onClick={() => setActiveTab('info')}
+        >
+          Informacion General
+        </button>
+        <button
+          className={`detail-tab ${activeTab === 'reparacion' ? 'active' : ''}`}
+          onClick={() => setActiveTab('reparacion')}
+        >
+          Ticket de Reparacion
+          {siniestro.reparacion_id && <span className="tab-dot" />}
+        </button>
+      </div>
+
+      {activeTab === 'info' ? (
       <div className="detail-cards">
         <div className="detail-card">
           <div className="detail-card-title">Información General</div>
@@ -1646,33 +1769,48 @@ function SiniestroDetailView({ siniestro, onEdit }: SiniestroDetailViewProps) {
             <span className="detail-item-value monto monto-positivo">{formatMoney(siniestro.total_pagado)}</span>
           </div>
         </div>
+
+        {/* Descripción y Relato */}
+        {(siniestro.descripcion_danos || siniestro.relato) && (
+          <div className="detail-card" style={{ gridColumn: '1 / -1' }}>
+            <div className="detail-card-title">Descripcion</div>
+            {siniestro.descripcion_danos && (
+              <div style={{ marginBottom: '12px' }}>
+                <strong style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Danos:</strong>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>{siniestro.descripcion_danos}</p>
+              </div>
+            )}
+            {siniestro.relato && (
+              <div>
+                <strong style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Relato:</strong>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>{siniestro.relato}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Observaciones */}
+        {siniestro.observaciones && (
+          <div className="detail-card" style={{ gridColumn: '1 / -1' }}>
+            <div className="detail-card-title">Observaciones</div>
+            <p style={{ margin: 0, fontSize: '13px' }}>{siniestro.observaciones}</p>
+          </div>
+        )}
       </div>
-
-      {/* Descripción y Relato */}
-      {(siniestro.descripcion_danos || siniestro.relato) && (
-        <div className="detail-card" style={{ gridColumn: '1 / -1' }}>
-          <div className="detail-card-title">Descripción</div>
-          {siniestro.descripcion_danos && (
-            <div style={{ marginBottom: '12px' }}>
-              <strong style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Daños:</strong>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>{siniestro.descripcion_danos}</p>
-            </div>
-          )}
-          {siniestro.relato && (
-            <div>
-              <strong style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Relato:</strong>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>{siniestro.relato}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Observaciones */}
-      {siniestro.observaciones && (
-        <div className="detail-card" style={{ gridColumn: '1 / -1' }}>
-          <div className="detail-card-title">Observaciones</div>
-          <p style={{ margin: 0, fontSize: '13px' }}>{siniestro.observaciones}</p>
-        </div>
+      ) : (
+        <ReparacionTicket
+          siniestroId={siniestro.id}
+          reparacion={siniestro.reparacion_id ? {
+            id: siniestro.reparacion_id,
+            siniestro_id: siniestro.id,
+            taller: siniestro.reparacion_taller,
+            fecha_inicio: siniestro.reparacion_fecha_inicio,
+            fecha_finalizacion: siniestro.reparacion_fecha_finalizacion,
+            estado: siniestro.reparacion_estado || 'INICIADO',
+            observaciones: siniestro.reparacion_observaciones
+          } : null}
+          onSave={onReload}
+        />
       )}
     </div>
   )

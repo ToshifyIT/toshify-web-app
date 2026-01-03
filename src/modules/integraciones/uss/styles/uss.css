@@ -74,10 +74,10 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
   border-radius: 20px;
-  color: #22C55E;
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
 }
@@ -531,15 +531,17 @@
 }
 
 .uss-table th {
-  padding: 12px 16px;
+  padding: 8px 12px;
   text-align: left;
   font-weight: 600;
-  font-size: 12px;
-  color: var(--text-tertiary);
+  font-size: 11px;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.025em;
+  background: var(--table-header-bg);
   border-bottom: 1px solid var(--border-primary);
   white-space: nowrap;
+  user-select: none;
 }
 
 .uss-table th.uss-sortable {
@@ -653,10 +655,11 @@
 }
 
 .uss-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-primary);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--table-border);
   color: var(--text-primary);
   font-size: 13px;
+  vertical-align: middle;
 }
 
 .uss-table tbody tr {
@@ -664,7 +667,11 @@
 }
 
 .uss-table tbody tr:hover {
-  background-color: var(--bg-secondary);
+  background-color: var(--table-row-hover);
+}
+
+.uss-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .uss-patente {

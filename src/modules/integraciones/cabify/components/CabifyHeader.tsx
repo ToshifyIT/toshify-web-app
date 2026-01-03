@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { Calendar, ChevronDown } from 'lucide-react'
+import { Calendar, ChevronDown, Radio } from 'lucide-react'
 import type { WeekOption } from '../types/cabify.types'
 
 // =====================================================
@@ -69,6 +69,12 @@ export function CabifyHeader({
           <div className="cabify-loading-indicator">
             <div className="dt-loading-spinner" style={{ width: 16, height: 16 }} />
             <span>Sincronizando...</span>
+          </div>
+        )}
+        {!isLoading && (
+          <div className="cabify-realtime-indicator">
+            <Radio size={14} className="pulse-icon" />
+            <span>Tiempo real</span>
           </div>
         )}
       </div>

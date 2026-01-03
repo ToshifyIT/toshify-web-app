@@ -68,6 +68,11 @@
   color: var(--text-secondary);
 }
 
+.tabs-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* =====================================================
    STATS
    ===================================================== */
@@ -224,16 +229,17 @@
 }
 
 .incidencias-table th {
-  padding: 10px 12px;
+  padding: 8px 12px;
   text-align: left;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-tertiary);
-  background: var(--bg-secondary);
+  letter-spacing: 0.025em;
+  color: var(--text-secondary);
+  background: var(--table-header-bg);
   border-bottom: 1px solid var(--border-primary);
   white-space: nowrap;
+  user-select: none;
 }
 
 .incidencias-table th.sortable {
@@ -252,19 +258,19 @@
 }
 
 .incidencias-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-primary);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--table-border);
   color: var(--text-primary);
   vertical-align: middle;
 }
 
 .incidencias-table tbody tr {
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.15s;
 }
 
 .incidencias-table tbody tr:hover {
-  background: var(--bg-tertiary);
+  background: var(--table-row-hover);
 }
 
 .incidencias-table tbody tr:last-child td {
@@ -411,72 +417,89 @@
 }
 
 /* =====================================================
-   PAGINATION
+   PAGINATION (estilo homologado con DataTable)
    ===================================================== */
 
 .table-footer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-primary);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pagination-info {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .page-size {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.page-size label {
-  font-size: 12px;
-  color: var(--text-secondary);
+  gap: 6px;
 }
 
 .page-size select {
-  padding: 4px 8px;
+  padding: 5px 8px;
   border: 1px solid var(--border-primary);
   border-radius: 4px;
   font-size: 12px;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   color: var(--text-primary);
+  cursor: pointer;
+}
+
+.page-size select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.page-size span {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .pagination {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .pagination-btn {
-  width: 32px;
-  height: 32px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: all 0.15s;
+  min-width: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-primary);
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s;
 }
 
 .pagination-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
 
 .pagination-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .page-info {
   font-size: 12px;
   color: var(--text-secondary);
-  min-width: 100px;
-  text-align: center;
+  padding: 0 6px;
 }
 
 /* =====================================================
@@ -503,7 +526,8 @@
   width: 100%;
   max-width: 800px;
   max-height: 90vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
 }
 
@@ -513,10 +537,9 @@
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-primary);
-  position: sticky;
-  top: 0;
   background: var(--bg-primary);
-  z-index: 1;
+  flex-shrink: 0;
+  border-radius: 12px 12px 0 0;
 }
 
 .modal-header h2 {
@@ -546,6 +569,9 @@
 
 .modal-body {
   padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .modal-footer {
@@ -554,9 +580,9 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  position: sticky;
-  bottom: 0;
   background: var(--bg-primary);
+  flex-shrink: 0;
+  border-radius: 0 0 12px 12px;
 }
 
 /* =====================================================
@@ -989,24 +1015,31 @@
 }
 
 .penalidades-table th {
-  padding: 10px 12px;
+  padding: 8px 12px;
   text-align: left;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--text-tertiary);
-  background: var(--bg-secondary);
+  letter-spacing: 0.025em;
+  color: var(--text-secondary);
+  background: var(--table-header-bg);
   border-bottom: 1px solid var(--border-primary);
+  user-select: none;
 }
 
 .penalidades-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-primary);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--table-border);
   color: var(--text-primary);
+  vertical-align: middle;
 }
 
 .penalidades-table tbody tr:hover {
-  background: var(--bg-tertiary);
+  background: var(--table-row-hover);
+}
+
+.penalidades-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 /* =====================================================

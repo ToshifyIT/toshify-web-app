@@ -78,6 +78,24 @@
   50% { opacity: 0.6; }
 }
 
+/* Indicador de tiempo real */
+.cabify-realtime-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 20px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cabify-realtime-indicator .pulse-icon {
+  animation: pulse 2s ease-in-out infinite;
+}
+
 /* Date Range Picker - Dropdown Style */
 .cabify-date-picker-wrapper {
   position: relative;
@@ -172,33 +190,32 @@
   cursor: not-allowed;
 }
 
-/* Info Card */
+/* Info Card - Estilo pill como indicador de tiempo real */
 .cabify-info-card {
-  border-radius: 6px;
-  padding: 8px 12px;
-  margin-bottom: 10px;
-  font-size: 13px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 20px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 10px;
 }
 
-.cabify-info-card.historical {
-  background-color: var(--badge-green-bg);
-  border: 1px solid var(--color-success-light);
-  color: var(--badge-green-text);
-}
-
-.cabify-info-card.api {
-  background-color: var(--badge-blue-bg);
-  border: 1px solid var(--color-info-light);
-  color: var(--badge-blue-text);
-}
-
+.cabify-info-card.historical,
+.cabify-info-card.api,
 .cabify-info-card.hybrid {
-  background-color: var(--badge-yellow-bg);
-  border: 1px solid var(--color-warning);
-  color: var(--badge-yellow-text);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-primary);
+}
+
+.cabify-info-card svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
 }
 
 .cabify-info-card .auto-sync {
@@ -358,11 +375,11 @@
 }
 
 .cabify-top-card.mejores {
-  border-top: 4px solid var(--color-success);
+  border-top: 3px solid var(--border-secondary);
 }
 
 .cabify-top-card.peores {
-  border-top: 4px solid var(--color-danger);
+  border-top: 3px solid var(--border-secondary);
 }
 
 .cabify-top-title {
@@ -373,13 +390,13 @@
 }
 
 .cabify-top-title.mejores {
-  background: linear-gradient(to right, var(--badge-green-bg), var(--color-success-light));
-  color: var(--badge-green-text);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .cabify-top-title.peores {
-  background: linear-gradient(to right, var(--badge-red-bg), var(--color-danger-light));
-  color: var(--badge-red-text);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .cabify-top-list {
@@ -462,11 +479,11 @@
 }
 
 .cabify-top-amount.mejores {
-  color: var(--color-success);
+  color: var(--text-primary);
 }
 
 .cabify-top-amount.peores {
-  color: var(--color-danger);
+  color: var(--text-primary);
 }
 
 .cabify-top-empty {
@@ -498,15 +515,15 @@
 }
 
 .cabify-accordion-card.estadisticas {
-  border-top: 4px solid var(--color-purple);
+  border-top: 3px solid var(--border-secondary);
 }
 
 .cabify-accordion-card.mejores {
-  border-top: 4px solid var(--color-success);
+  border-top: 3px solid var(--border-secondary);
 }
 
 .cabify-accordion-card.peores {
-  border-top: 4px solid var(--color-danger);
+  border-top: 3px solid var(--border-secondary);
 }
 
 .cabify-accordion-header {
@@ -524,19 +541,19 @@
 }
 
 .cabify-accordion-header.mejores {
-  background: linear-gradient(to right, var(--badge-green-bg), var(--color-success-light));
+  background: var(--bg-secondary);
 }
 
 .cabify-accordion-header.mejores:hover {
-  background: var(--color-success-light);
+  background: var(--table-row-hover);
 }
 
 .cabify-accordion-header.peores {
-  background: linear-gradient(to right, var(--badge-red-bg), var(--color-danger-light));
+  background: var(--bg-secondary);
 }
 
 .cabify-accordion-header.peores:hover {
-  background: var(--color-danger-light);
+  background: var(--table-row-hover);
 }
 
 .cabify-accordion-title {
@@ -570,8 +587,8 @@
 }
 
 .cabify-stat-card.highlight-green {
-  background: linear-gradient(135deg, var(--badge-green-bg) 0%, var(--color-success-light) 100%);
-  border-color: var(--color-success-light);
+  background: var(--bg-tertiary);
+  border-color: var(--border-primary);
 }
 
 .cabify-stat-value {
@@ -582,7 +599,7 @@
 }
 
 .cabify-stat-card.highlight-green .cabify-stat-value {
-  color: var(--color-success);
+  color: var(--text-primary);
 }
 
 .cabify-stat-label {
@@ -705,14 +722,15 @@
 }
 
 .cabify-toggle-btn.active {
-  background: var(--color-purple);
-  border-color: var(--color-purple);
-  color: var(--text-inverse);
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .cabify-toggle-btn.active:hover {
-  background: var(--color-purple-dark);
-  border-color: var(--color-purple-dark);
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
 }
 
 /* ==========================================
@@ -896,16 +914,9 @@
   }
 
   .cabify-info-card {
-    padding: 10px 12px;
-    font-size: 12px;
+    padding: 6px 10px;
+    font-size: 11px;
     margin-bottom: 8px;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-
-  .cabify-info-card .auto-sync {
-    margin-left: 0;
   }
 
   .cabify-search-bar {
