@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, Users, Filter, TrendingUp, UserX } from 'lucide-react'
+import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, Filter, TrendingUp } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
@@ -694,25 +694,18 @@ export function AsignacionesActivasModule() {
               <span className="stat-label">Total Flota</span>
             </div>
           </div>
-          <div className="stat-card" title={`${stats.vehiculos} vehículos tienen asignación activa`}>
+          <div className="stat-card" title="Vehículos con asignación activa">
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.vehiculos}</span>
-              <span className="stat-label">Vehículos</span>
+              <span className="stat-label">Vehículos Activos</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" title={`${stats.cuposOcupados} ocupados de ${stats.cuposTotales} cupos`}>
             <ClipboardList size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.cuposTotales}</span>
-              <span className="stat-label">Cupos Totales</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <UserX size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.cuposDisponibles}</span>
-              <span className="stat-label">Cupos Disponibles</span>
+              <span className="stat-value">{stats.cuposOcupados}/{stats.cuposTotales}</span>
+              <span className="stat-label">Cupos</span>
             </div>
           </div>
           <div className="stat-card" title={`Diurno: ${stats.vacantesD} | Nocturno: ${stats.vacantesN}`}>
@@ -722,25 +715,18 @@ export function AsignacionesActivasModule() {
               <span className="stat-label">Turnos Vacantes</span>
             </div>
           </div>
-          <div className="stat-card">
-            <Users size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.cuposOcupados}</span>
-              <span className="stat-label">Cupos Ocupados</span>
-            </div>
-          </div>
-          <div className="stat-card" title={`${stats.cuposOcupados} ocupados de ${stats.cuposTotales} totales`}>
+          <div className="stat-card" title={`${stats.cuposOcupados} cupos ocupados de ${stats.cuposTotales} totales`}>
             <TrendingUp size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.porcentajeOcupacionGeneral}%</span>
-              <span className="stat-label">% Ocup. General</span>
+              <span className="stat-label">% Ocupación</span>
             </div>
           </div>
-          <div className="stat-card" title={`${stats.vehiculosOcupadosOperacionales} vehículos ocupados de ${stats.vehiculosOperacionales} disponibles (excluye vehículos en reparación/mantenimiento)`}>
+          <div className="stat-card" title={`${stats.vehiculos} vehículos activos de ${stats.totalFlota} en flota`}>
             <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
-              <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionOperacional}%</span>
-              <span className="stat-label">% Ocup. Operacional</span>
+              <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionFlota}%</span>
+              <span className="stat-label">% Operatividad</span>
             </div>
           </div>
         </div>

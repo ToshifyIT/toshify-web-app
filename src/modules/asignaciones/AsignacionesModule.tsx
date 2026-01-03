@@ -65,6 +65,13 @@ export function AsignacionesModule() {
   const canDelete = canDeleteInMenu('asignaciones')
 
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
+  const [vehiculosSinAsignacion, setVehiculosSinAsignacion] = useState<Array<{
+    id: string
+    patente: string
+    marca: string
+    modelo: string
+    anio: number
+  }>>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showWizard, setShowWizard] = useState(false)
@@ -296,7 +303,24 @@ export function AsignacionesModule() {
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
-      setAsignaciones(data || [])
+      const asignacionesData = data as any[] || []
+      setAsignaciones(asignacionesData)
+
+      // Cargar vehículos sin asignación activa
+      const vehiculosConAsignacionActiva = new Set(
+        asignacionesData
+          .filter((a: any) => a.estado === 'activa' || a.estado === 'activo')
+          .map((a: any) => a.vehiculo_id)
+      )
+
+      const { data: todosVehiculos } = await supabase
+        .from('vehiculos')
+        .select('id, patente, marca, modelo, anio')
+        .order('patente')
+
+      const vehiculosList = todosVehiculos as any[] || []
+      const sinAsignacion = vehiculosList.filter((v: any) => !vehiculosConAsignacionActiva.has(v.id))
+      setVehiculosSinAsignacion(sinAsignacion)
     } catch (err: any) {
       console.error('Error loading asignaciones:', err)
       setError(err.message || 'Error al cargar las asignaciones')
@@ -384,7 +408,39 @@ export function AsignacionesModule() {
 
   // Procesar asignaciones - UNA fila por asignación
   const expandedAsignaciones = useMemo<ExpandedAsignacion[]>(() => {
-    return filteredAsignaciones.map((asignacion): ExpandedAsignacion => {
+    // Primero: vehículos sin asignación (solo si no hay filtros de estado activos)
+    const vehiculosSinAsignarRows: ExpandedAsignacion[] = (!statusFilter || statusFilter === 'sin_asignar')
+      ? vehiculosSinAsignacion
+          .filter(v => !vehicleFilter || v.patente.toLowerCase().includes(vehicleFilter.toLowerCase()))
+          .map(v => ({
+            id: `sin-asignar-${v.id}`,
+            codigo: '-',
+            vehiculo_id: v.id,
+            conductor_id: '',
+            fecha_inicio: '',
+            fecha_fin: null,
+            modalidad: '',
+            horario: '',
+            estado: 'sin_asignar',
+            notas: null,
+            created_at: '',
+            vehiculos: {
+              patente: v.patente,
+              marca: v.marca,
+              modelo: v.modelo
+            },
+            conductoresTurno: null,
+            conductorCargo: null
+          }))
+      : []
+
+    // Luego: asignaciones activas con vacantes (TURNO con menos de 2 conductores)
+    const asignacionesConVacante = filteredAsignaciones
+      .filter(a => (a.estado === 'activa' || a.estado === 'activo') && a.horario === 'TURNO')
+      .filter(a => (a.asignaciones_conductores?.length || 0) < 2)
+
+    // Resto de asignaciones filtradas
+    const asignacionesProcesadas = filteredAsignaciones.map((asignacion): ExpandedAsignacion => {
       const conductores = asignacion.asignaciones_conductores || []
 
       // Para modalidad TURNO: extraer conductor diurno y nocturno
@@ -422,7 +478,22 @@ export function AsignacionesModule() {
         } : null
       }
     })
-  }, [filteredAsignaciones])
+
+    // Ordenar: sin asignar primero, luego vacantes, luego el resto
+    const vacantesIds = new Set(asignacionesConVacante.map(a => a.id))
+    const ordenado = asignacionesProcesadas.sort((a, b) => {
+      const aEsVacante = vacantesIds.has(a.id) ? 0 : 1
+      const bEsVacante = vacantesIds.has(b.id) ? 0 : 1
+      return aEsVacante - bEsVacante
+    })
+
+    // Si filtro es 'sin_asignar', solo mostrar vehículos sin asignación
+    if (statusFilter === 'sin_asignar') {
+      return vehiculosSinAsignarRows
+    }
+
+    return [...vehiculosSinAsignarRows, ...ordenado]
+  }, [filteredAsignaciones, vehiculosSinAsignacion, statusFilter, vehicleFilter])
 
   // Estadísticas para los stat cards (solo programadas del listado actual)
   const programadasCount = useMemo(() => {
@@ -648,9 +719,21 @@ export function AsignacionesModule() {
       programado: 'dt-badge dt-badge-yellow',
       activa: 'dt-badge dt-badge-green',
       finalizada: 'dt-badge dt-badge-blue',
-      cancelada: 'dt-badge dt-badge-red'
+      cancelada: 'dt-badge dt-badge-red',
+      sin_asignar: 'dt-badge dt-badge-orange'
     }
     return classes[status] || 'dt-badge dt-badge-gray'
+  }
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      programado: 'Programado',
+      activa: 'Activa',
+      finalizada: 'Finalizada',
+      cancelada: 'Cancelada',
+      sin_asignar: 'Sin Asignar'
+    }
+    return labels[status] || status
   }
 
   const getHorarioBadgeClass = (horario: string) => {
@@ -925,6 +1008,16 @@ export function AsignacionesModule() {
                 Todos
               </button>
               <button
+                className={`asig-column-filter-option ${statusFilter === 'sin_asignar' ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setStatusFilter('sin_asignar')
+                  setOpenColumnFilter(null)
+                }}
+              >
+                Sin Asignar
+              </button>
+              <button
                 className={`asig-column-filter-option ${statusFilter === 'programado' ? 'selected' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation()
@@ -970,7 +1063,7 @@ export function AsignacionesModule() {
       ),
       cell: ({ row }) => (
         <span className={getStatusBadgeClass(row.original.estado)}>
-          {row.original.estado === 'finalizada' ? 'histórico' : row.original.estado}
+          {getStatusLabel(row.original.estado)}
         </span>
       )
     },
