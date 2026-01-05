@@ -124,13 +124,14 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
-  overflow: visible; /* Permite que los dropdowns de filtros se muestren fuera del contenedor */
+  overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
 
 /* Table Wrapper for horizontal scroll */
 .dt-table-wrapper {
-  overflow: visible; /* Permite que los dropdowns de filtros se muestren */
+  overflow-x: auto;
+  overflow-y: visible;
   -webkit-overflow-scrolling: touch;
 }
 

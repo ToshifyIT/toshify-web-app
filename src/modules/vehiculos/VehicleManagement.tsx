@@ -1,6 +1,6 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Filter } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Filter, Loader2, Briefcase, PaintBucket, Warehouse } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -28,11 +28,13 @@ export function VehicleManagement() {
   // Stats data para tarjetas de resumen
   const [statsData, setStatsData] = useState({
     totalVehiculos: 0,
-    vehiculosDisponibles: 0,
+    vehiculosDisponibles: 0, // PKG_ON_BASE + PKG_OFF_BASE (disponibles en cochera)
     vehiculosEnUso: 0,
-    vehiculosEnTaller: 0,
-    vehiculosFueraServicio: 0,
+    vehiculosTallerMecanico: 0, // TALLER_AXIS, TALLER_ALLIANCE, TALLER_KALZALO, TALLER_BASE_VALIENTE, INSTALACION_GNC
+    vehiculosChapaPintura: 0, // TALLER_CHAPA_PINTURA
+    vehiculosCorporativos: 0, // CORPORATIVO
   })
+  const [statsLoading, setStatsLoading] = useState(true)
 
   // Removed TanStack Table states - now handled by DataTable component
 
@@ -97,6 +99,7 @@ export function VehicleManagement() {
   }, [openColumnFilter])
 
   const loadStatsData = async () => {
+    setStatsLoading(true)
     try {
       // Total de vehículos
       const { count: totalVehiculos } = await supabase
@@ -111,17 +114,14 @@ export function VehicleManagement() {
       const estadoIdMap = new Map<string, string>()
       estadosVeh?.forEach(e => estadoIdMap.set(e.codigo, e.id))
 
-      // Vehículos disponibles (sin asignar, listos para usar: DISPONIBLE + PKG_ON_BASE)
+      // Vehículos disponibles en cochera (solo PKG_ON_BASE - listos para usar)
       let vehiculosDisponibles = 0
-      const disponiblesIds = [
-        estadoIdMap.get('DISPONIBLE'),
-        estadoIdMap.get('PKG_ON_BASE')
-      ].filter(Boolean) as string[]
-      if (disponiblesIds.length > 0) {
+      const disponibleId = estadoIdMap.get('PKG_ON_BASE')
+      if (disponibleId) {
         const { count } = await supabase
           .from('vehiculos')
           .select('*', { count: 'exact', head: true })
-          .in('estado_id', disponiblesIds)
+          .eq('estado_id', disponibleId)
         vehiculosDisponibles = count || 0
       }
 
@@ -136,52 +136,57 @@ export function VehicleManagement() {
         vehiculosEnUso = count || 0
       }
 
-      // Vehículos en taller
-      let vehiculosEnTaller = 0
-      const tallerIds = [
+      // Vehículos en taller mecánico
+      let vehiculosTallerMecanico = 0
+      const tallerMecanicoIds = [
         estadoIdMap.get('TALLER_AXIS'),
-        estadoIdMap.get('TALLER_CHAPA_PINTURA'),
         estadoIdMap.get('TALLER_ALLIANCE'),
         estadoIdMap.get('TALLER_KALZALO'),
         estadoIdMap.get('TALLER_BASE_VALIENTE'),
         estadoIdMap.get('INSTALACION_GNC')
       ].filter(Boolean) as string[]
-      if (tallerIds.length > 0) {
+      if (tallerMecanicoIds.length > 0) {
         const { count } = await supabase
           .from('vehiculos')
           .select('*', { count: 'exact', head: true })
-          .in('estado_id', tallerIds)
-        vehiculosEnTaller = count || 0
+          .in('estado_id', tallerMecanicoIds)
+        vehiculosTallerMecanico = count || 0
       }
 
-      // Vehículos no disponibles (Robo, Destrucción, Jubilado, Retenido, Corporativo, PKG OFF)
-      let vehiculosFueraServicio = 0
-      const noDisponibleIds = [
-        estadoIdMap.get('ROBO'),
-        estadoIdMap.get('DESTRUCCION_TOTAL'),
-        estadoIdMap.get('JUBILADO'),
-        estadoIdMap.get('RETENIDO_COMISARIA'),
-        estadoIdMap.get('CORPORATIVO'),
-        estadoIdMap.get('PKG_OFF_BASE'),
-        estadoIdMap.get('PKG_OFF_FRANCIA')
-      ].filter(Boolean) as string[]
-      if (noDisponibleIds.length > 0) {
+      // Vehículos en taller chapa y pintura
+      let vehiculosChapaPintura = 0
+      const chapaPinturaId = estadoIdMap.get('TALLER_CHAPA_PINTURA')
+      if (chapaPinturaId) {
         const { count } = await supabase
           .from('vehiculos')
           .select('*', { count: 'exact', head: true })
-          .in('estado_id', noDisponibleIds)
-        vehiculosFueraServicio = count || 0
+          .eq('estado_id', chapaPinturaId)
+        vehiculosChapaPintura = count || 0
+      }
+
+      // Vehículos corporativos
+      let vehiculosCorporativos = 0
+      const corporativoId = estadoIdMap.get('CORPORATIVO')
+      if (corporativoId) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado_id', corporativoId)
+        vehiculosCorporativos = count || 0
       }
 
       setStatsData({
         totalVehiculos: totalVehiculos || 0,
         vehiculosDisponibles,
         vehiculosEnUso,
-        vehiculosEnTaller,
-        vehiculosFueraServicio,
+        vehiculosTallerMecanico,
+        vehiculosChapaPintura,
+        vehiculosCorporativos,
       })
     } catch (err) {
       console.error('Error loading stats:', err)
+    } finally {
+      setStatsLoading(false)
     }
   }
 
@@ -514,26 +519,30 @@ export function VehicleManagement() {
     setActiveStatCard(cardType)
 
     // Definir estados para cada categoría
-    const estadosDisponibles = ['DISPONIBLE', 'PKG_ON_BASE']
+    const estadosEnCochera = ['PKG_ON_BASE'] // Solo disponibles (listos para usar)
     const estadosEnUso = ['EN_USO']
-    const estadosTaller = ['TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_BASE_VALIENTE', 'INSTALACION_GNC']
-    const estadosNoDisponible = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'RETENIDO_COMISARIA', 'CORPORATIVO', 'PKG_OFF_BASE', 'PKG_OFF_FRANCIA']
+    const estadosTallerMecanico = ['TALLER_AXIS', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_BASE_VALIENTE', 'INSTALACION_GNC']
+    const estadosChapaPintura = ['TALLER_CHAPA_PINTURA']
+    const estadosCorporativos = ['CORPORATIVO']
 
     switch (cardType) {
       case 'total':
         setEstadoFilter([])
         break
-      case 'disponibles':
-        setEstadoFilter(estadosDisponibles)
+      case 'enCochera':
+        setEstadoFilter(estadosEnCochera)
         break
       case 'enUso':
         setEstadoFilter(estadosEnUso)
         break
-      case 'enTaller':
-        setEstadoFilter(estadosTaller)
+      case 'tallerMecanico':
+        setEstadoFilter(estadosTallerMecanico)
         break
-      case 'noDisponible':
-        setEstadoFilter(estadosNoDisponible)
+      case 'chapaPintura':
+        setEstadoFilter(estadosChapaPintura)
+        break
+      case 'corporativos':
+        setEstadoFilter(estadosCorporativos)
         break
       default:
         setEstadoFilter([])
@@ -938,57 +947,80 @@ export function VehicleManagement() {
         <div className="veh-stats-grid">
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'total' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('total')}
+            onClick={() => !statsLoading && handleStatCardClick('total')}
             title="Click para ver todos"
           >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.totalVehiculos}</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.totalVehiculos}
+              </span>
               <span className="stat-label">Total</span>
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'disponibles' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('disponibles')}
-            title="Click para filtrar: DISPONIBLE + PKG ON"
+            className={`stat-card stat-card-clickable ${activeStatCard === 'enCochera' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('enCochera')}
+            title="Click para filtrar: PKG ON + PKG OFF"
           >
-            <Car size={18} className="stat-icon" />
+            <Warehouse size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.vehiculosDisponibles}</span>
-              <span className="stat-label">Disponibles</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosDisponibles}
+              </span>
+              <span className="stat-label">Disponible</span>
             </div>
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'enUso' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('enUso')}
+            onClick={() => !statsLoading && handleStatCardClick('enUso')}
             title="Click para filtrar: EN USO"
           >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.vehiculosEnUso}</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosEnUso}
+              </span>
               <span className="stat-label">En Uso</span>
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'enTaller' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('enTaller')}
-            title="Click para filtrar: Talleres"
+            className={`stat-card stat-card-clickable ${activeStatCard === 'tallerMecanico' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('tallerMecanico')}
+            title="Click para filtrar: Talleres mecánicos"
           >
             <Wrench size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.vehiculosEnTaller}</span>
-              <span className="stat-label">En Taller</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosTallerMecanico}
+              </span>
+              <span className="stat-label">Taller Mecánico</span>
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'noDisponible' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('noDisponible')}
-            title="Click para filtrar: Robo, destrucción, jubilado, etc."
+            className={`stat-card stat-card-clickable ${activeStatCard === 'chapaPintura' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('chapaPintura')}
+            title="Click para filtrar: Chapa y Pintura"
           >
-            <AlertTriangle size={18} className="stat-icon" />
+            <PaintBucket size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.vehiculosFueraServicio}</span>
-              <span className="stat-label">No Disponible</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosChapaPintura}
+              </span>
+              <span className="stat-label">Chapa y Pintura</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'corporativos' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('corporativos')}
+            title="Click para filtrar: Corporativos"
+          >
+            <Briefcase size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosCorporativos}
+              </span>
+              <span className="stat-label">Corporativos</span>
             </div>
           </div>
         </div>
@@ -1160,7 +1192,7 @@ export function VehicleManagement() {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Tipo GPS</label>
+                <label className="form-label">GPS 1</label>
                 <select
                   className="form-input"
                   value={formData.tipo_gps}
@@ -1174,19 +1206,19 @@ export function VehicleManagement() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">USS (Wialon)</label>
-                <div style={{ display: 'flex', alignItems: 'center', height: '42px' }}>
+                <label className="form-label">GPS 2</label>
+                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
                   <input
                     type="checkbox"
                     checked={formData.gps_uss}
                     onChange={(e) => setFormData({ ...formData, gps_uss: e.target.checked })}
                     disabled={saving}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                   />
-                  <span style={{ marginLeft: '8px', color: formData.gps_uss ? '#10B981' : '#6B7280' }}>
-                    {formData.gps_uss ? 'Sí tiene USS' : 'No tiene USS'}
+                  <span style={{ color: formData.gps_uss ? '#10B981' : 'var(--text-primary)' }}>
+                    USS (Wialon)
                   </span>
-                </div>
+                </label>
               </div>
             </div>
 
@@ -1423,11 +1455,11 @@ export function VehicleManagement() {
                 <div className="detail-value">{(selectedVehiculo as any).tipo_combustible || 'N/A'}</div>
               </div>
               <div>
-                <label className="detail-label">TIPO GPS</label>
+                <label className="detail-label">GPS 1</label>
                 <div className="detail-value">{(selectedVehiculo as any).tipo_gps || 'Sin GPS'}</div>
               </div>
               <div>
-                <label className="detail-label">USS (WIALON)</label>
+                <label className="detail-label">GPS 2 - USS (WIALON)</label>
                 <div className="detail-value" style={{ color: (selectedVehiculo as any).gps_uss ? '#10B981' : 'inherit' }}>
                   {(selectedVehiculo as any).gps_uss ? 'Sí' : 'No'}
                 </div>

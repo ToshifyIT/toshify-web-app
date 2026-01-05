@@ -207,7 +207,7 @@ export function VehiculoWizard({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Tipo GPS</label>
+                <label className="form-label">GPS 1</label>
                 <select
                   className="form-input"
                   value={formData.tipo_gps}
@@ -221,19 +221,19 @@ export function VehiculoWizard({
               </div>
 
               <div className="form-group">
-                <label className="form-label">USS (Wialon)</label>
-                <div style={{ display: 'flex', alignItems: 'center', height: '42px' }}>
+                <label className="form-label">GPS 2</label>
+                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
                   <input
                     type="checkbox"
                     checked={formData.gps_uss}
                     onChange={(e) => setFormData({ ...formData, gps_uss: e.target.checked })}
                     disabled={saving}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                   />
-                  <span style={{ marginLeft: '8px', color: formData.gps_uss ? '#10B981' : '#6B7280' }}>
-                    {formData.gps_uss ? 'Sí tiene USS' : 'No tiene USS'}
+                  <span style={{ color: formData.gps_uss ? '#10B981' : 'var(--text-primary)' }}>
+                    USS (Wialon)
                   </span>
-                </div>
+                </label>
               </div>
             </div>
           </div>
