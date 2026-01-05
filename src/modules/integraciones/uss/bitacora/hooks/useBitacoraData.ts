@@ -131,9 +131,11 @@ export function useBitacoraData() {
     loadAsignaciones()
   }, [loadAsignaciones])
 
-  // Cargar datos
-  const loadData = useCallback(async () => {
-    setQueryState((prev) => ({ ...prev, loading: true, error: null }))
+  // Función interna para cargar datos (con opción de mostrar loading o no)
+  const fetchData = useCallback(async (showLoading: boolean) => {
+    if (showLoading) {
+      setQueryState((prev) => ({ ...prev, loading: true, error: null }))
+    }
 
     try {
       const offset = (page - 1) * pageSize
@@ -170,13 +172,25 @@ export function useBitacoraData() {
         lastUpdate: new Date(),
       })
     } catch (error) {
-      setQueryState({
-        loading: false,
-        error: error instanceof Error ? error.message : 'Error desconocido',
-        lastUpdate: null,
-      })
+      // Solo mostrar error si era una carga con loading visible
+      if (showLoading) {
+        setQueryState({
+          loading: false,
+          error: error instanceof Error ? error.message : 'Error desconocido',
+          lastUpdate: null,
+        })
+      } else {
+        // En actualizaciones silenciosas, solo actualizar lastUpdate
+        setQueryState((prev) => ({ ...prev, lastUpdate: new Date() }))
+      }
     }
   }, [dateRange, page, pageSize, filterPatente, filterConductor, filterEstado, asignaciones])
+
+  // Cargar datos con loading visible (para carga inicial y cambios de filtros)
+  const loadData = useCallback(() => fetchData(true), [fetchData])
+
+  // Cargar datos silenciosamente (para tiempo real, sin parpadeo)
+  const loadDataSilent = useCallback(() => fetchData(false), [fetchData])
 
   // Cargar datos automáticamente al montar
   useEffect(() => {
@@ -211,9 +225,9 @@ export function useBitacoraData() {
           table: 'wialon_bitacora',
         },
         () => {
-          // Cuando hay cambios en la tabla, recargar datos
+          // Cuando hay cambios en la tabla, recargar datos SIN parpadeo
           wialonBitacoraService.clearCache()
-          loadData()
+          loadDataSilent()
         }
       )
       .subscribe()
@@ -221,7 +235,7 @@ export function useBitacoraData() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [dateRange.label, loadData])
+  }, [dateRange.label, loadDataSilent])
 
   // Auto-refresh con intervalo como fallback (cada 30 segundos cuando vemos "Hoy")
   useEffect(() => {
@@ -229,11 +243,11 @@ export function useBitacoraData() {
 
     const intervalId = setInterval(() => {
       wialonBitacoraService.clearCache()
-      loadData()
+      loadDataSilent()
     }, AUTO_REFRESH_INTERVAL)
 
     return () => clearInterval(intervalId)
-  }, [dateRange.label, loadData])
+  }, [dateRange.label, loadDataSilent])
 
   // Cambiar rango de fecha predefinido
   const setDateRangePreset = useCallback((preset: string) => {
