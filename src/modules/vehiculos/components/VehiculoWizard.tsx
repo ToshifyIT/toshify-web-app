@@ -12,8 +12,6 @@ interface VehiculoFormData {
   tipo_vehiculo: string
   tipo_combustible: string
   tipo_gps: string
-  gps_uss: boolean
-  traccar: boolean
   numero_motor: string
   numero_chasis: string
   provisoria: string
@@ -218,38 +216,16 @@ export function VehiculoWizard({
 
             <div className="form-group">
               <label className="form-label">Tipo GPS</label>
-              <input
-                type="text"
+              <select
                 className="form-input"
                 value={formData.tipo_gps}
                 onChange={(e) => setFormData({ ...formData, tipo_gps: e.target.value })}
-                placeholder="GPS Tracker, GPS Satelital..."
                 disabled={saving}
-              />
-            </div>
-
-            <div className="checkbox-group-horizontal">
-              <label className="checkbox-card">
-                <input
-                  type="checkbox"
-                  checked={formData.gps_uss}
-                  onChange={(e) => setFormData({ ...formData, gps_uss: e.target.checked })}
-                  disabled={saving}
-                />
-                <span className="checkbox-card-label">GPS USS</span>
-                <span className="checkbox-card-desc">Integración con USS</span>
-              </label>
-
-              <label className="checkbox-card">
-                <input
-                  type="checkbox"
-                  checked={formData.traccar}
-                  onChange={(e) => setFormData({ ...formData, traccar: e.target.checked })}
-                  disabled={saving}
-                />
-                <span className="checkbox-card-label">Traccar</span>
-                <span className="checkbox-card-desc">Integración con Traccar</span>
-              </label>
+              >
+                <option value="">Sin GPS</option>
+                <option value="Strix">Strix</option>
+                <option value="Traccar">Traccar</option>
+              </select>
             </div>
           </div>
         )
