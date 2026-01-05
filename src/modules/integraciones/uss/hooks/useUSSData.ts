@@ -92,9 +92,11 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
-  // Función principal de carga
-  const loadData = useCallback(async () => {
-    setQueryState((prev) => ({ ...prev, loading: true, error: null }))
+  // Función interna de carga (con opción de mostrar loading o no)
+  const fetchData = useCallback(async (showLoading: boolean) => {
+    if (showLoading) {
+      setQueryState((prev) => ({ ...prev, loading: true, error: null }))
+    }
 
     try {
       // Cargar excesos con filtros y paginación
@@ -132,14 +134,26 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
         lastUpdate: new Date(),
       })
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-      setQueryState({
-        loading: false,
-        error: errorMessage,
-        lastUpdate: null,
-      })
+      // Solo mostrar error si era una carga con loading visible
+      if (showLoading) {
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+        setQueryState({
+          loading: false,
+          error: errorMessage,
+          lastUpdate: null,
+        })
+      } else {
+        // En actualizaciones silenciosas, solo actualizar lastUpdate
+        setQueryState((prev) => ({ ...prev, lastUpdate: new Date() }))
+      }
     }
   }, [dateRange, page, pageSize, patenteFilter, conductorFilter, minExcesoFilter])
+
+  // Cargar datos con loading visible (para carga inicial y cambios de filtros)
+  const loadData = useCallback(() => fetchData(true), [fetchData])
+
+  // Cargar datos silenciosamente (para tiempo real, sin parpadeo)
+  const loadDataSilent = useCallback(() => fetchData(false), [fetchData])
 
   // Cargar más datos
   const loadMore = useCallback(async () => {
@@ -191,8 +205,8 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
           table: 'uss_excesos_velocidad',
         },
         () => {
-          // Cuando hay cambios en la tabla, recargar datos
-          loadData()
+          // Cuando hay cambios en la tabla, recargar datos SIN parpadeo
+          loadDataSilent()
         }
       )
       .subscribe()
@@ -200,18 +214,18 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [isRealtime, loadData])
+  }, [isRealtime, loadDataSilent])
 
   // Auto-refresh con intervalo como fallback (cada 30 segundos cuando vemos datos recientes)
   useEffect(() => {
     if (!isRealtime) return
 
     const intervalId = setInterval(() => {
-      loadData()
+      loadDataSilent()
     }, AUTO_REFRESH_INTERVAL)
 
     return () => clearInterval(intervalId)
-  }, [isRealtime, loadData])
+  }, [isRealtime, loadDataSilent])
 
   return {
     excesos,

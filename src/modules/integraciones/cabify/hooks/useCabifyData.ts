@@ -86,11 +86,108 @@ export function useCabifyData(): UseCabifyDataReturn {
   }, [])
 
   // =====================================================
-  // CARGA DE DATOS
+  // FUNCIONES DE CARGA (definidas antes de los efectos)
   // =====================================================
 
   // Referencia para evitar múltiples recargas simultáneas
   const isReloadingRef = useRef(false)
+
+  const loadAsignaciones = useCallback(async (driverData: CabifyDriver[]): Promise<void> => {
+    const dnis = extractValidDNIs(driverData)
+
+    if (dnis.length === 0) {
+      setAsignaciones(new Map())
+      return
+    }
+
+    const asignacionesMap = await asignacionesService.getAsignacionesByDNIs(dnis)
+    setAsignaciones(asignacionesMap)
+  }, [])
+
+  const executeDataLoad = useCallback(async (week: WeekOption, showLoading: boolean): Promise<void> => {
+    // Solo mostrar loading y vaciar datos si no es actualización silenciosa
+    if (showLoading) {
+      setQueryState((prev) => ({ ...prev, loading: true, error: null }))
+      setDrivers([])
+      setLoadingProgress(INITIAL_LOADING_PROGRESS)
+    }
+
+    // Obtener datos históricos
+    const { drivers: driverData, stats } = await cabifyHistoricalService.getDriversData(
+      week.startDate,
+      week.endDate,
+      {
+        onProgress: showLoading ? (current, total, message) => {
+          setLoadingProgress({ current, total, message })
+        } : undefined,
+      }
+    )
+
+    // Si es la semana actual (weeksAgo === 0) y no hay datos, cargar semana anterior silenciosamente
+    // Solo hacer esto en carga inicial, no en actualizaciones silenciosas
+    if (showLoading && driverData.length === 0 && week.weeksAgo === 0) {
+      // Obtener semanas directamente del servicio (no del estado que puede estar desactualizado)
+      const freshWeeks = cabifyService.getAvailableWeeks(WEEKS_TO_LOAD) as WeekOption[]
+
+      if (freshWeeks.length > 1) {
+        const previousWeek = freshWeeks[1] // Semana anterior
+
+        // Cambiar a la semana anterior directamente (sin popup molesto)
+        setSelectedWeek(previousWeek)
+        return
+      }
+    }
+
+    // Actualizar estado con datos
+    setDrivers(driverData)
+    setDataSource(stats.source)
+    if (showLoading) {
+      setLoadingProgress(INITIAL_LOADING_PROGRESS)
+    }
+
+    // Cargar asignaciones
+    await loadAsignaciones(driverData)
+
+    // Finalizar carga exitosa
+    setQueryState((prev) => ({
+      ...prev,
+      loading: false,
+      lastUpdate: new Date(),
+      error: null,
+    }))
+  }, [loadAsignaciones])
+
+  // Carga con loading visible (para carga inicial o cambio de semana)
+  const loadData = useCallback(async () => {
+    // Early return: No hay semana seleccionada
+    if (!selectedWeek) {
+      return
+    }
+
+    try {
+      await executeDataLoad(selectedWeek, true)
+    } catch (error) {
+      handleLoadError(error)
+    }
+  }, [selectedWeek, executeDataLoad])
+
+  // Carga silenciosa para tiempo real (sin parpadeo)
+  const loadDataSilent = useCallback(async () => {
+    if (!selectedWeek) {
+      return
+    }
+
+    try {
+      await executeDataLoad(selectedWeek, false)
+    } catch (error) {
+      // En modo silencioso, no mostrar popup de error
+      console.error('Error en actualización silenciosa:', error)
+    }
+  }, [selectedWeek, executeDataLoad])
+
+  // =====================================================
+  // EFECTOS DE CARGA DE DATOS
+  // =====================================================
 
   useEffect(() => {
     if (selectedWeek) {
@@ -126,16 +223,16 @@ export function useCabifyData(): UseCabifyDataReturn {
             const startTime = new Date(selectedWeek.startDate).getTime()
             const endTime = new Date(selectedWeek.endDate).getTime()
 
-            // Si el registro está dentro del período seleccionado, recargar
+            // Si el registro está dentro del período seleccionado, recargar SIN parpadeo
             if (recordTime >= startTime && recordTime <= endTime) {
               // Evitar múltiples recargas simultáneas
               if (!isReloadingRef.current) {
                 isReloadingRef.current = true
-                console.log('📡 Realtime: Cambio detectado, actualizando datos...')
+                console.log('📡 Realtime: Cambio detectado, actualizando datos silenciosamente...')
 
                 // Pequeño delay para agrupar múltiples cambios
                 setTimeout(() => {
-                  loadData().finally(() => {
+                  loadDataSilent().finally(() => {
                     isReloadingRef.current = false
                   })
                 }, 500)
@@ -155,81 +252,7 @@ export function useCabifyData(): UseCabifyDataReturn {
       console.log('📡 Realtime: Desuscribiendo...')
       supabase.removeChannel(channel)
     }
-  }, [selectedWeek])
-
-  const loadData = useCallback(async () => {
-    // Early return: No hay semana seleccionada
-    if (!selectedWeek) {
-      return
-    }
-
-    try {
-      await executeDataLoad(selectedWeek)
-    } catch (error) {
-      handleLoadError(error)
-    }
-  }, [selectedWeek])
-
-  const executeDataLoad = async (week: WeekOption): Promise<void> => {
-    // Inicializar estado de carga
-    setQueryState((prev) => ({ ...prev, loading: true, error: null }))
-    setDrivers([])
-    setLoadingProgress(INITIAL_LOADING_PROGRESS)
-
-    // Obtener datos históricos
-    const { drivers: driverData, stats } = await cabifyHistoricalService.getDriversData(
-      week.startDate,
-      week.endDate,
-      {
-        onProgress: (current, total, message) => {
-          setLoadingProgress({ current, total, message })
-        },
-      }
-    )
-
-    // Si es la semana actual (weeksAgo === 0) y no hay datos, cargar semana anterior silenciosamente
-    if (driverData.length === 0 && week.weeksAgo === 0) {
-      // Obtener semanas directamente del servicio (no del estado que puede estar desactualizado)
-      const freshWeeks = cabifyService.getAvailableWeeks(WEEKS_TO_LOAD) as WeekOption[]
-
-      if (freshWeeks.length > 1) {
-        const previousWeek = freshWeeks[1] // Semana anterior
-
-        // Cambiar a la semana anterior directamente (sin popup molesto)
-        setSelectedWeek(previousWeek)
-        return
-      }
-    }
-
-    // Actualizar estado con datos
-    setDrivers(driverData)
-    setDataSource(stats.source)
-    setLoadingProgress(INITIAL_LOADING_PROGRESS)
-
-    // Cargar asignaciones
-    await loadAsignaciones(driverData)
-
-    // Finalizar carga exitosa
-    setQueryState((prev) => ({
-      ...prev,
-      loading: false,
-      lastUpdate: new Date(),
-      error: null,
-    }))
-
-  }
-
-  const loadAsignaciones = async (driverData: CabifyDriver[]): Promise<void> => {
-    const dnis = extractValidDNIs(driverData)
-
-    if (dnis.length === 0) {
-      setAsignaciones(new Map())
-      return
-    }
-
-    const asignacionesMap = await asignacionesService.getAsignacionesByDNIs(dnis)
-    setAsignaciones(asignacionesMap)
-  }
+  }, [selectedWeek, loadDataSilent])
 
   // =====================================================
   // MANEJO DE ERRORES
