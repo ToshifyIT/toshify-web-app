@@ -94,7 +94,9 @@ export function ConductoresModule() {
   const [estadoFilter, setEstadoFilter] = useState('');
   const [turnoFilter, setTurnoFilter] = useState('');
   const [asignacionFilter, setAsignacionFilter] = useState('');
+  const [licenciaVencerFilter, setLicenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
+  const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
 
   // Estados para modal de confirmación de baja
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
@@ -224,6 +226,48 @@ export function ConductoresModule() {
       });
     } catch (err) {
       console.error("Error loading stats:", err);
+    }
+  };
+
+  // Helper para manejar clicks en stat cards
+  const handleStatCardClick = (cardType: string) => {
+    // Limpiar todos los filtros primero
+    setNombreFilter('');
+    setDniFilter('');
+    setCbuFilter('');
+    setEstadoFilter('');
+    setTurnoFilter('');
+    setAsignacionFilter('');
+    setLicenciaVencerFilter(false);
+
+    // Si se hace click en la misma card activa, solo limpiar
+    if (activeStatCard === cardType) {
+      setActiveStatCard(null);
+      return;
+    }
+
+    // Aplicar filtro según el tipo de card
+    setActiveStatCard(cardType);
+    switch (cardType) {
+      case 'total':
+        // No aplicar filtro, mostrar todos
+        setActiveStatCard(null);
+        break;
+      case 'activos':
+        setEstadoFilter('ACTIVO');
+        break;
+      case 'disponibles':
+        setAsignacionFilter('disponible');
+        break;
+      case 'asignados':
+        setAsignacionFilter('asignado');
+        break;
+      case 'baja':
+        setEstadoFilter('BAJA');
+        break;
+      case 'licencias':
+        setLicenciaVencerFilter(true);
+        break;
     }
   };
 
@@ -1048,8 +1092,20 @@ export function ConductoresModule() {
       }
     }
 
+    // Filtro por licencias por vencer (próximos 30 días)
+    if (licenciaVencerFilter) {
+      const hoy = new Date();
+      const en30Dias = new Date();
+      en30Dias.setDate(en30Dias.getDate() + 30);
+      result = result.filter(c => {
+        if (!c.licencia_vencimiento) return false;
+        const fechaVenc = new Date(c.licencia_vencimiento);
+        return fechaVenc >= hoy && fechaVenc <= en30Dias;
+      });
+    }
+
     return result;
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter, licenciaVencerFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {

@@ -43,7 +43,7 @@ export function VehicleManagement() {
   const [patenteFilter, setPatenteFilter] = useState('')
   const [marcaFilter, setMarcaFilter] = useState('')
   const [modeloFilter, setModeloFilter] = useState('')
-  const [estadoFilter, setEstadoFilter] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
@@ -63,6 +63,7 @@ export function VehicleManagement() {
     tipo_vehiculo: '',
     tipo_combustible: '',
     tipo_gps: '',
+    gps_uss: false,
     numero_motor: '',
     numero_chasis: '',
     provisoria: '',
@@ -109,14 +110,17 @@ export function VehicleManagement() {
       const estadoIdMap = new Map<string, string>()
       estadosVeh?.forEach(e => estadoIdMap.set(e.codigo, e.id))
 
-      // Vehículos disponibles
+      // Vehículos disponibles (sin asignar, listos para usar: DISPONIBLE + PKG_ON_BASE)
       let vehiculosDisponibles = 0
-      const estadoDisponibleId = estadoIdMap.get('DISPONIBLE')
-      if (estadoDisponibleId) {
+      const disponiblesIds = [
+        estadoIdMap.get('DISPONIBLE'),
+        estadoIdMap.get('PKG_ON_BASE')
+      ].filter(Boolean) as string[]
+      if (disponiblesIds.length > 0) {
         const { count } = await supabase
           .from('vehiculos')
           .select('*', { count: 'exact', head: true })
-          .eq('estado_id', estadoDisponibleId)
+          .in('estado_id', disponiblesIds)
         vehiculosDisponibles = count || 0
       }
 
@@ -149,20 +153,22 @@ export function VehicleManagement() {
         vehiculosEnTaller = count || 0
       }
 
-      // Vehículos fuera de servicio
+      // Vehículos no disponibles (Robo, Destrucción, Jubilado, Retenido, Corporativo, PKG OFF)
       let vehiculosFueraServicio = 0
-      const fueraServicioIds = [
+      const noDisponibleIds = [
         estadoIdMap.get('ROBO'),
         estadoIdMap.get('DESTRUCCION_TOTAL'),
-        estadoIdMap.get('RETENIDO_COMISARIA'),
         estadoIdMap.get('JUBILADO'),
-        estadoIdMap.get('PKG_OFF_BASE')
+        estadoIdMap.get('RETENIDO_COMISARIA'),
+        estadoIdMap.get('CORPORATIVO'),
+        estadoIdMap.get('PKG_OFF_BASE'),
+        estadoIdMap.get('PKG_OFF_FRANCIA')
       ].filter(Boolean) as string[]
-      if (fueraServicioIds.length > 0) {
+      if (noDisponibleIds.length > 0) {
         const { count } = await supabase
           .from('vehiculos')
           .select('*', { count: 'exact', head: true })
-          .in('estado_id', fueraServicioIds)
+          .in('estado_id', noDisponibleIds)
         vehiculosFueraServicio = count || 0
       }
 
@@ -273,6 +279,7 @@ export function VehicleManagement() {
           tipo_vehiculo: formData.tipo_vehiculo || null,
           tipo_combustible: formData.tipo_combustible || null,
           tipo_gps: formData.tipo_gps || null,
+          gps_uss: formData.gps_uss,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           provisoria: formData.provisoria || null,
@@ -341,6 +348,7 @@ export function VehicleManagement() {
           tipo_vehiculo: formData.tipo_vehiculo || null,
           tipo_combustible: formData.tipo_combustible || null,
           tipo_gps: formData.tipo_gps || null,
+          gps_uss: formData.gps_uss,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           provisoria: formData.provisoria || null,
@@ -440,6 +448,7 @@ export function VehicleManagement() {
       tipo_vehiculo: (vehiculo as any).tipo_vehiculo || '',
       tipo_combustible: (vehiculo as any).tipo_combustible || '',
       tipo_gps: (vehiculo as any).tipo_gps || '',
+      gps_uss: (vehiculo as any).gps_uss || false,
       numero_motor: vehiculo.numero_motor || '',
       numero_chasis: vehiculo.numero_chasis || '',
       provisoria: vehiculo.provisoria || '',
@@ -471,6 +480,7 @@ export function VehicleManagement() {
       tipo_vehiculo: '',
       tipo_combustible: '',
       tipo_gps: '',
+      gps_uss: false,
       numero_motor: '',
       numero_chasis: '',
       provisoria: '',
@@ -508,9 +518,9 @@ export function VehicleManagement() {
       )
     }
 
-    if (estadoFilter) {
+    if (estadoFilter.length > 0) {
       result = result.filter(v =>
-        v.vehiculos_estados?.codigo === estadoFilter
+        estadoFilter.includes(v.vehiculos_estados?.codigo || '')
       )
     }
 
@@ -689,9 +699,9 @@ export function VehicleManagement() {
         accessorKey: 'vehiculos_estados.codigo',
         header: () => (
           <div className="dt-column-filter">
-            <span>Estado</span>
+            <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${estadoFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado')
@@ -701,17 +711,15 @@ export function VehicleManagement() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'estado' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '200px', maxHeight: '400px', overflowY: 'auto' }}>
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '220px', maxHeight: '400px', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
                 <button
-                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setEstadoFilter('')
-                    setOpenColumnFilter(null)
-                  }}
+                  className="dt-column-filter-option"
+                  onClick={() => setEstadoFilter([])}
+                  style={{ color: estadoFilter.length === 0 ? 'var(--color-primary)' : 'inherit', fontWeight: estadoFilter.length === 0 ? '600' : 'normal' }}
                 >
-                  Todos
+                  ✓ Todos ({vehiculos.length})
                 </button>
+                <div style={{ borderBottom: '1px solid var(--border-primary)', margin: '4px 0' }} />
                 {/* Ordenar estados: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto */}
                 {[...vehiculosEstados].sort((a, b) => {
                   const orden: Record<string, number> = {
@@ -724,19 +732,32 @@ export function VehicleManagement() {
                   const ordenB = orden[b.codigo] || 99
                   if (ordenA !== ordenB) return ordenA - ordenB
                   return (a.descripcion || '').localeCompare(b.descripcion || '')
-                }).map((estado) => (
-                  <button
-                    key={estado.codigo}
-                    className={`dt-column-filter-option ${estadoFilter === estado.codigo ? 'selected' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setEstadoFilter(estado.codigo)
-                      setOpenColumnFilter(null)
-                    }}
-                  >
-                    {estado.descripcion}
-                  </button>
-                ))}
+                }).map((estado) => {
+                  const isSelected = estadoFilter.includes(estado.codigo)
+                  const count = vehiculos.filter(v => v.vehiculos_estados?.codigo === estado.codigo).length
+                  return (
+                    <label
+                      key={estado.codigo}
+                      className="dt-column-filter-option"
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          if (isSelected) {
+                            setEstadoFilter(estadoFilter.filter(c => c !== estado.codigo))
+                          } else {
+                            setEstadoFilter([...estadoFilter, estado.codigo])
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      <span style={{ flex: 1 }}>{estado.descripcion}</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>({count})</span>
+                    </label>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -861,11 +882,11 @@ export function VehicleManagement() {
               <span className="stat-label">Total</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos con estado DISPONIBLE, listos para ser asignados">
+          <div className="stat-card" title="Vehículos disponibles para asignar (DISPONIBLE + PKG ON)">
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosDisponibles}</span>
-              <span className="stat-label">Sin Asignar</span>
+              <span className="stat-label">Disponibles</span>
             </div>
           </div>
           <div className="stat-card" title="Vehículos con asignación activa actualmente">
@@ -882,11 +903,11 @@ export function VehicleManagement() {
               <span className="stat-label">En Taller</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos fuera de servicio (robo, destrucción total, PKG off)">
+          <div className="stat-card" title="Vehículos no disponibles (robo, destrucción, jubilado, PKG off, corporativo)">
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosFueraServicio}</span>
-              <span className="stat-label">Fuera Servicio</span>
+              <span className="stat-label">No Disponible</span>
             </div>
           </div>
         </div>
@@ -1079,6 +1100,22 @@ export function VehicleManagement() {
                   <option value="Strix">Strix</option>
                   <option value="Traccar">Traccar</option>
                 </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">USS (Wialon)</label>
+                <div style={{ display: 'flex', alignItems: 'center', height: '42px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.gps_uss}
+                    onChange={(e) => setFormData({ ...formData, gps_uss: e.target.checked })}
+                    disabled={saving}
+                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                  />
+                  <span style={{ marginLeft: '8px', color: formData.gps_uss ? '#10B981' : '#6B7280' }}>
+                    {formData.gps_uss ? 'Sí tiene USS' : 'No tiene USS'}
+                  </span>
+                </div>
               </div>
             </div>
 

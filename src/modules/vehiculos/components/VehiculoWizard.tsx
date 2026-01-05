@@ -12,6 +12,7 @@ interface VehiculoFormData {
   tipo_vehiculo: string
   tipo_combustible: string
   tipo_gps: string
+  gps_uss: boolean
   numero_motor: string
   numero_chasis: string
   provisoria: string
@@ -214,18 +215,36 @@ export function VehiculoWizard({
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Tipo GPS</label>
-              <select
-                className="form-input"
-                value={formData.tipo_gps}
-                onChange={(e) => setFormData({ ...formData, tipo_gps: e.target.value })}
-                disabled={saving}
-              >
-                <option value="">Sin GPS</option>
-                <option value="Strix">Strix</option>
-                <option value="Traccar">Traccar</option>
-              </select>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Tipo GPS</label>
+                <select
+                  className="form-input"
+                  value={formData.tipo_gps}
+                  onChange={(e) => setFormData({ ...formData, tipo_gps: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Sin GPS</option>
+                  <option value="Strix">Strix</option>
+                  <option value="Traccar">Traccar</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">USS (Wialon)</label>
+                <div style={{ display: 'flex', alignItems: 'center', height: '42px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.gps_uss}
+                    onChange={(e) => setFormData({ ...formData, gps_uss: e.target.checked })}
+                    disabled={saving}
+                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                  />
+                  <span style={{ marginLeft: '8px', color: formData.gps_uss ? '#10B981' : '#6B7280' }}>
+                    {formData.gps_uss ? 'Sí tiene USS' : 'No tiene USS'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )

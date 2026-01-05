@@ -291,38 +291,42 @@ export function AsignacionesModule() {
       setLoading(true)
       setError(null)
 
-      const { data, error: fetchError } = await supabase
-        .from('asignaciones')
-        .select(`
-          *,
-          vehiculos (patente, marca, modelo),
-          conductores (nombres, apellidos, numero_licencia),
-          asignaciones_conductores (
-            id, conductor_id, estado, horario, confirmado, fecha_confirmacion,
-            conductores (nombres, apellidos, numero_licencia)
-          )
-        `)
-        .order('created_at', { ascending: false })
+      // Cargar asignaciones y vehículos en paralelo
+      const [asignacionesResult, vehiculosResult] = await Promise.all([
+        supabase
+          .from('asignaciones')
+          .select(`
+            *,
+            vehiculos (patente, marca, modelo),
+            conductores (nombres, apellidos, numero_licencia),
+            asignaciones_conductores (
+              id, conductor_id, estado, horario, confirmado, fecha_confirmacion,
+              conductores (nombres, apellidos, numero_licencia)
+            )
+          `)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('vehiculos')
+          .select('id, patente, marca, modelo, anio')
+          .order('patente')
+      ])
 
-      if (fetchError) throw fetchError
-      const asignacionesData = data as any[] || []
-      setAsignaciones(asignacionesData)
+      if (asignacionesResult.error) throw asignacionesResult.error
 
-      // Cargar vehículos sin asignación activa
+      const asignacionesData = asignacionesResult.data as any[] || []
+      const vehiculosList = vehiculosResult.data as any[] || []
+
+      // Calcular vehículos sin asignación activa
       const vehiculosConAsignacionActiva = new Set(
         asignacionesData
           .filter((a: any) => a.estado === 'activa' || a.estado === 'activo')
           .map((a: any) => a.vehiculo_id)
       )
-
-      const { data: todosVehiculos } = await supabase
-        .from('vehiculos')
-        .select('id, patente, marca, modelo, anio')
-        .order('patente')
-
-      const vehiculosList = todosVehiculos as any[] || []
       const sinAsignacion = vehiculosList.filter((v: any) => !vehiculosConAsignacionActiva.has(v.id))
+
+      // Actualizar ambos estados juntos para evitar renderizados con datos desincronizados
       setVehiculosSinAsignacion(sinAsignacion)
+      setAsignaciones(asignacionesData)
     } catch (err: any) {
       console.error('Error loading asignaciones:', err)
       setError(err.message || 'Error al cargar las asignaciones')
