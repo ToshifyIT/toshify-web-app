@@ -514,19 +514,24 @@ export function VehicleManagement() {
       )
     }
 
+    // Ordenar por estado: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto
+    const estadoOrden: Record<string, number> = {
+      'EN_USO': 1,
+      'PKG_ON_BASE': 2,
+      'PKG_OFF_BASE': 3,
+      'TALLER_CHAPA_PINTURA': 4,
+    }
+    result = [...result].sort((a, b) => {
+      const ordenA = estadoOrden[a.vehiculos_estados?.codigo || ''] || 99
+      const ordenB = estadoOrden[b.vehiculos_estados?.codigo || ''] || 99
+      if (ordenA !== ordenB) return ordenA - ordenB
+      // Si mismo estado, ordenar por patente
+      return (a.patente || '').localeCompare(b.patente || '')
+    })
+
     return result
   }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, estadoFilter])
 
-  // Obtener lista única de estados para el filtro
-  const uniqueEstados = useMemo(() => {
-    const estados = new Map<string, string>()
-    vehiculos.forEach(v => {
-      if (v.vehiculos_estados?.codigo) {
-        estados.set(v.vehiculos_estados.codigo, v.vehiculos_estados.descripcion || v.vehiculos_estados.codigo)
-      }
-    })
-    return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]))
-  }, [vehiculos])
 
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<VehiculoWithRelations>[]>(
@@ -696,7 +701,7 @@ export function VehicleManagement() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'estado' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px', maxHeight: '250px', overflowY: 'auto' }}>
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '200px', maxHeight: '400px', overflowY: 'auto' }}>
                 <button
                   className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
                   onClick={(e) => {
@@ -707,17 +712,29 @@ export function VehicleManagement() {
                 >
                   Todos
                 </button>
-                {uniqueEstados.map(([codigo, descripcion]) => (
+                {/* Ordenar estados: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto */}
+                {[...vehiculosEstados].sort((a, b) => {
+                  const orden: Record<string, number> = {
+                    'EN_USO': 1,
+                    'PKG_ON_BASE': 2,
+                    'PKG_OFF_BASE': 3,
+                    'TALLER_CHAPA_PINTURA': 4,
+                  }
+                  const ordenA = orden[a.codigo] || 99
+                  const ordenB = orden[b.codigo] || 99
+                  if (ordenA !== ordenB) return ordenA - ordenB
+                  return (a.descripcion || '').localeCompare(b.descripcion || '')
+                }).map((estado) => (
                   <button
-                    key={codigo}
-                    className={`dt-column-filter-option ${estadoFilter === codigo ? 'selected' : ''}`}
+                    key={estado.codigo}
+                    className={`dt-column-filter-option ${estadoFilter === estado.codigo ? 'selected' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation()
-                      setEstadoFilter(codigo)
+                      setEstadoFilter(estado.codigo)
                       setOpenColumnFilter(null)
                     }}
                   >
-                    {descripcion}
+                    {estado.descripcion}
                   </button>
                 ))}
               </div>
@@ -751,27 +768,31 @@ export function VehicleManagement() {
 
           let badgeClass = 'dt-badge dt-badge-solid-gray'
           switch (codigo) {
-            case 'DISPONIBLE':
+            case 'EN_USO':
               badgeClass = 'dt-badge dt-badge-solid-green'
               break
-            case 'EN_USO':
+            case 'DISPONIBLE':
               badgeClass = 'dt-badge dt-badge-solid-amber'
               break
             case 'CORPORATIVO':
               badgeClass = 'dt-badge dt-badge-solid-blue'
               break
             case 'PKG_ON_BASE':
+              badgeClass = 'dt-badge dt-badge-solid-yellow'
+              break
             case 'PKG_OFF_BASE':
             case 'PKG_OFF_FRANCIA':
               badgeClass = 'dt-badge dt-badge-solid-gray'
               break
-            case 'TALLER_AXIS':
             case 'TALLER_CHAPA_PINTURA':
+              badgeClass = 'dt-badge dt-badge-solid-purple'
+              break
+            case 'TALLER_AXIS':
             case 'TALLER_ALLIANCE':
             case 'TALLER_KALZALO':
             case 'TALLER_BASE_VALIENTE':
             case 'INSTALACION_GNC':
-              badgeClass = 'dt-badge dt-badge-solid-yellow'
+              badgeClass = 'dt-badge dt-badge-solid-orange'
               break
             case 'ROBO':
             case 'DESTRUCCION_TOTAL':
@@ -825,7 +846,7 @@ export function VehicleManagement() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, estadoFilter, openColumnFilter, uniqueEstados]
+    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, estadoFilter, openColumnFilter, vehiculosEstados]
   )
 
   return (
@@ -884,6 +905,8 @@ export function VehicleManagement() {
         columns={columns}
         loading={loading}
         error={error}
+        pageSize={100}
+        pageSizeOptions={[50, 100, 200]}
         searchPlaceholder="Buscar por patente, marca, modelo..."
         emptyIcon={<Car size={64} />}
         emptyTitle="No hay vehiculos registrados"
