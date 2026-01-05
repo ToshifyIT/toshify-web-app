@@ -1568,45 +1568,69 @@ export function ConductoresModule() {
 
   return (
     <div className="cond-module">
-      {/* Stats Cards - Estilo Bitácora */}
+      {/* Stats Cards - Estilo Bitácora (Clickeables para filtrar) */}
       <div className="cond-stats">
         <div className="cond-stats-grid">
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === null ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('total')}
+            title="Ver todos los conductores"
+          >
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.totalConductores}</span>
               <span className="stat-label">Total</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'activos' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('activos')}
+            title="Filtrar conductores activos"
+          >
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresActivos}</span>
               <span className="stat-label">Activos</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'disponibles' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('disponibles')}
+            title="Filtrar conductores disponibles (activos sin asignación)"
+          >
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresDisponibles}</span>
               <span className="stat-label">Disponibles</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'asignados' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('asignados')}
+            title="Filtrar conductores asignados"
+          >
             <UserCheck size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresAsignados}</span>
               <span className="stat-label">Asignados</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'baja' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('baja')}
+            title="Filtrar conductores de baja"
+          >
             <UserX size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresBaja}</span>
               <span className="stat-label">Baja</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('licencias')}
+            title="Filtrar licencias por vencer (próximos 30 días)"
+          >
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.licenciasPorVencer}</span>
