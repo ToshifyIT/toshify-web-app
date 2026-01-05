@@ -91,6 +91,23 @@
   white-space: nowrap;
 }
 
+/* Stat Cards Clickeables */
+.veh-stats .stat-card.stat-card-clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.veh-stats .stat-card.stat-card-clickable:hover {
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
+}
+
+.veh-stats .stat-card.stat-card-active {
+  border-color: #DC2626;
+  background: rgba(220, 38, 38, 0.05);
+}
+
 /* Responsive Stats */
 @media (max-width: 1200px) {
   .veh-stats-grid {

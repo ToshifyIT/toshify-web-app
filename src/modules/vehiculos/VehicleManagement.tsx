@@ -45,6 +45,7 @@ export function VehicleManagement() {
   const [modeloFilter, setModeloFilter] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
@@ -60,7 +61,7 @@ export function VehicleManagement() {
     modelo: '',
     anio: new Date().getFullYear(),
     color: '',
-    tipo_vehiculo: '',
+    tipo_vehiculo: 'Auto',
     tipo_combustible: '',
     tipo_gps: '',
     gps_uss: false,
@@ -477,7 +478,7 @@ export function VehicleManagement() {
       modelo: '',
       anio: new Date().getFullYear(),
       color: '',
-      tipo_vehiculo: '',
+      tipo_vehiculo: 'Auto',
       tipo_combustible: '',
       tipo_gps: '',
       gps_uss: false,
@@ -495,6 +496,66 @@ export function VehicleManagement() {
       notas: ''
     })
   }
+
+  // Manejar click en stat cards para filtrar
+  const handleStatCardClick = (cardType: string) => {
+    // Limpiar filtros de columna
+    setPatenteFilter('')
+    setMarcaFilter('')
+    setModeloFilter('')
+
+    // Si hace click en el mismo, desactivar
+    if (activeStatCard === cardType) {
+      setActiveStatCard(null)
+      setEstadoFilter([])
+      return
+    }
+
+    setActiveStatCard(cardType)
+
+    // Definir estados para cada categoría
+    const estadosDisponibles = ['DISPONIBLE', 'PKG_ON_BASE']
+    const estadosEnUso = ['EN_USO']
+    const estadosTaller = ['TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_BASE_VALIENTE', 'INSTALACION_GNC']
+    const estadosNoDisponible = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'RETENIDO_COMISARIA', 'CORPORATIVO', 'PKG_OFF_BASE', 'PKG_OFF_FRANCIA']
+
+    switch (cardType) {
+      case 'total':
+        setEstadoFilter([])
+        break
+      case 'disponibles':
+        setEstadoFilter(estadosDisponibles)
+        break
+      case 'enUso':
+        setEstadoFilter(estadosEnUso)
+        break
+      case 'enTaller':
+        setEstadoFilter(estadosTaller)
+        break
+      case 'noDisponible':
+        setEstadoFilter(estadosNoDisponible)
+        break
+      default:
+        setEstadoFilter([])
+    }
+  }
+
+  // Extraer marcas y modelos únicos para autocomplete
+  const marcasExistentes = useMemo(() => {
+    const marcas = new Set<string>()
+    vehiculos.forEach(v => {
+      if (v.marca) marcas.add(v.marca)
+    })
+    return Array.from(marcas).sort()
+  }, [vehiculos])
+
+  const modelosExistentes = useMemo(() => {
+    const modelos = new Set<string>()
+    vehiculos.forEach(v => {
+      if (v.modelo) modelos.add(v.modelo)
+    })
+    return Array.from(modelos).sort()
+  }, [vehiculos])
 
   // Filtrar vehículos según los filtros de columna
   const filteredVehiculos = useMemo(() => {
@@ -872,38 +933,58 @@ export function VehicleManagement() {
 
   return (
     <div className="veh-module">
-      {/* Stats Cards - Estilo Bitácora */}
+      {/* Stats Cards - Clickeables para filtrar */}
       <div className="veh-stats">
         <div className="veh-stats-grid">
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'total' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('total')}
+            title="Click para ver todos"
+          >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.totalVehiculos}</span>
               <span className="stat-label">Total</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos disponibles para asignar (DISPONIBLE + PKG ON)">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'disponibles' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('disponibles')}
+            title="Click para filtrar: DISPONIBLE + PKG ON"
+          >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosDisponibles}</span>
               <span className="stat-label">Disponibles</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos con asignación activa actualmente">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'enUso' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('enUso')}
+            title="Click para filtrar: EN USO"
+          >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosEnUso}</span>
               <span className="stat-label">En Uso</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos en taller de mecánica o chapa y pintura">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'enTaller' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('enTaller')}
+            title="Click para filtrar: Talleres"
+          >
             <Wrench size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosEnTaller}</span>
               <span className="stat-label">En Taller</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos no disponibles (robo, destrucción, jubilado, PKG off, corporativo)">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'noDisponible' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('noDisponible')}
+            title="Click para filtrar: Robo, destrucción, jubilado, etc."
+          >
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.vehiculosFueraServicio}</span>
@@ -967,6 +1048,8 @@ export function VehicleManagement() {
               formData={formData}
               setFormData={setFormData}
               vehiculosEstados={vehiculosEstados}
+              marcasExistentes={marcasExistentes}
+              modelosExistentes={modelosExistentes}
               onCancel={() => {
                 setShowCreateModal(false)
                 resetForm()
@@ -1018,6 +1101,7 @@ export function VehicleManagement() {
                   value={formData.marca}
                   onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
                   disabled={saving}
+                  placeholder={marcasExistentes.length > 0 ? marcasExistentes.slice(0, 3).join(', ') + '...' : ''}
                 />
               </div>
 
@@ -1029,6 +1113,7 @@ export function VehicleManagement() {
                   value={formData.modelo}
                   onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
                   disabled={saving}
+                  placeholder={modelosExistentes.length > 0 ? modelosExistentes.slice(0, 3).join(', ') + '...' : ''}
                 />
               </div>
             </div>
@@ -1059,32 +1144,18 @@ export function VehicleManagement() {
               </div>
             </div>
 
-            <div className="section-title">Tipo y Características</div>
+            <div className="section-title">Combustible y GPS</div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Tipo</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.tipo_vehiculo}
-                  onChange={(e) => setFormData({ ...formData, tipo_vehiculo: e.target.value })}
-                  disabled={saving}
-                  placeholder="Ej: Camion, Auto, Moto, Utilitario..."
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Tipo Combustible</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.tipo_combustible}
-                  onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
-                  disabled={saving}
-                  placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
-                />
-              </div>
+            <div className="form-group">
+              <label className="form-label">Tipo Combustible</label>
+              <input
+                type="text"
+                className="form-input"
+                value={formData.tipo_combustible}
+                onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
+                disabled={saving}
+                placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
+              />
             </div>
 
             <div className="form-row">
@@ -1303,7 +1374,7 @@ export function VehicleManagement() {
       {/* Modal Ver Detalles */}
       {showDetailsModal && selectedVehiculo && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
             <div className="modal-header">
               <h2>Detalles del Vehículo</h2>
               <button
@@ -1314,83 +1385,128 @@ export function VehicleManagement() {
                 ×
               </button>
             </div>
-            <div className="modal-body">
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '16px',
-              marginBottom: '24px'
-            }}>
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+            {/* Información Básica */}
+            <div className="section-title">Información Básica</div>
+            <div className="details-grid">
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  PATENTE
-                </label>
-                <div className="patente-badge" style={{ display: 'inline-block' }}>
-                  {selectedVehiculo.patente}
-                </div>
+                <label className="detail-label">PATENTE</label>
+                <div className="patente-badge" style={{ display: 'inline-block' }}>{selectedVehiculo.patente}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  ESTADO
-                </label>
-                <span className="badge" style={{ backgroundColor: '#10B981', color: 'white' }}>
-                  {selectedVehiculo.vehiculos_estados?.descripcion || 'N/A'}
-                </span>
+                <label className="detail-label">ESTADO</label>
+                <div className="detail-value">{selectedVehiculo.vehiculos_estados?.descripcion || 'N/A'}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  MARCA
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {selectedVehiculo.marca}
-                </div>
+                <label className="detail-label">MARCA</label>
+                <div className="detail-value">{selectedVehiculo.marca || 'N/A'}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  MODELO
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {selectedVehiculo.modelo}
-                </div>
+                <label className="detail-label">MODELO</label>
+                <div className="detail-value">{selectedVehiculo.modelo || 'N/A'}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  AÑO
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {selectedVehiculo.anio || 'N/A'}
-                </div>
+                <label className="detail-label">AÑO</label>
+                <div className="detail-value">{selectedVehiculo.anio || 'N/A'}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  KILOMETRAJE
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {selectedVehiculo.kilometraje_actual.toLocaleString()} km
+                <label className="detail-label">COLOR</label>
+                <div className="detail-value">{selectedVehiculo.color || 'N/A'}</div>
+              </div>
+            </div>
+
+            {/* Combustible y GPS */}
+            <div className="section-title">Combustible y GPS</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">TIPO COMBUSTIBLE</label>
+                <div className="detail-value">{(selectedVehiculo as any).tipo_combustible || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">TIPO GPS</label>
+                <div className="detail-value">{(selectedVehiculo as any).tipo_gps || 'Sin GPS'}</div>
+              </div>
+              <div>
+                <label className="detail-label">USS (WIALON)</label>
+                <div className="detail-value" style={{ color: (selectedVehiculo as any).gps_uss ? '#10B981' : 'inherit' }}>
+                  {(selectedVehiculo as any).gps_uss ? 'Sí' : 'No'}
                 </div>
               </div>
+            </div>
 
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  FECHA DE CREACIÓN
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {new Date(selectedVehiculo.created_at).toLocaleString('es-AR')}
-                </div>
+            {/* Datos Técnicos */}
+            <div className="section-title">Datos Técnicos</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">NÚMERO MOTOR</label>
+                <div className="detail-value">{selectedVehiculo.numero_motor || 'N/A'}</div>
               </div>
+              <div>
+                <label className="detail-label">NÚMERO CHASIS</label>
+                <div className="detail-value">{selectedVehiculo.numero_chasis || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">PROVISORIA</label>
+                <div className="detail-value">{selectedVehiculo.provisoria || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">KILOMETRAJE</label>
+                <div className="detail-value">{selectedVehiculo.kilometraje_actual?.toLocaleString() || 0} km</div>
+              </div>
+            </div>
 
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  ÚLTIMA ACTUALIZACIÓN
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {new Date(selectedVehiculo.updated_at).toLocaleString('es-AR')}
-                </div>
+            {/* Fechas e Inspecciones */}
+            <div className="section-title">Fechas e Inspecciones</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">FECHA ADQUISICIÓN</label>
+                <div className="detail-value">{selectedVehiculo.fecha_adquisicion ? new Date(selectedVehiculo.fecha_adquisicion).toLocaleDateString('es-AR') : 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">ÚLTIMA INSPECCIÓN</label>
+                <div className="detail-value">{selectedVehiculo.fecha_ulti_inspeccion ? new Date(selectedVehiculo.fecha_ulti_inspeccion).toLocaleDateString('es-AR') : 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">PRÓXIMA INSPECCIÓN</label>
+                <div className="detail-value">{selectedVehiculo.fecha_prox_inspeccion ? new Date(selectedVehiculo.fecha_prox_inspeccion).toLocaleDateString('es-AR') : 'N/A'}</div>
+              </div>
+            </div>
+
+            {/* Seguro */}
+            <div className="section-title">Seguro</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">NÚMERO PÓLIZA</label>
+                <div className="detail-value">{selectedVehiculo.seguro_numero || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">VIGENCIA SEGURO</label>
+                <div className="detail-value">{selectedVehiculo.seguro_vigencia ? new Date(selectedVehiculo.seguro_vigencia).toLocaleDateString('es-AR') : 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">TITULAR</label>
+                <div className="detail-value">{selectedVehiculo.titular || 'N/A'}</div>
+              </div>
+            </div>
+
+            {/* Notas */}
+            {selectedVehiculo.notas && (
+              <>
+                <div className="section-title">Notas</div>
+                <div className="detail-value" style={{ whiteSpace: 'pre-wrap' }}>{selectedVehiculo.notas}</div>
+              </>
+            )}
+
+            {/* Registro */}
+            <div className="section-title">Registro</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">CREADO</label>
+                <div className="detail-value">{new Date(selectedVehiculo.created_at).toLocaleString('es-AR')}</div>
+              </div>
+              <div>
+                <label className="detail-label">ÚLTIMA ACTUALIZACIÓN</label>
+                <div className="detail-value">{new Date(selectedVehiculo.updated_at).toLocaleString('es-AR')}</div>
               </div>
             </div>
             </div>

@@ -31,6 +31,8 @@ interface VehiculoWizardProps {
   formData: VehiculoFormData
   setFormData: React.Dispatch<React.SetStateAction<VehiculoFormData>>
   vehiculosEstados: VehiculoEstado[]
+  marcasExistentes: string[]
+  modelosExistentes: string[]
   onCancel: () => void
   onSubmit: () => void
   saving: boolean
@@ -50,6 +52,8 @@ export function VehiculoWizard({
   formData,
   setFormData,
   vehiculosEstados,
+  marcasExistentes,
+  modelosExistentes,
   onCancel,
   onSubmit,
   saving
@@ -116,7 +120,7 @@ export function VehiculoWizard({
                 className={`form-input ${errors.patente ? 'input-error' : ''}`}
                 value={formData.patente}
                 onChange={(e) => setFormData({ ...formData, patente: e.target.value.toUpperCase() })}
-                placeholder="ABC-123"
+                placeholder="ABC123"
                 disabled={saving}
                 maxLength={10}
               />
@@ -131,7 +135,7 @@ export function VehiculoWizard({
                   className="form-input"
                   value={formData.marca}
                   onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
-                  placeholder="Toyota, Ford, etc."
+                  placeholder={marcasExistentes.length > 0 ? marcasExistentes.slice(0, 3).join(', ') + '...' : 'Toyota, Ford, etc.'}
                   disabled={saving}
                 />
               </div>
@@ -143,7 +147,7 @@ export function VehiculoWizard({
                   className="form-input"
                   value={formData.modelo}
                   onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
-                  placeholder="Hilux, Ranger, etc."
+                  placeholder={modelosExistentes.length > 0 ? modelosExistentes.slice(0, 3).join(', ') + '...' : 'Hilux, Ranger, etc.'}
                   disabled={saving}
                 />
               </div>
@@ -183,36 +187,22 @@ export function VehiculoWizard({
           <div className="wizard-step-content">
             <div className="wizard-step-header">
               <Settings size={20} />
-              <h3>Tipo y Características</h3>
+              <h3>Combustible y GPS</h3>
             </div>
             <p className="step-description">
-              Define el tipo de vehículo, combustible y configuración GPS.
+              Define el tipo de combustible y configuración GPS del vehículo.
             </p>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Tipo de Vehículo</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.tipo_vehiculo}
-                  onChange={(e) => setFormData({ ...formData, tipo_vehiculo: e.target.value })}
-                  placeholder="Auto, Camioneta, Moto..."
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Tipo Combustible</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.tipo_combustible}
-                  onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
-                  placeholder="Nafta, Gasoil, GNC..."
-                  disabled={saving}
-                />
-              </div>
+            <div className="form-group">
+              <label className="form-label">Tipo Combustible</label>
+              <input
+                type="text"
+                className="form-input"
+                value={formData.tipo_combustible}
+                onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
+                placeholder="Nafta, Gasoil, GNC..."
+                disabled={saving}
+              />
             </div>
 
             <div className="form-row">
