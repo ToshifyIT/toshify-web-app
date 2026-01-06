@@ -87,14 +87,19 @@ export function ConductoresModule() {
   const [estadosLicencia, setEstadosLicencia] = useState<LicenciaEstado[]>([]);
   const [tiposLicencia, setTiposLicencia] = useState<LicenciaTipo[]>([]);
 
-  // Column filter states
-  const [nombreFilter, setNombreFilter] = useState('');
-  const [dniFilter, setDniFilter] = useState('');
-  const [cbuFilter, setCbuFilter] = useState('');
-  const [estadoFilter, setEstadoFilter] = useState('');
-  const [turnoFilter, setTurnoFilter] = useState('');
-  const [asignacionFilter, setAsignacionFilter] = useState('');
+  // Column filter states - Multiselect tipo Excel
+  const [nombreFilter, setNombreFilter] = useState<string[]>([]);
+  const [nombreSearch, setNombreSearch] = useState('');
+  const [dniFilter, setDniFilter] = useState<string[]>([]);
+  const [dniSearch, setDniSearch] = useState('');
+  const [cbuFilter, setCbuFilter] = useState<string[]>([]);
+  const [cbuSearch, setCbuSearch] = useState('');
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
+  const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
+  const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
+  const [licenciaVencerFilter, setLicenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
+  const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
 
   // Estados para modal de confirmación de baja
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
@@ -224,6 +229,51 @@ export function ConductoresModule() {
       });
     } catch (err) {
       console.error("Error loading stats:", err);
+    }
+  };
+
+  // Helper para manejar clicks en stat cards
+  const handleStatCardClick = (cardType: string) => {
+    // Limpiar todos los filtros primero
+    setNombreFilter([]);
+    setNombreSearch('');
+    setDniFilter([]);
+    setDniSearch('');
+    setCbuFilter([]);
+    setCbuSearch('');
+    setEstadoFilter([]);
+    setTurnoFilter([]);
+    setAsignacionFilter([]);
+    setLicenciaVencerFilter(false);
+
+    // Si se hace click en la misma card activa, solo limpiar
+    if (activeStatCard === cardType) {
+      setActiveStatCard(null);
+      return;
+    }
+
+    // Aplicar filtro según el tipo de card
+    setActiveStatCard(cardType);
+    switch (cardType) {
+      case 'total':
+        // No aplicar filtro, mostrar todos
+        setActiveStatCard(null);
+        break;
+      case 'activos':
+        setEstadoFilter(['ACTIVO']);
+        break;
+      case 'disponibles':
+        setAsignacionFilter(['disponible']);
+        break;
+      case 'asignados':
+        setAsignacionFilter(['asignado']);
+        break;
+      case 'baja':
+        setEstadoFilter(['BAJA']);
+        break;
+      case 'licencias':
+        setLicenciaVencerFilter(true);
+        break;
     }
   };
 
@@ -1003,53 +1053,141 @@ export function ConductoresModule() {
     }
   };
 
-  // Filtrar conductores según los filtros de columna
+  // Valores únicos para filtros tipo Excel
+  const nombresUnicos = useMemo(() => {
+    const nombres = conductores.map(c => `${c.nombres} ${c.apellidos}`).filter(Boolean);
+    return [...new Set(nombres)].sort();
+  }, [conductores]);
+
+  const dnisUnicos = useMemo(() => {
+    const dnis = conductores.map(c => c.numero_dni).filter(Boolean) as string[];
+    return [...new Set(dnis)].sort();
+  }, [conductores]);
+
+  const cbusUnicos = useMemo(() => {
+    const cbus = conductores.map(c => (c as any).cbu).filter(Boolean) as string[];
+    return [...new Set(cbus)].sort();
+  }, [conductores]);
+
+  const turnosUnicos = ['DIURNO', 'NOCTURNO', 'SIN_PREFERENCIA', 'A_CARGO'];
+  const turnoLabels: Record<string, string> = {
+    'DIURNO': 'Diurno',
+    'NOCTURNO': 'Nocturno',
+    'SIN_PREFERENCIA': 'Sin Preferencia',
+    'A_CARGO': 'A Cargo'
+  };
+
+  // Opciones filtradas por búsqueda
+  const nombresFiltrados = useMemo(() => {
+    if (!nombreSearch) return nombresUnicos;
+    return nombresUnicos.filter(n => n.toLowerCase().includes(nombreSearch.toLowerCase()));
+  }, [nombresUnicos, nombreSearch]);
+
+  const dnisFiltrados = useMemo(() => {
+    if (!dniSearch) return dnisUnicos;
+    return dnisUnicos.filter(d => d.toLowerCase().includes(dniSearch.toLowerCase()));
+  }, [dnisUnicos, dniSearch]);
+
+  const cbusFiltrados = useMemo(() => {
+    if (!cbuSearch) return cbusUnicos;
+    return cbusUnicos.filter(c => c.toLowerCase().includes(cbuSearch.toLowerCase()));
+  }, [cbusUnicos, cbuSearch]);
+
+  // Toggle functions para multiselect
+  const toggleNombreFilter = (nombre: string) => {
+    setNombreFilter(prev =>
+      prev.includes(nombre) ? prev.filter(n => n !== nombre) : [...prev, nombre]
+    );
+  };
+
+  const toggleDniFilter = (dni: string) => {
+    setDniFilter(prev =>
+      prev.includes(dni) ? prev.filter(d => d !== dni) : [...prev, dni]
+    );
+  };
+
+  const toggleCbuFilter = (cbu: string) => {
+    setCbuFilter(prev =>
+      prev.includes(cbu) ? prev.filter(c => c !== cbu) : [...prev, cbu]
+    );
+  };
+
+  const toggleEstadoFilter = (estado: string) => {
+    setEstadoFilter(prev =>
+      prev.includes(estado) ? prev.filter(e => e !== estado) : [...prev, estado]
+    );
+  };
+
+  const toggleTurnoFilter = (turno: string) => {
+    setTurnoFilter(prev =>
+      prev.includes(turno) ? prev.filter(t => t !== turno) : [...prev, turno]
+    );
+  };
+
+  const toggleAsignacionFilter = (asignacion: string) => {
+    setAsignacionFilter(prev =>
+      prev.includes(asignacion) ? prev.filter(a => a !== asignacion) : [...prev, asignacion]
+    );
+  };
+
+  // Filtrar conductores según los filtros de columna (multiselect tipo Excel)
   const filteredConductores = useMemo(() => {
     let result = conductores;
 
-    if (nombreFilter) {
+    if (nombreFilter.length > 0) {
       result = result.filter(c =>
-        `${c.nombres} ${c.apellidos}`.toLowerCase().includes(nombreFilter.toLowerCase())
+        nombreFilter.includes(`${c.nombres} ${c.apellidos}`)
       );
     }
 
-    if (dniFilter) {
+    if (dniFilter.length > 0) {
       result = result.filter(c =>
-        c.numero_dni?.toLowerCase().includes(dniFilter.toLowerCase())
+        dniFilter.includes(c.numero_dni || '')
       );
     }
 
-    if (cbuFilter) {
+    if (cbuFilter.length > 0) {
       result = result.filter(c =>
-        (c as any).cbu?.toLowerCase().includes(cbuFilter.toLowerCase())
+        cbuFilter.includes((c as any).cbu || '')
       );
     }
 
-    if (estadoFilter) {
+    if (estadoFilter.length > 0) {
       result = result.filter(c =>
-        c.conductores_estados?.codigo === estadoFilter
+        estadoFilter.includes(c.conductores_estados?.codigo || '')
       );
     }
 
-    if (turnoFilter) {
+    if (turnoFilter.length > 0) {
       result = result.filter(c =>
-        (c as any).preferencia_turno === turnoFilter
+        turnoFilter.includes((c as any).preferencia_turno || 'SIN_PREFERENCIA')
       );
     }
 
-    if (asignacionFilter) {
-      if (asignacionFilter === 'asignado') {
-        result = result.filter(c => (c as any).vehiculo_asignado);
-      } else if (asignacionFilter === 'disponible') {
-        result = result.filter(c =>
-          !(c as any).vehiculo_asignado &&
-          c.conductores_estados?.codigo?.toLowerCase() === 'activo'
-        );
-      }
+    if (asignacionFilter.length > 0) {
+      result = result.filter(c => {
+        const tieneAsignacion = !!(c as any).vehiculo_asignado;
+        const esActivo = c.conductores_estados?.codigo?.toLowerCase() === 'activo';
+        if (asignacionFilter.includes('asignado') && tieneAsignacion) return true;
+        if (asignacionFilter.includes('disponible') && !tieneAsignacion && esActivo) return true;
+        return false;
+      });
+    }
+
+    // Filtro por licencias por vencer (próximos 30 días)
+    if (licenciaVencerFilter) {
+      const hoy = new Date();
+      const en30Dias = new Date();
+      en30Dias.setDate(en30Dias.getDate() + 30);
+      result = result.filter(c => {
+        if (!c.licencia_vencimiento) return false;
+        const fechaVenc = new Date(c.licencia_vencimiento);
+        return fechaVenc >= hoy && fechaVenc <= en30Dias;
+      });
     }
 
     return result;
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter, licenciaVencerFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -1070,9 +1208,9 @@ export function ConductoresModule() {
         accessorKey: "nombres",
         header: () => (
           <div className="dt-column-filter">
-            <span>Nombre</span>
+            <span>Nombre {nombreFilter.length > 0 && `(${nombreFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${nombreFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${nombreFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'nombre' ? null : 'nombre');
@@ -1082,26 +1220,37 @@ export function ConductoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'nombre' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar nombre..."
-                  value={nombreFilter}
-                  onChange={(e) => setNombreFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={nombreSearch}
+                  onChange={(e) => setNombreSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {nombreFilter && (
+                <div className="dt-excel-filter-list">
+                  {nombresFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    nombresFiltrados.slice(0, 50).map(nombre => (
+                      <label key={nombre} className={`dt-column-filter-checkbox ${nombreFilter.includes(nombre) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={nombreFilter.includes(nombre)}
+                          onChange={() => toggleNombreFilter(nombre)}
+                        />
+                        <span>{nombre}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {nombreFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setNombreFilter('');
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setNombreFilter([]); setNombreSearch(''); }}
                   >
-                    Limpiar
+                    Limpiar ({nombreFilter.length})
                   </button>
                 )}
               </div>
@@ -1117,9 +1266,9 @@ export function ConductoresModule() {
         accessorKey: "numero_dni",
         header: () => (
           <div className="dt-column-filter">
-            <span>DNI</span>
+            <span>DNI {dniFilter.length > 0 && `(${dniFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${dniFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${dniFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'dni' ? null : 'dni');
@@ -1129,26 +1278,37 @@ export function ConductoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'dni' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar DNI..."
-                  value={dniFilter}
-                  onChange={(e) => setDniFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={dniSearch}
+                  onChange={(e) => setDniSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {dniFilter && (
+                <div className="dt-excel-filter-list">
+                  {dnisFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    dnisFiltrados.slice(0, 50).map(dni => (
+                      <label key={dni} className={`dt-column-filter-checkbox ${dniFilter.includes(dni) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={dniFilter.includes(dni)}
+                          onChange={() => toggleDniFilter(dni)}
+                        />
+                        <span>{dni}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {dniFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDniFilter('');
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setDniFilter([]); setDniSearch(''); }}
                   >
-                    Limpiar
+                    Limpiar ({dniFilter.length})
                   </button>
                 )}
               </div>
@@ -1162,9 +1322,9 @@ export function ConductoresModule() {
         accessorKey: "cbu",
         header: () => (
           <div className="dt-column-filter">
-            <span>CBU</span>
+            <span>CBU {cbuFilter.length > 0 && `(${cbuFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${cbuFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${cbuFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'cbu' ? null : 'cbu');
@@ -1174,26 +1334,37 @@ export function ConductoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'cbu' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar CBU..."
-                  value={cbuFilter}
-                  onChange={(e) => setCbuFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={cbuSearch}
+                  onChange={(e) => setCbuSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {cbuFilter && (
+                <div className="dt-excel-filter-list">
+                  {cbusFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    cbusFiltrados.slice(0, 50).map(cbu => (
+                      <label key={cbu} className={`dt-column-filter-checkbox ${cbuFilter.includes(cbu) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={cbuFilter.includes(cbu)}
+                          onChange={() => toggleCbuFilter(cbu)}
+                        />
+                        <span>{cbu}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {cbuFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCbuFilter('');
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setCbuFilter([]); setCbuSearch(''); }}
                   >
-                    Limpiar
+                    Limpiar ({cbuFilter.length})
                   </button>
                 )}
               </div>
@@ -1207,9 +1378,9 @@ export function ConductoresModule() {
         accessorKey: "preferencia_turno",
         header: () => (
           <div className="dt-column-filter">
-            <span>Turno</span>
+            <span>Turno {turnoFilter.length > 0 && `(${turnoFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${turnoFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${turnoFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'turno' ? null : 'turno');
@@ -1219,57 +1390,27 @@ export function ConductoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'turno' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
-                <button
-                  className={`dt-column-filter-option ${turnoFilter === '' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTurnoFilter('');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Todos
-                </button>
-                <button
-                  className={`dt-column-filter-option ${turnoFilter === 'DIURNO' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTurnoFilter('DIURNO');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Diurno
-                </button>
-                <button
-                  className={`dt-column-filter-option ${turnoFilter === 'NOCTURNO' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTurnoFilter('NOCTURNO');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Nocturno
-                </button>
-                <button
-                  className={`dt-column-filter-option ${turnoFilter === 'SIN_PREFERENCIA' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTurnoFilter('SIN_PREFERENCIA');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Sin Preferencia
-                </button>
-                <button
-                  className={`dt-column-filter-option ${turnoFilter === 'A_CARGO' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTurnoFilter('A_CARGO');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  A Cargo
-                </button>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  {turnosUnicos.map(turno => (
+                    <label key={turno} className={`dt-column-filter-checkbox ${turnoFilter.includes(turno) ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={turnoFilter.includes(turno)}
+                        onChange={() => toggleTurnoFilter(turno)}
+                      />
+                      <span>{turnoLabels[turno] || turno}</span>
+                    </label>
+                  ))}
+                </div>
+                {turnoFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => setTurnoFilter([])}
+                  >
+                    Limpiar ({turnoFilter.length})
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1335,9 +1476,9 @@ export function ConductoresModule() {
         accessorKey: "conductores_estados.codigo",
         header: () => (
           <div className="dt-column-filter">
-            <span>Estado</span>
+            <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${estadoFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado');
@@ -1347,30 +1488,27 @@ export function ConductoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'estado' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
-                <button
-                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEstadoFilter('');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Todos
-                </button>
-                {uniqueEstados.map(([codigo, descripcion]) => (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  {uniqueEstados.map(([codigo, descripcion]) => (
+                    <label key={codigo} className={`dt-column-filter-checkbox ${estadoFilter.includes(codigo) ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={estadoFilter.includes(codigo)}
+                        onChange={() => toggleEstadoFilter(codigo)}
+                      />
+                      <span>{descripcion}</span>
+                    </label>
+                  ))}
+                </div>
+                {estadoFilter.length > 0 && (
                   <button
-                    key={codigo}
-                    className={`dt-column-filter-option ${estadoFilter === codigo ? 'selected' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEstadoFilter(codigo);
-                      setOpenColumnFilter(null);
-                    }}
+                    className="dt-column-filter-clear"
+                    onClick={() => setEstadoFilter([])}
                   >
-                    {descripcion}
+                    Limpiar ({estadoFilter.length})
                   </button>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -1395,9 +1533,9 @@ export function ConductoresModule() {
         id: "vehiculo_asignado",
         header: () => (
           <div className="dt-column-filter">
-            <span>Asignación</span>
+            <span>Asignación {asignacionFilter.length > 0 && `(${asignacionFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${asignacionFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${asignacionFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'asignacion' ? null : 'asignacion');
@@ -1407,37 +1545,33 @@ export function ConductoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'asignacion' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
-                <button
-                  className={`dt-column-filter-option ${asignacionFilter === '' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAsignacionFilter('');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Todos
-                </button>
-                <button
-                  className={`dt-column-filter-option ${asignacionFilter === 'asignado' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAsignacionFilter('asignado');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Asignados
-                </button>
-                <button
-                  className={`dt-column-filter-option ${asignacionFilter === 'disponible' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAsignacionFilter('disponible');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Disponibles
-                </button>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  <label className={`dt-column-filter-checkbox ${asignacionFilter.includes('asignado') ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={asignacionFilter.includes('asignado')}
+                      onChange={() => toggleAsignacionFilter('asignado')}
+                    />
+                    <span>Asignados</span>
+                  </label>
+                  <label className={`dt-column-filter-checkbox ${asignacionFilter.includes('disponible') ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={asignacionFilter.includes('disponible')}
+                      onChange={() => toggleAsignacionFilter('disponible')}
+                    />
+                    <span>Disponibles</span>
+                  </label>
+                </div>
+                {asignacionFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => setAsignacionFilter([])}
+                  >
+                    Limpiar ({asignacionFilter.length})
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1507,50 +1641,74 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cbusFiltrados, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
   );
 
   return (
     <div className="cond-module">
-      {/* Stats Cards - Estilo Bitácora */}
+      {/* Stats Cards - Estilo Bitácora (Clickeables para filtrar) */}
       <div className="cond-stats">
         <div className="cond-stats-grid">
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === null ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('total')}
+            title="Ver todos los conductores"
+          >
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.totalConductores}</span>
               <span className="stat-label">Total</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'activos' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('activos')}
+            title="Filtrar conductores activos"
+          >
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresActivos}</span>
               <span className="stat-label">Activos</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'disponibles' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('disponibles')}
+            title="Filtrar conductores disponibles (activos sin asignación)"
+          >
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresDisponibles}</span>
               <span className="stat-label">Disponibles</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'asignados' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('asignados')}
+            title="Filtrar conductores asignados"
+          >
             <UserCheck size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresAsignados}</span>
               <span className="stat-label">Asignados</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'baja' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('baja')}
+            title="Filtrar conductores de baja"
+          >
             <UserX size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresBaja}</span>
               <span className="stat-label">Baja</span>
             </div>
           </div>
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('licencias')}
+            title="Filtrar licencias por vencer (próximos 30 días)"
+          >
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.licenciasPorVencer}</span>

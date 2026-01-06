@@ -254,6 +254,24 @@ export function useCabifyData(): UseCabifyDataReturn {
     }
   }, [selectedWeek, loadDataSilent])
 
+  // Auto-refresh con intervalo como fallback (cada 5 minutos)
+  const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000 // 5 minutos
+  useEffect(() => {
+    if (!selectedWeek) return
+
+    // Solo auto-refresh si es la semana actual (weeksAgo === 0)
+    if (selectedWeek.weeksAgo !== 0) return
+
+    const intervalId = setInterval(() => {
+      if (!isReloadingRef.current) {
+        console.log('⏰ Auto-refresh: Actualizando datos de Cabify...')
+        loadDataSilent()
+      }
+    }, AUTO_REFRESH_INTERVAL)
+
+    return () => clearInterval(intervalId)
+  }, [selectedWeek, loadDataSilent])
+
   // =====================================================
   // MANEJO DE ERRORES
   // =====================================================

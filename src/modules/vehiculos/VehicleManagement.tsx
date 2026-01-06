@@ -1,6 +1,6 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Filter } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Filter, Loader2, Briefcase, PaintBucket, Warehouse } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -28,23 +28,29 @@ export function VehicleManagement() {
   // Stats data para tarjetas de resumen
   const [statsData, setStatsData] = useState({
     totalVehiculos: 0,
-    vehiculosDisponibles: 0,
+    vehiculosDisponibles: 0, // PKG_ON_BASE + PKG_OFF_BASE (disponibles en cochera)
     vehiculosEnUso: 0,
-    vehiculosEnTaller: 0,
-    vehiculosFueraServicio: 0,
+    vehiculosTallerMecanico: 0, // TALLER_AXIS, TALLER_ALLIANCE, TALLER_KALZALO, TALLER_BASE_VALIENTE, INSTALACION_GNC
+    vehiculosChapaPintura: 0, // TALLER_CHAPA_PINTURA
+    vehiculosCorporativos: 0, // CORPORATIVO
   })
+  const [statsLoading, setStatsLoading] = useState(true)
 
   // Removed TanStack Table states - now handled by DataTable component
 
   // Catalog states
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
 
-  // Column filter states
-  const [patenteFilter, setPatenteFilter] = useState('')
-  const [marcaFilter, setMarcaFilter] = useState('')
-  const [modeloFilter, setModeloFilter] = useState('')
-  const [estadoFilter, setEstadoFilter] = useState('')
+  // Column filter states - Multiselect tipo Excel
+  const [patenteFilter, setPatenteFilter] = useState<string[]>([])
+  const [patenteSearch, setPatenteSearch] = useState('')
+  const [marcaFilter, setMarcaFilter] = useState<string[]>([])
+  const [marcaSearch, setMarcaSearch] = useState('')
+  const [modeloFilter, setModeloFilter] = useState<string[]>([])
+  const [modeloSearch, setModeloSearch] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
@@ -60,11 +66,10 @@ export function VehicleManagement() {
     modelo: '',
     anio: new Date().getFullYear(),
     color: '',
-    tipo_vehiculo: '',
+    tipo_vehiculo: 'Auto',
     tipo_combustible: '',
     tipo_gps: '',
     gps_uss: false,
-    traccar: false,
     numero_motor: '',
     numero_chasis: '',
     provisoria: '',
@@ -97,6 +102,7 @@ export function VehicleManagement() {
   }, [openColumnFilter])
 
   const loadStatsData = async () => {
+    setStatsLoading(true)
     try {
       // Total de vehículos
       const { count: totalVehiculos } = await supabase
@@ -111,14 +117,14 @@ export function VehicleManagement() {
       const estadoIdMap = new Map<string, string>()
       estadosVeh?.forEach(e => estadoIdMap.set(e.codigo, e.id))
 
-      // Vehículos disponibles
+      // Vehículos disponibles en cochera (solo PKG_ON_BASE - listos para usar)
       let vehiculosDisponibles = 0
-      const estadoDisponibleId = estadoIdMap.get('DISPONIBLE')
-      if (estadoDisponibleId) {
+      const disponibleId = estadoIdMap.get('PKG_ON_BASE')
+      if (disponibleId) {
         const { count } = await supabase
           .from('vehiculos')
           .select('*', { count: 'exact', head: true })
-          .eq('estado_id', estadoDisponibleId)
+          .eq('estado_id', disponibleId)
         vehiculosDisponibles = count || 0
       }
 
@@ -133,50 +139,57 @@ export function VehicleManagement() {
         vehiculosEnUso = count || 0
       }
 
-      // Vehículos en taller
-      let vehiculosEnTaller = 0
-      const tallerIds = [
+      // Vehículos en taller mecánico
+      let vehiculosTallerMecanico = 0
+      const tallerMecanicoIds = [
         estadoIdMap.get('TALLER_AXIS'),
-        estadoIdMap.get('TALLER_CHAPA_PINTURA'),
         estadoIdMap.get('TALLER_ALLIANCE'),
         estadoIdMap.get('TALLER_KALZALO'),
         estadoIdMap.get('TALLER_BASE_VALIENTE'),
         estadoIdMap.get('INSTALACION_GNC')
       ].filter(Boolean) as string[]
-      if (tallerIds.length > 0) {
+      if (tallerMecanicoIds.length > 0) {
         const { count } = await supabase
           .from('vehiculos')
           .select('*', { count: 'exact', head: true })
-          .in('estado_id', tallerIds)
-        vehiculosEnTaller = count || 0
+          .in('estado_id', tallerMecanicoIds)
+        vehiculosTallerMecanico = count || 0
       }
 
-      // Vehículos fuera de servicio
-      let vehiculosFueraServicio = 0
-      const fueraServicioIds = [
-        estadoIdMap.get('ROBO'),
-        estadoIdMap.get('DESTRUCCION_TOTAL'),
-        estadoIdMap.get('RETENIDO_COMISARIA'),
-        estadoIdMap.get('JUBILADO'),
-        estadoIdMap.get('PKG_OFF_BASE')
-      ].filter(Boolean) as string[]
-      if (fueraServicioIds.length > 0) {
+      // Vehículos en taller chapa y pintura
+      let vehiculosChapaPintura = 0
+      const chapaPinturaId = estadoIdMap.get('TALLER_CHAPA_PINTURA')
+      if (chapaPinturaId) {
         const { count } = await supabase
           .from('vehiculos')
           .select('*', { count: 'exact', head: true })
-          .in('estado_id', fueraServicioIds)
-        vehiculosFueraServicio = count || 0
+          .eq('estado_id', chapaPinturaId)
+        vehiculosChapaPintura = count || 0
+      }
+
+      // Vehículos corporativos
+      let vehiculosCorporativos = 0
+      const corporativoId = estadoIdMap.get('CORPORATIVO')
+      if (corporativoId) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado_id', corporativoId)
+        vehiculosCorporativos = count || 0
       }
 
       setStatsData({
         totalVehiculos: totalVehiculos || 0,
         vehiculosDisponibles,
         vehiculosEnUso,
-        vehiculosEnTaller,
-        vehiculosFueraServicio,
+        vehiculosTallerMecanico,
+        vehiculosChapaPintura,
+        vehiculosCorporativos,
       })
     } catch (err) {
       console.error('Error loading stats:', err)
+    } finally {
+      setStatsLoading(false)
     }
   }
 
@@ -276,7 +289,6 @@ export function VehicleManagement() {
           tipo_combustible: formData.tipo_combustible || null,
           tipo_gps: formData.tipo_gps || null,
           gps_uss: formData.gps_uss,
-          traccar: formData.traccar,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           provisoria: formData.provisoria || null,
@@ -346,7 +358,6 @@ export function VehicleManagement() {
           tipo_combustible: formData.tipo_combustible || null,
           tipo_gps: formData.tipo_gps || null,
           gps_uss: formData.gps_uss,
-          traccar: formData.traccar,
           numero_motor: formData.numero_motor || null,
           numero_chasis: formData.numero_chasis || null,
           provisoria: formData.provisoria || null,
@@ -446,8 +457,7 @@ export function VehicleManagement() {
       tipo_vehiculo: (vehiculo as any).tipo_vehiculo || '',
       tipo_combustible: (vehiculo as any).tipo_combustible || '',
       tipo_gps: (vehiculo as any).tipo_gps || '',
-      gps_uss: vehiculo.gps_uss,
-      traccar: (vehiculo as any).traccar || false,
+      gps_uss: (vehiculo as any).gps_uss || false,
       numero_motor: vehiculo.numero_motor || '',
       numero_chasis: vehiculo.numero_chasis || '',
       provisoria: vehiculo.provisoria || '',
@@ -476,11 +486,10 @@ export function VehicleManagement() {
       modelo: '',
       anio: new Date().getFullYear(),
       color: '',
-      tipo_vehiculo: '',
+      tipo_vehiculo: 'Auto',
       tipo_combustible: '',
       tipo_gps: '',
       gps_uss: false,
-      traccar: false,
       numero_motor: '',
       numero_chasis: '',
       provisoria: '',
@@ -496,47 +505,160 @@ export function VehicleManagement() {
     })
   }
 
-  // Filtrar vehículos según los filtros de columna
+  // Manejar click en stat cards para filtrar
+  const handleStatCardClick = (cardType: string) => {
+    // Limpiar filtros de columna
+    setPatenteFilter([])
+    setPatenteSearch('')
+    setMarcaFilter([])
+    setMarcaSearch('')
+    setModeloFilter([])
+    setModeloSearch('')
+
+    // Si hace click en el mismo, desactivar
+    if (activeStatCard === cardType) {
+      setActiveStatCard(null)
+      setEstadoFilter([])
+      return
+    }
+
+    setActiveStatCard(cardType)
+
+    // Definir estados para cada categoría
+    const estadosEnCochera = ['PKG_ON_BASE'] // Solo disponibles (listos para usar)
+    const estadosEnUso = ['EN_USO']
+    const estadosTallerMecanico = ['TALLER_AXIS', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_BASE_VALIENTE', 'INSTALACION_GNC']
+    const estadosChapaPintura = ['TALLER_CHAPA_PINTURA']
+    const estadosCorporativos = ['CORPORATIVO']
+
+    switch (cardType) {
+      case 'total':
+        setEstadoFilter([])
+        break
+      case 'enCochera':
+        setEstadoFilter(estadosEnCochera)
+        break
+      case 'enUso':
+        setEstadoFilter(estadosEnUso)
+        break
+      case 'tallerMecanico':
+        setEstadoFilter(estadosTallerMecanico)
+        break
+      case 'chapaPintura':
+        setEstadoFilter(estadosChapaPintura)
+        break
+      case 'corporativos':
+        setEstadoFilter(estadosCorporativos)
+        break
+      default:
+        setEstadoFilter([])
+    }
+  }
+
+  // Extraer marcas y modelos únicos para autocomplete
+  const marcasExistentes = useMemo(() => {
+    const marcas = new Set<string>()
+    vehiculos.forEach(v => {
+      if (v.marca) marcas.add(v.marca)
+    })
+    return Array.from(marcas).sort()
+  }, [vehiculos])
+
+  const modelosExistentes = useMemo(() => {
+    const modelos = new Set<string>()
+    vehiculos.forEach(v => {
+      if (v.modelo) modelos.add(v.modelo)
+    })
+    return Array.from(modelos).sort()
+  }, [vehiculos])
+
+  // Valores únicos para filtros tipo Excel
+  const patentesUnicas = useMemo(() => {
+    const patentes = vehiculos.map(v => v.patente).filter(Boolean) as string[]
+    return [...new Set(patentes)].sort()
+  }, [vehiculos])
+
+  // Opciones filtradas por búsqueda
+  const patentesFiltradas = useMemo(() => {
+    if (!patenteSearch) return patentesUnicas
+    return patentesUnicas.filter(p => p.toLowerCase().includes(patenteSearch.toLowerCase()))
+  }, [patentesUnicas, patenteSearch])
+
+  const marcasFiltradas = useMemo(() => {
+    if (!marcaSearch) return marcasExistentes
+    return marcasExistentes.filter(m => m.toLowerCase().includes(marcaSearch.toLowerCase()))
+  }, [marcasExistentes, marcaSearch])
+
+  const modelosFiltrados = useMemo(() => {
+    if (!modeloSearch) return modelosExistentes
+    return modelosExistentes.filter(m => m.toLowerCase().includes(modeloSearch.toLowerCase()))
+  }, [modelosExistentes, modeloSearch])
+
+  // Toggle functions para multiselect
+  const togglePatenteFilter = (patente: string) => {
+    setPatenteFilter(prev =>
+      prev.includes(patente) ? prev.filter(p => p !== patente) : [...prev, patente]
+    )
+  }
+
+  const toggleMarcaFilter = (marca: string) => {
+    setMarcaFilter(prev =>
+      prev.includes(marca) ? prev.filter(m => m !== marca) : [...prev, marca]
+    )
+  }
+
+  const toggleModeloFilter = (modelo: string) => {
+    setModeloFilter(prev =>
+      prev.includes(modelo) ? prev.filter(m => m !== modelo) : [...prev, modelo]
+    )
+  }
+
+  // Filtrar vehículos según los filtros de columna (multiselect tipo Excel)
   const filteredVehiculos = useMemo(() => {
     let result = vehiculos
 
-    if (patenteFilter) {
+    if (patenteFilter.length > 0) {
       result = result.filter(v =>
-        v.patente?.toLowerCase().includes(patenteFilter.toLowerCase())
+        patenteFilter.includes(v.patente || '')
       )
     }
 
-    if (marcaFilter) {
+    if (marcaFilter.length > 0) {
       result = result.filter(v =>
-        v.marca?.toLowerCase().includes(marcaFilter.toLowerCase())
+        marcaFilter.includes(v.marca || '')
       )
     }
 
-    if (modeloFilter) {
+    if (modeloFilter.length > 0) {
       result = result.filter(v =>
-        v.modelo?.toLowerCase().includes(modeloFilter.toLowerCase())
+        modeloFilter.includes(v.modelo || '')
       )
     }
 
-    if (estadoFilter) {
+    if (estadoFilter.length > 0) {
       result = result.filter(v =>
-        v.vehiculos_estados?.codigo === estadoFilter
+        estadoFilter.includes(v.vehiculos_estados?.codigo || '')
       )
     }
+
+    // Ordenar por estado: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto
+    const estadoOrden: Record<string, number> = {
+      'EN_USO': 1,
+      'PKG_ON_BASE': 2,
+      'PKG_OFF_BASE': 3,
+      'TALLER_CHAPA_PINTURA': 4,
+    }
+    result = [...result].sort((a, b) => {
+      const ordenA = estadoOrden[a.vehiculos_estados?.codigo || ''] || 99
+      const ordenB = estadoOrden[b.vehiculos_estados?.codigo || ''] || 99
+      if (ordenA !== ordenB) return ordenA - ordenB
+      // Si mismo estado, ordenar por patente
+      return (a.patente || '').localeCompare(b.patente || '')
+    })
 
     return result
   }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, estadoFilter])
 
-  // Obtener lista única de estados para el filtro
-  const uniqueEstados = useMemo(() => {
-    const estados = new Map<string, string>()
-    vehiculos.forEach(v => {
-      if (v.vehiculos_estados?.codigo) {
-        estados.set(v.vehiculos_estados.codigo, v.vehiculos_estados.descripcion || v.vehiculos_estados.codigo)
-      }
-    })
-    return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]))
-  }, [vehiculos])
 
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<VehiculoWithRelations>[]>(
@@ -545,9 +667,9 @@ export function VehicleManagement() {
         accessorKey: 'patente',
         header: () => (
           <div className="dt-column-filter">
-            <span>Patente</span>
+            <span>Patente {patenteFilter.length > 0 && `(${patenteFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${patenteFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${patenteFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente')
@@ -557,26 +679,37 @@ export function VehicleManagement() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'patente' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar patente..."
-                  value={patenteFilter}
-                  onChange={(e) => setPatenteFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={patenteSearch}
+                  onChange={(e) => setPatenteSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {patenteFilter && (
+                <div className="dt-excel-filter-list">
+                  {patentesFiltradas.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    patentesFiltradas.slice(0, 50).map(patente => (
+                      <label key={patente} className={`dt-column-filter-checkbox ${patenteFilter.includes(patente) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={patenteFilter.includes(patente)}
+                          onChange={() => togglePatenteFilter(patente)}
+                        />
+                        <span>{patente}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {patenteFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setPatenteFilter('')
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setPatenteFilter([]); setPatenteSearch('') }}
                   >
-                    Limpiar
+                    Limpiar ({patenteFilter.length})
                   </button>
                 )}
               </div>
@@ -592,9 +725,9 @@ export function VehicleManagement() {
         accessorKey: 'marca',
         header: () => (
           <div className="dt-column-filter">
-            <span>Marca</span>
+            <span>Marca {marcaFilter.length > 0 && `(${marcaFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${marcaFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${marcaFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'marca' ? null : 'marca')
@@ -604,26 +737,37 @@ export function VehicleManagement() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'marca' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar marca..."
-                  value={marcaFilter}
-                  onChange={(e) => setMarcaFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={marcaSearch}
+                  onChange={(e) => setMarcaSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {marcaFilter && (
+                <div className="dt-excel-filter-list">
+                  {marcasFiltradas.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    marcasFiltradas.slice(0, 50).map(marca => (
+                      <label key={marca} className={`dt-column-filter-checkbox ${marcaFilter.includes(marca) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={marcaFilter.includes(marca)}
+                          onChange={() => toggleMarcaFilter(marca)}
+                        />
+                        <span>{marca}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {marcaFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setMarcaFilter('')
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setMarcaFilter([]); setMarcaSearch('') }}
                   >
-                    Limpiar
+                    Limpiar ({marcaFilter.length})
                   </button>
                 )}
               </div>
@@ -637,9 +781,9 @@ export function VehicleManagement() {
         accessorKey: 'modelo',
         header: () => (
           <div className="dt-column-filter">
-            <span>Modelo</span>
+            <span>Modelo {modeloFilter.length > 0 && `(${modeloFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${modeloFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${modeloFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'modelo' ? null : 'modelo')
@@ -649,26 +793,37 @@ export function VehicleManagement() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'modelo' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar modelo..."
-                  value={modeloFilter}
-                  onChange={(e) => setModeloFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={modeloSearch}
+                  onChange={(e) => setModeloSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {modeloFilter && (
+                <div className="dt-excel-filter-list">
+                  {modelosFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    modelosFiltrados.slice(0, 50).map(modelo => (
+                      <label key={modelo} className={`dt-column-filter-checkbox ${modeloFilter.includes(modelo) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={modeloFilter.includes(modelo)}
+                          onChange={() => toggleModeloFilter(modelo)}
+                        />
+                        <span>{modelo}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {modeloFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setModeloFilter('')
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setModeloFilter([]); setModeloSearch('') }}
                   >
-                    Limpiar
+                    Limpiar ({modeloFilter.length})
                   </button>
                 )}
               </div>
@@ -694,9 +849,9 @@ export function VehicleManagement() {
         accessorKey: 'vehiculos_estados.codigo',
         header: () => (
           <div className="dt-column-filter">
-            <span>Estado</span>
+            <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${estadoFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado')
@@ -706,30 +861,53 @@ export function VehicleManagement() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'estado' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '180px', maxHeight: '250px', overflowY: 'auto' }}>
+              <div className="dt-column-filter-dropdown" style={{ minWidth: '220px', maxHeight: '400px', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
                 <button
-                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setEstadoFilter('')
-                    setOpenColumnFilter(null)
-                  }}
+                  className="dt-column-filter-option"
+                  onClick={() => setEstadoFilter([])}
+                  style={{ color: estadoFilter.length === 0 ? 'var(--color-primary)' : 'inherit', fontWeight: estadoFilter.length === 0 ? '600' : 'normal' }}
                 >
-                  Todos
+                  ✓ Todos ({vehiculos.length})
                 </button>
-                {uniqueEstados.map(([codigo, descripcion]) => (
-                  <button
-                    key={codigo}
-                    className={`dt-column-filter-option ${estadoFilter === codigo ? 'selected' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setEstadoFilter(codigo)
-                      setOpenColumnFilter(null)
-                    }}
-                  >
-                    {descripcion}
-                  </button>
-                ))}
+                <div style={{ borderBottom: '1px solid var(--border-primary)', margin: '4px 0' }} />
+                {/* Ordenar estados: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto */}
+                {[...vehiculosEstados].sort((a, b) => {
+                  const orden: Record<string, number> = {
+                    'EN_USO': 1,
+                    'PKG_ON_BASE': 2,
+                    'PKG_OFF_BASE': 3,
+                    'TALLER_CHAPA_PINTURA': 4,
+                  }
+                  const ordenA = orden[a.codigo] || 99
+                  const ordenB = orden[b.codigo] || 99
+                  if (ordenA !== ordenB) return ordenA - ordenB
+                  return (a.descripcion || '').localeCompare(b.descripcion || '')
+                }).map((estado) => {
+                  const isSelected = estadoFilter.includes(estado.codigo)
+                  const count = vehiculos.filter(v => v.vehiculos_estados?.codigo === estado.codigo).length
+                  return (
+                    <label
+                      key={estado.codigo}
+                      className="dt-column-filter-option"
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          if (isSelected) {
+                            setEstadoFilter(estadoFilter.filter(c => c !== estado.codigo))
+                          } else {
+                            setEstadoFilter([...estadoFilter, estado.codigo])
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      <span style={{ flex: 1 }}>{estado.descripcion}</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>({count})</span>
+                    </label>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -761,27 +939,31 @@ export function VehicleManagement() {
 
           let badgeClass = 'dt-badge dt-badge-solid-gray'
           switch (codigo) {
-            case 'DISPONIBLE':
+            case 'EN_USO':
               badgeClass = 'dt-badge dt-badge-solid-green'
               break
-            case 'EN_USO':
+            case 'DISPONIBLE':
               badgeClass = 'dt-badge dt-badge-solid-amber'
               break
             case 'CORPORATIVO':
               badgeClass = 'dt-badge dt-badge-solid-blue'
               break
             case 'PKG_ON_BASE':
+              badgeClass = 'dt-badge dt-badge-solid-yellow'
+              break
             case 'PKG_OFF_BASE':
             case 'PKG_OFF_FRANCIA':
               badgeClass = 'dt-badge dt-badge-solid-gray'
               break
-            case 'TALLER_AXIS':
             case 'TALLER_CHAPA_PINTURA':
+              badgeClass = 'dt-badge dt-badge-solid-purple'
+              break
+            case 'TALLER_AXIS':
             case 'TALLER_ALLIANCE':
             case 'TALLER_KALZALO':
             case 'TALLER_BASE_VALIENTE':
             case 'INSTALACION_GNC':
-              badgeClass = 'dt-badge dt-badge-solid-yellow'
+              badgeClass = 'dt-badge dt-badge-solid-orange'
               break
             case 'ROBO':
             case 'DESTRUCCION_TOTAL':
@@ -835,47 +1017,90 @@ export function VehicleManagement() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, estadoFilter, openColumnFilter, uniqueEstados]
+    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, estadoFilter, openColumnFilter, vehiculosEstados]
   )
 
   return (
     <div className="veh-module">
-      {/* Stats Cards - Estilo Bitácora */}
+      {/* Stats Cards - Clickeables para filtrar */}
       <div className="veh-stats">
         <div className="veh-stats-grid">
-          <div className="stat-card">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'total' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('total')}
+            title="Click para ver todos"
+          >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.totalVehiculos}</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.totalVehiculos}
+              </span>
               <span className="stat-label">Total</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos con estado DISPONIBLE, listos para ser asignados">
-            <Car size={18} className="stat-icon" />
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'enCochera' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('enCochera')}
+            title="Click para filtrar: PKG ON + PKG OFF"
+          >
+            <Warehouse size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.vehiculosDisponibles}</span>
-              <span className="stat-label">Sin Asignar</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosDisponibles}
+              </span>
+              <span className="stat-label">Disponible</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos con asignación activa actualmente">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'enUso' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('enUso')}
+            title="Click para filtrar: EN USO"
+          >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.vehiculosEnUso}</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosEnUso}
+              </span>
               <span className="stat-label">En Uso</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos en taller de mecánica o chapa y pintura">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'tallerMecanico' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('tallerMecanico')}
+            title="Click para filtrar: Talleres mecánicos"
+          >
             <Wrench size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.vehiculosEnTaller}</span>
-              <span className="stat-label">En Taller</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosTallerMecanico}
+              </span>
+              <span className="stat-label">Taller Mecánico</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos fuera de servicio (robo, destrucción total, PKG off)">
-            <AlertTriangle size={18} className="stat-icon" />
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'chapaPintura' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('chapaPintura')}
+            title="Click para filtrar: Chapa y Pintura"
+          >
+            <PaintBucket size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.vehiculosFueraServicio}</span>
-              <span className="stat-label">Fuera Servicio</span>
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosChapaPintura}
+              </span>
+              <span className="stat-label">Chapa y Pintura</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'corporativos' ? 'stat-card-active' : ''}`}
+            onClick={() => !statsLoading && handleStatCardClick('corporativos')}
+            title="Click para filtrar: Corporativos"
+          >
+            <Briefcase size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">
+                {statsLoading ? <Loader2 size={20} className="stat-spinner" /> : statsData.vehiculosCorporativos}
+              </span>
+              <span className="stat-label">Corporativos</span>
             </div>
           </div>
         </div>
@@ -894,6 +1119,8 @@ export function VehicleManagement() {
         columns={columns}
         loading={loading}
         error={error}
+        pageSize={100}
+        pageSizeOptions={[50, 100, 200]}
         searchPlaceholder="Buscar por patente, marca, modelo..."
         emptyIcon={<Car size={64} />}
         emptyTitle="No hay vehiculos registrados"
@@ -933,6 +1160,8 @@ export function VehicleManagement() {
               formData={formData}
               setFormData={setFormData}
               vehiculosEstados={vehiculosEstados}
+              marcasExistentes={marcasExistentes}
+              modelosExistentes={modelosExistentes}
               onCancel={() => {
                 setShowCreateModal(false)
                 resetForm()
@@ -984,6 +1213,7 @@ export function VehicleManagement() {
                   value={formData.marca}
                   onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
                   disabled={saving}
+                  placeholder={marcasExistentes.length > 0 ? marcasExistentes.slice(0, 3).join(', ') + '...' : ''}
                 />
               </div>
 
@@ -995,6 +1225,7 @@ export function VehicleManagement() {
                   value={formData.modelo}
                   onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
                   disabled={saving}
+                  placeholder={modelosExistentes.length > 0 ? modelosExistentes.slice(0, 3).join(', ') + '...' : ''}
                 />
               </div>
             </div>
@@ -1025,67 +1256,48 @@ export function VehicleManagement() {
               </div>
             </div>
 
-            <div className="section-title">Tipo y Características</div>
+            <div className="section-title">Combustible y GPS</div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Tipo</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.tipo_vehiculo}
-                  onChange={(e) => setFormData({ ...formData, tipo_vehiculo: e.target.value })}
-                  disabled={saving}
-                  placeholder="Ej: Camion, Auto, Moto, Utilitario..."
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Tipo Combustible</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.tipo_combustible}
-                  onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
-                  disabled={saving}
-                  placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
-                />
-              </div>
+            <div className="form-group">
+              <label className="form-label">Tipo Combustible</label>
+              <input
+                type="text"
+                className="form-input"
+                value={formData.tipo_combustible}
+                onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
+                disabled={saving}
+                placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
+              />
             </div>
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Tipo GPS</label>
-                <input
-                  type="text"
+                <label className="form-label">GPS 1</label>
+                <select
                   className="form-input"
                   value={formData.tipo_gps}
                   onChange={(e) => setFormData({ ...formData, tipo_gps: e.target.value })}
                   disabled={saving}
-                  placeholder="Ej: GPS Tracker, GPS Satelital, GPS Móvil..."
-                />
+                >
+                  <option value="">Sin GPS</option>
+                  <option value="Strix">Strix</option>
+                  <option value="Traccar">Traccar</option>
+                </select>
               </div>
 
-              <div className="form-group" style={{ display: 'flex', gap: '24px', marginTop: '28px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <div className="form-group">
+                <label className="form-label">GPS 2</label>
+                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
                   <input
                     type="checkbox"
-                    className="form-checkbox"
                     checked={formData.gps_uss}
                     onChange={(e) => setFormData({ ...formData, gps_uss: e.target.checked })}
                     disabled={saving}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                   />
-                  <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>GPS USS</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    className="form-checkbox"
-                    checked={formData.traccar}
-                    onChange={(e) => setFormData({ ...formData, traccar: e.target.checked })}
-                    disabled={saving}
-                  />
-                  <span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '8px' }}>Traccar</span>
+                  <span style={{ color: formData.gps_uss ? '#10B981' : 'var(--text-primary)' }}>
+                    USS (Wialon)
+                  </span>
                 </label>
               </div>
             </div>
@@ -1274,7 +1486,7 @@ export function VehicleManagement() {
       {/* Modal Ver Detalles */}
       {showDetailsModal && selectedVehiculo && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
             <div className="modal-header">
               <h2>Detalles del Vehículo</h2>
               <button
@@ -1285,83 +1497,128 @@ export function VehicleManagement() {
                 ×
               </button>
             </div>
-            <div className="modal-body">
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '16px',
-              marginBottom: '24px'
-            }}>
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+            {/* Información Básica */}
+            <div className="section-title">Información Básica</div>
+            <div className="details-grid">
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  PATENTE
-                </label>
-                <div className="patente-badge" style={{ display: 'inline-block' }}>
-                  {selectedVehiculo.patente}
-                </div>
+                <label className="detail-label">PATENTE</label>
+                <div className="patente-badge" style={{ display: 'inline-block' }}>{selectedVehiculo.patente}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  ESTADO
-                </label>
-                <span className="badge" style={{ backgroundColor: '#10B981', color: 'white' }}>
-                  {selectedVehiculo.vehiculos_estados?.descripcion || 'N/A'}
-                </span>
+                <label className="detail-label">ESTADO</label>
+                <div className="detail-value">{selectedVehiculo.vehiculos_estados?.descripcion || 'N/A'}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  MARCA
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {selectedVehiculo.marca}
-                </div>
+                <label className="detail-label">MARCA</label>
+                <div className="detail-value">{selectedVehiculo.marca || 'N/A'}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  MODELO
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {selectedVehiculo.modelo}
-                </div>
+                <label className="detail-label">MODELO</label>
+                <div className="detail-value">{selectedVehiculo.modelo || 'N/A'}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  AÑO
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {selectedVehiculo.anio || 'N/A'}
-                </div>
+                <label className="detail-label">AÑO</label>
+                <div className="detail-value">{selectedVehiculo.anio || 'N/A'}</div>
               </div>
-
               <div>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  KILOMETRAJE
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {selectedVehiculo.kilometraje_actual.toLocaleString()} km
+                <label className="detail-label">COLOR</label>
+                <div className="detail-value">{selectedVehiculo.color || 'N/A'}</div>
+              </div>
+            </div>
+
+            {/* Combustible y GPS */}
+            <div className="section-title">Combustible y GPS</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">TIPO COMBUSTIBLE</label>
+                <div className="detail-value">{(selectedVehiculo as any).tipo_combustible || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">GPS 1</label>
+                <div className="detail-value">{(selectedVehiculo as any).tipo_gps || 'Sin GPS'}</div>
+              </div>
+              <div>
+                <label className="detail-label">GPS 2 - USS (WIALON)</label>
+                <div className="detail-value" style={{ color: (selectedVehiculo as any).gps_uss ? '#10B981' : 'inherit' }}>
+                  {(selectedVehiculo as any).gps_uss ? 'Sí' : 'No'}
                 </div>
               </div>
+            </div>
 
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  FECHA DE CREACIÓN
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {new Date(selectedVehiculo.created_at).toLocaleString('es-AR')}
-                </div>
+            {/* Datos Técnicos */}
+            <div className="section-title">Datos Técnicos</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">NÚMERO MOTOR</label>
+                <div className="detail-value">{selectedVehiculo.numero_motor || 'N/A'}</div>
               </div>
+              <div>
+                <label className="detail-label">NÚMERO CHASIS</label>
+                <div className="detail-value">{selectedVehiculo.numero_chasis || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">PROVISORIA</label>
+                <div className="detail-value">{selectedVehiculo.provisoria || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">KILOMETRAJE</label>
+                <div className="detail-value">{selectedVehiculo.kilometraje_actual?.toLocaleString() || 0} km</div>
+              </div>
+            </div>
 
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontWeight: '600', fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                  ÚLTIMA ACTUALIZACIÓN
-                </label>
-                <div style={{ fontSize: '14px', color: '#1F2937' }}>
-                  {new Date(selectedVehiculo.updated_at).toLocaleString('es-AR')}
-                </div>
+            {/* Fechas e Inspecciones */}
+            <div className="section-title">Fechas e Inspecciones</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">FECHA ADQUISICIÓN</label>
+                <div className="detail-value">{selectedVehiculo.fecha_adquisicion ? new Date(selectedVehiculo.fecha_adquisicion).toLocaleDateString('es-AR') : 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">ÚLTIMA INSPECCIÓN</label>
+                <div className="detail-value">{selectedVehiculo.fecha_ulti_inspeccion ? new Date(selectedVehiculo.fecha_ulti_inspeccion).toLocaleDateString('es-AR') : 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">PRÓXIMA INSPECCIÓN</label>
+                <div className="detail-value">{selectedVehiculo.fecha_prox_inspeccion ? new Date(selectedVehiculo.fecha_prox_inspeccion).toLocaleDateString('es-AR') : 'N/A'}</div>
+              </div>
+            </div>
+
+            {/* Seguro */}
+            <div className="section-title">Seguro</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">NÚMERO PÓLIZA</label>
+                <div className="detail-value">{selectedVehiculo.seguro_numero || 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">VIGENCIA SEGURO</label>
+                <div className="detail-value">{selectedVehiculo.seguro_vigencia ? new Date(selectedVehiculo.seguro_vigencia).toLocaleDateString('es-AR') : 'N/A'}</div>
+              </div>
+              <div>
+                <label className="detail-label">TITULAR</label>
+                <div className="detail-value">{selectedVehiculo.titular || 'N/A'}</div>
+              </div>
+            </div>
+
+            {/* Notas */}
+            {selectedVehiculo.notas && (
+              <>
+                <div className="section-title">Notas</div>
+                <div className="detail-value" style={{ whiteSpace: 'pre-wrap' }}>{selectedVehiculo.notas}</div>
+              </>
+            )}
+
+            {/* Registro */}
+            <div className="section-title">Registro</div>
+            <div className="details-grid">
+              <div>
+                <label className="detail-label">CREADO</label>
+                <div className="detail-value">{new Date(selectedVehiculo.created_at).toLocaleString('es-AR')}</div>
+              </div>
+              <div>
+                <label className="detail-label">ÚLTIMA ACTUALIZACIÓN</label>
+                <div className="detail-value">{new Date(selectedVehiculo.updated_at).toLocaleString('es-AR')}</div>
               </div>
             </div>
             </div>

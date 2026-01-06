@@ -230,11 +230,43 @@ export function AsignacionesModule() {
       const turnosPotenciales = vehiculosEnTurno * 2
       const turnosDisponibles = turnosPotenciales - turnosOcupados
 
-      // Unidades disponibles = vehículos DISPONIBLE + vehículos TURNO con al menos 1 vacante
+      // Unidades disponibles = vehículos sin asignación activa + vehículos TURNO con al menos 1 vacante
+      // Excluir estados no disponibles: ROBO, DESTRUCCION_TOTAL, JUBILADO, CORPORATIVO, RETENIDO_COMISARIA, PKG_OFF_BASE, PKG_OFF_FRANCIA
+      const estadosNoDisponibles = [
+        estadoIdMap.get('ROBO'),
+        estadoIdMap.get('DESTRUCCION_TOTAL'),
+        estadoIdMap.get('JUBILADO'),
+        estadoIdMap.get('CORPORATIVO'),
+        estadoIdMap.get('RETENIDO_COMISARIA'),
+        estadoIdMap.get('PKG_OFF_BASE'),
+        estadoIdMap.get('PKG_OFF_FRANCIA')
+      ].filter(Boolean) as string[]
+
+      // Vehículos sin asignación activa (excluir estados no disponibles)
+      const { data: todosVehiculos } = await supabase
+        .from('vehiculos')
+        .select('id, estado_id') as { data: Array<{ id: string; estado_id: string }> | null }
+
+      // Obtener IDs de vehículos con asignación activa
+      const { data: asignacionesActivasVehiculos } = await supabase
+        .from('asignaciones')
+        .select('vehiculo_id')
+        .eq('estado', 'activa') as { data: Array<{ vehiculo_id: string }> | null }
+
+      const vehiculosAsignadosIds = new Set(asignacionesActivasVehiculos?.map(a => a.vehiculo_id) || [])
+
+      // Contar vehículos sin asignar (no tienen asignación activa y no están en estados no disponibles)
+      const vehiculosSinAsignar = todosVehiculos?.filter(v =>
+        !vehiculosAsignadosIds.has(v.id) &&
+        !estadosNoDisponibles.includes(v.estado_id)
+      ).length || 0
+
+      // Vehículos TURNO con al menos 1 vacante
       const vehiculosTurnoConVacante = asignacionesActivasParaTurnos?.filter(a =>
         a.horario === 'TURNO' && (a.asignaciones_conductores?.length || 0) < 2
       ).length || 0
-      const unidadesDisponibles = vehiculosDisponibles + vehiculosTurnoConVacante
+
+      const unidadesDisponibles = vehiculosSinAsignar + vehiculosTurnoConVacante
 
       // Entregas programadas para hoy
       const hoy = new Date()
@@ -291,38 +323,70 @@ export function AsignacionesModule() {
       setLoading(true)
       setError(null)
 
-      const { data, error: fetchError } = await supabase
-        .from('asignaciones')
-        .select(`
-          *,
-          vehiculos (patente, marca, modelo),
-          conductores (nombres, apellidos, numero_licencia),
-          asignaciones_conductores (
-            id, conductor_id, estado, horario, confirmado, fecha_confirmacion,
-            conductores (nombres, apellidos, numero_licencia)
-          )
-        `)
-        .order('created_at', { ascending: false })
+      // Cargar asignaciones, vehículos y estados en paralelo
+      const [asignacionesResult, vehiculosResult, estadosResult] = await Promise.all([
+        supabase
+          .from('asignaciones')
+          .select(`
+            *,
+            vehiculos (patente, marca, modelo),
+            conductores (nombres, apellidos, numero_licencia),
+            asignaciones_conductores (
+              id, conductor_id, estado, horario, confirmado, fecha_confirmacion,
+              conductores (nombres, apellidos, numero_licencia)
+            )
+          `)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('vehiculos')
+          .select('id, patente, marca, modelo, anio, estado_id, vehiculos_estados(codigo)')
+          .order('patente'),
+        supabase
+          .from('vehiculos_estados')
+          .select('id, codigo')
+      ])
 
-      if (fetchError) throw fetchError
-      const asignacionesData = data as any[] || []
-      setAsignaciones(asignacionesData)
+      if (asignacionesResult.error) throw asignacionesResult.error
 
-      // Cargar vehículos sin asignación activa
+      const asignacionesData = asignacionesResult.data as any[] || []
+      const vehiculosList = vehiculosResult.data as any[] || []
+      const estadosList = estadosResult.data as any[] || []
+
+      // Estados de vehículos que NO deben aparecer en "Sin Asignar"
+      // (no están disponibles para ser asignados)
+      const estadosNoDisponibles = [
+        'ROBO',
+        'DESTRUCCION_TOTAL',
+        'JUBILADO',
+        'CORPORATIVO',
+        'RETENIDO_COMISARIA',
+        'PKG_OFF_BASE',
+        'PKG_OFF_FRANCIA'
+      ]
+      const estadosNoDisponiblesIds = new Set(
+        estadosList
+          .filter((e: any) => estadosNoDisponibles.includes(e.codigo))
+          .map((e: any) => e.id)
+      )
+
+      // Calcular vehículos sin asignación activa
       const vehiculosConAsignacionActiva = new Set(
         asignacionesData
           .filter((a: any) => a.estado === 'activa' || a.estado === 'activo')
           .map((a: any) => a.vehiculo_id)
       )
 
-      const { data: todosVehiculos } = await supabase
-        .from('vehiculos')
-        .select('id, patente, marca, modelo, anio')
-        .order('patente')
+      // Filtrar vehículos:
+      // 1. Que no tengan asignación activa
+      // 2. Que NO estén en estados no disponibles (ROBO, JUBILADO, etc.)
+      const sinAsignacion = vehiculosList.filter((v: any) =>
+        !vehiculosConAsignacionActiva.has(v.id) &&
+        !estadosNoDisponiblesIds.has(v.estado_id)
+      )
 
-      const vehiculosList = todosVehiculos as any[] || []
-      const sinAsignacion = vehiculosList.filter((v: any) => !vehiculosConAsignacionActiva.has(v.id))
+      // Actualizar ambos estados juntos para evitar renderizados con datos desincronizados
       setVehiculosSinAsignacion(sinAsignacion)
+      setAsignaciones(asignacionesData)
     } catch (err: any) {
       console.error('Error loading asignaciones:', err)
       setError(err.message || 'Error al cargar las asignaciones')

@@ -91,6 +91,32 @@
   white-space: nowrap;
 }
 
+/* Stat Cards Clickeables */
+.cond-stats .stat-card.stat-card-clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.cond-stats .stat-card.stat-card-clickable:hover {
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cond-stats .stat-card.stat-card-active {
+  border-color: #DC2626;
+  background: rgba(220, 38, 38, 0.05);
+}
+
+.cond-stats .stat-card.stat-card-active .stat-icon {
+  color: #DC2626;
+}
+
+.cond-stats .stat-card.stat-card-active .stat-value {
+  color: #DC2626;
+}
+
 /* Responsive Stats */
 @media (max-width: 1200px) {
   .cond-stats-grid {

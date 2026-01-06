@@ -131,6 +131,7 @@
 /* Table Wrapper for horizontal scroll */
 .dt-table-wrapper {
   overflow-x: auto;
+  overflow-y: visible;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -139,6 +140,7 @@
   width: 100%;
   min-width: 800px;
   border-collapse: collapse;
+  overflow: visible; /* Permite que los dropdowns de filtros se muestren */
 }
 
 /* Header */
@@ -154,6 +156,8 @@
   border-bottom: 1px solid var(--border-primary);
   white-space: nowrap;
   user-select: none;
+  position: relative; /* Para que el dropdown absoluto se posicione correctamente */
+  overflow: visible; /* Permite que el dropdown se muestre fuera */
 }
 
 .dt-table th.dt-sortable {
@@ -402,6 +406,16 @@
   color: var(--text-inverse);
 }
 
+.dt-badge-solid-purple {
+  background: #8B5CF6;
+  color: var(--text-inverse);
+}
+
+.dt-badge-solid-orange {
+  background: #EA580C;
+  color: var(--text-inverse);
+}
+
 /* Column Header Filters */
 .dt-column-filter {
   display: inline-flex;
@@ -447,7 +461,7 @@
   border: 1px solid var(--border-primary);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 100;
+  z-index: 1000; /* Alto para estar encima de todo */
 }
 
 [data-theme="dark"] .dt-column-filter-dropdown {
@@ -510,6 +524,98 @@
 .dt-column-filter-input:focus {
   outline: none;
   border-color: var(--color-primary);
+}
+
+/* Multiselect Checkbox Filter */
+.dt-column-filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.dt-column-filter-checkbox:hover {
+  background: var(--bg-tertiary);
+}
+
+.dt-column-filter-checkbox.selected {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.dt-column-filter-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.dt-column-filter-clear {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border: none;
+  border-top: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--color-danger);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dt-column-filter-clear:hover {
+  background: var(--badge-red-bg);
+}
+
+/* Excel-style Filter */
+.dt-excel-filter {
+  min-width: 200px !important;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dt-excel-filter .dt-column-filter-input {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.dt-excel-filter-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 200px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+}
+
+.dt-excel-filter-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dt-excel-filter-list::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+
+.dt-excel-filter-list::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
+}
+
+.dt-excel-filter-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 /* Responsive - Multi-resolution support */

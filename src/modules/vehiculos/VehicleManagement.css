@@ -55,7 +55,7 @@
 
 .veh-stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 12px;
 }
 
@@ -89,6 +89,34 @@
   font-size: 11px;
   color: var(--text-tertiary);
   white-space: nowrap;
+}
+
+/* Stat Cards Clickeables */
+.veh-stats .stat-card.stat-card-clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.veh-stats .stat-card.stat-card-clickable:hover {
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
+}
+
+.veh-stats .stat-card.stat-card-active {
+  border-color: #DC2626;
+  background: rgba(220, 38, 38, 0.05);
+}
+
+/* Stat Loading Spinner */
+.veh-stats .stat-spinner {
+  animation: spin 1s linear infinite;
+  color: #DC2626;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Responsive Stats */
