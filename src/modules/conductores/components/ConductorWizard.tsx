@@ -1,6 +1,6 @@
 // src/modules/conductores/components/ConductorWizard.tsx
 import { useState } from 'react'
-import { User, CreditCard, FileCheck, Phone, Briefcase, Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { User, CreditCard, FileCheck, Phone, Shield, Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 
 interface ConductorFormData {
   nombres: string
@@ -31,6 +31,8 @@ interface ConductorFormData {
   motivo_baja: string
   estado_id: string
   preferencia_turno: string
+  url_documentacion: string
+  numero_ibutton: string
 }
 
 interface ConductorWizardProps {
@@ -52,7 +54,7 @@ const STEPS = [
   { id: 2, title: 'Fiscal', icon: CreditCard },
   { id: 3, title: 'Licencia', icon: FileCheck },
   { id: 4, title: 'Contacto', icon: Phone },
-  { id: 5, title: 'Laboral', icon: Briefcase },
+  { id: 5, title: 'Seguridad', icon: Shield },
 ]
 
 export function ConductorWizard({
@@ -77,6 +79,12 @@ export function ConductorWizard({
     if (step === 1) {
       if (!formData.nombres.trim()) newErrors.nombres = 'Requerido'
       if (!formData.apellidos.trim()) newErrors.apellidos = 'Requerido'
+      if (!formData.numero_dni.trim()) newErrors.numero_dni = 'Requerido'
+      if (!formData.fecha_nacimiento) newErrors.fecha_nacimiento = 'Requerido'
+      if (!formData.nacionalidad_id) newErrors.nacionalidad_id = 'Requerido'
+      if (!formData.estado_civil_id) newErrors.estado_civil_id = 'Requerido'
+      if (!formData.zona.trim()) newErrors.zona = 'Requerido'
+      // CUIT (numero_cuit) es opcional
     }
 
     if (step === 3) {
@@ -120,7 +128,7 @@ export function ConductorWizard({
               <User size={20} />
               <h3>Información Personal</h3>
             </div>
-            <p className="step-description">Datos básicos del conductor. Nombres y apellidos son obligatorios.</p>
+            <p className="step-description">Datos básicos del conductor. Todos los campos son obligatorios excepto CUIL.</p>
 
             <div className="form-row">
               <div className="form-group">
@@ -149,42 +157,45 @@ export function ConductorWizard({
 
             <div className="form-row-3">
               <div className="form-group">
-                <label className="form-label">DNI</label>
+                <label className="form-label">DNI *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.numero_dni ? 'input-error' : ''}`}
                   value={formData.numero_dni}
                   onChange={(e) => setFormData({ ...formData, numero_dni: e.target.value })}
                   disabled={saving}
                 />
+                {errors.numero_dni && <span className="error-message">{errors.numero_dni}</span>}
               </div>
               <div className="form-group">
-                <label className="form-label">CUIT</label>
+                <label className="form-label">CUIL</label>
                 <input
                   type="text"
                   className="form-input"
                   value={formData.numero_cuit}
                   onChange={(e) => setFormData({ ...formData, numero_cuit: e.target.value })}
                   disabled={saving}
+                  placeholder="Opcional"
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Fecha de Nacimiento</label>
+                <label className="form-label">Fecha de Nacimiento *</label>
                 <input
                   type="date"
-                  className="form-input"
+                  className={`form-input ${errors.fecha_nacimiento ? 'input-error' : ''}`}
                   value={formData.fecha_nacimiento}
                   onChange={(e) => setFormData({ ...formData, fecha_nacimiento: e.target.value })}
                   disabled={saving}
                 />
+                {errors.fecha_nacimiento && <span className="error-message">{errors.fecha_nacimiento}</span>}
               </div>
             </div>
 
             <div className="form-row-3">
               <div className="form-group">
-                <label className="form-label">Nacionalidad</label>
+                <label className="form-label">Nacionalidad *</label>
                 <select
-                  className="form-input"
+                  className={`form-input ${errors.nacionalidad_id ? 'input-error' : ''}`}
                   value={formData.nacionalidad_id}
                   onChange={(e) => setFormData({ ...formData, nacionalidad_id: e.target.value })}
                   disabled={saving}
@@ -194,11 +205,12 @@ export function ConductorWizard({
                     <option key={n.id} value={n.id}>{n.descripcion}</option>
                   ))}
                 </select>
+                {errors.nacionalidad_id && <span className="error-message">{errors.nacionalidad_id}</span>}
               </div>
               <div className="form-group">
-                <label className="form-label">Estado Civil</label>
+                <label className="form-label">Estado Civil *</label>
                 <select
-                  className="form-input"
+                  className={`form-input ${errors.estado_civil_id ? 'input-error' : ''}`}
                   value={formData.estado_civil_id}
                   onChange={(e) => setFormData({ ...formData, estado_civil_id: e.target.value })}
                   disabled={saving}
@@ -208,17 +220,19 @@ export function ConductorWizard({
                     <option key={e.id} value={e.id}>{e.descripcion}</option>
                   ))}
                 </select>
+                {errors.estado_civil_id && <span className="error-message">{errors.estado_civil_id}</span>}
               </div>
               <div className="form-group">
-                <label className="form-label">Zona</label>
+                <label className="form-label">Zona *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.zona ? 'input-error' : ''}`}
                   value={formData.zona}
                   onChange={(e) => setFormData({ ...formData, zona: e.target.value })}
                   disabled={saving}
                   placeholder="Ej: Zona Norte, CABA"
                 />
+                {errors.zona && <span className="error-message">{errors.zona}</span>}
               </div>
             </div>
           </div>
@@ -424,11 +438,11 @@ export function ConductorWizard({
         return (
           <div className="wizard-step-content">
             <div className="wizard-step-header">
-              <Briefcase size={20} />
-              <h3>Información Laboral</h3>
+              <Shield size={20} />
+              <h3>Información de Seguridad</h3>
               <span className="optional-badge">Opcional</span>
             </div>
-            <p className="step-description">Preferencias, antecedentes y fechas laborales.</p>
+            <p className="step-description">Preferencias, antecedentes y fecha de incorporación.</p>
 
             <div className="form-row-3">
               <label className="checkbox-container">
@@ -467,7 +481,7 @@ export function ConductorWizard({
 
             <div className="form-row-3">
               <div className="form-group">
-                <label className="form-label">Fecha Contratación</label>
+                <label className="form-label">Fecha de Incorporación</label>
                 <input
                   type="date"
                   className="form-input"
@@ -499,6 +513,50 @@ export function ConductorWizard({
                     <option key={e.id} value={e.id}>{e.descripcion}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div className="section-divider">Documentación e iButton</div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Link de Documentación (Drive)</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="url"
+                    className="form-input"
+                    value={formData.url_documentacion}
+                    onChange={(e) => setFormData({ ...formData, url_documentacion: e.target.value })}
+                    disabled={saving}
+                    placeholder="https://drive.google.com/..."
+                    style={{ flex: 1 }}
+                  />
+                  {formData.url_documentacion && (
+                    <a
+                      href={formData.url_documentacion}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-secondary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px' }}
+                    >
+                      <ExternalLink size={16} />
+                      Ver
+                    </a>
+                  )}
+                </div>
+                <small className="input-hint">Enlace de Google Drive con la documentación</small>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Número de iButton</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.numero_ibutton}
+                  onChange={(e) => setFormData({ ...formData, numero_ibutton: e.target.value })}
+                  disabled={saving}
+                  placeholder="Ej: IB-001234"
+                />
+                <small className="input-hint">Asignar al entregar el iButton</small>
               </div>
             </div>
           </div>
@@ -558,25 +616,15 @@ export function ConductorWizard({
             </button>
           )}
           {currentStep < 5 ? (
-            <>
-              <button
-                className="btn-success"
-                onClick={onSubmit}
-                disabled={saving || !formData.nombres || !formData.apellidos}
-                type="button"
-              >
-                Crear Ahora
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleNext}
-                disabled={saving}
-                type="button"
-              >
-                Siguiente
-                <ChevronRight size={16} />
-              </button>
-            </>
+            <button
+              className="btn-primary"
+              onClick={handleNext}
+              disabled={saving}
+              type="button"
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </button>
           ) : (
             <button
               className="btn-success"
