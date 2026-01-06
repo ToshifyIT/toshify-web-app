@@ -53,6 +53,7 @@ const ESTADOS_NO_OPERATIVOS = [
 export function AsignacionesActivasModule() {
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
+  const [vehiculosOperativos, setVehiculosOperativos] = useState(0) // PKG_ON_BASE + EN_USO
   const [loading, setLoading] = useState(true)
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -95,7 +96,14 @@ export function AsignacionesActivasModule() {
         return !ESTADOS_NO_OPERATIVOS.includes(estadoCodigo)
       }).length
 
+      // Contar PKG_ON_BASE + EN_USO para % Operatividad
+      const operativos = vehiculos.filter((v: any) => {
+        const estadoCodigo = v.vehiculos_estados?.codigo
+        return estadoCodigo === 'PKG_ON_BASE' || estadoCodigo === 'EN_USO'
+      }).length
+
       setTotalVehiculosFlota(totalFlotaOperativa)
+      setVehiculosOperativos(operativos)
     } catch (err) {
       console.error('Error cargando total vehículos:', err)
     }
@@ -282,9 +290,9 @@ export function AsignacionesActivasModule() {
     // Vehículos sin asignación
     const vehiculosSinAsignar = totalVehiculosFlota - vehiculosSet.size
 
-    // % de ocupación de la flota (vehículos con asignación / total flota)
-    const porcentajeOcupacionFlota = totalVehiculosFlota > 0
-      ? ((vehiculosSet.size / totalVehiculosFlota) * 100).toFixed(1)
+    // % Operatividad = (PKG_ON_BASE + EN_USO) / Total Flota * 100
+    const porcentajeOperatividad = totalVehiculosFlota > 0
+      ? ((vehiculosOperativos / totalVehiculosFlota) * 100).toFixed(1)
       : '0'
 
     return {
@@ -305,9 +313,9 @@ export function AsignacionesActivasModule() {
       vehiculosOcupadosOperacionales,
       porcentajeOcupacionGeneral,
       porcentajeOcupacionOperacional,
-      porcentajeOcupacionFlota
+      porcentajeOperatividad
     }
-  }, [asignaciones, totalVehiculosFlota])
+  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos])
 
   // Filtrar asignaciones según los filtros de columna y stat clickeada
   const filteredAsignaciones = useMemo(() => {
@@ -759,17 +767,6 @@ export function AsignacionesActivasModule() {
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatFilter === 'cupos' ? 'stat-card-active' : ''}`}
-            title={`${stats.cuposOcupados} ocupados de ${stats.cuposTotales} cupos`}
-            onClick={() => handleStatCardClick('cupos')}
-          >
-            <ClipboardList size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.cuposOcupados}/{stats.cuposTotales}</span>
-              <span className="stat-label">Cupos</span>
-            </div>
-          </div>
-          <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'vacantes' ? 'stat-card-active' : ''}`}
             title={`Diurno: ${stats.vacantesD} | Nocturno: ${stats.vacantesN} - Click para ver solo vacantes`}
             onClick={() => handleStatCardClick('vacantes')}
@@ -777,7 +774,7 @@ export function AsignacionesActivasModule() {
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.vacantesD + stats.vacantesN}</span>
-              <span className="stat-label">Turnos Vacantes</span>
+              <span className="stat-label">Cupos</span>
             </div>
           </div>
           <div className="stat-card" title={`${stats.cuposOcupados} cupos ocupados de ${stats.cuposTotales} totales`}>
@@ -787,10 +784,10 @@ export function AsignacionesActivasModule() {
               <span className="stat-label">% Ocupación</span>
             </div>
           </div>
-          <div className="stat-card" title={`${stats.vehiculos} vehículos activos de ${stats.totalFlota} en flota`}>
+          <div className="stat-card" title={`(PKG ON + EN USO) / Total Flota`}>
             <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
-              <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionFlota}%</span>
+              <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOperatividad}%</span>
               <span className="stat-label">% Operatividad</span>
             </div>
           </div>
