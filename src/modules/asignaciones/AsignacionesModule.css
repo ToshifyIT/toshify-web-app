@@ -95,6 +95,40 @@
   text-overflow: ellipsis;
 }
 
+/* Stat Cards Clickables */
+.asig-stats .stat-card-clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.asig-stats .stat-card-clickable:hover {
+  background: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.asig-stats .stat-card-active {
+  border-color: #DC2626;
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 1px #DC2626;
+}
+
+/* Spinner para carga de stats */
+.asig-stats .stat-spinner {
+  animation: spin 1s linear infinite;
+  color: #DC2626;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Responsive Stats - Pantallas grandes */
 @media (max-width: 1600px) {
   .asig-stats-grid {

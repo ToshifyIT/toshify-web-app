@@ -42,12 +42,21 @@ interface AsignacionActiva {
   }>
 }
 
+// Estados NO operativos que se excluyen del conteo de flota
+const ESTADOS_NO_OPERATIVOS = [
+  'CORPORATIVO',
+  'ROBO',
+  'DESTRUCCION_TOTAL',
+  'JUBILADO'
+]
+
 export function AsignacionesActivasModule() {
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
   const [loading, setLoading] = useState(true)
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null)
 
   // Column filter states
   const [codigoFilter, setCodigoFilter] = useState('')
@@ -73,10 +82,20 @@ export function AsignacionesActivasModule() {
 
   const loadTotalVehiculos = async () => {
     try {
-      const { count } = await supabase
+      // Obtener todos los vehículos con su estado
+      const { data: vehiculos } = await supabase
         .from('vehiculos')
-        .select('*', { count: 'exact', head: true })
-      setTotalVehiculosFlota(count || 0)
+        .select('id, vehiculos_estados(codigo)')
+
+      if (!vehiculos) return
+
+      // Contar solo vehículos operativos (excluir CORPORATIVO, ROBO, DESTRUCCION_TOTAL, JUBILADO)
+      const totalFlotaOperativa = vehiculos.filter((v: any) => {
+        const estadoCodigo = v.vehiculos_estados?.codigo
+        return !ESTADOS_NO_OPERATIVOS.includes(estadoCodigo)
+      }).length
+
+      setTotalVehiculosFlota(totalFlotaOperativa)
     } catch (err) {
       console.error('Error cargando total vehículos:', err)
     }
@@ -146,6 +165,15 @@ export function AsignacionesActivasModule() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleStatCardClick = (filterType: string) => {
+    // Toggle: si ya está activo, desactivar
+    if (activeStatFilter === filterType) {
+      setActiveStatFilter(null)
+      return
+    }
+    setActiveStatFilter(filterType)
   }
 
   const openDetailsModal = (asignacion: AsignacionActiva) => {
@@ -281,9 +309,30 @@ export function AsignacionesActivasModule() {
     }
   }, [asignaciones, totalVehiculosFlota])
 
-  // Filtrar asignaciones según los filtros de columna
+  // Filtrar asignaciones según los filtros de columna y stat clickeada
   const filteredAsignaciones = useMemo(() => {
     let result = asignaciones
+
+    // Filtrar por stat card clickeada
+    if (activeStatFilter) {
+      switch (activeStatFilter) {
+        case 'vacantes':
+          // Solo mostrar asignaciones con al menos 1 vacante
+          result = result.filter(a => {
+            if (a.horario === 'TURNO') {
+              const conductores = a.asignaciones_conductores || []
+              const diurno = conductores.find(ac => ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D')
+              const nocturno = conductores.find(ac => ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N')
+              return !diurno?.conductor_id || !nocturno?.conductor_id
+            }
+            return false // CARGO no tiene vacantes en el mismo sentido
+          })
+          break
+        // Para totalFlota y vehiculosActivos no hay filtrado especial
+        default:
+          break
+      }
+    }
 
     if (codigoFilter) {
       result = result.filter(a =>
@@ -302,7 +351,7 @@ export function AsignacionesActivasModule() {
     }
 
     return result
-  }, [asignaciones, codigoFilter, vehiculoFilter, modalidadFilter])
+  }, [asignaciones, codigoFilter, vehiculoFilter, modalidadFilter, activeStatFilter])
 
   // Procesar asignaciones - UNA fila por asignación (no expandir)
   const processedAsignaciones = useMemo(() => {
@@ -687,28 +736,44 @@ export function AsignacionesActivasModule() {
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
         <div className="asig-stats-grid">
-          <div className="stat-card" title="Total de vehículos en la flota">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatFilter === 'totalFlota' ? 'stat-card-active' : ''}`}
+            title="Total de vehículos en la flota (excluye corporativos, robos, destruidos, jubilados)"
+            onClick={() => handleStatCardClick('totalFlota')}
+          >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.totalFlota}</span>
               <span className="stat-label">Total Flota</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos con asignación activa">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatFilter === 'vehiculosActivos' ? 'stat-card-active' : ''}`}
+            title="Vehículos con asignación activa"
+            onClick={() => handleStatCardClick('vehiculosActivos')}
+          >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.vehiculos}</span>
               <span className="stat-label">Vehículos Activos</span>
             </div>
           </div>
-          <div className="stat-card" title={`${stats.cuposOcupados} ocupados de ${stats.cuposTotales} cupos`}>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatFilter === 'cupos' ? 'stat-card-active' : ''}`}
+            title={`${stats.cuposOcupados} ocupados de ${stats.cuposTotales} cupos`}
+            onClick={() => handleStatCardClick('cupos')}
+          >
             <ClipboardList size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.cuposOcupados}/{stats.cuposTotales}</span>
               <span className="stat-label">Cupos</span>
             </div>
           </div>
-          <div className="stat-card" title={`Diurno: ${stats.vacantesD} | Nocturno: ${stats.vacantesN}`}>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatFilter === 'vacantes' ? 'stat-card-active' : ''}`}
+            title={`Diurno: ${stats.vacantesD} | Nocturno: ${stats.vacantesN} - Click para ver solo vacantes`}
+            onClick={() => handleStatCardClick('vacantes')}
+          >
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.vacantesD + stats.vacantesN}</span>
@@ -716,9 +781,9 @@ export function AsignacionesActivasModule() {
             </div>
           </div>
           <div className="stat-card" title={`${stats.cuposOcupados} cupos ocupados de ${stats.cuposTotales} totales`}>
-            <TrendingUp size={18} className="stat-icon" />
+            <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
-              <span className="stat-value">{stats.porcentajeOcupacionGeneral}%</span>
+              <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionGeneral}%</span>
               <span className="stat-label">% Ocupación</span>
             </div>
           </div>
