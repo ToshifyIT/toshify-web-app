@@ -66,22 +66,7 @@ function calcularEstado(horaCierre: string | null, km: number): string {
   return 'Turno Finalizado'
 }
 
-function calcularDuracionMinutos(horaInicio: string | null, horaCierre: string | null): number | null {
-  if (!horaInicio || !horaCierre) return null
-
-  const [hI, mI] = horaInicio.split(':').map(Number)
-  const [hC, mC] = horaCierre.split(':').map(Number)
-
-  const inicioMin = hI * 60 + mI
-  const cierreMin = hC * 60 + mC
-
-  // Si cierre es menor, asumimos que cruzó medianoche
-  if (cierreMin < inicioMin) {
-    return (24 * 60 - inicioMin) + cierreMin
-  }
-
-  return cierreMin - inicioMin
-}
+// NOTA: duracion_minutos se calcula como columna generada en la tabla selfhosted
 
 /**
  * Calcula rango de fechas para sincronización
@@ -265,15 +250,15 @@ serve(async (req) => {
     console.log(`   Generados: ${turnos.length} turnos`)
 
     // 3. Preparar registros para upsert
+    // NOTA: duracion_minutos es columna generada en selfhosted, no la enviamos
     const registros = turnos.map(turno => ({
       patente: turno.patente,
       patente_normalizada: turno.patenteNormalizada,
       conductor_wialon: turno.conductor,
       ibutton: turno.ibutton,
       fecha_turno: turno.fecha,
-      hora_inicio: turno.horaInicio,
+      hora_inicio: turno.horaInicio || '00:00', // Evitar NULL en constraint
       hora_cierre: turno.horaCierre,
-      duracion_minutos: calcularDuracionMinutos(turno.horaInicio, turno.horaCierre),
       kilometraje: Math.round(turno.kilometraje * 100) / 100,
       estado: calcularEstado(turno.horaCierre, turno.kilometraje),
       observaciones: turno.observaciones,

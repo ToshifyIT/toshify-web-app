@@ -5,6 +5,7 @@ import Swal from 'sweetalert2'
 import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
+import { formatDateTimeAR } from '../../utils/dateUtils'
 import './ProveedoresModule.css'
 
 type CategoriaProveedor = 'maquinaria' | 'herramientas' | 'repuestos' | 'insumos' | 'otro'
@@ -1333,13 +1334,13 @@ export function ProveedoresModule() {
                   <div>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Creado</span>
                     <span style={{ fontSize: '14px' }}>
-                      {new Date(selectedProveedor.created_at).toLocaleString('es-AR')}
+                      {formatDateTimeAR(selectedProveedor.created_at)}
                     </span>
                   </div>
                   <div>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Actualizado</span>
                     <span style={{ fontSize: '14px' }}>
-                      {new Date(selectedProveedor.updated_at).toLocaleString('es-AR')}
+                      {formatDateTimeAR(selectedProveedor.updated_at)}
                     </span>
                   </div>
                 </div>

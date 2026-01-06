@@ -63,15 +63,7 @@ export function ConductoresModule() {
   const [selectedConductor, setSelectedConductor] =
     useState<ConductorWithRelations | null>(null);
 
-  // Stats data para tarjetas de resumen
-  const [statsData, setStatsData] = useState({
-    totalConductores: 0,
-    conductoresActivos: 0,
-    conductoresDisponibles: 0,
-    conductoresAsignados: 0,
-    conductoresBaja: 0,
-    licenciasPorVencer: 0,
-  });
+  // Stats ahora se calculan con useMemo desde los datos cargados (calculatedStats)
 
   // Removed TanStack Table states - now handled by DataTable component
 
@@ -152,16 +144,10 @@ export function ConductoresModule() {
     numero_ibutton: "",
   });
 
+  // ✅ OPTIMIZADO: Carga inicial unificada en paralelo
   useEffect(() => {
-    loadConductores();
-    loadCatalogs();
-    loadStatsData();
+    loadAllData();
   }, []);
-
-  // Recargar stats cuando cambia el filtro de fecha
-  useEffect(() => {
-    loadStatsData();
-  }, [metricsDateFilter, customStartDate, customEndDate]);
 
   // Cerrar dropdown de filtro al hacer click fuera
   useEffect(() => {
@@ -220,122 +206,66 @@ export function ConductoresModule() {
     }
   };
 
-  const loadStatsData = async () => {
-    try {
-      const dateRange = getDateRange();
+  // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
+  const calculatedStats = useMemo(() => {
+    const dateRange = getDateRange();
+    const hoy = new Date();
+    const en30Dias = new Date();
+    en30Dias.setDate(en30Dias.getDate() + 30);
+    const hoyStr = hoy.toISOString().split('T')[0];
+    const en30DiasStr = en30Dias.toISOString().split('T')[0];
 
-      // Total de conductores
-      let totalQuery = supabase.from("conductores").select("*", { count: "exact", head: true });
-      if (dateRange) {
-        totalQuery = totalQuery
-          .gte('fecha_contratacion', dateRange.start)
-          .lte('fecha_contratacion', dateRange.end);
-      }
-      const { count: totalConductores } = await totalQuery;
-
-      // Obtener estados de conductores
-      const { data: estadosCond } = await supabase
-        .from("conductores_estados")
-        .select("id, codigo") as { data: Array<{ id: string; codigo: string }> | null };
-
-      const estadoActivoId = estadosCond?.find((e) => e.codigo.toLowerCase() === "activo")?.id;
-      const estadoBajaId = estadosCond?.find((e) => e.codigo.toLowerCase() === "baja")?.id;
-
-      // Conductores activos
-      let conductoresActivos = 0;
-      if (estadoActivoId) {
-        let activosQuery = supabase
-          .from("conductores")
-          .select("*", { count: "exact", head: true })
-          .eq("estado_id", estadoActivoId);
-        if (dateRange) {
-          activosQuery = activosQuery
-            .gte('fecha_contratacion', dateRange.start)
-            .lte('fecha_contratacion', dateRange.end);
-        }
-        const { count } = await activosQuery;
-        conductoresActivos = count || 0;
-      }
-
-      // Conductores de baja
-      let conductoresBaja = 0;
-      if (estadoBajaId) {
-        let bajaQuery = supabase
-          .from("conductores")
-          .select("*", { count: "exact", head: true })
-          .eq("estado_id", estadoBajaId);
-        if (dateRange) {
-          bajaQuery = bajaQuery
-            .gte('fecha_contratacion', dateRange.start)
-            .lte('fecha_contratacion', dateRange.end);
-        }
-        const { count } = await bajaQuery;
-        conductoresBaja = count || 0;
-      }
-
-      // Para asignados, primero obtenemos los conductores que cumplen el filtro de fecha
-      let conductoresEnRango: string[] = [];
-      if (dateRange) {
-        const { data: conductoresData } = await supabase
-          .from("conductores")
-          .select("id")
-          .gte('fecha_contratacion', dateRange.start)
-          .lte('fecha_contratacion', dateRange.end) as { data: Array<{ id: string }> | null };
-        conductoresEnRango = conductoresData?.map(c => c.id) || [];
-      }
-
-      // Conductores asignados (en asignaciones activas)
-      let asignacionesQuery = supabase
-        .from("asignaciones_conductores")
-        .select("conductor_id")
-        .in("estado", ["asignado", "activo"]);
-
-      const { data: asignacionesActivas } = await asignacionesQuery as { data: Array<{ conductor_id: string }> | null };
-
-      let conductoresAsignadosIds = new Set(asignacionesActivas?.map((a) => a.conductor_id) || []);
-
-      // Si hay filtro de fecha, solo contar los que están en el rango
-      if (dateRange && conductoresEnRango.length > 0) {
-        conductoresAsignadosIds = new Set(
-          [...conductoresAsignadosIds].filter(id => conductoresEnRango.includes(id))
-        );
-      } else if (dateRange && conductoresEnRango.length === 0) {
-        conductoresAsignadosIds = new Set();
-      }
-
-      const conductoresAsignados = conductoresAsignadosIds.size;
-
-      // Conductores disponibles = activos - asignados
-      const conductoresDisponibles = Math.max(0, conductoresActivos - conductoresAsignados);
-
-      // Licencias por vencer (próximos 30 días)
-      const hoy = new Date();
-      const en30Dias = new Date();
-      en30Dias.setDate(en30Dias.getDate() + 30);
-      let licenciasQuery = supabase
-        .from("conductores")
-        .select("*", { count: "exact", head: true })
-        .gte("licencia_vencimiento", hoy.toISOString().split("T")[0])
-        .lte("licencia_vencimiento", en30Dias.toISOString().split("T")[0]);
-      if (dateRange) {
-        licenciasQuery = licenciasQuery
-          .gte('fecha_contratacion', dateRange.start)
-          .lte('fecha_contratacion', dateRange.end);
-      }
-      const { count: licenciasPorVencer } = await licenciasQuery;
-
-      setStatsData({
-        totalConductores: totalConductores || 0,
-        conductoresActivos,
-        conductoresDisponibles,
-        conductoresAsignados,
-        conductoresBaja,
-        licenciasPorVencer: licenciasPorVencer || 0,
+    // Filtrar por rango de fechas si aplica
+    let filteredConductores = conductores;
+    if (dateRange) {
+      filteredConductores = conductores.filter(c => {
+        const fechaContratacion = c.fecha_contratacion;
+        if (!fechaContratacion) return false;
+        return fechaContratacion >= dateRange.start && fechaContratacion <= dateRange.end;
       });
-    } catch (err) {
-      console.error("Error loading stats:", err);
     }
-  };
+
+    // Calcular todo en UNA SOLA PASADA
+    let totalConductores = 0;
+    let conductoresActivos = 0;
+    let conductoresBaja = 0;
+    let conductoresAsignados = 0;
+    let licenciasPorVencer = 0;
+
+    for (const c of filteredConductores) {
+      totalConductores++;
+
+      const estadoCodigo = (c as any).conductores_estados?.codigo?.toLowerCase();
+
+      if (estadoCodigo === 'activo') {
+        conductoresActivos++;
+      } else if (estadoCodigo === 'baja') {
+        conductoresBaja++;
+      }
+
+      // Verificar si tiene vehículo asignado
+      if ((c as any).vehiculo_asignado) {
+        conductoresAsignados++;
+      }
+
+      // Licencias por vencer
+      const vencimiento = c.licencia_vencimiento;
+      if (vencimiento && vencimiento >= hoyStr && vencimiento <= en30DiasStr) {
+        licenciasPorVencer++;
+      }
+    }
+
+    const conductoresDisponibles = Math.max(0, conductoresActivos - conductoresAsignados);
+
+    return {
+      totalConductores,
+      conductoresActivos,
+      conductoresDisponibles,
+      conductoresAsignados,
+      conductoresBaja,
+      licenciasPorVencer,
+    };
+  }, [conductores, metricsDateFilter, customStartDate, customEndDate]);
 
   // Helper para manejar clicks en stat cards
   const handleStatCardClick = (cardType: string) => {
@@ -382,9 +312,19 @@ export function ConductoresModule() {
     }
   };
 
-  const loadCatalogs = async () => {
+  // ✅ OPTIMIZADO: Carga TODO en paralelo (conductores + catálogos)
+  const loadAllData = async () => {
+    setLoading(true);
+    setError("");
+
     try {
+      // Ejecutar TODAS las queries en paralelo
       const [
+        // Query principal de conductores - SOLO campos necesarios para la tabla
+        conductoresRes,
+        // Query de asignaciones activas
+        asignacionesRes,
+        // Catálogos
         estadosCivilesRes,
         nacionalidadesRes,
         categoriasRes,
@@ -392,36 +332,129 @@ export function ConductoresModule() {
         estadosLicenciaRes,
         tiposLicenciaRes,
       ] = await Promise.all([
-        supabase.from("estados_civiles").select("*").order("descripcion"),
-        supabase.from("nacionalidades").select("*").order("descripcion"),
-        supabase.from("licencias_categorias").select("*").order("descripcion"),
-        supabase.from("conductores_estados").select("*").order("descripcion"),
-        supabase.from("licencias_estados").select("*").order("descripcion"),
-        supabase.from("licencias_tipos").select("*").order("descripcion"),
+        supabase
+          .from("conductores")
+          .select(`
+            id,
+            nombres,
+            apellidos,
+            numero_dni,
+            numero_cuit,
+            preferencia_turno,
+            licencia_vencimiento,
+            telefono_contacto,
+            fecha_contratacion,
+            estado_id,
+            created_at,
+            conductores_estados (id, codigo, descripcion),
+            conductores_licencias_categorias (
+              licencias_categorias (id, codigo, descripcion)
+            )
+          `)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("asignaciones_conductores")
+          .select(`
+            conductor_id,
+            asignaciones!inner (
+              estado,
+              vehiculos (id, patente, marca, modelo)
+            )
+          `)
+          .in("asignaciones.estado", ["activo", "activa"]),
+        supabase.from("estados_civiles").select("id, codigo, descripcion").order("descripcion"),
+        supabase.from("nacionalidades").select("id, codigo, descripcion").order("descripcion"),
+        supabase.from("licencias_categorias").select("id, codigo, descripcion").order("descripcion"),
+        supabase.from("conductores_estados").select("id, codigo, descripcion").order("descripcion"),
+        supabase.from("licencias_estados").select("id, codigo, descripcion").order("descripcion"),
+        supabase.from("licencias_tipos").select("id, codigo, descripcion").order("descripcion"),
       ]);
 
+      // Procesar catálogos
       if (estadosCivilesRes.data) setEstadosCiviles(estadosCivilesRes.data);
       if (nacionalidadesRes.data) setNacionalidades(nacionalidadesRes.data);
       if (categoriasRes.data) setCategoriasLicencia(categoriasRes.data);
-      if (estadosConductorRes.data)
-        setEstadosConductor(estadosConductorRes.data);
+      if (estadosConductorRes.data) setEstadosConductor(estadosConductorRes.data);
       if (estadosLicenciaRes.data) setEstadosLicencia(estadosLicenciaRes.data);
       if (tiposLicenciaRes.data) setTiposLicencia(tiposLicenciaRes.data);
 
-      if (estadosCivilesRes.error)
-        console.error("Error estados_civiles:", estadosCivilesRes.error);
-      if (nacionalidadesRes.error)
-        console.error("Error nacionalidades:", nacionalidadesRes.error);
-      if (categoriasRes.error)
-        console.error("Error licencias_categorias:", categoriasRes.error);
-      if (estadosConductorRes.error)
-        console.error("Error conductores_estados:", estadosConductorRes.error);
-      if (estadosLicenciaRes.error)
-        console.error("Error licencias_estados:", estadosLicenciaRes.error);
-      if (tiposLicenciaRes.error)
-        console.error("Error licencias_tipos:", tiposLicenciaRes.error);
+      // Procesar conductores
+      if (conductoresRes.error) throw conductoresRes.error;
+
+      // Crear mapa de asignaciones (optimizado con inner join)
+      const asignacionesMap = new Map();
+      if (asignacionesRes.data) {
+        for (const asig of asignacionesRes.data as any[]) {
+          if (asig?.asignaciones?.vehiculos) {
+            asignacionesMap.set(asig.conductor_id, asig.asignaciones.vehiculos);
+          }
+        }
+      }
+
+      // Procesar conductores con sus relaciones
+      if (conductoresRes.data && conductoresRes.data.length > 0) {
+        const conductoresConRelaciones = conductoresRes.data.map((conductor: any) => {
+          const relaciones: any = { ...conductor };
+
+          // Procesar categorías de licencia
+          if (conductor.conductores_licencias_categorias?.length > 0) {
+            relaciones.licencias_categorias = conductor.conductores_licencias_categorias
+              .map((c: any) => c.licencias_categorias)
+              .filter((c: any) => c !== null);
+          }
+
+          // Agregar vehículo asignado si existe
+          if (asignacionesMap.has(conductor.id)) {
+            relaciones.vehiculo_asignado = asignacionesMap.get(conductor.id);
+          }
+
+          return relaciones;
+        });
+
+        setConductores(conductoresConRelaciones);
+      } else {
+        setConductores([]);
+      }
     } catch (err: any) {
-      console.error("Error cargando catálogos:", err);
+      console.error("Error cargando datos:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cargar detalles completos de un conductor (para modal de detalles/edición)
+  const loadConductorDetails = async (conductorId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("conductores")
+        .select(`
+          *,
+          estados_civiles (id, codigo, descripcion),
+          nacionalidades (id, codigo, descripcion),
+          conductores_estados (id, codigo, descripcion),
+          licencias_estados (id, codigo, descripcion),
+          licencias_tipos (id, codigo, descripcion),
+          conductores_licencias_categorias (
+            licencias_categorias (id, codigo, descripcion)
+          )
+        `)
+        .eq("id", conductorId)
+        .single();
+
+      if (error) throw error;
+
+      // Procesar categorías
+      if ((data as any)?.conductores_licencias_categorias?.length > 0) {
+        (data as any).licencias_categorias = (data as any).conductores_licencias_categorias
+          .map((c: any) => c.licencias_categorias)
+          .filter((c: any) => c !== null);
+      }
+
+      return data;
+    } catch (err) {
+      console.error("Error cargando detalles del conductor:", err);
+      return null;
     }
   };
 
@@ -430,98 +463,63 @@ export function ConductoresModule() {
     setError("");
 
     try {
-      // ✅ OPTIMIZADO: Una sola query con todos los JOINs (700 queries → 1 query)
-      const { data, error: fetchError } = await supabase
-        .from("conductores")
-        .select(`
-          *,
-          estados_civiles (
+      // ✅ OPTIMIZADO: Query paralela con campos mínimos
+      const [conductoresRes, asignacionesRes] = await Promise.all([
+        supabase
+          .from("conductores")
+          .select(`
             id,
-            codigo,
-            descripcion
-          ),
-          nacionalidades (
-            id,
-            codigo,
-            descripcion
-          ),
-          conductores_licencias_categorias (
-            licencias_categorias (
-              id,
-              codigo,
-              descripcion
+            nombres,
+            apellidos,
+            numero_dni,
+            numero_cuit,
+            preferencia_turno,
+            licencia_vencimiento,
+            telefono_contacto,
+            fecha_contratacion,
+            estado_id,
+            created_at,
+            conductores_estados (id, codigo, descripcion),
+            conductores_licencias_categorias (
+              licencias_categorias (id, codigo, descripcion)
             )
-          ),
-          conductores_estados (
-            id,
-            codigo,
-            descripcion
-          ),
-          licencias_estados (
-            id,
-            codigo,
-            descripcion
-          ),
-          licencias_tipos (
-            id,
-            codigo,
-            descripcion
-          )
-        `)
-        .order("created_at", { ascending: false });
-
-      if (fetchError) throw fetchError;
-
-      // Procesar las relaciones en memoria (mucho más rápido que queries)
-      if (data && data.length > 0) {
-        // Obtener todos los IDs de conductores activos de una vez
-        const conductoresActivos = data.filter((c: any) =>
-          c.conductores_estados?.codigo?.toLowerCase() === "activo"
-        );
-        const conductoresActivosIds = conductoresActivos.map((c: any) => c.id);
-
-        // Obtener todas las asignaciones de vehículos en una sola query
-        let asignacionesMap = new Map();
-        if (conductoresActivosIds.length > 0) {
-          const { data: asignaciones } = await supabase
-            .from("asignaciones_conductores")
-            .select(`
-              conductor_id,
+          `)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("asignaciones_conductores")
+          .select(`
+            conductor_id,
+            asignaciones!inner (
               estado,
-              asignaciones!inner (
-                vehiculo_id,
-                vehiculos (
-                  patente,
-                  marca,
-                  modelo
-                )
-              )
-            `)
-            .in("conductor_id", conductoresActivosIds)
-            .in("estado", ["asignado", "activo"]);
+              vehiculos (id, patente, marca, modelo)
+            )
+          `)
+          .in("asignaciones.estado", ["activo", "activa"])
+      ]);
 
-          // Mapear asignaciones por conductor_id
-          if (asignaciones) {
-            asignaciones.forEach((asig: any) => {
-              if (asig?.asignaciones?.vehiculos) {
-                asignacionesMap.set(asig.conductor_id, asig.asignaciones.vehiculos);
-              }
-            });
+      if (conductoresRes.error) throw conductoresRes.error;
+
+      // Crear mapa de asignaciones
+      const asignacionesMap = new Map();
+      if (asignacionesRes.data) {
+        for (const asig of asignacionesRes.data as any[]) {
+          if (asig?.asignaciones?.vehiculos) {
+            asignacionesMap.set(asig.conductor_id, asig.asignaciones.vehiculos);
           }
         }
+      }
 
-        // Mapear categorías de licencia
-        const conductoresConRelaciones = data.map((conductor: any) => {
+      // Procesar conductores
+      if (conductoresRes.data && conductoresRes.data.length > 0) {
+        const conductoresConRelaciones = conductoresRes.data.map((conductor: any) => {
           const relaciones: any = { ...conductor };
 
-          // Procesar categorías de licencia
-          if (conductor.conductores_licencias_categorias && conductor.conductores_licencias_categorias.length > 0) {
+          if (conductor.conductores_licencias_categorias?.length > 0) {
             relaciones.licencias_categorias = conductor.conductores_licencias_categorias
               .map((c: any) => c.licencias_categorias)
               .filter((c: any) => c !== null);
           }
 
-          // Agregar vehículo asignado si existe
           if (asignacionesMap.has(conductor.id)) {
             relaciones.vehiculo_asignado = asignacionesMap.get(conductor.id);
           }
@@ -1057,45 +1055,50 @@ export function ConductoresModule() {
     }
   };
 
-  const openEditModal = (conductor: ConductorWithRelations) => {
-    setSelectedConductor(conductor);
+  const openEditModal = async (conductor: ConductorWithRelations) => {
+    // Cargar detalles completos para edición
+    const fullConductor = await loadConductorDetails(conductor.id);
+    if (!fullConductor) return;
+
+    setSelectedConductor(fullConductor as any);
 
     // Extraer IDs de categorías de licencia si existen
-    const categoriasIds = Array.isArray((conductor as any).licencias_categorias)
-      ? (conductor as any).licencias_categorias.map((c: any) => c.id)
+    const categoriasIds = Array.isArray((fullConductor as any).licencias_categorias)
+      ? (fullConductor as any).licencias_categorias.map((c: any) => c.id)
       : [];
 
+    const fc = fullConductor as any;
     setFormData({
-      nombres: conductor.nombres,
-      apellidos: conductor.apellidos,
-      numero_dni: conductor.numero_dni || "",
-      numero_cuit: conductor.numero_cuit || "",
-      cbu: (conductor as any).cbu || "",
-      monotributo: (conductor as any).monotributo || false,
-      numero_licencia: conductor.numero_licencia || "",
+      nombres: fc.nombres,
+      apellidos: fc.apellidos,
+      numero_dni: fc.numero_dni || "",
+      numero_cuit: fc.numero_cuit || "",
+      cbu: fc.cbu || "",
+      monotributo: fc.monotributo || false,
+      numero_licencia: fc.numero_licencia || "",
       licencia_categorias_ids: categoriasIds,
-      licencia_vencimiento: conductor.licencia_vencimiento,
-      licencia_estado_id: conductor.licencia_estado_id || "",
-      licencia_tipo_id: conductor.licencia_tipo_id || "",
-      telefono_contacto: conductor.telefono_contacto || "",
-      email: conductor.email || "",
-      direccion: conductor.direccion || "",
-      zona: conductor.zona || "",
-      fecha_nacimiento: conductor.fecha_nacimiento || "",
-      estado_civil_id: conductor.estado_civil_id || "",
-      nacionalidad_id: conductor.nacionalidad_id || "",
-      contacto_emergencia: conductor.contacto_emergencia || "",
-      telefono_emergencia: conductor.telefono_emergencia || "",
-      antecedentes_penales: conductor.antecedentes_penales,
-      cochera_propia: conductor.cochera_propia,
-      fecha_contratacion: conductor.fecha_contratacion || "",
-      fecha_reincorpoaracion: conductor.fecha_reincorpoaracion || "",
-      fecha_terminacion: conductor.fecha_terminacion || "",
-      motivo_baja: conductor.motivo_baja || "",
-      estado_id: conductor.estado_id || "",
-      preferencia_turno: (conductor as any).preferencia_turno || "SIN_PREFERENCIA",
-      url_documentacion: (conductor as any).url_documentacion || "",
-      numero_ibutton: (conductor as any).numero_ibutton || "",
+      licencia_vencimiento: fc.licencia_vencimiento,
+      licencia_estado_id: fc.licencia_estado_id || "",
+      licencia_tipo_id: fc.licencia_tipo_id || "",
+      telefono_contacto: fc.telefono_contacto || "",
+      email: fc.email || "",
+      direccion: fc.direccion || "",
+      zona: fc.zona || "",
+      fecha_nacimiento: fc.fecha_nacimiento || "",
+      estado_civil_id: fc.estado_civil_id || "",
+      nacionalidad_id: fc.nacionalidad_id || "",
+      contacto_emergencia: fc.contacto_emergencia || "",
+      telefono_emergencia: fc.telefono_emergencia || "",
+      antecedentes_penales: fc.antecedentes_penales,
+      cochera_propia: fc.cochera_propia,
+      fecha_contratacion: fc.fecha_contratacion || "",
+      fecha_reincorpoaracion: fc.fecha_reincorpoaracion || "",
+      fecha_terminacion: fc.fecha_terminacion || "",
+      motivo_baja: fc.motivo_baja || "",
+      estado_id: fc.estado_id || "",
+      preferencia_turno: fc.preferencia_turno || "SIN_PREFERENCIA",
+      url_documentacion: fc.url_documentacion || "",
+      numero_ibutton: fc.numero_ibutton || "",
     });
     setShowEditModal(true);
   };
@@ -1711,9 +1714,13 @@ export function ConductoresModule() {
           <div className="dt-actions">
             <button
               className="dt-btn-action dt-btn-view"
-              onClick={() => {
-                setSelectedConductor(row.original);
-                setShowDetailsModal(true);
+              onClick={async () => {
+                // Cargar detalles completos antes de mostrar el modal
+                const fullDetails = await loadConductorDetails(row.original.id);
+                if (fullDetails) {
+                  setSelectedConductor(fullDetails as any);
+                  setShowDetailsModal(true);
+                }
               }}
               title="Ver detalles"
             >
@@ -1803,7 +1810,7 @@ export function ConductoresModule() {
           >
             <UserCheck size={18} className="stat-icon" style={{ color: '#22C55E' }} />
             <div className="stat-content">
-              <span className="stat-value">{statsData.conductoresAsignados}</span>
+              <span className="stat-value">{calculatedStats.conductoresAsignados}</span>
               <span className="stat-label">Activos con Auto</span>
             </div>
           </div>
@@ -1814,7 +1821,7 @@ export function ConductoresModule() {
           >
             <Clock size={18} className="stat-icon" style={{ color: '#F59E0B' }} />
             <div className="stat-content">
-              <span className="stat-value">{statsData.conductoresDisponibles}</span>
+              <span className="stat-value">{calculatedStats.conductoresDisponibles}</span>
               <span className="stat-label">En Espera</span>
             </div>
           </div>
@@ -1825,7 +1832,7 @@ export function ConductoresModule() {
           >
             <UserX size={18} className="stat-icon" style={{ color: '#6B7280' }} />
             <div className="stat-content">
-              <span className="stat-value">{statsData.conductoresBaja}</span>
+              <span className="stat-value">{calculatedStats.conductoresBaja}</span>
               <span className="stat-label">Bajas</span>
             </div>
           </div>
@@ -1836,7 +1843,7 @@ export function ConductoresModule() {
           >
             <AlertTriangle size={18} className="stat-icon" style={{ color: '#EF4444' }} />
             <div className="stat-content">
-              <span className="stat-value">{statsData.licenciasPorVencer}</span>
+              <span className="stat-value">{calculatedStats.licenciasPorVencer}</span>
               <span className="stat-label">Lic. por Vencer</span>
             </div>
           </div>

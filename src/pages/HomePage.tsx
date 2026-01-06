@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { Menu } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate, Routes, Route, useLocation } from 'react-router-dom'
+import { useNavigate, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
 import { useTheme } from '../contexts/ThemeContext'
 import logoRed from '../assets/logo-toshify-red.svg'
@@ -901,11 +901,7 @@ export function HomePage() {
                   <AsignacionesPage />
                 </ProtectedRoute>
               } />
-              <Route path="/estado-de-flota" element={
-                <ProtectedRoute menuName="estado-de-flota" action="view">
-                  <AsignacionesActivasPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/estado-de-flota" element={<AsignacionesActivasPage />} />
               <Route path="/asignaciones" element={
                 <ProtectedRoute submenuName="asignaciones" action="view">
                   <AsignacionesPage />
@@ -973,17 +969,8 @@ export function HomePage() {
               {/* Perfil de usuario */}
               <Route path="/perfil" element={<ProfilePage />} />
 
-              {/* Ruta por defecto */}
-              <Route path="/" element={
-                <div className="content-card">
-                  <div className="card-header">
-                    <h2 className="card-title">Bienvenido al Panel de Administración</h2>
-                    <p className="card-description">
-                      Selecciona una opción del menú lateral para comenzar
-                    </p>
-                  </div>
-                </div>
-              } />
+              {/* Ruta por defecto - redirige a Estado de Flota */}
+              <Route path="/" element={<Navigate to="/estado-de-flota" replace />} />
             </Routes>
           </div>
         </main>

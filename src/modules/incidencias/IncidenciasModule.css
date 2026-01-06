@@ -11,14 +11,15 @@
 }
 
 /* =====================================================
-   TABS ROW (igual que Siniestros)
+   TABS ROW - Diseño armonioso y responsivo
    ===================================================== */
 
 .incidencias-tabs-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .incidencias-tabs {
@@ -28,10 +29,11 @@
   padding: 4px;
   border-radius: 8px;
   border: 1px solid var(--border-primary);
+  flex-shrink: 0;
 }
 
 .incidencias-tab {
-  padding: 10px 20px;
+  padding: 8px 16px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -42,7 +44,8 @@
   transition: all 0.15s;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .incidencias-tab:hover {
@@ -58,9 +61,11 @@
 .tab-badge {
   background: rgba(255, 255, 255, 0.25);
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: 10px;
   font-size: 11px;
   font-weight: 600;
+  min-width: 20px;
+  text-align: center;
 }
 
 .incidencias-tab:not(.active) .tab-badge {
@@ -68,9 +73,16 @@
   color: var(--text-secondary);
 }
 
+/* Badge especial para pendientes (Por Aplicar) */
+.incidencias-tab:not(.active) .tab-badge.pending {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
 .tabs-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 /* =====================================================
@@ -1088,6 +1100,24 @@
   }
 }
 
+@media (max-width: 900px) {
+  .incidencias-tabs-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .incidencias-tabs {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tabs-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 @media (max-width: 768px) {
   .incidencias-header-actions .btn-primary {
     flex: 1;
@@ -1096,12 +1126,25 @@
 
   .incidencias-tabs {
     flex-wrap: wrap;
+    justify-content: center;
   }
 
   .incidencias-tab {
     flex: 1;
     justify-content: center;
-    min-width: 100px;
+    min-width: 90px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .tabs-actions {
+    justify-content: center;
+  }
+
+  .tabs-actions .btn-secondary,
+  .tabs-actions .btn-primary {
+    flex: 1;
+    justify-content: center;
   }
 
   .stats-grid {
