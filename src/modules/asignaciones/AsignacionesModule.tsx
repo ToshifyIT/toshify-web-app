@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, CalendarRange, Activity, Filter, Car, UserPlus, UserCheck, Ban } from 'lucide-react'
+import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, Filter, UserPlus, UserCheck, Ban } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
@@ -89,309 +89,194 @@ export function AsignacionesModule() {
   const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
-  const [statsData, setStatsData] = useState({
-    totalVehiculos: 0,
-    vehiculosDisponibles: 0,
-    vehiculosEnUso: 0,
-    vehiculosEnTaller: 0,
-    vehiculosFueraServicio: 0,
-    turnosDisponibles: 0,
-    conductoresDisponibles: 0,
-    conductoresAsignados: 0,
-    totalConductores: 0,
-    entregasHoy: 0,
-    entregasSemana: 0,
-    asignacionesActivas: 0,
-    unidadesDisponibles: 0,  // Vehículos sin asignar + vehículos TURNO con al menos 1 vacante
-    // Nuevas métricas OnBoarding
-    entregasCompletadas: 0,
-    entregasCanceladas: 0,
-    conductoresCartaOferta: 0,  // Conductores únicos con documento CARTA_OFERTA
-    conductoresAnexo: 0  // Conductores únicos con documento ANEXO
-  })
+  // Datos base para cálculo de stats (cargados en paralelo)
+  const [vehiculosData, setVehiculosData] = useState<Array<{ id: string; estado_id: string; estadoCodigo?: string }>>([])
+  const [conductoresData, setConductoresData] = useState<Array<{ id: string; estadoCodigo?: string }>>([])
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
 
-  const loadStatsData = async (filterDateFrom?: string, filterDateTo?: string) => {
+  // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (elimina 14+ queries)
+  const calculatedStats = useMemo(() => {
+    const hoy = new Date()
+    const hoyStr = hoy.toISOString().split('T')[0]
+    const finSemana = new Date(hoy)
+    finSemana.setDate(finSemana.getDate() + 7)
+    const finSemanaStr = finSemana.toISOString().split('T')[0]
+
+    // Estados a excluir/agrupar
+    const estadosTaller = ['TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO']
+    const estadosFueraServicio = ['ROBO', 'DESTRUCCION_TOTAL', 'PKG_OFF_BASE']
+    const estadosNoDisponibles = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'CORPORATIVO', 'RETENIDO_COMISARIA', 'PKG_OFF_BASE', 'PKG_OFF_FRANCIA']
+
+    // Contadores de vehículos
+    let totalVehiculos = 0
+    let vehiculosDisponibles = 0
+    let vehiculosEnUso = 0
+    let vehiculosEnTaller = 0
+    let vehiculosFueraServicio = 0
+
+    for (const v of vehiculosData) {
+      totalVehiculos++
+      const codigo = v.estadoCodigo || ''
+      if (codigo === 'DISPONIBLE' || codigo === 'PKG_ON_BASE') vehiculosDisponibles++
+      else if (codigo === 'EN_USO') vehiculosEnUso++
+      else if (estadosTaller.includes(codigo)) vehiculosEnTaller++
+      else if (estadosFueraServicio.includes(codigo)) vehiculosFueraServicio++
+    }
+
+    // Conductores activos
+    const conductoresActivos = conductoresData.filter(c =>
+      c.estadoCodigo?.toLowerCase().includes('activo')
+    )
+    const totalConductores = conductoresActivos.length
+
+    // Asignaciones activas y sus conductores
+    const asignacionesActivas = asignaciones.filter(a => a.estado === 'activa')
+    const conductoresOcupadosIds = new Set<string>()
+
+    let turnosOcupados = 0
+    let vehiculosTurno = 0
+
+    for (const a of asignacionesActivas) {
+      const conductores = a.asignaciones_conductores || []
+      for (const c of conductores) {
+        if (c.conductor_id) conductoresOcupadosIds.add(c.conductor_id)
+      }
+      if (a.horario === 'TURNO') {
+        vehiculosTurno++
+        turnosOcupados += conductores.length
+      }
+    }
+
+    const conductoresDisponibles = conductoresActivos.filter(c => !conductoresOcupadosIds.has(c.id)).length
+    const conductoresAsignados = conductoresOcupadosIds.size
+    const turnosDisponibles = Math.max(0, (vehiculosTurno * 2) - turnosOcupados)
+
+    // Vehículos asignados
+    const vehiculosAsignadosIds = new Set(asignacionesActivas.map(a => a.vehiculo_id))
+    const vehiculosSinAsignar = vehiculosData.filter(v =>
+      !vehiculosAsignadosIds.has(v.id) && !estadosNoDisponibles.includes(v.estadoCodigo || '')
+    ).length
+    const vehiculosTurnoConVacante = asignacionesActivas.filter(a =>
+      a.horario === 'TURNO' && (a.asignaciones_conductores?.length || 0) < 2
+    ).length
+    const unidadesDisponibles = vehiculosSinAsignar + vehiculosTurnoConVacante
+
+    // Entregas programadas
+    const entregasHoy = asignaciones.filter(a => {
+      if (a.estado !== 'programado' || !a.fecha_programada) return false
+      const fecha = a.fecha_programada.split('T')[0]
+      return fecha === hoyStr
+    }).length
+
+    const entregasSemana = asignaciones.filter(a => {
+      if (a.estado !== 'programado' || !a.fecha_programada) return false
+      const fecha = a.fecha_programada.split('T')[0]
+      return fecha >= hoyStr && fecha <= finSemanaStr
+    }).length
+
+    // Métricas con filtro de fecha (dateFrom, dateTo)
+    const filtrarPorFecha = (a: Asignacion) => {
+      if (!dateFrom && !dateTo) return true
+      const fecha = a.fecha_programada?.split('T')[0]
+      if (!fecha) return false
+      if (dateFrom && fecha < dateFrom) return false
+      if (dateTo && fecha > dateTo) return false
+      return true
+    }
+
+    const entregasCompletadas = asignaciones.filter(a => a.estado === 'finalizada' && filtrarPorFecha(a)).length
+    const entregasCanceladas = asignaciones.filter(a => a.estado === 'cancelada' && filtrarPorFecha(a)).length
+
+    // Conductores por documento
+    const conductoresCartaOfertaSet = new Set<string>()
+    const conductoresAnexoSet = new Set<string>()
+
+    for (const a of asignaciones) {
+      if (!filtrarPorFecha(a)) continue
+      for (const c of a.asignaciones_conductores || []) {
+        if (c.documento === 'CARTA_OFERTA') conductoresCartaOfertaSet.add(c.conductor_id)
+        else if (c.documento === 'ANEXO') conductoresAnexoSet.add(c.conductor_id)
+      }
+    }
+
+    return {
+      totalVehiculos,
+      vehiculosDisponibles,
+      vehiculosEnUso,
+      vehiculosEnTaller,
+      vehiculosFueraServicio,
+      turnosDisponibles,
+      conductoresDisponibles,
+      conductoresAsignados,
+      totalConductores,
+      entregasHoy,
+      entregasSemana,
+      asignacionesActivas: asignacionesActivas.length,
+      unidadesDisponibles,
+      entregasCompletadas,
+      entregasCanceladas,
+      conductoresCartaOferta: conductoresCartaOfertaSet.size,
+      conductoresAnexo: conductoresAnexoSet.size
+    }
+  }, [vehiculosData, conductoresData, asignaciones, dateFrom, dateTo])
+
+  // ✅ OPTIMIZADO: Carga TODO en paralelo
+  const loadAllData = async () => {
     try {
-      // Total de vehículos
-      const { count: totalVehiculos } = await supabase
-        .from('vehiculos')
-        .select('*', { count: 'exact', head: true })
+      setLoading(true)
+      setError(null)
 
-      // Obtener todos los estados de vehículos
-      const { data: estadosVehiculos } = await supabase
-        .from('vehiculos_estados')
-        .select('id, codigo') as { data: Array<{ id: string; codigo: string }> | null }
-
-      const estadoIdMap = new Map<string, string>()
-      estadosVehiculos?.forEach(e => estadoIdMap.set(e.codigo, e.id))
-
-      // Vehículos disponibles (estado = DISPONIBLE)
-      let vehiculosDisponibles = 0
-      const estadoDisponibleId = estadoIdMap.get('DISPONIBLE')
-      if (estadoDisponibleId) {
-        const { count } = await supabase
+      const [asignacionesRes, vehiculosRes, conductoresRes, userRes] = await Promise.all([
+        // Asignaciones con relaciones - SOLO campos necesarios
+        supabase
+          .from('asignaciones')
+          .select(`
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at,
+            vehiculos (patente, marca, modelo),
+            asignaciones_conductores (
+              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
+              conductores (nombres, apellidos, numero_licencia)
+            )
+          `)
+          .order('created_at', { ascending: false }),
+        // Vehículos con estado
+        supabase
           .from('vehiculos')
-          .select('*', { count: 'exact', head: true })
-          .eq('estado_id', estadoDisponibleId)
-        vehiculosDisponibles = count || 0
+          .select('id, estado_id, vehiculos_estados(codigo)'),
+        // Conductores con estado
+        supabase
+          .from('conductores')
+          .select('id, conductores_estados(codigo)'),
+        // Usuario actual
+        supabase.auth.getUser()
+      ])
+
+      if (asignacionesRes.error) throw asignacionesRes.error
+      setAsignaciones(asignacionesRes.data || [])
+
+      // Procesar vehículos
+      if (vehiculosRes.data) {
+        setVehiculosData(vehiculosRes.data.map((v: any) => ({
+          id: v.id,
+          estado_id: v.estado_id,
+          estadoCodigo: v.vehiculos_estados?.codigo
+        })))
       }
 
-      // Vehículos en uso (estado = EN_USO)
-      let vehiculosEnUso = 0
-      const estadoEnUsoId = estadoIdMap.get('EN_USO')
-      if (estadoEnUsoId) {
-        const { count } = await supabase
-          .from('vehiculos')
-          .select('*', { count: 'exact', head: true })
-          .eq('estado_id', estadoEnUsoId)
-        vehiculosEnUso = count || 0
+      // Procesar conductores
+      if (conductoresRes.data) {
+        setConductoresData(conductoresRes.data.map((c: any) => ({
+          id: c.id,
+          estadoCodigo: c.conductores_estados?.codigo
+        })))
       }
 
-      // Vehículos en taller (TALLER_AXIS + TALLER_CHAPA_PINTURA)
-      let vehiculosEnTaller = 0
-      const tallerIds = [estadoIdMap.get('TALLER_AXIS'), estadoIdMap.get('TALLER_CHAPA_PINTURA')].filter(Boolean) as string[]
-      if (tallerIds.length > 0) {
-        const { count } = await supabase
-          .from('vehiculos')
-          .select('*', { count: 'exact', head: true })
-          .in('estado_id', tallerIds)
-        vehiculosEnTaller = count || 0
-      }
-
-      // Vehículos fuera de servicio (ROBO, DESTRUCCION_TOTAL, PKG_OFF_BASE)
-      let vehiculosFueraServicio = 0
-      const fueraServicioIds = [
-        estadoIdMap.get('ROBO'),
-        estadoIdMap.get('DESTRUCCION_TOTAL'),
-        estadoIdMap.get('PKG_OFF_BASE')
-      ].filter(Boolean) as string[]
-      if (fueraServicioIds.length > 0) {
-        const { count } = await supabase
-          .from('vehiculos')
-          .select('*', { count: 'exact', head: true })
-          .in('estado_id', fueraServicioIds)
-        vehiculosFueraServicio = count || 0
-      }
-
-      // Obtener todos los conductores con su estado (mismo filtro que el wizard)
-      const { data: todosConductores } = await supabase
-        .from('conductores')
-        .select('id, estado_id, conductores_estados(codigo)') as { data: Array<{ id: string; estado_id: string; conductores_estados: { codigo: string } | null }> | null }
-
-      // Filtrar conductores activos (cualquier variante del código que incluya 'activo')
-      // Esta es la misma lógica que usa el AssignmentWizard
-      const conductoresActivos = todosConductores?.filter(c =>
-        c.conductores_estados?.codigo?.toLowerCase().includes('activo')
-      ) || []
-      const totalConductores = conductoresActivos.length
-
-      // Obtener asignaciones activas
-      const { data: asignacionesActivasData } = await supabase
-        .from('asignaciones')
-        .select('id')
-        .eq('estado', 'activa') as { data: Array<{ id: string }> | null }
-
-      const asignacionesActivasIds = asignacionesActivasData?.map(a => a.id) || []
-
-      // Obtener conductores en esas asignaciones activas
-      let conductoresOcupadosIds = new Set<string>()
-      if (asignacionesActivasIds.length > 0) {
-        const { data: conductoresOcupados } = await supabase
-          .from('asignaciones_conductores')
-          .select('conductor_id')
-          .in('asignacion_id', asignacionesActivasIds) as { data: Array<{ conductor_id: string }> | null }
-
-        conductoresOcupadosIds = new Set(
-          conductoresOcupados?.map(c => c.conductor_id) || []
-        )
-      }
-
-      // Conductores disponibles = conductores activos que NO están en asignaciones activas
-      const conductoresDisponibles = conductoresActivos.filter(c =>
-        !conductoresOcupadosIds.has(c.id)
-      ).length
-
-      // Turnos disponibles: calcular basado en vehículos en uso que tienen turnos libres
-      // Un vehículo en modo TURNO tiene 2 turnos (diurno/nocturno)
-      const { data: asignacionesActivasParaTurnos } = await supabase
-        .from('asignaciones')
-        .select('id, horario, asignaciones_conductores(id, horario)')
-        .eq('estado', 'activa') as { data: Array<{ id: string; horario: string; asignaciones_conductores: any[] }> | null }
-
-      let turnosOcupados = 0
-      asignacionesActivasParaTurnos?.forEach(a => {
-        if (a.horario === 'TURNO') {
-          turnosOcupados += a.asignaciones_conductores?.length || 0
-        }
-      })
-
-      // Turnos potenciales = vehículos en uso con modo TURNO * 2
-      const vehiculosEnTurno = asignacionesActivasParaTurnos?.filter(a => a.horario === 'TURNO').length || 0
-      const turnosPotenciales = vehiculosEnTurno * 2
-      const turnosDisponibles = turnosPotenciales - turnosOcupados
-
-      // Unidades disponibles = vehículos sin asignación activa + vehículos TURNO con al menos 1 vacante
-      // Excluir estados no disponibles: ROBO, DESTRUCCION_TOTAL, JUBILADO, CORPORATIVO, RETENIDO_COMISARIA, PKG_OFF_BASE, PKG_OFF_FRANCIA
-      const estadosNoDisponibles = [
-        estadoIdMap.get('ROBO'),
-        estadoIdMap.get('DESTRUCCION_TOTAL'),
-        estadoIdMap.get('JUBILADO'),
-        estadoIdMap.get('CORPORATIVO'),
-        estadoIdMap.get('RETENIDO_COMISARIA'),
-        estadoIdMap.get('PKG_OFF_BASE'),
-        estadoIdMap.get('PKG_OFF_FRANCIA')
-      ].filter(Boolean) as string[]
-
-      // Vehículos sin asignación activa (excluir estados no disponibles)
-      const { data: todosVehiculos } = await supabase
-        .from('vehiculos')
-        .select('id, estado_id') as { data: Array<{ id: string; estado_id: string }> | null }
-
-      // Obtener IDs de vehículos con asignación activa
-      const { data: asignacionesActivasVehiculos } = await supabase
-        .from('asignaciones')
-        .select('vehiculo_id')
-        .eq('estado', 'activa') as { data: Array<{ vehiculo_id: string }> | null }
-
-      const vehiculosAsignadosIds = new Set(asignacionesActivasVehiculos?.map(a => a.vehiculo_id) || [])
-
-      // Contar vehículos sin asignar (no tienen asignación activa y no están en estados no disponibles)
-      const vehiculosSinAsignar = todosVehiculos?.filter(v =>
-        !vehiculosAsignadosIds.has(v.id) &&
-        !estadosNoDisponibles.includes(v.estado_id)
-      ).length || 0
-
-      // Vehículos TURNO con al menos 1 vacante
-      const vehiculosTurnoConVacante = asignacionesActivasParaTurnos?.filter(a =>
-        a.horario === 'TURNO' && (a.asignaciones_conductores?.length || 0) < 2
-      ).length || 0
-
-      const unidadesDisponibles = vehiculosSinAsignar + vehiculosTurnoConVacante
-
-      // Entregas programadas para hoy
-      const hoy = new Date()
-      const hoyStr = hoy.toISOString().split('T')[0]
-      const { count: entregasHoy } = await supabase
-        .from('asignaciones')
-        .select('*', { count: 'exact', head: true })
-        .eq('estado', 'programado')
-        .gte('fecha_programada', `${hoyStr}T00:00:00`)
-        .lt('fecha_programada', `${hoyStr}T23:59:59`)
-
-      // Entregas programadas para los próximos 7 días
-      const finSemana = new Date(hoy)
-      finSemana.setDate(finSemana.getDate() + 7)
-      const finSemanaStr = finSemana.toISOString().split('T')[0]
-      const { count: entregasSemana } = await supabase
-        .from('asignaciones')
-        .select('*', { count: 'exact', head: true })
-        .eq('estado', 'programado')
-        .gte('fecha_programada', `${hoyStr}T00:00:00`)
-        .lt('fecha_programada', `${finSemanaStr}T23:59:59`)
-
-      // Asignaciones activas (count)
-      const { count: totalAsignacionesActivas } = await supabase
-        .from('asignaciones')
-        .select('*', { count: 'exact', head: true })
-        .eq('estado', 'activa')
-
-      // Conductores asignados (en asignaciones activas)
-      const conductoresAsignados = conductoresOcupadosIds.size
-
-      // === NUEVAS MÉTRICAS ONBOARDING (con filtro de fechas opcional) ===
-
-      // Entregas completadas (finalizadas)
-      let queryCompletadas = supabase
-        .from('asignaciones')
-        .select('*', { count: 'exact', head: true })
-        .eq('estado', 'finalizada')
-
-      if (filterDateFrom) {
-        queryCompletadas = queryCompletadas.gte('fecha_programada', `${filterDateFrom}T00:00:00`)
-      }
-      if (filterDateTo) {
-        queryCompletadas = queryCompletadas.lte('fecha_programada', `${filterDateTo}T23:59:59`)
-      }
-      const { count: entregasCompletadas } = await queryCompletadas
-
-      // Entregas canceladas
-      let queryCanceladas = supabase
-        .from('asignaciones')
-        .select('*', { count: 'exact', head: true })
-        .eq('estado', 'cancelada')
-
-      if (filterDateFrom) {
-        queryCanceladas = queryCanceladas.gte('fecha_programada', `${filterDateFrom}T00:00:00`)
-      }
-      if (filterDateTo) {
-        queryCanceladas = queryCanceladas.lte('fecha_programada', `${filterDateTo}T23:59:59`)
-      }
-      const { count: entregasCanceladas } = await queryCanceladas
-
-      // Conductores con Carta Oferta (nuevos) - contar conductores únicos
-      // Necesitamos hacer un join para filtrar por fecha de la asignación
-      let queryCartaOferta = supabase
-        .from('asignaciones_conductores')
-        .select('conductor_id, asignaciones!inner(fecha_programada)')
-        .eq('documento', 'CARTA_OFERTA')
-
-      if (filterDateFrom || filterDateTo) {
-        // Si hay filtros de fecha, aplicarlos
-        if (filterDateFrom) {
-          queryCartaOferta = queryCartaOferta.gte('asignaciones.fecha_programada', `${filterDateFrom}T00:00:00`)
-        }
-        if (filterDateTo) {
-          queryCartaOferta = queryCartaOferta.lte('asignaciones.fecha_programada', `${filterDateTo}T23:59:59`)
-        }
-      }
-      const { data: conductoresCartaOfertaData } = await queryCartaOferta as unknown as { data: Array<{ conductor_id: string }> | null }
-
-      const conductoresCartaOfertaUnicos = new Set(
-        conductoresCartaOfertaData?.map(c => c.conductor_id) || []
-      )
-
-      // Conductores con Anexo (cambio vehículo) - contar conductores únicos
-      let queryAnexo = supabase
-        .from('asignaciones_conductores')
-        .select('conductor_id, asignaciones!inner(fecha_programada)')
-        .eq('documento', 'ANEXO')
-
-      if (filterDateFrom || filterDateTo) {
-        if (filterDateFrom) {
-          queryAnexo = queryAnexo.gte('asignaciones.fecha_programada', `${filterDateFrom}T00:00:00`)
-        }
-        if (filterDateTo) {
-          queryAnexo = queryAnexo.lte('asignaciones.fecha_programada', `${filterDateTo}T23:59:59`)
-        }
-      }
-      const { data: conductoresAnexoData } = await queryAnexo as unknown as { data: Array<{ conductor_id: string }> | null }
-
-      const conductoresAnexoUnicos = new Set(
-        conductoresAnexoData?.map(c => c.conductor_id) || []
-      )
-
-      setStatsData({
-        totalVehiculos: totalVehiculos || 0,
-        vehiculosDisponibles,
-        vehiculosEnUso,
-        vehiculosEnTaller,
-        vehiculosFueraServicio,
-        turnosDisponibles: Math.max(0, turnosDisponibles),
-        conductoresDisponibles: Math.max(0, conductoresDisponibles),
-        conductoresAsignados,
-        totalConductores,
-        entregasHoy: entregasHoy || 0,
-        entregasSemana: entregasSemana || 0,
-        asignacionesActivas: totalAsignacionesActivas || 0,
-        unidadesDisponibles,
-        entregasCompletadas: entregasCompletadas || 0,
-        entregasCanceladas: entregasCanceladas || 0,
-        conductoresCartaOferta: conductoresCartaOfertaUnicos.size,
-        conductoresAnexo: conductoresAnexoUnicos.size
-      })
-    } catch (err) {
-      console.error('Error loading stats:', err)
+      setCurrentUserId(userRes.data?.user?.id || null)
+    } catch (err: any) {
+      console.error('Error loading data:', err)
+      setError(err.message || 'Error al cargar los datos')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -403,9 +288,8 @@ export function AsignacionesModule() {
       const { data, error: queryError } = await supabase
         .from('asignaciones')
         .select(`
-          *,
+          id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at,
           vehiculos (patente, marca, modelo),
-          conductores (nombres, apellidos, numero_licencia),
           asignaciones_conductores (
             id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
             conductores (nombres, apellidos, numero_licencia)
@@ -424,24 +308,10 @@ export function AsignacionesModule() {
     }
   }
 
+  // ✅ OPTIMIZADO: Carga unificada en paralelo
   useEffect(() => {
-    loadAsignaciones()
-    loadStatsData()
-    const getCurrentUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setCurrentUserId(user?.id || null)
-    }
-    getCurrentUser()
+    loadAllData()
   }, [])
-
-  // Recargar métricas de OnBoarding cuando cambian los filtros de fecha
-  useEffect(() => {
-    if (dateFrom || dateTo) {
-      loadStatsData(dateFrom, dateTo)
-    } else {
-      loadStatsData()
-    }
-  }, [dateFrom, dateTo])
 
   // Cerrar dropdown de filtro de columna al hacer click fuera
   useEffect(() => {
@@ -725,7 +595,6 @@ export function AsignacionesModule() {
 
         Swal.fire('Finalizado', 'La asignación ha sido marcada como finalizada', 'success')
         loadAsignaciones()
-        loadStatsData()
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al finalizar la asignación', 'error')
       } finally {
@@ -832,7 +701,6 @@ export function AsignacionesModule() {
       setConductoresToConfirm([])
       setSelectedAsignacion(null)
       loadAsignaciones()
-      loadStatsData()
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Error al confirmar', 'error')
     } finally {
@@ -870,7 +738,6 @@ export function AsignacionesModule() {
       setCancelMotivo('')
       setSelectedAsignacion(null)
       loadAsignaciones()
-      loadStatsData()
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Error al cancelar', 'error')
     } finally {
@@ -1308,7 +1175,7 @@ export function AsignacionesModule() {
     <div className="asig-module">
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
-        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'programadas' ? 'stat-card-active' : ''}`}
             title="Asignaciones en estado programado pendientes de confirmación"
@@ -1321,24 +1188,13 @@ export function AsignacionesModule() {
             </div>
           </div>
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'activas' ? 'stat-card-active' : ''}`}
-            title="Asignaciones actualmente en curso"
-            onClick={() => handleStatCardClick('activas')}
-          >
-            <Activity size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{statsData.asignacionesActivas}</span>
-              <span className="stat-label">Activas</span>
-            </div>
-          </div>
-          <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'completadas' ? 'stat-card-active' : ''}`}
             title="Entregas completadas (finalizadas)"
             onClick={() => handleStatCardClick('completadas')}
           >
             <CheckCircle size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.entregasCompletadas}</span>
+              <span className="stat-value">{calculatedStats.entregasCompletadas}</span>
               <span className="stat-label">Completadas</span>
             </div>
           </div>
@@ -1349,24 +1205,13 @@ export function AsignacionesModule() {
           >
             <Ban size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.entregasCanceladas}</span>
+              <span className="stat-value">{calculatedStats.entregasCanceladas}</span>
               <span className="stat-label">Canceladas</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'unidades' ? 'stat-card-active' : ''}`}
-            title="Vehículos sin asignar + vehículos TURNO con al menos 1 turno vacante"
-            onClick={() => handleStatCardClick('unidades')}
-          >
-            <Car size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{statsData.unidadesDisponibles}</span>
-              <span className="stat-label">Unidades Disp.</span>
             </div>
           </div>
         </div>
         {/* Segunda fila de stats - Métricas por tipo de documento */}
-        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginTop: '12px' }}>
+        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginTop: '12px' }}>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'cartaOferta' ? 'stat-card-active' : ''}`}
             title="Conductores nuevos que firmaron Carta Oferta (conteo por conductor único)"
@@ -1374,7 +1219,7 @@ export function AsignacionesModule() {
           >
             <UserPlus size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.conductoresCartaOferta}</span>
+              <span className="stat-value">{calculatedStats.conductoresCartaOferta}</span>
               <span className="stat-label">Cond. Nuevos</span>
             </div>
           </div>
@@ -1385,22 +1230,15 @@ export function AsignacionesModule() {
           >
             <UserCheck size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.conductoresAnexo}</span>
+              <span className="stat-value">{calculatedStats.conductoresAnexo}</span>
               <span className="stat-label">Cond. Anexo</span>
             </div>
           </div>
           <div className="stat-card" title="Entregas de vehículos programadas para hoy">
             <Calendar size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{statsData.entregasHoy}</span>
+              <span className="stat-value">{calculatedStats.entregasHoy}</span>
               <span className="stat-label">Entregas Hoy</span>
-            </div>
-          </div>
-          <div className="stat-card" title="Entregas de vehículos programadas para los próximos 7 días">
-            <CalendarRange size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{statsData.entregasSemana}</span>
-              <span className="stat-label">Entregas Semana</span>
             </div>
           </div>
         </div>
@@ -1437,7 +1275,6 @@ export function AsignacionesModule() {
           onClose={() => setShowWizard(false)}
           onSuccess={() => {
             loadAsignaciones()
-            loadStatsData()
             setShowWizard(false)
           }}
         />
@@ -1482,6 +1319,18 @@ export function AsignacionesModule() {
                           {ac.confirmado && (
                             <span className="asig-conductor-confirmed">
                               <CheckCircle size={14} /> Ya confirmado
+                              {ac.fecha_confirmacion && (
+                                <span style={{ marginLeft: '8px', fontWeight: 400, opacity: 0.85 }}>
+                                  ({new Date(ac.fecha_confirmacion).toLocaleString('es-AR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    timeZone: 'America/Buenos_Aires'
+                                  })})
+                                </span>
+                              )}
                             </span>
                           )}
                         </p>
@@ -1573,7 +1422,6 @@ export function AsignacionesModule() {
                       setConfirmComentarios('')
                       setSelectedAsignacion(null)
                       loadAsignaciones()
-                      loadStatsData()
                     } catch (err: any) {
                       Swal.fire('Error', err.message || 'Error al activar', 'error')
                     } finally {
@@ -1680,6 +1528,18 @@ export function AsignacionesModule() {
                             <>
                               <span className="asig-conductor-confirmed">
                                 <CheckCircle size={14} /> Confirmado
+                                {ac.fecha_confirmacion && (
+                                  <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '12px', opacity: 0.85 }}>
+                                    ({new Date(ac.fecha_confirmacion).toLocaleString('es-AR', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      timeZone: 'America/Buenos_Aires'
+                                    })})
+                                  </span>
+                                )}
                               </span>
                               {canEdit && viewAsignacion.estado === 'programado' && (
                                 <button

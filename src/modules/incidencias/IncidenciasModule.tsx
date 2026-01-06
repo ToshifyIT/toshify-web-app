@@ -591,7 +591,11 @@ export function IncidenciasModule() {
           >
             <Clock size={16} />
             Por Aplicar
-            {countPorAplicar > 0 && <span className="tab-badge">{countPorAplicar}</span>}
+            {countPorAplicar > 0 && (
+              <span className={`tab-badge ${activeTab !== 'por_aplicar' ? 'pending' : ''}`}>
+                {countPorAplicar}
+              </span>
+            )}
           </button>
         </div>
         <div className="tabs-actions">

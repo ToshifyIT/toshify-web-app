@@ -70,8 +70,7 @@ export function AsignacionesActivasModule() {
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   useEffect(() => {
-    loadAsignacionesActivas()
-    loadTotalVehiculos()
+    loadAllData()
   }, [])
 
   // Cerrar dropdown de filtro al hacer click fuera
@@ -85,117 +84,107 @@ export function AsignacionesActivasModule() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [openColumnFilter])
 
-  const loadTotalVehiculos = async () => {
-    try {
-      // Obtener estados de vehículos primero
-      const { data: estadosData } = await supabase
-        .from('vehiculos_estados')
-        .select('id, codigo')
-
-      if (!estadosData) return
-
-      const estadoIdMap = new Map<string, string>()
-      estadosData.forEach((e: any) => estadoIdMap.set(e.codigo, e.id))
-
-      // Obtener todos los vehículos con su estado_id
-      const { data: vehiculos } = await supabase
-        .from('vehiculos')
-        .select('id, estado_id')
-
-      if (!vehiculos) return
-
-      // Crear mapa inverso: id -> codigo
-      const idToCodigoMap = new Map<string, string>()
-      estadosData.forEach((e: any) => idToCodigoMap.set(e.id, e.codigo))
-
-      // Contar solo vehículos operativos (excluir CORPORATIVO, ROBO, DESTRUCCION_TOTAL, JUBILADO)
-      const totalFlotaOperativa = vehiculos.filter((v: any) => {
-        const estadoCodigo = idToCodigoMap.get(v.estado_id)
-        return !ESTADOS_NO_OPERATIVOS.includes(estadoCodigo || '')
-      }).length
-
-      // Contar PKG_ON_BASE + EN_USO para % Operatividad
-      const operativos = vehiculos.filter((v: any) => {
-        const estadoCodigo = idToCodigoMap.get(v.estado_id)
-        return estadoCodigo === 'PKG_ON_BASE' || estadoCodigo === 'EN_USO'
-      }).length
-
-      // Contar solo PKG_ON_BASE para Cupos Disponibles
-      const pkgOnId = estadoIdMap.get('PKG_ON_BASE')
-      const pkgOn = vehiculos.filter((v: any) => v.estado_id === pkgOnId).length
-
-      // Contar solo EN_USO para % Ocupación
-      const enUsoId = estadoIdMap.get('EN_USO')
-      const enUso = vehiculos.filter((v: any) => v.estado_id === enUsoId).length
-
-      setTotalVehiculosFlota(totalFlotaOperativa)
-      setVehiculosOperativos(operativos)
-      setVehiculosPkgOn(pkgOn)
-      setVehiculosEnUso(enUso)
-    } catch (err) {
-      console.error('Error cargando total vehículos:', err)
-    }
-  }
-
-  const loadAsignacionesActivas = async () => {
+  // ✅ OPTIMIZADO: Una sola función que carga todo en paralelo
+  const loadAllData = async () => {
     setLoading(true)
     try {
-      // Obtener solo asignaciones con estado "activa" (verificar ambas variantes)
-      const { data: asignacionesData, error } = await supabase
-        .from('asignaciones')
-        .select(`
-          id,
-          codigo,
-          vehiculo_id,
-          fecha_programada,
-          fecha_inicio,
-          modalidad,
-          horario,
-          estado,
-          created_at,
-          vehiculos (
-            patente,
-            marca,
-            modelo,
-            anio,
-            estado_id,
-            vehiculos_tipos (
-              descripcion
-            ),
-            vehiculos_estados (
-              codigo,
-              descripcion
-            )
-          ),
-          asignaciones_conductores (
+      // Ejecutar ambas queries en paralelo con Promise.all
+      const [asignacionesResult, vehiculosResult] = await Promise.all([
+        // Query 1: Asignaciones activas con relaciones
+        supabase
+          .from('asignaciones')
+          .select(`
             id,
-            conductor_id,
-            estado,
+            codigo,
+            vehiculo_id,
+            fecha_programada,
+            fecha_inicio,
+            modalidad,
             horario,
-            confirmado,
-            fecha_confirmacion,
-            conductores (
+            estado,
+            created_at,
+            vehiculos (
+              patente,
+              marca,
+              modelo,
+              anio,
+              estado_id,
+              vehiculos_tipos (
+                descripcion
+              ),
+              vehiculos_estados (
+                codigo,
+                descripcion
+              )
+            ),
+            asignaciones_conductores (
               id,
-              nombres,
-              apellidos,
-              numero_licencia,
-              telefono_contacto
+              conductor_id,
+              estado,
+              horario,
+              confirmado,
+              fecha_confirmacion,
+              conductores (
+                id,
+                nombres,
+                apellidos,
+                numero_licencia,
+                telefono_contacto
+              )
             )
-          )
-        `)
-        .in('estado', ['activo', 'activa'])
-        .order('created_at', { ascending: false })
+          `)
+          .in('estado', ['activo', 'activa'])
+          .order('created_at', { ascending: false }),
 
-      if (error) throw error
+        // Query 2: Vehículos con estado (una sola query con join)
+        supabase
+          .from('vehiculos')
+          .select('id, estado_id, vehiculos_estados(codigo)')
+      ])
 
-      // ✅ OPTIMIZADO: Ya no necesitamos queries separadas, incluir en la query principal
-      setAsignaciones(asignacionesData || [])
+      // Procesar asignaciones
+      if (asignacionesResult.error) throw asignacionesResult.error
+      setAsignaciones(asignacionesResult.data || [])
+
+      // Procesar estadísticas de vehículos en una sola pasada
+      if (vehiculosResult.data) {
+        const vehiculos = vehiculosResult.data as any[]
+
+        // Calcular todo en una sola iteración
+        let totalFlota = 0
+        let operativos = 0
+        let pkgOn = 0
+        let enUso = 0
+
+        for (const v of vehiculos) {
+          const estadoCodigo = v.vehiculos_estados?.codigo || ''
+
+          // Total flota (excluir no operativos)
+          if (!ESTADOS_NO_OPERATIVOS.includes(estadoCodigo)) {
+            totalFlota++
+          }
+
+          // Operativos (PKG_ON_BASE + EN_USO)
+          if (estadoCodigo === 'PKG_ON_BASE') {
+            operativos++
+            pkgOn++
+          } else if (estadoCodigo === 'EN_USO') {
+            operativos++
+            enUso++
+          }
+        }
+
+        setTotalVehiculosFlota(totalFlota)
+        setVehiculosOperativos(operativos)
+        setVehiculosPkgOn(pkgOn)
+        setVehiculosEnUso(enUso)
+      }
     } catch (err: any) {
-      console.error('Error cargando asignaciones activas:', err)
+      console.error('Error cargando datos:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'No se pudieron cargar las asignaciones activas',
+        text: 'No se pudieron cargar los datos',
         confirmButtonColor: 'var(--color-primary)'
       })
     } finally {
@@ -204,6 +193,13 @@ export function AsignacionesActivasModule() {
   }
 
   const handleStatCardClick = (filterType: string) => {
+    // Limpiar TODOS los filtros de columna primero
+    setCodigoFilter([])
+    setCodigoSearch('')
+    setVehiculoFilter([])
+    setVehiculoSearch('')
+    setModalidadFilter([])
+
     // Toggle: si ya está activo, desactivar
     if (activeStatFilter === filterType) {
       setActiveStatFilter(null)
@@ -277,40 +273,40 @@ export function AsignacionesActivasModule() {
     setShowDetailsModal(true)
   }
 
-  // Calcular estadísticas
+  // ✅ OPTIMIZADO: Calcular todas las estadísticas en UNA SOLA PASADA
   const stats = useMemo(() => {
-    const turnoCount = asignaciones.filter(a => a.horario === 'TURNO').length
-    const cargoCount = asignaciones.filter(a => a.horario === 'CARGO' || !a.horario).length
-
     // Estados de vehículos NO operacionales
     const estadosNoOperacionales = ['REPARACION', 'MANTENIMIENTO', 'BAJA', 'VENDIDO']
 
-    // Cupos totales: TURNO tiene 2 cupos (D+N), CARGO tiene 1 cupo
-    const cuposTotales = (turnoCount * 2) + cargoCount
+    // Sets para contar únicos
+    const conductoresSet = new Set<string>()
+    const vehiculosSet = new Set<string>()
 
-    // Filtrar solo vehículos operacionales (disponibles)
-    const asignacionesOperacionales = asignaciones.filter(a => {
-      const estadoVehiculo = (a.vehiculos as any)?.vehiculos_estados?.codigo
-      return !estadosNoOperacionales.includes(estadoVehiculo)
-    })
-    // Variables para futura referencia - cupos operacionales
-    // const turnoCountOp = asignacionesOperacionales.filter(a => a.horario === 'TURNO').length
-    // const cargoCountOp = asignacionesOperacionales.filter(a => a.horario === 'CARGO' || !a.horario).length
-    // const cuposTotalesOperacionales = (turnoCountOp * 2) + cargoCountOp
-
-    // Contar cupos ocupados y vacantes (TODOS los vehículos)
+    // Contadores - todo en una sola pasada
+    let turnoCount = 0
+    let cargoCount = 0
     let cuposOcupados = 0
     let vacantesD = 0
     let vacantesN = 0
+    let vehiculosOcupados = 0
+    let vehiculosOperacionalesCount = 0
+    let vehiculosOcupadosOperacionales = 0
 
-    asignaciones.forEach(a => {
+    // UNA SOLA ITERACIÓN sobre asignaciones
+    for (const a of asignaciones) {
+      const estadoVehiculo = (a.vehiculos as any)?.vehiculos_estados?.codigo || ''
+      const esOperacional = !estadosNoOperacionales.includes(estadoVehiculo)
+      const conductores = a.asignaciones_conductores || []
+
+      // Contar por horario
       if (a.horario === 'TURNO') {
-        // Buscar conductor diurno (minúsculas)
-        const conductorD = a.asignaciones_conductores?.find(ac =>
+        turnoCount++
+
+        // Buscar conductores D y N
+        const conductorD = conductores.find(ac =>
           ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D'
         )
-        // Buscar conductor nocturno (minúsculas)
-        const conductorN = a.asignaciones_conductores?.find(ac =>
+        const conductorN = conductores.find(ac =>
           ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N'
         )
 
@@ -326,59 +322,42 @@ export function AsignacionesActivasModule() {
           vacantesN++
         }
       } else {
-        // CARGO: tiene 1 cupo, contar si está ocupado
-        const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
+        cargoCount++
+        const tieneConductor = conductores.some(ac => ac.conductor_id)
         if (tieneConductor) {
           cuposOcupados++
         }
       }
-    })
 
-    // Contar VEHÍCULOS ocupados (con al menos 1 conductor) - para % Operacional
-    let vehiculosOcupados = 0
-    let vehiculosOcupadosOperacionales = 0
+      // Vehículos ocupados (con al menos 1 conductor)
+      const tieneConductor = conductores.some(ac => ac.conductor_id)
+      if (tieneConductor) {
+        vehiculosOcupados++
+        if (esOperacional) vehiculosOcupadosOperacionales++
+      }
 
-    asignaciones.forEach(a => {
-      const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
-      if (tieneConductor) vehiculosOcupados++
-    })
+      // Contar operacionales
+      if (esOperacional) vehiculosOperacionalesCount++
 
-    asignacionesOperacionales.forEach(a => {
-      const tieneConductor = a.asignaciones_conductores?.some(ac => ac.conductor_id)
-      if (tieneConductor) vehiculosOcupadosOperacionales++
-    })
+      // Agregar a sets
+      if (a.vehiculo_id) vehiculosSet.add(a.vehiculo_id)
+      for (const ac of conductores) {
+        if (ac.conductor_id) conductoresSet.add(ac.conductor_id)
+      }
+    }
 
+    // Cálculos finales
+    const cuposTotales = (turnoCount * 2) + cargoCount
     const cuposDisponibles = cuposTotales - cuposOcupados
 
-    // % Ocupación = EN_USO / Total Flota * 100
     const porcentajeOcupacionGeneral = totalVehiculosFlota > 0
       ? ((vehiculosEnUso / totalVehiculosFlota) * 100).toFixed(1)
       : '0'
 
-    // % Ocupación Operacional: (Vehículos ocupados / Vehículos disponibles) × 100
-    const vehiculosDisponibles = asignacionesOperacionales.length
-    const porcentajeOcupacionOperacional = vehiculosDisponibles > 0
-      ? ((vehiculosOcupadosOperacionales / vehiculosDisponibles) * 100).toFixed(1)
+    const porcentajeOcupacionOperacional = vehiculosOperacionalesCount > 0
+      ? ((vehiculosOcupadosOperacionales / vehiculosOperacionalesCount) * 100).toFixed(1)
       : '0'
 
-    // Conductores únicos
-    const conductoresSet = new Set<string>()
-    asignaciones.forEach(a => {
-      a.asignaciones_conductores?.forEach(ac => {
-        if (ac.conductor_id) conductoresSet.add(ac.conductor_id)
-      })
-    })
-
-    // Vehículos únicos
-    const vehiculosSet = new Set<string>()
-    asignaciones.forEach(a => {
-      if (a.vehiculo_id) vehiculosSet.add(a.vehiculo_id)
-    })
-
-    // Vehículos sin asignación
-    const vehiculosSinAsignar = totalVehiculosFlota - vehiculosSet.size
-
-    // % Operatividad = (PKG_ON_BASE + EN_USO) / Total Flota * 100
     const porcentajeOperatividad = totalVehiculosFlota > 0
       ? ((vehiculosOperativos / totalVehiculosFlota) * 100).toFixed(1)
       : '0'
@@ -390,13 +369,13 @@ export function AsignacionesActivasModule() {
       conductores: conductoresSet.size,
       vehiculos: vehiculosSet.size,
       totalFlota: totalVehiculosFlota,
-      vehiculosSinAsignar,
+      vehiculosSinAsignar: totalVehiculosFlota - vehiculosSet.size,
       cuposTotales,
       cuposOcupados,
       cuposDisponibles,
       vacantesD,
       vacantesN,
-      vehiculosOperacionales: asignacionesOperacionales.length,
+      vehiculosOperacionales: vehiculosOperacionalesCount,
       vehiculosOcupados,
       vehiculosOcupadosOperacionales,
       porcentajeOcupacionGeneral,

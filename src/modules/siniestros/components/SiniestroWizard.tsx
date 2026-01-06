@@ -1,6 +1,7 @@
 // src/modules/siniestros/components/SiniestroWizard.tsx
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Check, X, Car, AlertTriangle, FileText, Users, Briefcase } from 'lucide-react'
+import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import type { SiniestroFormData, SiniestroCategoria, SiniestroEstado, VehiculoSimple, ConductorSimple } from '../../../types/siniestros.types'
 
 // =====================================================
@@ -413,10 +414,9 @@ function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculo
       <div className="form-row">
         <div className="form-group">
           <label>Hora</label>
-          <input
-            type="time"
-            value={formData.hora_siniestro || ''}
-            onChange={(e) => setFormData(prev => ({ ...prev, hora_siniestro: e.target.value }))}
+          <TimeInput24h
+            value={formData.hora_siniestro || '09:00'}
+            onChange={(value) => setFormData(prev => ({ ...prev, hora_siniestro: value }))}
           />
         </div>
         <div className="form-group">

@@ -7,6 +7,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Calendar, ChevronDown, Radio } from 'lucide-react'
 import type { WeekOption } from '../types/cabify.types'
+import { formatDateTimeAR } from '../../../../utils/dateUtils'
 
 // =====================================================
 // TIPOS
@@ -80,7 +81,7 @@ export function CabifyHeader({
       </div>
       {lastUpdate && (
         <span className="cabify-last-update-compact">
-          Última actualización: {lastUpdate.toLocaleString('es-AR')}
+          Última actualización: {formatDateTimeAR(lastUpdate)}
         </span>
       )}
     </div>

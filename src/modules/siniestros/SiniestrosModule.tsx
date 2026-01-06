@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { TimeInput24h } from '../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import {
   Plus,
@@ -1259,10 +1260,9 @@ function SiniestroForm({
         <div className="form-row">
           <div className="form-group">
             <label>Hora</label>
-            <input
-              type="time"
-              value={formData.hora_siniestro || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, hora_siniestro: e.target.value }))}
+            <TimeInput24h
+              value={formData.hora_siniestro || '09:00'}
+              onChange={(value) => setFormData(prev => ({ ...prev, hora_siniestro: value }))}
               disabled={isFieldDisabled('hora_siniestro')}
             />
           </div>

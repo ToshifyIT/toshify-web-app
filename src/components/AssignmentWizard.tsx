@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { X, Calendar, User, ChevronRight, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { TimeInput24h } from './ui/TimeInput24h'
 import Swal from 'sweetalert2'
 
 interface Vehicle {
@@ -1862,18 +1863,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       }}>
                         Hora de Entrega *
                       </label>
-                      <input
-                        type="time"
+                      <TimeInput24h
                         value={formData.hora_programada}
-                        onChange={(e) => setFormData({ ...formData, hora_programada: e.target.value })}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          border: '2px solid #E5E7EB',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                          fontFamily: 'inherit'
-                        }}
+                        onChange={(value) => setFormData({ ...formData, hora_programada: value })}
                       />
                     </div>
                   </div>

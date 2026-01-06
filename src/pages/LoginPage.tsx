@@ -30,7 +30,7 @@ export function LoginPage() {
           setError(error.message)
         }
       } else {
-        navigate('/')
+        navigate('/estado-de-flota')
       }
     } catch {
       setError('Error al iniciar sesión. Intentá de nuevo.')

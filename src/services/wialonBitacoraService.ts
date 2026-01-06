@@ -365,12 +365,34 @@ export const wialonBitacoraService = {
   },
 
   /**
-   * Trigger sync - Solo limpia cache (wialon_bitacora se sincroniza por Edge Function)
+   * Trigger sync - Invoca la Edge Function para sincronizar datos
    */
-  async triggerSync(_startDate?: string, _endDate?: string): Promise<{ success: boolean; error?: string; turnos?: number }> {
+  async triggerSync(startDate?: string, endDate?: string): Promise<{ success: boolean; error?: string; turnos?: number }> {
     this.clearCache()
-    // wialon_bitacora se sincroniza por Edge Function (cron job)
-    return { success: true }
+
+    try {
+      // Invocar la Edge Function de sincronización
+      const { data, error } = await supabase.functions.invoke('sync-wialon-bitacora', {
+        body: {
+          daysBack: 3,
+          ...(startDate && endDate ? { startDate, endDate } : {}),
+        },
+      })
+
+      if (error) {
+        console.error('Error invocando sync-wialon-bitacora:', error)
+        return { success: false, error: error.message }
+      }
+
+      return {
+        success: true,
+        turnos: data?.turnosGenerados || 0,
+      }
+    } catch (err) {
+      // Si la Edge Function no está disponible, solo limpiar caché
+      console.warn('Edge Function no disponible, solo se limpió el caché:', err)
+      return { success: true }
+    }
   },
 
   clearCache(): void {
