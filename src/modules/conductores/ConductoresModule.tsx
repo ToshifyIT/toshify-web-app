@@ -1476,9 +1476,9 @@ export function ConductoresModule() {
         accessorKey: "conductores_estados.codigo",
         header: () => (
           <div className="dt-column-filter">
-            <span>Estado</span>
+            <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${estadoFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado');
@@ -1488,30 +1488,27 @@ export function ConductoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'estado' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
-                <button
-                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEstadoFilter('');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Todos
-                </button>
-                {uniqueEstados.map(([codigo, descripcion]) => (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  {uniqueEstados.map(([codigo, descripcion]) => (
+                    <label key={codigo} className={`dt-column-filter-checkbox ${estadoFilter.includes(codigo) ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={estadoFilter.includes(codigo)}
+                        onChange={() => toggleEstadoFilter(codigo)}
+                      />
+                      <span>{descripcion}</span>
+                    </label>
+                  ))}
+                </div>
+                {estadoFilter.length > 0 && (
                   <button
-                    key={codigo}
-                    className={`dt-column-filter-option ${estadoFilter === codigo ? 'selected' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEstadoFilter(codigo);
-                      setOpenColumnFilter(null);
-                    }}
+                    className="dt-column-filter-clear"
+                    onClick={() => setEstadoFilter([])}
                   >
-                    {descripcion}
+                    Limpiar ({estadoFilter.length})
                   </button>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -1536,9 +1533,9 @@ export function ConductoresModule() {
         id: "vehiculo_asignado",
         header: () => (
           <div className="dt-column-filter">
-            <span>Asignación</span>
+            <span>Asignación {asignacionFilter.length > 0 && `(${asignacionFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${asignacionFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${asignacionFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'asignacion' ? null : 'asignacion');
@@ -1548,37 +1545,33 @@ export function ConductoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'asignacion' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
-                <button
-                  className={`dt-column-filter-option ${asignacionFilter === '' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAsignacionFilter('');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Todos
-                </button>
-                <button
-                  className={`dt-column-filter-option ${asignacionFilter === 'asignado' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAsignacionFilter('asignado');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Asignados
-                </button>
-                <button
-                  className={`dt-column-filter-option ${asignacionFilter === 'disponible' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAsignacionFilter('disponible');
-                    setOpenColumnFilter(null);
-                  }}
-                >
-                  Disponibles
-                </button>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  <label className={`dt-column-filter-checkbox ${asignacionFilter.includes('asignado') ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={asignacionFilter.includes('asignado')}
+                      onChange={() => toggleAsignacionFilter('asignado')}
+                    />
+                    <span>Asignados</span>
+                  </label>
+                  <label className={`dt-column-filter-checkbox ${asignacionFilter.includes('disponible') ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={asignacionFilter.includes('disponible')}
+                      onChange={() => toggleAsignacionFilter('disponible')}
+                    />
+                    <span>Disponibles</span>
+                  </label>
+                </div>
+                {asignacionFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => setAsignacionFilter([])}
+                  >
+                    Limpiar ({asignacionFilter.length})
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1648,7 +1641,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cbusFiltrados, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
   );
 
   return (
