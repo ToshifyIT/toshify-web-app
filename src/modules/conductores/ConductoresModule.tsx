@@ -143,6 +143,8 @@ export function ConductoresModule() {
     motivo_baja: "",
     estado_id: "",
     preferencia_turno: "SIN_PREFERENCIA",
+    url_documentacion: "",
+    numero_ibutton: "",
   });
 
   useEffect(() => {
@@ -498,6 +500,8 @@ export function ConductoresModule() {
             motivo_baja: formData.motivo_baja || null,
             estado_id: formData.estado_id || null,
             preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
+            url_documentacion: formData.url_documentacion || null,
+            numero_ibutton: formData.numero_ibutton || null,
             created_by: user?.id,
             created_by_name: profile?.full_name || "Sistema",
           },
@@ -833,6 +837,8 @@ export function ConductoresModule() {
         motivo_baja: formData.motivo_baja || null,
         estado_id: formData.estado_id || null,
         preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
+        url_documentacion: formData.url_documentacion || null,
+        numero_ibutton: formData.numero_ibutton || null,
         updated_at: new Date().toISOString(),
         updated_by: profile?.full_name || "Sistema",
       })
@@ -985,6 +991,8 @@ export function ConductoresModule() {
       motivo_baja: conductor.motivo_baja || "",
       estado_id: conductor.estado_id || "",
       preferencia_turno: (conductor as any).preferencia_turno || "SIN_PREFERENCIA",
+      url_documentacion: (conductor as any).url_documentacion || "",
+      numero_ibutton: (conductor as any).numero_ibutton || "",
     });
     setShowEditModal(true);
   };
@@ -1024,6 +1032,8 @@ export function ConductoresModule() {
       motivo_baja: "",
       estado_id: "",
       preferencia_turno: "SIN_PREFERENCIA",
+      url_documentacion: "",
+      numero_ibutton: "",
     });
   };
 
@@ -1064,9 +1074,9 @@ export function ConductoresModule() {
     return [...new Set(dnis)].sort();
   }, [conductores]);
 
-  const cbusUnicos = useMemo(() => {
-    const cbus = conductores.map(c => (c as any).cbu).filter(Boolean) as string[];
-    return [...new Set(cbus)].sort();
+  const cuilsUnicos = useMemo(() => {
+    const cuils = conductores.map(c => c.numero_cuit).filter(Boolean) as string[];
+    return [...new Set(cuils)].sort();
   }, [conductores]);
 
   const turnosUnicos = ['DIURNO', 'NOCTURNO', 'SIN_PREFERENCIA', 'A_CARGO'];
@@ -1088,10 +1098,10 @@ export function ConductoresModule() {
     return dnisUnicos.filter(d => d.toLowerCase().includes(dniSearch.toLowerCase()));
   }, [dnisUnicos, dniSearch]);
 
-  const cbusFiltrados = useMemo(() => {
-    if (!cbuSearch) return cbusUnicos;
-    return cbusUnicos.filter(c => c.toLowerCase().includes(cbuSearch.toLowerCase()));
-  }, [cbusUnicos, cbuSearch]);
+  const cuilsFiltrados = useMemo(() => {
+    if (!cbuSearch) return cuilsUnicos;
+    return cuilsUnicos.filter(c => c.toLowerCase().includes(cbuSearch.toLowerCase()));
+  }, [cuilsUnicos, cbuSearch]);
 
   // Toggle functions para multiselect
   const toggleNombreFilter = (nombre: string) => {
@@ -1148,7 +1158,7 @@ export function ConductoresModule() {
 
     if (cbuFilter.length > 0) {
       result = result.filter(c =>
-        cbuFilter.includes((c as any).cbu || '')
+        cbuFilter.includes(c.numero_cuit || '')
       );
     }
 
@@ -1319,17 +1329,17 @@ export function ConductoresModule() {
         enableSorting: true,
       },
       {
-        accessorKey: "cbu",
+        accessorKey: "numero_cuit",
         header: () => (
           <div className="dt-column-filter">
-            <span>CBU {cbuFilter.length > 0 && `(${cbuFilter.length})`}</span>
+            <span>CUIL {cbuFilter.length > 0 && `(${cbuFilter.length})`}</span>
             <button
               className={`dt-column-filter-btn ${cbuFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'cbu' ? null : 'cbu');
               }}
-              title="Filtrar por CBU"
+              title="Filtrar por CUIL"
             >
               <Filter size={12} />
             </button>
@@ -1344,17 +1354,17 @@ export function ConductoresModule() {
                   autoFocus
                 />
                 <div className="dt-excel-filter-list">
-                  {cbusFiltrados.length === 0 ? (
+                  {cuilsFiltrados.length === 0 ? (
                     <div className="dt-excel-filter-empty">Sin resultados</div>
                   ) : (
-                    cbusFiltrados.slice(0, 50).map(cbu => (
-                      <label key={cbu} className={`dt-column-filter-checkbox ${cbuFilter.includes(cbu) ? 'selected' : ''}`}>
+                    cuilsFiltrados.slice(0, 50).map(cuil => (
+                      <label key={cuil} className={`dt-column-filter-checkbox ${cbuFilter.includes(cuil) ? 'selected' : ''}`}>
                         <input
                           type="checkbox"
-                          checked={cbuFilter.includes(cbu)}
-                          onChange={() => toggleCbuFilter(cbu)}
+                          checked={cbuFilter.includes(cuil)}
+                          onChange={() => toggleCbuFilter(cuil)}
                         />
-                        <span>{cbu}</span>
+                        <span>{cuil}</span>
                       </label>
                     ))
                   )}
@@ -1371,7 +1381,7 @@ export function ConductoresModule() {
             )}
           </div>
         ),
-        cell: ({ row }) => (row.original as any).cbu || "-",
+        cell: ({ row }) => row.original.numero_cuit || "-",
         enableSorting: true,
       },
       {
@@ -1431,12 +1441,6 @@ export function ConductoresModule() {
           }
           return <span className="dt-badge dt-badge-gray">{turno}</span>;
         },
-        enableSorting: true,
-      },
-      {
-        accessorKey: "numero_licencia",
-        header: "Licencia",
-        cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
       {
@@ -1641,78 +1645,56 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cbusFiltrados, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cuilsFiltrados, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
   );
 
   return (
     <div className="cond-module">
-      {/* Stats Cards - Estilo Bitácora (Clickeables para filtrar) */}
+      {/* Stats Cards - Métricas principales */}
       <div className="cond-stats">
         <div className="cond-stats-grid">
           <div
-            className={`stat-card stat-card-clickable ${activeStatCard === null ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('total')}
-            title="Ver todos los conductores"
+            className={`stat-card stat-card-clickable ${activeStatCard === 'asignados' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('asignados')}
+            title="Conductores activos con vehículo asignado"
           >
-            <Users size={18} className="stat-icon" />
+            <UserCheck size={18} className="stat-icon" style={{ color: '#22C55E' }} />
             <div className="stat-content">
-              <span className="stat-value">{statsData.totalConductores}</span>
-              <span className="stat-label">Total</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'activos' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('activos')}
-            title="Filtrar conductores activos"
-          >
-            <Users size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{statsData.conductoresActivos}</span>
-              <span className="stat-label">Activos</span>
+              <span className="stat-value">{statsData.conductoresAsignados}</span>
+              <span className="stat-label">Activos con Auto</span>
             </div>
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'disponibles' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('disponibles')}
-            title="Filtrar conductores disponibles (activos sin asignación)"
+            title="Conductores activos esperando vehículo"
           >
-            <Users size={18} className="stat-icon" />
+            <Clock size={18} className="stat-icon" style={{ color: '#F59E0B' }} />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresDisponibles}</span>
-              <span className="stat-label">Disponibles</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'asignados' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('asignados')}
-            title="Filtrar conductores asignados"
-          >
-            <UserCheck size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{statsData.conductoresAsignados}</span>
-              <span className="stat-label">Asignados</span>
+              <span className="stat-label">En Espera</span>
             </div>
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'baja' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('baja')}
-            title="Filtrar conductores de baja"
+            title="Conductores de baja"
           >
-            <UserX size={18} className="stat-icon" />
+            <UserX size={18} className="stat-icon" style={{ color: '#6B7280' }} />
             <div className="stat-content">
               <span className="stat-value">{statsData.conductoresBaja}</span>
-              <span className="stat-label">Baja</span>
+              <span className="stat-label">Bajas</span>
             </div>
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('licencias')}
-            title="Filtrar licencias por vencer (próximos 30 días)"
+            title="Licencias por vencer en los próximos 30 días"
           >
-            <Clock size={18} className="stat-icon" />
+            <AlertTriangle size={18} className="stat-icon" style={{ color: '#EF4444' }} />
             <div className="stat-content">
               <span className="stat-value">{statsData.licenciasPorVencer}</span>
-              <span className="stat-label">Lic. Vencer</span>
+              <span className="stat-label">Lic. por Vencer</span>
             </div>
           </div>
         </div>
@@ -2310,11 +2292,11 @@ function ModalEditar({
           </div>
         </div>
 
-        <div className="section-title">Información Laboral</div>
+        <div className="section-title">Información de Seguridad</div>
 
         <div className="form-row-3">
           <div className="form-group">
-            <label className="form-label">Fecha Contratación</label>
+            <label className="form-label">Fecha de Incorporación</label>
             <input
               type="date"
               className="form-input"
@@ -2357,6 +2339,50 @@ function ModalEditar({
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+
+        <div className="form-section-title" style={{ marginTop: '20px' }}>Documentación e iButton</div>
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Link de Documentación (Drive)</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="url"
+                className="form-input"
+                value={formData.url_documentacion}
+                onChange={(e) =>
+                  setFormData({ ...formData, url_documentacion: e.target.value })
+                }
+                disabled={saving}
+                placeholder="https://drive.google.com/..."
+                style={{ flex: 1 }}
+              />
+              {formData.url_documentacion && (
+                <a
+                  href={formData.url_documentacion}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-secondary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px' }}
+                >
+                  Ver
+                </a>
+              )}
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Número de iButton</label>
+            <input
+              type="text"
+              className="form-input"
+              value={formData.numero_ibutton}
+              onChange={(e) =>
+                setFormData({ ...formData, numero_ibutton: e.target.value })
+              }
+              disabled={saving}
+              placeholder="Ej: IB-001234"
+            />
           </div>
         </div>
 
@@ -2561,9 +2587,15 @@ function ModalDetalles({
             </div>
           </div>
           <div>
-            <label className="detail-label">CBU</label>
+            <label className="detail-label">CUIL</label>
             <div className="detail-value">
-              {(selectedConductor as any).cbu || "N/A"}
+              {selectedConductor.numero_cuit || "N/A"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">NÚMERO IBUTTON</label>
+            <div className="detail-value">
+              {(selectedConductor as any).numero_ibutton || "N/A"}
             </div>
           </div>
           <div>
@@ -2673,6 +2705,22 @@ function ModalDetalles({
             <label className="detail-label">DIRECCIÓN</label>
             <div className="detail-value">
               {selectedConductor.direccion || "N/A"}
+            </div>
+          </div>
+        </div>
+
+        <div className="section-title">Contacto de Emergencia</div>
+        <div className="details-grid">
+          <div>
+            <label className="detail-label">NOMBRE CONTACTO</label>
+            <div className="detail-value">
+              {selectedConductor.contacto_emergencia || "N/A"}
+            </div>
+          </div>
+          <div>
+            <label className="detail-label">TELÉFONO EMERGENCIA</label>
+            <div className="detail-value">
+              {selectedConductor.telefono_emergencia || "N/A"}
             </div>
           </div>
         </div>
