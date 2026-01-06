@@ -41,10 +41,13 @@ export function VehicleManagement() {
   // Catalog states
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
 
-  // Column filter states
-  const [patenteFilter, setPatenteFilter] = useState('')
-  const [marcaFilter, setMarcaFilter] = useState('')
-  const [modeloFilter, setModeloFilter] = useState('')
+  // Column filter states - Multiselect tipo Excel
+  const [patenteFilter, setPatenteFilter] = useState<string[]>([])
+  const [patenteSearch, setPatenteSearch] = useState('')
+  const [marcaFilter, setMarcaFilter] = useState<string[]>([])
+  const [marcaSearch, setMarcaSearch] = useState('')
+  const [modeloFilter, setModeloFilter] = useState<string[]>([])
+  const [modeloSearch, setModeloSearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
@@ -505,9 +508,12 @@ export function VehicleManagement() {
   // Manejar click en stat cards para filtrar
   const handleStatCardClick = (cardType: string) => {
     // Limpiar filtros de columna
-    setPatenteFilter('')
-    setMarcaFilter('')
-    setModeloFilter('')
+    setPatenteFilter([])
+    setPatenteSearch('')
+    setMarcaFilter([])
+    setMarcaSearch('')
+    setModeloFilter([])
+    setModeloSearch('')
 
     // Si hace click en el mismo, desactivar
     if (activeStatCard === cardType) {
@@ -566,25 +572,66 @@ export function VehicleManagement() {
     return Array.from(modelos).sort()
   }, [vehiculos])
 
-  // Filtrar vehículos según los filtros de columna
+  // Valores únicos para filtros tipo Excel
+  const patentesUnicas = useMemo(() => {
+    const patentes = vehiculos.map(v => v.patente).filter(Boolean) as string[]
+    return [...new Set(patentes)].sort()
+  }, [vehiculos])
+
+  // Opciones filtradas por búsqueda
+  const patentesFiltradas = useMemo(() => {
+    if (!patenteSearch) return patentesUnicas
+    return patentesUnicas.filter(p => p.toLowerCase().includes(patenteSearch.toLowerCase()))
+  }, [patentesUnicas, patenteSearch])
+
+  const marcasFiltradas = useMemo(() => {
+    if (!marcaSearch) return marcasExistentes
+    return marcasExistentes.filter(m => m.toLowerCase().includes(marcaSearch.toLowerCase()))
+  }, [marcasExistentes, marcaSearch])
+
+  const modelosFiltrados = useMemo(() => {
+    if (!modeloSearch) return modelosExistentes
+    return modelosExistentes.filter(m => m.toLowerCase().includes(modeloSearch.toLowerCase()))
+  }, [modelosExistentes, modeloSearch])
+
+  // Toggle functions para multiselect
+  const togglePatenteFilter = (patente: string) => {
+    setPatenteFilter(prev =>
+      prev.includes(patente) ? prev.filter(p => p !== patente) : [...prev, patente]
+    )
+  }
+
+  const toggleMarcaFilter = (marca: string) => {
+    setMarcaFilter(prev =>
+      prev.includes(marca) ? prev.filter(m => m !== marca) : [...prev, marca]
+    )
+  }
+
+  const toggleModeloFilter = (modelo: string) => {
+    setModeloFilter(prev =>
+      prev.includes(modelo) ? prev.filter(m => m !== modelo) : [...prev, modelo]
+    )
+  }
+
+  // Filtrar vehículos según los filtros de columna (multiselect tipo Excel)
   const filteredVehiculos = useMemo(() => {
     let result = vehiculos
 
-    if (patenteFilter) {
+    if (patenteFilter.length > 0) {
       result = result.filter(v =>
-        v.patente?.toLowerCase().includes(patenteFilter.toLowerCase())
+        patenteFilter.includes(v.patente || '')
       )
     }
 
-    if (marcaFilter) {
+    if (marcaFilter.length > 0) {
       result = result.filter(v =>
-        v.marca?.toLowerCase().includes(marcaFilter.toLowerCase())
+        marcaFilter.includes(v.marca || '')
       )
     }
 
-    if (modeloFilter) {
+    if (modeloFilter.length > 0) {
       result = result.filter(v =>
-        v.modelo?.toLowerCase().includes(modeloFilter.toLowerCase())
+        modeloFilter.includes(v.modelo || '')
       )
     }
 
@@ -620,9 +667,9 @@ export function VehicleManagement() {
         accessorKey: 'patente',
         header: () => (
           <div className="dt-column-filter">
-            <span>Patente</span>
+            <span>Patente {patenteFilter.length > 0 && `(${patenteFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${patenteFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${patenteFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente')
@@ -632,26 +679,37 @@ export function VehicleManagement() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'patente' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar patente..."
-                  value={patenteFilter}
-                  onChange={(e) => setPatenteFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={patenteSearch}
+                  onChange={(e) => setPatenteSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {patenteFilter && (
+                <div className="dt-excel-filter-list">
+                  {patentesFiltradas.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    patentesFiltradas.slice(0, 50).map(patente => (
+                      <label key={patente} className={`dt-column-filter-checkbox ${patenteFilter.includes(patente) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={patenteFilter.includes(patente)}
+                          onChange={() => togglePatenteFilter(patente)}
+                        />
+                        <span>{patente}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {patenteFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setPatenteFilter('')
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setPatenteFilter([]); setPatenteSearch('') }}
                   >
-                    Limpiar
+                    Limpiar ({patenteFilter.length})
                   </button>
                 )}
               </div>
@@ -667,9 +725,9 @@ export function VehicleManagement() {
         accessorKey: 'marca',
         header: () => (
           <div className="dt-column-filter">
-            <span>Marca</span>
+            <span>Marca {marcaFilter.length > 0 && `(${marcaFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${marcaFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${marcaFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'marca' ? null : 'marca')
@@ -679,26 +737,37 @@ export function VehicleManagement() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'marca' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar marca..."
-                  value={marcaFilter}
-                  onChange={(e) => setMarcaFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={marcaSearch}
+                  onChange={(e) => setMarcaSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {marcaFilter && (
+                <div className="dt-excel-filter-list">
+                  {marcasFiltradas.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    marcasFiltradas.slice(0, 50).map(marca => (
+                      <label key={marca} className={`dt-column-filter-checkbox ${marcaFilter.includes(marca) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={marcaFilter.includes(marca)}
+                          onChange={() => toggleMarcaFilter(marca)}
+                        />
+                        <span>{marca}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {marcaFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setMarcaFilter('')
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setMarcaFilter([]); setMarcaSearch('') }}
                   >
-                    Limpiar
+                    Limpiar ({marcaFilter.length})
                   </button>
                 )}
               </div>
@@ -712,9 +781,9 @@ export function VehicleManagement() {
         accessorKey: 'modelo',
         header: () => (
           <div className="dt-column-filter">
-            <span>Modelo</span>
+            <span>Modelo {modeloFilter.length > 0 && `(${modeloFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${modeloFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${modeloFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'modelo' ? null : 'modelo')
@@ -724,26 +793,37 @@ export function VehicleManagement() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'modelo' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar modelo..."
-                  value={modeloFilter}
-                  onChange={(e) => setModeloFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={modeloSearch}
+                  onChange={(e) => setModeloSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {modeloFilter && (
+                <div className="dt-excel-filter-list">
+                  {modelosFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    modelosFiltrados.slice(0, 50).map(modelo => (
+                      <label key={modelo} className={`dt-column-filter-checkbox ${modeloFilter.includes(modelo) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={modeloFilter.includes(modelo)}
+                          onChange={() => toggleModeloFilter(modelo)}
+                        />
+                        <span>{modelo}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {modeloFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setModeloFilter('')
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setModeloFilter([]); setModeloSearch('') }}
                   >
-                    Limpiar
+                    Limpiar ({modeloFilter.length})
                   </button>
                 )}
               </div>
