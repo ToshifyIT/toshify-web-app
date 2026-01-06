@@ -54,6 +54,7 @@ export function AsignacionesActivasModule() {
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
   const [vehiculosOperativos, setVehiculosOperativos] = useState(0) // PKG_ON_BASE + EN_USO
+  const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0) // Solo PKG_ON_BASE
   const [loading, setLoading] = useState(true)
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -83,27 +84,46 @@ export function AsignacionesActivasModule() {
 
   const loadTotalVehiculos = async () => {
     try {
-      // Obtener todos los vehículos con su estado
+      // Obtener estados de vehículos primero
+      const { data: estadosData } = await supabase
+        .from('vehiculos_estados')
+        .select('id, codigo')
+
+      if (!estadosData) return
+
+      const estadoIdMap = new Map<string, string>()
+      estadosData.forEach((e: any) => estadoIdMap.set(e.codigo, e.id))
+
+      // Obtener todos los vehículos con su estado_id
       const { data: vehiculos } = await supabase
         .from('vehiculos')
-        .select('id, vehiculos_estados(codigo)')
+        .select('id, estado_id')
 
       if (!vehiculos) return
 
+      // Crear mapa inverso: id -> codigo
+      const idToCodigoMap = new Map<string, string>()
+      estadosData.forEach((e: any) => idToCodigoMap.set(e.id, e.codigo))
+
       // Contar solo vehículos operativos (excluir CORPORATIVO, ROBO, DESTRUCCION_TOTAL, JUBILADO)
       const totalFlotaOperativa = vehiculos.filter((v: any) => {
-        const estadoCodigo = v.vehiculos_estados?.codigo
-        return !ESTADOS_NO_OPERATIVOS.includes(estadoCodigo)
+        const estadoCodigo = idToCodigoMap.get(v.estado_id)
+        return !ESTADOS_NO_OPERATIVOS.includes(estadoCodigo || '')
       }).length
 
       // Contar PKG_ON_BASE + EN_USO para % Operatividad
       const operativos = vehiculos.filter((v: any) => {
-        const estadoCodigo = v.vehiculos_estados?.codigo
+        const estadoCodigo = idToCodigoMap.get(v.estado_id)
         return estadoCodigo === 'PKG_ON_BASE' || estadoCodigo === 'EN_USO'
       }).length
 
+      // Contar solo PKG_ON_BASE para Cupos Disponibles
+      const pkgOnId = estadoIdMap.get('PKG_ON_BASE')
+      const pkgOn = vehiculos.filter((v: any) => v.estado_id === pkgOnId).length
+
       setTotalVehiculosFlota(totalFlotaOperativa)
       setVehiculosOperativos(operativos)
+      setVehiculosPkgOn(pkgOn)
     } catch (err) {
       console.error('Error cargando total vehículos:', err)
     }
@@ -313,9 +333,10 @@ export function AsignacionesActivasModule() {
       vehiculosOcupadosOperacionales,
       porcentajeOcupacionGeneral,
       porcentajeOcupacionOperacional,
-      porcentajeOperatividad
+      porcentajeOperatividad,
+      cuposDisp: vehiculosPkgOn
     }
-  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos])
+  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOn])
 
   // Filtrar asignaciones según los filtros de columna y stat clickeada
   const filteredAsignaciones = useMemo(() => {
@@ -774,7 +795,14 @@ export function AsignacionesActivasModule() {
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.vacantesD + stats.vacantesN}</span>
-              <span className="stat-label">Cupos</span>
+              <span className="stat-label">Turnos Disponibles</span>
+            </div>
+          </div>
+          <div className="stat-card" title="Vehículos con estado PKG_ON_BASE">
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{stats.cuposDisp}</span>
+              <span className="stat-label">Cupos Disp</span>
             </div>
           </div>
           <div className="stat-card" title={`${stats.cuposOcupados} cupos ocupados de ${stats.cuposTotales} totales`}>

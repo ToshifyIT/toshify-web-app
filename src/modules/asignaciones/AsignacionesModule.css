@@ -55,7 +55,7 @@
 
 .asig-stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 16px;
 }
 
@@ -132,7 +132,7 @@
 /* Responsive Stats - Pantallas grandes */
 @media (max-width: 1600px) {
   .asig-stats-grid {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 12px;
   }
 
