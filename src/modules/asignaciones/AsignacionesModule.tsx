@@ -345,7 +345,7 @@ export function AsignacionesModule() {
           queryCartaOferta = queryCartaOferta.lte('asignaciones.fecha_programada', `${filterDateTo}T23:59:59`)
         }
       }
-      const { data: conductoresCartaOfertaData } = await queryCartaOferta
+      const { data: conductoresCartaOfertaData } = await queryCartaOferta as unknown as { data: Array<{ conductor_id: string }> | null }
 
       const conductoresCartaOfertaUnicos = new Set(
         conductoresCartaOfertaData?.map(c => c.conductor_id) || []
@@ -365,7 +365,7 @@ export function AsignacionesModule() {
           queryAnexo = queryAnexo.lte('asignaciones.fecha_programada', `${filterDateTo}T23:59:59`)
         }
       }
-      const { data: conductoresAnexoData } = await queryAnexo
+      const { data: conductoresAnexoData } = await queryAnexo as unknown as { data: Array<{ conductor_id: string }> | null }
 
       const conductoresAnexoUnicos = new Set(
         conductoresAnexoData?.map(c => c.conductor_id) || []
@@ -1559,7 +1559,7 @@ export function AsignacionesModule() {
                         .from('vehiculos_estados')
                         .select('id')
                         .eq('codigo', 'EN_USO')
-                        .single()
+                        .single() as unknown as { data: { id: string } | null }
 
                       if (estadoEnUso && selectedAsignacion.vehiculo_id) {
                         await (supabase as any)
