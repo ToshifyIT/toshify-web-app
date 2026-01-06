@@ -55,6 +55,7 @@ export function AsignacionesActivasModule() {
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
   const [vehiculosOperativos, setVehiculosOperativos] = useState(0) // PKG_ON_BASE + EN_USO
   const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0) // Solo PKG_ON_BASE
+  const [vehiculosEnUso, setVehiculosEnUso] = useState(0) // Solo EN_USO
   const [loading, setLoading] = useState(true)
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -121,9 +122,14 @@ export function AsignacionesActivasModule() {
       const pkgOnId = estadoIdMap.get('PKG_ON_BASE')
       const pkgOn = vehiculos.filter((v: any) => v.estado_id === pkgOnId).length
 
+      // Contar solo EN_USO para % Ocupación
+      const enUsoId = estadoIdMap.get('EN_USO')
+      const enUso = vehiculos.filter((v: any) => v.estado_id === enUsoId).length
+
       setTotalVehiculosFlota(totalFlotaOperativa)
       setVehiculosOperativos(operativos)
       setVehiculosPkgOn(pkgOn)
+      setVehiculosEnUso(enUso)
     } catch (err) {
       console.error('Error cargando total vehículos:', err)
     }
@@ -282,9 +288,9 @@ export function AsignacionesActivasModule() {
 
     const cuposDisponibles = cuposTotales - cuposOcupados
 
-    // % Ocupación General: (Turnos ocupados / Turnos totales) × 100
-    const porcentajeOcupacionGeneral = cuposTotales > 0
-      ? ((cuposOcupados / cuposTotales) * 100).toFixed(1)
+    // % Ocupación = EN_USO / Total Flota * 100
+    const porcentajeOcupacionGeneral = totalVehiculosFlota > 0
+      ? ((vehiculosEnUso / totalVehiculosFlota) * 100).toFixed(1)
       : '0'
 
     // % Ocupación Operacional: (Vehículos ocupados / Vehículos disponibles) × 100
@@ -336,7 +342,7 @@ export function AsignacionesActivasModule() {
       porcentajeOperatividad,
       cuposDisp: vehiculosPkgOn
     }
-  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOn])
+  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOn, vehiculosEnUso])
 
   // Filtrar asignaciones según los filtros de columna y stat clickeada
   const filteredAsignaciones = useMemo(() => {
