@@ -39,7 +39,7 @@ export function BitacoraHeader({
 
   const formatLastUpdate = (date: Date | null) => {
     if (!date) return 'Nunca'
-    return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
   }
 
   const isRealtime = dateRange.label === 'Hoy'
