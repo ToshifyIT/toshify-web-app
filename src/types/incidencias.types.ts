@@ -35,6 +35,7 @@ export interface Incidencia {
   registrado_por?: string
   conductor_nombre?: string
   vehiculo_patente?: string
+  auto_a_cargo?: boolean
   created_by?: string
   created_at: string
   updated_at: string
@@ -107,6 +108,7 @@ export interface IncidenciaFormData {
   registrado_por?: string
   conductor_nombre?: string
   vehiculo_patente?: string
+  auto_a_cargo?: boolean
 }
 
 export interface PenalidadFormData {

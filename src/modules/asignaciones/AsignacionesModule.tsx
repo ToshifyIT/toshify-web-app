@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, CalendarRange, Activity, Filter, Car } from 'lucide-react'
+import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, CalendarRange, Activity, Filter, Car, UserPlus, UserCheck, Ban } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
@@ -41,6 +41,7 @@ interface Asignacion {
     horario: string
     confirmado: boolean
     fecha_confirmacion?: string | null
+    documento?: string
     conductores: {
       nombres: string
       apellidos: string
@@ -101,10 +102,16 @@ export function AsignacionesModule() {
     entregasHoy: 0,
     entregasSemana: 0,
     asignacionesActivas: 0,
-    unidadesDisponibles: 0  // Vehículos sin asignar + vehículos TURNO con al menos 1 vacante
+    unidadesDisponibles: 0,  // Vehículos sin asignar + vehículos TURNO con al menos 1 vacante
+    // Nuevas métricas OnBoarding
+    entregasCompletadas: 0,
+    entregasCanceladas: 0,
+    conductoresCartaOferta: 0,  // Conductores únicos con documento CARTA_OFERTA
+    conductoresAnexo: 0  // Conductores únicos con documento ANEXO
   })
+  const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
 
-  const loadStatsData = async () => {
+  const loadStatsData = async (filterDateFrom?: string, filterDateTo?: string) => {
     try {
       // Total de vehículos
       const { count: totalVehiculos } = await supabase
@@ -292,6 +299,78 @@ export function AsignacionesModule() {
       // Conductores asignados (en asignaciones activas)
       const conductoresAsignados = conductoresOcupadosIds.size
 
+      // === NUEVAS MÉTRICAS ONBOARDING (con filtro de fechas opcional) ===
+
+      // Entregas completadas (finalizadas)
+      let queryCompletadas = supabase
+        .from('asignaciones')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'finalizada')
+
+      if (filterDateFrom) {
+        queryCompletadas = queryCompletadas.gte('fecha_programada', `${filterDateFrom}T00:00:00`)
+      }
+      if (filterDateTo) {
+        queryCompletadas = queryCompletadas.lte('fecha_programada', `${filterDateTo}T23:59:59`)
+      }
+      const { count: entregasCompletadas } = await queryCompletadas
+
+      // Entregas canceladas
+      let queryCanceladas = supabase
+        .from('asignaciones')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'cancelada')
+
+      if (filterDateFrom) {
+        queryCanceladas = queryCanceladas.gte('fecha_programada', `${filterDateFrom}T00:00:00`)
+      }
+      if (filterDateTo) {
+        queryCanceladas = queryCanceladas.lte('fecha_programada', `${filterDateTo}T23:59:59`)
+      }
+      const { count: entregasCanceladas } = await queryCanceladas
+
+      // Conductores con Carta Oferta (nuevos) - contar conductores únicos
+      // Necesitamos hacer un join para filtrar por fecha de la asignación
+      let queryCartaOferta = supabase
+        .from('asignaciones_conductores')
+        .select('conductor_id, asignaciones!inner(fecha_programada)')
+        .eq('documento', 'CARTA_OFERTA')
+
+      if (filterDateFrom || filterDateTo) {
+        // Si hay filtros de fecha, aplicarlos
+        if (filterDateFrom) {
+          queryCartaOferta = queryCartaOferta.gte('asignaciones.fecha_programada', `${filterDateFrom}T00:00:00`)
+        }
+        if (filterDateTo) {
+          queryCartaOferta = queryCartaOferta.lte('asignaciones.fecha_programada', `${filterDateTo}T23:59:59`)
+        }
+      }
+      const { data: conductoresCartaOfertaData } = await queryCartaOferta
+
+      const conductoresCartaOfertaUnicos = new Set(
+        conductoresCartaOfertaData?.map(c => c.conductor_id) || []
+      )
+
+      // Conductores con Anexo (cambio vehículo) - contar conductores únicos
+      let queryAnexo = supabase
+        .from('asignaciones_conductores')
+        .select('conductor_id, asignaciones!inner(fecha_programada)')
+        .eq('documento', 'ANEXO')
+
+      if (filterDateFrom || filterDateTo) {
+        if (filterDateFrom) {
+          queryAnexo = queryAnexo.gte('asignaciones.fecha_programada', `${filterDateFrom}T00:00:00`)
+        }
+        if (filterDateTo) {
+          queryAnexo = queryAnexo.lte('asignaciones.fecha_programada', `${filterDateTo}T23:59:59`)
+        }
+      }
+      const { data: conductoresAnexoData } = await queryAnexo
+
+      const conductoresAnexoUnicos = new Set(
+        conductoresAnexoData?.map(c => c.conductor_id) || []
+      )
+
       setStatsData({
         totalVehiculos: totalVehiculos || 0,
         vehiculosDisponibles,
@@ -305,7 +384,11 @@ export function AsignacionesModule() {
         entregasHoy: entregasHoy || 0,
         entregasSemana: entregasSemana || 0,
         asignacionesActivas: totalAsignacionesActivas || 0,
-        unidadesDisponibles
+        unidadesDisponibles,
+        entregasCompletadas: entregasCompletadas || 0,
+        entregasCanceladas: entregasCanceladas || 0,
+        conductoresCartaOferta: conductoresCartaOfertaUnicos.size,
+        conductoresAnexo: conductoresAnexoUnicos.size
       })
     } catch (err) {
       console.error('Error loading stats:', err)
@@ -324,7 +407,7 @@ export function AsignacionesModule() {
           vehiculos (patente, marca, modelo),
           conductores (nombres, apellidos, numero_licencia),
           asignaciones_conductores (
-            id, conductor_id, estado, horario, confirmado, fecha_confirmacion,
+            id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
             conductores (nombres, apellidos, numero_licencia)
           )
         `)
@@ -350,6 +433,15 @@ export function AsignacionesModule() {
     }
     getCurrentUser()
   }, [])
+
+  // Recargar métricas de OnBoarding cuando cambian los filtros de fecha
+  useEffect(() => {
+    if (dateFrom || dateTo) {
+      loadStatsData(dateFrom, dateTo)
+    } else {
+      loadStatsData()
+    }
+  }, [dateFrom, dateTo])
 
   // Cerrar dropdown de filtro de columna al hacer click fuera
   useEffect(() => {
@@ -426,24 +518,36 @@ export function AsignacionesModule() {
     }
 
     // Filtro por rango de fecha de entrega (fecha_programada)
+    // Usar comparación de strings YYYY-MM-DD para evitar problemas de timezone
     if (dateFrom) {
-      const fromDate = new Date(dateFrom)
-      fromDate.setHours(0, 0, 0, 0)
       result = result.filter(a => {
         if (!a.fecha_programada) return false
-        const fechaEntrega = new Date(a.fecha_programada)
-        return fechaEntrega >= fromDate
+        // Extraer solo la fecha YYYY-MM-DD de fecha_programada
+        const fechaEntregaStr = a.fecha_programada.split('T')[0]
+        return fechaEntregaStr >= dateFrom
       })
     }
 
     if (dateTo) {
-      const toDate = new Date(dateTo)
-      toDate.setHours(23, 59, 59, 999)
       result = result.filter(a => {
         if (!a.fecha_programada) return false
-        const fechaEntrega = new Date(a.fecha_programada)
-        return fechaEntrega <= toDate
+        // Extraer solo la fecha YYYY-MM-DD de fecha_programada
+        const fechaEntregaStr = a.fecha_programada.split('T')[0]
+        return fechaEntregaStr <= dateTo
       })
+    }
+
+    // Filtro por tipo de documento (desde stat cards)
+    if (activeStatCard === 'cartaOferta') {
+      result = result.filter(a =>
+        a.asignaciones_conductores?.some(c => c.documento === 'CARTA_OFERTA')
+      )
+    }
+
+    if (activeStatCard === 'anexo') {
+      result = result.filter(a =>
+        a.asignaciones_conductores?.some(c => c.documento === 'ANEXO')
+      )
     }
 
     // Ordenar: programados primero, luego por fecha_programada ascendente
@@ -458,7 +562,7 @@ export function AsignacionesModule() {
       const fechaB = b.fecha_programada ? new Date(b.fecha_programada).getTime() : Infinity
       return fechaA - fechaB
     })
-  }, [asignaciones, statusFilter, modalityFilter, vehicleFilter, dateFrom, dateTo])
+  }, [asignaciones, statusFilter, modalityFilter, vehicleFilter, dateFrom, dateTo, activeStatCard])
 
   // Procesar asignaciones - UNA fila por asignación (solo asignaciones reales)
   const expandedAsignaciones = useMemo<ExpandedAsignacion[]>(() => {
@@ -526,6 +630,54 @@ export function AsignacionesModule() {
   const programadasCount = useMemo(() => {
     return asignaciones.filter(a => a.estado === 'programado').length
   }, [asignaciones])
+
+  // Manejar click en stat cards para filtrar
+  const handleStatCardClick = (cardType: string) => {
+    // Limpiar otros filtros de columna
+    setModalityFilter([])
+    setVehicleFilter([])
+    setVehicleSearch('')
+
+    // Si hace click en el mismo, desactivar
+    if (activeStatCard === cardType) {
+      setActiveStatCard(null)
+      setStatusFilter([])
+      return
+    }
+
+    setActiveStatCard(cardType)
+
+    // Aplicar filtro según el tipo de card
+    switch (cardType) {
+      case 'programadas':
+        setStatusFilter(['programado'])
+        break
+      case 'activas':
+        setStatusFilter(['activa'])
+        break
+      case 'completadas':
+        setStatusFilter(['finalizada'])
+        break
+      case 'canceladas':
+        setStatusFilter(['cancelada'])
+        break
+      case 'cartaOferta':
+        // Filtrar asignaciones que tengan al menos un conductor con CARTA_OFERTA
+        setStatusFilter([])
+        // El filtro se aplica en el useMemo de filteredAsignaciones
+        break
+      case 'anexo':
+        // Filtrar asignaciones que tengan al menos un conductor con ANEXO
+        setStatusFilter([])
+        break
+      case 'unidades':
+        // No aplica filtro de estado, es informativo
+        setStatusFilter([])
+        break
+      default:
+        setStatusFilter([])
+    }
+  }
 
   const handleDelete = async (id: string) => {
     if (isSubmitting || !canDelete) return
@@ -923,9 +1075,20 @@ export function AsignacionesModule() {
     },
     {
       accessorKey: 'fecha_programada',
-      header: () => (
+      sortingFn: (rowA, rowB) => {
+        const fechaA = rowA.original.fecha_programada ? new Date(rowA.original.fecha_programada).getTime() : 0
+        const fechaB = rowB.original.fecha_programada ? new Date(rowB.original.fecha_programada).getTime() : 0
+        return fechaA - fechaB
+      },
+      header: ({ column }) => (
         <div className="asig-column-filter">
-          <span>Fecha Entrega</span>
+          <span
+            style={{ cursor: 'pointer' }}
+            onClick={() => column.toggleSorting()}
+            title="Click para ordenar"
+          >
+            Fecha Entrega
+          </span>
           <button
             className={`asig-column-filter-btn ${dateFrom || dateTo ? 'active' : ''}`}
             onClick={(e) => {
@@ -986,13 +1149,47 @@ export function AsignacionesModule() {
     {
       id: 'hora_entrega',
       header: 'Hora',
-      cell: ({ row }) => (
-        <span>
-          {row.original.fecha_programada
-            ? new Date(row.original.fecha_programada).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-            : '-'}
-        </span>
-      )
+      cell: ({ row }) => {
+        const estado = row.original.estado
+        // Si está activa o finalizada, mostrar hora real de entrega (fecha_inicio)
+        // Si está programada, mostrar hora programada
+        const fechaMostrar = (estado === 'activa' || estado === 'finalizada')
+          ? row.original.fecha_inicio
+          : row.original.fecha_programada
+
+        return (
+          <span title={estado === 'programado' ? 'Hora programada' : 'Hora de entrega real'}>
+            {fechaMostrar
+              ? new Date(fechaMostrar).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+              : '-'}
+          </span>
+        )
+      }
+    },
+    {
+      id: 'tipo_documento',
+      header: 'Documento',
+      cell: ({ row }) => {
+        const conductores = row.original.asignaciones_conductores || []
+        // Obtener documentos únicos de los conductores
+        const documentos = [...new Set(conductores.map(c => c.documento).filter(Boolean))]
+
+        if (documentos.length === 0) return <span className="text-muted">-</span>
+
+        // Si hay múltiples documentos diferentes, mostrar ambos
+        return (
+          <div className="asig-documento-badges">
+            {documentos.map((doc, idx) => (
+              <span
+                key={idx}
+                className={`asig-documento-badge ${doc === 'CARTA_OFERTA' ? 'asig-doc-carta' : doc === 'ANEXO' ? 'asig-doc-anexo' : 'asig-doc-na'}`}
+              >
+                {doc === 'CARTA_OFERTA' ? 'Carta Oferta' : doc === 'ANEXO' ? 'Anexo' : 'N/A'}
+              </span>
+            ))}
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'fecha_fin',
@@ -1021,7 +1218,7 @@ export function AsignacionesModule() {
             <Filter size={12} />
           </button>
           {openColumnFilter === 'estado' && (
-            <div className="asig-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+            <div className="asig-column-filter-dropdown dt-excel-filter asig-filter-right" onClick={(e) => e.stopPropagation()}>
               <div className="dt-excel-filter-list">
                 {statusOptions.map(opt => (
                   <label key={opt.value} className={`dt-column-filter-checkbox ${statusFilter.includes(opt.value) ? 'selected' : ''}`}>
@@ -1111,19 +1308,85 @@ export function AsignacionesModule() {
     <div className="asig-module">
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
-        <div className="asig-stats-grid">
-          <div className="stat-card" title="Asignaciones en estado programado pendientes de confirmación">
+        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'programadas' ? 'stat-card-active' : ''}`}
+            title="Asignaciones en estado programado pendientes de confirmación"
+            onClick={() => handleStatCardClick('programadas')}
+          >
             <Calendar size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{programadasCount}</span>
               <span className="stat-label">Programadas</span>
             </div>
           </div>
-          <div className="stat-card" title="Asignaciones actualmente en curso">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'activas' ? 'stat-card-active' : ''}`}
+            title="Asignaciones actualmente en curso"
+            onClick={() => handleStatCardClick('activas')}
+          >
             <Activity size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.asignacionesActivas}</span>
               <span className="stat-label">Activas</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'completadas' ? 'stat-card-active' : ''}`}
+            title="Entregas completadas (finalizadas)"
+            onClick={() => handleStatCardClick('completadas')}
+          >
+            <CheckCircle size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.entregasCompletadas}</span>
+              <span className="stat-label">Completadas</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'canceladas' ? 'stat-card-active' : ''}`}
+            title="Entregas canceladas"
+            onClick={() => handleStatCardClick('canceladas')}
+          >
+            <Ban size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.entregasCanceladas}</span>
+              <span className="stat-label">Canceladas</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'unidades' ? 'stat-card-active' : ''}`}
+            title="Vehículos sin asignar + vehículos TURNO con al menos 1 turno vacante"
+            onClick={() => handleStatCardClick('unidades')}
+          >
+            <Car size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.unidadesDisponibles}</span>
+              <span className="stat-label">Unidades Disp.</span>
+            </div>
+          </div>
+        </div>
+        {/* Segunda fila de stats - Métricas por tipo de documento */}
+        <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginTop: '12px' }}>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'cartaOferta' ? 'stat-card-active' : ''}`}
+            title="Conductores nuevos que firmaron Carta Oferta (conteo por conductor único)"
+            onClick={() => handleStatCardClick('cartaOferta')}
+          >
+            <UserPlus size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresCartaOferta}</span>
+              <span className="stat-label">Cond. Nuevos</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'anexo' ? 'stat-card-active' : ''}`}
+            title="Conductores antiguos con Anexo por cambio de vehículo (conteo por conductor único)"
+            onClick={() => handleStatCardClick('anexo')}
+          >
+            <UserCheck size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{statsData.conductoresAnexo}</span>
+              <span className="stat-label">Cond. Anexo</span>
             </div>
           </div>
           <div className="stat-card" title="Entregas de vehículos programadas para hoy">
@@ -1138,13 +1401,6 @@ export function AsignacionesModule() {
             <div className="stat-content">
               <span className="stat-value">{statsData.entregasSemana}</span>
               <span className="stat-label">Entregas Semana</span>
-            </div>
-          </div>
-          <div className="stat-card" title="Vehículos sin asignar + vehículos TURNO con al menos 1 turno vacante">
-            <Car size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{statsData.unidadesDisponibles}</span>
-              <span className="stat-label">Unidades Disp.</span>
             </div>
           </div>
         </div>
@@ -1263,8 +1519,8 @@ export function AsignacionesModule() {
                 Cancelar
               </button>
               {/* Si todos los conductores ya confirmaron, mostrar botón para activar directamente */}
-              {selectedAsignacion.asignaciones_conductores?.length > 0 &&
-               selectedAsignacion.asignaciones_conductores.every(ac => ac.confirmado) ? (
+              {(selectedAsignacion.asignaciones_conductores?.length ?? 0) > 0 &&
+               selectedAsignacion.asignaciones_conductores?.every(ac => ac.confirmado) ? (
                 <button
                   className="btn-primary"
                   onClick={async () => {

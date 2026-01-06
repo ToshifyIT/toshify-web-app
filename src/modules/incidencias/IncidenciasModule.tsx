@@ -77,13 +77,23 @@ export function IncidenciasModule() {
   const [selectedIncidencia, setSelectedIncidencia] = useState<IncidenciaCompleta | null>(null)
   const [selectedPenalidad, setSelectedPenalidad] = useState<PenalidadCompleta | null>(null)
 
+  // Helper para obtener fecha local en formato YYYY-MM-DD
+  function getLocalDateString() {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    const day = String(today.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   // Form data
   const [incidenciaForm, setIncidenciaForm] = useState<IncidenciaFormData>({
     estado_id: '',
-    fecha: new Date().toISOString().split('T')[0]
+    fecha: getLocalDateString(),
+    registrado_por: profile?.full_name || ''
   })
   const [penalidadForm, setPenalidadForm] = useState<PenalidadFormData>({
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: getLocalDateString(),
     aplicado: false
   })
   const [saving, setSaving] = useState(false)
@@ -228,7 +238,8 @@ export function IncidenciasModule() {
     const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')
     setIncidenciaForm({
       estado_id: estadoPendiente?.id || '',
-      fecha: new Date().toISOString().split('T')[0]
+      fecha: getLocalDateString(),
+      registrado_por: profile?.full_name || ''
     })
     setSelectedIncidencia(null)
     setModalMode('create')
@@ -238,7 +249,7 @@ export function IncidenciasModule() {
 
   function handleNuevaPenalidad() {
     setPenalidadForm({
-      fecha: new Date().toISOString().split('T')[0],
+      fecha: getLocalDateString(),
       aplicado: false
     })
     setSelectedPenalidad(null)
@@ -286,7 +297,6 @@ export function IncidenciasModule() {
   function handleEditarPenalidad(penalidad: PenalidadCompleta) {
     setSelectedPenalidad(penalidad)
     setPenalidadForm({
-      incidencia_id: penalidad.incidencia_id,
       vehiculo_id: penalidad.vehiculo_id,
       conductor_id: penalidad.conductor_id,
       tipo_penalidad_id: penalidad.tipo_penalidad_id,
@@ -307,16 +317,37 @@ export function IncidenciasModule() {
     setShowModal(true)
   }
 
+  // Calcular número de semana ISO 8601
+  function getWeekNumber(dateStr: string): number {
+    if (!dateStr) return 0
+    // Parsear la fecha usando componentes locales para evitar problemas de timezone
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const date = new Date(year, month - 1, day, 12, 0, 0) // mediodía hora local
+
+    // ISO week: la semana 1 es la que contiene el primer jueves del año
+    const thursday = new Date(date)
+    thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3) // Ir al jueves de la semana
+
+    const firstThursday = new Date(thursday.getFullYear(), 0, 4) // 4 de enero siempre está en semana 1
+    firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
+
+    const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+    return weekNumber
+  }
+
   async function handleGuardarIncidencia() {
-    if (!incidenciaForm.estado_id || !incidenciaForm.fecha) {
-      Swal.fire('Error', 'Por favor complete los campos requeridos', 'warning')
+    if (!incidenciaForm.estado_id || !incidenciaForm.fecha || !incidenciaForm.area) {
+      Swal.fire('Error', 'Por favor complete los campos requeridos (fecha, estado, área)', 'warning')
       return
     }
 
     setSaving(true)
     try {
+      // Calcular semana basada en la fecha
+      const semanaCalculada = getWeekNumber(incidenciaForm.fecha)
       const dataToSave = {
         ...incidenciaForm,
+        semana: semanaCalculada,
         created_by: user?.id
       }
 
@@ -351,8 +382,11 @@ export function IncidenciasModule() {
 
     setSaving(true)
     try {
+      // Calcular semana basada en la fecha
+      const semanaCalculada = getWeekNumber(penalidadForm.fecha)
       const dataToSave = {
         ...penalidadForm,
+        semana: semanaCalculada,
         created_by: user?.id
       }
 
@@ -549,7 +583,7 @@ export function IncidenciasModule() {
             onClick={() => { setActiveTab('penalidades'); setPage(1) }}
           >
             <DollarSign size={16} />
-            Penalidades
+            Cobros&Descuentos
           </button>
           <button
             className={`incidencias-tab ${activeTab === 'por_aplicar' ? 'active' : ''}`}
@@ -600,11 +634,12 @@ export function IncidenciasModule() {
               </select>
             </div>
             <div className="filter-group">
-              <span className="filter-label">Turno:</span>
+              <span className="filter-label">Tipo:</span>
               <select className="filter-select" value={filtroTurno} onChange={e => { setFiltroTurno(e.target.value); setPage(1) }}>
                 <option value="">Todos</option>
                 <option value="Diurno">Diurno</option>
                 <option value="Nocturno">Nocturno</option>
+                <option value="A cargo">A cargo</option>
               </select>
             </div>
             <div className="search-wrapper">
@@ -633,6 +668,7 @@ export function IncidenciasModule() {
                       Fecha
                       {sortColumn === 'fecha' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                     </th>
+                    <th>Sem</th>
                     <th className="sortable" onClick={() => handleSort('patente_display')}>
                       Patente
                       {sortColumn === 'patente_display' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
@@ -641,7 +677,7 @@ export function IncidenciasModule() {
                       Conductor
                       {sortColumn === 'conductor_display' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                     </th>
-                    <th>Turno</th>
+                    <th>Tipo</th>
                     <th className="sortable" onClick={() => handleSort('area')}>
                       Área
                       {sortColumn === 'area' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
@@ -650,6 +686,7 @@ export function IncidenciasModule() {
                       Estado
                       {sortColumn === 'estado_nombre' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                     </th>
+                    <th>Responsable</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -657,14 +694,14 @@ export function IncidenciasModule() {
                   {loading ? (
                     [...Array(5)].map((_, i) => (
                       <tr key={i} className="loading-row">
-                        {[...Array(7)].map((_, j) => (
+                        {[...Array(9)].map((_, j) => (
                           <td key={j}><div className="skeleton" style={{ width: `${60 + Math.random() * 40}%` }} /></td>
                         ))}
                       </tr>
                     ))
                   ) : paginatedData.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="empty-state">
+                      <td colSpan={9} className="empty-state">
                         <Shield size={40} />
                         <p>No hay incidencias para mostrar</p>
                       </td>
@@ -673,6 +710,7 @@ export function IncidenciasModule() {
                     (paginatedData as IncidenciaCompleta[]).map(i => (
                       <tr key={i.id} onClick={() => handleVerIncidencia(i)}>
                         <td>{formatDate(i.fecha)}</td>
+                        <td className="text-center">{i.semana || '-'}</td>
                         <td><span className="patente">{i.patente_display || '-'}</span></td>
                         <td className="text-truncate">{i.conductor_display || '-'}</td>
                         <td>
@@ -684,6 +722,7 @@ export function IncidenciasModule() {
                         <td>
                           <span className={`estado-badge estado-${i.estado_color}`}>{i.estado_nombre}</span>
                         </td>
+                        <td className="text-truncate">{i.registrado_por || '-'}</td>
                         <td onClick={e => e.stopPropagation()}>
                           <div className="table-actions">
                             <button className="btn-icon" title="Ver" onClick={() => handleVerIncidencia(i)}>
@@ -738,46 +777,71 @@ export function IncidenciasModule() {
           {/* Stats - diferentes según tab */}
           <div className="incidencias-stats">
             <div className="stats-grid">
-              <div className="stat-card">
-                <FileText size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{penalidadesFiltradas.length}</span>
-                  <span className="stat-label">{activeTab === 'por_aplicar' ? 'Pendientes' : 'Total'}</span>
-                </div>
-              </div>
-              <div className="stat-card">
-                <DollarSign size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
-                  <span className="stat-label">{activeTab === 'por_aplicar' ? 'Monto Pendiente' : 'Monto Total'}</span>
-                </div>
-              </div>
-              {/* Solo mostrar Aplicadas/Pendientes en tab Penalidades (no en Por Aplicar) */}
-              {activeTab === 'penalidades' && (
+              {activeTab === 'por_aplicar' ? (
+                // Tab Por Aplicar - solo mostrar pendientes
                 <>
+                  <div className="stat-card">
+                    <Clock size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{penalidadesFiltradas.length}</span>
+                      <span className="stat-label">Pendientes</span>
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <DollarSign size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
+                      <span className="stat-label">$ Pendiente</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                // Tab Cobros&Descuentos - mostrar pendientes, aplicadas y totales
+                <>
+                  <div className="stat-card">
+                    <Clock size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{penalidades.filter(p => !p.aplicado).length}</span>
+                      <span className="stat-label">Pendientes</span>
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <DollarSign size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{formatMoney(penalidades.filter(p => !p.aplicado).reduce((s, p) => s + (p.monto || 0), 0))}</span>
+                      <span className="stat-label">$ Pendiente</span>
+                    </div>
+                  </div>
                   <div className="stat-card">
                     <CheckCircle size={20} className="stat-icon" />
                     <div className="stat-content">
-                      <span className="stat-value">{penalidadesFiltradas.filter(p => p.aplicado).length}</span>
+                      <span className="stat-value">{penalidades.filter(p => p.aplicado).length}</span>
                       <span className="stat-label">Aplicadas</span>
                     </div>
                   </div>
                   <div className="stat-card">
-                    <Clock size={20} className="stat-icon" />
+                    <DollarSign size={20} className="stat-icon" />
                     <div className="stat-content">
-                      <span className="stat-value">{penalidadesFiltradas.filter(p => !p.aplicado).length}</span>
-                      <span className="stat-label">Pendientes</span>
+                      <span className="stat-value">{formatMoney(penalidades.filter(p => p.aplicado).reduce((s, p) => s + (p.monto || 0), 0))}</span>
+                      <span className="stat-label">$ Aplicado</span>
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <FileText size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{penalidades.length}</span>
+                      <span className="stat-label">Total</span>
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <DollarSign size={20} className="stat-icon" />
+                    <div className="stat-content">
+                      <span className="stat-value">{formatMoney(penalidades.reduce((s, p) => s + (p.monto || 0), 0))}</span>
+                      <span className="stat-label">$ Total</span>
                     </div>
                   </div>
                 </>
               )}
-              <div className="stat-card">
-                <Users size={20} className="stat-icon" />
-                <div className="stat-content">
-                  <span className="stat-value">{new Set(penalidadesFiltradas.map(p => p.conductor_display)).size}</span>
-                  <span className="stat-label">Conductores</span>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -825,6 +889,7 @@ export function IncidenciasModule() {
                 <thead>
                   <tr>
                     <th>Fecha</th>
+                    <th>Sem</th>
                     <th>Patente</th>
                     <th>Conductor</th>
                     <th>Tipo</th>
@@ -837,14 +902,14 @@ export function IncidenciasModule() {
                   {loading ? (
                     [...Array(5)].map((_, i) => (
                       <tr key={i} className="loading-row">
-                        {[...Array(7)].map((_, j) => (
+                        {[...Array(8)].map((_, j) => (
                           <td key={j}><div className="skeleton" style={{ width: `${60 + Math.random() * 40}%` }} /></td>
                         ))}
                       </tr>
                     ))
                   ) : penalidadesFiltradas.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="empty-state">
+                      <td colSpan={8} className="empty-state">
                         <Shield size={40} />
                         <p>No hay penalidades para mostrar</p>
                       </td>
@@ -853,6 +918,7 @@ export function IncidenciasModule() {
                     penalidadesFiltradas.slice((page - 1) * pageSize, page * pageSize).map(p => (
                       <tr key={p.id} onClick={() => handleVerPenalidad(p)}>
                         <td>{formatDate(p.fecha)}</td>
+                        <td className="text-center">{p.semana || '-'}</td>
                         <td><span className="patente">{p.patente_display || '-'}</span></td>
                         <td className="text-truncate">{p.conductor_display || '-'}</td>
                         <td>{p.tipo_nombre || '-'}</td>
@@ -959,7 +1025,6 @@ export function IncidenciasModule() {
                   tiposPenalidad={tiposPenalidad}
                   vehiculos={vehiculos}
                   conductores={conductores}
-                  incidencias={incidencias}
                   disabled={saving}
                 />
               )}
@@ -999,14 +1064,107 @@ interface IncidenciaFormProps {
   disabled?: boolean
 }
 
+interface ConductorAsignado {
+  id: string
+  nombre_completo: string
+  horario: string
+}
+
 function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, disabled }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
   const [showConductorDropdown, setShowConductorDropdown] = useState(false)
 
+  // Estado para modal de selección de conductor
+  const [showConductorSelectModal, setShowConductorSelectModal] = useState(false)
+  const [conductoresAsignados, setConductoresAsignados] = useState<ConductorAsignado[]>([])
+  const [loadingConductores, setLoadingConductores] = useState(false)
+
   const selectedVehiculo = vehiculos.find(v => v.id === formData.vehiculo_id)
   const selectedConductor = conductores.find(c => c.id === formData.conductor_id)
+
+  // Buscar conductores asignados al vehículo seleccionado
+  async function buscarConductoresAsignados(vehiculoId: string) {
+    setLoadingConductores(true)
+    try {
+      const { data, error } = await supabase
+        .from('asignaciones')
+        .select(`
+          id,
+          horario,
+          conductores (
+            id,
+            nombres,
+            apellidos
+          )
+        `)
+        .eq('vehiculo_id', vehiculoId)
+        .eq('activo', true)
+
+      if (error) throw error
+
+      const conductoresData: ConductorAsignado[] = (data || [])
+        .filter((a: any) => a.conductores)
+        .map((a: any) => ({
+          id: a.conductores.id,
+          nombre_completo: `${a.conductores.nombres} ${a.conductores.apellidos}`,
+          horario: a.horario === 'TURNO' ? 'Turno' : 'A Cargo'
+        }))
+
+      if (conductoresData.length === 1) {
+        // Solo un conductor, auto-seleccionar
+        setFormData(prev => ({ ...prev, conductor_id: conductoresData[0].id }))
+        setConductorSearch('')
+      } else if (conductoresData.length > 1) {
+        // Múltiples conductores, mostrar modal
+        setConductoresAsignados(conductoresData)
+        setShowConductorSelectModal(true)
+      }
+      // Si no hay conductores asignados, no hacer nada
+    } catch (error) {
+      console.error('Error buscando conductores asignados:', error)
+    } finally {
+      setLoadingConductores(false)
+    }
+  }
+
+  // Manejar selección de vehículo
+  function handleSelectVehiculo(vehiculo: VehiculoSimple) {
+    setFormData(prev => ({ ...prev, vehiculo_id: vehiculo.id, vehiculo_patente: undefined }))
+    setVehiculoSearch('')
+    setShowVehiculoDropdown(false)
+    // Buscar conductores asignados
+    buscarConductoresAsignados(vehiculo.id)
+  }
+
+  // Manejar selección de conductor desde modal
+  function handleSelectConductorFromModal(conductor: ConductorAsignado) {
+    setFormData(prev => ({ ...prev, conductor_id: conductor.id }))
+    setConductorSearch('')
+    setShowConductorSelectModal(false)
+    setConductoresAsignados([])
+  }
+
+  // Calcular número de semana ISO 8601
+  const getWeekNumber = (dateStr: string): number => {
+    if (!dateStr) return 0
+    // Parsear la fecha usando componentes locales para evitar problemas de timezone
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const date = new Date(year, month - 1, day, 12, 0, 0) // mediodía hora local
+
+    // ISO week: la semana 1 es la que contiene el primer jueves del año
+    const thursday = new Date(date)
+    thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3) // Ir al jueves de la semana
+
+    const firstThursday = new Date(thursday.getFullYear(), 0, 4) // 4 de enero siempre está en semana 1
+    firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
+
+    const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+    return weekNumber
+  }
+
+  const semanaCalculada = getWeekNumber(formData.fecha)
 
   const filteredVehiculos = vehiculos.filter(v => {
     const term = vehiculoSearch.toLowerCase()
@@ -1027,6 +1185,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             <div className="searchable-select">
               <input
                 type="text"
+                autoComplete="off"
                 value={selectedVehiculo ? `${selectedVehiculo.patente} - ${selectedVehiculo.marca} ${selectedVehiculo.modelo}` : vehiculoSearch}
                 onChange={e => {
                   setVehiculoSearch(e.target.value)
@@ -1041,19 +1200,18 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               {showVehiculoDropdown && vehiculoSearch && filteredVehiculos.length > 0 && (
                 <div className="searchable-dropdown">
                   {filteredVehiculos.map(v => (
-                    <div key={v.id} className="searchable-option" onClick={() => {
-                      setFormData(prev => ({ ...prev, vehiculo_id: v.id, vehiculo_patente: undefined }))
-                      setVehiculoSearch('')
-                      setShowVehiculoDropdown(false)
-                    }}>
+                    <div key={v.id} className="searchable-option" onClick={() => handleSelectVehiculo(v)}>
                       <strong>{v.patente}</strong> - {v.marca} {v.modelo}
                     </div>
                   ))}
                 </div>
               )}
+              {loadingConductores && (
+                <div className="searchable-loading">Buscando conductores...</div>
+              )}
               {selectedVehiculo && (
                 <button type="button" className="clear-selection" onClick={() => {
-                  setFormData(prev => ({ ...prev, vehiculo_id: undefined }))
+                  setFormData(prev => ({ ...prev, vehiculo_id: undefined, conductor_id: undefined }))
                   setVehiculoSearch('')
                 }}>
                   <X size={14} />
@@ -1066,6 +1224,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             <div className="searchable-select">
               <input
                 type="text"
+                autoComplete="off"
                 value={selectedConductor ? selectedConductor.nombre_completo : conductorSearch}
                 onChange={e => {
                   setConductorSearch(e.target.value)
@@ -1114,29 +1273,30 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
           <div className="form-group">
             <label>Semana</label>
             <input
-              type="number"
-              value={formData.semana || ''}
-              onChange={e => setFormData(prev => ({ ...prev, semana: Number(e.target.value) || undefined }))}
-              placeholder="N° semana"
-              disabled={disabled}
+              type="text"
+              value={semanaCalculada || '-'}
+              readOnly
+              className="form-input-readonly"
             />
           </div>
         </div>
         <div className="form-row three-cols">
           <div className="form-group">
-            <label>Turno</label>
+            <label>Tipo</label>
             <select value={formData.turno || ''} onChange={e => setFormData(prev => ({ ...prev, turno: e.target.value }))} disabled={disabled}>
               <option value="">Seleccionar</option>
               <option value="Diurno">Diurno</option>
               <option value="Nocturno">Nocturno</option>
+              <option value="A cargo">A cargo</option>
             </select>
           </div>
           <div className="form-group">
-            <label>Área</label>
+            <label>Área <span className="required">*</span></label>
             <select value={formData.area || ''} onChange={e => setFormData(prev => ({ ...prev, area: e.target.value }))} disabled={disabled}>
               <option value="">Seleccionar</option>
               <option value="Logística">Logística</option>
               <option value="Data Entry">Data Entry</option>
+              <option value="Administración">Administración</option>
             </select>
           </div>
           <div className="form-group">
@@ -1168,9 +1328,9 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             <input
               type="text"
               value={formData.registrado_por || ''}
-              onChange={e => setFormData(prev => ({ ...prev, registrado_por: e.target.value }))}
-              placeholder="Nombre del agente"
-              disabled={disabled}
+              readOnly
+              className="form-input-readonly"
+              placeholder="Se asigna automáticamente"
             />
           </div>
         </div>
@@ -1201,6 +1361,38 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
           </div>
         </div>
       </div>
+
+      {/* Modal de selección de conductor */}
+      {showConductorSelectModal && (
+        <div className="conductor-select-modal-overlay" onClick={() => setShowConductorSelectModal(false)}>
+          <div className="conductor-select-modal" onClick={e => e.stopPropagation()}>
+            <div className="conductor-select-modal-header">
+              <h4>Seleccionar Conductor</h4>
+              <p>Este vehículo tiene múltiples conductores asignados</p>
+            </div>
+            <div className="conductor-select-modal-list">
+              {conductoresAsignados.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="conductor-select-option"
+                  onClick={() => handleSelectConductorFromModal(c)}
+                >
+                  <span className="conductor-select-name">{c.nombre_completo}</span>
+                  <span className="conductor-select-horario">{c.horario}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="conductor-select-skip"
+              onClick={() => setShowConductorSelectModal(false)}
+            >
+              Omitir selección
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -1211,30 +1403,183 @@ interface PenalidadFormProps {
   tiposPenalidad: TipoPenalidad[]
   vehiculos: VehiculoSimple[]
   conductores: ConductorSimple[]
-  incidencias: IncidenciaCompleta[]
   disabled?: boolean
 }
 
-function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos: _vehiculos, conductores, incidencias, disabled }: PenalidadFormProps) {
+function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos, conductores, disabled }: PenalidadFormProps) {
   const [conductorSearch, setConductorSearch] = useState('')
   const [showConductorDropdown, setShowConductorDropdown] = useState(false)
+  const [vehiculoSearch, setVehiculoSearch] = useState('')
+  const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
+
+  // Estado para modal de selección de conductor
+  const [showConductorSelectModal, setShowConductorSelectModal] = useState(false)
+  const [conductoresAsignados, setConductoresAsignados] = useState<ConductorAsignado[]>([])
+  const [loadingConductores, setLoadingConductores] = useState(false)
 
   const selectedConductor = conductores.find(c => c.id === formData.conductor_id)
+  const selectedVehiculo = vehiculos.find(v => v.id === formData.vehiculo_id)
+
+  // Buscar conductores asignados al vehículo seleccionado
+  async function buscarConductoresAsignados(vehiculoId: string) {
+    setLoadingConductores(true)
+    try {
+      const { data, error } = await supabase
+        .from('asignaciones')
+        .select(`
+          id,
+          horario,
+          conductores (
+            id,
+            nombres,
+            apellidos
+          )
+        `)
+        .eq('vehiculo_id', vehiculoId)
+        .eq('activo', true)
+
+      if (error) throw error
+
+      const conductoresData: ConductorAsignado[] = (data || [])
+        .filter((a: any) => a.conductores)
+        .map((a: any) => ({
+          id: a.conductores.id,
+          nombre_completo: `${a.conductores.nombres} ${a.conductores.apellidos}`,
+          horario: a.horario === 'TURNO' ? 'Turno' : 'A Cargo'
+        }))
+
+      if (conductoresData.length === 1) {
+        // Solo un conductor, auto-seleccionar
+        setFormData(prev => ({ ...prev, conductor_id: conductoresData[0].id }))
+        setConductorSearch('')
+      } else if (conductoresData.length > 1) {
+        // Múltiples conductores, mostrar modal
+        setConductoresAsignados(conductoresData)
+        setShowConductorSelectModal(true)
+      }
+    } catch (error) {
+      console.error('Error buscando conductores asignados:', error)
+    } finally {
+      setLoadingConductores(false)
+    }
+  }
+
+  // Manejar selección de vehículo
+  function handleSelectVehiculoPenalidad(vehiculo: VehiculoSimple) {
+    setFormData(prev => ({ ...prev, vehiculo_id: vehiculo.id, vehiculo_patente: undefined }))
+    setVehiculoSearch('')
+    setShowVehiculoDropdown(false)
+    // Buscar conductores asignados
+    buscarConductoresAsignados(vehiculo.id)
+  }
+
+  // Manejar selección de conductor desde modal
+  function handleSelectConductorFromModal(conductor: ConductorAsignado) {
+    setFormData(prev => ({ ...prev, conductor_id: conductor.id }))
+    setConductorSearch('')
+    setShowConductorSelectModal(false)
+    setConductoresAsignados([])
+  }
+
+  // Calcular número de semana ISO 8601
+  const getWeekNumber = (dateStr: string): number => {
+    if (!dateStr) return 0
+    // Parsear la fecha usando componentes locales para evitar problemas de timezone
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const date = new Date(year, month - 1, day, 12, 0, 0) // mediodía hora local
+
+    // ISO week: la semana 1 es la que contiene el primer jueves del año
+    const thursday = new Date(date)
+    thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3) // Ir al jueves de la semana
+
+    const firstThursday = new Date(thursday.getFullYear(), 0, 4) // 4 de enero siempre está en semana 1
+    firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
+
+    const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+    return weekNumber
+  }
+
+  const semanaCalculada = getWeekNumber(formData.fecha)
 
   const filteredConductores = conductores.filter(c => {
     return c.nombre_completo.toLowerCase().includes(conductorSearch.toLowerCase())
   }).slice(0, 10)
 
+  const filteredVehiculos = vehiculos.filter(v => {
+    const term = vehiculoSearch.toLowerCase()
+    return v.patente.toLowerCase().includes(term) || v.marca.toLowerCase().includes(term)
+  }).slice(0, 10)
+
+  // Lista de tipos de cobros/descuentos
+  const tiposCobrosDescuentos = [
+    'Entrega tardía del vehículo',
+    'Llegada tarde o inasistencia injustificada a revisión técnica',
+    'Ingreso a zonas restringidas',
+    'Falta de lavado',
+    'Falta de restitución de la unidad',
+    'Pérdida o daño de elementos de seguridad',
+    'Falta restitución de GNC',
+    'Falta restitución de Nafta',
+    'Mora en canon',
+    'Exceso de kilometraje',
+    'Manipulación no autorizada de GPS',
+    'Abandono del vehículo',
+    'No disponer de lugar seguro para la guarda del vehículo',
+    'I button',
+    'Multa de tránsito',
+    'Reparación Siniestro'
+  ]
+
   return (
     <>
       <div className="form-section">
-        <div className="form-section-title">Datos de la Penalidad</div>
+        <div className="form-section-title">Datos del Cobro/Descuento</div>
         <div className="form-row">
+          <div className="form-group">
+            <label>Patente</label>
+            <div className="searchable-select">
+              <input
+                type="text"
+                autoComplete="off"
+                value={selectedVehiculo ? `${selectedVehiculo.patente} - ${selectedVehiculo.marca} ${selectedVehiculo.modelo}` : vehiculoSearch}
+                onChange={e => {
+                  setVehiculoSearch(e.target.value)
+                  setShowVehiculoDropdown(true)
+                  if (formData.vehiculo_id) setFormData(prev => ({ ...prev, vehiculo_id: undefined }))
+                }}
+                onFocus={() => setShowVehiculoDropdown(true)}
+                onBlur={() => setTimeout(() => setShowVehiculoDropdown(false), 200)}
+                placeholder="Buscar patente..."
+                disabled={disabled}
+              />
+              {showVehiculoDropdown && vehiculoSearch && filteredVehiculos.length > 0 && (
+                <div className="searchable-dropdown">
+                  {filteredVehiculos.map(v => (
+                    <div key={v.id} className="searchable-option" onClick={() => handleSelectVehiculoPenalidad(v)}>
+                      <strong>{v.patente}</strong> - {v.marca} {v.modelo}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {loadingConductores && (
+                <div className="searchable-loading">Buscando conductores...</div>
+              )}
+              {selectedVehiculo && (
+                <button type="button" className="clear-selection" onClick={() => {
+                  setFormData(prev => ({ ...prev, vehiculo_id: undefined, conductor_id: undefined }))
+                  setVehiculoSearch('')
+                }}>
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
           <div className="form-group">
             <label>Conductor <span className="required">*</span></label>
             <div className="searchable-select">
               <input
                 type="text"
+                autoComplete="off"
                 value={selectedConductor ? selectedConductor.nombre_completo : conductorSearch}
                 onChange={e => {
                   setConductorSearch(e.target.value)
@@ -1269,6 +1614,8 @@ function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos: _vehi
               )}
             </div>
           </div>
+        </div>
+        <div className="form-row three-cols">
           <div className="form-group">
             <label>Fecha <span className="required">*</span></label>
             <input
@@ -1278,24 +1625,46 @@ function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos: _vehi
               disabled={disabled}
             />
           </div>
+          <div className="form-group">
+            <label>Semana</label>
+            <input
+              type="text"
+              value={semanaCalculada || '-'}
+              readOnly
+              className="form-input-readonly"
+            />
+          </div>
+          <div className="form-group">
+            <label>Modalidad</label>
+            <select value={formData.turno || ''} onChange={e => setFormData(prev => ({ ...prev, turno: e.target.value }))} disabled={disabled}>
+              <option value="">Seleccionar</option>
+              <option value="Diurno">Diurno</option>
+              <option value="Nocturno">Nocturno</option>
+            </select>
+          </div>
         </div>
         <div className="form-row three-cols">
           <div className="form-group">
             <label>Tipo</label>
             <select value={formData.tipo_penalidad_id || ''} onChange={e => setFormData(prev => ({ ...prev, tipo_penalidad_id: e.target.value || undefined }))} disabled={disabled}>
               <option value="">Seleccionar</option>
-              {tiposPenalidad.map(t => (
-                <option key={t.id} value={t.id}>{t.nombre}</option>
-              ))}
+              {tiposPenalidad.length > 0 ? (
+                tiposPenalidad.map(t => (
+                  <option key={t.id} value={t.id}>{t.nombre}</option>
+                ))
+              ) : (
+                tiposCobrosDescuentos.map(tipo => (
+                  <option key={tipo} value={tipo}>{tipo}</option>
+                ))
+              )}
             </select>
           </div>
           <div className="form-group">
-            <label>Detalle</label>
+            <label>Acción a realizar</label>
             <select value={formData.detalle || ''} onChange={e => setFormData(prev => ({ ...prev, detalle: e.target.value }))} disabled={disabled}>
               <option value="">Seleccionar</option>
               <option value="Descuento">Descuento</option>
               <option value="Cobro">Cobro</option>
-              <option value="Sin cargo">Sin cargo</option>
               <option value="A favor">A favor</option>
             </select>
           </div>
@@ -1317,18 +1686,17 @@ function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos: _vehi
               <option value="">Seleccionar</option>
               <option value="LOGISTICA">Logística</option>
               <option value="DATA ENTRY">Data Entry</option>
-              <option value="GUIAS">Guías</option>
-              <option value="VENTAS">Ventas</option>
+              <option value="ADMINISTRACION">Administración</option>
             </select>
           </div>
           <div className="form-group">
-            <label>Incidencia relacionada</label>
-            <select value={formData.incidencia_id || ''} onChange={e => setFormData(prev => ({ ...prev, incidencia_id: e.target.value || undefined }))} disabled={disabled}>
-              <option value="">Ninguna</option>
-              {incidencias.slice(0, 50).map(i => (
-                <option key={i.id} value={i.id}>{i.patente_display} - {i.descripcion?.substring(0, 30)}...</option>
-              ))}
-            </select>
+            <label>Patente</label>
+            <input
+              type="text"
+              value={selectedVehiculo ? selectedVehiculo.patente : (formData.vehiculo_patente || '-')}
+              readOnly
+              className="form-input-readonly"
+            />
           </div>
         </div>
       </div>
@@ -1360,6 +1728,38 @@ function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos: _vehi
           </div>
         </div>
       </div>
+
+      {/* Modal de selección de conductor */}
+      {showConductorSelectModal && (
+        <div className="conductor-select-modal-overlay" onClick={() => setShowConductorSelectModal(false)}>
+          <div className="conductor-select-modal" onClick={e => e.stopPropagation()}>
+            <div className="conductor-select-modal-header">
+              <h4>Seleccionar Conductor</h4>
+              <p>Este vehículo tiene múltiples conductores asignados</p>
+            </div>
+            <div className="conductor-select-modal-list">
+              {conductoresAsignados.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="conductor-select-option"
+                  onClick={() => handleSelectConductorFromModal(c)}
+                >
+                  <span className="conductor-select-name">{c.nombre_completo}</span>
+                  <span className="conductor-select-horario">{c.horario}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="conductor-select-skip"
+              onClick={() => setShowConductorSelectModal(false)}
+            >
+              Omitir selección
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -1405,7 +1805,7 @@ function IncidenciaDetailView({ incidencia, onEdit }: IncidenciaDetailViewProps)
             <span className="detail-item-value">{incidencia.semana || '-'}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-item-label">Turno</span>
+            <span className="detail-item-label">Tipo</span>
             <span className="detail-item-value">{incidencia.turno || '-'}</span>
           </div>
           <div className="detail-item">
@@ -1528,7 +1928,7 @@ function PenalidadDetailView({ penalidad, onEdit }: PenalidadDetailViewProps) {
             <span className="detail-item-value">{penalidad.patente_display || '-'}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-item-label">Turno</span>
+            <span className="detail-item-label">Tipo</span>
             <span className="detail-item-value">{penalidad.turno || '-'}</span>
           </div>
           <div className="detail-item">
