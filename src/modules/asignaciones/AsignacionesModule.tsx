@@ -531,13 +531,13 @@ export function AsignacionesModule() {
     if (isSubmitting || !canDelete) return
 
     const result = await Swal.fire({
-      title: '¿Estás seguro?',
-      text: 'Esta acción no se puede deshacer',
-      icon: 'warning',
+      title: '¿Finalizar asignación?',
+      text: 'La asignación se marcará como finalizada',
+      icon: 'question',
       showCancelButton: true,
-      confirmButtonColor: '#E63946',
+      confirmButtonColor: '#10B981',
       cancelButtonColor: '#6B7280',
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, finalizar',
       cancelButtonText: 'Cancelar'
     })
 
@@ -545,21 +545,20 @@ export function AsignacionesModule() {
       setIsSubmitting(true)
       try {
         const asignacion = asignaciones.find(a => a.id === id)
+        const ahora = new Date().toISOString()
 
-        const { data: conductoresAsignados } = await supabase
-          .from('asignaciones_conductores')
-          .select('id')
-          .eq('asignacion_id', id)
-
-        if (conductoresAsignados && conductoresAsignados.length > 0) {
-          const conductorIds = conductoresAsignados.map((c: any) => c.id)
-          await supabase.from('vehiculos_turnos_ocupados').delete().in('asignacion_conductor_id', conductorIds)
-        }
-
-        await supabase.from('asignaciones_conductores').delete().eq('asignacion_id', id)
-        const { error: asignacionError } = await supabase.from('asignaciones').delete().eq('id', id)
+        // Marcar como finalizada en vez de eliminar
+        const { error: asignacionError } = await (supabase as any)
+          .from('asignaciones')
+          .update({
+            estado: 'finalizada',
+            fecha_fin: ahora,
+            updated_by: profile?.full_name || 'Sistema'
+          })
+          .eq('id', id)
         if (asignacionError) throw asignacionError
 
+        // Cambiar estado del vehículo a DISPONIBLE
         if (asignacion?.vehiculo_id) {
           const { data: estadoDisponible } = await supabase
             .from('vehiculos_estados')
@@ -572,11 +571,11 @@ export function AsignacionesModule() {
           }
         }
 
-        Swal.fire('Eliminado', 'La asignación ha sido eliminada', 'success')
+        Swal.fire('Finalizado', 'La asignación ha sido marcada como finalizada', 'success')
         loadAsignaciones()
         loadStatsData()
       } catch (err: any) {
-        Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
+        Swal.fire('Error', err.message || 'Error al finalizar la asignación', 'error')
       } finally {
         setIsSubmitting(false)
       }
@@ -1263,14 +1262,83 @@ export function AsignacionesModule() {
               >
                 Cancelar
               </button>
-              <button
-                className="btn-primary"
-                onClick={handleConfirmProgramacion}
-                disabled={conductoresToConfirm.length === 0 || isSubmitting}
-                style={{ background: conductoresToConfirm.length > 0 && !isSubmitting ? '#10B981' : '#D1D5DB' }}
-              >
-                {isSubmitting ? 'Procesando...' : 'Confirmar Seleccionados'}
-              </button>
+              {/* Si todos los conductores ya confirmaron, mostrar botón para activar directamente */}
+              {selectedAsignacion.asignaciones_conductores?.length > 0 &&
+               selectedAsignacion.asignaciones_conductores.every(ac => ac.confirmado) ? (
+                <button
+                  className="btn-primary"
+                  onClick={async () => {
+                    if (isSubmitting) return
+                    setIsSubmitting(true)
+                    try {
+                      const ahora = new Date().toISOString()
+
+                      // Cerrar asignaciones activas anteriores del mismo vehículo
+                      const { data: asignacionesACerrar } = await supabase
+                        .from('asignaciones')
+                        .select('id')
+                        .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+                        .eq('estado', 'activa')
+                        .neq('id', selectedAsignacion.id)
+
+                      if (asignacionesACerrar && asignacionesACerrar.length > 0) {
+                        await (supabase as any).from('asignaciones')
+                          .update({ estado: 'finalizada', fecha_fin: ahora, notas: '[AUTO-CERRADA]' })
+                          .in('id', asignacionesACerrar.map((a: any) => a.id))
+                      }
+
+                      // Activar la asignación
+                      await (supabase as any)
+                        .from('asignaciones')
+                        .update({
+                          estado: 'activa',
+                          fecha_inicio: ahora,
+                          notas: confirmComentarios || selectedAsignacion.notas,
+                          updated_by: profile?.full_name || 'Sistema'
+                        })
+                        .eq('id', selectedAsignacion.id)
+
+                      // Actualizar estado del vehículo a EN_USO
+                      const { data: estadoEnUso } = await supabase
+                        .from('vehiculos_estados')
+                        .select('id')
+                        .eq('codigo', 'EN_USO')
+                        .single()
+
+                      if (estadoEnUso && selectedAsignacion.vehiculo_id) {
+                        await (supabase as any)
+                          .from('vehiculos')
+                          .update({ estado_id: estadoEnUso.id })
+                          .eq('id', selectedAsignacion.vehiculo_id)
+                      }
+
+                      Swal.fire('Activado', 'La asignación está ahora ACTIVA.', 'success')
+                      setShowConfirmModal(false)
+                      setConfirmComentarios('')
+                      setSelectedAsignacion(null)
+                      loadAsignaciones()
+                      loadStatsData()
+                    } catch (err: any) {
+                      Swal.fire('Error', err.message || 'Error al activar', 'error')
+                    } finally {
+                      setIsSubmitting(false)
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  style={{ background: !isSubmitting ? '#10B981' : '#D1D5DB' }}
+                >
+                  {isSubmitting ? 'Procesando...' : 'Activar Asignación'}
+                </button>
+              ) : (
+                <button
+                  className="btn-primary"
+                  onClick={handleConfirmProgramacion}
+                  disabled={conductoresToConfirm.length === 0 || isSubmitting}
+                  style={{ background: conductoresToConfirm.length > 0 && !isSubmitting ? '#10B981' : '#D1D5DB' }}
+                >
+                  {isSubmitting ? 'Procesando...' : 'Confirmar Seleccionados'}
+                </button>
+              )}
             </div>
           </div>
         </div>

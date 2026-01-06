@@ -124,7 +124,7 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible; /* Permite que los dropdowns de filtros se muestren */
   box-shadow: var(--shadow-sm);
 }
 
