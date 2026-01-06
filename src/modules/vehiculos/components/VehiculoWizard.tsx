@@ -25,6 +25,7 @@ interface VehiculoFormData {
   seguro_vigencia: string
   titular: string
   notas: string
+  url_documentacion: string
 }
 
 interface VehiculoWizardProps {
@@ -322,11 +323,22 @@ export function VehiculoWizard({
                   disabled={saving}
                 >
                   <option value="">Seleccionar...</option>
-                  {vehiculosEstados.map((estado) => (
-                    <option key={estado.id} value={estado.id}>
-                      {estado.descripcion}
-                    </option>
-                  ))}
+                  {vehiculosEstados
+                    .filter((estado) => [
+                      'PKG_ON_BASE',
+                      'PKG_OFF_BASE',
+                      'CORPORATIVO',
+                      'EN_USO',
+                      'TALLER_BASE_VALIENTE',
+                      'TALLER_AXIS',
+                      'RETENIDO_COMISARIA',
+                      'TALLER_CHAPA_PINTURA'
+                    ].includes(estado.codigo))
+                    .map((estado) => (
+                      <option key={estado.id} value={estado.id}>
+                        {estado.descripcion}
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -412,6 +424,21 @@ export function VehiculoWizard({
                 onChange={(e) => setFormData({ ...formData, titular: e.target.value })}
                 disabled={saving}
               />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">URL Documentación (Google Drive)</label>
+              <input
+                type="url"
+                className="form-input"
+                value={formData.url_documentacion}
+                onChange={(e) => setFormData({ ...formData, url_documentacion: e.target.value })}
+                disabled={saving}
+                placeholder="https://drive.google.com/drive/folders/..."
+              />
+              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px', display: 'block' }}>
+                Link a la carpeta de Drive con la documentación del vehículo
+              </span>
             </div>
 
             <div className="form-group">

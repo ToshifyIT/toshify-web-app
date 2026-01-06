@@ -62,9 +62,10 @@ export function ProveedoresModule() {
     categoria: '' as CategoriaProveedor | ''
   })
 
-  // Column filter states
-  const [razonSocialFilter, setRazonSocialFilter] = useState('')
-  const [estadoFilter, setEstadoFilter] = useState<string>('')
+  // Column filter states - Multiselect tipo Excel
+  const [razonSocialFilter, setRazonSocialFilter] = useState<string[]>([])
+  const [razonSocialSearch, setRazonSocialSearch] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   useEffect(() => {
@@ -82,19 +83,50 @@ export function ProveedoresModule() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [openColumnFilter])
 
-  // Filtrar proveedores según los filtros de columna
+  // Valores únicos para filtros tipo Excel
+  const razonSocialUnicos = useMemo(() => {
+    const razones = proveedores.map(p => p.razon_social).filter(Boolean)
+    return [...new Set(razones)].sort()
+  }, [proveedores])
+
+  const razonSocialFiltrados = useMemo(() => {
+    if (!razonSocialSearch) return razonSocialUnicos
+    return razonSocialUnicos.filter(r => r.toLowerCase().includes(razonSocialSearch.toLowerCase()))
+  }, [razonSocialUnicos, razonSocialSearch])
+
+  const estadoOptions = [
+    { value: 'true', label: 'Activo' },
+    { value: 'false', label: 'Inactivo' }
+  ]
+
+  // Toggle functions para multiselect
+  const toggleRazonSocialFilter = (razon: string) => {
+    setRazonSocialFilter(prev =>
+      prev.includes(razon) ? prev.filter(r => r !== razon) : [...prev, razon]
+    )
+  }
+
+  const toggleEstadoFilter = (estado: string) => {
+    setEstadoFilter(prev =>
+      prev.includes(estado) ? prev.filter(e => e !== estado) : [...prev, estado]
+    )
+  }
+
+  // Filtrar proveedores según los filtros de columna (multiselect tipo Excel)
   const filteredProveedores = useMemo(() => {
     let result = proveedores
 
-    if (razonSocialFilter) {
+    if (razonSocialFilter.length > 0) {
       result = result.filter(p =>
-        p.razon_social?.toLowerCase().includes(razonSocialFilter.toLowerCase())
+        razonSocialFilter.includes(p.razon_social || '')
       )
     }
 
-    if (estadoFilter !== '') {
-      const isActivo = estadoFilter === 'true'
-      result = result.filter(p => p.activo === isActivo)
+    if (estadoFilter.length > 0) {
+      result = result.filter(p => {
+        const estadoStr = p.activo ? 'true' : 'false'
+        return estadoFilter.includes(estadoStr)
+      })
     }
 
     return result
@@ -319,9 +351,9 @@ export function ProveedoresModule() {
         accessorKey: 'razon_social',
         header: () => (
           <div className="dt-column-filter">
-            <span>Razón Social</span>
+            <span>Razón Social {razonSocialFilter.length > 0 && `(${razonSocialFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${razonSocialFilter ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${razonSocialFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'razon_social' ? null : 'razon_social')
@@ -331,26 +363,37 @@ export function ProveedoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'razon_social' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '200px' }}>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
-                  placeholder="Buscar razón social..."
-                  value={razonSocialFilter}
-                  onChange={(e) => setRazonSocialFilter(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Buscar..."
+                  value={razonSocialSearch}
+                  onChange={(e) => setRazonSocialSearch(e.target.value)}
                   className="dt-column-filter-input"
                   autoFocus
                 />
-                {razonSocialFilter && (
+                <div className="dt-excel-filter-list">
+                  {razonSocialFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    razonSocialFiltrados.slice(0, 50).map(razon => (
+                      <label key={razon} className={`dt-column-filter-checkbox ${razonSocialFilter.includes(razon) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={razonSocialFilter.includes(razon)}
+                          onChange={() => toggleRazonSocialFilter(razon)}
+                        />
+                        <span>{razon}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {razonSocialFilter.length > 0 && (
                   <button
-                    className="dt-column-filter-option"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setRazonSocialFilter('')
-                    }}
-                    style={{ marginTop: '4px', color: 'var(--color-danger)' }}
+                    className="dt-column-filter-clear"
+                    onClick={() => { setRazonSocialFilter([]); setRazonSocialSearch('') }}
                   >
-                    Limpiar
+                    Limpiar ({razonSocialFilter.length})
                   </button>
                 )}
               </div>
@@ -413,9 +456,9 @@ export function ProveedoresModule() {
         accessorKey: 'activo',
         header: () => (
           <div className="dt-column-filter">
-            <span>Estado</span>
+            <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
             <button
-              className={`dt-column-filter-btn ${estadoFilter !== '' ? 'active' : ''}`}
+              className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado')
@@ -425,37 +468,27 @@ export function ProveedoresModule() {
               <Filter size={12} />
             </button>
             {openColumnFilter === 'estado' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '130px' }}>
-                <button
-                  className={`dt-column-filter-option ${estadoFilter === '' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setEstadoFilter('')
-                    setOpenColumnFilter(null)
-                  }}
-                >
-                  Todos
-                </button>
-                <button
-                  className={`dt-column-filter-option ${estadoFilter === 'true' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setEstadoFilter('true')
-                    setOpenColumnFilter(null)
-                  }}
-                >
-                  Activo
-                </button>
-                <button
-                  className={`dt-column-filter-option ${estadoFilter === 'false' ? 'selected' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setEstadoFilter('false')
-                    setOpenColumnFilter(null)
-                  }}
-                >
-                  Inactivo
-                </button>
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  {estadoOptions.map(opt => (
+                    <label key={opt.value} className={`dt-column-filter-checkbox ${estadoFilter.includes(opt.value) ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={estadoFilter.includes(opt.value)}
+                        onChange={() => toggleEstadoFilter(opt.value)}
+                      />
+                      <span>{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+                {estadoFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => setEstadoFilter([])}
+                  >
+                    Limpiar ({estadoFilter.length})
+                  </button>
+                )}
               </div>
             )}
           </div>

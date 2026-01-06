@@ -1,6 +1,6 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Filter, Loader2, Briefcase, PaintBucket, Warehouse } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Filter, Loader2, Briefcase, PaintBucket, Warehouse, FolderOpen } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -81,7 +81,8 @@ export function VehicleManagement() {
     seguro_numero: '',
     seguro_vigencia: '',
     titular: '',
-    notas: ''
+    notas: '',
+    url_documentacion: ''
   })
 
   useEffect(() => {
@@ -104,18 +105,35 @@ export function VehicleManagement() {
   const loadStatsData = async () => {
     setStatsLoading(true)
     try {
-      // Total de vehículos
-      const { count: totalVehiculos } = await supabase
-        .from('vehiculos')
-        .select('*', { count: 'exact', head: true })
-
-      // Obtener estados de vehículos
+      // Obtener estados de vehículos primero
       const { data: estadosVeh } = await supabase
         .from('vehiculos_estados')
         .select('id, codigo') as { data: Array<{ id: string; codigo: string }> | null }
 
       const estadoIdMap = new Map<string, string>()
       estadosVeh?.forEach(e => estadoIdMap.set(e.codigo, e.id))
+
+      // Estados a EXCLUIR del total (robados, destruccion total, jubilados)
+      const estadosExcluidos = [
+        estadoIdMap.get('ROBO'),
+        estadoIdMap.get('DESTRUCCION_TOTAL'),
+        estadoIdMap.get('JUBILADO')
+      ].filter(Boolean) as string[]
+
+      // Total de vehículos (excluyendo robados, destrucción total y jubilados)
+      let totalVehiculos = 0
+      if (estadosExcluidos.length > 0) {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+          .not('estado_id', 'in', `(${estadosExcluidos.join(',')})`)
+        totalVehiculos = count || 0
+      } else {
+        const { count } = await supabase
+          .from('vehiculos')
+          .select('*', { count: 'exact', head: true })
+        totalVehiculos = count || 0
+      }
 
       // Vehículos disponibles en cochera (solo PKG_ON_BASE - listos para usar)
       let vehiculosDisponibles = 0
@@ -469,7 +487,8 @@ export function VehicleManagement() {
       seguro_numero: vehiculo.seguro_numero || '',
       seguro_vigencia: vehiculo.seguro_vigencia || '',
       titular: vehiculo.titular || '',
-      notas: vehiculo.notas || ''
+      notas: vehiculo.notas || '',
+      url_documentacion: (vehiculo as any).url_documentacion || (vehiculo as any).documentos_urls || ''
     })
     setShowEditModal(true)
   }
@@ -501,7 +520,8 @@ export function VehicleManagement() {
       seguro_numero: '',
       seguro_vigencia: '',
       titular: '',
-      notas: ''
+      notas: '',
+      url_documentacion: ''
     })
   }
 
@@ -840,6 +860,41 @@ export function VehicleManagement() {
         enableSorting: true,
       },
       {
+        accessorKey: 'color',
+        header: 'Color',
+        cell: ({ getValue }) => {
+          const color = getValue() as string
+          if (!color) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span
+                style={{
+                  width: '12px',
+                  height: '12px',
+                  borderRadius: '50%',
+                  background: color.toLowerCase() === 'blanco' ? '#f5f5f5' :
+                              color.toLowerCase() === 'negro' ? '#1a1a1a' :
+                              color.toLowerCase() === 'gris' ? '#808080' :
+                              color.toLowerCase() === 'plata' ? '#c0c0c0' :
+                              color.toLowerCase() === 'rojo' ? '#dc2626' :
+                              color.toLowerCase() === 'azul' ? '#2563eb' :
+                              color.toLowerCase() === 'verde' ? '#16a34a' :
+                              color.toLowerCase() === 'amarillo' ? '#eab308' :
+                              color.toLowerCase() === 'naranja' ? '#ea580c' :
+                              color.toLowerCase() === 'marron' || color.toLowerCase() === 'marrón' ? '#78350f' :
+                              color.toLowerCase() === 'beige' ? '#d4c4a8' :
+                              '#9ca3af',
+                  border: '1px solid var(--border-primary)',
+                  flexShrink: 0
+                }}
+              />
+              <span>{color}</span>
+            </div>
+          )
+        },
+        enableSorting: true,
+      },
+      {
         accessorKey: 'kilometraje_actual',
         header: 'Kilometraje',
         cell: ({ getValue }) => `${(getValue() as number).toLocaleString()} km`,
@@ -984,36 +1039,51 @@ export function VehicleManagement() {
       {
         id: 'acciones',
         header: 'Acciones',
-        cell: ({ row }) => (
-          <div className="dt-actions">
-            <button
-              className="dt-btn-action dt-btn-view"
-              onClick={() => {
-                setSelectedVehiculo(row.original)
-                setShowDetailsModal(true)
-              }}
-              title="Ver detalles"
-            >
-              <Eye size={16} />
-            </button>
-            <button
-              className="dt-btn-action dt-btn-edit"
-              onClick={() => openEditModal(row.original)}
-              disabled={!canUpdate}
-              title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehiculo'}
-            >
-              <Edit size={16} />
-            </button>
-            <button
-              className="dt-btn-action dt-btn-delete"
-              onClick={() => openDeleteModal(row.original)}
-              disabled={!canDelete}
-              title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehiculo'}
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const documentosUrl = (row.original as any).documentos_urls
+          return (
+            <div className="dt-actions">
+              {documentosUrl && (
+                <a
+                  href={documentosUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="dt-btn-action"
+                  style={{ color: '#2563eb', background: 'rgba(37, 99, 235, 0.1)' }}
+                  title="Ver documentación en Drive"
+                >
+                  <FolderOpen size={16} />
+                </a>
+              )}
+              <button
+                className="dt-btn-action dt-btn-view"
+                onClick={() => {
+                  setSelectedVehiculo(row.original)
+                  setShowDetailsModal(true)
+                }}
+                title="Ver detalles"
+              >
+                <Eye size={16} />
+              </button>
+              <button
+                className="dt-btn-action dt-btn-edit"
+                onClick={() => openEditModal(row.original)}
+                disabled={!canUpdate}
+                title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehiculo'}
+              >
+                <Edit size={16} />
+              </button>
+              <button
+                className="dt-btn-action dt-btn-delete"
+                onClick={() => openDeleteModal(row.original)}
+                disabled={!canDelete}
+                title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehiculo'}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          )
+        },
         enableSorting: false,
       },
     ],

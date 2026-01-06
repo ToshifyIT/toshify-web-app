@@ -369,7 +369,7 @@
   border: 1px solid var(--border-primary);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 100;
+  z-index: 1000; /* Alto para estar encima de todo */
 }
 
 .asig-column-filter-option {
@@ -1220,4 +1220,79 @@ input[type="date"].asig-status-select {
 
 .asig-no-filter-results .asig-clear-filters-btn {
   padding: 8px 16px;
+}
+
+/* =====================================================
+   DOCUMENTO BADGES - Tipo de documento a firmar
+   ===================================================== */
+
+.asig-documento-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.asig-documento-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Carta Oferta - Verde */
+.asig-doc-carta {
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+
+/* Anexo - Azul */
+.asig-doc-anexo {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+}
+
+/* N/A - Gris */
+.asig-doc-na {
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
+}
+
+/* =====================================================
+   FILTROS - Correcciones de visualización
+   ===================================================== */
+
+/* Dropdown alineado a la derecha para columnas cerca del borde */
+.asig-column-filter-dropdown.asig-filter-right {
+  left: auto;
+  right: 0;
+}
+
+/* Asegurar que el dropdown no se corte */
+.asig-column-filter-dropdown {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Mejorar visualización de opciones en el filtro de estado */
+.asig-column-filter-dropdown.dt-excel-filter .dt-excel-filter-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.asig-column-filter-dropdown.dt-excel-filter .dt-column-filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.asig-column-filter-dropdown.dt-excel-filter .dt-column-filter-checkbox span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

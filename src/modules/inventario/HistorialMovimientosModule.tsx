@@ -154,7 +154,7 @@ export function HistorialMovimientosModule() {
             <div>
               <div>{date.toLocaleDateString('es-CL')}</div>
               <div className="hist-date-time">
-                {date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                {date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false })}
               </div>
             </div>
           </div>

@@ -11,7 +11,8 @@ import {
   Check,
   Loader2,
   Package,
-  FileText
+  FileText,
+  Filter
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -55,6 +56,12 @@ export function ConceptosTab() {
   const [formData, setFormData] = useState<ConceptoNominaFormData>(INITIAL_FORM_DATA)
   const [saving, setSaving] = useState(false)
 
+  // Column filter states - Multiselect tipo Excel
+  const [codigoFilter, setCodigoFilter] = useState<string[]>([])
+  const [codigoSearch, setCodigoSearch] = useState('')
+  const [tipoFilter, setTipoFilter] = useState<string[]>([])
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+
   // Load data on mount
   useEffect(() => {
     cargarDatos()
@@ -65,6 +72,56 @@ export function ConceptosTab() {
     const precioFinal = formData.precio_base * (1 + formData.iva_porcentaje / 100)
     setFormData(prev => ({ ...prev, precio_final: Number(precioFinal.toFixed(2)) }))
   }, [formData.precio_base, formData.iva_porcentaje])
+
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter])
+
+  // Valores únicos para filtros tipo Excel
+  const codigosUnicos = useMemo(() => {
+    const codigos = conceptos.map(c => c.codigo).filter(Boolean)
+    return [...new Set(codigos)].sort()
+  }, [conceptos])
+
+  const codigosFiltrados = useMemo(() => {
+    if (!codigoSearch) return codigosUnicos
+    return codigosUnicos.filter(c => c.toLowerCase().includes(codigoSearch.toLowerCase()))
+  }, [codigosUnicos, codigoSearch])
+
+  // Toggle functions para multiselect
+  const toggleCodigoFilter = (codigo: string) => {
+    setCodigoFilter(prev =>
+      prev.includes(codigo) ? prev.filter(c => c !== codigo) : [...prev, codigo]
+    )
+  }
+
+  const toggleTipoFilter = (tipo: string) => {
+    setTipoFilter(prev =>
+      prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
+    )
+  }
+
+  // Filtrar conceptos según los filtros de columna
+  const filteredConceptos = useMemo(() => {
+    let result = conceptos
+
+    if (codigoFilter.length > 0) {
+      result = result.filter(c => codigoFilter.includes(c.codigo))
+    }
+
+    if (tipoFilter.length > 0) {
+      result = result.filter(c => tipoFilter.includes(c.tipo))
+    }
+
+    return result
+  }, [conceptos, codigoFilter, tipoFilter])
 
   async function cargarDatos() {
     setLoading(true)
@@ -245,7 +302,57 @@ export function ConceptosTab() {
   const columns = useMemo<ColumnDef<ConceptoNomina>[]>(() => [
     {
       accessorKey: 'codigo',
-      header: 'Código',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Código {codigoFilter.length > 0 && `(${codigoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${codigoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'codigo' ? null : 'codigo')
+            }}
+            title="Filtrar por código"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'codigo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar..."
+                value={codigoSearch}
+                onChange={(e) => setCodigoSearch(e.target.value)}
+                className="dt-column-filter-input"
+                autoFocus
+              />
+              <div className="dt-excel-filter-list">
+                {codigosFiltrados.length === 0 ? (
+                  <div className="dt-excel-filter-empty">Sin resultados</div>
+                ) : (
+                  codigosFiltrados.slice(0, 50).map(codigo => (
+                    <label key={codigo} className={`dt-column-filter-checkbox ${codigoFilter.includes(codigo) ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={codigoFilter.includes(codigo)}
+                        onChange={() => toggleCodigoFilter(codigo)}
+                      />
+                      <span>{codigo}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {codigoFilter.length > 0 && (
+                <button
+                  className="dt-column-filter-clear"
+                  onClick={() => { setCodigoFilter([]); setCodigoSearch('') }}
+                >
+                  Limpiar ({codigoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span className="nom-codigo">{row.original.codigo}</span>
       )
@@ -257,7 +364,45 @@ export function ConceptosTab() {
     },
     {
       accessorKey: 'tipo',
-      header: 'Tipo',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo')
+            }}
+            title="Filtrar por tipo"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'tipo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {TIPOS_CONCEPTO.map(tipo => (
+                  <label key={tipo.value} className={`dt-column-filter-checkbox ${tipoFilter.includes(tipo.value) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={tipoFilter.includes(tipo.value)}
+                      onChange={() => toggleTipoFilter(tipo.value)}
+                    />
+                    <span>{tipo.label}</span>
+                  </label>
+                ))}
+              </div>
+              {tipoFilter.length > 0 && (
+                <button
+                  className="dt-column-filter-clear"
+                  onClick={() => setTipoFilter([])}
+                >
+                  Limpiar ({tipoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span
           className="dt-badge"
@@ -394,7 +539,7 @@ export function ConceptosTab() {
 
       {/* DataTable */}
       <DataTable
-        data={conceptos}
+        data={filteredConceptos}
         columns={columns}
         loading={loading}
         searchPlaceholder="Buscar por código, descripción..."
