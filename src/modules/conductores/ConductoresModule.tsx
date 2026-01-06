@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, Calendar } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -101,6 +101,11 @@ export function ConductoresModule() {
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
 
+  // Estados para filtro de fechas en métricas
+  const [metricsDateFilter, setMetricsDateFilter] = useState<'all' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+
   // Estados para modal de confirmación de baja
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
   const [affectedAssignments, setAffectedAssignments] = useState<any[]>([]);
@@ -153,6 +158,11 @@ export function ConductoresModule() {
     loadStatsData();
   }, []);
 
+  // Recargar stats cuando cambia el filtro de fecha
+  useEffect(() => {
+    loadStatsData();
+  }, [metricsDateFilter, customStartDate, customEndDate]);
+
   // Cerrar dropdown de filtro al hacer click fuera
   useEffect(() => {
     const handleClickOutside = () => {
@@ -164,12 +174,64 @@ export function ConductoresModule() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [openColumnFilter]);
 
+  // Helper para calcular rango de fechas según el filtro seleccionado
+  const getDateRange = () => {
+    const today = new Date();
+    const startOfWeek = (date: Date) => {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Lunes como inicio de semana
+      return new Date(d.setDate(diff));
+    };
+
+    switch (metricsDateFilter) {
+      case 'thisWeek': {
+        const start = startOfWeek(today);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
+      }
+      case 'lastWeek': {
+        const thisWeekStart = startOfWeek(today);
+        const start = new Date(thisWeekStart);
+        start.setDate(start.getDate() - 7);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
+      }
+      case 'thisMonth': {
+        const start = new Date(today.getFullYear(), today.getMonth(), 1);
+        const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
+      }
+      case 'lastMonth': {
+        const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const end = new Date(today.getFullYear(), today.getMonth(), 0);
+        return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
+      }
+      case 'custom': {
+        if (customStartDate && customEndDate) {
+          return { start: customStartDate, end: customEndDate };
+        }
+        return null;
+      }
+      default:
+        return null;
+    }
+  };
+
   const loadStatsData = async () => {
     try {
+      const dateRange = getDateRange();
+
       // Total de conductores
-      const { count: totalConductores } = await supabase
-        .from("conductores")
-        .select("*", { count: "exact", head: true });
+      let totalQuery = supabase.from("conductores").select("*", { count: "exact", head: true });
+      if (dateRange) {
+        totalQuery = totalQuery
+          .gte('fecha_contratacion', dateRange.start)
+          .lte('fecha_contratacion', dateRange.end);
+      }
+      const { count: totalConductores } = await totalQuery;
 
       // Obtener estados de conductores
       const { data: estadosCond } = await supabase
@@ -182,30 +244,65 @@ export function ConductoresModule() {
       // Conductores activos
       let conductoresActivos = 0;
       if (estadoActivoId) {
-        const { count } = await supabase
+        let activosQuery = supabase
           .from("conductores")
           .select("*", { count: "exact", head: true })
           .eq("estado_id", estadoActivoId);
+        if (dateRange) {
+          activosQuery = activosQuery
+            .gte('fecha_contratacion', dateRange.start)
+            .lte('fecha_contratacion', dateRange.end);
+        }
+        const { count } = await activosQuery;
         conductoresActivos = count || 0;
       }
 
       // Conductores de baja
       let conductoresBaja = 0;
       if (estadoBajaId) {
-        const { count } = await supabase
+        let bajaQuery = supabase
           .from("conductores")
           .select("*", { count: "exact", head: true })
           .eq("estado_id", estadoBajaId);
+        if (dateRange) {
+          bajaQuery = bajaQuery
+            .gte('fecha_contratacion', dateRange.start)
+            .lte('fecha_contratacion', dateRange.end);
+        }
+        const { count } = await bajaQuery;
         conductoresBaja = count || 0;
       }
 
+      // Para asignados, primero obtenemos los conductores que cumplen el filtro de fecha
+      let conductoresEnRango: string[] = [];
+      if (dateRange) {
+        const { data: conductoresData } = await supabase
+          .from("conductores")
+          .select("id")
+          .gte('fecha_contratacion', dateRange.start)
+          .lte('fecha_contratacion', dateRange.end) as { data: Array<{ id: string }> | null };
+        conductoresEnRango = conductoresData?.map(c => c.id) || [];
+      }
+
       // Conductores asignados (en asignaciones activas)
-      const { data: asignacionesActivas } = await supabase
+      let asignacionesQuery = supabase
         .from("asignaciones_conductores")
         .select("conductor_id")
-        .in("estado", ["asignado", "activo"]) as { data: Array<{ conductor_id: string }> | null };
+        .in("estado", ["asignado", "activo"]);
 
-      const conductoresAsignadosIds = new Set(asignacionesActivas?.map((a) => a.conductor_id) || []);
+      const { data: asignacionesActivas } = await asignacionesQuery as { data: Array<{ conductor_id: string }> | null };
+
+      let conductoresAsignadosIds = new Set(asignacionesActivas?.map((a) => a.conductor_id) || []);
+
+      // Si hay filtro de fecha, solo contar los que están en el rango
+      if (dateRange && conductoresEnRango.length > 0) {
+        conductoresAsignadosIds = new Set(
+          [...conductoresAsignadosIds].filter(id => conductoresEnRango.includes(id))
+        );
+      } else if (dateRange && conductoresEnRango.length === 0) {
+        conductoresAsignadosIds = new Set();
+      }
+
       const conductoresAsignados = conductoresAsignadosIds.size;
 
       // Conductores disponibles = activos - asignados
@@ -215,11 +312,17 @@ export function ConductoresModule() {
       const hoy = new Date();
       const en30Dias = new Date();
       en30Dias.setDate(en30Dias.getDate() + 30);
-      const { count: licenciasPorVencer } = await supabase
+      let licenciasQuery = supabase
         .from("conductores")
         .select("*", { count: "exact", head: true })
         .gte("licencia_vencimiento", hoy.toISOString().split("T")[0])
         .lte("licencia_vencimiento", en30Dias.toISOString().split("T")[0]);
+      if (dateRange) {
+        licenciasQuery = licenciasQuery
+          .gte('fecha_contratacion', dateRange.start)
+          .lte('fecha_contratacion', dateRange.end);
+      }
+      const { count: licenciasPorVencer } = await licenciasQuery;
 
       setStatsData({
         totalConductores: totalConductores || 0,
@@ -1652,6 +1755,46 @@ export function ConductoresModule() {
     <div className="cond-module">
       {/* Stats Cards - Métricas principales */}
       <div className="cond-stats">
+        {/* Header con filtro de fechas */}
+        <div className="cond-stats-header">
+          <div className="cond-stats-title">
+            <Calendar size={16} />
+            <span>Métricas</span>
+          </div>
+          <div className="cond-stats-filters">
+            <select
+              className="cond-date-filter-select"
+              value={metricsDateFilter}
+              onChange={(e) => setMetricsDateFilter(e.target.value as typeof metricsDateFilter)}
+            >
+              <option value="all">Todo el tiempo</option>
+              <option value="thisWeek">Esta semana</option>
+              <option value="lastWeek">Semana anterior</option>
+              <option value="thisMonth">Este mes</option>
+              <option value="lastMonth">Mes anterior</option>
+              <option value="custom">Rango personalizado</option>
+            </select>
+            {metricsDateFilter === 'custom' && (
+              <div className="cond-custom-date-inputs">
+                <input
+                  type="date"
+                  className="cond-date-input"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  placeholder="Desde"
+                />
+                <span className="cond-date-separator">-</span>
+                <input
+                  type="date"
+                  className="cond-date-input"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  placeholder="Hasta"
+                />
+              </div>
+            )}
+          </div>
+        </div>
         <div className="cond-stats-grid">
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'asignados' ? 'stat-card-active' : ''}`}
