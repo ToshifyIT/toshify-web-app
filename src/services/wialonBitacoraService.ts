@@ -28,6 +28,7 @@ export interface BitacoraRegistroTransformado {
   lavado_realizado: boolean
   nafta_cargada: boolean
   tipo_turno?: string | null // TURNO, CARGO - viene de asignaciones
+  turno_indicador?: string | null // D, N - indicador diurno/nocturno
 }
 
 // Tipo para fila de wialon_bitacora
