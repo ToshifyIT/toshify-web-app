@@ -40,40 +40,40 @@ export function ConceptosFacturacionTab() {
     const { value: formValues } = await Swal.fire({
       title: 'Nuevo Concepto',
       html: `
-        <div style="text-align: left;">
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">Código</label>
-            <input id="swal-codigo" type="text" class="swal2-input" placeholder="Ej: P013" style="margin: 0; width: 100%;">
+        <div class="fact-modal-form">
+          <div class="fact-form-group">
+            <label class="fact-form-label">Código</label>
+            <input id="swal-codigo" type="text" class="fact-form-input" placeholder="Ej: P013">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">Descripción</label>
-            <input id="swal-desc" type="text" class="swal2-input" placeholder="Descripción del concepto" style="margin: 0; width: 100%;">
+          <div class="fact-form-group">
+            <label class="fact-form-label">Descripción</label>
+            <input id="swal-desc" type="text" class="fact-form-input" placeholder="Descripción del concepto">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">Tipo</label>
-            <select id="swal-tipo" class="swal2-select" style="margin: 0; width: 100%;">
+          <div class="fact-form-group">
+            <label class="fact-form-label">Tipo</label>
+            <select id="swal-tipo" class="fact-form-select">
               ${tiposOptions}
             </select>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-            <div>
-              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">Precio Base</label>
-              <input id="swal-precio" type="number" class="swal2-input" placeholder="0" style="margin: 0; width: 100%;" step="0.01">
+          <div class="fact-form-row">
+            <div class="fact-form-group">
+              <label class="fact-form-label">Precio Base</label>
+              <input id="swal-precio" type="number" class="fact-form-input" placeholder="0" step="0.01">
             </div>
-            <div>
-              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">IVA (%)</label>
-              <input id="swal-iva" type="number" class="swal2-input" value="0" style="margin: 0; width: 100%;" step="0.01">
+            <div class="fact-form-group">
+              <label class="fact-form-label">IVA (%)</label>
+              <input id="swal-iva" type="number" class="fact-form-input" value="0" step="0.01">
             </div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
-              <input id="swal-variable" type="checkbox"> Es monto variable
+          <div class="fact-form-checkboxes">
+            <label class="fact-checkbox-label">
+              <input id="swal-variable" type="checkbox" class="fact-checkbox"> Es monto variable
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
-              <input id="swal-turno" type="checkbox" checked> Aplica a TURNO
+            <label class="fact-checkbox-label">
+              <input id="swal-turno" type="checkbox" class="fact-checkbox" checked> Aplica a TURNO
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
-              <input id="swal-cargo" type="checkbox" checked> Aplica a CARGO
+            <label class="fact-checkbox-label">
+              <input id="swal-cargo" type="checkbox" class="fact-checkbox" checked> Aplica a CARGO
             </label>
           </div>
         </div>
@@ -82,7 +82,16 @@ export function ConceptosFacturacionTab() {
       showCancelButton: true,
       confirmButtonText: 'Crear',
       cancelButtonText: 'Cancelar',
-      width: 420,
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280',
+      width: 400,
+      customClass: {
+        popup: 'fact-modal',
+        title: 'fact-modal-title',
+        htmlContainer: 'fact-modal-content',
+        confirmButton: 'fact-btn-confirm',
+        cancelButton: 'fact-btn-cancel'
+      },
       preConfirm: () => {
         const codigo = (document.getElementById('swal-codigo') as HTMLInputElement).value
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value
@@ -134,43 +143,43 @@ export function ConceptosFacturacionTab() {
     const { value: formValues } = await Swal.fire({
       title: 'Editar Concepto',
       html: `
-        <div style="text-align: left;">
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">Código</label>
-            <input id="swal-codigo" type="text" class="swal2-input" value="${concepto.codigo}" style="margin: 0; width: 100%;" disabled>
+        <div class="fact-modal-form">
+          <div class="fact-form-group">
+            <label class="fact-form-label">Código</label>
+            <input id="swal-codigo" type="text" class="fact-form-input fact-input-disabled" value="${concepto.codigo}" disabled>
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">Descripción</label>
-            <input id="swal-desc" type="text" class="swal2-input" value="${concepto.descripcion}" style="margin: 0; width: 100%;">
+          <div class="fact-form-group">
+            <label class="fact-form-label">Descripción</label>
+            <input id="swal-desc" type="text" class="fact-form-input" value="${concepto.descripcion}">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">Tipo</label>
-            <select id="swal-tipo" class="swal2-select" style="margin: 0; width: 100%;">
+          <div class="fact-form-group">
+            <label class="fact-form-label">Tipo</label>
+            <select id="swal-tipo" class="fact-form-select">
               ${tiposOptions}
             </select>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-            <div>
-              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">Precio Base</label>
-              <input id="swal-precio" type="number" class="swal2-input" value="${concepto.precio_base || 0}" style="margin: 0; width: 100%;" step="0.01">
+          <div class="fact-form-row">
+            <div class="fact-form-group">
+              <label class="fact-form-label">Precio Base</label>
+              <input id="swal-precio" type="number" class="fact-form-input" value="${concepto.precio_base || 0}" step="0.01">
             </div>
-            <div>
-              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #64748b;">IVA (%)</label>
-              <input id="swal-iva" type="number" class="swal2-input" value="${concepto.iva_porcentaje || 0}" style="margin: 0; width: 100%;" step="0.01">
+            <div class="fact-form-group">
+              <label class="fact-form-label">IVA (%)</label>
+              <input id="swal-iva" type="number" class="fact-form-input" value="${concepto.iva_porcentaje || 0}" step="0.01">
             </div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
-              <input id="swal-variable" type="checkbox" ${concepto.es_variable ? 'checked' : ''}> Es monto variable
+          <div class="fact-form-checkboxes">
+            <label class="fact-checkbox-label">
+              <input id="swal-variable" type="checkbox" class="fact-checkbox" ${concepto.es_variable ? 'checked' : ''}> Es monto variable
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
-              <input id="swal-turno" type="checkbox" ${concepto.aplica_turno ? 'checked' : ''}> Aplica a TURNO
+            <label class="fact-checkbox-label">
+              <input id="swal-turno" type="checkbox" class="fact-checkbox" ${concepto.aplica_turno ? 'checked' : ''}> Aplica a TURNO
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
-              <input id="swal-cargo" type="checkbox" ${concepto.aplica_cargo ? 'checked' : ''}> Aplica a CARGO
+            <label class="fact-checkbox-label">
+              <input id="swal-cargo" type="checkbox" class="fact-checkbox" ${concepto.aplica_cargo ? 'checked' : ''}> Aplica a CARGO
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
-              <input id="swal-activo" type="checkbox" ${concepto.activo ? 'checked' : ''}> Activo
+            <label class="fact-checkbox-label">
+              <input id="swal-activo" type="checkbox" class="fact-checkbox" ${concepto.activo ? 'checked' : ''}> Activo
             </label>
           </div>
         </div>
@@ -179,7 +188,16 @@ export function ConceptosFacturacionTab() {
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
-      width: 420,
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280',
+      width: 400,
+      customClass: {
+        popup: 'fact-modal',
+        title: 'fact-modal-title',
+        htmlContainer: 'fact-modal-content',
+        confirmButton: 'fact-btn-confirm',
+        cancelButton: 'fact-btn-cancel'
+      },
       preConfirm: () => {
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value

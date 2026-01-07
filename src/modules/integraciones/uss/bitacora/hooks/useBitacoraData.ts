@@ -15,14 +15,19 @@ import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 // Intervalo de auto-refresh en ms (30 segundos)
 const AUTO_REFRESH_INTERVAL = 30000
 
-// Tipo para asignaciones
+// Tipo para conductor asignado con su turno
+interface ConductorTurno {
+  conductor_nombre: string
+  conductor_completo: string
+  turno: string | null // diurno, nocturno, todo_dia
+}
+
+// Tipo para asignaciones activas con conductores
 interface AsignacionActiva {
   patente: string
   patente_normalizada: string
-  conductor_nombre: string
-  conductor_apellido: string
-  conductor_completo: string
-  horario: string | null // TURNO, CARGO, etc.
+  modalidad: string | null // TURNO, CARGO
+  conductores: ConductorTurno[]
 }
 
 // Helpers para fechas - Usando zona horaria Argentina
@@ -89,7 +94,7 @@ export function useBitacoraData() {
     lastUpdate: null,
   })
 
-  // Cargar asignaciones activas
+  // Cargar asignaciones activas con conductores y sus turnos
   const loadAsignaciones = useCallback(async () => {
     const { data } = await supabase
       .from('asignaciones')
@@ -97,14 +102,20 @@ export function useBitacoraData() {
         vehiculo_id,
         horario,
         vehiculos!inner(patente),
-        conductores!inner(nombres, apellidos)
+        asignaciones_conductores(
+          horario,
+          conductores(nombres, apellidos)
+        )
       `)
       .eq('estado', 'activa') as {
       data: Array<{
         vehiculo_id: string
         horario: string | null
         vehiculos: { patente: string }
-        conductores: { nombres: string; apellidos: string }
+        asignaciones_conductores: Array<{
+          horario: string | null
+          conductores: { nombres: string; apellidos: string }
+        }>
       }> | null
     }
 
@@ -112,17 +123,25 @@ export function useBitacoraData() {
       const map = new Map<string, AsignacionActiva>()
       for (const row of data) {
         const vehiculo = row.vehiculos
-        const conductor = row.conductores
+        const asigConductores = row.asignaciones_conductores || []
 
-        if (vehiculo && conductor) {
+        if (vehiculo) {
           const patenteNorm = vehiculo.patente.replace(/\s/g, '').toUpperCase()
+
+          // Mapear conductores con sus turnos
+          const conductores: ConductorTurno[] = asigConductores
+            .filter(ac => ac.conductores)
+            .map(ac => ({
+              conductor_nombre: ac.conductores.nombres,
+              conductor_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
+              turno: ac.horario, // diurno, nocturno, todo_dia
+            }))
+
           map.set(patenteNorm, {
             patente: vehiculo.patente,
             patente_normalizada: patenteNorm,
-            conductor_nombre: conductor.nombres,
-            conductor_apellido: conductor.apellidos,
-            conductor_completo: `${conductor.nombres} ${conductor.apellidos}`,
-            horario: row.horario,
+            modalidad: row.horario, // TURNO, CARGO
+            conductores,
           })
         }
       }
@@ -155,17 +174,32 @@ export function useBitacoraData() {
         wialonBitacoraService.getStats(dateRange.startDate, dateRange.endDate),
       ])
 
-      // Cruzar con asignaciones
+      // Cruzar con asignaciones - buscar conductor y su turno
       const registrosEnriquecidos = bitacoraResult.data.map((r) => {
         const asignacion = asignaciones.get(r.patente_normalizada)
         if (asignacion) {
+          // Buscar el conductor que coincida por nombre (si existe conductor_wialon en el registro)
+          const conductorWialon = r.conductor_wialon?.toLowerCase() || ''
+          const conductorMatch = asignacion.conductores.find(c =>
+            conductorWialon.includes(c.conductor_nombre.toLowerCase())
+          )
+
+          // Determinar el turno del conductor
+          let turnoIndicador: string | null = null
+          if (asignacion.modalidad === 'TURNO' && conductorMatch?.turno) {
+            // Usar nombre completo: Diurno o Nocturno
+            if (conductorMatch.turno === 'diurno') turnoIndicador = 'Diurno'
+            else if (conductorMatch.turno === 'nocturno') turnoIndicador = 'Nocturno'
+          }
+
           return {
             ...r,
-            conductor_wialon: asignacion.conductor_completo,
-            tipo_turno: asignacion.horario,
+            conductor_wialon: conductorMatch?.conductor_completo || r.conductor_wialon,
+            tipo_turno: asignacion.modalidad, // TURNO o CARGO
+            turno_indicador: turnoIndicador, // D, N, o null
           }
         }
-        return { ...r, tipo_turno: null }
+        return { ...r, tipo_turno: null, turno_indicador: null }
       })
 
       setRegistros(registrosEnriquecidos)

@@ -67,6 +67,14 @@ export function BitacoraTable({
     }
   }
 
+  const getTurnoIndicadorClass = (indicador: string | null | undefined) => {
+    switch (indicador) {
+      case 'Diurno': return 'turno-diurno'
+      case 'Nocturno': return 'turno-nocturno'
+      default: return ''
+    }
+  }
+
   const getEstadoClass = (estado: string) => {
     switch (estado) {
       case 'Turno Finalizado': return 'estado-finalizado'
@@ -101,6 +109,7 @@ export function BitacoraTable({
               <th>iButton</th>
               <th>Conductor</th>
               <th>Tipo</th>
+              <th>Turno</th>
               <th>Inicio</th>
               <th>Cierre</th>
               <th>Km</th>
@@ -114,14 +123,14 @@ export function BitacoraTable({
             {isLoading ? (
               [...Array(5)].map((_, i) => (
                 <tr key={i} className="loading-row">
-                  {[...Array(12)].map((_, j) => (
+                  {[...Array(13)].map((_, j) => (
                     <td key={j}><div className="skeleton-cell"></div></td>
                   ))}
                 </tr>
               ))
             ) : registros.length === 0 ? (
               <tr>
-                <td colSpan={12} className="empty-state">
+                <td colSpan={13} className="empty-state">
                   No hay registros para mostrar
                 </td>
               </tr>
@@ -136,6 +145,15 @@ export function BitacoraTable({
                     <span className={`tipo-badge ${getTipoTurnoClass(r.tipo_turno)}`}>
                       {r.tipo_turno || '-'}
                     </span>
+                  </td>
+                  <td>
+                    {r.tipo_turno === 'TURNO' && r.turno_indicador ? (
+                      <span className={`turno-badge ${getTurnoIndicadorClass(r.turno_indicador)}`}>
+                        {r.turno_indicador}
+                      </span>
+                    ) : (
+                      <span className="turno-empty">-</span>
+                    )}
                   </td>
                   <td>{formatTime(r.hora_inicio)}</td>
                   <td>{formatTime(r.hora_cierre)}</td>
