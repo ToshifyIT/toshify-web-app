@@ -443,36 +443,29 @@
   color: var(--text-tertiary);
 }
 
-/* Columna de turno indicador */
-.col-turno-indicador {
-  width: 32px;
-  text-align: center;
-}
-
-/* Indicador de turno diurno/nocturno */
-.turno-indicador {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+/* Badge de turno diurno/nocturno */
+.turno-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
-.turno-indicador-empty {
+.turno-empty {
   color: var(--text-tertiary);
   font-size: 12px;
 }
 
 .turno-diurno {
-  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  background: #FEF3C7;
   color: #92400E;
 }
 
 .turno-nocturno {
-  background: linear-gradient(135deg, #DBEAFE 0%, #93C5FD 100%);
+  background: #DBEAFE;
   color: #1E40AF;
 }
 
