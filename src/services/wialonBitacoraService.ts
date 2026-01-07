@@ -27,6 +27,7 @@ export interface BitacoraRegistroTransformado {
   gnc_cargado: boolean
   lavado_realizado: boolean
   nafta_cargada: boolean
+  tipo_turno?: string | null // TURNO, CARGO - viene de asignaciones
 }
 
 // Tipo para fila de wialon_bitacora
