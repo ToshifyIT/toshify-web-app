@@ -20,8 +20,7 @@ import {
   RefreshCw,
   FileSpreadsheet,
   Filter,
-  AlertCircle,
-  Play
+  AlertCircle
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -150,10 +149,10 @@ export function ReporteFacturacionTab() {
       setPeriodo(periodoData as PeriodoFacturacion)
 
       // 2. Cargar facturaciones de conductores para este período
-      const { data: facturacionesData, error: errFact } = await supabase
-        .from('facturacion_conductores')
+      const { data: facturacionesData, error: errFact } = await (supabase
+        .from('facturacion_conductores') as any)
         .select('*')
-        .eq('periodo_id', periodoData.id)
+        .eq('periodo_id', (periodoData as any).id)
         .order('conductor_nombre')
 
       if (errFact) throw errFact

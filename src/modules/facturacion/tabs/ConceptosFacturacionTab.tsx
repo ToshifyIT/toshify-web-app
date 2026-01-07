@@ -212,7 +212,7 @@ export function ConceptosFacturacionTab() {
     if (!formValues) return
 
     try {
-      const { error } = await supabase.from('conceptos_nomina').update(formValues).eq('id', concepto.id)
+      const { error } = await (supabase.from('conceptos_nomina') as any).update(formValues).eq('id', concepto.id)
       if (error) throw error
       Swal.fire({ icon: 'success', title: 'Concepto actualizado', timer: 1500, showConfirmButton: false })
       cargarConceptos()
@@ -377,7 +377,7 @@ export function ConceptosFacturacionTab() {
       emptyDescription="No hay conceptos registrados"
       pageSize={20}
       pageSizeOptions={[10, 20, 50]}
-      headerActions={
+      headerAction={
         <button
           onClick={crearConcepto}
           style={{

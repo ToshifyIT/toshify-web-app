@@ -7,7 +7,6 @@ import {
   CheckCircle,
   Clock,
   AlertTriangle,
-  Loader2,
   Eye,
   Plus,
   DollarSign
@@ -79,8 +78,8 @@ export function GarantiasTab() {
     if (!formValues) return
 
     try {
-      const { error: errorPago } = await supabase
-        .from('garantias_pagos')
+      const { error: errorPago } = await (supabase
+        .from('garantias_pagos') as any)
         .insert({
           garantia_id: garantia.id,
           conductor_id: garantia.conductor_id,
@@ -96,8 +95,8 @@ export function GarantiasTab() {
       const nuevasCuotasPagadas = garantia.cuotas_pagadas + 1
       const completada = nuevoMontoPagado >= garantia.monto_total
 
-      const { error: errorUpdate } = await supabase
-        .from('garantias_conductores')
+      const { error: errorUpdate } = await (supabase
+        .from('garantias_conductores') as any)
         .update({
           monto_pagado: nuevoMontoPagado,
           cuotas_pagadas: nuevasCuotasPagadas,
@@ -132,7 +131,7 @@ export function GarantiasTab() {
       if (error) throw error
 
       const pagosHtml = pagos && pagos.length > 0
-        ? pagos.map(p => `
+        ? (pagos as any[]).map((p: any) => `
             <tr>
               <td style="padding: 8px; border-bottom: 1px solid #eee;">${p.numero_cuota}</td>
               <td style="padding: 8px; border-bottom: 1px solid #eee;">${formatDate(p.fecha_pago)}</td>

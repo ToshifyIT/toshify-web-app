@@ -47,9 +47,9 @@ export function TicketsFavorTab() {
       .select('id, nombres, apellidos, numero_dni')
       .order('apellidos')
 
-    const conductoresOptions = conductores?.map(c =>
+    const conductoresOptions = (conductores as any[] || []).map((c: any) =>
       `<option value="${c.id}">${c.apellidos}, ${c.nombres} - ${c.numero_dni}</option>`
-    ).join('') || ''
+    ).join('')
 
     const tiposOptions = TIPOS_TICKET_FAVOR.map(t =>
       `<option value="${t.codigo}">${t.nombre}</option>`
@@ -98,7 +98,7 @@ export function TicketsFavorTab() {
         if (!tipo) { Swal.showValidationMessage('Seleccione un tipo'); return false }
         if (!monto || parseFloat(monto) <= 0) { Swal.showValidationMessage('Ingrese un monto válido'); return false }
 
-        const conductor = conductores?.find(c => c.id === conductorId)
+        const conductor = (conductores as any[] || []).find((c: any) => c.id === conductorId)
         return {
           conductor_id: conductorId,
           conductor_nombre: conductor ? `${conductor.apellidos}, ${conductor.nombres}` : '',
@@ -141,8 +141,8 @@ export function TicketsFavorTab() {
     if (!result.isConfirmed) return
 
     try {
-      const { error } = await supabase
-        .from('tickets_favor')
+      const { error } = await (supabase
+        .from('tickets_favor') as any)
         .update({ estado: 'aprobado', fecha_aprobacion: new Date().toISOString() })
         .eq('id', ticket.id)
 
@@ -169,8 +169,8 @@ export function TicketsFavorTab() {
     if (!motivo) return
 
     try {
-      const { error } = await supabase
-        .from('tickets_favor')
+      const { error } = await (supabase
+        .from('tickets_favor') as any)
         .update({ estado: 'rechazado', motivo_rechazo: motivo })
         .eq('id', ticket.id)
 
@@ -190,9 +190,11 @@ export function TicketsFavorTab() {
       .order('anio', { ascending: false })
       .order('semana', { ascending: false })
 
-    const periodosOptions = periodos?.map(p =>
-      `<option value="${p.id}">Semana ${p.semana} - ${p.anio}</option>`
-    ).join('') || '<option value="">No hay períodos abiertos</option>'
+    const periodosOptions = (periodos as any[] || []).length > 0
+      ? (periodos as any[]).map((p: any) =>
+          `<option value="${p.id}">Semana ${p.semana} - ${p.anio}</option>`
+        ).join('')
+      : '<option value="">No hay períodos abiertos</option>'
 
     const { value: periodoId } = await Swal.fire({
       title: 'Aplicar Ticket',
@@ -210,8 +212,8 @@ export function TicketsFavorTab() {
     if (!periodoId) return
 
     try {
-      const { error } = await supabase
-        .from('tickets_favor')
+      const { error } = await (supabase
+        .from('tickets_favor') as any)
         .update({ estado: 'aplicado', periodo_aplicado_id: periodoId, fecha_aplicacion: new Date().toISOString() })
         .eq('id', ticket.id)
 

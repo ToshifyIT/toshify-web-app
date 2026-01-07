@@ -100,8 +100,8 @@ export function SaldosAbonosTab() {
     try {
       const montoFinal = formValues.tipo === 'abono' ? formValues.monto : -formValues.monto
 
-      const { error: errorAbono } = await supabase
-        .from('abonos_conductores')
+      const { error: errorAbono } = await (supabase
+        .from('abonos_conductores') as any)
         .insert({
           conductor_id: saldo.conductor_id,
           tipo: formValues.tipo,
@@ -114,8 +114,8 @@ export function SaldosAbonosTab() {
       if (errorAbono) throw errorAbono
 
       const nuevoSaldo = saldo.saldo_actual + montoFinal
-      const { error: errorUpdate } = await supabase
-        .from('saldos_conductores')
+      const { error: errorUpdate } = await (supabase
+        .from('saldos_conductores') as any)
         .update({ saldo_actual: nuevoSaldo, ultima_actualizacion: new Date().toISOString() })
         .eq('id', saldo.id)
 
@@ -147,7 +147,7 @@ export function SaldosAbonosTab() {
       if (error) throw error
 
       const historialHtml = abonos && abonos.length > 0
-        ? abonos.map(a => `
+        ? (abonos as any[]).map((a: any) => `
             <tr>
               <td style="padding: 8px; border-bottom: 1px solid #eee;">${formatDate(a.fecha_abono)}</td>
               <td style="padding: 8px; border-bottom: 1px solid #eee;">

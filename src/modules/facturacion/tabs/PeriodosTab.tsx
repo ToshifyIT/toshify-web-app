@@ -83,7 +83,7 @@ export function PeriodosTab() {
 
       // Mapear semanas con datos de BD
       const semanasConDatos: SemanaFacturacion[] = semanasBase.map(s => {
-        const periodoExistente = (periodos || []).find(p => p.semana === s.semana && p.anio === s.anio)
+        const periodoExistente = ((periodos || []) as any[]).find((p: any) => p.semana === s.semana && p.anio === s.anio)
 
         return {
           semana: s.semana,
@@ -175,8 +175,8 @@ export function PeriodosTab() {
 
       if (!periodoId) {
         // Crear nuevo período
-        const { data: nuevoPeriodo, error: errPeriodo } = await supabase
-          .from('periodos_facturacion')
+        const { data: nuevoPeriodo, error: errPeriodo } = await (supabase
+          .from('periodos_facturacion') as any)
           .insert({
             semana: semana.semana,
             anio: semana.anio,
@@ -189,11 +189,11 @@ export function PeriodosTab() {
           .single()
 
         if (errPeriodo) throw errPeriodo
-        periodoId = nuevoPeriodo.id
+        periodoId = (nuevoPeriodo as any).id
       } else {
         // Marcar como procesando
-        await supabase
-          .from('periodos_facturacion')
+        await (supabase
+          .from('periodos_facturacion') as any)
           .update({ estado: 'procesando' })
           .eq('id', periodoId)
       }
@@ -216,8 +216,8 @@ export function PeriodosTab() {
       if (errAsig) throw errAsig
 
       if (!asignaciones || asignaciones.length === 0) {
-        await supabase
-          .from('periodos_facturacion')
+        await (supabase
+          .from('periodos_facturacion') as any)
           .update({ estado: 'abierto', total_conductores: 0 })
           .eq('id', periodoId)
 
@@ -232,13 +232,13 @@ export function PeriodosTab() {
         .select('*')
         .eq('activo', true)
 
-      const precioTurno = conceptos?.find(c => c.codigo === 'P002')?.precio_final || 245000
-      const precioCargo = conceptos?.find(c => c.codigo === 'P001')?.precio_final || 360000
+      const precioTurno = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 245000
+      const precioCargo = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 360000
       const cuotaGarantia = 50000
 
       // 4. Obtener datos adicionales (penalidades, tickets, etc.)
-      const conductorIds = asignaciones
-        .map(a => (a.conductores as any)?.id)
+      const conductorIds = (asignaciones as any[])
+        .map((a: any) => a.conductores?.id)
         .filter((id): id is string => !!id)
 
       const [penalidadesRes, ticketsRes, saldosRes] = await Promise.all([
@@ -281,9 +281,9 @@ export function PeriodosTab() {
       let totalCargos = 0
       let totalDescuentos = 0
 
-      for (const asig of asignaciones) {
-        const conductor = asig.conductores as any
-        const vehiculo = asig.vehiculos as any
+      for (const asig of (asignaciones as any[])) {
+        const conductor = asig.conductores
+        const vehiculo = asig.vehiculos
 
         if (!conductor) continue
 
@@ -291,15 +291,15 @@ export function PeriodosTab() {
         const precioSemanal = tipoAlquiler === 'CARGO' ? precioCargo : precioTurno
 
         // Penalidades del conductor
-        const pensConductor = penalidades.filter(p => p.conductor_id === conductor.id)
-        const totalPenalidades = pensConductor.reduce((sum, p) => sum + (p.monto || 0), 0)
+        const pensConductor = (penalidades as any[]).filter((p: any) => p.conductor_id === conductor.id)
+        const totalPenalidades = pensConductor.reduce((sum: number, p: any) => sum + (p.monto || 0), 0)
 
         // Tickets del conductor (descuentos)
-        const ticketsConductor = tickets.filter(t => t.conductor_id === conductor.id)
-        const totalTickets = ticketsConductor.reduce((sum, t) => sum + (t.monto || 0), 0)
+        const ticketsConductor = (tickets as any[]).filter((t: any) => t.conductor_id === conductor.id)
+        const totalTickets = ticketsConductor.reduce((sum: number, t: any) => sum + (t.monto || 0), 0)
 
         // Saldo anterior
-        const saldoConductor = saldos.find(s => s.conductor_id === conductor.id)
+        const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.id)
         const saldoAnterior = saldoConductor?.saldo_actual || 0
         const diasMora = saldoAnterior > 0 ? Math.min(saldoConductor?.dias_mora || 0, 7) : 0
         const montoMora = saldoAnterior > 0 ? saldoAnterior * 0.01 * diasMora : 0
@@ -314,8 +314,8 @@ export function PeriodosTab() {
         totalDescuentos += subtotalDescuentos
 
         // Insertar facturación del conductor
-        const { data: factConductor, error: errFact } = await supabase
-          .from('facturacion_conductores')
+        const { data: factConductor, error: errFact } = await (supabase
+          .from('facturacion_conductores') as any)
           .insert({
             periodo_id: periodoId,
             conductor_id: conductor.id,
@@ -348,8 +348,8 @@ export function PeriodosTab() {
         }
 
         // Insertar detalle de alquiler
-        await supabase.from('facturacion_detalle').insert({
-          facturacion_id: factConductor.id,
+        await (supabase.from('facturacion_detalle') as any).insert({
+          facturacion_id: (factConductor as any).id,
           concepto_codigo: tipoAlquiler === 'CARGO' ? 'P001' : 'P002',
           concepto_descripcion: tipoAlquiler === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler a Turno',
           cantidad: 7,
@@ -360,8 +360,8 @@ export function PeriodosTab() {
         })
 
         // Insertar detalle de garantía
-        await supabase.from('facturacion_detalle').insert({
-          facturacion_id: factConductor.id,
+        await (supabase.from('facturacion_detalle') as any).insert({
+          facturacion_id: (factConductor as any).id,
           concepto_codigo: 'P003',
           concepto_descripcion: 'Cuota de Garantía',
           cantidad: 1,
@@ -373,52 +373,52 @@ export function PeriodosTab() {
 
         // Insertar penalidades como detalle
         for (const pen of pensConductor) {
-          await supabase.from('facturacion_detalle').insert({
-            facturacion_id: factConductor.id,
+          await (supabase.from('facturacion_detalle') as any).insert({
+            facturacion_id: (factConductor as any).id,
             concepto_codigo: 'P007',
-            concepto_descripcion: `Penalidad: ${pen.detalle || 'Sin detalle'}`,
+            concepto_descripcion: `Penalidad: ${(pen as any).detalle || 'Sin detalle'}`,
             cantidad: 1,
-            precio_unitario: pen.monto,
-            subtotal: pen.monto,
-            total: pen.monto,
+            precio_unitario: (pen as any).monto,
+            subtotal: (pen as any).monto,
+            total: (pen as any).monto,
             es_descuento: false,
-            referencia_id: pen.id,
+            referencia_id: (pen as any).id,
             referencia_tipo: 'penalidad'
           })
 
           // Marcar penalidad como aplicada
-          await supabase
-            .from('penalidades')
+          await (supabase
+            .from('penalidades') as any)
             .update({ aplicado: true })
-            .eq('id', pen.id)
+            .eq('id', (pen as any).id)
         }
 
         // Insertar tickets como detalle (descuentos)
         for (const ticket of ticketsConductor) {
-          await supabase.from('facturacion_detalle').insert({
-            facturacion_id: factConductor.id,
+          await (supabase.from('facturacion_detalle') as any).insert({
+            facturacion_id: (factConductor as any).id,
             concepto_codigo: 'P004',
-            concepto_descripcion: `Ticket: ${ticket.descripcion || ticket.tipo}`,
+            concepto_descripcion: `Ticket: ${(ticket as any).descripcion || (ticket as any).tipo}`,
             cantidad: 1,
-            precio_unitario: ticket.monto,
-            subtotal: ticket.monto,
-            total: ticket.monto,
+            precio_unitario: (ticket as any).monto,
+            subtotal: (ticket as any).monto,
+            total: (ticket as any).monto,
             es_descuento: true,
-            referencia_id: ticket.id,
+            referencia_id: (ticket as any).id,
             referencia_tipo: 'ticket'
           })
 
           // Marcar ticket como aplicado
-          await supabase
-            .from('tickets_favor')
+          await (supabase
+            .from('tickets_favor') as any)
             .update({ estado: 'aplicado', periodo_aplicado_id: periodoId, fecha_aplicacion: new Date().toISOString() })
-            .eq('id', ticket.id)
+            .eq('id', (ticket as any).id)
         }
 
         // Insertar mora si existe
         if (montoMora > 0) {
-          await supabase.from('facturacion_detalle').insert({
-            facturacion_id: factConductor.id,
+          await (supabase.from('facturacion_detalle') as any).insert({
+            facturacion_id: (factConductor as any).id,
             concepto_codigo: 'P009',
             concepto_descripcion: `Mora (${diasMora} días al 1%)`,
             cantidad: diasMora,
@@ -431,8 +431,8 @@ export function PeriodosTab() {
       }
 
       // 7. Actualizar totales del período
-      await supabase
-        .from('periodos_facturacion')
+      await (supabase
+        .from('periodos_facturacion') as any)
         .update({
           estado: 'abierto',
           total_conductores: asignaciones.length,
@@ -482,8 +482,8 @@ export function PeriodosTab() {
     if (!result.isConfirmed) return
 
     try {
-      const { error } = await supabase
-        .from('periodos_facturacion')
+      const { error } = await (supabase
+        .from('periodos_facturacion') as any)
         .update({
           estado: 'cerrado',
           fecha_cierre: new Date().toISOString(),
@@ -515,8 +515,8 @@ export function PeriodosTab() {
     if (!result.isConfirmed) return
 
     try {
-      const { error } = await supabase
-        .from('periodos_facturacion')
+      const { error } = await (supabase
+        .from('periodos_facturacion') as any)
         .update({ estado: 'abierto', fecha_cierre: null, cerrado_por_name: null })
         .eq('id', semana.periodo_id)
 
