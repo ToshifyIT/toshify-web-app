@@ -29,7 +29,7 @@ import { BitacoraPage } from './integraciones/uss/BitacoraPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
 import { RolesPage } from './administracion/RolesPage'
-import { NominasPage } from './nominas/NominasPage'
+import { FacturacionPage } from './facturacion/FacturacionPage'
 import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
 import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
@@ -935,7 +935,7 @@ export function HomePage() {
               {/* Facturación */}
               <Route path="/facturacion" element={
                 <ProtectedRoute submenuName="facturacion" action="view">
-                  <NominasPage />
+                  <FacturacionPage />
                 </ProtectedRoute>
               } />
 

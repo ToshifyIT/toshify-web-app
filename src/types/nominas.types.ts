@@ -101,6 +101,7 @@ export interface NominaResumen {
   conductor_id: string
   conductor_nombre: string
   conductor_dni: string
+  conductor_cuit: string | null
   vehiculo_patente: string | null
   tipo_horario: string
   total_cargos: number

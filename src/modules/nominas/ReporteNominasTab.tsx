@@ -44,7 +44,7 @@ interface AsignacionDB {
   modalidad: string
   vehiculo_id: string | null
   conductor_id: string | null
-  conductores: { id: string; nombres: string; apellidos: string; numero_dni: string; email: string | null } | null
+  conductores: { id: string; nombres: string; apellidos: string; numero_dni: string; numero_cuit: string | null; email: string | null } | null
   vehiculos: { id: string; patente: string } | null
 }
 
@@ -113,6 +113,15 @@ export function ReporteNominasTab() {
   const [filtroSiniestros, setFiltroSiniestros] = useState<string>('todos')
   const [exportingExcel, setExportingExcel] = useState(false)
 
+  // Filtros tipo Excel por columna
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [conductorFilter, setConductorFilter] = useState<string[]>([])
+  const [conductorSearch, setConductorSearch] = useState('')
+  const [tipoDocFilter, setTipoDocFilter] = useState<string[]>([])
+  const [vehiculoFilter, setVehiculoFilter] = useState<string[]>([])
+  const [vehiculoSearch, setVehiculoSearch] = useState('')
+  const [tipoHorarioFilter, setTipoHorarioFilter] = useState<string[]>([])
+
   // Cargar conceptos al montar
   useEffect(() => {
     cargarConceptos()
@@ -154,7 +163,7 @@ export function ReporteNominasTab() {
           modalidad,
           vehiculo_id,
           conductor_id,
-          conductores:conductor_id(id, nombres, apellidos, numero_dni, email),
+          conductores:conductor_id(id, nombres, apellidos, numero_dni, numero_cuit, email),
           vehiculos:vehiculo_id(id, patente)
         `)
         .eq('estado', 'activa')
@@ -176,64 +185,66 @@ export function ReporteNominasTab() {
         return
       }
 
-      // 2. Obtener IDs de conductores
+      // 2. Obtener IDs de conductores y DNIs
       const conductorIds = asignaciones
         .map(a => a.conductores?.id)
         .filter((id): id is string => !!id)
 
-      // 3. Obtener penalidades del período
-      const { data: penalidadesRaw, error: errPen } = await supabase
-        .from('penalidades')
-        .select(`
-          id,
-          fecha,
-          monto,
-          detalle,
-          aplicado,
-          conductor_id,
-          tipos_penalidad:tipo_penalidad_id(codigo, nombre)
-        `)
-        .in('conductor_id', conductorIds)
-        .gte('fecha', fechaInicio)
-        .lte('fecha', fechaFin)
-
-      if (errPen) throw errPen
-      const penalidades = penalidadesRaw as unknown as PenalidadDB[]
-
-      // 4. Obtener siniestros del período
-      const { data: siniestrosRaw, error: errSin } = await supabase
-        .from('siniestros')
-        .select(`
-          id,
-          fecha_siniestro,
-          presupuesto_real,
-          responsable,
-          conductor_id,
-          siniestros_categorias:categoria_id(nombre),
-          vehiculos:vehiculo_id(patente)
-        `)
-        .in('conductor_id', conductorIds)
-        .gte('fecha_siniestro', fechaInicio + 'T00:00:00')
-        .lte('fecha_siniestro', fechaFin + 'T23:59:59')
-        .in('responsable', ['conductor', 'compartida'])
-
-      if (errSin) throw errSin
-      const siniestros = siniestrosRaw as unknown as SiniestroDB[]
-
-      // 5. Obtener datos de Cabify del período
       const dnis = asignaciones
         .map(a => a.conductores?.numero_dni)
         .filter((dni): dni is string => !!dni)
 
-      const { data: cabifyDataRaw, error: errCab } = await supabase
-        .from('cabify_historico')
-        .select('dni, cobro_efectivo, peajes, ganancia_total')
-        .in('dni', dnis)
-        .gte('fecha_inicio', fechaInicio + 'T00:00:00')
-        .lte('fecha_inicio', fechaFin + 'T23:59:59')
+      // 3. Ejecutar consultas en PARALELO para mejor performance
+      const [penalidadesResult, siniestrosResult, cabifyResult] = await Promise.all([
+        // Penalidades del período
+        supabase
+          .from('penalidades')
+          .select(`
+            id,
+            fecha,
+            monto,
+            detalle,
+            aplicado,
+            conductor_id,
+            tipos_penalidad:tipo_penalidad_id(codigo, nombre)
+          `)
+          .in('conductor_id', conductorIds)
+          .gte('fecha', fechaInicio)
+          .lte('fecha', fechaFin),
 
-      if (errCab) throw errCab
-      const cabifyData = cabifyDataRaw as unknown as CabifyDB[]
+        // Siniestros del período
+        supabase
+          .from('siniestros')
+          .select(`
+            id,
+            fecha_siniestro,
+            presupuesto_real,
+            responsable,
+            conductor_id,
+            siniestros_categorias:categoria_id(nombre),
+            vehiculos:vehiculo_id(patente)
+          `)
+          .in('conductor_id', conductorIds)
+          .gte('fecha_siniestro', fechaInicio + 'T00:00:00')
+          .lte('fecha_siniestro', fechaFin + 'T23:59:59')
+          .in('responsable', ['conductor', 'compartida']),
+
+        // Datos de Cabify del período
+        supabase
+          .from('cabify_historico')
+          .select('dni, cobro_efectivo, peajes, ganancia_total')
+          .in('dni', dnis)
+          .gte('fecha_inicio', fechaInicio + 'T00:00:00')
+          .lte('fecha_inicio', fechaFin + 'T23:59:59')
+      ])
+
+      if (penalidadesResult.error) throw penalidadesResult.error
+      if (siniestrosResult.error) throw siniestrosResult.error
+      if (cabifyResult.error) throw cabifyResult.error
+
+      const penalidades = penalidadesResult.data as unknown as PenalidadDB[]
+      const siniestros = siniestrosResult.data as unknown as SiniestroDB[]
+      const cabifyData = cabifyResult.data as unknown as CabifyDB[]
 
       // 6. Obtener precios de alquiler
       const precioTurno = conceptos.find(c => c.codigo === 'P001')?.precio_final || 35000
@@ -278,6 +289,7 @@ export function ReporteNominasTab() {
           conductor_id: conductor.id,
           conductor_nombre: `${conductor.nombres} ${conductor.apellidos}`,
           conductor_dni: conductor.numero_dni || '',
+          conductor_cuit: conductor.numero_cuit || null,
           vehiculo_patente: vehiculo?.patente || null,
           tipo_horario: tipoHorario,
           total_cargos: totalCargos,
@@ -322,67 +334,67 @@ export function ReporteNominasTab() {
       const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
       const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
 
-      // Obtener asignación del conductor
-      const { data: asignacionRaw } = await supabase
-        .from('asignaciones')
-        .select(`
-          id,
-          codigo,
-          horario,
-          vehiculos:vehiculo_id(patente)
-        `)
-        .eq('conductor_id', nomina.conductor_id)
-        .eq('estado', 'activa')
-        .single()
+      // Ejecutar TODAS las consultas en PARALELO para mejor performance
+      const [asignacionResult, penalidadesResult, siniestrosResult, cabifyResult] = await Promise.all([
+        // Asignación del conductor
+        supabase
+          .from('asignaciones')
+          .select(`
+            id,
+            codigo,
+            horario,
+            vehiculos:vehiculo_id(patente)
+          `)
+          .eq('conductor_id', nomina.conductor_id)
+          .eq('estado', 'activa')
+          .single(),
 
-      const asignacion = asignacionRaw as { id: string; codigo: string; horario: string | null; vehiculos: { patente: string } | null } | null
+        // Penalidades detalladas
+        supabase
+          .from('penalidades')
+          .select(`
+            id,
+            fecha,
+            monto,
+            detalle,
+            aplicado,
+            tipos_penalidad:tipo_penalidad_id(codigo, nombre)
+          `)
+          .eq('conductor_id', nomina.conductor_id)
+          .gte('fecha', fechaInicio)
+          .lte('fecha', fechaFin)
+          .order('fecha'),
 
-      // Obtener penalidades detalladas
-      const { data: penalidadesRaw } = await supabase
-        .from('penalidades')
-        .select(`
-          id,
-          fecha,
-          monto,
-          detalle,
-          aplicado,
-          tipos_penalidad:tipo_penalidad_id(codigo, nombre)
-        `)
-        .eq('conductor_id', nomina.conductor_id)
-        .gte('fecha', fechaInicio)
-        .lte('fecha', fechaFin)
-        .order('fecha')
+        // Siniestros detallados
+        supabase
+          .from('siniestros')
+          .select(`
+            id,
+            fecha_siniestro,
+            presupuesto_real,
+            responsable,
+            siniestros_categorias:categoria_id(nombre),
+            vehiculos:vehiculo_id(patente)
+          `)
+          .eq('conductor_id', nomina.conductor_id)
+          .gte('fecha_siniestro', fechaInicio + 'T00:00:00')
+          .lte('fecha_siniestro', fechaFin + 'T23:59:59')
+          .in('responsable', ['conductor', 'compartida'])
+          .order('fecha_siniestro'),
 
-      const penalidades = penalidadesRaw as unknown as PenalidadDB[]
+        // Datos de Cabify
+        supabase
+          .from('cabify_historico')
+          .select('cobro_efectivo, peajes, ganancia_total, viajes_finalizados, fecha_inicio, dni')
+          .eq('dni', nomina.conductor_dni)
+          .gte('fecha_inicio', fechaInicio + 'T00:00:00')
+          .lte('fecha_inicio', fechaFin + 'T23:59:59')
+      ])
 
-      // Obtener siniestros detallados
-      const { data: siniestrosRaw } = await supabase
-        .from('siniestros')
-        .select(`
-          id,
-          fecha_siniestro,
-          presupuesto_real,
-          responsable,
-          siniestros_categorias:categoria_id(nombre),
-          vehiculos:vehiculo_id(patente)
-        `)
-        .eq('conductor_id', nomina.conductor_id)
-        .gte('fecha_siniestro', fechaInicio + 'T00:00:00')
-        .lte('fecha_siniestro', fechaFin + 'T23:59:59')
-        .in('responsable', ['conductor', 'compartida'])
-        .order('fecha_siniestro')
-
-      const siniestros = siniestrosRaw as unknown as SiniestroDB[]
-
-      // Obtener datos de Cabify
-      const { data: cabifyDataRaw } = await supabase
-        .from('cabify_historico')
-        .select('cobro_efectivo, peajes, ganancia_total, viajes_finalizados, fecha_inicio, dni')
-        .eq('dni', nomina.conductor_dni)
-        .gte('fecha_inicio', fechaInicio + 'T00:00:00')
-        .lte('fecha_inicio', fechaFin + 'T23:59:59')
-
-      const cabifyData = cabifyDataRaw as unknown as CabifyDB[]
+      const asignacion = asignacionResult.data as { id: string; codigo: string; horario: string | null; vehiculos: { patente: string } | null } | null
+      const penalidades = penalidadesResult.data as unknown as PenalidadDB[]
+      const siniestros = siniestrosResult.data as unknown as SiniestroDB[]
+      const cabifyData = cabifyResult.data as unknown as CabifyDB[]
 
       // Precios
       const precioTurno = conceptos.find(c => c.codigo === 'P001')?.precio_final || 35000
@@ -748,10 +760,65 @@ export function ReporteNominasTab() {
     }).format(value)
   }
 
+  // Valores únicos para filtros tipo Excel
+  const conductoresUnicos = useMemo(() => {
+    return [...new Set(nominas.map(n => n.conductor_nombre))].sort()
+  }, [nominas])
+
+  const conductoresFiltrados = useMemo(() => {
+    if (!conductorSearch) return conductoresUnicos
+    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
+  }, [conductoresUnicos, conductorSearch])
+
+  const vehiculosUnicos = useMemo(() => {
+    return [...new Set(nominas.map(n => n.vehiculo_patente).filter(Boolean))].sort() as string[]
+  }, [nominas])
+
+  const vehiculosFiltrados = useMemo(() => {
+    if (!vehiculoSearch) return vehiculosUnicos
+    return vehiculosUnicos.filter(v => v.toLowerCase().includes(vehiculoSearch.toLowerCase()))
+  }, [vehiculosUnicos, vehiculoSearch])
+
+  const tiposDocUnicos = ['CUIL', 'DNI']
+  const tiposHorarioUnicos = ['TURNO', 'CARGO']
+
+  // Funciones toggle para filtros
+  const toggleConductorFilter = (conductor: string) => {
+    setConductorFilter(prev =>
+      prev.includes(conductor)
+        ? prev.filter(c => c !== conductor)
+        : [...prev, conductor]
+    )
+  }
+
+  const toggleTipoDocFilter = (tipo: string) => {
+    setTipoDocFilter(prev =>
+      prev.includes(tipo)
+        ? prev.filter(t => t !== tipo)
+        : [...prev, tipo]
+    )
+  }
+
+  const toggleVehiculoFilter = (vehiculo: string) => {
+    setVehiculoFilter(prev =>
+      prev.includes(vehiculo)
+        ? prev.filter(v => v !== vehiculo)
+        : [...prev, vehiculo]
+    )
+  }
+
+  const toggleTipoHorarioFilter = (tipo: string) => {
+    setTipoHorarioFilter(prev =>
+      prev.includes(tipo)
+        ? prev.filter(t => t !== tipo)
+        : [...prev, tipo]
+    )
+  }
+
   // Filtrar datos según los filtros seleccionados
   const nominasFiltradas = useMemo(() => {
     return nominas.filter(n => {
-      // Filtro por tipo de horario
+      // Filtro por tipo de horario (select)
       if (filtroTipo !== 'todos' && n.tipo_horario !== filtroTipo) return false
       // Filtro por penalidades
       if (filtroPenalidades === 'con' && !n.tiene_penalidades) return false
@@ -759,9 +826,17 @@ export function ReporteNominasTab() {
       // Filtro por siniestros
       if (filtroSiniestros === 'con' && !n.tiene_siniestros) return false
       if (filtroSiniestros === 'sin' && n.tiene_siniestros) return false
+      // Filtros tipo Excel
+      if (conductorFilter.length > 0 && !conductorFilter.includes(n.conductor_nombre)) return false
+      if (tipoDocFilter.length > 0) {
+        const tipoDoc = n.conductor_cuit ? 'CUIL' : 'DNI'
+        if (!tipoDocFilter.includes(tipoDoc)) return false
+      }
+      if (vehiculoFilter.length > 0 && n.vehiculo_patente && !vehiculoFilter.includes(n.vehiculo_patente)) return false
+      if (tipoHorarioFilter.length > 0 && !tipoHorarioFilter.includes(n.tipo_horario)) return false
       return true
     })
-  }, [nominas, filtroTipo, filtroPenalidades, filtroSiniestros])
+  }, [nominas, filtroTipo, filtroPenalidades, filtroSiniestros, conductorFilter, tipoDocFilter, vehiculoFilter, tipoHorarioFilter])
 
   // Exportar a Excel - Formato de Reporte de Facturación
   async function exportarExcel() {
@@ -805,7 +880,7 @@ export function ReporteNominasTab() {
         [''],
         ['DETALLE POR CONDUCTOR'],
         [''],
-        ['Conductor', 'DNI', 'Vehículo', 'Tipo', 'Alquiler', 'Peajes', 'Penalidades', 'Siniestros', 'Total Cargos', 'Efectivo Cabify', 'Total Créditos', 'Saldo', 'Estado']
+        ['Conductor', 'Tipo Doc', 'Nro Doc', 'Vehículo', 'Tipo', 'Alquiler', 'Peajes', 'Penalidades', 'Siniestros', 'Total Cargos', 'Efectivo Cabify', 'Total Créditos', 'Saldo', 'Estado']
       ]
 
       // Agregar datos de cada conductor
@@ -817,7 +892,8 @@ export function ReporteNominasTab() {
 
         resumenData.push([
           n.conductor_nombre,
-          n.conductor_dni,
+          n.conductor_cuit ? 'CUIL' : 'DNI',
+          n.conductor_cuit || n.conductor_dni || '-',
           n.vehiculo_patente || '-',
           n.tipo_horario,
           precioAlquiler,
@@ -843,6 +919,7 @@ export function ReporteNominasTab() {
         '',
         '',
         '',
+        '',
         dataToExport.reduce((sum, n) => sum + n.total_cargos, 0),
         dataToExport.reduce((sum, n) => sum + n.total_creditos, 0),
         dataToExport.reduce((sum, n) => sum + n.total_creditos, 0),
@@ -855,7 +932,8 @@ export function ReporteNominasTab() {
       // Ajustar anchos de columna
       wsResumen['!cols'] = [
         { wch: 35 }, // Conductor
-        { wch: 12 }, // DNI
+        { wch: 10 }, // Tipo Doc
+        { wch: 15 }, // Nro Doc
         { wch: 10 }, // Vehículo
         { wch: 8 },  // Tipo
         { wch: 12 }, // Alquiler
@@ -911,7 +989,7 @@ export function ReporteNominasTab() {
         [`Semana ${semana} - ${anio}`],
         [`Período: ${fechaInicio} al ${fechaFin}`],
         [''],
-        ['N°', 'Conductor', 'DNI', 'Concepto', 'Descripción', 'Cantidad', 'Precio Unit.', 'Subtotal', 'IVA', 'Total']
+        ['N°', 'Conductor', 'Tipo Doc', 'Nro Doc', 'Concepto', 'Descripción', 'Cantidad', 'Precio Unit.', 'Subtotal', 'IVA', 'Total']
       ]
 
       let nro = 1
@@ -926,7 +1004,8 @@ export function ReporteNominasTab() {
         facturacionData.push([
           nro,
           n.conductor_nombre,
-          n.conductor_dni,
+          n.conductor_cuit ? 'CUIL' : 'DNI',
+          n.conductor_cuit || n.conductor_dni || '-',
           codigoAlquiler,
           descAlquiler,
           1,
@@ -942,7 +1021,8 @@ export function ReporteNominasTab() {
           facturacionData.push([
             nro,
             n.conductor_nombre,
-            n.conductor_dni,
+            n.conductor_cuit ? 'CUIL' : 'DNI',
+            n.conductor_cuit || n.conductor_dni || '-',
             'E001',
             'Efectivo Recaudado (Descuento)',
             1,
@@ -956,13 +1036,14 @@ export function ReporteNominasTab() {
       })
 
       facturacionData.push([''])
-      facturacionData.push(['', '', '', '', '', '', '', 'TOTAL GENERAL:', '', dataToExport.reduce((sum, n) => sum + n.saldo, 0)])
+      facturacionData.push(['', '', '', '', '', '', '', '', 'TOTAL GENERAL:', '', dataToExport.reduce((sum, n) => sum + n.saldo, 0)])
 
       const wsFacturacion = XLSX.utils.aoa_to_sheet(facturacionData)
       wsFacturacion['!cols'] = [
         { wch: 5 },  // N°
         { wch: 30 }, // Conductor
-        { wch: 12 }, // DNI
+        { wch: 10 }, // Tipo Doc
+        { wch: 15 }, // Nro Doc
         { wch: 8 },  // Concepto
         { wch: 35 }, // Descripción
         { wch: 8 },  // Cantidad
@@ -999,45 +1080,241 @@ export function ReporteNominasTab() {
   const columns = useMemo<ColumnDef<NominaResumen>[]>(() => [
     {
       accessorKey: 'conductor_nombre',
-      header: 'Conductor',
-      cell: ({ row }) => (
-        <div className="nom-conductor-cell">
-          <span className="nom-conductor-nombre">{row.original.conductor_nombre}</span>
-          <span className="nom-conductor-dni">DNI: {row.original.conductor_dni}</span>
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor')
+            }}
+            title="Filtrar por conductor"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'conductor' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar..."
+                value={conductorSearch}
+                onChange={(e) => setConductorSearch(e.target.value)}
+                className="dt-column-filter-input"
+                autoFocus
+              />
+              <div className="dt-excel-filter-list">
+                {conductoresFiltrados.length === 0 ? (
+                  <div className="dt-excel-filter-empty">Sin resultados</div>
+                ) : (
+                  conductoresFiltrados.slice(0, 50).map(conductor => (
+                    <label key={conductor} className={`dt-column-filter-checkbox ${conductorFilter.includes(conductor) ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={conductorFilter.includes(conductor)}
+                        onChange={() => toggleConductorFilter(conductor)}
+                      />
+                      <span>{conductor}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {conductorFilter.length > 0 && (
+                <button
+                  className="dt-column-filter-clear"
+                  onClick={() => { setConductorFilter([]); setConductorSearch('') }}
+                >
+                  Limpiar ({conductorFilter.length})
+                </button>
+              )}
+            </div>
+          )}
         </div>
+      ),
+      cell: ({ row }) => (
+        <strong>{row.original.conductor_nombre}</strong>
+      ),
+      enableSorting: true,
+    },
+    {
+      id: 'tipo_doc',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Tipo Doc {tipoDocFilter.length > 0 && `(${tipoDocFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${tipoDocFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'tipoDoc' ? null : 'tipoDoc')
+            }}
+            title="Filtrar por tipo de documento"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'tipoDoc' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {tiposDocUnicos.map(tipo => (
+                  <label key={tipo} className={`dt-column-filter-checkbox ${tipoDocFilter.includes(tipo) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={tipoDocFilter.includes(tipo)}
+                      onChange={() => toggleTipoDocFilter(tipo)}
+                    />
+                    <span>{tipo}</span>
+                  </label>
+                ))}
+              </div>
+              {tipoDocFilter.length > 0 && (
+                <button
+                  className="dt-column-filter-clear"
+                  onClick={() => setTipoDocFilter([])}
+                >
+                  Limpiar ({tipoDocFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => (
+        <span className={`dt-badge ${row.original.conductor_cuit ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`}>
+          {row.original.conductor_cuit ? 'CUIL' : 'DNI'}
+        </span>
+      )
+    },
+    {
+      id: 'nro_doc',
+      header: 'Nro Doc',
+      cell: ({ row }) => (
+        <span className="nom-conductor-doc">
+          {row.original.conductor_cuit || row.original.conductor_dni || '-'}
+        </span>
       )
     },
     {
       accessorKey: 'vehiculo_patente',
-      header: 'Vehículo',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Vehículo {vehiculoFilter.length > 0 && `(${vehiculoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${vehiculoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'vehiculo' ? null : 'vehiculo')
+            }}
+            title="Filtrar por vehículo"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'vehiculo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar..."
+                value={vehiculoSearch}
+                onChange={(e) => setVehiculoSearch(e.target.value)}
+                className="dt-column-filter-input"
+                autoFocus
+              />
+              <div className="dt-excel-filter-list">
+                {vehiculosFiltrados.length === 0 ? (
+                  <div className="dt-excel-filter-empty">Sin resultados</div>
+                ) : (
+                  vehiculosFiltrados.slice(0, 50).map(vehiculo => (
+                    <label key={vehiculo} className={`dt-column-filter-checkbox ${vehiculoFilter.includes(vehiculo) ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={vehiculoFilter.includes(vehiculo)}
+                        onChange={() => toggleVehiculoFilter(vehiculo)}
+                      />
+                      <span>{vehiculo}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {vehiculoFilter.length > 0 && (
+                <button
+                  className="dt-column-filter-clear"
+                  onClick={() => { setVehiculoFilter([]); setVehiculoSearch('') }}
+                >
+                  Limpiar ({vehiculoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
-        <span className="nom-patente">
+        <span className="patente-badge">
           {row.original.vehiculo_patente || '-'}
         </span>
-      )
+      ),
+      enableSorting: true,
     },
     {
       accessorKey: 'tipo_horario',
-      header: 'Tipo',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Tipo {tipoHorarioFilter.length > 0 && `(${tipoHorarioFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${tipoHorarioFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpenColumnFilter(openColumnFilter === 'tipoHorario' ? null : 'tipoHorario')
+            }}
+            title="Filtrar por tipo de horario"
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'tipoHorario' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {tiposHorarioUnicos.map(tipo => (
+                  <label key={tipo} className={`dt-column-filter-checkbox ${tipoHorarioFilter.includes(tipo) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={tipoHorarioFilter.includes(tipo)}
+                      onChange={() => toggleTipoHorarioFilter(tipo)}
+                    />
+                    <span>{tipo}</span>
+                  </label>
+                ))}
+              </div>
+              {tipoHorarioFilter.length > 0 && (
+                <button
+                  className="dt-column-filter-clear"
+                  onClick={() => setTipoHorarioFilter([])}
+                >
+                  Limpiar ({tipoHorarioFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span className={`dt-badge ${row.original.tipo_horario === 'CARGO' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`}>
           {row.original.tipo_horario}
         </span>
-      )
+      ),
+      enableSorting: true,
     },
     {
       accessorKey: 'total_cargos',
       header: 'Cargos',
       cell: ({ row }) => (
         <span className="nom-monto nom-cargo">{formatCurrency(row.original.total_cargos)}</span>
-      )
+      ),
+      enableSorting: true,
     },
     {
       accessorKey: 'total_creditos',
       header: 'Créditos',
       cell: ({ row }) => (
         <span className="nom-monto nom-credito">{formatCurrency(row.original.total_creditos)}</span>
-      )
+      ),
+      enableSorting: true,
     },
     {
       accessorKey: 'saldo',
@@ -1050,7 +1327,8 @@ export function ReporteNominasTab() {
             {esPositivo ? '' : '-'}{formatCurrency(Math.abs(saldo))}
           </span>
         )
-      }
+      },
+      enableSorting: true,
     },
     {
       id: 'alertas',
@@ -1085,7 +1363,7 @@ export function ReporteNominasTab() {
         </div>
       )
     }
-  ], [])
+  ], [openColumnFilter, conductorFilter, conductorSearch, conductoresFiltrados, tipoDocFilter, tiposDocUnicos, vehiculoFilter, vehiculoSearch, vehiculosFiltrados, tipoHorarioFilter, tiposHorarioUnicos])
 
   // Info de la semana
   const infoSemana = useMemo(() => {

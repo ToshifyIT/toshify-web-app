@@ -492,7 +492,7 @@ export function ConceptosTab() {
         </div>
       )
     }
-  ], [])
+  ], [openColumnFilter, codigoFilter, codigoSearch, codigosFiltrados, tipoFilter])
 
   return (
     <>
