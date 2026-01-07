@@ -56,7 +56,15 @@ export function BitacoraTable({
 
   const formatDate = (date: string) => {
     const d = new Date(date + 'T00:00:00')
-    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  const getTipoTurnoClass = (tipo: string | null | undefined) => {
+    switch (tipo) {
+      case 'CARGO': return 'tipo-cargo'
+      case 'TURNO': return 'tipo-turno'
+      default: return 'tipo-sin-asignar'
+    }
   }
 
   const getEstadoClass = (estado: string) => {
@@ -92,6 +100,7 @@ export function BitacoraTable({
               <th>Patente</th>
               <th>iButton</th>
               <th>Conductor</th>
+              <th>Tipo</th>
               <th>Inicio</th>
               <th>Cierre</th>
               <th>Km</th>
@@ -105,14 +114,14 @@ export function BitacoraTable({
             {isLoading ? (
               [...Array(5)].map((_, i) => (
                 <tr key={i} className="loading-row">
-                  {[...Array(11)].map((_, j) => (
+                  {[...Array(12)].map((_, j) => (
                     <td key={j}><div className="skeleton-cell"></div></td>
                   ))}
                 </tr>
               ))
             ) : registros.length === 0 ? (
               <tr>
-                <td colSpan={11} className="empty-state">
+                <td colSpan={12} className="empty-state">
                   No hay registros para mostrar
                 </td>
               </tr>
@@ -123,6 +132,11 @@ export function BitacoraTable({
                   <td><span className="patente">{r.patente.replace(/\s/g, '')}</span></td>
                   <td className="text-muted">{r.ibutton || '-'}</td>
                   <td>{r.conductor_wialon || '-'}</td>
+                  <td>
+                    <span className={`tipo-badge ${getTipoTurnoClass(r.tipo_turno)}`}>
+                      {r.tipo_turno || '-'}
+                    </span>
+                  </td>
                   <td>{formatTime(r.hora_inicio)}</td>
                   <td>{formatTime(r.hora_cierre)}</td>
                   <td className={r.kilometraje < BITACORA_CONSTANTS.POCO_KM_THRESHOLD ? 'km-low' : ''}>

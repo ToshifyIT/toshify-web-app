@@ -417,6 +417,32 @@
   color: var(--text-secondary);
 }
 
+/* Tipo de turno badges */
+.tipo-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tipo-cargo {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.tipo-turno {
+  background: #F3E8FF;
+  color: #7C3AED;
+}
+
+.tipo-sin-asignar {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
 .bitacora-table input[type="checkbox"] {
   width: 16px;
   height: 16px;

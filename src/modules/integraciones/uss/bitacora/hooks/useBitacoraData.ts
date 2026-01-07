@@ -22,6 +22,7 @@ interface AsignacionActiva {
   conductor_nombre: string
   conductor_apellido: string
   conductor_completo: string
+  horario: string | null // TURNO, CARGO, etc.
 }
 
 // Helpers para fechas - Usando zona horaria Argentina
@@ -94,12 +95,14 @@ export function useBitacoraData() {
       .from('asignaciones')
       .select(`
         vehiculo_id,
+        horario,
         vehiculos!inner(patente),
         conductores!inner(nombres, apellidos)
       `)
       .eq('estado', 'activa') as {
       data: Array<{
         vehiculo_id: string
+        horario: string | null
         vehiculos: { patente: string }
         conductores: { nombres: string; apellidos: string }
       }> | null
@@ -119,6 +122,7 @@ export function useBitacoraData() {
             conductor_nombre: conductor.nombres,
             conductor_apellido: conductor.apellidos,
             conductor_completo: `${conductor.nombres} ${conductor.apellidos}`,
+            horario: row.horario,
           })
         }
       }
@@ -158,9 +162,10 @@ export function useBitacoraData() {
           return {
             ...r,
             conductor_wialon: asignacion.conductor_completo,
+            tipo_turno: asignacion.horario,
           }
         }
-        return r
+        return { ...r, tipo_turno: null }
       })
 
       setRegistros(registrosEnriquecidos)
