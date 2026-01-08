@@ -543,27 +543,27 @@ export function IncidenciasModule() {
       {/* Stats rápidos - Arriba de todo (igual que Siniestros) */}
       <div className="incidencias-stats">
         <div className="stats-grid">
-          <div className="stat-card">
+          <button className={`stat-card${activeTab === 'incidencias' ? ' active' : ''}`} onClick={() => { setActiveTab('incidencias'); setPage(1) }}>
             <FileText size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{incidencias.length}</span>
               <span className="stat-label">Total</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => { setActiveTab('incidencias'); setPage(1) }}>
             <Car size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{new Set(incidencias.map(i => i.patente_display)).size}</span>
               <span className="stat-label">Vehículos</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => { setActiveTab('incidencias'); setPage(1) }}>
             <Users size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{new Set(incidencias.map(i => i.conductor_display)).size}</span>
               <span className="stat-label">Conductores</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -784,66 +784,66 @@ export function IncidenciasModule() {
               {activeTab === 'por_aplicar' ? (
                 // Tab Por Aplicar - solo mostrar pendientes
                 <>
-                  <div className="stat-card">
+                  <button className="stat-card active" onClick={() => { setActiveTab('por_aplicar'); setPage(1) }}>
                     <Clock size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{penalidadesFiltradas.length}</span>
                       <span className="stat-label">Pendientes</span>
                     </div>
-                  </div>
-                  <div className="stat-card">
+                  </button>
+                  <button className="stat-card" onClick={() => { setActiveTab('por_aplicar'); setPage(1) }}>
                     <DollarSign size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
                       <span className="stat-label">$ Pendiente</span>
                     </div>
-                  </div>
+                  </button>
                 </>
               ) : (
                 // Tab Cobros&Descuentos - mostrar pendientes, aplicadas y totales
                 <>
-                  <div className="stat-card">
+                  <button className={`stat-card${filtroAplicado === 'false' ? ' active' : ''}`} onClick={() => { setFiltroAplicado('false'); setPage(1) }}>
                     <Clock size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{penalidades.filter(p => !p.aplicado).length}</span>
                       <span className="stat-label">Pendientes</span>
                     </div>
-                  </div>
-                  <div className="stat-card">
+                  </button>
+                  <button className="stat-card" onClick={() => { setFiltroAplicado('false'); setPage(1) }}>
                     <DollarSign size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{formatMoney(penalidades.filter(p => !p.aplicado).reduce((s, p) => s + (p.monto || 0), 0))}</span>
                       <span className="stat-label">$ Pendiente</span>
                     </div>
-                  </div>
-                  <div className="stat-card">
+                  </button>
+                  <button className={`stat-card${filtroAplicado === 'true' ? ' active' : ''}`} onClick={() => { setFiltroAplicado('true'); setPage(1) }}>
                     <CheckCircle size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{penalidades.filter(p => p.aplicado).length}</span>
                       <span className="stat-label">Aplicadas</span>
                     </div>
-                  </div>
-                  <div className="stat-card">
+                  </button>
+                  <button className="stat-card" onClick={() => { setFiltroAplicado('true'); setPage(1) }}>
                     <DollarSign size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{formatMoney(penalidades.filter(p => p.aplicado).reduce((s, p) => s + (p.monto || 0), 0))}</span>
                       <span className="stat-label">$ Aplicado</span>
                     </div>
-                  </div>
-                  <div className="stat-card">
+                  </button>
+                  <button className={`stat-card${filtroAplicado === '' ? ' active' : ''}`} onClick={() => { setFiltroAplicado(''); setPage(1) }}>
                     <FileText size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{penalidades.length}</span>
                       <span className="stat-label">Total</span>
                     </div>
-                  </div>
-                  <div className="stat-card">
+                  </button>
+                  <button className="stat-card" onClick={() => { setFiltroAplicado(''); setPage(1) }}>
                     <DollarSign size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{formatMoney(penalidades.reduce((s, p) => s + (p.monto || 0), 0))}</span>
                       <span className="stat-label">$ Total</span>
                     </div>
-                  </div>
+                  </button>
                 </>
               )}
             </div>

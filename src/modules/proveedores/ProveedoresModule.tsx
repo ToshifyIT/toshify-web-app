@@ -555,27 +555,27 @@ export function ProveedoresModule() {
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prov-stats">
         <div className="prov-stats-grid">
-          <div className="stat-card">
+          <button className={`stat-card${estadoFilter.length === 0 ? ' active' : ''}`} onClick={() => setEstadoFilter([])}>
             <Building2 size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.total}</span>
               <span className="stat-label">Total</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${estadoFilter.length === 1 && estadoFilter[0] === 'activo' ? ' active' : ''}`} onClick={() => setEstadoFilter(['activo'])}>
             <CheckCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.activos}</span>
               <span className="stat-label">Activos</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${estadoFilter.length === 1 && estadoFilter[0] === 'inactivo' ? ' active' : ''}`} onClick={() => setEstadoFilter(['inactivo'])}>
             <XCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.inactivos}</span>
               <span className="stat-label">Inactivos</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 

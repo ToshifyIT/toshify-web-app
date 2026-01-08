@@ -282,48 +282,48 @@ export function InventarioDashboardModule() {
       {/* Stats Cards - Estilo Bitacora */}
       <div className="inv-stats">
         <div className="inv-stats-grid">
-          <div className="stat-card">
+          <button className={`stat-card${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>
             <Package size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{filteredData.length}</span>
               <span className="stat-label">Productos</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <CheckCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.disponible}</span>
               <span className="stat-label">Disponible</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <Activity size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.en_uso}</span>
               <span className="stat-label">En Uso</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <Truck size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.en_transito}</span>
               <span className="stat-label">En Tránsito</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.dañado}</span>
               <span className="stat-label">Dañado</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <XCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.perdido}</span>
               <span className="stat-label">Perdido</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 

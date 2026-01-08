@@ -111,6 +111,7 @@ export function ReporteNominasTab() {
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
   const [filtroPenalidades, setFiltroPenalidades] = useState<string>('todos')
   const [filtroSiniestros, setFiltroSiniestros] = useState<string>('todos')
+  const [filtroSaldo, setFiltroSaldo] = useState<string>('todos')
   const [exportingExcel, setExportingExcel] = useState(false)
 
   // Filtros tipo Excel por columna
@@ -826,6 +827,9 @@ export function ReporteNominasTab() {
       // Filtro por siniestros
       if (filtroSiniestros === 'con' && !n.tiene_siniestros) return false
       if (filtroSiniestros === 'sin' && n.tiene_siniestros) return false
+      // Filtro por saldo
+      if (filtroSaldo === 'a_favor' && n.saldo >= 0) return false
+      if (filtroSaldo === 'deben' && n.saldo < 0) return false
       // Filtros tipo Excel
       if (conductorFilter.length > 0 && !conductorFilter.includes(n.conductor_nombre)) return false
       if (tipoDocFilter.length > 0) {
@@ -836,7 +840,7 @@ export function ReporteNominasTab() {
       if (tipoHorarioFilter.length > 0 && !tipoHorarioFilter.includes(n.tipo_horario)) return false
       return true
     })
-  }, [nominas, filtroTipo, filtroPenalidades, filtroSiniestros, conductorFilter, tipoDocFilter, vehiculoFilter, tipoHorarioFilter])
+  }, [nominas, filtroTipo, filtroPenalidades, filtroSiniestros, filtroSaldo, conductorFilter, tipoDocFilter, vehiculoFilter, tipoHorarioFilter])
 
   // Exportar a Excel - Formato de Reporte de Facturación
   async function exportarExcel() {
@@ -1405,48 +1409,48 @@ export function ReporteNominasTab() {
       {/* Stats */}
       <div className="nom-stats">
         <div className="nom-stats-grid six-cols">
-          <div className="stat-card">
+          <button className={`stat-card${filtroSaldo === 'todos' ? ' active' : ''}`} onClick={() => setFiltroSaldo('todos')}>
             <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats?.total_conductores || 0}</span>
               <span className="stat-label">Conductores</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFiltroSaldo('todos')}>
             <TrendingUp size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{formatCurrency(stats?.total_cargos || 0)}</span>
               <span className="stat-label">Total Cargos</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFiltroSaldo('todos')}>
             <TrendingDown size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{formatCurrency(stats?.total_creditos || 0)}</span>
               <span className="stat-label">Total Créditos</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFiltroSaldo('todos')}>
             <DollarSign size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{formatCurrency(stats?.saldo_total || 0)}</span>
               <span className="stat-label">Saldo Total</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${filtroSaldo === 'a_favor' ? ' active' : ''}`} onClick={() => setFiltroSaldo('a_favor')}>
             <TrendingDown size={18} className="stat-icon green" />
             <div className="stat-content">
               <span className="stat-value">{stats?.conductores_a_favor || 0}</span>
               <span className="stat-label">A Favor</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${filtroSaldo === 'deben' ? ' active' : ''}`} onClick={() => setFiltroSaldo('deben')}>
             <TrendingUp size={18} className="stat-icon red" />
             <div className="stat-content">
               <span className="stat-value">{stats?.conductores_deben || 0}</span>
               <span className="stat-label">Deben</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 

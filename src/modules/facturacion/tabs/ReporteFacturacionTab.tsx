@@ -1647,42 +1647,42 @@ export function ReporteFacturacionTab() {
           {stats && (
             <div className="fact-stats">
               <div className="fact-stats-grid">
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.total_conductores}</span>
                     <span className="stat-label">Conductores</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <TrendingUp size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_cargos)}</span>
                     <span className="stat-label">Total Cargos</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <TrendingDown size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_descuentos)}</span>
                     <span className="stat-label">Total Descuentos</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <DollarSign size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_neto)}</span>
                     <span className="stat-label">Total Proyectado</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <TrendingUp size={18} className="stat-icon red" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
                     <span className="stat-label">Deben</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <TrendingDown size={18} className="stat-icon green" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_favor}</span>
@@ -1823,42 +1823,42 @@ export function ReporteFacturacionTab() {
           {stats && (
             <div className="fact-stats">
               <div className="fact-stats-grid">
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <Users size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.total_conductores}</span>
                     <span className="stat-label">Conductores</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <TrendingUp size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_cargos)}</span>
                     <span className="stat-label">Total Cargos</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <TrendingDown size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_descuentos)}</span>
                     <span className="stat-label">Total Descuentos</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <DollarSign size={18} className="stat-icon" />
                   <div className="stat-content">
                     <span className="stat-value">{formatCurrency(stats.total_neto)}</span>
                     <span className="stat-label">Total Neto</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <TrendingUp size={18} className="stat-icon red" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_deben}</span>
                     <span className="stat-label">Deben</span>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="fact-stat-card">
                   <TrendingDown size={18} className="stat-icon green" />
                   <div className="stat-content">
                     <span className="stat-value">{stats.conductores_favor}</span>

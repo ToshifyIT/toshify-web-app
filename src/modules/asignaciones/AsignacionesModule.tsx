@@ -1234,7 +1234,7 @@ export function AsignacionesModule() {
               <span className="stat-label">Cond. Anexo</span>
             </div>
           </div>
-          <div className="stat-card" title="Entregas de vehículos programadas para hoy">
+          <div className="stat-card stat-card-clickable" title="Entregas de vehículos programadas para hoy" onClick={() => setActiveStatCard(null)}>
             <Calendar size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.entregasHoy}</span>
