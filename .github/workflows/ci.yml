@@ -1,5 +1,6 @@
-# CI Workflow - Validación en Pull Requests
-# Trunk-Based Development: Valida antes de mergear a main
+# CI Workflow - Trunk-Based Development
+# Valida PRs antes de mergear a main
+# Los aprobadores deben aprobar el PR manualmente
 
 name: CI
 
@@ -7,7 +8,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, development]
+    branches: [main]  # Solo al mergear a main, no en development
 
 jobs:
   validate:
