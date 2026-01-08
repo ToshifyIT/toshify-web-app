@@ -46,7 +46,7 @@ export function InventarioDashboardModule() {
   const [codigoFilter, setCodigoFilter] = useState<string[]>([])
   const [nombreFilter, setNombreFilter] = useState<string[]>([])
   const [tipoFilter, setTipoFilter] = useState<string[]>([])
-  const [categoriaFilter, setCategoriaFilter] = useState<string[]>([])
+  const [categoriaFilter] = useState<string[]>([])
   const filterRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -142,11 +142,6 @@ export function InventarioDashboardModule() {
     [...new Set(categoryFilteredData.map(p => p.es_retornable ? 'Herramienta' : 'Repuesto'))],
     [categoryFilteredData]
   )
-  const uniqueCategorias = useMemo(() =>
-    [...new Set(categoryFilteredData.map(p => p.categoria))].filter(Boolean) as string[],
-    [categoryFilteredData]
-  )
-
   // Toggle functions
   const toggleCodigoFilter = (value: string) => {
     setCodigoFilter(prev =>
@@ -163,12 +158,6 @@ export function InventarioDashboardModule() {
       prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
     )
   }
-  const toggleCategoriaFilter = (value: string) => {
-    setCategoriaFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    )
-  }
-
   // Final filtered data with column filters
   const filteredData = useMemo(() => {
     let data = categoryFilteredData

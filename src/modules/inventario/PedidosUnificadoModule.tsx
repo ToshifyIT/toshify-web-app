@@ -141,7 +141,7 @@ export function PedidosUnificadoModule() {
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   const [productoFilter, setProductoFilter] = useState<string[]>([])
   const [proveedorFilter, setProveedorFilter] = useState<string[]>([])
-  const [tipoProductoFilter, setTipoProductoFilter] = useState<string[]>([])
+  const [tipoProductoFilter] = useState<string[]>([])
   const filterRef = useRef<HTMLDivElement>(null)
 
   const userRole = profile?.roles?.name || ''
@@ -708,11 +708,6 @@ export function PedidosUnificadoModule() {
     [...new Set(entradasSimples.map(e => e.proveedor_nombre))].filter(Boolean) as string[],
     [entradasSimples]
   )
-  const uniqueTiposProducto = useMemo(() =>
-    [...new Set(entradasSimples.map(e => e.producto_tipo))].filter(Boolean) as string[],
-    [entradasSimples]
-  )
-
   // Toggle functions for Entradas Simples filters
   const toggleProductoFilter = (value: string) => {
     setProductoFilter(prev =>
@@ -724,12 +719,6 @@ export function PedidosUnificadoModule() {
       prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
     )
   }
-  const toggleTipoProductoFilter = (value: string) => {
-    setTipoProductoFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    )
-  }
-
   // Filtered Entradas Simples data
   const entradasFiltered = useMemo(() => {
     let data = entradasSimples
