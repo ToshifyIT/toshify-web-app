@@ -1,5 +1,6 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import {
   Package,
   Truck,
@@ -9,8 +10,7 @@ import {
   CheckCircle,
   Activity,
   Settings,
-  Droplets,
-  Filter
+  Droplets
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -41,28 +41,17 @@ export function InventarioDashboardModule() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterCategoria>('all')
 
-  // Excel-style column filter states
-  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  // Excel-style column filter states con Portal
+  const { openFilterId, setOpenFilterId } = useExcelFilters()
   const [codigoFilter, setCodigoFilter] = useState<string[]>([])
   const [nombreFilter, setNombreFilter] = useState<string[]>([])
   const [tipoFilter, setTipoFilter] = useState<string[]>([])
   const [categoriaFilter] = useState<string[]>([])
-  const filterRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     loadStockData()
   }, [])
 
-  // Close dropdown on click outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setOpenColumnFilter(null)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
 
   const loadStockData = async () => {
     try {
@@ -142,22 +131,6 @@ export function InventarioDashboardModule() {
     [...new Set(categoryFilteredData.map(p => p.es_retornable ? 'Herramienta' : 'Repuesto'))],
     [categoryFilteredData]
   )
-  // Toggle functions
-  const toggleCodigoFilter = (value: string) => {
-    setCodigoFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    )
-  }
-  const toggleNombreFilter = (value: string) => {
-    setNombreFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    )
-  }
-  const toggleTipoFilter = (value: string) => {
-    setTipoFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    )
-  }
   // Final filtered data with column filters
   const filteredData = useMemo(() => {
     let data = categoryFilteredData
@@ -199,32 +172,15 @@ export function InventarioDashboardModule() {
       {
         accessorKey: 'codigo',
         header: () => (
-          <div className="dt-column-filter" ref={openColumnFilter === 'codigo' ? filterRef : null}>
-            <span>Código {codigoFilter.length > 0 && `(${codigoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${codigoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'codigo' ? null : 'codigo') }}
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'codigo' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  {uniqueCodigos.map(codigo => (
-                    <label key={codigo} className={`dt-column-filter-checkbox ${codigoFilter.includes(codigo) ? 'selected' : ''}`}>
-                      <input type="checkbox" checked={codigoFilter.includes(codigo)} onChange={() => toggleCodigoFilter(codigo)} />
-                      <span>{codigo}</span>
-                    </label>
-                  ))}
-                </div>
-                {codigoFilter.length > 0 && (
-                  <button className="dt-column-filter-clear" onClick={() => setCodigoFilter([])}>
-                    Limpiar ({codigoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Codigo"
+            options={uniqueCodigos}
+            selectedValues={codigoFilter}
+            onSelectionChange={setCodigoFilter}
+            filterId="inv_codigo"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
         ),
         cell: ({ getValue }) => (
           <span className="inv-codigo">{getValue() as string}</span>
@@ -234,32 +190,15 @@ export function InventarioDashboardModule() {
       {
         accessorKey: 'nombre',
         header: () => (
-          <div className="dt-column-filter" ref={openColumnFilter === 'nombre' ? filterRef : null}>
-            <span>Producto {nombreFilter.length > 0 && `(${nombreFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${nombreFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'nombre' ? null : 'nombre') }}
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'nombre' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  {uniqueNombres.map(nombre => (
-                    <label key={nombre} className={`dt-column-filter-checkbox ${nombreFilter.includes(nombre) ? 'selected' : ''}`}>
-                      <input type="checkbox" checked={nombreFilter.includes(nombre)} onChange={() => toggleNombreFilter(nombre)} />
-                      <span>{nombre}</span>
-                    </label>
-                  ))}
-                </div>
-                {nombreFilter.length > 0 && (
-                  <button className="dt-column-filter-clear" onClick={() => setNombreFilter([])}>
-                    Limpiar ({nombreFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Producto"
+            options={uniqueNombres}
+            selectedValues={nombreFilter}
+            onSelectionChange={setNombreFilter}
+            filterId="inv_nombre"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
         ),
         cell: ({ getValue }) => (
           <span className="inv-nombre">{getValue() as string}</span>
@@ -277,32 +216,15 @@ export function InventarioDashboardModule() {
       {
         accessorKey: 'es_retornable',
         header: () => (
-          <div className="dt-column-filter" ref={openColumnFilter === 'tipo' ? filterRef : null}>
-            <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'tipo' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  {uniqueTipos.map(tipo => (
-                    <label key={tipo} className={`dt-column-filter-checkbox ${tipoFilter.includes(tipo) ? 'selected' : ''}`}>
-                      <input type="checkbox" checked={tipoFilter.includes(tipo)} onChange={() => toggleTipoFilter(tipo)} />
-                      <span>{tipo}</span>
-                    </label>
-                  ))}
-                </div>
-                {tipoFilter.length > 0 && (
-                  <button className="dt-column-filter-clear" onClick={() => setTipoFilter([])}>
-                    Limpiar ({tipoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Tipo"
+            options={uniqueTipos}
+            selectedValues={tipoFilter}
+            onSelectionChange={setTipoFilter}
+            filterId="inv_tipo"
+            openFilterId={openFilterId}
+            onOpenChange={setOpenFilterId}
+          />
         ),
         cell: ({ getValue }) => {
           const esRetornable = getValue() as boolean
@@ -371,7 +293,7 @@ export function InventarioDashboardModule() {
         enableSorting: true,
       },
     ],
-    [openColumnFilter, codigoFilter, nombreFilter, tipoFilter, uniqueCodigos, uniqueNombres, uniqueTipos]
+    [uniqueCodigos, codigoFilter, uniqueNombres, nombreFilter, uniqueTipos, tipoFilter, openFilterId]
   )
 
   return (
