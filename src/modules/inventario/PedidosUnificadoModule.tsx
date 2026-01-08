@@ -1,6 +1,6 @@
 // src/modules/inventario/PedidosUnificadoModule.tsx
 // Módulo unificado que combina Pedidos en Tránsito y Aprobaciones Pendientes
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -137,6 +137,13 @@ export function PedidosUnificadoModule() {
   const [processing, setProcessing] = useState<string | null>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>('todos')
 
+  // Excel-style column filter states for Entradas Simples
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [productoFilter, setProductoFilter] = useState<string[]>([])
+  const [proveedorFilter, setProveedorFilter] = useState<string[]>([])
+  const [tipoProductoFilter, setTipoProductoFilter] = useState<string[]>([])
+  const filterRef = useRef<HTMLDivElement>(null)
+
   const userRole = profile?.roles?.name || ''
   const canApprove = userRole === 'encargado' || userRole === 'admin' || userRole === 'supervisor'
 
@@ -155,6 +162,17 @@ export function PedidosUnificadoModule() {
       cargarHistorico()
     }
   }, [activeTab, canApprove])
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // ============= FUNCIONES PEDIDOS EN TRÁNSITO =============
   const loadPedidosData = async () => {
@@ -681,6 +699,52 @@ export function PedidosUnificadoModule() {
   }
 
   // ============= MEMOS =============
+  // Unique value lists for Entradas Simples filters
+  const uniqueProductos = useMemo(() =>
+    [...new Set(entradasSimples.map(e => e.producto_nombre))].filter(Boolean) as string[],
+    [entradasSimples]
+  )
+  const uniqueProveedores = useMemo(() =>
+    [...new Set(entradasSimples.map(e => e.proveedor_nombre))].filter(Boolean) as string[],
+    [entradasSimples]
+  )
+  const uniqueTiposProducto = useMemo(() =>
+    [...new Set(entradasSimples.map(e => e.producto_tipo))].filter(Boolean) as string[],
+    [entradasSimples]
+  )
+
+  // Toggle functions for Entradas Simples filters
+  const toggleProductoFilter = (value: string) => {
+    setProductoFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+  const toggleProveedorFilter = (value: string) => {
+    setProveedorFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+  const toggleTipoProductoFilter = (value: string) => {
+    setTipoProductoFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+
+  // Filtered Entradas Simples data
+  const entradasFiltered = useMemo(() => {
+    let data = entradasSimples
+    if (productoFilter.length > 0) {
+      data = data.filter(e => productoFilter.includes(e.producto_nombre))
+    }
+    if (proveedorFilter.length > 0) {
+      data = data.filter(e => proveedorFilter.includes(e.proveedor_nombre))
+    }
+    if (tipoProductoFilter.length > 0) {
+      data = data.filter(e => tipoProductoFilter.includes(e.producto_tipo))
+    }
+    return data
+  }, [entradasSimples, productoFilter, proveedorFilter, tipoProductoFilter])
+
   const movimientosFiltrados = filtroTipo === 'todos'
     ? movimientos
     : movimientos.filter(m => m.tipo === filtroTipo)
@@ -702,7 +766,34 @@ export function PedidosUnificadoModule() {
   const entradasColumns = useMemo<ColumnDef<EntradaTransito, any>[]>(() => [
     {
       accessorKey: 'producto_codigo',
-      header: 'Producto',
+      header: () => (
+        <div className="dt-column-filter" ref={openColumnFilter === 'producto' ? filterRef : null}>
+          <span>Producto {productoFilter.length > 0 && `(${productoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${productoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'producto' ? null : 'producto') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'producto' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {uniqueProductos.map(producto => (
+                  <label key={producto} className={`dt-column-filter-checkbox ${productoFilter.includes(producto) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={productoFilter.includes(producto)} onChange={() => toggleProductoFilter(producto)} />
+                    <span>{producto}</span>
+                  </label>
+                ))}
+              </div>
+              {productoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setProductoFilter([])}>
+                  Limpiar ({productoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <div>
           <div style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '14px' }}>
@@ -719,7 +810,34 @@ export function PedidosUnificadoModule() {
     },
     {
       accessorKey: 'proveedor_nombre',
-      header: 'Proveedor',
+      header: () => (
+        <div className="dt-column-filter" ref={openColumnFilter === 'proveedor' ? filterRef : null}>
+          <span>Proveedor {proveedorFilter.length > 0 && `(${proveedorFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${proveedorFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'proveedor' ? null : 'proveedor') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'proveedor' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {uniqueProveedores.map(proveedor => (
+                  <label key={proveedor} className={`dt-column-filter-checkbox ${proveedorFilter.includes(proveedor) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={proveedorFilter.includes(proveedor)} onChange={() => toggleProveedorFilter(proveedor)} />
+                    <span>{proveedor}</span>
+                  </label>
+                ))}
+              </div>
+              {proveedorFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setProveedorFilter([])}>
+                  Limpiar ({proveedorFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span style={{ color: 'var(--text-primary)', fontSize: '14px' }}>
           {row.original.proveedor_nombre}
@@ -800,7 +918,7 @@ export function PedidosUnificadoModule() {
         </div>
       )
     }
-  ], [processingItem])
+  ], [processingItem, openColumnFilter, productoFilter, proveedorFilter, uniqueProductos, uniqueProveedores])
 
   // ============= RENDER =============
   return (
@@ -1248,7 +1366,7 @@ export function PedidosUnificadoModule() {
         {/* ==================== TAB: ENTRADAS SIMPLES ==================== */}
         {activeTab === 'entradas' && (
           <DataTable
-            data={entradasSimples}
+            data={entradasFiltered}
             columns={entradasColumns}
             loading={loadingPedidos}
             searchPlaceholder="Buscar por producto o proveedor..."

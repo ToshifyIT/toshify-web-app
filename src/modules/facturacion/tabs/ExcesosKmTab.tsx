@@ -11,7 +11,8 @@ import {
   Trash2,
   CheckCircle,
   Clock,
-  Calculator
+  Calculator,
+  Filter
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -40,9 +41,54 @@ export function ExcesosKmTab() {
   const [filtroEstado, setFiltroEstado] = useState<string>('todos')
   const [filtroPeriodo, setFiltroPeriodo] = useState<string>('todos')
 
+  // Estados para filtros Excel
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [conductorFilter, setConductorFilter] = useState<string[]>([])
+  const [conductorSearch, setConductorSearch] = useState('')
+  const [patenteFilter, setPatenteFilter] = useState<string[]>([])
+  const [aplicadoFilter, setAplicadoFilter] = useState<string[]>([])
+
   useEffect(() => {
     cargarDatos()
   }, [])
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    if (!openColumnFilter) return
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [openColumnFilter])
+
+  // Listas únicas para filtros
+  const conductoresUnicos = useMemo(() =>
+    [...new Set(excesos.map(e => e.conductor_nombre).filter(Boolean) as string[])].sort()
+  , [excesos])
+
+  const conductoresFiltrados = useMemo(() => {
+    if (!conductorSearch) return conductoresUnicos
+    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
+  }, [conductoresUnicos, conductorSearch])
+
+  const patentesUnicas = useMemo(() =>
+    [...new Set(excesos.map(e => e.vehiculo_patente).filter(Boolean) as string[])].sort()
+  , [excesos])
+
+  // Toggle functions
+  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const togglePatenteFilter = (val: string) => setPatenteFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleAplicadoFilter = (val: string) => setAplicadoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
 
   async function cargarDatos() {
     setLoading(true)
@@ -547,7 +593,41 @@ export function ExcesosKmTab() {
     },
     {
       accessorKey: 'conductor_nombre',
-      header: 'Conductor',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'conductor' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar conductor..."
+                value={conductorSearch}
+                onChange={(e) => setConductorSearch(e.target.value)}
+                className="dt-column-filter-input"
+              />
+              <div className="dt-excel-filter-list">
+                {conductoresFiltrados.map(c => (
+                  <label key={c} className={`dt-column-filter-checkbox ${conductorFilter.includes(c) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={conductorFilter.includes(c)} onChange={() => toggleConductorFilter(c)} />
+                    <span>{c}</span>
+                  </label>
+                ))}
+              </div>
+              {conductorFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
+                  Limpiar ({conductorFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <div>
           <div className="font-medium">{row.original.conductor_nombre}</div>
@@ -556,7 +636,34 @@ export function ExcesosKmTab() {
     },
     {
       accessorKey: 'vehiculo_patente',
-      header: 'Vehículo',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Vehículo {patenteFilter.length > 0 && `(${patenteFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${patenteFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'patente' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {patentesUnicas.map(p => (
+                  <label key={p} className={`dt-column-filter-checkbox ${patenteFilter.includes(p) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={patenteFilter.includes(p)} onChange={() => togglePatenteFilter(p)} />
+                    <span>{p}</span>
+                  </label>
+                ))}
+              </div>
+              {patenteFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setPatenteFilter([])}>
+                  Limpiar ({patenteFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>
           {row.original.vehiculo_patente}
@@ -622,7 +729,37 @@ export function ExcesosKmTab() {
     },
     {
       accessorKey: 'aplicado',
-      header: 'Estado',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Estado {aplicadoFilter.length > 0 && `(${aplicadoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${aplicadoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'aplicado' ? null : 'aplicado') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'aplicado' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {[
+                  { value: 'pendiente', label: 'Pendiente' },
+                  { value: 'aplicado', label: 'Aplicado' }
+                ].map(e => (
+                  <label key={e.value} className={`dt-column-filter-checkbox ${aplicadoFilter.includes(e.value) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={aplicadoFilter.includes(e.value)} onChange={() => toggleAplicadoFilter(e.value)} />
+                    <span>{e.label}</span>
+                  </label>
+                ))}
+              </div>
+              {aplicadoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setAplicadoFilter([])}>
+                  Limpiar ({aplicadoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span className={`fact-badge ${row.original.aplicado ? 'fact-badge-green' : 'fact-badge-yellow'}`}>
           {row.original.aplicado ? 'Aplicado' : 'Pendiente'}
@@ -662,22 +799,26 @@ export function ExcesosKmTab() {
         </div>
       )
     }
-  ], [])
+  ], [conductorFilter, conductorSearch, conductoresFiltrados, patenteFilter, patentesUnicas, aplicadoFilter, openColumnFilter])
 
   const excesosFiltrados = useMemo(() => {
-    let filtered = excesos
-
-    if (filtroEstado !== 'todos') {
-      const esAplicado = filtroEstado === 'aplicado'
-      filtered = filtered.filter(e => e.aplicado === esAplicado)
-    }
-
-    if (filtroPeriodo !== 'todos') {
-      filtered = filtered.filter(e => e.periodo_id === filtroPeriodo)
-    }
-
-    return filtered
-  }, [excesos, filtroEstado, filtroPeriodo])
+    return excesos.filter(e => {
+      // Filtros legacy de header
+      if (filtroEstado !== 'todos') {
+        const esAplicado = filtroEstado === 'aplicado'
+        if (e.aplicado !== esAplicado) return false
+      }
+      if (filtroPeriodo !== 'todos' && e.periodo_id !== filtroPeriodo) return false
+      // Filtros Excel
+      if (conductorFilter.length > 0 && !conductorFilter.includes(e.conductor_nombre || '')) return false
+      if (patenteFilter.length > 0 && !patenteFilter.includes(e.vehiculo_patente || '')) return false
+      if (aplicadoFilter.length > 0) {
+        const estado = e.aplicado ? 'aplicado' : 'pendiente'
+        if (!aplicadoFilter.includes(estado)) return false
+      }
+      return true
+    })
+  }, [excesos, filtroEstado, filtroPeriodo, conductorFilter, patenteFilter, aplicadoFilter])
 
   const stats = useMemo(() => {
     const total = excesos.length

@@ -6,7 +6,6 @@ import { TimeInput24h } from '../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import {
   Plus,
-  Search,
   Eye,
   Edit2,
   AlertTriangle,
@@ -15,18 +14,17 @@ import {
   DollarSign,
   FileText,
   TrendingUp,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  ChevronDown,
   X,
   Shield,
   Clock,
   ExternalLink,
   FolderOpen,
-  Download
+  Download,
+  Filter
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { type ColumnDef } from '@tanstack/react-table'
+import { DataTable } from '../../components/ui/DataTable'
 import type {
   SiniestroCompleto,
   SiniestroCategoria,
@@ -55,20 +53,15 @@ export function SiniestrosModule() {
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   const [stats, setStats] = useState<SiniestroStats | null>(null)
 
-  // Filtros
-  const [filtroEstado, setFiltroEstado] = useState('')
-  const [filtroCategoria, setFiltroCategoria] = useState('')
-  const [filtroResponsable, setFiltroResponsable] = useState('')
-  const [busqueda, setBusqueda] = useState('')
-
-  // Paginación
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
-
-  // Ordenamiento
-  type SortColumn = 'fecha_siniestro' | 'vehiculo_patente' | 'conductor_display' | 'categoria_nombre' | 'responsable' | 'estado_nombre' | 'presupuesto_real'
-  const [sortColumn, setSortColumn] = useState<SortColumn>('fecha_siniestro')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  // Filtros por columna tipo Excel
+  const [patenteFilter, setPatenteFilter] = useState<string[]>([])
+  const [patenteSearch, setPatenteSearch] = useState('')
+  const [conductorFilter, setConductorFilter] = useState<string[]>([])
+  const [conductorSearch, setConductorSearch] = useState('')
+  const [categoriaFilter, setCategoriaFilter] = useState<string[]>([])
+  const [responsableFilter, setResponsableFilter] = useState<string[]>([])
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   // Modal
   const [showModal, setShowModal] = useState(false)
@@ -193,7 +186,61 @@ export function SiniestrosModule() {
     })
   }
 
-  // Filtrar siniestros según tab y filtros
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) setOpenColumnFilter(null)
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter])
+
+  // Listas de valores únicos para filtros
+  const patentesUnicas = useMemo(() =>
+    [...new Set(siniestros.map(s => s.vehiculo_patente).filter(Boolean))].sort() as string[]
+  , [siniestros])
+
+  const conductoresUnicos = useMemo(() =>
+    [...new Set(siniestros.map(s => s.conductor_display).filter(Boolean))].sort() as string[]
+  , [siniestros])
+
+  const categoriasUnicas = useMemo(() =>
+    [...new Set(siniestros.map(s => s.categoria_nombre).filter(Boolean))].sort() as string[]
+  , [siniestros])
+
+  const estadosUnicos = useMemo(() =>
+    [...new Set(siniestros.map(s => s.estado_nombre).filter(Boolean))].sort() as string[]
+  , [siniestros])
+
+  // Listas filtradas por búsqueda
+  const patentesFiltradas = useMemo(() => {
+    if (!patenteSearch) return patentesUnicas
+    return patentesUnicas.filter(p => p.toLowerCase().includes(patenteSearch.toLowerCase()))
+  }, [patentesUnicas, patenteSearch])
+
+  const conductoresFiltrados = useMemo(() => {
+    if (!conductorSearch) return conductoresUnicos
+    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
+  }, [conductoresUnicos, conductorSearch])
+
+  // Toggle functions para multiselect
+  const togglePatenteFilter = (val: string) => setPatenteFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleCategoriaFilter = (val: string) => setCategoriaFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleResponsableFilter = (val: string) => setResponsableFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+
+  // Filtrar siniestros según tab y filtros tipo Excel
   const siniestrosFiltrados = useMemo(() => {
     let filtered = [...siniestros]
 
@@ -219,52 +266,25 @@ export function SiniestrosModule() {
       })
     }
 
-    // Aplicar filtros
-    if (filtroEstado) {
-      filtered = filtered.filter(s => s.estado_id === filtroEstado)
+    // Aplicar filtros tipo Excel
+    if (patenteFilter.length > 0) {
+      filtered = filtered.filter(s => patenteFilter.includes(s.vehiculo_patente || ''))
     }
-    if (filtroCategoria) {
-      filtered = filtered.filter(s => s.categoria_id === filtroCategoria)
+    if (conductorFilter.length > 0) {
+      filtered = filtered.filter(s => conductorFilter.includes(s.conductor_display || ''))
     }
-    if (filtroResponsable) {
-      filtered = filtered.filter(s => s.responsable === filtroResponsable)
+    if (categoriaFilter.length > 0) {
+      filtered = filtered.filter(s => categoriaFilter.includes(s.categoria_nombre || ''))
     }
-    if (busqueda.trim()) {
-      const term = busqueda.toLowerCase()
-      filtered = filtered.filter(s =>
-        s.vehiculo_patente?.toLowerCase().includes(term) ||
-        s.conductor_display?.toLowerCase().includes(term) ||
-        s.nro_siniestro_seguro?.toLowerCase().includes(term)
-      )
+    if (responsableFilter.length > 0) {
+      filtered = filtered.filter(s => responsableFilter.includes(s.responsable || ''))
     }
-
-    // Ordenar
-    filtered.sort((a, b) => {
-      let aVal: any = a[sortColumn]
-      let bVal: any = b[sortColumn]
-
-      // Manejar nulls según tipo de columna
-      const isNumericColumn = sortColumn === 'presupuesto_real'
-      if (aVal === null || aVal === undefined) aVal = isNumericColumn ? 0 : ''
-      if (bVal === null || bVal === undefined) bVal = isNumericColumn ? 0 : ''
-
-      // Comparar strings
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        aVal = aVal.toLowerCase()
-        bVal = bVal.toLowerCase()
-      }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
-      return 0
-    })
+    if (estadoFilter.length > 0) {
+      filtered = filtered.filter(s => estadoFilter.includes(s.estado_nombre || ''))
+    }
 
     return filtered
-  }, [siniestros, activeTab, filtroEstado, filtroCategoria, filtroResponsable, busqueda, estados, sortColumn, sortDirection])
-
-  // Paginación
-  const totalPages = Math.ceil(siniestrosFiltrados.length / pageSize)
-  const siniestrosPaginados = siniestrosFiltrados.slice((page - 1) * pageSize, page * pageSize)
+  }, [siniestros, activeTab, patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter, estados])
 
   // Conductores con más siniestros (para alertas)
   const conductoresReincidentes = useMemo(() => {
@@ -282,16 +302,265 @@ export function SiniestrosModule() {
       .slice(0, 5)
   }, [siniestros])
 
-  // Handlers
-  function handleSort(column: SortColumn) {
-    if (sortColumn === column) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortColumn(column)
-      setSortDirection('asc')
+  // Columnas para DataTable con filtros tipo Excel
+  const siniestrosColumns = useMemo<ColumnDef<SiniestroCompleto>[]>(() => [
+    {
+      accessorKey: 'fecha_siniestro',
+      header: 'Fecha',
+      cell: ({ row }) => formatDate(row.original.fecha_siniestro)
+    },
+    {
+      accessorKey: 'vehiculo_patente',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Patente {patenteFilter.length > 0 && `(${patenteFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${patenteFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'patente' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar patente..."
+                value={patenteSearch}
+                onChange={(e) => setPatenteSearch(e.target.value)}
+              />
+              <div className="dt-excel-filter-list">
+                {patentesFiltradas.map(patente => (
+                  <label key={patente} className={`dt-column-filter-checkbox ${patenteFilter.includes(patente) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={patenteFilter.includes(patente)}
+                      onChange={() => togglePatenteFilter(patente)}
+                    />
+                    <span>{patente}</span>
+                  </label>
+                ))}
+              </div>
+              {patenteFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setPatenteFilter([]); setPatenteSearch('') }}>
+                  Limpiar ({patenteFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => <span className="dt-badge dt-badge-gray">{row.original.vehiculo_patente || '-'}</span>
+    },
+    {
+      accessorKey: 'conductor_display',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'conductor' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar conductor..."
+                value={conductorSearch}
+                onChange={(e) => setConductorSearch(e.target.value)}
+              />
+              <div className="dt-excel-filter-list">
+                {conductoresFiltrados.map(conductor => (
+                  <label key={conductor} className={`dt-column-filter-checkbox ${conductorFilter.includes(conductor) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={conductorFilter.includes(conductor)}
+                      onChange={() => toggleConductorFilter(conductor)}
+                    />
+                    <span>{conductor}</span>
+                  </label>
+                ))}
+              </div>
+              {conductorFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
+                  Limpiar ({conductorFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => row.original.conductor_display || '-'
+    },
+    {
+      accessorKey: 'categoria_nombre',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Categoría {categoriaFilter.length > 0 && `(${categoriaFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${categoriaFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'categoria' ? null : 'categoria') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'categoria' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {categoriasUnicas.map(cat => (
+                  <label key={cat} className={`dt-column-filter-checkbox ${categoriaFilter.includes(cat) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={categoriaFilter.includes(cat)}
+                      onChange={() => toggleCategoriaFilter(cat)}
+                    />
+                    <span>{cat}</span>
+                  </label>
+                ))}
+              </div>
+              {categoriaFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setCategoriaFilter([])}>
+                  Limpiar ({categoriaFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => row.original.categoria_nombre || '-'
+    },
+    {
+      accessorKey: 'responsable',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Responsable {responsableFilter.length > 0 && `(${responsableFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${responsableFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'responsable' ? null : 'responsable') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'responsable' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {['tercero', 'conductor', 'compartida', 'sin_info'].map(resp => (
+                  <label key={resp} className={`dt-column-filter-checkbox ${responsableFilter.includes(resp) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={responsableFilter.includes(resp)}
+                      onChange={() => toggleResponsableFilter(resp)}
+                    />
+                    <span>{resp.charAt(0).toUpperCase() + resp.slice(1).replace('_', ' ')}</span>
+                  </label>
+                ))}
+              </div>
+              {responsableFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setResponsableFilter([])}>
+                  Limpiar ({responsableFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => {
+        const resp = row.original.responsable
+        const color = resp === 'tercero' ? 'green' : resp === 'conductor' ? 'red' : 'gray'
+        const labels: Record<string, string> = {
+          tercero: 'Tercero',
+          conductor: 'Conductor',
+          sin_info: 'Sin Info',
+          compartida: 'Compartida'
+        }
+        return <span className={`dt-badge dt-badge-${color}`}>{labels[resp] || resp}</span>
+      }
+    },
+    {
+      accessorKey: 'estado_nombre',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'estado' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {estadosUnicos.map(estado => (
+                  <label key={estado} className={`dt-column-filter-checkbox ${estadoFilter.includes(estado) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={estadoFilter.includes(estado)}
+                      onChange={() => toggleEstadoFilter(estado)}
+                    />
+                    <span>{estado}</span>
+                  </label>
+                ))}
+              </div>
+              {estadoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setEstadoFilter([])}>
+                  Limpiar ({estadoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => {
+        const color = row.original.estado_color || 'gray'
+        return <span className={`dt-badge dt-badge-${color}`}>{row.original.estado_nombre}</span>
+      }
+    },
+    {
+      accessorKey: 'presupuesto_real',
+      header: 'Presupuesto',
+      cell: ({ row }) => {
+        const val = row.original.presupuesto_real
+        return val ? <span style={{ fontWeight: 600, color: '#059669' }}>{formatMoney(val)}</span> : '-'
+      }
+    },
+    {
+      accessorKey: 'habilitado_circular',
+      header: 'Hab.',
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={row.original.habilitado_circular || false}
+          onChange={() => handleToggleHabilitado(row.original.id, !row.original.habilitado_circular)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      cell: ({ row }) => (
+        <div className="dt-actions">
+          <button className="dt-btn-action dt-btn-view" title="Ver" onClick={() => handleVerSiniestro(row.original)}>
+            <Eye size={14} />
+          </button>
+          <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarSiniestro(row.original)}>
+            <Edit2 size={14} />
+          </button>
+          {row.original.carpeta_drive_url && (
+            <a
+              href={row.original.carpeta_drive_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="dt-btn-action"
+              title="Drive"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <FolderOpen size={14} />
+            </a>
+          )}
+        </div>
+      )
     }
-    setPage(1)
-  }
+  ], [patenteFilter, patenteSearch, patentesFiltradas, conductorFilter, conductorSearch, conductoresFiltrados, categoriaFilter, categoriasUnicas, responsableFilter, estadoFilter, estadosUnicos, openColumnFilter])
 
   function handleNuevoSiniestro() {
     const estadoRegistrado = estados.find(e => e.codigo === 'REGISTRADO')
@@ -582,14 +851,14 @@ export function SiniestrosModule() {
         </button>
         <button
           className={`siniestros-tab ${activeTab === 'listado' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('listado'); setPage(1) }}
+          onClick={() => setActiveTab('listado')}
         >
           <FileText size={16} />
           Listado
         </button>
         <button
           className={`siniestros-tab ${activeTab === 'por_cobrar' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('por_cobrar'); setPage(1) }}
+          onClick={() => setActiveTab('por_cobrar')}
         >
           <DollarSign size={16} />
           Por Cobrar
@@ -597,7 +866,7 @@ export function SiniestrosModule() {
         </button>
         <button
           className={`siniestros-tab ${activeTab === 'historico' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('historico'); setPage(1) }}
+          onClick={() => setActiveTab('historico')}
         >
           <Clock size={16} />
           Histórico
@@ -637,239 +906,15 @@ export function SiniestrosModule() {
           loading={loading}
         />
       ) : (
-        <>
-          {/* Filtros */}
-          <div className="siniestros-filters">
-            <div className="filter-group">
-              <label className="filter-label">Estado:</label>
-              <select
-                className="filter-select"
-                value={filtroEstado}
-                onChange={(e) => { setFiltroEstado(e.target.value); setPage(1) }}
-              >
-                <option value="">Todos</option>
-                {estados.map(e => (
-                  <option key={e.id} value={e.id}>{e.nombre}</option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-group">
-              <label className="filter-label">Categoría:</label>
-              <select
-                className="filter-select"
-                value={filtroCategoria}
-                onChange={(e) => { setFiltroCategoria(e.target.value); setPage(1) }}
-              >
-                <option value="">Todas</option>
-                {categorias.map(c => (
-                  <option key={c.id} value={c.id}>{c.nombre}</option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-group">
-              <label className="filter-label">Responsable:</label>
-              <select
-                className="filter-select"
-                value={filtroResponsable}
-                onChange={(e) => { setFiltroResponsable(e.target.value); setPage(1) }}
-              >
-                <option value="">Todos</option>
-                <option value="tercero">Tercero</option>
-                <option value="conductor">Conductor</option>
-                <option value="compartida">Compartida</option>
-              </select>
-            </div>
-            <div className="search-wrapper">
-              <Search size={16} className="search-icon" />
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Buscar por patente, conductor..."
-                value={busqueda}
-                onChange={(e) => { setBusqueda(e.target.value); setPage(1) }}
-              />
-            </div>
-          </div>
-
-          {/* Tabla */}
-          <div className="siniestros-table-container">
-            <div className="table-toolbar">
-              <span className="record-count">
-                Mostrando {siniestrosPaginados.length} de {siniestrosFiltrados.length} registros
-              </span>
-            </div>
-            <div className="table-wrapper">
-              <table className="siniestros-table">
-                <thead>
-                  <tr>
-                    <th className="sortable" onClick={() => handleSort('fecha_siniestro')}>
-                      Fecha
-                      {sortColumn === 'fecha_siniestro' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </th>
-                    <th className="sortable" onClick={() => handleSort('vehiculo_patente')}>
-                      Patente
-                      {sortColumn === 'vehiculo_patente' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </th>
-                    <th className="sortable" onClick={() => handleSort('conductor_display')}>
-                      Conductor
-                      {sortColumn === 'conductor_display' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </th>
-                    <th className="sortable" onClick={() => handleSort('responsable')}>
-                      Responsable
-                      {sortColumn === 'responsable' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </th>
-                    <th className="sortable" onClick={() => handleSort('estado_nombre')}>
-                      Estado
-                      {sortColumn === 'estado_nombre' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </th>
-                    <th className="sortable" onClick={() => handleSort('presupuesto_real')}>
-                      Pres. Real
-                      {sortColumn === 'presupuesto_real' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </th>
-                    <th>Pres. Aprobado</th>
-                    <th>Total Rep. Pagada</th>
-                    <th>Habilitado</th>
-                    <th>Días</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    [...Array(5)].map((_, i) => (
-                      <tr key={i} className="loading-row">
-                        {[...Array(11)].map((_, j) => (
-                          <td key={j}><div className="skeleton-cell" style={{ width: '80%' }} /></td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : siniestrosPaginados.length === 0 ? (
-                    <tr>
-                      <td colSpan={11} className="empty-state">
-                        <Shield size={40} />
-                        <p>No hay siniestros para mostrar</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    siniestrosPaginados.map(s => (
-                      <tr key={s.id} onClick={() => handleVerSiniestro(s)}>
-                        <td>{formatDate(s.fecha_siniestro)}</td>
-                        <td>
-                          <span className="patente">{s.vehiculo_patente || '-'}</span>
-                        </td>
-                        <td className="text-truncate">{s.conductor_display || '-'}</td>
-                        <td>
-                          <span className={`responsable-${s.responsable}`}>
-                            {s.responsable === 'tercero' ? 'Tercero' :
-                             s.responsable === 'conductor' ? 'Conductor' :
-                             s.responsable === 'compartida' ? 'Compartida' : '-'}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`estado-badge estado-${s.estado_color}`}>
-                            {s.estado_nombre}
-                          </span>
-                        </td>
-                        <td className="monto">
-                          {formatMoney(s.presupuesto_real)}
-                        </td>
-                        <td className="monto">
-                          {formatMoney(s.presupuesto_aprobado_seguro)}
-                        </td>
-                        <td className="monto">
-                          {formatMoney((s as any).total_reparacion_pagada)}
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={(s as any).habilitado_circular !== false}
-                            onChange={(e) => handleToggleHabilitado(s.id, e.target.checked)}
-                            title={`Vehículo ${(s as any).habilitado_circular !== false ? 'habilitado' : 'no habilitado'} para circular`}
-                          />
-                        </td>
-                        <td className="dias">
-                          {s.dias_siniestrado || 0}
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <div className="table-actions">
-                            {s.carpeta_drive_url && (
-                              <a
-                                href={s.carpeta_drive_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn-icon btn-drive"
-                                title="Abrir carpeta en Drive"
-                              >
-                                <FolderOpen size={14} />
-                              </a>
-                            )}
-                            <button
-                              className="btn-icon"
-                              title="Ver detalle"
-                              onClick={() => handleVerSiniestro(s)}
-                            >
-                              <Eye size={14} />
-                            </button>
-                            <button
-                              className="btn-icon"
-                              title="Editar"
-                              onClick={() => handleEditarSiniestro(s)}
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Paginación */}
-            {siniestrosFiltrados.length > 0 && (
-              <div className="table-footer">
-                <span className="pagination-info">
-                  Mostrando {((page - 1) * pageSize) + 1} a {Math.min(page * pageSize, siniestrosFiltrados.length)} de {siniestrosFiltrados.length} registros
-                </span>
-                <div className="pagination">
-                  <button onClick={() => setPage(1)} disabled={page === 1}>«</button>
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="page-info">Pagina {page} de {totalPages || 1}</span>
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
-                    <ChevronRight size={14} />
-                  </button>
-                  <button onClick={() => setPage(totalPages)} disabled={page >= totalPages}>»</button>
-                  <div className="page-size">
-                    <select
-                      value={pageSize}
-                      onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
-                    <span>por pagina</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
+        <DataTable
+          data={siniestrosFiltrados}
+          columns={siniestrosColumns}
+          loading={loading}
+          searchPlaceholder="Buscar por patente, conductor..."
+          emptyIcon={<Shield size={40} />}
+          emptyTitle="No hay siniestros para mostrar"
+          emptyDescription="Los siniestros aparecerán aquí cuando se registren."
+        />
       )}
 
       {/* Modal */}

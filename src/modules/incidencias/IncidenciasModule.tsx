@@ -5,14 +5,9 @@ import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
 import {
   Plus,
-  Search,
   Eye,
   Edit2,
   FileText,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  ChevronDown,
   X,
   Shield,
   Clock,
@@ -21,9 +16,12 @@ import {
   XCircle,
   Users,
   Car,
-  Download
+  Download,
+  Filter
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { type ColumnDef } from '@tanstack/react-table'
+import { DataTable } from '../../components/ui/DataTable'
 import type {
   IncidenciaCompleta,
   IncidenciaEstado,
@@ -51,24 +49,24 @@ export function IncidenciasModule() {
   const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
 
-  // Filtros incidencias
-  const [filtroEstado, setFiltroEstado] = useState('')
-  const [filtroArea, setFiltroArea] = useState('')
-  const [filtroTurno, setFiltroTurno] = useState('')
-  const [busqueda, setBusqueda] = useState('')
+  // Filtros por columna tipo Excel - Incidencias
+  const [patenteFilter, setPatenteFilter] = useState<string[]>([])
+  const [patenteSearch, setPatenteSearch] = useState('')
+  const [conductorFilter, setConductorFilter] = useState<string[]>([])
+  const [conductorSearch, setConductorSearch] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+  const [turnoFilter, setTurnoFilter] = useState<string[]>([])
+  const [areaFilter, setAreaFilter] = useState<string[]>([])
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
-  // Filtros penalidades
-  const [filtroTipo, setFiltroTipo] = useState('')
-  const [filtroAplicado, setFiltroAplicado] = useState('')
-
-  // Paginación
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
-
-  // Ordenamiento
-  type SortColumn = 'fecha' | 'patente_display' | 'conductor_display' | 'estado_nombre' | 'area' | 'monto'
-  const [sortColumn, setSortColumn] = useState<SortColumn>('fecha')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  // Filtros por columna tipo Excel - Penalidades
+  const [penPatenteFilter, setPenPatenteFilter] = useState<string[]>([])
+  const [penPatenteSearch, setPenPatenteSearch] = useState('')
+  const [penConductorFilter, setPenConductorFilter] = useState<string[]>([])
+  const [penConductorSearch, setPenConductorSearch] = useState('')
+  const [penTipoFilter, setPenTipoFilter] = useState<string[]>([])
+  const [penAplicadoFilter, setPenAplicadoFilter] = useState<string[]>([])
+  const [openPenColumnFilter, setOpenPenColumnFilter] = useState<string | null>(null)
 
   // Modal
   const [showModal, setShowModal] = useState(false)
@@ -149,50 +147,126 @@ export function IncidenciasModule() {
     }
   }
 
-  // Filtrar incidencias
+  // Cerrar dropdown de filtro al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (openColumnFilter) setOpenColumnFilter(null)
+      if (openPenColumnFilter) setOpenPenColumnFilter(null)
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [openColumnFilter, openPenColumnFilter])
+
+  // Listas de valores únicos para filtros - Incidencias
+  const patentesUnicas = useMemo(() =>
+    [...new Set(incidencias.map(i => i.patente_display).filter(Boolean))].sort() as string[]
+  , [incidencias])
+
+  const conductoresUnicos = useMemo(() =>
+    [...new Set(incidencias.map(i => i.conductor_display).filter(Boolean))].sort() as string[]
+  , [incidencias])
+
+  const estadosUnicos = useMemo(() =>
+    [...new Set(incidencias.map(i => i.estado_nombre).filter(Boolean))].sort() as string[]
+  , [incidencias])
+
+  const turnosUnicos = useMemo(() =>
+    [...new Set(incidencias.map(i => i.turno).filter(Boolean))].sort() as string[]
+  , [incidencias])
+
+  const areasUnicas = useMemo(() =>
+    [...new Set(incidencias.map(i => i.area).filter(Boolean))].sort() as string[]
+  , [incidencias])
+
+  // Listas filtradas por búsqueda
+  const patentesFiltradas = useMemo(() => {
+    if (!patenteSearch) return patentesUnicas
+    return patentesUnicas.filter(p => p.toLowerCase().includes(patenteSearch.toLowerCase()))
+  }, [patentesUnicas, patenteSearch])
+
+  const conductoresFiltrados = useMemo(() => {
+    if (!conductorSearch) return conductoresUnicos
+    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
+  }, [conductoresUnicos, conductorSearch])
+
+  // Listas para penalidades
+  const penPatentesUnicas = useMemo(() =>
+    [...new Set(penalidades.map(p => p.patente_display).filter(Boolean))].sort() as string[]
+  , [penalidades])
+
+  const penConductoresUnicos = useMemo(() =>
+    [...new Set(penalidades.map(p => p.conductor_display).filter(Boolean))].sort() as string[]
+  , [penalidades])
+
+  const penTiposUnicos = useMemo(() =>
+    [...new Set(penalidades.map(p => p.tipo_nombre).filter(Boolean))].sort() as string[]
+  , [penalidades])
+
+  const penPatentesFiltradas = useMemo(() => {
+    if (!penPatenteSearch) return penPatentesUnicas
+    return penPatentesUnicas.filter(p => p.toLowerCase().includes(penPatenteSearch.toLowerCase()))
+  }, [penPatentesUnicas, penPatenteSearch])
+
+  const penConductoresFiltrados = useMemo(() => {
+    if (!penConductorSearch) return penConductoresUnicos
+    return penConductoresUnicos.filter(c => c.toLowerCase().includes(penConductorSearch.toLowerCase()))
+  }, [penConductoresUnicos, penConductorSearch])
+
+  // Toggle functions para multiselect
+  const togglePatenteFilter = (val: string) => setPatenteFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleTurnoFilter = (val: string) => setTurnoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleAreaFilter = (val: string) => setAreaFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+
+  // Toggle functions penalidades
+  const togglePenPatenteFilter = (val: string) => setPenPatenteFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const togglePenConductorFilter = (val: string) => setPenConductorFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const togglePenTipoFilter = (val: string) => setPenTipoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const togglePenAplicadoFilter = (val: string) => setPenAplicadoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+
+  // Filtrar incidencias con filtros tipo Excel
   const incidenciasFiltradas = useMemo(() => {
     let filtered = [...incidencias]
 
-    if (filtroEstado) {
-      filtered = filtered.filter(i => i.estado_id === filtroEstado)
+    if (patenteFilter.length > 0) {
+      filtered = filtered.filter(i => patenteFilter.includes(i.patente_display || ''))
     }
-    if (filtroArea) {
-      filtered = filtered.filter(i => i.area === filtroArea)
+    if (conductorFilter.length > 0) {
+      filtered = filtered.filter(i => conductorFilter.includes(i.conductor_display || ''))
     }
-    if (filtroTurno) {
-      filtered = filtered.filter(i => i.turno === filtroTurno)
+    if (estadoFilter.length > 0) {
+      filtered = filtered.filter(i => estadoFilter.includes(i.estado_nombre || ''))
     }
-    if (busqueda.trim()) {
-      const term = busqueda.toLowerCase()
-      filtered = filtered.filter(i =>
-        i.patente_display?.toLowerCase().includes(term) ||
-        i.conductor_display?.toLowerCase().includes(term) ||
-        i.descripcion?.toLowerCase().includes(term)
-      )
+    if (turnoFilter.length > 0) {
+      filtered = filtered.filter(i => turnoFilter.includes(i.turno || ''))
     }
-
-    // Ordenar
-    filtered.sort((a, b) => {
-      let aVal: any = sortColumn === 'fecha' ? a.fecha : a[sortColumn as keyof IncidenciaCompleta]
-      let bVal: any = sortColumn === 'fecha' ? b.fecha : b[sortColumn as keyof IncidenciaCompleta]
-
-      if (aVal === null || aVal === undefined) aVal = ''
-      if (bVal === null || bVal === undefined) bVal = ''
-
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        aVal = aVal.toLowerCase()
-        bVal = bVal.toLowerCase()
-      }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
-      return 0
-    })
+    if (areaFilter.length > 0) {
+      filtered = filtered.filter(i => areaFilter.includes(i.area || ''))
+    }
 
     return filtered
-  }, [incidencias, filtroEstado, filtroArea, filtroTurno, busqueda, sortColumn, sortDirection])
+  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter])
 
-  // Filtrar penalidades
+  // Filtrar penalidades con filtros tipo Excel
   const penalidadesFiltradas = useMemo(() => {
     let filtered = [...penalidades]
 
@@ -200,39 +274,455 @@ export function IncidenciasModule() {
       filtered = filtered.filter(p => !p.aplicado)
     }
 
-    if (filtroTipo) {
-      filtered = filtered.filter(p => p.tipo_penalidad_id === filtroTipo)
+    if (penPatenteFilter.length > 0) {
+      filtered = filtered.filter(p => penPatenteFilter.includes(p.patente_display || ''))
     }
-    if (filtroAplicado !== '') {
-      filtered = filtered.filter(p => p.aplicado === (filtroAplicado === 'true'))
+    if (penConductorFilter.length > 0) {
+      filtered = filtered.filter(p => penConductorFilter.includes(p.conductor_display || ''))
     }
-    if (busqueda.trim()) {
-      const term = busqueda.toLowerCase()
-      filtered = filtered.filter(p =>
-        p.patente_display?.toLowerCase().includes(term) ||
-        p.conductor_display?.toLowerCase().includes(term) ||
-        p.observaciones?.toLowerCase().includes(term)
+    if (penTipoFilter.length > 0) {
+      filtered = filtered.filter(p => penTipoFilter.includes(p.tipo_nombre || ''))
+    }
+    if (penAplicadoFilter.length > 0) {
+      filtered = filtered.filter(p => {
+        const aplicadoStr = p.aplicado ? 'Sí' : 'No'
+        return penAplicadoFilter.includes(aplicadoStr)
+      })
+    }
+
+    return filtered
+  }, [penalidades, activeTab, penPatenteFilter, penConductorFilter, penTipoFilter, penAplicadoFilter])
+
+  // Columnas para tabla de incidencias
+  const incidenciasColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => [
+    {
+      accessorKey: 'fecha',
+      header: 'Fecha',
+      cell: ({ row }) => formatDate(row.original.fecha)
+    },
+    {
+      accessorKey: 'semana',
+      header: 'Sem',
+      cell: ({ row }) => row.original.semana || '-'
+    },
+    {
+      accessorKey: 'patente_display',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Patente {patenteFilter.length > 0 && `(${patenteFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${patenteFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'patente' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar patente..."
+                value={patenteSearch}
+                onChange={(e) => setPatenteSearch(e.target.value)}
+              />
+              <div className="dt-excel-filter-list">
+                {patentesFiltradas.map(patente => (
+                  <label key={patente} className={`dt-column-filter-checkbox ${patenteFilter.includes(patente) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={patenteFilter.includes(patente)}
+                      onChange={() => togglePatenteFilter(patente)}
+                    />
+                    <span>{patente}</span>
+                  </label>
+                ))}
+              </div>
+              {patenteFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setPatenteFilter([]); setPatenteSearch('') }}>
+                  Limpiar ({patenteFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => <span className="dt-badge dt-badge-gray">{row.original.patente_display || '-'}</span>
+    },
+    {
+      accessorKey: 'conductor_display',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'conductor' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar conductor..."
+                value={conductorSearch}
+                onChange={(e) => setConductorSearch(e.target.value)}
+              />
+              <div className="dt-excel-filter-list">
+                {conductoresFiltrados.map(conductor => (
+                  <label key={conductor} className={`dt-column-filter-checkbox ${conductorFilter.includes(conductor) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={conductorFilter.includes(conductor)}
+                      onChange={() => toggleConductorFilter(conductor)}
+                    />
+                    <span>{conductor}</span>
+                  </label>
+                ))}
+              </div>
+              {conductorFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
+                  Limpiar ({conductorFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => row.original.conductor_display || '-'
+    },
+    {
+      accessorKey: 'turno',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Tipo {turnoFilter.length > 0 && `(${turnoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${turnoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'turno' ? null : 'turno') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'turno' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {turnosUnicos.map(turno => (
+                  <label key={turno} className={`dt-column-filter-checkbox ${turnoFilter.includes(turno) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={turnoFilter.includes(turno)}
+                      onChange={() => toggleTurnoFilter(turno)}
+                    />
+                    <span>{turno}</span>
+                  </label>
+                ))}
+              </div>
+              {turnoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setTurnoFilter([])}>
+                  Limpiar ({turnoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => {
+        const turno = row.original.turno
+        if (!turno) return '-'
+        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : 'gray'
+        return <span className={`dt-badge dt-badge-${color}`}>{turno}</span>
+      }
+    },
+    {
+      accessorKey: 'area',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Área {areaFilter.length > 0 && `(${areaFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${areaFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'area' ? null : 'area') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'area' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {areasUnicas.map(area => (
+                  <label key={area} className={`dt-column-filter-checkbox ${areaFilter.includes(area) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={areaFilter.includes(area)}
+                      onChange={() => toggleAreaFilter(area)}
+                    />
+                    <span>{area}</span>
+                  </label>
+                ))}
+              </div>
+              {areaFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setAreaFilter([])}>
+                  Limpiar ({areaFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => row.original.area || '-'
+    },
+    {
+      accessorKey: 'estado_nombre',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'estado' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {estadosUnicos.map(estado => (
+                  <label key={estado} className={`dt-column-filter-checkbox ${estadoFilter.includes(estado) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={estadoFilter.includes(estado)}
+                      onChange={() => toggleEstadoFilter(estado)}
+                    />
+                    <span>{estado}</span>
+                  </label>
+                ))}
+              </div>
+              {estadoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setEstadoFilter([])}>
+                  Limpiar ({estadoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => {
+        const color = row.original.estado_color || 'gray'
+        return <span className={`dt-badge dt-badge-${color}`}>{row.original.estado_nombre}</span>
+      }
+    },
+    {
+      accessorKey: 'registrado_por',
+      header: 'Responsable',
+      cell: ({ row }) => row.original.registrado_por || '-'
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      cell: ({ row }) => (
+        <div className="dt-actions">
+          <button className="dt-btn-action dt-btn-view" title="Ver" onClick={() => handleVerIncidencia(row.original)}>
+            <Eye size={14} />
+          </button>
+          <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarIncidencia(row.original)}>
+            <Edit2 size={14} />
+          </button>
+        </div>
       )
     }
+  ], [patenteFilter, patenteSearch, patentesFiltradas, conductorFilter, conductorSearch, conductoresFiltrados, turnoFilter, turnosUnicos, areaFilter, areasUnicas, estadoFilter, estadosUnicos, openColumnFilter])
 
-    return filtered.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-  }, [penalidades, activeTab, filtroTipo, filtroAplicado, busqueda])
-
-  // Paginación
-  const currentData = activeTab === 'incidencias' ? incidenciasFiltradas : penalidadesFiltradas
-  const totalPages = Math.ceil(currentData.length / pageSize)
-  const paginatedData = currentData.slice((page - 1) * pageSize, page * pageSize)
-
-  // Handlers
-  function handleSort(column: SortColumn) {
-    if (sortColumn === column) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortColumn(column)
-      setSortDirection('asc')
+  // Columnas para tabla de penalidades
+  const penalidadesColumns = useMemo<ColumnDef<PenalidadCompleta>[]>(() => [
+    {
+      accessorKey: 'fecha',
+      header: 'Fecha',
+      cell: ({ row }) => formatDate(row.original.fecha)
+    },
+    {
+      accessorKey: 'semana',
+      header: 'Sem',
+      cell: ({ row }) => row.original.semana || '-'
+    },
+    {
+      accessorKey: 'patente_display',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Patente {penPatenteFilter.length > 0 && `(${penPatenteFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${penPatenteFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenPenColumnFilter(openPenColumnFilter === 'patente' ? null : 'patente') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openPenColumnFilter === 'patente' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar patente..."
+                value={penPatenteSearch}
+                onChange={(e) => setPenPatenteSearch(e.target.value)}
+              />
+              <div className="dt-excel-filter-list">
+                {penPatentesFiltradas.map(patente => (
+                  <label key={patente} className={`dt-column-filter-checkbox ${penPatenteFilter.includes(patente) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={penPatenteFilter.includes(patente)}
+                      onChange={() => togglePenPatenteFilter(patente)}
+                    />
+                    <span>{patente}</span>
+                  </label>
+                ))}
+              </div>
+              {penPatenteFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setPenPatenteFilter([]); setPenPatenteSearch('') }}>
+                  Limpiar ({penPatenteFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => <span className="dt-badge dt-badge-gray">{row.original.patente_display || '-'}</span>
+    },
+    {
+      accessorKey: 'conductor_display',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Conductor {penConductorFilter.length > 0 && `(${penConductorFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${penConductorFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenPenColumnFilter(openPenColumnFilter === 'conductor' ? null : 'conductor') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openPenColumnFilter === 'conductor' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar conductor..."
+                value={penConductorSearch}
+                onChange={(e) => setPenConductorSearch(e.target.value)}
+              />
+              <div className="dt-excel-filter-list">
+                {penConductoresFiltrados.map(conductor => (
+                  <label key={conductor} className={`dt-column-filter-checkbox ${penConductorFilter.includes(conductor) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={penConductorFilter.includes(conductor)}
+                      onChange={() => togglePenConductorFilter(conductor)}
+                    />
+                    <span>{conductor}</span>
+                  </label>
+                ))}
+              </div>
+              {penConductorFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setPenConductorFilter([]); setPenConductorSearch('') }}>
+                  Limpiar ({penConductorFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => row.original.conductor_display || '-'
+    },
+    {
+      accessorKey: 'tipo_nombre',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Tipo {penTipoFilter.length > 0 && `(${penTipoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${penTipoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenPenColumnFilter(openPenColumnFilter === 'tipo' ? null : 'tipo') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openPenColumnFilter === 'tipo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {penTiposUnicos.map(tipo => (
+                  <label key={tipo} className={`dt-column-filter-checkbox ${penTipoFilter.includes(tipo) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={penTipoFilter.includes(tipo)}
+                      onChange={() => togglePenTipoFilter(tipo)}
+                    />
+                    <span>{tipo}</span>
+                  </label>
+                ))}
+              </div>
+              {penTipoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setPenTipoFilter([])}>
+                  Limpiar ({penTipoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => row.original.tipo_nombre || '-'
+    },
+    {
+      accessorKey: 'monto',
+      header: 'Monto',
+      cell: ({ row }) => <span style={{ fontWeight: 600, color: '#F59E0B' }}>{formatMoney(row.original.monto)}</span>
+    },
+    {
+      accessorKey: 'aplicado',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Aplicado {penAplicadoFilter.length > 0 && `(${penAplicadoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${penAplicadoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenPenColumnFilter(openPenColumnFilter === 'aplicado' ? null : 'aplicado') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openPenColumnFilter === 'aplicado' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {['Sí', 'No'].map(val => (
+                  <label key={val} className={`dt-column-filter-checkbox ${penAplicadoFilter.includes(val) ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={penAplicadoFilter.includes(val)}
+                      onChange={() => togglePenAplicadoFilter(val)}
+                    />
+                    <span>{val}</span>
+                  </label>
+                ))}
+              </div>
+              {penAplicadoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setPenAplicadoFilter([])}>
+                  Limpiar ({penAplicadoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+      cell: ({ row }) => (
+        <span className={`dt-badge ${row.original.aplicado ? 'dt-badge-green' : 'dt-badge-red'}`}>
+          {row.original.aplicado ? <><CheckCircle size={12} /> Sí</> : <><XCircle size={12} /> No</>}
+        </span>
+      )
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      cell: ({ row }) => (
+        <div className="dt-actions">
+          {!row.original.aplicado && (
+            <button className="dt-btn-action dt-btn-view" title="Marcar como aplicado" onClick={() => handleMarcarAplicado(row.original)}>
+              <CheckCircle size={14} />
+            </button>
+          )}
+          <button className="dt-btn-action dt-btn-view" title="Ver" onClick={() => handleVerPenalidad(row.original)}>
+            <Eye size={14} />
+          </button>
+          <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarPenalidad(row.original)}>
+            <Edit2 size={14} />
+          </button>
+        </div>
+      )
     }
-    setPage(1)
-  }
+  ], [penPatenteFilter, penPatenteSearch, penPatentesFiltradas, penConductorFilter, penConductorSearch, penConductoresFiltrados, penTipoFilter, penTiposUnicos, penAplicadoFilter, openPenColumnFilter])
 
   function handleNuevaIncidencia() {
     const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')
@@ -532,9 +1022,6 @@ export function IncidenciasModule() {
     XLSX.writeFile(wb, `Penalidades_${tabName}_${fecha}.xlsx`)
   }
 
-  // Areas únicas para filtro
-  const areasUnicas = [...new Set(incidencias.map(i => i.area).filter(Boolean))]
-
   // Contadores para tabs
   const countPorAplicar = penalidades.filter(p => !p.aplicado).length
 
@@ -543,27 +1030,27 @@ export function IncidenciasModule() {
       {/* Stats rápidos - Arriba de todo (igual que Siniestros) */}
       <div className="incidencias-stats">
         <div className="stats-grid">
-          <button className={`stat-card${activeTab === 'incidencias' ? ' active' : ''}`} onClick={() => { setActiveTab('incidencias'); setPage(1) }}>
+          <div className="stat-card">
             <FileText size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{incidencias.length}</span>
               <span className="stat-label">Total</span>
             </div>
-          </button>
-          <button className="stat-card" onClick={() => { setActiveTab('incidencias'); setPage(1) }}>
+          </div>
+          <div className="stat-card">
             <Car size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{new Set(incidencias.map(i => i.patente_display)).size}</span>
               <span className="stat-label">Vehículos</span>
             </div>
-          </button>
-          <button className="stat-card" onClick={() => { setActiveTab('incidencias'); setPage(1) }}>
+          </div>
+          <div className="stat-card">
             <Users size={20} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{new Set(incidencias.map(i => i.conductor_display)).size}</span>
               <span className="stat-label">Conductores</span>
             </div>
-          </button>
+          </div>
         </div>
       </div>
 
@@ -572,7 +1059,7 @@ export function IncidenciasModule() {
         <div className="incidencias-tabs">
           <button
             className={`incidencias-tab ${activeTab === 'incidencias' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('incidencias'); setPage(1) }}
+            onClick={() => setActiveTab('incidencias')}
           >
             <FileText size={16} />
             Listado
@@ -580,14 +1067,14 @@ export function IncidenciasModule() {
           </button>
           <button
             className={`incidencias-tab ${activeTab === 'penalidades' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('penalidades'); setPage(1) }}
+            onClick={() => setActiveTab('penalidades')}
           >
             <DollarSign size={16} />
             Cobros&Descuentos
           </button>
           <button
             className={`incidencias-tab ${activeTab === 'por_aplicar' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('por_aplicar'); setPage(1) }}
+            onClick={() => setActiveTab('por_aplicar')}
           >
             <Clock size={16} />
             Por Aplicar
@@ -617,161 +1104,18 @@ export function IncidenciasModule() {
       {/* Incidencias Tab */}
       {activeTab === 'incidencias' && (
         <>
-          {/* Filtros */}
-          <div className="incidencias-filters">
-            <div className="filter-group">
-              <span className="filter-label">Estado:</span>
-              <select className="filter-select" value={filtroEstado} onChange={e => { setFiltroEstado(e.target.value); setPage(1) }}>
-                <option value="">Todos</option>
-                {estados.map(e => (
-                  <option key={e.id} value={e.id}>{e.nombre}</option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-group">
-              <span className="filter-label">Área:</span>
-              <select className="filter-select" value={filtroArea} onChange={e => { setFiltroArea(e.target.value); setPage(1) }}>
-                <option value="">Todas</option>
-                {areasUnicas.map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-group">
-              <span className="filter-label">Tipo:</span>
-              <select className="filter-select" value={filtroTurno} onChange={e => { setFiltroTurno(e.target.value); setPage(1) }}>
-                <option value="">Todos</option>
-                <option value="Diurno">Diurno</option>
-                <option value="Nocturno">Nocturno</option>
-                <option value="A cargo">A cargo</option>
-              </select>
-            </div>
-            <div className="search-wrapper">
-              <Search size={16} />
-              <input
-                type="text"
-                placeholder="Buscar por patente, conductor..."
-                value={busqueda}
-                onChange={e => { setBusqueda(e.target.value); setPage(1) }}
-              />
-            </div>
-          </div>
-
-          {/* Tabla */}
-          <div className="incidencias-table-container">
-            <div className="table-toolbar">
-              <span className="record-count">
-                Mostrando {paginatedData.length} de {incidenciasFiltradas.length} registros
-              </span>
-            </div>
-            <div className="table-wrapper">
-              <table className="incidencias-table">
-                <thead>
-                  <tr>
-                    <th className="sortable" onClick={() => handleSort('fecha')}>
-                      Fecha
-                      {sortColumn === 'fecha' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-                    </th>
-                    <th>Sem</th>
-                    <th className="sortable" onClick={() => handleSort('patente_display')}>
-                      Patente
-                      {sortColumn === 'patente_display' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-                    </th>
-                    <th className="sortable" onClick={() => handleSort('conductor_display')}>
-                      Conductor
-                      {sortColumn === 'conductor_display' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-                    </th>
-                    <th>Tipo</th>
-                    <th className="sortable" onClick={() => handleSort('area')}>
-                      Área
-                      {sortColumn === 'area' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-                    </th>
-                    <th className="sortable" onClick={() => handleSort('estado_nombre')}>
-                      Estado
-                      {sortColumn === 'estado_nombre' && (sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
-                    </th>
-                    <th>Responsable</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    [...Array(5)].map((_, i) => (
-                      <tr key={i} className="loading-row">
-                        {[...Array(9)].map((_, j) => (
-                          <td key={j}><div className="skeleton" style={{ width: `${60 + Math.random() * 40}%` }} /></td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : paginatedData.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="empty-state">
-                        <Shield size={40} />
-                        <p>No hay incidencias para mostrar</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    (paginatedData as IncidenciaCompleta[]).map(i => (
-                      <tr key={i.id} onClick={() => handleVerIncidencia(i)}>
-                        <td>{formatDate(i.fecha)}</td>
-                        <td className="text-center">{i.semana || '-'}</td>
-                        <td><span className="patente">{i.patente_display || '-'}</span></td>
-                        <td className="text-truncate">{i.conductor_display || '-'}</td>
-                        <td>
-                          {i.turno && (
-                            <span className={`turno-badge turno-${i.turno.toLowerCase()}`}>{i.turno}</span>
-                          )}
-                        </td>
-                        <td><span className="area-badge">{i.area || '-'}</span></td>
-                        <td>
-                          <span className={`estado-badge estado-${i.estado_color}`}>{i.estado_nombre}</span>
-                        </td>
-                        <td className="text-truncate">{i.registrado_por || '-'}</td>
-                        <td onClick={e => e.stopPropagation()}>
-                          <div className="table-actions">
-                            <button className="btn-icon" title="Ver" onClick={() => handleVerIncidencia(i)}>
-                              <Eye size={14} />
-                            </button>
-                            <button className="btn-icon" title="Editar" onClick={() => handleEditarIncidencia(i)}>
-                              <Edit2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Paginación */}
-            {incidenciasFiltradas.length > 0 && (
-              <div className="table-footer">
-                <span className="pagination-info">
-                  Mostrando {((page - 1) * pageSize) + 1} a {Math.min(page * pageSize, incidenciasFiltradas.length)} de {incidenciasFiltradas.length} registros
-                </span>
-                <div className="pagination">
-                  <button className="pagination-btn" disabled={page <= 1} onClick={() => setPage(1)}>«</button>
-                  <button className="pagination-btn" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="page-info">Pagina {page} de {totalPages}</span>
-                  <button className="pagination-btn" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
-                    <ChevronRight size={14} />
-                  </button>
-                  <button className="pagination-btn" disabled={page >= totalPages} onClick={() => setPage(totalPages)}>»</button>
-                  <div className="page-size">
-                    <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}>
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                    <span>por pagina</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Tabla con DataTable */}
+          <DataTable
+            data={incidenciasFiltradas}
+            columns={incidenciasColumns}
+            loading={loading}
+            searchPlaceholder="Buscar por patente, conductor..."
+            emptyIcon={<Shield size={48} />}
+            emptyTitle="Sin incidencias"
+            emptyDescription="No hay incidencias registradas"
+            pageSize={20}
+            pageSizeOptions={[10, 20, 50, 100]}
+          />
         </>
       )}
 
@@ -784,204 +1128,83 @@ export function IncidenciasModule() {
               {activeTab === 'por_aplicar' ? (
                 // Tab Por Aplicar - solo mostrar pendientes
                 <>
-                  <button className="stat-card active" onClick={() => { setActiveTab('por_aplicar'); setPage(1) }}>
+                  <div className="stat-card active">
                     <Clock size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{penalidadesFiltradas.length}</span>
                       <span className="stat-label">Pendientes</span>
                     </div>
-                  </button>
-                  <button className="stat-card" onClick={() => { setActiveTab('por_aplicar'); setPage(1) }}>
+                  </div>
+                  <div className="stat-card">
                     <DollarSign size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
                       <span className="stat-label">$ Pendiente</span>
                     </div>
-                  </button>
+                  </div>
                 </>
               ) : (
                 // Tab Cobros&Descuentos - mostrar pendientes, aplicadas y totales
                 <>
-                  <button className={`stat-card${filtroAplicado === 'false' ? ' active' : ''}`} onClick={() => { setFiltroAplicado('false'); setPage(1) }}>
+                  <div className="stat-card">
                     <Clock size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{penalidades.filter(p => !p.aplicado).length}</span>
                       <span className="stat-label">Pendientes</span>
                     </div>
-                  </button>
-                  <button className="stat-card" onClick={() => { setFiltroAplicado('false'); setPage(1) }}>
+                  </div>
+                  <div className="stat-card">
                     <DollarSign size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{formatMoney(penalidades.filter(p => !p.aplicado).reduce((s, p) => s + (p.monto || 0), 0))}</span>
                       <span className="stat-label">$ Pendiente</span>
                     </div>
-                  </button>
-                  <button className={`stat-card${filtroAplicado === 'true' ? ' active' : ''}`} onClick={() => { setFiltroAplicado('true'); setPage(1) }}>
+                  </div>
+                  <div className="stat-card">
                     <CheckCircle size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{penalidades.filter(p => p.aplicado).length}</span>
                       <span className="stat-label">Aplicadas</span>
                     </div>
-                  </button>
-                  <button className="stat-card" onClick={() => { setFiltroAplicado('true'); setPage(1) }}>
+                  </div>
+                  <div className="stat-card">
                     <DollarSign size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{formatMoney(penalidades.filter(p => p.aplicado).reduce((s, p) => s + (p.monto || 0), 0))}</span>
                       <span className="stat-label">$ Aplicado</span>
                     </div>
-                  </button>
-                  <button className={`stat-card${filtroAplicado === '' ? ' active' : ''}`} onClick={() => { setFiltroAplicado(''); setPage(1) }}>
+                  </div>
+                  <div className="stat-card">
                     <FileText size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{penalidades.length}</span>
                       <span className="stat-label">Total</span>
                     </div>
-                  </button>
-                  <button className="stat-card" onClick={() => { setFiltroAplicado(''); setPage(1) }}>
+                  </div>
+                  <div className="stat-card">
                     <DollarSign size={20} className="stat-icon" />
                     <div className="stat-content">
                       <span className="stat-value">{formatMoney(penalidades.reduce((s, p) => s + (p.monto || 0), 0))}</span>
                       <span className="stat-label">$ Total</span>
                     </div>
-                  </button>
+                  </div>
                 </>
               )}
             </div>
           </div>
 
-          {/* Filtros */}
-          {activeTab === 'penalidades' && (
-            <div className="incidencias-filters">
-              <div className="filter-group">
-                <span className="filter-label">Tipo:</span>
-                <select className="filter-select" value={filtroTipo} onChange={e => { setFiltroTipo(e.target.value); setPage(1) }}>
-                  <option value="">Todos</option>
-                  {tiposPenalidad.map(t => (
-                    <option key={t.id} value={t.id}>{t.nombre}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="filter-group">
-                <span className="filter-label">Estado:</span>
-                <select className="filter-select" value={filtroAplicado} onChange={e => { setFiltroAplicado(e.target.value); setPage(1) }}>
-                  <option value="">Todos</option>
-                  <option value="true">Aplicadas</option>
-                  <option value="false">Pendientes</option>
-                </select>
-              </div>
-              <div className="search-wrapper">
-                <Search size={16} />
-                <input
-                  type="text"
-                  placeholder="Buscar por patente, conductor..."
-                  value={busqueda}
-                  onChange={e => { setBusqueda(e.target.value); setPage(1) }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Tabla Penalidades */}
-          <div className="incidencias-table-container">
-            <div className="table-toolbar">
-              <span className="record-count">
-                Mostrando {Math.min(pageSize, penalidadesFiltradas.length)} de {penalidadesFiltradas.length} registros
-              </span>
-            </div>
-            <div className="table-wrapper">
-              <table className="incidencias-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Sem</th>
-                    <th>Patente</th>
-                    <th>Conductor</th>
-                    <th>Tipo</th>
-                    <th>Monto</th>
-                    <th>Aplicado</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    [...Array(5)].map((_, i) => (
-                      <tr key={i} className="loading-row">
-                        {[...Array(8)].map((_, j) => (
-                          <td key={j}><div className="skeleton" style={{ width: `${60 + Math.random() * 40}%` }} /></td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : penalidadesFiltradas.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="empty-state">
-                        <Shield size={40} />
-                        <p>No hay penalidades para mostrar</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    penalidadesFiltradas.slice((page - 1) * pageSize, page * pageSize).map(p => (
-                      <tr key={p.id} onClick={() => handleVerPenalidad(p)}>
-                        <td>{formatDate(p.fecha)}</td>
-                        <td className="text-center">{p.semana || '-'}</td>
-                        <td><span className="patente">{p.patente_display || '-'}</span></td>
-                        <td className="text-truncate">{p.conductor_display || '-'}</td>
-                        <td>{p.tipo_nombre || '-'}</td>
-                        <td className="monto">{formatMoney(p.monto)}</td>
-                        <td>
-                          <span className={`aplicado-badge ${p.aplicado ? 'aplicado-si' : 'aplicado-no'}`}>
-                            {p.aplicado ? <><CheckCircle size={12} /> Sí</> : <><XCircle size={12} /> No</>}
-                          </span>
-                        </td>
-                        <td onClick={e => e.stopPropagation()}>
-                          <div className="table-actions">
-                            {!p.aplicado && (
-                              <button className="btn-icon" title="Marcar como aplicado" onClick={() => handleMarcarAplicado(p)}>
-                                <CheckCircle size={14} />
-                              </button>
-                            )}
-                            <button className="btn-icon" title="Ver" onClick={() => handleVerPenalidad(p)}>
-                              <Eye size={14} />
-                            </button>
-                            <button className="btn-icon" title="Editar" onClick={() => handleEditarPenalidad(p)}>
-                              <Edit2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Paginación */}
-            {penalidadesFiltradas.length > 0 && (
-              <div className="table-footer">
-                <span className="pagination-info">
-                  Mostrando {((page - 1) * pageSize) + 1} a {Math.min(page * pageSize, penalidadesFiltradas.length)} de {penalidadesFiltradas.length} registros
-                </span>
-                <div className="pagination">
-                  <button className="pagination-btn" disabled={page <= 1} onClick={() => setPage(1)}>«</button>
-                  <button className="pagination-btn" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="page-info">Pagina {page} de {Math.ceil(penalidadesFiltradas.length / pageSize)}</span>
-                  <button className="pagination-btn" disabled={page >= Math.ceil(penalidadesFiltradas.length / pageSize)} onClick={() => setPage(p => p + 1)}>
-                    <ChevronRight size={14} />
-                  </button>
-                  <button className="pagination-btn" disabled={page >= Math.ceil(penalidadesFiltradas.length / pageSize)} onClick={() => setPage(Math.ceil(penalidadesFiltradas.length / pageSize))}>»</button>
-                  <div className="page-size">
-                    <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}>
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                    <span>por pagina</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Tabla Penalidades con DataTable */}
+          <DataTable
+            data={penalidadesFiltradas}
+            columns={penalidadesColumns}
+            loading={loading}
+            searchPlaceholder="Buscar por patente, conductor..."
+            emptyIcon={<Shield size={48} />}
+            emptyTitle="Sin penalidades"
+            emptyDescription="No hay penalidades registradas"
+            pageSize={20}
+            pageSizeOptions={[10, 20, 50, 100]}
+          />
         </>
       )}
 

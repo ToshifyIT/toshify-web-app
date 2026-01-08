@@ -9,7 +9,8 @@ import {
   AlertTriangle,
   Eye,
   Plus,
-  DollarSign
+  DollarSign,
+  Filter
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -21,9 +22,50 @@ export function GarantiasTab() {
   const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState<string>('todos')
 
+  // Estados para filtros Excel
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [conductorFilter, setConductorFilter] = useState<string[]>([])
+  const [conductorSearch, setConductorSearch] = useState('')
+  const [tipoFilter, setTipoFilter] = useState<string[]>([])
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+
   useEffect(() => {
     cargarGarantias()
   }, [])
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    if (!openColumnFilter) return
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [openColumnFilter])
+
+  // Listas únicas para filtros
+  const conductoresUnicos = useMemo(() =>
+    [...new Set(garantias.map(g => g.conductor_nombre).filter(Boolean) as string[])].sort()
+  , [garantias])
+
+  const conductoresFiltrados = useMemo(() => {
+    if (!conductorSearch) return conductoresUnicos
+    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
+  }, [conductoresUnicos, conductorSearch])
+
+  // Toggle functions
+  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleTipoFilter = (val: string) => setTipoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
 
   async function cargarGarantias() {
     setLoading(true)
@@ -173,7 +215,41 @@ export function GarantiasTab() {
   const columns = useMemo<ColumnDef<GarantiaConductor>[]>(() => [
     {
       accessorKey: 'conductor_nombre',
-      header: 'Conductor',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'conductor' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar conductor..."
+                value={conductorSearch}
+                onChange={(e) => setConductorSearch(e.target.value)}
+                className="dt-column-filter-input"
+              />
+              <div className="dt-excel-filter-list">
+                {conductoresFiltrados.map(c => (
+                  <label key={c} className={`dt-column-filter-checkbox ${conductorFilter.includes(c) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={conductorFilter.includes(c)} onChange={() => toggleConductorFilter(c)} />
+                    <span>{c}</span>
+                  </label>
+                ))}
+              </div>
+              {conductorFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
+                  Limpiar ({conductorFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <div>
           <div className="font-medium">{row.original.conductor_nombre}</div>
@@ -183,7 +259,34 @@ export function GarantiasTab() {
     },
     {
       accessorKey: 'tipo_alquiler',
-      header: 'Tipo',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'tipo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {['CARGO', 'TURNO'].map(t => (
+                  <label key={t} className={`dt-column-filter-checkbox ${tipoFilter.includes(t) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={tipoFilter.includes(t)} onChange={() => toggleTipoFilter(t)} />
+                    <span>{t}</span>
+                  </label>
+                ))}
+              </div>
+              {tipoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setTipoFilter([])}>
+                  Limpiar ({tipoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span className={`fact-badge ${row.original.tipo_alquiler === 'CARGO' ? 'fact-badge-blue' : 'fact-badge-purple'}`}>
           {row.original.tipo_alquiler}
@@ -230,7 +333,38 @@ export function GarantiasTab() {
     },
     {
       accessorKey: 'estado',
-      header: 'Estado',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'estado' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {[
+                  { value: 'completada', label: 'Completada' },
+                  { value: 'en_curso', label: 'En Curso' },
+                  { value: 'pendiente', label: 'Pendiente' }
+                ].map(e => (
+                  <label key={e.value} className={`dt-column-filter-checkbox ${estadoFilter.includes(e.value) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={estadoFilter.includes(e.value)} onChange={() => toggleEstadoFilter(e.value)} />
+                    <span>{e.label}</span>
+                  </label>
+                ))}
+              </div>
+              {estadoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setEstadoFilter([])}>
+                  Limpiar ({estadoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => {
         const estado = row.original.estado
         const config: Record<string, { class: string; label: string }> = {
@@ -258,12 +392,19 @@ export function GarantiasTab() {
         </div>
       )
     }
-  ], [])
+  ], [conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, estadoFilter, openColumnFilter])
 
   const garantiasFiltradas = useMemo(() => {
-    if (filtroEstado === 'todos') return garantias
-    return garantias.filter(g => g.estado === filtroEstado)
-  }, [garantias, filtroEstado])
+    return garantias.filter(g => {
+      // Filtro legacy de header
+      if (filtroEstado !== 'todos' && g.estado !== filtroEstado) return false
+      // Filtros Excel
+      if (conductorFilter.length > 0 && !conductorFilter.includes(g.conductor_nombre || '')) return false
+      if (tipoFilter.length > 0 && !tipoFilter.includes(g.tipo_alquiler)) return false
+      if (estadoFilter.length > 0 && !estadoFilter.includes(g.estado)) return false
+      return true
+    })
+  }, [garantias, filtroEstado, conductorFilter, tipoFilter, estadoFilter])
 
   const stats = useMemo(() => {
     const total = garantias.length

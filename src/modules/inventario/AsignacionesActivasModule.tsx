@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
-import { Truck, Package, Calendar, Wrench } from 'lucide-react'
+import { Truck, Package, Calendar, Wrench, Filter } from 'lucide-react'
 
 interface AsignacionActiva {
   id: string
@@ -21,9 +21,53 @@ export function AsignacionesActivasModule() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Estados para filtros Excel
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [patenteFilter, setPatenteFilter] = useState<string[]>([])
+  const [productoFilter, setProductoFilter] = useState<string[]>([])
+
   useEffect(() => {
     loadAsignaciones()
   }, [])
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    if (!openColumnFilter) return
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [openColumnFilter])
+
+  // Listas únicas para filtros
+  const patentesUnicas = useMemo(() =>
+    [...new Set(asignaciones.map(a => a.vehiculo_patente).filter(Boolean))].sort()
+  , [asignaciones])
+
+  const productosUnicos = useMemo(() =>
+    [...new Set(asignaciones.map(a => a.producto).filter(Boolean))].sort()
+  , [asignaciones])
+
+  // Toggle functions
+  const togglePatenteFilter = (val: string) => setPatenteFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleProductoFilter = (val: string) => setProductoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+
+  // Datos filtrados
+  const asignacionesFiltradas = useMemo(() => {
+    return asignaciones.filter(a => {
+      if (patenteFilter.length > 0 && !patenteFilter.includes(a.vehiculo_patente)) return false
+      if (productoFilter.length > 0 && !productoFilter.includes(a.producto)) return false
+      return true
+    })
+  }, [asignaciones, patenteFilter, productoFilter])
 
   const loadAsignaciones = async () => {
     try {
@@ -86,7 +130,34 @@ export function AsignacionesActivasModule() {
   const columns = useMemo<ColumnDef<AsignacionActiva, any>[]>(() => [
     {
       accessorKey: 'vehiculo_patente',
-      header: 'Vehiculo',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Vehiculo {patenteFilter.length > 0 && `(${patenteFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${patenteFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'patente' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {patentesUnicas.map(p => (
+                  <label key={p} className={`dt-column-filter-checkbox ${patenteFilter.includes(p) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={patenteFilter.includes(p)} onChange={() => togglePatenteFilter(p)} />
+                    <span>{p}</span>
+                  </label>
+                ))}
+              </div>
+              {patenteFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setPatenteFilter([])}>
+                  Limpiar ({patenteFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
@@ -123,7 +194,34 @@ export function AsignacionesActivasModule() {
     },
     {
       accessorKey: 'producto',
-      header: 'Herramienta',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Herramienta {productoFilter.length > 0 && `(${productoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${productoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'producto' ? null : 'producto') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'producto' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {productosUnicos.map(p => (
+                  <label key={p} className={`dt-column-filter-checkbox ${productoFilter.includes(p) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={productoFilter.includes(p)} onChange={() => toggleProductoFilter(p)} />
+                    <span>{p}</span>
+                  </label>
+                ))}
+              </div>
+              {productoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setProductoFilter([])}>
+                  Limpiar ({productoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Wrench size={14} style={{ color: 'var(--text-tertiary)' }} />
@@ -159,7 +257,7 @@ export function AsignacionesActivasModule() {
         </div>
       )
     }
-  ], [])
+  ], [patenteFilter, patentesUnicas, productoFilter, productosUnicos, openColumnFilter])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -228,7 +326,7 @@ export function AsignacionesActivasModule() {
 
       {/* DataTable */}
       <DataTable
-        data={asignaciones}
+        data={asignacionesFiltradas}
         columns={columns}
         loading={loading}
         error={error}
