@@ -116,16 +116,16 @@ END $$;
 -- ==========================================
 -- ÍNDICES PARA HISTÓRICOS (críticos para performance)
 -- ==========================================
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cabify_historico_pais ON cabify_historico(pais_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cabify_historico_pais_fecha ON cabify_historico(pais_id, fecha_inicio);
+CREATE INDEX IF NOT EXISTS idx_cabify_historico_pais ON cabify_historico(pais_id);
+CREATE INDEX IF NOT EXISTS idx_cabify_historico_pais_fecha ON cabify_historico(pais_id, fecha_inicio);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_uss_historico_pais ON uss_historico(pais_id);
+CREATE INDEX IF NOT EXISTS idx_uss_historico_pais ON uss_historico(pais_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_uss_excesos_pais ON uss_excesos_velocidad(pais_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_uss_excesos_pais_fecha ON uss_excesos_velocidad(pais_id, fecha_evento);
+CREATE INDEX IF NOT EXISTS idx_uss_excesos_pais ON uss_excesos_velocidad(pais_id);
+CREATE INDEX IF NOT EXISTS idx_uss_excesos_pais_fecha ON uss_excesos_velocidad(pais_id, fecha_evento);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wialon_bitacora_pais ON wialon_bitacora(pais_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wialon_bitacora_pais_fecha ON wialon_bitacora(pais_id, fecha_turno);
+CREATE INDEX IF NOT EXISTS idx_wialon_bitacora_pais ON wialon_bitacora(pais_id);
+CREATE INDEX IF NOT EXISTS idx_wialon_bitacora_pais_fecha ON wialon_bitacora(pais_id, fecha_turno);
 
 COMMENT ON COLUMN cabify_historico.pais_id IS 'País de la operación Cabify';
 COMMENT ON COLUMN uss_historico.pais_id IS 'País del registro USS';

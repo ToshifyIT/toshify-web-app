@@ -47,9 +47,8 @@ export function TicketsFavorTab() {
       .select('id, nombres, apellidos, numero_dni')
       .order('apellidos')
 
-    const conductoresOptions = (conductores as any[] || []).map((c: any) =>
-      `<option value="${c.id}">${c.apellidos}, ${c.nombres} - ${c.numero_dni}</option>`
-    ).join('')
+    // Guardar conductores en variable global temporal para el modal
+    ;(window as any).__ticketConductores = conductores || []
 
     const tiposOptions = TIPOS_TICKET_FAVOR.map(t =>
       `<option value="${t.codigo}">${t.nombre}</option>`
@@ -58,38 +57,121 @@ export function TicketsFavorTab() {
     const { value: formValues } = await Swal.fire({
       title: 'Nuevo Ticket a Favor',
       html: `
-        <div style="text-align: left;">
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Conductor:</label>
-            <select id="swal-conductor" class="swal2-select" style="margin: 0;">
-              <option value="">Seleccionar...</option>
-              ${conductoresOptions}
-            </select>
+        <div style="text-align: left; padding: 0 8px;">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Conductor</label>
+            <input id="swal-conductor-search" type="text" placeholder="Buscar conductor..." style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box;">
+            <div id="swal-conductor-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px; background: #fff; margin-top: 4px;">
+            </div>
+            <input type="hidden" id="swal-conductor-id" value="">
+            <input type="hidden" id="swal-conductor-nombre" value="">
+            <input type="hidden" id="swal-conductor-dni" value="">
+            <div id="swal-conductor-selected" style="margin-top: 8px; padding: 10px 12px; background: #FEE2E2; border-radius: 6px; display: none;">
+              <span style="font-size: 13px; color: #991B1B; font-weight: 500;"></span>
+            </div>
           </div>
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Tipo de Ticket:</label>
-            <select id="swal-tipo" class="swal2-select" style="margin: 0;">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Tipo de Ticket</label>
+            <select id="swal-tipo" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; background: #fff; cursor: pointer;">
               <option value="">Seleccionar...</option>
               ${tiposOptions}
             </select>
           </div>
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Monto:</label>
-            <input id="swal-monto" type="number" class="swal2-input" placeholder="Monto" style="margin: 0;">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Monto</label>
+            <input id="swal-monto" type="number" placeholder="0" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box;">
           </div>
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Descripción:</label>
-            <textarea id="swal-desc" class="swal2-textarea" placeholder="Descripción del ticket" style="margin: 0;"></textarea>
+          <div style="margin-bottom: 8px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Descripción</label>
+            <textarea id="swal-desc" placeholder="Descripción del ticket" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; min-height: 80px; resize: vertical; box-sizing: border-box;"></textarea>
           </div>
         </div>
       `,
+      didOpen: () => {
+        const searchInput = document.getElementById('swal-conductor-search') as HTMLInputElement
+        const listContainer = document.getElementById('swal-conductor-list') as HTMLElement
+        const conductorIdInput = document.getElementById('swal-conductor-id') as HTMLInputElement
+        const conductorNombreInput = document.getElementById('swal-conductor-nombre') as HTMLInputElement
+        const conductorDniInput = document.getElementById('swal-conductor-dni') as HTMLInputElement
+        const selectedDiv = document.getElementById('swal-conductor-selected') as HTMLElement
+
+        const conductoresList = (window as any).__ticketConductores || []
+
+        const renderList = (filter: string = '') => {
+          const filterLower = filter.toLowerCase()
+          const filtered = conductoresList.filter((c: any) =>
+            `${c.apellidos} ${c.nombres}`.toLowerCase().includes(filterLower) ||
+            (c.numero_dni && c.numero_dni.toString().includes(filterLower))
+          )
+
+          if (filtered.length === 0) {
+            listContainer.innerHTML = '<div style="padding: 12px; text-align: center; color: #6B7280; font-size: 13px;">No se encontraron conductores</div>'
+            return
+          }
+
+          listContainer.innerHTML = filtered.map((c: any) => `
+            <div class="swal-conductor-item"
+                 data-id="${c.id}"
+                 data-nombre="${c.apellidos}, ${c.nombres}"
+                 data-dni="${c.numero_dni || ''}"
+                 style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+              <span>${c.apellidos}, ${c.nombres}</span>
+              <span style="color: #6B7280; font-family: monospace; font-size: 12px;">${c.numero_dni || '-'}</span>
+            </div>
+          `).join('')
+
+          // Agregar eventos de hover y click
+          listContainer.querySelectorAll('.swal-conductor-item').forEach((item: any) => {
+            item.addEventListener('mouseenter', () => {
+              item.style.background = '#F3F4F6'
+            })
+            item.addEventListener('mouseleave', () => {
+              item.style.background = ''
+            })
+            item.addEventListener('click', () => {
+              conductorIdInput.value = item.dataset.id
+              conductorNombreInput.value = item.dataset.nombre
+              conductorDniInput.value = item.dataset.dni
+              selectedDiv.style.display = 'block'
+              selectedDiv.querySelector('span')!.textContent = `${item.dataset.nombre} - ${item.dataset.dni}`
+              listContainer.style.display = 'none'
+              searchInput.value = ''
+            })
+          })
+        }
+
+        // Mostrar lista inicial
+        renderList()
+
+        // Filtrar al escribir
+        searchInput.addEventListener('input', () => {
+          listContainer.style.display = 'block'
+          renderList(searchInput.value)
+        })
+
+        // Mostrar lista al hacer focus
+        searchInput.addEventListener('focus', () => {
+          listContainer.style.display = 'block'
+          renderList(searchInput.value)
+        })
+
+        // Permitir cambiar selección
+        selectedDiv.addEventListener('click', () => {
+          selectedDiv.style.display = 'none'
+          listContainer.style.display = 'block'
+          searchInput.focus()
+        })
+      },
       focusConfirm: false,
       showCancelButton: true,
       confirmButtonText: 'Crear',
       cancelButtonText: 'Cancelar',
-      width: 500,
+      confirmButtonColor: '#DC2626',
+      width: 450,
       preConfirm: () => {
-        const conductorId = (document.getElementById('swal-conductor') as HTMLSelectElement).value
+        const conductorId = (document.getElementById('swal-conductor-id') as HTMLInputElement).value
+        const conductorNombre = (document.getElementById('swal-conductor-nombre') as HTMLInputElement).value
+        const conductorDni = (document.getElementById('swal-conductor-dni') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
         const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
         const descripcion = (document.getElementById('swal-desc') as HTMLTextAreaElement).value
@@ -98,11 +180,13 @@ export function TicketsFavorTab() {
         if (!tipo) { Swal.showValidationMessage('Seleccione un tipo'); return false }
         if (!monto || parseFloat(monto) <= 0) { Swal.showValidationMessage('Ingrese un monto válido'); return false }
 
-        const conductor = (conductores as any[] || []).find((c: any) => c.id === conductorId)
+        // Limpiar variable global
+        delete (window as any).__ticketConductores
+
         return {
           conductor_id: conductorId,
-          conductor_nombre: conductor ? `${conductor.apellidos}, ${conductor.nombres}` : '',
-          conductor_dni: conductor?.numero_dni,
+          conductor_nombre: conductorNombre,
+          conductor_dni: conductorDni,
           tipo,
           monto: parseFloat(monto),
           descripcion: descripcion || null

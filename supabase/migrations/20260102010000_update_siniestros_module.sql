@@ -125,9 +125,9 @@ SELECT
   -- Días siniestrado (calculado)
   CASE
     WHEN s.fecha_cierre IS NOT NULL THEN
-      EXTRACT(DAY FROM (s.fecha_cierre - s.fecha_siniestro))::INTEGER
+      (s.fecha_cierre::DATE - s.fecha_siniestro::DATE)
     ELSE
-      EXTRACT(DAY FROM (NOW() - s.fecha_siniestro))::INTEGER
+      (CURRENT_DATE - s.fecha_siniestro::DATE)
   END AS dias_siniestrado,
   -- Datos de reparación
   sr.id AS reparacion_id,
@@ -139,9 +139,9 @@ SELECT
   -- Días en reparación (calculado)
   CASE
     WHEN sr.fecha_finalizacion IS NOT NULL AND sr.fecha_inicio IS NOT NULL THEN
-      EXTRACT(DAY FROM (sr.fecha_finalizacion - sr.fecha_inicio))::INTEGER
+      (sr.fecha_finalizacion - sr.fecha_inicio)
     WHEN sr.fecha_inicio IS NOT NULL THEN
-      EXTRACT(DAY FROM (NOW() - sr.fecha_inicio))::INTEGER
+      (CURRENT_DATE - sr.fecha_inicio)
     ELSE NULL
   END AS reparacion_dias
 FROM siniestros s

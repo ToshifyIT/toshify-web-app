@@ -164,9 +164,9 @@ SELECT
   v.patente AS vehiculo_patente,
   v.marca AS vehiculo_marca,
   v.modelo AS vehiculo_modelo,
-  c.nombre AS conductor_nombre_sistema,
-  c.apellido AS conductor_apellido_sistema,
-  COALESCE(s.conductor_nombre, CONCAT(c.nombre, ' ', c.apellido)) AS conductor_display
+  c.nombres AS conductor_nombre_sistema,
+  c.apellidos AS conductor_apellido_sistema,
+  COALESCE(s.conductor_nombre, CONCAT(c.nombres, ' ', c.apellidos)) AS conductor_display
 FROM siniestros s
 LEFT JOIN siniestros_categorias sc ON s.categoria_id = sc.id
 LEFT JOIN siniestros_estados se ON s.estado_id = se.id
