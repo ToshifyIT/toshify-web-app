@@ -10,7 +10,8 @@ import {
   Eye,
   Plus,
   DollarSign,
-  Clock
+  Clock,
+  Filter
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -22,9 +23,46 @@ export function SaldosAbonosTab() {
   const [loading, setLoading] = useState(true)
   const [filtroSaldo, setFiltroSaldo] = useState<string>('todos')
 
+  // Estados para filtros Excel
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [conductorFilter, setConductorFilter] = useState<string[]>([])
+  const [conductorSearch, setConductorSearch] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+
   useEffect(() => {
     cargarSaldos()
   }, [])
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    if (!openColumnFilter) return
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [openColumnFilter])
+
+  // Listas únicas para filtros
+  const conductoresUnicos = useMemo(() =>
+    [...new Set(saldos.map(s => s.conductor_nombre).filter(Boolean) as string[])].sort()
+  , [saldos])
+
+  const conductoresFiltrados = useMemo(() => {
+    if (!conductorSearch) return conductoresUnicos
+    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
+  }, [conductoresUnicos, conductorSearch])
+
+  // Toggle functions
+  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
 
   async function cargarSaldos() {
     setLoading(true)
@@ -191,7 +229,41 @@ export function SaldosAbonosTab() {
   const columns = useMemo<ColumnDef<SaldoConductor>[]>(() => [
     {
       accessorKey: 'conductor_nombre',
-      header: 'Conductor',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'conductor' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar conductor..."
+                value={conductorSearch}
+                onChange={(e) => setConductorSearch(e.target.value)}
+                className="dt-column-filter-input"
+              />
+              <div className="dt-excel-filter-list">
+                {conductoresFiltrados.map(c => (
+                  <label key={c} className={`dt-column-filter-checkbox ${conductorFilter.includes(c) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={conductorFilter.includes(c)} onChange={() => toggleConductorFilter(c)} />
+                    <span>{c}</span>
+                  </label>
+                ))}
+              </div>
+              {conductorFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
+                  Limpiar ({conductorFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <div>
           <div className="font-medium">{row.original.conductor_nombre}</div>
@@ -209,7 +281,38 @@ export function SaldosAbonosTab() {
     },
     {
       id: 'estado_saldo',
-      header: 'Estado',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'estado' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {[
+                  { value: 'favor', label: 'A Favor' },
+                  { value: 'deuda', label: 'Deuda' },
+                  { value: 'sin_saldo', label: 'Sin Saldo' }
+                ].map(e => (
+                  <label key={e.value} className={`dt-column-filter-checkbox ${estadoFilter.includes(e.value) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={estadoFilter.includes(e.value)} onChange={() => toggleEstadoFilter(e.value)} />
+                    <span>{e.label}</span>
+                  </label>
+                ))}
+              </div>
+              {estadoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setEstadoFilter([])}>
+                  Limpiar ({estadoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => {
         const saldoVal = row.original.saldo_actual
         if (saldoVal > 0) return <span className="fact-badge fact-badge-green">A Favor</span>
@@ -256,16 +359,23 @@ export function SaldosAbonosTab() {
         </div>
       )
     }
-  ], [])
+  ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter])
 
   const saldosFiltrados = useMemo(() => {
-    switch (filtroSaldo) {
-      case 'favor': return saldos.filter(s => s.saldo_actual > 0)
-      case 'deuda': return saldos.filter(s => s.saldo_actual < 0)
-      case 'mora': return saldos.filter(s => (s.dias_mora || 0) > 0)
-      default: return saldos
-    }
-  }, [saldos, filtroSaldo])
+    return saldos.filter(s => {
+      // Filtro legacy de header
+      if (filtroSaldo === 'favor' && s.saldo_actual <= 0) return false
+      if (filtroSaldo === 'deuda' && s.saldo_actual >= 0) return false
+      if (filtroSaldo === 'mora' && (s.dias_mora || 0) === 0) return false
+      // Filtros Excel
+      if (conductorFilter.length > 0 && !conductorFilter.includes(s.conductor_nombre || '')) return false
+      if (estadoFilter.length > 0) {
+        const estado = s.saldo_actual > 0 ? 'favor' : s.saldo_actual < 0 ? 'deuda' : 'sin_saldo'
+        if (!estadoFilter.includes(estado)) return false
+      }
+      return true
+    })
+  }, [saldos, filtroSaldo, conductorFilter, estadoFilter])
 
   const stats = useMemo(() => {
     const total = saldos.length

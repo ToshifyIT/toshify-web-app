@@ -7,7 +7,8 @@ import {
   Clock,
   XCircle,
   Plus,
-  DollarSign
+  DollarSign,
+  Filter
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -20,9 +21,50 @@ export function TicketsFavorTab() {
   const [filtroEstado, setFiltroEstado] = useState<string>('todos')
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
 
+  // Estados para filtros Excel
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [conductorFilter, setConductorFilter] = useState<string[]>([])
+  const [conductorSearch, setConductorSearch] = useState('')
+  const [tipoFilterExcel, setTipoFilterExcel] = useState<string[]>([])
+  const [estadoFilterExcel, setEstadoFilterExcel] = useState<string[]>([])
+
   useEffect(() => {
     cargarTickets()
   }, [])
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    if (!openColumnFilter) return
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [openColumnFilter])
+
+  // Listas únicas para filtros
+  const conductoresUnicos = useMemo(() =>
+    [...new Set(tickets.map(t => t.conductor_nombre).filter(Boolean) as string[])].sort()
+  , [tickets])
+
+  const conductoresFiltrados = useMemo(() => {
+    if (!conductorSearch) return conductoresUnicos
+    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
+  }, [conductoresUnicos, conductorSearch])
+
+  // Toggle functions
+  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleTipoFilterExcel = (val: string) => setTipoFilterExcel(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleEstadoFilterExcel = (val: string) => setEstadoFilterExcel(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
 
   async function cargarTickets() {
     setLoading(true)
@@ -47,9 +89,8 @@ export function TicketsFavorTab() {
       .select('id, nombres, apellidos, numero_dni')
       .order('apellidos')
 
-    const conductoresOptions = (conductores as any[] || []).map((c: any) =>
-      `<option value="${c.id}">${c.apellidos}, ${c.nombres} - ${c.numero_dni}</option>`
-    ).join('')
+    // Guardar conductores en variable global temporal para el modal
+    ;(window as any).__ticketConductores = conductores || []
 
     const tiposOptions = TIPOS_TICKET_FAVOR.map(t =>
       `<option value="${t.codigo}">${t.nombre}</option>`
@@ -58,38 +99,121 @@ export function TicketsFavorTab() {
     const { value: formValues } = await Swal.fire({
       title: 'Nuevo Ticket a Favor',
       html: `
-        <div style="text-align: left;">
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Conductor:</label>
-            <select id="swal-conductor" class="swal2-select" style="margin: 0;">
-              <option value="">Seleccionar...</option>
-              ${conductoresOptions}
-            </select>
+        <div style="text-align: left; padding: 0 8px;">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Conductor</label>
+            <input id="swal-conductor-search" type="text" placeholder="Buscar conductor..." style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box;">
+            <div id="swal-conductor-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px; background: #fff; margin-top: 4px;">
+            </div>
+            <input type="hidden" id="swal-conductor-id" value="">
+            <input type="hidden" id="swal-conductor-nombre" value="">
+            <input type="hidden" id="swal-conductor-dni" value="">
+            <div id="swal-conductor-selected" style="margin-top: 8px; padding: 10px 12px; background: #FEE2E2; border-radius: 6px; display: none;">
+              <span style="font-size: 13px; color: #991B1B; font-weight: 500;"></span>
+            </div>
           </div>
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Tipo de Ticket:</label>
-            <select id="swal-tipo" class="swal2-select" style="margin: 0;">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Tipo de Ticket</label>
+            <select id="swal-tipo" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; background: #fff; cursor: pointer;">
               <option value="">Seleccionar...</option>
               ${tiposOptions}
             </select>
           </div>
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Monto:</label>
-            <input id="swal-monto" type="number" class="swal2-input" placeholder="Monto" style="margin: 0;">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Monto</label>
+            <input id="swal-monto" type="number" placeholder="0" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box;">
           </div>
-          <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Descripción:</label>
-            <textarea id="swal-desc" class="swal2-textarea" placeholder="Descripción del ticket" style="margin: 0;"></textarea>
+          <div style="margin-bottom: 8px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Descripción</label>
+            <textarea id="swal-desc" placeholder="Descripción del ticket" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; min-height: 80px; resize: vertical; box-sizing: border-box;"></textarea>
           </div>
         </div>
       `,
+      didOpen: () => {
+        const searchInput = document.getElementById('swal-conductor-search') as HTMLInputElement
+        const listContainer = document.getElementById('swal-conductor-list') as HTMLElement
+        const conductorIdInput = document.getElementById('swal-conductor-id') as HTMLInputElement
+        const conductorNombreInput = document.getElementById('swal-conductor-nombre') as HTMLInputElement
+        const conductorDniInput = document.getElementById('swal-conductor-dni') as HTMLInputElement
+        const selectedDiv = document.getElementById('swal-conductor-selected') as HTMLElement
+
+        const conductoresList = (window as any).__ticketConductores || []
+
+        const renderList = (filter: string = '') => {
+          const filterLower = filter.toLowerCase()
+          const filtered = conductoresList.filter((c: any) =>
+            `${c.apellidos} ${c.nombres}`.toLowerCase().includes(filterLower) ||
+            (c.numero_dni && c.numero_dni.toString().includes(filterLower))
+          )
+
+          if (filtered.length === 0) {
+            listContainer.innerHTML = '<div style="padding: 12px; text-align: center; color: #6B7280; font-size: 13px;">No se encontraron conductores</div>'
+            return
+          }
+
+          listContainer.innerHTML = filtered.map((c: any) => `
+            <div class="swal-conductor-item"
+                 data-id="${c.id}"
+                 data-nombre="${c.apellidos}, ${c.nombres}"
+                 data-dni="${c.numero_dni || ''}"
+                 style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+              <span>${c.apellidos}, ${c.nombres}</span>
+              <span style="color: #6B7280; font-family: monospace; font-size: 12px;">${c.numero_dni || '-'}</span>
+            </div>
+          `).join('')
+
+          // Agregar eventos de hover y click
+          listContainer.querySelectorAll('.swal-conductor-item').forEach((item: any) => {
+            item.addEventListener('mouseenter', () => {
+              item.style.background = '#F3F4F6'
+            })
+            item.addEventListener('mouseleave', () => {
+              item.style.background = ''
+            })
+            item.addEventListener('click', () => {
+              conductorIdInput.value = item.dataset.id
+              conductorNombreInput.value = item.dataset.nombre
+              conductorDniInput.value = item.dataset.dni
+              selectedDiv.style.display = 'block'
+              selectedDiv.querySelector('span')!.textContent = `${item.dataset.nombre} - ${item.dataset.dni}`
+              listContainer.style.display = 'none'
+              searchInput.value = ''
+            })
+          })
+        }
+
+        // Mostrar lista inicial
+        renderList()
+
+        // Filtrar al escribir
+        searchInput.addEventListener('input', () => {
+          listContainer.style.display = 'block'
+          renderList(searchInput.value)
+        })
+
+        // Mostrar lista al hacer focus
+        searchInput.addEventListener('focus', () => {
+          listContainer.style.display = 'block'
+          renderList(searchInput.value)
+        })
+
+        // Permitir cambiar selección
+        selectedDiv.addEventListener('click', () => {
+          selectedDiv.style.display = 'none'
+          listContainer.style.display = 'block'
+          searchInput.focus()
+        })
+      },
       focusConfirm: false,
       showCancelButton: true,
       confirmButtonText: 'Crear',
       cancelButtonText: 'Cancelar',
-      width: 500,
+      confirmButtonColor: '#DC2626',
+      width: 450,
       preConfirm: () => {
-        const conductorId = (document.getElementById('swal-conductor') as HTMLSelectElement).value
+        const conductorId = (document.getElementById('swal-conductor-id') as HTMLInputElement).value
+        const conductorNombre = (document.getElementById('swal-conductor-nombre') as HTMLInputElement).value
+        const conductorDni = (document.getElementById('swal-conductor-dni') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
         const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
         const descripcion = (document.getElementById('swal-desc') as HTMLTextAreaElement).value
@@ -98,11 +222,13 @@ export function TicketsFavorTab() {
         if (!tipo) { Swal.showValidationMessage('Seleccione un tipo'); return false }
         if (!monto || parseFloat(monto) <= 0) { Swal.showValidationMessage('Ingrese un monto válido'); return false }
 
-        const conductor = (conductores as any[] || []).find((c: any) => c.id === conductorId)
+        // Limpiar variable global
+        delete (window as any).__ticketConductores
+
         return {
           conductor_id: conductorId,
-          conductor_nombre: conductor ? `${conductor.apellidos}, ${conductor.nombres}` : '',
-          conductor_dni: conductor?.numero_dni,
+          conductor_nombre: conductorNombre,
+          conductor_dni: conductorDni,
           tipo,
           monto: parseFloat(monto),
           descripcion: descripcion || null
@@ -233,7 +359,41 @@ export function TicketsFavorTab() {
     },
     {
       accessorKey: 'conductor_nombre',
-      header: 'Conductor',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'conductor' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                placeholder="Buscar conductor..."
+                value={conductorSearch}
+                onChange={(e) => setConductorSearch(e.target.value)}
+                className="dt-column-filter-input"
+              />
+              <div className="dt-excel-filter-list">
+                {conductoresFiltrados.map(c => (
+                  <label key={c} className={`dt-column-filter-checkbox ${conductorFilter.includes(c) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={conductorFilter.includes(c)} onChange={() => toggleConductorFilter(c)} />
+                    <span>{c}</span>
+                  </label>
+                ))}
+              </div>
+              {conductorFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
+                  Limpiar ({conductorFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <div>
           <div className="font-medium">{row.original.conductor_nombre}</div>
@@ -243,7 +403,34 @@ export function TicketsFavorTab() {
     },
     {
       accessorKey: 'tipo',
-      header: 'Tipo',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Tipo {tipoFilterExcel.length > 0 && `(${tipoFilterExcel.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${tipoFilterExcel.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'tipo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {TIPOS_TICKET_FAVOR.map(t => (
+                  <label key={t.codigo} className={`dt-column-filter-checkbox ${tipoFilterExcel.includes(t.codigo) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={tipoFilterExcel.includes(t.codigo)} onChange={() => toggleTipoFilterExcel(t.codigo)} />
+                    <span>{t.nombre}</span>
+                  </label>
+                ))}
+              </div>
+              {tipoFilterExcel.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setTipoFilterExcel([])}>
+                  Limpiar ({tipoFilterExcel.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => {
         const tipoInfo = TIPOS_TICKET_FAVOR.find(t => t.codigo === row.original.tipo)
         return <span className="fact-badge fact-badge-purple">{tipoInfo?.nombre || row.original.tipo}</span>
@@ -261,7 +448,39 @@ export function TicketsFavorTab() {
     },
     {
       accessorKey: 'estado',
-      header: 'Estado',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Estado {estadoFilterExcel.length > 0 && `(${estadoFilterExcel.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${estadoFilterExcel.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'estado' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {[
+                  { value: 'pendiente', label: 'Pendiente' },
+                  { value: 'aprobado', label: 'Aprobado' },
+                  { value: 'rechazado', label: 'Rechazado' },
+                  { value: 'aplicado', label: 'Aplicado' }
+                ].map(e => (
+                  <label key={e.value} className={`dt-column-filter-checkbox ${estadoFilterExcel.includes(e.value) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={estadoFilterExcel.includes(e.value)} onChange={() => toggleEstadoFilterExcel(e.value)} />
+                    <span>{e.label}</span>
+                  </label>
+                ))}
+              </div>
+              {estadoFilterExcel.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setEstadoFilterExcel([])}>
+                  Limpiar ({estadoFilterExcel.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => {
         const estado = row.original.estado
         const config: Record<string, { class: string; label: string }> = {
@@ -300,14 +519,20 @@ export function TicketsFavorTab() {
         )
       }
     }
-  ], [])
+  ], [conductorFilter, conductorSearch, conductoresFiltrados, tipoFilterExcel, estadoFilterExcel, openColumnFilter])
 
   const ticketsFiltrados = useMemo(() => {
-    let filtered = tickets
-    if (filtroEstado !== 'todos') filtered = filtered.filter(t => t.estado === filtroEstado)
-    if (filtroTipo !== 'todos') filtered = filtered.filter(t => t.tipo === filtroTipo)
-    return filtered
-  }, [tickets, filtroEstado, filtroTipo])
+    return tickets.filter(t => {
+      // Filtros legacy de header
+      if (filtroEstado !== 'todos' && t.estado !== filtroEstado) return false
+      if (filtroTipo !== 'todos' && t.tipo !== filtroTipo) return false
+      // Filtros Excel
+      if (conductorFilter.length > 0 && !conductorFilter.includes(t.conductor_nombre || '')) return false
+      if (tipoFilterExcel.length > 0 && !tipoFilterExcel.includes(t.tipo)) return false
+      if (estadoFilterExcel.length > 0 && !estadoFilterExcel.includes(t.estado)) return false
+      return true
+    })
+  }, [tickets, filtroEstado, filtroTipo, conductorFilter, tipoFilterExcel, estadoFilterExcel])
 
   const stats = useMemo(() => {
     const total = tickets.length

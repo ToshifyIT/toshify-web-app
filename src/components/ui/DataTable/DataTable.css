@@ -126,6 +126,7 @@
   border-radius: 8px;
   overflow: visible; /* Permite que los dropdowns de filtros se muestren */
   box-shadow: var(--shadow-sm);
+  position: relative;
 }
 
 /* Table Wrapper for horizontal scroll */
@@ -133,6 +134,9 @@
   overflow-x: auto;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
+  /* Clip solo horizontalmente, permitir vertical overflow */
+  overflow-clip-margin: 0 content-box;
+  padding-bottom: 4px; /* Espacio para evitar corte del scrollbar */
 }
 
 /* Table */
@@ -451,17 +455,15 @@
 }
 
 .dt-column-filter-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 4px;
+  position: fixed;
   min-width: 150px;
   padding: 6px;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 1000; /* Alto para estar encima de todo */
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 99999; /* Muy alto para estar encima de todo */
+  /* La posición top/left se calcula con JavaScript */
 }
 
 [data-theme="dark"] .dt-column-filter-dropdown {
@@ -616,6 +618,23 @@
   text-align: center;
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+/* Portal dropdown - posicionado con fixed via JavaScript */
+.dt-filter-portal {
+  position: fixed !important;
+  animation: dt-filter-fadeIn 0.15s ease-out;
+}
+
+@keyframes dt-filter-fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Responsive - Multi-resolution support */

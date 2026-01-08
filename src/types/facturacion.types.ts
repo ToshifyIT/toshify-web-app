@@ -365,23 +365,26 @@ export interface ConceptosStats {
 }
 
 // =====================================================
-// CONSTANTES DE FACTURACIÓN (según reunión)
+// CONSTANTES DE FACTURACIÓN
+// NOTA: En producción, los precios deben venir de conceptos_nomina
+// y los parámetros de parametros_sistema. Estos son valores por defecto.
+// Valores actualizados según reporte Bruno Timoteo Mancuello 2025
 // =====================================================
 export const FACTURACION_CONFIG = {
-  // Alquiler semanal
-  ALQUILER_CARGO: 360000,
-  ALQUILER_TURNO: 245000,
+  // Alquiler semanal (valores reales según Bruno)
+  ALQUILER_CARGO: 360000,  // A cargo: $360,000/semana
+  ALQUILER_TURNO: 300000,  // Turno: $300,000/semana (Bruno muestra este valor)
 
-  // Garantía
-  GARANTIA_CUOTA_SEMANAL: 50000,
-  GARANTIA_TOTAL_CARGO: 1000000,
-  GARANTIA_TOTAL_TURNO: 800000,
+  // Garantía (valores reales según Bruno)
+  GARANTIA_CUOTA_SEMANAL: 80000,  // $80,000/semana según Bruno
+  GARANTIA_TOTAL_CARGO: 1600000,  // 20 cuotas x $80,000
+  GARANTIA_TOTAL_TURNO: 1120000,  // 14 cuotas x $80,000 (Bruno muestra 14 cuotas)
   GARANTIA_CUOTAS_CARGO: 20,
-  GARANTIA_CUOTAS_TURNO: 16,
+  GARANTIA_CUOTAS_TURNO: 14,  // 14 cuotas según Bruno
 
-  // Mora
-  MORA_PORCENTAJE_DIARIO: 1, // 1% diario
-  MORA_DIAS_MAXIMOS: 7,
+  // Mora (según Bruno: 5% flat, no diario)
+  MORA_PORCENTAJE: 5,  // 5% flat si hay saldo y no hay abono
+  MORA_DIAS_MAXIMOS: 7,  // Máximo 7 días de mora (o hasta fecha de baja)
 
   // Kilometraje
   KM_BASE_SEMANAL: 1800,
@@ -441,9 +444,23 @@ export function calcularExcesoKm(
   return { kmExceso, montoBase, iva, total, rango, porcentaje }
 }
 
-export function calcularMora(saldoPendiente: number, diasMora: number): number {
-  const diasEfectivos = Math.min(diasMora, FACTURACION_CONFIG.MORA_DIAS_MAXIMOS)
-  return saldoPendiente * (FACTURACION_CONFIG.MORA_PORCENTAJE_DIARIO / 100) * diasEfectivos
+/**
+ * Calcula la mora según las reglas de la reunión:
+ * - Si conductor tiene saldo adeudado y NO hizo abono: 5% flat
+ * - Si conductor hizo abono (aunque sea parcial): no hay mora
+ * - Si conductor tiene baja con deuda: mora hasta fecha de baja
+ */
+export function calcularMora(
+  saldoPendiente: number,
+  hizoAbono: boolean = false
+): number {
+  // Si hizo abono, no se cobra mora
+  if (hizoAbono || saldoPendiente <= 0) {
+    return 0
+  }
+
+  // Mora flat del 5% sobre el saldo pendiente
+  return saldoPendiente * (FACTURACION_CONFIG.MORA_PORCENTAJE / 100)
 }
 
 export function calcularAlquilerProporcional(
@@ -505,4 +522,95 @@ export function getCurrentWeekNumber(): { semana: number; anio: number } {
   const semana = Math.ceil((diff + start.getDay() * 24 * 60 * 60 * 1000) / oneWeek)
 
   return { semana, anio: now.getFullYear() }
+}
+
+// =====================================================
+// PARÁMETROS DEL SISTEMA
+// =====================================================
+export type ParametroTipo = 'number' | 'string' | 'boolean' | 'json' | 'date'
+
+export interface ParametroSistema {
+  id: string
+  modulo: string
+  clave: string
+  tipo: ParametroTipo
+  valor: string
+  descripcion: string | null
+  unidad: string | null
+  valor_minimo: number | null
+  valor_maximo: number | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  updated_by: string | null
+}
+
+export interface ParametroSistemaFormData {
+  modulo: string
+  clave: string
+  tipo: ParametroTipo
+  valor: string
+  descripcion?: string
+  unidad?: string
+  valor_minimo?: number
+  valor_maximo?: number
+  activo?: boolean
+}
+
+// Claves de parámetros de facturación (para autocompletado)
+export const PARAMETROS_FACTURACION = {
+  // Mora
+  MORA_PORCENTAJE: 'mora_porcentaje',
+  MORA_DIAS_MAXIMOS: 'mora_dias_maximos',
+  MORA_TIPO_CALCULO: 'mora_tipo_calculo',
+
+  // Kilometraje
+  KM_BASE_SEMANAL: 'km_base_semanal',
+  KM_EXCESO_IVA: 'km_exceso_iva',
+  KM_RANGOS_EXCESO: 'km_rangos_exceso',
+
+  // Garantías
+  GARANTIA_CUOTAS_CARGO: 'garantia_cuotas_cargo',
+  GARANTIA_CUOTAS_TURNO: 'garantia_cuotas_turno',
+  GARANTIA_COBRO_SIMULTANEO: 'garantia_cobro_simultaneo',
+
+  // Turnos
+  TURNOS_SEMANA: 'turnos_semana',
+
+  // Períodos
+  PERIODO_DIA_CIERRE: 'periodo_dia_cierre',
+  PERIODO_CIERRE_AUTOMATICO: 'periodo_cierre_automatico',
+
+  // IVA
+  IVA_CONCEPTOS_21: 'iva_conceptos_21',
+  IVA_CONCEPTOS_EXENTO: 'iva_conceptos_exento',
+
+  // Factura
+  FACTURA_TIPO_CUIT: 'factura_tipo_cuit',
+  FACTURA_TIPO_DNI: 'factura_tipo_dni',
+
+  // Comprobante
+  COMPROBANTE_NOTA_CREDITO: 'comprobante_nota_credito',
+  COMPROBANTE_NOTA_DEBITO: 'comprobante_nota_debito',
+
+  // Referidos
+  REFERIDO_BONO_SEMANA_1: 'referido_bono_semana_1',
+  REFERIDO_BONO_SEMANA_5: 'referido_bono_semana_5'
+} as const
+
+// Helper para parsear valor según tipo
+export function parseParametroValor<T>(param: ParametroSistema): T {
+  switch (param.tipo) {
+    case 'number':
+      return parseFloat(param.valor) as T
+    case 'boolean':
+      return (param.valor === 'true') as T
+    case 'json':
+      return JSON.parse(param.valor) as T
+    case 'date':
+      return new Date(param.valor) as T
+    default:
+      return param.valor as T
+  }
 }

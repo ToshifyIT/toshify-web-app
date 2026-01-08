@@ -9,10 +9,11 @@
  * - Separation of Concerns: Lógica, tipos, constantes y UI separados
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Users, UserX, ChevronDown, ChevronUp, Database, Filter } from 'lucide-react'
+import { useState, useMemo, useCallback } from 'react'
+import { Users, UserX, ChevronDown, ChevronUp, Database } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable/DataTable'
+import { ExcelColumnFilter, useExcelFilters } from '../../../components/ui/DataTable/ExcelColumnFilter'
 
 // Tipos
 import type { CabifyDriver, AccordionKey, WeekOption } from './types/cabify.types'
@@ -113,20 +114,10 @@ export function CabifyModule() {
 
   // Column filter states - Multiselect tipo Excel
   const [companyFilter, setCompanyFilter] = useState<string[]>([])
-  const [companySearch, setCompanySearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
-  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
-  // Cerrar dropdown de filtro al hacer click fuera
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (openColumnFilter) {
-        setOpenColumnFilter(null)
-      }
-    }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [openColumnFilter])
+  // Excel filter hook for portal-based dropdowns
+  const { openFilterId, setOpenFilterId } = useExcelFilters()
 
   // Valores únicos para filtros tipo Excel
   const companiesUnicas = useMemo(() => {
@@ -134,28 +125,7 @@ export function CabifyModule() {
     return [...new Set(companies)].sort()
   }, [drivers])
 
-  const companiesFiltradas = useMemo(() => {
-    if (!companySearch) return companiesUnicas
-    return companiesUnicas.filter(c => c.toLowerCase().includes(companySearch.toLowerCase()))
-  }, [companiesUnicas, companySearch])
-
-  const estadoOptions = [
-    { value: 'activo', label: 'Activo' },
-    { value: 'inactivo', label: 'Inactivo' }
-  ]
-
-  // Toggle functions para multiselect
-  const toggleCompanyFilter = useCallback((company: string) => {
-    setCompanyFilter(prev =>
-      prev.includes(company) ? prev.filter(c => c !== company) : [...prev, company]
-    )
-  }, [])
-
-  const toggleEstadoFilter = useCallback((estado: string) => {
-    setEstadoFilter(prev =>
-      prev.includes(estado) ? prev.filter(e => e !== estado) : [...prev, estado]
-    )
-  }, [])
+  const estadoOptions = ['activo', 'inactivo']
 
   // Filtrar drivers según los filtros de columna
   const filteredDrivers = useMemo(() => {
@@ -189,17 +159,13 @@ export function CabifyModule() {
     asignaciones,
     {
       companyFilter,
-      companySearch,
-      companiesFiltradas,
-      toggleCompanyFilter,
       setCompanyFilter,
-      setCompanySearch,
+      companiesUnicas,
       estadoFilter,
-      estadoOptions,
-      toggleEstadoFilter,
       setEstadoFilter,
-      openColumnFilter,
-      setOpenColumnFilter
+      estadoOptions,
+      openFilterId,
+      setOpenFilterId
     }
   )
 
@@ -457,17 +423,13 @@ import type { AsignacionActiva } from '../../../services/asignacionesService'
 
 interface FilterState {
   companyFilter: string[]
-  companySearch: string
-  companiesFiltradas: string[]
-  toggleCompanyFilter: (company: string) => void
   setCompanyFilter: (filters: string[]) => void
-  setCompanySearch: (search: string) => void
+  companiesUnicas: string[]
   estadoFilter: string[]
-  estadoOptions: { value: string; label: string }[]
-  toggleEstadoFilter: (estado: string) => void
   setEstadoFilter: (filters: string[]) => void
-  openColumnFilter: string | null
-  setOpenColumnFilter: (filter: string | null) => void
+  estadoOptions: string[]
+  openFilterId: string | null
+  setOpenFilterId: (filterId: string | null) => void
 }
 
 function useTableColumns(
@@ -509,55 +471,15 @@ function createCompanyColumnWithFilter(filters: FilterState): ColumnDef<CabifyDr
   return {
     accessorKey: 'companyName',
     header: () => (
-      <div className="dt-column-filter">
-        <span>Compañía {filters.companyFilter.length > 0 && `(${filters.companyFilter.length})`}</span>
-        <button
-          className={`dt-column-filter-btn ${filters.companyFilter.length > 0 ? 'active' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation()
-            filters.setOpenColumnFilter(filters.openColumnFilter === 'company' ? null : 'company')
-          }}
-          title="Filtrar por compañía"
-        >
-          <Filter size={12} />
-        </button>
-        {filters.openColumnFilter === 'company' && (
-          <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={filters.companySearch}
-              onChange={(e) => filters.setCompanySearch(e.target.value)}
-              className="dt-column-filter-input"
-              autoFocus
-            />
-            <div className="dt-excel-filter-list">
-              {filters.companiesFiltradas.length === 0 ? (
-                <div className="dt-excel-filter-empty">Sin resultados</div>
-              ) : (
-                filters.companiesFiltradas.slice(0, 50).map(company => (
-                  <label key={company} className={`dt-column-filter-checkbox ${filters.companyFilter.includes(company) ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={filters.companyFilter.includes(company)}
-                      onChange={() => filters.toggleCompanyFilter(company)}
-                    />
-                    <span>{company}</span>
-                  </label>
-                ))
-              )}
-            </div>
-            {filters.companyFilter.length > 0 && (
-              <button
-                className="dt-column-filter-clear"
-                onClick={() => { filters.setCompanyFilter([]); filters.setCompanySearch('') }}
-              >
-                Limpiar ({filters.companyFilter.length})
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <ExcelColumnFilter
+        label="Compañía"
+        options={filters.companiesUnicas}
+        selectedValues={filters.companyFilter}
+        onSelectionChange={filters.setCompanyFilter}
+        filterId="company"
+        openFilterId={filters.openFilterId}
+        onOpenChange={filters.setOpenFilterId}
+      />
     ),
     cell: ({ getValue }) => (
       <span className="cabify-company">{(getValue() as string) || '-'}</span>
@@ -570,43 +492,15 @@ function createEstadoColumnWithFilter(filters: FilterState): ColumnDef<CabifyDri
   return {
     accessorKey: 'disabled',
     header: () => (
-      <div className="dt-column-filter">
-        <span>Estado {filters.estadoFilter.length > 0 && `(${filters.estadoFilter.length})`}</span>
-        <button
-          className={`dt-column-filter-btn ${filters.estadoFilter.length > 0 ? 'active' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation()
-            filters.setOpenColumnFilter(filters.openColumnFilter === 'estado' ? null : 'estado')
-          }}
-          title="Filtrar por estado"
-        >
-          <Filter size={12} />
-        </button>
-        {filters.openColumnFilter === 'estado' && (
-          <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-            <div className="dt-excel-filter-list">
-              {filters.estadoOptions.map(opt => (
-                <label key={opt.value} className={`dt-column-filter-checkbox ${filters.estadoFilter.includes(opt.value) ? 'selected' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={filters.estadoFilter.includes(opt.value)}
-                    onChange={() => filters.toggleEstadoFilter(opt.value)}
-                  />
-                  <span>{opt.label}</span>
-                </label>
-              ))}
-            </div>
-            {filters.estadoFilter.length > 0 && (
-              <button
-                className="dt-column-filter-clear"
-                onClick={() => filters.setEstadoFilter([])}
-              >
-                Limpiar ({filters.estadoFilter.length})
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <ExcelColumnFilter
+        label="Estado"
+        options={filters.estadoOptions}
+        selectedValues={filters.estadoFilter}
+        onSelectionChange={filters.setEstadoFilter}
+        filterId="estado"
+        openFilterId={filters.openFilterId}
+        onOpenChange={filters.setOpenFilterId}
+      />
     ),
     cell: ({ getValue }) => {
       const disabled = getValue() as boolean

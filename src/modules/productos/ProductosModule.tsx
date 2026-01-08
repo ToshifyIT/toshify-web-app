@@ -811,34 +811,34 @@ export function ProductosModule() {
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prod-stats">
         <div className="prod-stats-grid">
-          <div className="stat-card">
+          <button className={`stat-card${tipoFilter.length === 0 ? ' active' : ''}`} onClick={() => setTipoFilter([])}>
             <Package size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.total}</span>
               <span className="stat-label">Total</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${tipoFilter.length === 1 && tipoFilter[0] === 'herramienta' ? ' active' : ''}`} onClick={() => setTipoFilter(['herramienta'])}>
             <Wrench size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.herramientas}</span>
               <span className="stat-label">Herramientas</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${tipoFilter.length === 1 && tipoFilter[0] === 'repuesto' ? ' active' : ''}`} onClick={() => setTipoFilter(['repuesto'])}>
             <Box size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.repuestos}</span>
               <span className="stat-label">Repuestos</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${tipoFilter.length === 1 && tipoFilter[0] === 'retornable' ? ' active' : ''}`} onClick={() => setTipoFilter(['retornable'])}>
             <Tag size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.retornables}</span>
               <span className="stat-label">Retornables</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 

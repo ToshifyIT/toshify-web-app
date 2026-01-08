@@ -66,6 +66,20 @@
   padding: 12px;
   background: var(--bg-secondary);
   border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.prod-stats .stat-card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
+  transform: translateY(-1px);
+}
+
+.prod-stats .stat-card.active {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: #DC2626;
 }
 
 .prod-stats .stat-card .stat-icon {

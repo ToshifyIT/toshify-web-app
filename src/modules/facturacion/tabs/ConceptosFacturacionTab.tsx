@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
-import { Plus, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Edit2, Trash2, Filter } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import type { ConceptoFacturacion } from '../../../types/facturacion.types'
@@ -11,9 +11,47 @@ export function ConceptosFacturacionTab() {
   const [conceptos, setConceptos] = useState<ConceptoFacturacion[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Estados para filtros Excel
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [tipoFilter, setTipoFilter] = useState<string[]>([])
+  const [activoFilter, setActivoFilter] = useState<string[]>([])
+
   useEffect(() => {
     cargarConceptos()
   }, [])
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    if (!openColumnFilter) return
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.dt-column-filter-dropdown') && !target.closest('.dt-column-filter-btn')) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [openColumnFilter])
+
+  // Toggle functions
+  const toggleTipoFilter = (val: string) => setTipoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+  const toggleActivoFilter = (val: string) => setActivoFilter(prev =>
+    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+  )
+
+  // Datos filtrados
+  const conceptosFiltrados = useMemo(() => {
+    return conceptos.filter(c => {
+      if (tipoFilter.length > 0 && !tipoFilter.includes(c.tipo)) return false
+      if (activoFilter.length > 0) {
+        const estado = c.activo ? 'activo' : 'inactivo'
+        if (!activoFilter.includes(estado)) return false
+      }
+      return true
+    })
+  }, [conceptos, tipoFilter, activoFilter])
 
   async function cargarConceptos() {
     setLoading(true)
@@ -287,7 +325,34 @@ export function ConceptosFacturacionTab() {
     },
     {
       accessorKey: 'tipo',
-      header: 'Tipo',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'tipo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {TIPOS_CONCEPTO.map(t => (
+                  <label key={t.value} className={`dt-column-filter-checkbox ${tipoFilter.includes(t.value) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={tipoFilter.includes(t.value)} onChange={() => toggleTipoFilter(t.value)} />
+                    <span>{t.label}</span>
+                  </label>
+                ))}
+              </div>
+              {tipoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setTipoFilter([])}>
+                  Limpiar ({tipoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => {
         const tipo = row.original.tipo
         const style = getTipoStyle(tipo)
@@ -333,7 +398,37 @@ export function ConceptosFacturacionTab() {
     },
     {
       accessorKey: 'activo',
-      header: 'Estado',
+      header: () => (
+        <div className="dt-column-filter">
+          <span>Estado {activoFilter.length > 0 && `(${activoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${activoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'activo' ? null : 'activo') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'activo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {[
+                  { value: 'activo', label: 'Activo' },
+                  { value: 'inactivo', label: 'Inactivo' }
+                ].map(e => (
+                  <label key={e.value} className={`dt-column-filter-checkbox ${activoFilter.includes(e.value) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={activoFilter.includes(e.value)} onChange={() => toggleActivoFilter(e.value)} />
+                    <span>{e.label}</span>
+                  </label>
+                ))}
+              </div>
+              {activoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setActivoFilter([])}>
+                  Limpiar ({activoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span style={{
           padding: '4px 8px',
@@ -383,11 +478,11 @@ export function ConceptosFacturacionTab() {
         </div>
       )
     }
-  ], [])
+  ], [tipoFilter, activoFilter, openColumnFilter])
 
   return (
     <DataTable
-      data={conceptos}
+      data={conceptosFiltrados}
       columns={columns}
       loading={loading}
       searchPlaceholder="Buscar concepto..."

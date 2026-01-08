@@ -499,41 +499,41 @@ export function ConceptosTab() {
       {/* Stats */}
       <div className="nom-stats">
         <div className="nom-stats-grid">
-          <div className="stat-card">
+          <button className={`stat-card${tipoFilter.length === 0 ? ' active' : ''}`} onClick={() => setTipoFilter([])}>
             <Package size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats?.total || 0}</span>
               <span className="stat-label">Total</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setTipoFilter([])}>
             <Check size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats?.activos || 0}</span>
               <span className="stat-label">Activos</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${tipoFilter.length === 1 && tipoFilter[0] === 'alquiler' ? ' active' : ''}`} onClick={() => setTipoFilter(['alquiler'])}>
             <DollarSign size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats?.porTipo.alquiler || 0}</span>
               <span className="stat-label">Alquiler</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${tipoFilter.length === 1 && tipoFilter[0] === 'cargo' ? ' active' : ''}`} onClick={() => setTipoFilter(['cargo'])}>
             <FileText size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats?.porTipo.cargo || 0}</span>
               <span className="stat-label">Cargos</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className={`stat-card${tipoFilter.length === 1 && tipoFilter[0] === 'descuento' ? ' active' : ''}`} onClick={() => setTipoFilter(['descuento'])}>
             <DollarSign size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats?.porTipo.descuento || 0}</span>
               <span className="stat-label">Descuentos</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 

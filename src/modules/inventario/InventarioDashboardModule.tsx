@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import {
   Package,
@@ -9,7 +9,8 @@ import {
   CheckCircle,
   Activity,
   Settings,
-  Droplets
+  Droplets,
+  Filter
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -40,8 +41,27 @@ export function InventarioDashboardModule() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterCategoria>('all')
 
+  // Excel-style column filter states
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [codigoFilter, setCodigoFilter] = useState<string[]>([])
+  const [nombreFilter, setNombreFilter] = useState<string[]>([])
+  const [tipoFilter, setTipoFilter] = useState<string[]>([])
+  const [categoriaFilter] = useState<string[]>([])
+  const filterRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     loadStockData()
+  }, [])
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   const loadStockData = async () => {
@@ -101,13 +121,63 @@ export function InventarioDashboardModule() {
     insumos: productosConStock.filter(p => p.categoria_codigo === 'insumos').length,
   }
 
-  const filteredData = productosConStock.filter((item) => {
+  const categoryFilteredData = productosConStock.filter((item) => {
     if (filter === 'herramientas') return item.categoria_codigo === 'herramientas' || item.es_retornable
     if (filter === 'repuestos') return item.categoria_codigo === 'repuestos' || (!item.es_retornable && item.categoria_codigo !== 'insumos' && item.categoria_codigo !== 'maquinaria')
     if (filter === 'maquinaria') return item.categoria_codigo === 'maquinaria'
     if (filter === 'insumos') return item.categoria_codigo === 'insumos'
     return true
   })
+
+  // Unique value lists for filters
+  const uniqueCodigos = useMemo(() =>
+    [...new Set(categoryFilteredData.map(p => p.codigo))].filter(Boolean) as string[],
+    [categoryFilteredData]
+  )
+  const uniqueNombres = useMemo(() =>
+    [...new Set(categoryFilteredData.map(p => p.nombre))].filter(Boolean) as string[],
+    [categoryFilteredData]
+  )
+  const uniqueTipos = useMemo(() =>
+    [...new Set(categoryFilteredData.map(p => p.es_retornable ? 'Herramienta' : 'Repuesto'))],
+    [categoryFilteredData]
+  )
+  // Toggle functions
+  const toggleCodigoFilter = (value: string) => {
+    setCodigoFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+  const toggleNombreFilter = (value: string) => {
+    setNombreFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+  const toggleTipoFilter = (value: string) => {
+    setTipoFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+  // Final filtered data with column filters
+  const filteredData = useMemo(() => {
+    let data = categoryFilteredData
+    if (codigoFilter.length > 0) {
+      data = data.filter(p => codigoFilter.includes(p.codigo))
+    }
+    if (nombreFilter.length > 0) {
+      data = data.filter(p => nombreFilter.includes(p.nombre))
+    }
+    if (tipoFilter.length > 0) {
+      data = data.filter(p => {
+        const tipo = p.es_retornable ? 'Herramienta' : 'Repuesto'
+        return tipoFilter.includes(tipo)
+      })
+    }
+    if (categoriaFilter.length > 0) {
+      data = data.filter(p => p.categoria && categoriaFilter.includes(p.categoria))
+    }
+    return data
+  }, [categoryFilteredData, codigoFilter, nombreFilter, tipoFilter, categoriaFilter])
 
   // Calcular totales generales
   // Stock Total = Disponible + En Uso + En Tránsito (NO incluye dañado ni perdido)
@@ -128,7 +198,34 @@ export function InventarioDashboardModule() {
     () => [
       {
         accessorKey: 'codigo',
-        header: 'Código',
+        header: () => (
+          <div className="dt-column-filter" ref={openColumnFilter === 'codigo' ? filterRef : null}>
+            <span>Código {codigoFilter.length > 0 && `(${codigoFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${codigoFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'codigo' ? null : 'codigo') }}
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'codigo' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  {uniqueCodigos.map(codigo => (
+                    <label key={codigo} className={`dt-column-filter-checkbox ${codigoFilter.includes(codigo) ? 'selected' : ''}`}>
+                      <input type="checkbox" checked={codigoFilter.includes(codigo)} onChange={() => toggleCodigoFilter(codigo)} />
+                      <span>{codigo}</span>
+                    </label>
+                  ))}
+                </div>
+                {codigoFilter.length > 0 && (
+                  <button className="dt-column-filter-clear" onClick={() => setCodigoFilter([])}>
+                    Limpiar ({codigoFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (
           <span className="inv-codigo">{getValue() as string}</span>
         ),
@@ -136,7 +233,34 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'nombre',
-        header: 'Producto',
+        header: () => (
+          <div className="dt-column-filter" ref={openColumnFilter === 'nombre' ? filterRef : null}>
+            <span>Producto {nombreFilter.length > 0 && `(${nombreFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${nombreFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'nombre' ? null : 'nombre') }}
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'nombre' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  {uniqueNombres.map(nombre => (
+                    <label key={nombre} className={`dt-column-filter-checkbox ${nombreFilter.includes(nombre) ? 'selected' : ''}`}>
+                      <input type="checkbox" checked={nombreFilter.includes(nombre)} onChange={() => toggleNombreFilter(nombre)} />
+                      <span>{nombre}</span>
+                    </label>
+                  ))}
+                </div>
+                {nombreFilter.length > 0 && (
+                  <button className="dt-column-filter-clear" onClick={() => setNombreFilter([])}>
+                    Limpiar ({nombreFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => (
           <span className="inv-nombre">{getValue() as string}</span>
         ),
@@ -152,7 +276,34 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'es_retornable',
-        header: 'Tipo',
+        header: () => (
+          <div className="dt-column-filter" ref={openColumnFilter === 'tipo' ? filterRef : null}>
+            <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'tipo' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  {uniqueTipos.map(tipo => (
+                    <label key={tipo} className={`dt-column-filter-checkbox ${tipoFilter.includes(tipo) ? 'selected' : ''}`}>
+                      <input type="checkbox" checked={tipoFilter.includes(tipo)} onChange={() => toggleTipoFilter(tipo)} />
+                      <span>{tipo}</span>
+                    </label>
+                  ))}
+                </div>
+                {tipoFilter.length > 0 && (
+                  <button className="dt-column-filter-clear" onClick={() => setTipoFilter([])}>
+                    Limpiar ({tipoFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => {
           const esRetornable = getValue() as boolean
           return (
@@ -220,7 +371,7 @@ export function InventarioDashboardModule() {
         enableSorting: true,
       },
     ],
-    []
+    [openColumnFilter, codigoFilter, nombreFilter, tipoFilter, uniqueCodigos, uniqueNombres, uniqueTipos]
   )
 
   return (
@@ -282,48 +433,48 @@ export function InventarioDashboardModule() {
       {/* Stats Cards - Estilo Bitacora */}
       <div className="inv-stats">
         <div className="inv-stats-grid">
-          <div className="stat-card">
+          <button className={`stat-card${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>
             <Package size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{filteredData.length}</span>
               <span className="stat-label">Productos</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <CheckCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.disponible}</span>
               <span className="stat-label">Disponible</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <Activity size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.en_uso}</span>
               <span className="stat-label">En Uso</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <Truck size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.en_transito}</span>
               <span className="stat-label">En Tránsito</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.dañado}</span>
               <span className="stat-label">Dañado</span>
             </div>
-          </div>
-          <div className="stat-card">
+          </button>
+          <button className="stat-card" onClick={() => setFilter('all')}>
             <XCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.perdido}</span>
               <span className="stat-label">Perdido</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 

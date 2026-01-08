@@ -279,6 +279,15 @@
   padding: 12px;
   background: var(--bg-secondary);
   border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.uss-stat-card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
+  transform: translateY(-1px);
 }
 
 .uss-stat-icon {

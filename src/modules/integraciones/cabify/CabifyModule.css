@@ -584,6 +584,14 @@
   padding: 12px 10px;
   text-align: center;
   border: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cabify-stat-card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
+  transform: translateY(-1px);
 }
 
 .cabify-stat-card.highlight-green {

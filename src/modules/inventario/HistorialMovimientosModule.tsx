@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -10,7 +10,8 @@ import {
   Truck,
   Calendar,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Filter
 } from 'lucide-react'
 import './HistorialMovimientos.css'
 
@@ -70,8 +71,27 @@ export function HistorialMovimientosModule() {
   const [error, setError] = useState<string | null>(null)
   const [tipoFilter, setTipoFilter] = useState<string>('all')
 
+  // Excel-style column filter states
+  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+  const [tipoMovimientoFilter, setTipoMovimientoFilter] = useState<string[]>([])
+  const [productoFilter, setProductoFilter] = useState<string[]>([])
+  const [vehiculoFilter, setVehiculoFilter] = useState<string[]>([])
+  const [usuarioFilter, setUsuarioFilter] = useState<string[]>([])
+  const filterRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     loadMovimientos()
+  }, [])
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setOpenColumnFilter(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   const loadMovimientos = async () => {
@@ -135,11 +155,69 @@ export function HistorialMovimientosModule() {
     }
   }
 
-  // Filtrar por tipo de movimiento
+  // Unique value lists for filters
+  const uniqueTipoMovimiento = useMemo(() =>
+    [...new Set(movimientos.map(m => m.tipo_movimiento))].filter(Boolean) as string[],
+    [movimientos]
+  )
+  const uniqueProductos = useMemo(() =>
+    [...new Set(movimientos.map(m => m.producto.nombre))].filter(Boolean) as string[],
+    [movimientos]
+  )
+  const uniqueVehiculos = useMemo(() =>
+    [...new Set(movimientos.map(m => m.vehiculo_destino?.patente || m.vehiculo_origen?.patente))].filter(Boolean) as string[],
+    [movimientos]
+  )
+  const uniqueUsuarios = useMemo(() =>
+    [...new Set(movimientos.map(m => m.usuario?.nombre))].filter(Boolean) as string[],
+    [movimientos]
+  )
+
+  // Toggle functions
+  const toggleTipoMovimientoFilter = (value: string) => {
+    setTipoMovimientoFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+  const toggleProductoFilter = (value: string) => {
+    setProductoFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+  const toggleVehiculoFilter = (value: string) => {
+    setVehiculoFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+  const toggleUsuarioFilter = (value: string) => {
+    setUsuarioFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+
+  // Filtrar por tipo de movimiento y column filters
   const filteredData = useMemo(() => {
-    if (tipoFilter === 'all') return movimientos
-    return movimientos.filter(item => item.tipo_movimiento === tipoFilter)
-  }, [movimientos, tipoFilter])
+    let data = movimientos
+    if (tipoFilter !== 'all') {
+      data = data.filter(item => item.tipo_movimiento === tipoFilter)
+    }
+    if (tipoMovimientoFilter.length > 0) {
+      data = data.filter(item => tipoMovimientoFilter.includes(item.tipo_movimiento))
+    }
+    if (productoFilter.length > 0) {
+      data = data.filter(item => productoFilter.includes(item.producto.nombre))
+    }
+    if (vehiculoFilter.length > 0) {
+      data = data.filter(item => {
+        const vehiculo = item.vehiculo_destino?.patente || item.vehiculo_origen?.patente
+        return vehiculo && vehiculoFilter.includes(vehiculo)
+      })
+    }
+    if (usuarioFilter.length > 0) {
+      data = data.filter(item => item.usuario?.nombre && usuarioFilter.includes(item.usuario.nombre))
+    }
+    return data
+  }, [movimientos, tipoFilter, tipoMovimientoFilter, productoFilter, vehiculoFilter, usuarioFilter])
 
   // Definición de columnas para TanStack Table
   const columns = useMemo<ColumnDef<Movimiento, any>[]>(() => [
@@ -163,7 +241,34 @@ export function HistorialMovimientosModule() {
     },
     {
       accessorKey: 'tipo_movimiento',
-      header: 'Tipo',
+      header: () => (
+        <div className="dt-column-filter" ref={openColumnFilter === 'tipo' ? filterRef : null}>
+          <span>Tipo {tipoMovimientoFilter.length > 0 && `(${tipoMovimientoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${tipoMovimientoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'tipo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {uniqueTipoMovimiento.map(tipo => (
+                  <label key={tipo} className={`dt-column-filter-checkbox ${tipoMovimientoFilter.includes(tipo) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={tipoMovimientoFilter.includes(tipo)} onChange={() => toggleTipoMovimientoFilter(tipo)} />
+                    <span>{getTipoLabel(tipo)}</span>
+                  </label>
+                ))}
+              </div>
+              {tipoMovimientoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setTipoMovimientoFilter([])}>
+                  Limpiar ({tipoMovimientoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => {
         const tipo = row.original.tipo_movimiento
         return (
@@ -177,7 +282,34 @@ export function HistorialMovimientosModule() {
     {
       accessorFn: (row) => `${row.producto.codigo} ${row.producto.nombre}`,
       id: 'producto',
-      header: 'Producto',
+      header: () => (
+        <div className="dt-column-filter" ref={openColumnFilter === 'producto' ? filterRef : null}>
+          <span>Producto {productoFilter.length > 0 && `(${productoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${productoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'producto' ? null : 'producto') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'producto' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {uniqueProductos.map(producto => (
+                  <label key={producto} className={`dt-column-filter-checkbox ${productoFilter.includes(producto) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={productoFilter.includes(producto)} onChange={() => toggleProductoFilter(producto)} />
+                    <span>{producto}</span>
+                  </label>
+                ))}
+              </div>
+              {productoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setProductoFilter([])}>
+                  Limpiar ({productoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <div>
           <div className="hist-producto-codigo">{row.original.producto.codigo}</div>
@@ -197,7 +329,34 @@ export function HistorialMovimientosModule() {
     {
       accessorFn: (row) => row.vehiculo_destino?.patente || row.vehiculo_origen?.patente || '',
       id: 'vehiculo',
-      header: 'Vehículo',
+      header: () => (
+        <div className="dt-column-filter" ref={openColumnFilter === 'vehiculo' ? filterRef : null}>
+          <span>Vehículo {vehiculoFilter.length > 0 && `(${vehiculoFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${vehiculoFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'vehiculo' ? null : 'vehiculo') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'vehiculo' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {uniqueVehiculos.map(vehiculo => (
+                  <label key={vehiculo} className={`dt-column-filter-checkbox ${vehiculoFilter.includes(vehiculo) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={vehiculoFilter.includes(vehiculo)} onChange={() => toggleVehiculoFilter(vehiculo)} />
+                    <span>{vehiculo}</span>
+                  </label>
+                ))}
+              </div>
+              {vehiculoFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setVehiculoFilter([])}>
+                  Limpiar ({vehiculoFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => (
         <span>
           {row.original.vehiculo_destino?.patente || row.original.vehiculo_origen?.patente || '-'}
@@ -207,7 +366,34 @@ export function HistorialMovimientosModule() {
     {
       accessorFn: (row) => row.usuario?.nombre || 'Sistema',
       id: 'usuario',
-      header: 'Usuario',
+      header: () => (
+        <div className="dt-column-filter" ref={openColumnFilter === 'usuario' ? filterRef : null}>
+          <span>Usuario {usuarioFilter.length > 0 && `(${usuarioFilter.length})`}</span>
+          <button
+            className={`dt-column-filter-btn ${usuarioFilter.length > 0 ? 'active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'usuario' ? null : 'usuario') }}
+          >
+            <Filter size={12} />
+          </button>
+          {openColumnFilter === 'usuario' && (
+            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+              <div className="dt-excel-filter-list">
+                {uniqueUsuarios.map(usuario => (
+                  <label key={usuario} className={`dt-column-filter-checkbox ${usuarioFilter.includes(usuario) ? 'selected' : ''}`}>
+                    <input type="checkbox" checked={usuarioFilter.includes(usuario)} onChange={() => toggleUsuarioFilter(usuario)} />
+                    <span>{usuario}</span>
+                  </label>
+                ))}
+              </div>
+              {usuarioFilter.length > 0 && (
+                <button className="dt-column-filter-clear" onClick={() => setUsuarioFilter([])}>
+                  Limpiar ({usuarioFilter.length})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ),
       cell: ({ row }) => {
         const usuario = row.original.usuario
         if (!usuario) {
@@ -235,7 +421,7 @@ export function HistorialMovimientosModule() {
         </span>
       )
     }
-  ], [])
+  ], [openColumnFilter, tipoMovimientoFilter, productoFilter, vehiculoFilter, usuarioFilter, uniqueTipoMovimiento, uniqueProductos, uniqueVehiculos, uniqueUsuarios])
 
   return (
     <div className="hist-module">
