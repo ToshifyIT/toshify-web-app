@@ -248,9 +248,9 @@ export function ConductoresModule() {
         conductoresAsignados++;
       }
 
-      // Licencias por vencer
+      // Licencias por vencer (solo conductores activos)
       const vencimiento = c.licencia_vencimiento;
-      if (vencimiento && vencimiento >= hoyStr && vencimiento <= en30DiasStr) {
+      if (estadoCodigo === 'activo' && vencimiento && vencimiento >= hoyStr && vencimiento <= en30DiasStr) {
         licenciasPorVencer++;
       }
     }
@@ -1290,19 +1290,30 @@ export function ConductoresModule() {
       });
     }
 
-    // Filtro por licencias por vencer (próximos 30 días)
+    // Filtro por licencias por vencer (próximos 30 días, solo activos)
     if (licenciaVencerFilter) {
       const hoy = new Date();
       const en30Dias = new Date();
       en30Dias.setDate(en30Dias.getDate() + 30);
       result = result.filter(c => {
+        // Solo conductores activos
+        const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
+        if (estadoCodigo !== 'activo') return false;
         if (!c.licencia_vencimiento) return false;
         const fechaVenc = new Date(c.licencia_vencimiento);
         return fechaVenc >= hoy && fechaVenc <= en30Dias;
       });
     }
 
-    return result;
+    // Ordenar: primero activos, luego baja
+    return result.sort((a, b) => {
+      const estadoA = a.conductores_estados?.codigo?.toLowerCase();
+      const estadoB = b.conductores_estados?.codigo?.toLowerCase();
+      // Activos primero (0), baja después (1), otros al final (2)
+      const prioridadA = estadoA === 'activo' ? 0 : estadoA === 'baja' ? 1 : 2;
+      const prioridadB = estadoB === 'activo' ? 0 : estadoB === 'baja' ? 1 : 2;
+      return prioridadA - prioridadB;
+    });
   }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter, licenciaVencerFilter]);
 
   // Obtener lista única de estados para el filtro
@@ -1572,8 +1583,14 @@ export function ConductoresModule() {
       {
         accessorKey: "licencia_vencimiento",
         header: "Vencimiento",
-        cell: ({ getValue }) =>
-          new Date(getValue() as string).toLocaleDateString("es-AR"),
+        cell: ({ row, getValue }) => {
+          // No mostrar vencimiento para conductores de baja
+          const estadoCodigo = row.original.conductores_estados?.codigo?.toLowerCase();
+          if (estadoCodigo === 'baja') return '-';
+          const fecha = getValue() as string;
+          if (!fecha) return '-';
+          return new Date(fecha).toLocaleDateString("es-AR");
+        },
         enableSorting: true,
       },
       {
