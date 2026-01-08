@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { TimeInput24h } from '../../components/ui/TimeInput24h'
+import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
 import {
   Plus,
@@ -19,8 +20,7 @@ import {
   Clock,
   ExternalLink,
   FolderOpen,
-  Download,
-  Filter
+  Download
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -53,15 +53,13 @@ export function SiniestrosModule() {
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   const [stats, setStats] = useState<SiniestroStats | null>(null)
 
-  // Filtros por columna tipo Excel
+  // Filtros por columna tipo Excel con Portal
+  const { openFilterId, setOpenFilterId } = useExcelFilters()
   const [patenteFilter, setPatenteFilter] = useState<string[]>([])
-  const [patenteSearch, setPatenteSearch] = useState('')
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
-  const [conductorSearch, setConductorSearch] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState<string[]>([])
   const [responsableFilter, setResponsableFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
-  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   // Modal
   const [showModal, setShowModal] = useState(false)
@@ -186,14 +184,6 @@ export function SiniestrosModule() {
     })
   }
 
-  // Cerrar dropdown de filtro al hacer click fuera
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (openColumnFilter) setOpenColumnFilter(null)
-    }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [openColumnFilter])
 
   // Listas de valores únicos para filtros
   const patentesUnicas = useMemo(() =>
@@ -212,33 +202,6 @@ export function SiniestrosModule() {
     [...new Set(siniestros.map(s => s.estado_nombre).filter(Boolean))].sort() as string[]
   , [siniestros])
 
-  // Listas filtradas por búsqueda
-  const patentesFiltradas = useMemo(() => {
-    if (!patenteSearch) return patentesUnicas
-    return patentesUnicas.filter(p => p.toLowerCase().includes(patenteSearch.toLowerCase()))
-  }, [patentesUnicas, patenteSearch])
-
-  const conductoresFiltrados = useMemo(() => {
-    if (!conductorSearch) return conductoresUnicos
-    return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
-  }, [conductoresUnicos, conductorSearch])
-
-  // Toggle functions para multiselect
-  const togglePatenteFilter = (val: string) => setPatenteFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleCategoriaFilter = (val: string) => setCategoriaFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleResponsableFilter = (val: string) => setResponsableFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
 
   // Filtrar siniestros según tab y filtros tipo Excel
   const siniestrosFiltrados = useMemo(() => {
@@ -312,156 +275,60 @@ export function SiniestrosModule() {
     {
       accessorKey: 'vehiculo_patente',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Patente {patenteFilter.length > 0 && `(${patenteFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${patenteFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'patente' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar patente..."
-                value={patenteSearch}
-                onChange={(e) => setPatenteSearch(e.target.value)}
-              />
-              <div className="dt-excel-filter-list">
-                {patentesFiltradas.map(patente => (
-                  <label key={patente} className={`dt-column-filter-checkbox ${patenteFilter.includes(patente) ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={patenteFilter.includes(patente)}
-                      onChange={() => togglePatenteFilter(patente)}
-                    />
-                    <span>{patente}</span>
-                  </label>
-                ))}
-              </div>
-              {patenteFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setPatenteFilter([]); setPatenteSearch('') }}>
-                  Limpiar ({patenteFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Patente"
+          options={patentesUnicas}
+          selectedValues={patenteFilter}
+          onSelectionChange={setPatenteFilter}
+          filterId="patente"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
       ),
       cell: ({ row }) => <span className="dt-badge dt-badge-gray">{row.original.vehiculo_patente || '-'}</span>
     },
     {
       accessorKey: 'conductor_display',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Conductor {conductorFilter.length > 0 && `(${conductorFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${conductorFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'conductor' ? null : 'conductor') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'conductor' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar conductor..."
-                value={conductorSearch}
-                onChange={(e) => setConductorSearch(e.target.value)}
-              />
-              <div className="dt-excel-filter-list">
-                {conductoresFiltrados.map(conductor => (
-                  <label key={conductor} className={`dt-column-filter-checkbox ${conductorFilter.includes(conductor) ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={conductorFilter.includes(conductor)}
-                      onChange={() => toggleConductorFilter(conductor)}
-                    />
-                    <span>{conductor}</span>
-                  </label>
-                ))}
-              </div>
-              {conductorFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setConductorFilter([]); setConductorSearch('') }}>
-                  Limpiar ({conductorFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Conductor"
+          options={conductoresUnicos}
+          selectedValues={conductorFilter}
+          onSelectionChange={setConductorFilter}
+          filterId="conductor"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
       ),
       cell: ({ row }) => row.original.conductor_display || '-'
     },
     {
       accessorKey: 'categoria_nombre',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Categoría {categoriaFilter.length > 0 && `(${categoriaFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${categoriaFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'categoria' ? null : 'categoria') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'categoria' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {categoriasUnicas.map(cat => (
-                  <label key={cat} className={`dt-column-filter-checkbox ${categoriaFilter.includes(cat) ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={categoriaFilter.includes(cat)}
-                      onChange={() => toggleCategoriaFilter(cat)}
-                    />
-                    <span>{cat}</span>
-                  </label>
-                ))}
-              </div>
-              {categoriaFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setCategoriaFilter([])}>
-                  Limpiar ({categoriaFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Categoria"
+          options={categoriasUnicas}
+          selectedValues={categoriaFilter}
+          onSelectionChange={setCategoriaFilter}
+          filterId="categoria"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
       ),
       cell: ({ row }) => row.original.categoria_nombre || '-'
     },
     {
       accessorKey: 'responsable',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Responsable {responsableFilter.length > 0 && `(${responsableFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${responsableFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'responsable' ? null : 'responsable') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'responsable' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {['tercero', 'conductor', 'compartida', 'sin_info'].map(resp => (
-                  <label key={resp} className={`dt-column-filter-checkbox ${responsableFilter.includes(resp) ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={responsableFilter.includes(resp)}
-                      onChange={() => toggleResponsableFilter(resp)}
-                    />
-                    <span>{resp.charAt(0).toUpperCase() + resp.slice(1).replace('_', ' ')}</span>
-                  </label>
-                ))}
-              </div>
-              {responsableFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setResponsableFilter([])}>
-                  Limpiar ({responsableFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Responsable"
+          options={['tercero', 'conductor', 'compartida', 'sin_info']}
+          selectedValues={responsableFilter}
+          onSelectionChange={setResponsableFilter}
+          filterId="responsable"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
       ),
       cell: ({ row }) => {
         const resp = row.original.responsable
@@ -478,36 +345,15 @@ export function SiniestrosModule() {
     {
       accessorKey: 'estado_nombre',
       header: () => (
-        <div className="dt-column-filter">
-          <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'estado' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {estadosUnicos.map(estado => (
-                  <label key={estado} className={`dt-column-filter-checkbox ${estadoFilter.includes(estado) ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={estadoFilter.includes(estado)}
-                      onChange={() => toggleEstadoFilter(estado)}
-                    />
-                    <span>{estado}</span>
-                  </label>
-                ))}
-              </div>
-              {estadoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setEstadoFilter([])}>
-                  Limpiar ({estadoFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <ExcelColumnFilter
+          label="Estado"
+          options={estadosUnicos}
+          selectedValues={estadoFilter}
+          onSelectionChange={setEstadoFilter}
+          filterId="estado"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
       ),
       cell: ({ row }) => {
         const color = row.original.estado_color || 'gray'
@@ -560,7 +406,7 @@ export function SiniestrosModule() {
         </div>
       )
     }
-  ], [patenteFilter, patenteSearch, patentesFiltradas, conductorFilter, conductorSearch, conductoresFiltrados, categoriaFilter, categoriasUnicas, responsableFilter, estadoFilter, estadosUnicos, openColumnFilter])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, categoriasUnicas, categoriaFilter, responsableFilter, estadosUnicos, estadoFilter, openFilterId])
 
   function handleNuevoSiniestro() {
     const estadoRegistrado = estados.find(e => e.codigo === 'REGISTRADO')

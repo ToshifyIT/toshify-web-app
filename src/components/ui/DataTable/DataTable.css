@@ -137,14 +137,30 @@
   /* Clip solo horizontalmente, permitir vertical overflow */
   overflow-clip-margin: 0 content-box;
   padding-bottom: 4px; /* Espacio para evitar corte del scrollbar */
+  /* Smooth horizontal scrolling on mobile */
+  scrollbar-width: thin;
+}
+
+.dt-table-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.dt-table-wrapper::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.dt-table-wrapper::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
 }
 
 /* Table */
 .dt-table {
   width: 100%;
-  min-width: 800px;
+  min-width: max-content; /* Solo crece si necesita, no fuerza ancho fijo */
   border-collapse: collapse;
   overflow: visible; /* Permite que los dropdowns de filtros se muestren */
+  table-layout: auto; /* Permite que las columnas se ajusten */
 }
 
 /* Header */
@@ -638,6 +654,8 @@
 }
 
 /* Responsive - Multi-resolution support */
+
+/* Large desktop (1440px+) */
 @media (max-width: 1440px) {
   .dt-table th,
   .dt-table td {
@@ -645,7 +663,29 @@
   }
 }
 
+/* Desktop/Laptop (1024px - 1440px) */
+@media (max-width: 1280px) {
+  .dt-table th,
+  .dt-table td {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .dt-table th {
+    font-size: 10px;
+  }
+}
+
+/* Tablet landscape (768px - 1024px) */
 @media (max-width: 1024px) {
+  .dt-header-bar {
+    gap: 10px;
+  }
+
+  .dt-search-wrapper {
+    min-width: 180px;
+  }
+
   .dt-table th,
   .dt-table td {
     padding: 6px 8px;
@@ -655,8 +695,17 @@
   .dt-table th {
     font-size: 10px;
   }
+
+  .dt-pagination-info {
+    font-size: 11px;
+  }
+
+  .dt-pagination-text {
+    font-size: 11px;
+  }
 }
 
+/* Tablet portrait (600px - 768px) */
 @media (max-width: 768px) {
   .dt-header-bar {
     flex-wrap: wrap;
@@ -664,47 +713,59 @@
   }
 
   .dt-search-wrapper {
-    min-width: 100%;
-    order: 2;
+    flex: 1;
+    min-width: 200px;
   }
 
   .dt-header-action {
-    order: 1;
+    flex-shrink: 0;
+  }
+
+  .dt-table th,
+  .dt-table td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  .dt-table th {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
+  .dt-pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .dt-pagination-info {
+    text-align: center;
+  }
+
+  .dt-pagination-controls {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
+/* Mobile large (480px - 600px) */
+@media (max-width: 600px) {
+  .dt-header-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dt-search-wrapper {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .dt-header-action {
     width: 100%;
   }
 
   .dt-header-action button {
     width: 100%;
-  }
-
-  .dt-table {
-    min-width: 600px;
-  }
-
-  .dt-table th,
-  .dt-table td {
-    padding: 6px 8px;
-  }
-
-  .dt-pagination {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .dt-pagination-controls {
-    width: 100%;
-    justify-content: space-between;
-  }
-}
-
-@media (max-width: 480px) {
-  .dt-search-input {
-    padding: 10px 12px 10px 36px;
-    font-size: 14px; /* Más grande para mejor legibilidad táctil */
-  }
-
-  .dt-table {
-    min-width: 500px;
   }
 
   .dt-table th,
@@ -716,6 +777,25 @@
   .dt-table th {
     font-size: 9px;
   }
+}
+
+/* Mobile (< 480px) */
+@media (max-width: 480px) {
+  .dt-search-input {
+    padding: 10px 12px 10px 36px;
+    font-size: 14px; /* Mas grande para mejor legibilidad tactil */
+  }
+
+  .dt-table th,
+  .dt-table td {
+    padding: 8px 4px;
+    font-size: 11px;
+  }
+
+  .dt-table th {
+    font-size: 9px;
+    padding: 6px 4px;
+  }
 
   .dt-pagination-text {
     display: none;
@@ -723,17 +803,14 @@
 
   .dt-pagination-info {
     font-size: 11px;
-    width: 100%;
-    text-align: center;
-    margin-bottom: 4px;
   }
 
   .dt-pagination-controls {
-    justify-content: center;
+    gap: 3px;
   }
 
   .dt-pagination-btn {
-    padding: 8px 10px; /* Más grande para táctil - min 44px touch target */
+    padding: 8px 10px; /* Touch-friendly - min 44px touch target */
     min-width: 36px;
     font-size: 13px;
   }
@@ -778,18 +855,15 @@
 
 /* Extra small devices (< 360px) */
 @media (max-width: 360px) {
-  .dt-table {
-    min-width: 450px;
-  }
-
   .dt-table th,
   .dt-table td {
-    padding: 6px 4px;
+    padding: 6px 3px;
     font-size: 10px;
   }
 
   .dt-table th {
     font-size: 8px;
+    padding: 5px 3px;
   }
 
   .dt-header-bar {
