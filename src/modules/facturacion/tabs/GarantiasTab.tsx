@@ -85,27 +85,45 @@ export function GarantiasTab() {
   }
 
   async function registrarPago(garantia: GarantiaConductor) {
+    const pendiente = garantia.monto_total - garantia.monto_pagado
+    const siguienteCuota = garantia.cuotas_pagadas + 1
+
     const { value: formValues } = await Swal.fire({
-      title: 'Registrar Pago de Garantía',
+      title: `<span style="font-size: 16px; font-weight: 600;">Registrar Pago de Garantía</span>`,
       html: `
-        <div style="text-align: left; margin-bottom: 15px;">
-          <p><strong>Conductor:</strong> ${garantia.conductor_nombre}</p>
-          <p><strong>Tipo:</strong> ${garantia.tipo_alquiler}</p>
-          <p><strong>Monto pendiente:</strong> ${formatCurrency(garantia.monto_total - garantia.monto_pagado)}</p>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px;">Monto a pagar:</label>
-          <input id="swal-monto" type="number" class="swal2-input" placeholder="Monto" value="${FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL}">
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px;">Referencia (opcional):</label>
-          <input id="swal-ref" type="text" class="swal2-input" placeholder="Ej: Semana 2">
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
+            <div style="display: flex; gap: 12px; margin-top: 4px;">
+              <span style="color: #6B7280; font-size: 12px;">Tipo: <strong style="color: #374151;">${garantia.tipo_alquiler}</strong></span>
+              <span style="color: #6B7280; font-size: 12px;">Cuota: <strong style="color: #374151;">${siguienteCuota}/${garantia.cuotas_totales}</strong></span>
+            </div>
+            <div style="color: #DC2626; font-size: 12px; margin-top: 4px;">
+              Pendiente: <strong>${formatCurrency(pendiente)}</strong>
+            </div>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a pagar:</label>
+            <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Monto" value="${FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL}">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
+            <input id="swal-ref" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Semana 2">
+          </div>
         </div>
       `,
       focusConfirm: false,
       showCancelButton: true,
       confirmButtonText: 'Registrar',
       cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280',
+      width: 340,
+      customClass: {
+        popup: 'swal-compact',
+        title: 'swal-title-compact',
+        htmlContainer: 'swal-html-compact'
+      },
       preConfirm: () => {
         const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
         const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
@@ -175,37 +193,59 @@ export function GarantiasTab() {
       const pagosHtml = pagos && pagos.length > 0
         ? (pagos as any[]).map((p: any) => `
             <tr>
-              <td style="padding: 8px; border-bottom: 1px solid #eee;">${p.numero_cuota}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #eee;">${formatDate(p.fecha_pago)}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #eee;">${formatCurrency(p.monto)}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #eee;">${p.referencia || '-'}</td>
+              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${p.numero_cuota}</td>
+              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${formatDate(p.fecha_pago)}</td>
+              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; text-align: right; color: #16a34a;">${formatCurrency(p.monto)}</td>
+              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">${p.referencia || '-'}</td>
             </tr>
           `).join('')
-        : '<tr><td colspan="4" style="padding: 20px; text-align: center;">Sin pagos registrados</td></tr>'
+        : '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #9CA3AF;">Sin pagos registrados</td></tr>'
+
+      const pendiente = garantia.monto_total - garantia.monto_pagado
+      const porcentaje = Math.round((garantia.monto_pagado / garantia.monto_total) * 100)
 
       Swal.fire({
-        title: 'Historial de Garantía',
+        title: `<span style="font-size: 16px; font-weight: 600;">Historial de Garantía</span>`,
         html: `
-          <div style="text-align: left; margin-bottom: 15px;">
-            <p><strong>Conductor:</strong> ${garantia.conductor_nombre}</p>
-            <p><strong>Progreso:</strong> ${formatCurrency(garantia.monto_pagado)} / ${formatCurrency(garantia.monto_total)}</p>
-          </div>
-          <div style="max-height: 300px; overflow-y: auto;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-              <thead>
-                <tr style="background: #f5f5f5;">
-                  <th style="padding: 8px; text-align: left;">Cuota</th>
-                  <th style="padding: 8px; text-align: left;">Fecha</th>
-                  <th style="padding: 8px; text-align: left;">Monto</th>
-                  <th style="padding: 8px; text-align: left;">Ref.</th>
-                </tr>
-              </thead>
-              <tbody>${pagosHtml}</tbody>
-            </table>
+          <div style="text-align: left; font-size: 13px;">
+            <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+              <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
+              <div style="display: flex; gap: 12px; margin-top: 4px;">
+                <span style="color: #6B7280; font-size: 12px;">Tipo: <strong style="color: #374151;">${garantia.tipo_alquiler}</strong></span>
+                <span style="color: #6B7280; font-size: 12px;">Cuotas: <strong style="color: #374151;">${garantia.cuotas_pagadas}/${garantia.cuotas_totales}</strong></span>
+              </div>
+              <div style="display: flex; gap: 12px; margin-top: 4px;">
+                <span style="color: #16a34a; font-size: 12px;">Pagado: <strong>${formatCurrency(garantia.monto_pagado)}</strong></span>
+                <span style="color: #DC2626; font-size: 12px;">Pendiente: <strong>${formatCurrency(pendiente)}</strong></span>
+              </div>
+              <div style="background: #E5E7EB; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+                <div style="background: #16a34a; height: 100%; width: ${porcentaje}%;"></div>
+              </div>
+              <div style="text-align: center; font-size: 11px; color: #6B7280; margin-top: 2px;">${porcentaje}%</div>
+            </div>
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                  <tr style="background: #F9FAFB;">
+                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Cuota</th>
+                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Fecha</th>
+                    <th style="padding: 6px 8px; text-align: right; font-weight: 600;">Monto</th>
+                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Ref.</th>
+                  </tr>
+                </thead>
+                <tbody>${pagosHtml}</tbody>
+              </table>
+            </div>
           </div>
         `,
-        width: 600,
-        confirmButtonText: 'Cerrar'
+        width: 400,
+        confirmButtonText: 'Cerrar',
+        confirmButtonColor: '#6B7280',
+        customClass: {
+          popup: 'swal-compact',
+          title: 'swal-title-compact',
+          htmlContainer: 'swal-html-compact'
+        }
       })
     } catch (error) {
       console.error('Error cargando historial:', error)

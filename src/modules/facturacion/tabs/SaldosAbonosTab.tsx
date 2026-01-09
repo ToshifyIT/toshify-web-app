@@ -82,38 +82,51 @@ export function SaldosAbonosTab() {
   }
 
   async function registrarAbono(saldo: SaldoConductor) {
+    const saldoColor = saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'
+
     const { value: formValues } = await Swal.fire({
-      title: 'Registrar Movimiento',
+      title: `<span style="font-size: 16px; font-weight: 600;">Registrar Movimiento</span>`,
       html: `
-        <div style="text-align: left; margin-bottom: 15px;">
-          <p><strong>Conductor:</strong> ${saldo.conductor_nombre}</p>
-          <p><strong>Saldo actual:</strong> <span style="color: ${saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'}">${formatCurrency(saldo.saldo_actual)}</span></p>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Tipo:</label>
-          <select id="swal-tipo" class="swal2-select" style="margin: 0;">
-            <option value="abono">Abono (a favor del conductor)</option>
-            <option value="cargo">Cargo (deuda del conductor)</option>
-          </select>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Monto:</label>
-          <input id="swal-monto" type="number" class="swal2-input" placeholder="Monto" style="margin: 0;">
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Concepto:</label>
-          <input id="swal-concepto" type="text" class="swal2-input" placeholder="Ej: Pago en efectivo" style="margin: 0;">
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Referencia (opcional):</label>
-          <input id="swal-ref" type="text" class="swal2-input" placeholder="Ej: Recibo #123" style="margin: 0;">
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
+            <div style="color: ${saldoColor}; font-size: 12px; margin-top: 4px;">
+              Saldo actual: <strong>${formatCurrency(saldo.saldo_actual)}</strong>
+            </div>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Tipo:</label>
+            <select id="swal-tipo" class="swal2-select" style="font-size: 14px; margin: 0; width: 100%; padding: 8px;">
+              <option value="abono">Abono (a favor del conductor)</option>
+              <option value="cargo">Cargo (deuda del conductor)</option>
+            </select>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto:</label>
+            <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Monto">
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Concepto:</label>
+            <input id="swal-concepto" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Pago en efectivo">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
+            <input id="swal-ref" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Recibo #123">
+          </div>
         </div>
       `,
       focusConfirm: false,
       showCancelButton: true,
       confirmButtonText: 'Registrar',
       cancelButtonText: 'Cancelar',
-      width: 500,
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280',
+      width: 360,
+      customClass: {
+        popup: 'swal-compact',
+        title: 'swal-title-compact',
+        htmlContainer: 'swal-html-compact'
+      },
       preConfirm: () => {
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
         const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
@@ -187,39 +200,54 @@ export function SaldosAbonosTab() {
       const historialHtml = abonos && abonos.length > 0
         ? (abonos as any[]).map((a: any) => `
             <tr>
-              <td style="padding: 8px; border-bottom: 1px solid #eee;">${formatDate(a.fecha_abono)}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #eee;">
-                <span style="color: ${a.tipo === 'abono' ? '#16a34a' : '#dc2626'}">${a.tipo === 'abono' ? '+' : '-'}${formatCurrency(a.monto)}</span>
+              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${formatDate(a.fecha_abono)}</td>
+              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; text-align: right;">
+                <span style="color: ${a.tipo === 'abono' ? '#16a34a' : '#dc2626'}; font-weight: 600;">${a.tipo === 'abono' ? '+' : '-'}${formatCurrency(a.monto)}</span>
               </td>
-              <td style="padding: 8px; border-bottom: 1px solid #eee;">${a.concepto}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #eee;">${a.referencia || '-'}</td>
+              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${a.concepto}</td>
+              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">${a.referencia || '-'}</td>
             </tr>
           `).join('')
-        : '<tr><td colspan="4" style="padding: 20px; text-align: center;">Sin movimientos</td></tr>'
+        : '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #9CA3AF;">Sin movimientos</td></tr>'
+
+      const saldoColor = saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'
+      const saldoLabel = saldo.saldo_actual >= 0 ? 'A Favor' : 'Deuda'
 
       Swal.fire({
-        title: 'Historial de Movimientos',
+        title: `<span style="font-size: 16px; font-weight: 600;">Historial de Movimientos</span>`,
         html: `
-          <div style="text-align: left; margin-bottom: 15px;">
-            <p><strong>Conductor:</strong> ${saldo.conductor_nombre}</p>
-            <p><strong>Saldo actual:</strong> <span style="color: ${saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'}">${formatCurrency(saldo.saldo_actual)}</span></p>
-          </div>
-          <div style="max-height: 400px; overflow-y: auto;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-              <thead>
-                <tr style="background: #f5f5f5;">
-                  <th style="padding: 8px; text-align: left;">Fecha</th>
-                  <th style="padding: 8px; text-align: left;">Monto</th>
-                  <th style="padding: 8px; text-align: left;">Concepto</th>
-                  <th style="padding: 8px; text-align: left;">Ref.</th>
-                </tr>
-              </thead>
-              <tbody>${historialHtml}</tbody>
-            </table>
+          <div style="text-align: left; font-size: 13px;">
+            <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+              <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                <span style="color: ${saldoColor}; font-size: 14px; font-weight: 700;">${formatCurrency(saldo.saldo_actual)}</span>
+                <span style="background: ${saldo.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2'}; color: ${saldoColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${saldoLabel}</span>
+              </div>
+              ${saldo.dias_mora && saldo.dias_mora > 0 ? `<div style="color: #DC2626; font-size: 11px; margin-top: 4px;">En mora: ${saldo.dias_mora} días</div>` : ''}
+            </div>
+            <div style="max-height: 220px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                  <tr style="background: #F9FAFB;">
+                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Fecha</th>
+                    <th style="padding: 6px 8px; text-align: right; font-weight: 600;">Monto</th>
+                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Concepto</th>
+                    <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Ref.</th>
+                  </tr>
+                </thead>
+                <tbody>${historialHtml}</tbody>
+              </table>
+            </div>
           </div>
         `,
-        width: 700,
-        confirmButtonText: 'Cerrar'
+        width: 420,
+        confirmButtonText: 'Cerrar',
+        confirmButtonColor: '#6B7280',
+        customClass: {
+          popup: 'swal-compact',
+          title: 'swal-title-compact',
+          htmlContainer: 'swal-html-compact'
+        }
       })
     } catch (error) {
       console.error('Error cargando historial:', error)
