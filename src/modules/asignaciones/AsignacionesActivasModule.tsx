@@ -423,7 +423,7 @@ export function AsignacionesActivasModule() {
           // Vehículos PKG_ON_BASE que tienen vacantes (realmente disponibles)
           // Excluir A CARGO (tienen conductor asignado a tiempo completo)
           result = result.filter(a => {
-            const estadoCodigo = a.vehiculos?.vehiculos_estados?.codigo?.toUpperCase()
+            const estadoCodigo = (a.vehiculos as any)?.vehiculos_estados?.codigo?.toUpperCase()
             if (estadoCodigo !== 'PKG_ON_BASE') return false
 
             // Si es A CARGO, NO es disponible (tiene conductor asignado)
