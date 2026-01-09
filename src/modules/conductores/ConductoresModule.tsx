@@ -248,9 +248,9 @@ export function ConductoresModule() {
         conductoresAsignados++;
       }
 
-      // Licencias por vencer (solo conductores activos)
+      // Licencias por vencer (solo conductores activos CON asignación)
       const vencimiento = c.licencia_vencimiento;
-      if (estadoCodigo === 'activo' && vencimiento && vencimiento >= hoyStr && vencimiento <= en30DiasStr) {
+      if (estadoCodigo === 'activo' && (c as any).vehiculo_asignado && vencimiento && vencimiento >= hoyStr && vencimiento <= en30DiasStr) {
         licenciasPorVencer++;
       }
     }
@@ -1290,15 +1290,16 @@ export function ConductoresModule() {
       });
     }
 
-    // Filtro por licencias por vencer (próximos 30 días, solo activos)
+    // Filtro por licencias por vencer (próximos 30 días, solo activos CON asignación)
     if (licenciaVencerFilter) {
       const hoy = new Date();
       const en30Dias = new Date();
       en30Dias.setDate(en30Dias.getDate() + 30);
       result = result.filter(c => {
-        // Solo conductores activos
+        // Solo conductores activos CON asignación
         const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
         if (estadoCodigo !== 'activo') return false;
+        if (!(c as any).vehiculo_asignado) return false;
         if (!c.licencia_vencimiento) return false;
         const fechaVenc = new Date(c.licencia_vencimiento);
         return fechaVenc >= hoy && fechaVenc <= en30Dias;
@@ -1856,7 +1857,7 @@ export function ConductoresModule() {
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('licencias')}
-            title="Licencias por vencer en los próximos 30 días"
+            title="Licencias por vencer en los próximos 30 días (solo conductores con asignación)"
           >
             <AlertTriangle size={18} className="stat-icon" style={{ color: '#EF4444' }} />
             <div className="stat-content">
