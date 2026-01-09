@@ -1340,7 +1340,7 @@ export function ReporteFacturacionTab() {
           ritData.push([
             fechaInicio, fechaFin, 5, tipoFactura,
             f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
-            'P005', 'Telepeajes (Cabify)', 1, f.monto_peajes, 0, f.monto_peajes,
+            'P005', 'Telepeajes (Cabify)', 1, f.monto_peajes || 0, 0, f.monto_peajes || 0,
             0, 'ND', 'Peso', 1
           ])
         }
@@ -1352,7 +1352,7 @@ export function ReporteFacturacionTab() {
           ritData.push([
             fechaInicio, fechaFin, 5, tipoFactura,
             f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
-            'P006', `Exceso KM (${f.km_exceso || 0} km)`, 1, netoExceso, ivaExceso, f.monto_excesos,
+            'P006', `Exceso KM (${f.km_exceso || 0} km)`, 1, netoExceso, ivaExceso, f.monto_excesos || 0,
             0, 'ND', 'Peso', 1
           ])
         }
@@ -1362,7 +1362,7 @@ export function ReporteFacturacionTab() {
           ritData.push([
             fechaInicio, fechaFin, 5, tipoFactura,
             f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
-            'P007', 'Penalidades', 1, f.monto_penalidades, 0, f.monto_penalidades,
+            'P007', 'Penalidades', 1, f.monto_penalidades || 0, 0, f.monto_penalidades || 0,
             0, 'ND', 'Peso', 1
           ])
         }
