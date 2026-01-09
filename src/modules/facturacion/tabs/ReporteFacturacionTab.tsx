@@ -61,6 +61,11 @@ interface FacturacionConductor {
   ganancia_cabify?: number
   cubre_cuota?: boolean
   cuota_garantia_numero?: string // ej: "15/20"
+  // Datos detallados para RIT export (P005, P006, P007)
+  monto_peajes?: number       // P005 - Peajes de Cabify
+  monto_excesos?: number      // P006 - Excesos de KM
+  km_exceso?: number          // KM de exceso
+  monto_penalidades?: number  // P007 - Penalidades
 }
 
 interface FacturacionDetalle {
@@ -342,17 +347,19 @@ export function ReporteFacturacionTab() {
       )
 
       // 3. Cargar garantías (TODAS para saber el estado de cuotas)
+      // Nota: conductor_id puede ser NULL (importado desde histórico), usamos conductor_nombre como clave
       const { data: garantias } = await (supabase
         .from('garantias_conductores') as any)
-        .select('conductor_id, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler')
+        .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler')
 
       const garantiasMap = new Map<string, {
-        conductor_id: string;
+        conductor_id: string | null;
+        conductor_nombre: string;
         estado: string;
         cuotas_pagadas: number;
         cuotas_totales: number;
         tipo_alquiler: string;
-      }>((garantias || []).map((g: any) => [g.conductor_id, g]))
+      }>((garantias || []).map((g: any) => [g.conductor_nombre?.toLowerCase().trim() || '', g]))
 
       // 3.1 Cargar datos de Cabify desde la tabla cabify_historico
       const { data: cabifyData } = await supabase
@@ -363,11 +370,18 @@ export function ReporteFacturacionTab() {
 
       // Crear mapa de ganancias Cabify por DNI (sumar si hay múltiples registros)
       const cabifyMap = new Map<string, number>()
+      // Crear mapa de peajes Cabify por DNI (P005)
+      const peajesMap = new Map<string, number>()
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
-          const actual = cabifyMap.get(record.dni) || 0
+          // Ganancias
+          const actualGanancia = cabifyMap.get(record.dni) || 0
           const ganancia = parseFloat(String(record.ganancia_total)) || 0
-          cabifyMap.set(record.dni, actual + ganancia)
+          cabifyMap.set(record.dni, actualGanancia + ganancia)
+          // Peajes (P005)
+          const actualPeajes = peajesMap.get(record.dni) || 0
+          const peajes = parseFloat(String(record.peajes)) || 0
+          peajesMap.set(record.dni, actualPeajes + peajes)
         }
       })
 
@@ -399,6 +413,20 @@ export function ReporteFacturacionTab() {
       })
 
       setExcesos((excesosData || []) as ExcesoKm[])
+
+      // 5.1 Cargar penalidades pendientes (P007)
+      const { data: penalidadesData } = await (supabase
+        .from('penalidades') as any)
+        .select('conductor_id, monto, detalle, aplicado')
+        .gte('fecha', fechaInicio)
+        .lte('fecha', fechaFin)
+        .eq('aplicado', false)
+
+      const penalidadesMap = new Map<string, number>()
+      ;(penalidadesData || []).forEach((p: any) => {
+        const actual = penalidadesMap.get(p.conductor_id) || 0
+        penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+      })
 
       // 6. Calcular facturación proyectada para cada conductor
       const facturacionesProyectadas: FacturacionConductor[] = []
@@ -435,7 +463,9 @@ export function ReporteFacturacionTab() {
         // Garantía con prorrateo
         // REGLA: TODO conductor con asignación activa DEBE pagar garantía desde el día 1
         // La garantía es $50,000 semanal (prorrateado) hasta completar 20 cuotas (CARGO) o 16 cuotas (TURNO)
-        const garantia = garantiasMap.get(conductorId)
+        // Buscar garantía por nombre (conductor_id puede ser NULL en garantías importadas del histórico)
+        const conductorNombreCompleto = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.toLowerCase().trim()
+        const garantia = garantiasMap.get(conductorNombreCompleto)
         let subtotalGarantia = 0
         let cuotaGarantiaNumero = ''
         const cuotasTotales = tipoAlquiler === 'CARGO'
@@ -449,22 +479,33 @@ export function ReporteFacturacionTab() {
             subtotalGarantia = 0
             cuotaGarantiaNumero = 'NA' // Completada
           } else {
-            // Tiene garantía activa en curso
+            // Tiene garantía activa en curso - mostrar siguiente cuota a pagar
             subtotalGarantia = Math.round(FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL * factorProporcional)
-            cuotaGarantiaNumero = `${garantia.cuotas_pagadas + 1}/${garantia.cuotas_totales}`
+            const cuotaActual = garantia.cuotas_pagadas + 1
+            cuotaGarantiaNumero = `${cuotaActual} de ${garantia.cuotas_totales}`
           }
         } else {
           // Sin registro de garantía = conductor nuevo, empieza cuota 1
           subtotalGarantia = Math.round(FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL * factorProporcional)
-          cuotaGarantiaNumero = `1/${cuotasTotales}`
+          cuotaGarantiaNumero = `1 de ${cuotasTotales}`
         }
 
-        // Excesos de KM
+        // Datos por DNI del conductor
+        const dniConductor = conductor.numero_dni || ''
+
+        // Excesos de KM (P006)
         const exceso = excesosMap.get(conductorId)
         const montoExcesos = exceso?.monto || 0
+        const kmExceso = exceso?.kmExceso || 0
 
-        // Subtotal cargos
-        const subtotalCargos = subtotalAlquiler + subtotalGarantia + montoExcesos
+        // Peajes de Cabify (P005)
+        const montoPeajes = peajesMap.get(dniConductor) || 0
+
+        // Penalidades (P007)
+        const montoPenalidades = penalidadesMap.get(conductorId) || 0
+
+        // Subtotal cargos (incluye P005, P006, P007)
+        const subtotalCargos = subtotalAlquiler + subtotalGarantia + montoExcesos + montoPeajes + montoPenalidades
 
         // Tickets a favor (descuentos)
         const subtotalDescuentos = ticketsMap.get(conductorId) || 0
@@ -484,7 +525,6 @@ export function ReporteFacturacionTab() {
         const totalAPagar = subtotalNeto + saldoAnterior + montoMora
 
         // Datos de Cabify - ganancia semanal del conductor
-        const dniConductor = conductor.numero_dni || ''
         const gananciaCabify = cabifyMap.get(dniConductor) || 0
         // El conductor cubre su cuota semanal si su ganancia >= alquiler + garantía
         const cuotaFijaSemanal = subtotalAlquiler + subtotalGarantia
@@ -517,7 +557,12 @@ export function ReporteFacturacionTab() {
           // Datos de Cabify (Vista Previa)
           ganancia_cabify: gananciaCabify,
           cubre_cuota: cubreCuota,
-          cuota_garantia_numero: cuotaGarantiaNumero
+          cuota_garantia_numero: cuotaGarantiaNumero,
+          // Datos detallados para RIT export
+          monto_peajes: montoPeajes,       // P005
+          monto_excesos: montoExcesos,     // P006
+          km_exceso: kmExceso,
+          monto_penalidades: montoPenalidades  // P007
         })
       }
 
@@ -1017,12 +1062,13 @@ export function ReporteFacturacionTab() {
       })
 
       // Cargar información de garantías para número de cuota
+      // Nota: conductor_id puede ser NULL (importado desde histórico), usamos conductor_nombre como clave
       const { data: garantias } = await supabase
         .from('garantias_conductores')
-        .select('conductor_id, cuotas_pagadas, cuotas_totales')
+        .select('conductor_id, conductor_nombre, cuotas_pagadas, cuotas_totales, estado')
 
-      const garantiasMap = new Map<string, { cuotas_pagadas: number; cuotas_totales: number }>(
-        (garantias || []).map((g: any) => [g.conductor_id, g])
+      const garantiasMap = new Map<string, { cuotas_pagadas: number; cuotas_totales: number; estado: string }>(
+        (garantias || []).map((g: any) => [g.conductor_nombre?.toLowerCase().trim() || '', g])
       )
 
       // Convertir a formato RITPreviewRow
@@ -1058,11 +1104,27 @@ export function ReporteFacturacionTab() {
           }
         })
 
-        // Obtener número de cuota de garantía
-        const garantia = garantiasMap.get(fc.conductor_id)
+        // Obtener número de cuota de garantía (formato: "X de Y")
+        // X = cuota actual a pagar (cuotas_pagadas + 1)
+        // Buscar por nombre (conductor_id puede ser NULL en garantías importadas)
+        const conductorNombreKey = (fc.conductor_nombre || '').toLowerCase().trim()
+        const garantia = garantiasMap.get(conductorNombreKey)
         let numeroCuota = 'NA'
-        if (garantia && fc.subtotal_garantia > 0) {
-          numeroCuota = `${garantia.cuotas_pagadas}/${garantia.cuotas_totales}`
+        if (fc.subtotal_garantia > 0) {
+          if (garantia) {
+            // Si garantía completada, mostrar NA
+            if (garantia.estado === 'completada' || garantia.cuotas_pagadas >= garantia.cuotas_totales) {
+              numeroCuota = 'NA'
+            } else {
+              // Conductor con registro de garantía: mostrar siguiente cuota a pagar
+              const cuotaActual = garantia.cuotas_pagadas + 1
+              numeroCuota = `${cuotaActual} de ${garantia.cuotas_totales}`
+            }
+          } else {
+            // Conductor nuevo sin registro: primera cuota
+            const cuotasTotales = fc.tipo_alquiler === 'CARGO' ? 20 : 16
+            numeroCuota = `1 de ${cuotasTotales}`
+          }
         }
 
         const row: RITPreviewRow = {
@@ -1273,6 +1335,38 @@ export function ReporteFacturacionTab() {
           ])
         }
 
+        // P005 - Telepeajes (exento IVA)
+        if ((f.monto_peajes || 0) > 0) {
+          ritData.push([
+            fechaInicio, fechaFin, 5, tipoFactura,
+            f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
+            'P005', 'Telepeajes (Cabify)', 1, f.monto_peajes || 0, 0, f.monto_peajes || 0,
+            0, 'ND', 'Peso', 1
+          ])
+        }
+
+        // P006 - Exceso de Kilometraje (con IVA 21%)
+        if ((f.monto_excesos || 0) > 0) {
+          const netoExceso = Math.round((f.monto_excesos || 0) / 1.21)
+          const ivaExceso = (f.monto_excesos || 0) - netoExceso
+          ritData.push([
+            fechaInicio, fechaFin, 5, tipoFactura,
+            f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
+            'P006', `Exceso KM (${f.km_exceso || 0} km)`, 1, netoExceso, ivaExceso, f.monto_excesos || 0,
+            0, 'ND', 'Peso', 1
+          ])
+        }
+
+        // P007 - Penalidades (exento IVA)
+        if ((f.monto_penalidades || 0) > 0) {
+          ritData.push([
+            fechaInicio, fechaFin, 5, tipoFactura,
+            f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
+            'P007', 'Penalidades', 1, f.monto_penalidades || 0, 0, f.monto_penalidades || 0,
+            0, 'ND', 'Peso', 1
+          ])
+        }
+
         // P009 - Saldo Anterior (exento IVA) - si hay saldo adeudado
         if (f.saldo_anterior > 0) {
           ritData.push([
@@ -1312,7 +1406,7 @@ export function ReporteFacturacionTab() {
         [`Semana ${semana} del ${anio}`],
         [`Período: ${fechaInicio} al ${fechaFin}`],
         [''],
-        ['Conductor', 'DNI', 'CUIT', 'Patente', 'Tipo', 'Días', 'Alquiler', 'Garantía', 'Descuentos', 'Saldo Ant.', 'Mora', 'TOTAL']
+        ['Conductor', 'DNI', 'CUIT', 'Patente', 'Tipo', 'Días', 'Alquiler', 'Garantía', 'Descuentos', 'Peajes', 'Excesos KM', 'Penalidades', 'Saldo Ant.', 'Mora', 'TOTAL']
       ]
 
       dataToExport.forEach(f => {
@@ -1326,6 +1420,9 @@ export function ReporteFacturacionTab() {
           f.subtotal_alquiler,
           f.subtotal_garantia,
           f.subtotal_descuentos,
+          f.monto_peajes || 0,
+          f.monto_excesos || 0,
+          f.monto_penalidades || 0,
           f.saldo_anterior,
           f.monto_mora,
           f.total_a_pagar
@@ -1340,6 +1437,9 @@ export function ReporteFacturacionTab() {
         dataToExport.reduce((sum, f) => sum + f.subtotal_alquiler, 0),
         dataToExport.reduce((sum, f) => sum + f.subtotal_garantia, 0),
         dataToExport.reduce((sum, f) => sum + f.subtotal_descuentos, 0),
+        dataToExport.reduce((sum, f) => sum + (f.monto_peajes || 0), 0),
+        dataToExport.reduce((sum, f) => sum + (f.monto_excesos || 0), 0),
+        dataToExport.reduce((sum, f) => sum + (f.monto_penalidades || 0), 0),
         dataToExport.reduce((sum, f) => sum + f.saldo_anterior, 0),
         dataToExport.reduce((sum, f) => sum + f.monto_mora, 0),
         dataToExport.reduce((sum, f) => sum + f.total_a_pagar, 0)
@@ -1349,7 +1449,8 @@ export function ReporteFacturacionTab() {
       wsResumen['!cols'] = [
         { wch: 30 }, { wch: 12 }, { wch: 15 }, { wch: 10 },
         { wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 },
-        { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 14 }
+        { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+        { wch: 12 }, { wch: 10 }, { wch: 14 }
       ]
       XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
 
