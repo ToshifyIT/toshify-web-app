@@ -276,13 +276,13 @@ export function UserManagement() {
 
     try {
       // Usar función RPC de base de datos (funciona en selfhosted)
-      const { data, error } = await supabase.rpc('admin_reset_user_password' as any, {
+      const { data, error } = await (supabase.rpc as any)('admin_reset_user_password', {
         target_user_id: userId,
         new_password: newPassword
       })
 
       if (error) throw error
-      if (data && !(data as any).success) throw new Error((data as any).error)
+      if (data && !data.success) throw new Error(data.error || 'Error desconocido')
 
       await loadData()
 
@@ -305,14 +305,14 @@ export function UserManagement() {
         if (emailResult.isConfirmed) {
           try {
             // Usar función RPC de PostgreSQL con http extension para enviar email
-            const { data: emailData, error: emailError } = await supabase.rpc('send_password_email' as any, {
+            const { data: emailData, error: emailError } = await (supabase.rpc as any)('send_password_email', {
               user_email: userEmail,
               user_name: userName,
               user_password: newPassword
             })
 
             if (emailError) throw emailError
-            if (emailData && !(emailData as any).success) throw new Error((emailData as any).error)
+            if (emailData && !emailData.success) throw new Error(emailData.error || 'Error desconocido')
 
             Swal.fire({
               icon: 'success',
@@ -412,7 +412,7 @@ export function UserManagement() {
           <div className="dt-actions">
             <button
               className="dt-btn-action dt-btn-warning"
-              onClick={() => forcePasswordChange(row.original.id, row.original.full_name || row.original.email || 'Usuario', row.original.email || undefined)}
+              onClick={() => forcePasswordChange(row.original.id, (row.original.full_name || row.original.email || 'Usuario') as string, row.original.email ?? undefined)}
               title="Forzar cambio de contraseña"
             >
               <KeyRound size={14} />
