@@ -118,12 +118,10 @@ type FiltroTipo = 'todos' | 'entrada' | 'salida' | 'asignacion' | 'devolucion'
 
 export function PedidosUnificadoModule() {
   const { user, profile } = useAuth()
-  const { canCreateInSubmenu, canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
+  const { canEditInSubmenu } = usePermissions()
 
   // Permisos específicos para el submenú de pedidos
-  const canCreate = canCreateInSubmenu('pedidos')
   const canEdit = canEditInSubmenu('pedidos')
-  const canDelete = canDeleteInSubmenu('pedidos')
 
   // Estado de tab activa
   const [activeTab, setActiveTab] = useState<TabActiva>('entradas')

@@ -91,11 +91,10 @@ interface ProductoLote {
 // COMPONENTE PRINCIPAL
 // =====================================================
 export function MovimientosModule() {
-  const { canCreateInSubmenu, canEditInSubmenu } = usePermissions()
+  const { canCreateInSubmenu } = usePermissions()
 
   // Permisos específicos para el submenú de movimientos
   const canCreate = canCreateInSubmenu('movimientos')
-  const canEdit = canEditInSubmenu('movimientos')
 
   // Estados de datos
   const [productos, setProductos] = useState<Producto[]>([])
