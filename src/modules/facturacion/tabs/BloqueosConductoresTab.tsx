@@ -8,7 +8,6 @@ import {
   DollarSign,
   Clock,
   CheckCircle,
-  XCircle,
   Eye,
   Filter,
   RefreshCw,
@@ -77,14 +76,14 @@ export function BloqueosConductoresTab() {
 
   async function cargarParametros() {
     try {
-      const { data } = await supabase
-        .from('parametros_sistema')
+      const { data } = await (supabase
+        .from('parametros_sistema') as any)
         .select('clave, valor')
         .eq('modulo', 'facturacion')
         .in('clave', ['bloqueo_monto_limite', 'bloqueo_dias_mora'])
 
       if (data) {
-        data.forEach(p => {
+        (data as any[]).forEach((p: any) => {
           if (p.clave === 'bloqueo_monto_limite') setMontoLimite(parseFloat(p.valor))
           if (p.clave === 'bloqueo_dias_mora') setDiasMoraLimite(parseFloat(p.valor))
         })
@@ -124,16 +123,18 @@ export function BloqueosConductoresTab() {
         .eq('estado', 'activa')
 
       // Mapear datos
+      const saldosArr = (saldosData || []) as any[]
+      const asignacionesArr = (asignacionesData || []) as any[]
       const conductoresMapeados: ConductorConDeuda[] = (conductoresData || []).map((c: any) => {
-        const saldo = saldosData?.find((s: any) => s.conductor_id === c.id)
-        const asignacion = asignacionesData?.find((a: any) => a.conductor_id === c.id)
+        const saldo = saldosArr.find((s: any) => s.conductor_id === c.id)
+        const asignacion = asignacionesArr.find((a: any) => a.conductor_id === c.id)
 
         return {
           ...c,
           saldo_actual: saldo?.saldo_actual || 0,
           dias_mora: saldo?.dias_mora || 0,
           monto_mora_acumulada: saldo?.monto_mora_acumulada || 0,
-          vehiculo_patente: (asignacion?.vehiculos as any)?.patente || null,
+          vehiculo_patente: asignacion?.vehiculos?.patente || null,
           tipo_alquiler: asignacion?.horario || null
         }
       })
@@ -180,8 +181,8 @@ export function BloqueosConductoresTab() {
     try {
       const { data: userData } = await supabase.auth.getUser()
 
-      const { error } = await supabase
-        .from('conductores')
+      const { error } = await (supabase
+        .from('conductores') as any)
         .update({
           bloqueado: true,
           motivo_bloqueo: motivo,
@@ -229,8 +230,8 @@ export function BloqueosConductoresTab() {
     if (!result.isConfirmed) return
 
     try {
-      const { error } = await supabase
-        .from('conductores')
+      const { error } = await (supabase
+        .from('conductores') as any)
         .update({
           bloqueado: false,
           motivo_bloqueo: null,
@@ -340,14 +341,14 @@ export function BloqueosConductoresTab() {
     if (!formValues) return
 
     try {
-      await supabase
-        .from('parametros_sistema')
+      await (supabase
+        .from('parametros_sistema') as any)
         .update({ valor: formValues.monto.toString() })
         .eq('modulo', 'facturacion')
         .eq('clave', 'bloqueo_monto_limite')
 
-      await supabase
-        .from('parametros_sistema')
+      await (supabase
+        .from('parametros_sistema') as any)
         .update({ valor: formValues.dias.toString() })
         .eq('modulo', 'facturacion')
         .eq('clave', 'bloqueo_dias_mora')

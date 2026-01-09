@@ -8,7 +8,6 @@ import {
   FileText,
   Plus,
   Eye,
-  Edit2,
   Trash2,
   CheckCircle,
   Clock,
@@ -23,8 +22,7 @@ import {
   formatDate,
   FACTURACION_CONFIG
 } from '../../../types/facturacion.types'
-import { format, differenceInDays, startOfWeek, addDays } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { format, differenceInDays, startOfWeek } from 'date-fns'
 import * as XLSX from 'xlsx'
 
 interface Liquidacion {
@@ -98,8 +96,8 @@ export function LiquidacionConductoresTab() {
   async function cargarLiquidaciones() {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('liquidaciones_conductores')
+      const { data, error } = await (supabase
+        .from('liquidaciones_conductores') as any)
         .select('*')
         .order('created_at', { ascending: false })
 
@@ -303,7 +301,7 @@ export function LiquidacionConductoresTab() {
       const diasTrabajados = differenceInDays(fechaCorteDate, lunesSemana) + 1
 
       // Obtener tipo alquiler y valores
-      const tipoAlquiler = asignacion?.horario || 'CARGO'
+      const tipoAlquiler = (asignacion as any)?.horario || 'CARGO'
       const valorAlquilerSemanal = tipoAlquiler === 'CARGO'
         ? FACTURACION_CONFIG.ALQUILER_CARGO
         : FACTURACION_CONFIG.ALQUILER_TURNO
@@ -319,8 +317,8 @@ export function LiquidacionConductoresTab() {
         .eq('conductor_id', conductorId)
         .single()
 
-      const saldoAnterior = saldo?.saldo_actual || 0
-      const moraAcumulada = saldo?.monto_mora_acumulada || 0
+      const saldoAnterior = (saldo as any)?.saldo_actual || 0
+      const moraAcumulada = (saldo as any)?.monto_mora_acumulada || 0
 
       // Obtener garantía acumulada
       const { data: garantia } = await supabase
@@ -330,8 +328,8 @@ export function LiquidacionConductoresTab() {
         .eq('estado', 'en_curso')
         .single()
 
-      const garantiaTotalPagada = garantia?.monto_pagado || 0
-      const garantiaCuotasPagadas = garantia?.cuotas_pagadas || 0
+      const garantiaTotalPagada = (garantia as any)?.monto_pagado || 0
+      const garantiaCuotasPagadas = (garantia as any)?.cuotas_pagadas || 0
 
       // Obtener peajes pendientes (última semana)
       const { data: cabifyData } = await supabase
@@ -380,15 +378,16 @@ export function LiquidacionConductoresTab() {
       const { data: userData } = await supabase.auth.getUser()
 
       // Insertar liquidación
-      const { data: liquidacion, error } = await supabase
-        .from('liquidaciones_conductores')
+      const cond = conductor as any
+      const { data: liquidacion, error } = await (supabase
+        .from('liquidaciones_conductores') as any)
         .insert({
           conductor_id: conductorId,
-          conductor_nombre: `${conductor.nombres} ${conductor.apellidos}`,
-          conductor_dni: conductor.dni,
-          conductor_cuit: conductor.cuit,
-          vehiculo_id: asignacion?.vehiculo_id,
-          vehiculo_patente: (asignacion?.vehiculos as any)?.patente,
+          conductor_nombre: `${cond.nombres} ${cond.apellidos}`,
+          conductor_dni: cond.dni,
+          conductor_cuit: cond.cuit,
+          vehiculo_id: (asignacion as any)?.vehiculo_id,
+          vehiculo_patente: (asignacion as any)?.vehiculos?.patente,
           tipo_alquiler: tipoAlquiler,
           fecha_liquidacion: format(new Date(), 'yyyy-MM-dd'),
           fecha_inicio_semana: format(lunesSemana, 'yyyy-MM-dd'),
@@ -424,7 +423,7 @@ export function LiquidacionConductoresTab() {
         title: 'Liquidación Calculada',
         html: `
           <div style="text-align: left;">
-            <p><strong>Conductor:</strong> ${conductor.nombres} ${conductor.apellidos}</p>
+            <p><strong>Conductor:</strong> ${cond.nombres} ${cond.apellidos}</p>
             <p><strong>Días trabajados:</strong> ${diasTrabajados}/7</p>
             <p><strong>Total a ${totalLiquidacion >= 0 ? 'cobrar' : 'devolver'}:</strong>
               <span style="font-weight: 700; color: ${totalLiquidacion >= 0 ? '#DC2626' : '#10B981'}">
@@ -621,8 +620,8 @@ export function LiquidacionConductoresTab() {
     try {
       const { data: userData } = await supabase.auth.getUser()
 
-      const { error } = await supabase
-        .from('liquidaciones_conductores')
+      const { error } = await (supabase
+        .from('liquidaciones_conductores') as any)
         .update({
           estado: 'aprobado',
           aprobado_por: userData.user?.id,
@@ -634,8 +633,8 @@ export function LiquidacionConductoresTab() {
       if (error) throw error
 
       // Actualizar estado del conductor a inactivo
-      await supabase
-        .from('conductores')
+      await (supabase
+        .from('conductores') as any)
         .update({
           estado: 'INACTIVO',
           fecha_baja: liquidacion.fecha_corte,
@@ -644,8 +643,8 @@ export function LiquidacionConductoresTab() {
         .eq('id', liquidacion.conductor_id)
 
       // Finalizar asignación
-      await supabase
-        .from('asignaciones')
+      await (supabase
+        .from('asignaciones') as any)
         .update({ estado: 'finalizada' })
         .eq('conductor_id', liquidacion.conductor_id)
         .eq('estado', 'activa')
@@ -683,8 +682,8 @@ export function LiquidacionConductoresTab() {
     if (!result.isConfirmed) return
 
     try {
-      const { error } = await supabase
-        .from('liquidaciones_conductores')
+      const { error } = await (supabase
+        .from('liquidaciones_conductores') as any)
         .delete()
         .eq('id', liquidacion.id)
 
