@@ -558,8 +558,54 @@ export interface ParametroSistemaFormData {
   activo?: boolean
 }
 
+// =====================================================
+// LIQUIDACIÓN DE CONDUCTORES
+// =====================================================
+export interface LiquidacionConductor {
+  id: string
+  conductor_id: string
+  conductor_nombre: string | null
+  conductor_dni: string | null
+  conductor_cuit: string | null
+  vehiculo_id: string | null
+  vehiculo_patente: string | null
+  tipo_alquiler: string | null
+  fecha_liquidacion: string
+  fecha_inicio_semana: string | null
+  fecha_corte: string
+  dias_trabajados: number
+  turnos_base: number
+  alquiler_proporcional: number
+  garantia_proporcional: number
+  peajes_pendientes: number
+  excesos_km: number
+  penalidades: number
+  tickets_favor: number
+  saldo_anterior: number
+  mora_acumulada: number
+  garantia_total_pagada: number
+  garantia_cuotas_pagadas: number
+  garantia_a_devolver: number
+  subtotal_cargos: number
+  subtotal_descuentos: number
+  total_liquidacion: number
+  estado: 'borrador' | 'calculado' | 'aprobado' | 'pagado' | 'cancelado'
+  notas: string | null
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  created_by_name: string | null
+  aprobado_por: string | null
+  aprobado_por_name: string | null
+  fecha_aprobacion: string | null
+}
+
 // Claves de parámetros de facturación (para autocompletado)
 export const PARAMETROS_FACTURACION = {
+  // Bloqueos
+  BLOQUEO_MONTO_LIMITE: 'bloqueo_monto_limite',
+  BLOQUEO_DIAS_MORA: 'bloqueo_dias_mora',
+
   // Mora
   MORA_PORCENTAJE: 'mora_porcentaje',
   MORA_DIAS_MAXIMOS: 'mora_dias_maximos',
