@@ -1,6 +1,5 @@
 # CI/CD Workflow con Aprobaciones
-# Flujo: development → staging → main (producción)
-# Dokploy despliega automáticamente en main
+# Flujo LINEAL: development → staging → main (producción)
 
 name: CI/CD
 
@@ -12,12 +11,11 @@ on:
 
 jobs:
   # =============================================
-  # CI - Validación (todas las ramas)
+  # PASO 1: Validación (todas las ramas)
   # =============================================
   build:
     name: Build & Validate
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -40,12 +38,8 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
-      - name: Build successful
-        run: echo "✅ Build validado en ${{ github.ref_name }}"
-
   # =============================================
-  # Gate: development → staging
-  # Requiere aprobación para promover a staging
+  # PASO 2: Aprobación para Staging (solo en development)
   # =============================================
   approve-staging:
     name: Aprobar para Staging
@@ -55,14 +49,10 @@ jobs:
     environment:
       name: staging
     steps:
-      - name: Aprobación recibida
-        run: |
-          echo "✅ Aprobado para promover a staging"
-          echo "Crear PR: development → staging"
+      - run: echo "✅ Aprobado - Crear PR development → staging"
 
   # =============================================
-  # Gate: staging → production
-  # Requiere aprobación para promover a producción
+  # PASO 2: Aprobación para Producción (solo en staging)
   # =============================================
   approve-production:
     name: Aprobar para Producción
@@ -72,8 +62,4 @@ jobs:
     environment:
       name: production
     steps:
-      - name: Aprobación recibida
-        run: |
-          echo "✅ Aprobado para promover a producción"
-          echo "Crear PR: staging → main"
-          echo "Dokploy desplegará automáticamente después del merge"
+      - run: echo "✅ Aprobado - Crear PR staging → main"
