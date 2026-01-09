@@ -237,13 +237,13 @@
 }
 
 .fact-saldo.debe {
-  background: #FEE2E2;
-  color: #DC2626;
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
 }
 
 .fact-saldo.favor {
-  background: #D1FAE5;
-  color: #059669;
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
 }
 
 .fact-alertas {
@@ -595,13 +595,13 @@
 }
 
 .fact-seccion-titulo.cargos {
-  background: #FEE2E2;
-  color: #DC2626;
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
 }
 
 .fact-seccion-titulo.creditos {
-  background: #D1FAE5;
-  color: #059669;
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
 }
 
 .fact-detalle-items {
@@ -942,33 +942,33 @@
 }
 
 .fact-badge-green {
-  background: #D1FAE5;
-  color: #059669;
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
 }
 
 .fact-badge-red {
-  background: #FEE2E2;
-  color: #DC2626;
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
 }
 
 .fact-badge-yellow {
-  background: #FEF3C7;
-  color: #D97706;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
 }
 
 .fact-badge-blue {
-  background: #DBEAFE;
-  color: #2563EB;
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
 }
 
 .fact-badge-purple {
-  background: #F3E8FF;
-  color: #7C3AED;
+  background: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
 }
 
 .fact-badge-gray {
-  background: #F3F4F6;
-  color: #6B7280;
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
 }
 
 /* =====================================================
@@ -1154,12 +1154,12 @@
 }
 
 .swal-compact .swal2-cancel {
-  background: #F3F4F6 !important;
-  color: #374151 !important;
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
 }
 
 .swal-compact .swal2-cancel:hover {
-  background: #E5E7EB !important;
+  background: var(--bg-secondary) !important;
 }
 
 /* =====================================================
@@ -1199,7 +1199,7 @@
 .fact-form-label {
   font-size: 12px;
   font-weight: 500;
-  color: #6B7280;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -1208,11 +1208,11 @@
 .fact-form-select {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   font-size: 14px;
-  color: #111827;
-  background: #FAFAFA;
+  color: var(--text-primary);
+  background: var(--input-bg);
   transition: all 0.15s;
   box-sizing: border-box;
 }
@@ -1221,18 +1221,96 @@
 .fact-form-select:focus {
   outline: none;
   border-color: #DC2626;
-  background: white;
+  background: var(--bg-primary);
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
 .fact-form-input::placeholder {
-  color: #9CA3AF;
+  color: var(--text-tertiary);
 }
 
 .fact-input-disabled {
-  background: #F3F4F6 !important;
-  color: #6B7280 !important;
+  background: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
   cursor: not-allowed;
+}
+
+.fact-form-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.fact-modal-info {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.fact-modal-info p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.fact-modal-info p:last-child {
+  margin-bottom: 0;
+}
+
+.fact-modal-info strong {
+  color: var(--text-primary);
+}
+
+.fact-modal-warning {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.fact-modal-danger {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.fact-modal-table {
+  width: 100%;
+  font-size: 14px;
+  border-collapse: collapse;
+}
+
+.fact-table-label {
+  padding: 6px 8px 6px 0;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.fact-table-value {
+  padding: 6px 0;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.fact-table-separator {
+  border-top: 1px solid var(--border-primary);
+}
+
+.fact-table-separator td {
+  padding-top: 10px;
+}
+
+.fact-text-danger {
+  color: #DC2626 !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
 }
 
 .fact-form-row {
@@ -1246,9 +1324,9 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  background: #F9FAFB;
+  background: var(--bg-secondary);
   border-radius: 8px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--border-primary);
 }
 
 .fact-checkbox-label {
@@ -1256,13 +1334,13 @@
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: #374151;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: color 0.15s;
 }
 
 .fact-checkbox-label:hover {
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .fact-checkbox {
@@ -1286,49 +1364,72 @@
   font-size: 14px !important;
   font-weight: 500 !important;
   border-radius: 8px !important;
-  background: #F3F4F6 !important;
-  color: #374151 !important;
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
 }
 
 .fact-btn-cancel:hover {
-  background: #E5E7EB !important;
+  background: var(--bg-secondary) !important;
 }
 
-/* Dark mode support */
-[data-theme="dark"] .fact-form-input,
-[data-theme="dark"] .fact-form-select {
-  background: #1F2937;
-  border-color: #374151;
-  color: #F9FAFB;
+/* =====================================================
+   BUSCADOR DE CONDUCTOR
+   ===================================================== */
+
+.fact-search-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
 }
 
-[data-theme="dark"] .fact-form-input:focus,
-[data-theme="dark"] .fact-form-select:focus {
-  background: #111827;
-  border-color: #DC2626;
+.fact-search-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
 }
 
-[data-theme="dark"] .fact-form-label {
-  color: #9CA3AF;
+.fact-search-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  outline: none;
 }
 
-[data-theme="dark"] .fact-form-checkboxes {
-  background: #1F2937;
-  border-color: #374151;
+.fact-search-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
 }
 
-[data-theme="dark"] .fact-checkbox-label {
-  color: #D1D5DB;
+.fact-search-input::placeholder {
+  color: var(--text-tertiary);
 }
 
-[data-theme="dark"] .fact-checkbox-label:hover {
-  color: #F9FAFB;
+.fact-search-clear {
+  padding: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-[data-theme="dark"] .fact-input-disabled {
-  background: #374151 !important;
-  color: #9CA3AF !important;
+.fact-search-clear:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
+
+/* Dark mode - ahora usa variables CSS, estos overrides son para casos especiales */
 
 /* ========================================
    RIT Preview Table Component

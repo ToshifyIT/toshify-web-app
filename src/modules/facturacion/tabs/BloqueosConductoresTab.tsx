@@ -112,29 +112,46 @@ export function BloqueosConductoresTab() {
         .from('saldos_conductores')
         .select('conductor_id, saldo_actual, dias_mora, monto_mora_acumulada')
 
-      // Cargar asignaciones activas
+      // Cargar asignaciones activas a través de asignaciones_conductores
       const { data: asignacionesData } = await supabase
         .from('asignaciones')
         .select(`
-          conductor_id,
+          id,
           horario,
-          vehiculos:vehiculo_id(patente)
+          vehiculos:vehiculo_id(patente),
+          asignaciones_conductores(
+            conductor_id,
+            horario
+          )
         `)
-        .eq('estado', 'activa')
+        .in('estado', ['activa', 'programado'])
+
+      // Crear mapa de conductor -> asignación
+      const asignacionesPorConductor = new Map<string, { patente: string | null; horario: string | null }>()
+      for (const asig of (asignacionesData || []) as any[]) {
+        const asigConductores = asig.asignaciones_conductores || []
+        for (const ac of asigConductores) {
+          if (ac.conductor_id && !asignacionesPorConductor.has(ac.conductor_id)) {
+            asignacionesPorConductor.set(ac.conductor_id, {
+              patente: asig.vehiculos?.patente || null,
+              horario: ac.horario || asig.horario || null
+            })
+          }
+        }
+      }
 
       // Mapear datos
       const saldosArr = (saldosData || []) as any[]
-      const asignacionesArr = (asignacionesData || []) as any[]
       const conductoresMapeados: ConductorConDeuda[] = (conductoresData || []).map((c: any) => {
         const saldo = saldosArr.find((s: any) => s.conductor_id === c.id)
-        const asignacion = asignacionesArr.find((a: any) => a.conductor_id === c.id)
+        const asignacion = asignacionesPorConductor.get(c.id)
 
         return {
           ...c,
           saldo_actual: saldo?.saldo_actual || 0,
           dias_mora: saldo?.dias_mora || 0,
           monto_mora_acumulada: saldo?.monto_mora_acumulada || 0,
-          vehiculo_patente: asignacion?.vehiculos?.patente || null,
+          vehiculo_patente: asignacion?.patente || null,
           tipo_alquiler: asignacion?.horario || null
         }
       })
@@ -151,13 +168,15 @@ export function BloqueosConductoresTab() {
     const { value: motivo } = await Swal.fire({
       title: 'Bloquear Conductor',
       html: `
-        <div style="text-align: left;">
-          <p><strong>Conductor:</strong> ${conductor.nombres} ${conductor.apellidos}</p>
-          <p><strong>Deuda actual:</strong> ${formatCurrency(conductor.saldo_actual)}</p>
-          <p><strong>Días en mora:</strong> ${conductor.dias_mora}</p>
-          <div style="margin-top: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-weight: 600;">Motivo del bloqueo:</label>
-            <textarea id="swal-motivo" rows="3" style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; resize: none;" placeholder="Ej: Deuda acumulada superior al límite permitido"></textarea>
+        <div class="fact-modal-form">
+          <div class="fact-modal-info">
+            <p><strong>Conductor:</strong> ${conductor.nombres} ${conductor.apellidos}</p>
+            <p><strong>Deuda actual:</strong> ${formatCurrency(conductor.saldo_actual)}</p>
+            <p><strong>Días en mora:</strong> ${conductor.dias_mora}</p>
+          </div>
+          <div class="fact-form-group">
+            <label class="fact-form-label">Motivo del bloqueo</label>
+            <textarea id="swal-motivo" rows="3" class="fact-form-input" style="resize: none;" placeholder="Ej: Deuda acumulada superior al límite permitido"></textarea>
           </div>
         </div>
       `,
@@ -166,6 +185,14 @@ export function BloqueosConductoresTab() {
       confirmButtonColor: '#DC2626',
       confirmButtonText: 'Bloquear',
       cancelButtonText: 'Cancelar',
+      width: 420,
+      customClass: {
+        popup: 'fact-modal',
+        title: 'fact-modal-title',
+        htmlContainer: 'fact-modal-content',
+        confirmButton: 'fact-btn-confirm',
+        cancelButton: 'fact-btn-cancel'
+      },
       preConfirm: () => {
         const motivo = (document.getElementById('swal-motivo') as HTMLTextAreaElement).value
         if (!motivo.trim()) {
@@ -211,20 +238,30 @@ export function BloqueosConductoresTab() {
     const result = await Swal.fire({
       title: 'Desbloquear Conductor',
       html: `
-        <div style="text-align: left;">
-          <p><strong>Conductor:</strong> ${conductor.nombres} ${conductor.apellidos}</p>
-          <p><strong>Motivo bloqueo:</strong> ${conductor.motivo_bloqueo || '-'}</p>
-          <p><strong>Deuda actual:</strong> ${formatCurrency(conductor.saldo_actual)}</p>
-          <p style="margin-top: 12px; color: #92400E; background: #FEF3C7; padding: 8px; border-radius: 6px;">
+        <div class="fact-modal-form">
+          <div class="fact-modal-info">
+            <p><strong>Conductor:</strong> ${conductor.nombres} ${conductor.apellidos}</p>
+            <p><strong>Motivo bloqueo:</strong> ${conductor.motivo_bloqueo || '-'}</p>
+            <p><strong>Deuda actual:</strong> ${formatCurrency(conductor.saldo_actual)}</p>
+          </div>
+          <div class="fact-modal-warning">
             <strong>Advertencia:</strong> El conductor aún tiene deuda pendiente.
-          </p>
+          </div>
         </div>
       `,
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#10B981',
       confirmButtonText: 'Desbloquear',
-      cancelButtonText: 'Cancelar'
+      cancelButtonText: 'Cancelar',
+      width: 420,
+      customClass: {
+        popup: 'fact-modal',
+        title: 'fact-modal-title',
+        htmlContainer: 'fact-modal-content',
+        confirmButton: 'fact-btn-confirm',
+        cancelButton: 'fact-btn-cancel'
+      }
     })
 
     if (!result.isConfirmed) return
@@ -259,56 +296,63 @@ export function BloqueosConductoresTab() {
     Swal.fire({
       title: 'Detalle del Conductor',
       html: `
-        <div style="text-align: left;">
-          <table style="width: 100%; font-size: 14px;">
+        <div class="fact-modal-form">
+          <table class="fact-modal-table">
             <tr>
-              <td style="padding: 6px 0; color: #6B7280;">Nombre:</td>
-              <td style="padding: 6px 0; font-weight: 500;">${conductor.nombres} ${conductor.apellidos}</td>
+              <td class="fact-table-label">Nombre:</td>
+              <td class="fact-table-value">${conductor.nombres} ${conductor.apellidos}</td>
             </tr>
             <tr>
-              <td style="padding: 6px 0; color: #6B7280;">DNI:</td>
-              <td style="padding: 6px 0;">${conductor.dni}</td>
+              <td class="fact-table-label">DNI:</td>
+              <td class="fact-table-value">${conductor.dni}</td>
             </tr>
             <tr>
-              <td style="padding: 6px 0; color: #6B7280;">CUIT:</td>
-              <td style="padding: 6px 0;">${conductor.cuit || '-'}</td>
+              <td class="fact-table-label">CUIT:</td>
+              <td class="fact-table-value">${conductor.cuit || '-'}</td>
             </tr>
             <tr>
-              <td style="padding: 6px 0; color: #6B7280;">Teléfono:</td>
-              <td style="padding: 6px 0;">${conductor.telefono || '-'}</td>
+              <td class="fact-table-label">Teléfono:</td>
+              <td class="fact-table-value">${conductor.telefono || '-'}</td>
             </tr>
             <tr>
-              <td style="padding: 6px 0; color: #6B7280;">Vehículo:</td>
-              <td style="padding: 6px 0; font-family: monospace;">${conductor.vehiculo_patente || '-'}</td>
+              <td class="fact-table-label">Vehículo:</td>
+              <td class="fact-table-value" style="font-family: monospace;">${conductor.vehiculo_patente || '-'}</td>
             </tr>
             <tr>
-              <td style="padding: 6px 0; color: #6B7280;">Tipo:</td>
-              <td style="padding: 6px 0;">${conductor.tipo_alquiler || '-'}</td>
+              <td class="fact-table-label">Tipo:</td>
+              <td class="fact-table-value">${conductor.tipo_alquiler || '-'}</td>
             </tr>
-            <tr style="border-top: 1px solid #E5E7EB;">
-              <td style="padding: 8px 0; color: #6B7280;">Deuda Actual:</td>
-              <td style="padding: 8px 0; font-weight: 600; color: #DC2626; font-size: 16px;">${formatCurrency(conductor.saldo_actual)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 6px 0; color: #6B7280;">Días en Mora:</td>
-              <td style="padding: 6px 0; font-weight: 500;">${conductor.dias_mora} días</td>
+            <tr class="fact-table-separator">
+              <td class="fact-table-label">Deuda Actual:</td>
+              <td class="fact-table-value fact-text-danger">${formatCurrency(conductor.saldo_actual)}</td>
             </tr>
             <tr>
-              <td style="padding: 6px 0; color: #6B7280;">Mora Acumulada:</td>
-              <td style="padding: 6px 0;">${formatCurrency(conductor.monto_mora_acumulada)}</td>
+              <td class="fact-table-label">Días en Mora:</td>
+              <td class="fact-table-value">${conductor.dias_mora} días</td>
+            </tr>
+            <tr>
+              <td class="fact-table-label">Mora Acumulada:</td>
+              <td class="fact-table-value">${formatCurrency(conductor.monto_mora_acumulada)}</td>
             </tr>
           </table>
           ${conductor.bloqueado ? `
-            <div style="margin-top: 12px; padding: 10px; background: #FEE2E2; border-radius: 6px; border: 1px solid #FCA5A5;">
-              <p style="margin: 0; font-weight: 600; color: #991B1B;">BLOQUEADO</p>
-              <p style="margin: 4px 0 0; font-size: 12px; color: #991B1B;">Motivo: ${conductor.motivo_bloqueo}</p>
-              <p style="margin: 2px 0 0; font-size: 12px; color: #991B1B;">Fecha: ${conductor.fecha_bloqueo ? formatDate(conductor.fecha_bloqueo) : '-'}</p>
+            <div class="fact-modal-danger">
+              <p style="margin: 0; font-weight: 600;">BLOQUEADO</p>
+              <p style="margin: 4px 0 0; font-size: 12px;">Motivo: ${conductor.motivo_bloqueo}</p>
+              <p style="margin: 2px 0 0; font-size: 12px;">Fecha: ${conductor.fecha_bloqueo ? formatDate(conductor.fecha_bloqueo) : '-'}</p>
             </div>
           ` : ''}
         </div>
       `,
       width: 450,
-      confirmButtonText: 'Cerrar'
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#6B7280',
+      customClass: {
+        popup: 'fact-modal',
+        title: 'fact-modal-title',
+        htmlContainer: 'fact-modal-content',
+        confirmButton: 'fact-btn-cancel'
+      }
     })
   }
 
@@ -316,22 +360,31 @@ export function BloqueosConductoresTab() {
     const { value: formValues } = await Swal.fire({
       title: 'Configurar Límites de Bloqueo',
       html: `
-        <div style="text-align: left; padding: 0 8px;">
-          <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #374151;">Monto límite de deuda (ARS)</label>
-            <input id="swal-monto" type="number" value="${montoLimite}" style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px;">
-            <p style="margin: 4px 0 0; font-size: 11px; color: #6B7280;">Conductores con deuda mayor a este monto aparecerán como candidatos a bloqueo</p>
+        <div class="fact-modal-form">
+          <div class="fact-form-group">
+            <label class="fact-form-label">Monto límite de deuda (ARS)</label>
+            <input id="swal-monto" type="number" class="fact-form-input" value="${montoLimite}">
+            <p class="fact-form-hint">Conductores con deuda mayor a este monto aparecerán como candidatos a bloqueo</p>
           </div>
-          <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #374151;">Días de mora límite</label>
-            <input id="swal-dias" type="number" value="${diasMoraLimite}" style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px;">
-            <p style="margin: 4px 0 0; font-size: 11px; color: #6B7280;">Conductores con más días de mora también aparecerán como candidatos</p>
+          <div class="fact-form-group">
+            <label class="fact-form-label">Días de mora límite</label>
+            <input id="swal-dias" type="number" class="fact-form-input" value="${diasMoraLimite}">
+            <p class="fact-form-hint">Conductores con más días de mora también aparecerán como candidatos</p>
           </div>
         </div>
       `,
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#DC2626',
+      width: 400,
+      customClass: {
+        popup: 'fact-modal',
+        title: 'fact-modal-title',
+        htmlContainer: 'fact-modal-content',
+        confirmButton: 'fact-btn-confirm',
+        cancelButton: 'fact-btn-cancel'
+      },
       preConfirm: () => ({
         monto: parseFloat((document.getElementById('swal-monto') as HTMLInputElement).value),
         dias: parseInt((document.getElementById('swal-dias') as HTMLInputElement).value)
