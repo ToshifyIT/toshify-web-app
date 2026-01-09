@@ -252,7 +252,7 @@ export function useBitacoraData() {
   }, [loadData, asignaciones.size])
 
   // Refs para debouncing de realtime
-  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isReloadingRef = useRef(false)
 
   // Auto-refresh: Suscripción a Supabase Realtime para cambios en wialon_bitacora

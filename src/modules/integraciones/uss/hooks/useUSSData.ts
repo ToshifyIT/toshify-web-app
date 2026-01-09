@@ -194,7 +194,7 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
   const isRealtime = dateRange.label === 'Hoy' || dateRange.label === 'Última semana'
 
   // Ref para debouncing de realtime
-  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isReloadingRef = useRef(false)
 
   // Auto-refresh: Suscripción a Supabase Realtime para cambios en uss_excesos_velocidad
