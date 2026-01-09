@@ -14,6 +14,8 @@ import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 
 // Intervalo de auto-refresh en ms (30 segundos)
 const AUTO_REFRESH_INTERVAL = 30000
+// Debounce para realtime (500ms para agrupar múltiples eventos)
+const REALTIME_DEBOUNCE_MS = 500
 
 // Tipo para conductor asignado con su turno
 interface ConductorTurno {
@@ -249,6 +251,10 @@ export function useBitacoraData() {
     }
   }, [loadData, asignaciones.size])
 
+  // Refs para debouncing de realtime
+  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const isReloadingRef = useRef(false)
+
   // Auto-refresh: Suscripción a Supabase Realtime para cambios en wialon_bitacora
   useEffect(() => {
     // Solo auto-refresh si estamos viendo "Hoy"
@@ -264,14 +270,28 @@ export function useBitacoraData() {
           table: 'wialon_bitacora',
         },
         () => {
-          // Cuando hay cambios en la tabla, recargar datos SIN parpadeo
-          wialonBitacoraService.clearCache()
-          loadDataSilent()
+          // Debounce: agrupar múltiples eventos en una sola recarga
+          if (realtimeDebounceRef.current) {
+            clearTimeout(realtimeDebounceRef.current)
+          }
+
+          if (!isReloadingRef.current) {
+            realtimeDebounceRef.current = setTimeout(() => {
+              isReloadingRef.current = true
+              wialonBitacoraService.clearCache()
+              loadDataSilent().finally(() => {
+                isReloadingRef.current = false
+              })
+            }, REALTIME_DEBOUNCE_MS)
+          }
         }
       )
       .subscribe()
 
     return () => {
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current)
+      }
       supabase.removeChannel(channel)
     }
   }, [dateRange.label, loadDataSilent])

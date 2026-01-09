@@ -4,7 +4,7 @@
  * Con soporte para tiempo real
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { ussService } from '../../../../services/ussService'
 import type {
@@ -19,6 +19,8 @@ import { getDateRangeForPeriod } from '../utils/uss.utils'
 
 // Intervalo de auto-refresh en ms (30 segundos)
 const AUTO_REFRESH_INTERVAL = 30000
+// Debounce para realtime (500ms para agrupar múltiples eventos)
+const REALTIME_DEBOUNCE_MS = 500
 
 interface UseUSSDataOptions {
   autoLoad?: boolean
@@ -191,6 +193,10 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
   // Determinar si estamos en modo realtime (Hoy o Última semana)
   const isRealtime = dateRange.label === 'Hoy' || dateRange.label === 'Última semana'
 
+  // Ref para debouncing de realtime
+  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const isReloadingRef = useRef(false)
+
   // Auto-refresh: Suscripción a Supabase Realtime para cambios en uss_excesos_velocidad
   useEffect(() => {
     if (!isRealtime) return
@@ -205,13 +211,27 @@ export function useUSSData(options: UseUSSDataOptions = {}): UseUSSDataReturn {
           table: 'uss_excesos_velocidad',
         },
         () => {
-          // Cuando hay cambios en la tabla, recargar datos SIN parpadeo
-          loadDataSilent()
+          // Debounce: agrupar múltiples eventos en una sola recarga
+          if (realtimeDebounceRef.current) {
+            clearTimeout(realtimeDebounceRef.current)
+          }
+
+          if (!isReloadingRef.current) {
+            realtimeDebounceRef.current = setTimeout(() => {
+              isReloadingRef.current = true
+              loadDataSilent().finally(() => {
+                isReloadingRef.current = false
+              })
+            }, REALTIME_DEBOUNCE_MS)
+          }
         }
       )
       .subscribe()
 
     return () => {
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current)
+      }
       supabase.removeChannel(channel)
     }
   }, [isRealtime, loadDataSilent])
