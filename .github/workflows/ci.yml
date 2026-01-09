@@ -53,14 +53,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
       - name: Merge development → staging
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin staging
           git checkout staging
-          git merge origin/development -m "Merge development → staging [skip ci]"
+          git merge origin/development -m "chore: merge development → staging [skip ci]"
           git push origin staging
 
   # ═══════════════════════════════════════════
@@ -76,7 +76,7 @@ jobs:
       - run: echo "✅ Aprobado para Producción"
 
   # ═══════════════════════════════════════════
-  # PASO 5: Merge a Main (Producción)
+  # PASO 5: Merge a Main
   # ═══════════════════════════════════════════
   merge-main:
     name: "5. Merge Main"
@@ -86,13 +86,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
       - name: Merge staging → main
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main staging
           git checkout main
-          git merge origin/staging -m "Merge staging → main [skip ci]"
+          git merge origin/staging -m "chore: merge staging → main [skip ci]"
           git push origin main
       - run: echo "🚀 Dokploy desplegará automáticamente"
