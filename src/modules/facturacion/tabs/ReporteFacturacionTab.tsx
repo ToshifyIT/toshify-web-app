@@ -1687,18 +1687,31 @@ export function ReporteFacturacionTab() {
 
   // Función para editar saldo de un conductor
   async function editarSaldo(facturacion: FacturacionConductor) {
+    // Detectar tema oscuro
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    const colors = {
+      bg: isDark ? '#1E293B' : '#fff',
+      text: isDark ? '#F1F5F9' : '#374151',
+      textSecondary: isDark ? '#94A3B8' : '#6B7280',
+      textMuted: isDark ? '#64748B' : '#9CA3AF',
+      border: isDark ? '#475569' : '#D1D5DB',
+      inputBg: isDark ? '#0F172A' : '#fff'
+    }
+
     const { value: nuevoSaldo } = await Swal.fire({
       title: 'Ajustar Saldo',
+      background: colors.bg,
+      color: colors.text,
       html: `
         <div style="text-align: left; padding: 0 8px;">
-          <p style="font-size: 13px; color: #6B7280; margin-bottom: 12px;">
-            <strong>${facturacion.conductor_nombre}</strong>
+          <p style="font-size: 13px; color: ${colors.textSecondary}; margin-bottom: 12px;">
+            <strong style="color: ${colors.text}">${facturacion.conductor_nombre}</strong>
           </p>
           <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Saldo Actual</label>
-            <input id="swal-saldo" type="number" value="${facturacion.saldo_anterior}" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase;">Saldo Actual</label>
+            <input id="swal-saldo" type="number" value="${facturacion.saldo_anterior}" style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; font-size: 14px; background: ${colors.inputBg}; color: ${colors.text};">
           </div>
-          <p style="font-size: 11px; color: #9CA3AF;">
+          <p style="font-size: 11px; color: ${colors.textMuted};">
             Positivo = Deuda del conductor<br>
             Negativo = Saldo a favor del conductor
           </p>
@@ -1822,7 +1835,7 @@ export function ReporteFacturacionTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <span style={{ fontSize: '12px', color: '#6B7280' }}>
+        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
           {row.original.vehiculo_patente || '-'}
         </span>
       ),
@@ -1877,11 +1890,11 @@ export function ReporteFacturacionTab() {
 
         return (
           <div style={{ fontSize: '12px' }}>
-            <div style={{ fontWeight: 600, color: '#111827' }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
               {formatCurrency(cobrado)}
             </div>
             {isProrrateo && (
-              <div style={{ fontSize: '10px', color: '#9CA3AF', textDecoration: 'line-through' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
                 {formatCurrency(base)}
               </div>
             )}
@@ -1905,8 +1918,8 @@ export function ReporteFacturacionTab() {
               <span style={{
                 padding: '2px 6px',
                 borderRadius: '4px',
-                background: '#D1FAE5',
-                color: '#065F46',
+                background: 'var(--badge-green-bg)',
+                color: 'var(--badge-green-text)',
                 fontSize: '10px',
                 fontWeight: 600
               }}>
@@ -1918,13 +1931,13 @@ export function ReporteFacturacionTab() {
 
         return (
           <div style={{ fontSize: '12px' }}>
-            <div style={{ fontWeight: 500, color: '#374151' }}>
+            <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>
               {formatCurrency(cobrado)}
             </div>
-            <div style={{ fontSize: '10px', color: '#6B7280' }}>
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
               {cuotaNum && <span>Cuota {cuotaNum}</span>}
               {isProrrateo && (
-                <span style={{ marginLeft: '4px', color: '#9CA3AF', textDecoration: 'line-through' }}>
+                <span style={{ marginLeft: '4px', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
                   {formatCurrency(base)}
                 </span>
               )}
@@ -1947,15 +1960,15 @@ export function ReporteFacturacionTab() {
         const kmTotal = excesosCond.reduce((sum, e) => sum + e.km_exceso, 0)
 
         if (excesosCond.length === 0) {
-          return <span style={{ color: '#9CA3AF', fontSize: '12px' }}>-</span>
+          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
         }
 
         return (
           <div style={{ fontSize: '12px' }}>
-            <div style={{ fontWeight: 600, color: '#DC2626' }}>
+            <div style={{ fontWeight: 600, color: 'var(--badge-red-text)' }}>
               {formatCurrency(totalExcesos)}
             </div>
-            <div style={{ fontSize: '10px', color: '#6B7280' }}>
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
               +{kmTotal} km
             </div>
           </div>
@@ -1970,7 +1983,7 @@ export function ReporteFacturacionTab() {
           <span style={{
             fontSize: '12px',
             fontWeight: row.original.saldo_anterior !== 0 ? 600 : 400,
-            color: row.original.saldo_anterior > 0 ? '#DC2626' : row.original.saldo_anterior < 0 ? '#059669' : '#9CA3AF'
+            color: row.original.saldo_anterior > 0 ? 'var(--badge-red-text)' : row.original.saldo_anterior < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
           }}>
             {row.original.saldo_anterior !== 0 ? formatCurrency(row.original.saldo_anterior) : '-'}
           </span>
@@ -1981,7 +1994,7 @@ export function ReporteFacturacionTab() {
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              color: '#9CA3AF',
+              color: 'var(--text-muted)',
               opacity: 0.6
             }}
             title="Ajustar saldo"
@@ -1999,7 +2012,7 @@ export function ReporteFacturacionTab() {
         <span style={{
           fontSize: '12px',
           fontWeight: row.original.subtotal_descuentos > 0 ? 600 : 400,
-          color: row.original.subtotal_descuentos > 0 ? '#059669' : '#9CA3AF'
+          color: row.original.subtotal_descuentos > 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
         }}>
           {row.original.subtotal_descuentos > 0 ? `-${formatCurrency(row.original.subtotal_descuentos)}` : '-'}
         </span>
@@ -2017,8 +2030,8 @@ export function ReporteFacturacionTab() {
             fontWeight: 700,
             padding: '4px 8px',
             borderRadius: '4px',
-            background: total > 0 ? '#FEE2E2' : '#D1FAE5',
-            color: total > 0 ? '#991B1B' : '#065F46'
+            background: total > 0 ? 'var(--badge-red-bg)' : 'var(--badge-green-bg)',
+            color: total > 0 ? 'var(--badge-red-text)' : 'var(--badge-green-text)'
           }}>
             {formatCurrency(total)}
           </span>
@@ -2032,7 +2045,7 @@ export function ReporteFacturacionTab() {
       header: () => (
         <div style={{ textAlign: 'center' }}>
           <span>Cabify</span>
-          <div style={{ fontSize: '9px', color: '#9CA3AF' }}>Ganancia</div>
+          <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Ganancia</div>
         </div>
       ),
       cell: ({ row }: { row: any }) => {
@@ -2044,17 +2057,17 @@ export function ReporteFacturacionTab() {
           <div style={{ fontSize: '12px', textAlign: 'center' }}>
             <div style={{
               fontWeight: 600,
-              color: cubreCuota ? '#059669' : '#DC2626',
+              color: cubreCuota ? 'var(--badge-green-text)' : 'var(--badge-red-text)',
               padding: '2px 6px',
               borderRadius: '4px',
-              background: cubreCuota ? '#D1FAE5' : '#FEE2E2'
+              background: cubreCuota ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)'
             }}>
               {formatCurrency(ganancia)}
             </div>
             <div style={{
               fontSize: '9px',
               marginTop: '2px',
-              color: cubreCuota ? '#059669' : '#DC2626'
+              color: cubreCuota ? 'var(--badge-green-text)' : 'var(--badge-red-text)'
             }}>
               {cubreCuota ? '✓ Cubre' : `Faltan ${formatCurrency(cuotaFija - ganancia)}`}
             </div>
@@ -2143,12 +2156,12 @@ export function ReporteFacturacionTab() {
           alignItems: 'center',
           gap: '8px',
           padding: '8px 12px',
-          background: periodo.estado === 'cerrado' ? '#FEF2F2' : periodo.estado === 'abierto' ? '#F0FDF4' : '#FEF3C7',
+          background: periodo.estado === 'cerrado' ? 'var(--badge-red-bg)' : periodo.estado === 'abierto' ? 'var(--badge-green-bg)' : 'var(--badge-yellow-bg)',
           borderRadius: '6px',
           marginBottom: '16px'
         }}>
-          <AlertCircle size={16} style={{ color: periodo.estado === 'cerrado' ? '#DC2626' : periodo.estado === 'abierto' ? '#059669' : '#D97706' }} />
-          <span style={{ fontSize: '13px', color: '#374151' }}>
+          <AlertCircle size={16} style={{ color: periodo.estado === 'cerrado' ? 'var(--badge-red-text)' : periodo.estado === 'abierto' ? 'var(--badge-green-text)' : 'var(--badge-yellow-text)' }} />
+          <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
             Estado del período: <strong style={{ textTransform: 'uppercase' }}>{periodo.estado}</strong>
             {periodo.fecha_cierre && ` - Cerrado el ${formatDate(periodo.fecha_cierre)}`}
           </span>
@@ -2165,18 +2178,18 @@ export function ReporteFacturacionTab() {
             justifyContent: 'space-between',
             gap: '12px',
             padding: '12px 16px',
-            background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+            background: 'var(--badge-blue-bg)',
             borderRadius: '8px',
             marginBottom: '16px',
-            border: '1px solid #93C5FD'
+            border: '1px solid var(--color-info)'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Calculator size={20} style={{ color: '#2563EB' }} />
+              <Calculator size={20} style={{ color: 'var(--color-info)' }} />
               <div>
-                <span style={{ fontWeight: 600, color: '#1E40AF', fontSize: '14px' }}>
+                <span style={{ fontWeight: 600, color: 'var(--badge-blue-text)', fontSize: '14px' }}>
                   VISTA PREVIA - Liquidación Proyectada
                 </span>
-                <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3B82F6' }}>
+                <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
                   Cálculo en tiempo real desde asignaciones activas. No guardado en BD.
                 </p>
               </div>
@@ -2190,7 +2203,7 @@ export function ReporteFacturacionTab() {
                   alignItems: 'center',
                   gap: '6px',
                   padding: '8px 12px',
-                  background: '#2563EB',
+                  background: 'var(--color-info)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -2208,9 +2221,9 @@ export function ReporteFacturacionTab() {
                 }}
                 style={{
                   padding: '8px 12px',
-                  background: 'white',
-                  color: '#374151',
-                  border: '1px solid #D1D5DB',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-color)',
                   borderRadius: '6px',
                   fontSize: '13px',
                   cursor: 'pointer'
@@ -2272,39 +2285,19 @@ export function ReporteFacturacionTab() {
           )}
 
           {/* Buscador de conductor */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: '16px',
-            padding: '12px 16px',
-            background: '#F9FAFB',
-            borderRadius: '8px'
-          }}>
-            <Search size={18} style={{ color: '#6B7280' }} />
+          <div className="fact-search-container">
+            <Search size={18} className="fact-search-icon" />
             <input
               type="text"
               placeholder="Buscar conductor por nombre, DNI o patente..."
               value={buscarConductor}
               onChange={(e) => setBuscarConductor(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                border: '1px solid #D1D5DB',
-                borderRadius: '6px',
-                fontSize: '14px'
-              }}
+              className="fact-search-input"
             />
             {buscarConductor && (
               <button
                 onClick={() => setBuscarConductor('')}
-                style={{
-                  padding: '6px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#9CA3AF'
-                }}
+                className="fact-search-clear"
               >
                 <X size={16} />
               </button>
