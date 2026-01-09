@@ -1177,6 +1177,7 @@ export function ReporteFacturacionTab() {
     try {
       // Actualizar cada facturacion_conductores con los nuevos valores
       for (const row of updatedData) {
+        // 1. Actualizar facturacion_conductores principal
         const { error } = await (supabase
           .from('facturacion_conductores') as any)
           .update({
@@ -1194,34 +1195,216 @@ export function ReporteFacturacionTab() {
           throw error
         }
 
-        // Actualizar detalles individuales si es necesario
-        // P005 - Peajes
+        // 2. Upsert detalles - P005 Peajes
         if (row.valorPeaje > 0) {
-          await (supabase
+          const { data: existeP005 } = await (supabase
             .from('facturacion_detalle') as any)
-            .update({ total: row.valorPeaje, subtotal: row.valorPeaje })
+            .select('id')
             .eq('facturacion_id', row.id)
             .eq('concepto_codigo', 'P005')
+            .single()
+
+          if (existeP005) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({ total: row.valorPeaje, subtotal: row.valorPeaje })
+              .eq('id', existeP005.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: row.id,
+                concepto_codigo: 'P005',
+                concepto_descripcion: 'Telepeajes (Cabify)',
+                cantidad: 1,
+                precio_unitario: row.valorPeaje,
+                subtotal: row.valorPeaje,
+                iva_porcentaje: 0,
+                iva_monto: 0,
+                total: row.valorPeaje,
+                es_credito: false
+              })
+          }
         }
 
-        // P006 - Exceso KM
+        // 3. Upsert detalles - P006 Exceso KM
         if (row.excesoKm > 0) {
           const netoExceso = Math.round(row.excesoKm / 1.21)
           const ivaExceso = row.excesoKm - netoExceso
-          await (supabase
+
+          const { data: existeP006 } = await (supabase
             .from('facturacion_detalle') as any)
-            .update({ total: row.excesoKm, subtotal: netoExceso, iva_monto: ivaExceso })
+            .select('id')
             .eq('facturacion_id', row.id)
             .eq('concepto_codigo', 'P006')
+            .single()
+
+          if (existeP006) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({ total: row.excesoKm, subtotal: netoExceso, iva_monto: ivaExceso })
+              .eq('id', existeP006.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: row.id,
+                concepto_codigo: 'P006',
+                concepto_descripcion: 'Exceso de Kilometraje',
+                cantidad: 1,
+                precio_unitario: row.excesoKm,
+                subtotal: netoExceso,
+                iva_porcentaje: 21,
+                iva_monto: ivaExceso,
+                total: row.excesoKm,
+                es_credito: false
+              })
+          }
         }
 
-        // P007 - Multas
+        // 4. Upsert detalles - P007 Multas/Penalidades
         if (row.valorMultas > 0) {
-          await (supabase
+          const { data: existeP007 } = await (supabase
             .from('facturacion_detalle') as any)
-            .update({ total: row.valorMultas, subtotal: row.valorMultas })
+            .select('id')
             .eq('facturacion_id', row.id)
             .eq('concepto_codigo', 'P007')
+            .single()
+
+          if (existeP007) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({ total: row.valorMultas, subtotal: row.valorMultas })
+              .eq('id', existeP007.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: row.id,
+                concepto_codigo: 'P007',
+                concepto_descripcion: 'Multas y Penalidades',
+                cantidad: 1,
+                precio_unitario: row.valorMultas,
+                subtotal: row.valorMultas,
+                iva_porcentaje: 0,
+                iva_monto: 0,
+                total: row.valorMultas,
+                es_credito: false
+              })
+          }
+        }
+
+        // 5. Upsert detalles - P008 Descuento Repuestos
+        if (row.descuentoRepuestos > 0) {
+          const { data: existeP008 } = await (supabase
+            .from('facturacion_detalle') as any)
+            .select('id')
+            .eq('facturacion_id', row.id)
+            .eq('concepto_codigo', 'P008')
+            .single()
+
+          if (existeP008) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({ total: row.descuentoRepuestos, subtotal: row.descuentoRepuestos })
+              .eq('id', existeP008.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: row.id,
+                concepto_codigo: 'P008',
+                concepto_descripcion: 'Descuento Repuestos',
+                cantidad: 1,
+                precio_unitario: row.descuentoRepuestos,
+                subtotal: row.descuentoRepuestos,
+                iva_porcentaje: 0,
+                iva_monto: 0,
+                total: row.descuentoRepuestos,
+                es_credito: true
+              })
+          }
+        }
+
+        // 6. Upsert detalles - P004 Tickets a Favor
+        if (row.ticketsFavor > 0) {
+          const { data: existeP004 } = await (supabase
+            .from('facturacion_detalle') as any)
+            .select('id')
+            .eq('facturacion_id', row.id)
+            .eq('concepto_codigo', 'P004')
+            .ilike('concepto_descripcion', '%ticket%')
+            .single()
+
+          if (existeP004) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({ total: row.ticketsFavor, subtotal: row.ticketsFavor })
+              .eq('id', existeP004.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: row.id,
+                concepto_codigo: 'P004',
+                concepto_descripcion: 'Tickets a Favor',
+                cantidad: 1,
+                precio_unitario: row.ticketsFavor,
+                subtotal: row.ticketsFavor,
+                iva_porcentaje: 0,
+                iva_monto: 0,
+                total: row.ticketsFavor,
+                es_credito: true
+              })
+          }
+        }
+
+        // 7. Upsert detalles - P004 Comisión Referido
+        if (row.comisionReferido > 0) {
+          const { data: existeRef } = await (supabase
+            .from('facturacion_detalle') as any)
+            .select('id')
+            .eq('facturacion_id', row.id)
+            .eq('concepto_codigo', 'P004')
+            .ilike('concepto_descripcion', '%referido%')
+            .single()
+
+          if (existeRef) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({ total: row.comisionReferido, subtotal: row.comisionReferido })
+              .eq('id', existeRef.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: row.id,
+                concepto_codigo: 'P004',
+                concepto_descripcion: 'Comisión por Referido',
+                cantidad: 1,
+                precio_unitario: row.comisionReferido,
+                subtotal: row.comisionReferido,
+                iva_porcentaje: 0,
+                iva_monto: 0,
+                total: row.comisionReferido,
+                es_credito: true
+              })
+          }
+        }
+
+        // 8. Actualizar garantía del conductor si cambió la cuota
+        if (row.cuotaGarantia > 0 && row.numeroCuota && row.numeroCuota !== 'NA') {
+          const matchCuota = row.numeroCuota.match(/(\d+)\s*de\s*(\d+)/)
+          if (matchCuota) {
+            const cuotaActual = parseInt(matchCuota[1])
+            const cuotasTotales = parseInt(matchCuota[2])
+            const cuotasPagadas = cuotaActual - 1
+
+            const conductorNombreKey = row.conductor.toLowerCase().trim()
+            const { data: garantiaExistente } = await (supabase
+              .from('garantias_conductores') as any)
+              .select('id, cuotas_pagadas')
+              .ilike('conductor_nombre', `%${conductorNombreKey.split(' ')[0]}%`)
+              .single()
+
+            if (garantiaExistente) {
+              await (supabase.from('garantias_conductores') as any)
+                .update({
+                  cuotas_pagadas: cuotasPagadas,
+                  monto_pagado: cuotasPagadas * row.cuotaGarantia,
+                  estado: cuotasPagadas >= cuotasTotales ? 'completada' : 'en_curso'
+                })
+                .eq('id', garantiaExistente.id)
+            }
+          }
         }
       }
 

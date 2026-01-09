@@ -6,7 +6,9 @@ import {
   DollarSign,
   Settings,
   Ticket,
-  Gauge
+  Gauge,
+  Ban,
+  UserMinus
 } from 'lucide-react'
 import { ReporteFacturacionTab } from './tabs/ReporteFacturacionTab'
 import { PeriodosTab } from './tabs/PeriodosTab'
@@ -15,17 +17,21 @@ import { SaldosAbonosTab } from './tabs/SaldosAbonosTab'
 import { TicketsFavorTab } from './tabs/TicketsFavorTab'
 import { ConceptosFacturacionTab } from './tabs/ConceptosFacturacionTab'
 import { ExcesosKmTab } from './tabs/ExcesosKmTab'
+import { BloqueosConductoresTab } from './tabs/BloqueosConductoresTab'
+import { LiquidacionConductoresTab } from './tabs/LiquidacionConductoresTab'
 import './FacturacionModule.css'
 
-type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'conceptos'
+type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'bloqueos' | 'liquidacion' | 'conceptos'
 
 const TABS = [
-  { id: 'reporte' as TabType, label: 'Reporte de Facturación', icon: FileText },
+  { id: 'reporte' as TabType, label: 'Reporte', icon: FileText },
   { id: 'periodos' as TabType, label: 'Períodos', icon: Calendar },
   { id: 'garantias' as TabType, label: 'Garantías', icon: Shield },
-  { id: 'saldos' as TabType, label: 'Saldos y Abonos', icon: DollarSign },
-  { id: 'tickets' as TabType, label: 'Tickets a Favor', icon: Ticket },
+  { id: 'saldos' as TabType, label: 'Saldos', icon: DollarSign },
+  { id: 'tickets' as TabType, label: 'Tickets', icon: Ticket },
   { id: 'excesos' as TabType, label: 'Excesos KM', icon: Gauge },
+  { id: 'bloqueos' as TabType, label: 'Bloqueos', icon: Ban },
+  { id: 'liquidacion' as TabType, label: 'Liquidación', icon: UserMinus },
   { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings }
 ]
 
@@ -59,6 +65,8 @@ export function FacturacionModule() {
         {activeTab === 'saldos' && <SaldosAbonosTab />}
         {activeTab === 'tickets' && <TicketsFavorTab />}
         {activeTab === 'excesos' && <ExcesosKmTab />}
+        {activeTab === 'bloqueos' && <BloqueosConductoresTab />}
+        {activeTab === 'liquidacion' && <LiquidacionConductoresTab />}
         {activeTab === 'conceptos' && <ConceptosFacturacionTab />}
       </div>
     </div>

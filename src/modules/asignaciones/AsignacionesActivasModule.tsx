@@ -291,6 +291,7 @@ export function AsignacionesActivasModule() {
     let vehiculosOcupados = 0
     let vehiculosOperacionalesCount = 0
     let vehiculosOcupadosOperacionales = 0
+    let autosDisponibles = 0 // PKG_ON_BASE con vacantes (no A CARGO)
 
     // UNA SOLA ITERACIÓN sobre asignaciones
     for (const a of asignaciones) {
@@ -339,6 +340,20 @@ export function AsignacionesActivasModule() {
       // Contar operacionales
       if (esOperacional) vehiculosOperacionalesCount++
 
+      // Contar autos disponibles: PKG_ON_BASE + TURNO con vacantes (no A CARGO)
+      if (estadoVehiculo === 'PKG_ON_BASE' && a.horario === 'TURNO') {
+        const conductorD = conductores.find(ac =>
+          ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D'
+        )
+        const conductorN = conductores.find(ac =>
+          ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N'
+        )
+        // Disponible si tiene al menos una vacante
+        if (!conductorD?.conductor_id || !conductorN?.conductor_id) {
+          autosDisponibles++
+        }
+      }
+
       // Agregar a sets
       if (a.vehiculo_id) vehiculosSet.add(a.vehiculo_id)
       for (const ac of conductores) {
@@ -381,7 +396,7 @@ export function AsignacionesActivasModule() {
       porcentajeOcupacionGeneral,
       porcentajeOcupacionOperacional,
       porcentajeOperatividad,
-      cuposDisp: vehiculosPkgOn
+      autosDisponibles
     }
   }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOn, vehiculosEnUso])
 
@@ -402,6 +417,27 @@ export function AsignacionesActivasModule() {
               return !diurno?.conductor_id || !nocturno?.conductor_id
             }
             return false // CARGO no tiene vacantes en el mismo sentido
+          })
+          break
+        case 'autosDisponibles':
+          // Vehículos PKG_ON_BASE que tienen vacantes (realmente disponibles)
+          // Excluir A CARGO (tienen conductor asignado a tiempo completo)
+          result = result.filter(a => {
+            const estadoCodigo = a.vehiculos?.vehiculos_estados?.codigo?.toUpperCase()
+            if (estadoCodigo !== 'PKG_ON_BASE') return false
+
+            // Si es A CARGO, NO es disponible (tiene conductor asignado)
+            if (a.horario === 'CARGO') return false
+
+            // Si es TURNO, verificar que tenga al menos una vacante
+            if (a.horario === 'TURNO') {
+              const conductores = a.asignaciones_conductores || []
+              const diurno = conductores.find(ac => ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D')
+              const nocturno = conductores.find(ac => ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N')
+              return !diurno?.conductor_id || !nocturno?.conductor_id
+            }
+
+            return true
           })
           break
         // Para totalFlota y vehiculosActivos no hay filtrado especial
@@ -874,11 +910,15 @@ export function AsignacionesActivasModule() {
               <span className="stat-label">Turnos Disponibles</span>
             </div>
           </div>
-          <div className="stat-card" title="Vehículos con estado PKG_ON_BASE">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatFilter === 'autosDisponibles' ? 'stat-card-active' : ''}`}
+            title="Vehículos PKG_ON_BASE con vacantes (TURNO sin conductor completo)"
+            onClick={() => handleStatCardClick('autosDisponibles')}
+          >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.cuposDisp}</span>
-              <span className="stat-label">Cupos Disp</span>
+              <span className="stat-value">{stats.autosDisponibles}</span>
+              <span className="stat-label">Autos Disponibles</span>
             </div>
           </div>
           <div className="stat-card" title={`${stats.cuposOcupados} cupos ocupados de ${stats.cuposTotales} totales`}>
@@ -934,7 +974,8 @@ export function AsignacionesActivasModule() {
               <span className="asig-filter-chip">
                 {activeStatFilter === 'vacantes' ? 'Solo Vacantes' :
                  activeStatFilter === 'totalFlota' ? 'Total Flota' :
-                 activeStatFilter === 'vehiculosActivos' ? 'Vehículos Activos' : activeStatFilter}
+                 activeStatFilter === 'vehiculosActivos' ? 'Vehículos Activos' :
+                 activeStatFilter === 'autosDisponibles' ? 'Autos Disponibles' : activeStatFilter}
                 <button onClick={() => setActiveStatFilter(null)} className="asig-filter-chip-remove">
                   <X size={12} />
                 </button>
