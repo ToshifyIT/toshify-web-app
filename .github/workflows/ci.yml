@@ -7,6 +7,9 @@ on:
   push:
     branches: [development]
 
+permissions:
+  contents: write
+
 jobs:
   # ═══════════════════════════════════════════
   # PASO 1: Build & Validate
