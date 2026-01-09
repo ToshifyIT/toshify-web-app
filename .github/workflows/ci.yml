@@ -93,6 +93,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main staging
           git checkout main
-          git merge origin/staging -m "chore: merge staging → main [skip ci]"
+          git merge origin/staging -m "chore: merge staging → main"
           git push origin main
-      - run: echo "🚀 Dokploy desplegará automáticamente"
+      - name: Trigger Dokploy Deploy
+        run: |
+          curl -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            --fail --silent --show-error
+          echo "🚀 Deploy triggered en Dokploy"
