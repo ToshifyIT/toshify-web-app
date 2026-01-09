@@ -1,0 +1,883 @@
+/* src/components/ui/DataTable/DataTable.css */
+/* Estilos estandarizados para tablas - Diseño compacto y responsive */
+/* Con soporte para Dark Mode mediante CSS Variables */
+
+/* Loading State */
+.dt-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  color: var(--text-secondary);
+  gap: 10px;
+}
+
+.dt-loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: dt-spin 0.8s linear infinite;
+}
+
+@keyframes dt-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error State */
+.dt-error {
+  padding: 12px 16px;
+  background: var(--badge-red-bg);
+  color: var(--color-danger);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+/* Empty State */
+.dt-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.dt-empty-icon {
+  margin-bottom: 12px;
+}
+
+.dt-empty-icon svg {
+  width: 48px;
+  height: 48px;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.dt-empty-title {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dt-empty-description {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* Wrapper */
+.dt-wrapper {
+  width: 100%;
+}
+
+/* Header Bar (Search + Action) */
+.dt-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dt-search-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+
+.dt-header-action {
+  flex-shrink: 0;
+}
+
+.dt-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.dt-search-input {
+  width: 100%;
+  padding: 8px 14px 8px 38px;
+  font-size: 13px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  font-family: inherit;
+}
+
+.dt-search-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: var(--input-focus-shadow);
+}
+
+.dt-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Table Container */
+.dt-container {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  overflow: visible; /* Permite que los dropdowns de filtros se muestren */
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+
+/* Table Wrapper for horizontal scroll */
+.dt-table-wrapper {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  /* Clip solo horizontalmente, permitir vertical overflow */
+  overflow-clip-margin: 0 content-box;
+  padding-bottom: 4px; /* Espacio para evitar corte del scrollbar */
+  /* Smooth horizontal scrolling on mobile */
+  scrollbar-width: thin;
+}
+
+.dt-table-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.dt-table-wrapper::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.dt-table-wrapper::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
+}
+
+/* Table */
+.dt-table {
+  width: 100%;
+  min-width: max-content; /* Solo crece si necesita, no fuerza ancho fijo */
+  border-collapse: collapse;
+  overflow: visible; /* Permite que los dropdowns de filtros se muestren */
+  table-layout: auto; /* Permite que las columnas se ajusten */
+}
+
+/* Header */
+.dt-table th {
+  background: var(--table-header-bg);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  border-bottom: 1px solid var(--border-primary);
+  white-space: nowrap;
+  user-select: none;
+  position: relative; /* Para que el dropdown absoluto se posicione correctamente */
+  overflow: visible; /* Permite que el dropdown se muestre fuera */
+}
+
+.dt-table th.dt-sortable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dt-table th.dt-sortable:hover {
+  background: var(--table-row-hover);
+}
+
+.dt-table th:last-child {
+  text-align: center;
+}
+
+.dt-header-content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dt-header-center {
+  justify-content: center;
+}
+
+.dt-sort-indicator {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* Body */
+.dt-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--table-border);
+  color: var(--text-primary);
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.dt-table td:last-child {
+  text-align: center;
+}
+
+.dt-table tbody tr {
+  transition: background 0.15s;
+}
+
+.dt-table tbody tr:hover {
+  background: var(--table-row-hover);
+}
+
+.dt-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.dt-no-results {
+  text-align: center !important;
+  padding: 30px 16px !important;
+  color: var(--text-tertiary) !important;
+}
+
+/* Pagination */
+.dt-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dt-pagination-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dt-pagination-controls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.dt-pagination-btn {
+  padding: 5px 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: all 0.15s;
+  min-width: 28px;
+}
+
+.dt-pagination-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.dt-pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dt-pagination-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 0 6px;
+}
+
+.dt-pagination-select {
+  padding: 5px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--bg-primary);
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.dt-pagination-select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Action Buttons */
+.dt-actions {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+}
+
+.dt-btn-action {
+  padding: 5px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.dt-btn-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dt-btn-action.dt-btn-view:hover:not(:disabled) {
+  border-color: var(--color-purple);
+  color: var(--color-purple);
+  background: var(--badge-purple-bg);
+}
+
+.dt-btn-action.dt-btn-edit:hover:not(:disabled) {
+  border-color: var(--color-info);
+  color: var(--color-info);
+  background: var(--badge-blue-bg);
+}
+
+.dt-btn-action.dt-btn-delete:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: var(--badge-red-bg);
+}
+
+/* Badge */
+.dt-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dt-badge-green {
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+
+.dt-badge-blue {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+}
+
+.dt-badge-yellow {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+
+.dt-badge-red {
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
+}
+
+.dt-badge-gray {
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
+}
+
+.dt-badge-orange {
+  background: #FFF7ED;
+  color: #C2410C;
+}
+
+[data-theme="dark"] .dt-badge-orange {
+  background: rgba(251, 146, 60, 0.15);
+  color: #FB923C;
+}
+
+.dt-badge-solid-green {
+  background: var(--color-success);
+  color: var(--text-inverse);
+}
+
+.dt-badge-solid-blue {
+  background: var(--color-info);
+  color: var(--text-inverse);
+}
+
+.dt-badge-solid-yellow {
+  background: var(--color-warning);
+  color: var(--text-inverse);
+}
+
+.dt-badge-solid-red {
+  background: var(--color-danger);
+  color: var(--text-inverse);
+}
+
+.dt-badge-solid-gray {
+  background: var(--color-gray-500);
+  color: var(--text-inverse);
+}
+
+.dt-badge-solid-amber {
+  background: #F59E0B;
+  color: var(--text-inverse);
+}
+
+.dt-badge-solid-purple {
+  background: #8B5CF6;
+  color: var(--text-inverse);
+}
+
+.dt-badge-solid-orange {
+  background: #EA580C;
+  color: var(--text-inverse);
+}
+
+/* Column Header Filters */
+.dt-column-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.dt-column-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.dt-column-filter-btn:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.dt-column-filter-btn.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.dt-column-filter-dropdown {
+  position: fixed;
+  min-width: 150px;
+  padding: 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 99999; /* Muy alto para estar encima de todo */
+  /* La posición top/left se calcula con JavaScript */
+}
+
+[data-theme="dark"] .dt-column-filter-dropdown {
+  background: var(--bg-secondary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.dt-column-filter-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+  margin-bottom: 2px;
+}
+
+.dt-column-filter-option:last-child {
+  margin-bottom: 0;
+}
+
+.dt-column-filter-option:hover {
+  background: var(--bg-tertiary);
+}
+
+.dt-column-filter-option.selected {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-weight: 600;
+  position: relative;
+  padding-left: 24px;
+}
+
+.dt-column-filter-option.selected::before {
+  content: '✓';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-success);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.dt-column-filter-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.dt-column-filter-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* Multiselect Checkbox Filter */
+.dt-column-filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.dt-column-filter-checkbox:hover {
+  background: var(--bg-tertiary);
+}
+
+.dt-column-filter-checkbox.selected {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.dt-column-filter-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.dt-column-filter-clear {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border: none;
+  border-top: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--color-danger);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dt-column-filter-clear:hover {
+  background: var(--badge-red-bg);
+}
+
+/* Excel-style Filter */
+.dt-excel-filter {
+  min-width: 200px !important;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dt-excel-filter .dt-column-filter-input {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.dt-excel-filter-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 200px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+}
+
+.dt-excel-filter-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dt-excel-filter-list::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+
+.dt-excel-filter-list::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
+}
+
+.dt-excel-filter-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* Portal dropdown - posicionado con fixed via JavaScript */
+.dt-filter-portal {
+  position: fixed !important;
+  animation: dt-filter-fadeIn 0.15s ease-out;
+}
+
+@keyframes dt-filter-fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive - Multi-resolution support */
+
+/* Large desktop (1440px+) */
+@media (max-width: 1440px) {
+  .dt-table th,
+  .dt-table td {
+    padding: 7px 10px;
+  }
+}
+
+/* Desktop/Laptop (1024px - 1440px) */
+@media (max-width: 1280px) {
+  .dt-table th,
+  .dt-table td {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .dt-table th {
+    font-size: 10px;
+  }
+}
+
+/* Tablet landscape (768px - 1024px) */
+@media (max-width: 1024px) {
+  .dt-header-bar {
+    gap: 10px;
+  }
+
+  .dt-search-wrapper {
+    min-width: 180px;
+  }
+
+  .dt-table th,
+  .dt-table td {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .dt-table th {
+    font-size: 10px;
+  }
+
+  .dt-pagination-info {
+    font-size: 11px;
+  }
+
+  .dt-pagination-text {
+    font-size: 11px;
+  }
+}
+
+/* Tablet portrait (600px - 768px) */
+@media (max-width: 768px) {
+  .dt-header-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .dt-search-wrapper {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .dt-header-action {
+    flex-shrink: 0;
+  }
+
+  .dt-table th,
+  .dt-table td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  .dt-table th {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
+  .dt-pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .dt-pagination-info {
+    text-align: center;
+  }
+
+  .dt-pagination-controls {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
+/* Mobile large (480px - 600px) */
+@media (max-width: 600px) {
+  .dt-header-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dt-search-wrapper {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .dt-header-action {
+    width: 100%;
+  }
+
+  .dt-header-action button {
+    width: 100%;
+  }
+
+  .dt-table th,
+  .dt-table td {
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  .dt-table th {
+    font-size: 9px;
+  }
+}
+
+/* Mobile (< 480px) */
+@media (max-width: 480px) {
+  .dt-search-input {
+    padding: 10px 12px 10px 36px;
+    font-size: 14px; /* Mas grande para mejor legibilidad tactil */
+  }
+
+  .dt-table th,
+  .dt-table td {
+    padding: 8px 4px;
+    font-size: 11px;
+  }
+
+  .dt-table th {
+    font-size: 9px;
+    padding: 6px 4px;
+  }
+
+  .dt-pagination-text {
+    display: none;
+  }
+
+  .dt-pagination-info {
+    font-size: 11px;
+  }
+
+  .dt-pagination-controls {
+    gap: 3px;
+  }
+
+  .dt-pagination-btn {
+    padding: 8px 10px; /* Touch-friendly - min 44px touch target */
+    min-width: 36px;
+    font-size: 13px;
+  }
+
+  .dt-pagination-select {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .dt-btn-action {
+    padding: 8px 10px; /* Touch-friendly */
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .dt-actions {
+    gap: 4px;
+  }
+
+  .dt-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+
+  .dt-empty {
+    padding: 30px 12px;
+  }
+
+  .dt-empty-icon svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .dt-empty-title {
+    font-size: 14px;
+  }
+
+  .dt-empty-description {
+    font-size: 12px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .dt-table th,
+  .dt-table td {
+    padding: 6px 3px;
+    font-size: 10px;
+  }
+
+  .dt-table th {
+    font-size: 8px;
+    padding: 5px 3px;
+  }
+
+  .dt-header-bar {
+    margin-bottom: 8px;
+  }
+
+  .dt-pagination {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .dt-pagination-btn {
+    padding: 6px 8px;
+    min-width: 32px;
+    font-size: 12px;
+  }
+}

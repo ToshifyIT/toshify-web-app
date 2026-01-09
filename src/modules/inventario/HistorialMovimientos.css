@@ -1,0 +1,349 @@
+/* src/modules/inventario/HistorialMovimientos.css */
+/* Estilos para el modulo de Historial de Movimientos - Diseno Bitacora */
+/* Con soporte para Dark Mode mediante CSS Variables */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.hist-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   HEADER - Estilo Bitacora
+   ===================================================== */
+
+.hist-header {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.hist-header-title {
+  border-left: 4px solid #DC2626;
+  padding-left: 16px;
+}
+
+.hist-header-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.hist-header-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}
+
+/* Filtros */
+.hist-filters {
+  margin-bottom: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hist-search-input {
+  flex: 1;
+  min-width: 250px;
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.hist-search-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: var(--input-focus-shadow);
+}
+
+.hist-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.hist-type-select {
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.hist-type-select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Celdas especiales */
+.hist-date-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.hist-date-time {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* Badge de Tipo */
+.hist-tipo-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hist-tipo-badge.entrada {
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+
+.hist-tipo-badge.salida {
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
+}
+
+.hist-tipo-badge.asignacion {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+
+.hist-tipo-badge.devolucion {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+}
+
+.hist-tipo-badge.ajuste {
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
+}
+
+.hist-tipo-badge.daño {
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
+}
+
+.hist-tipo-badge.perdida {
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
+}
+
+/* Celda de Producto */
+.hist-producto-codigo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.hist-producto-nombre {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Celda de Cantidad */
+.hist-cantidad {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Celda de Usuario */
+.hist-usuario-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hist-usuario-avatar {
+  width: 28px;
+  height: 28px;
+  background: var(--color-primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-inverse);
+  font-weight: 700;
+  font-size: 10px;
+}
+
+.hist-usuario-nombre {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.hist-usuario-email {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.hist-usuario-sistema {
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Celda de Observaciones */
+.hist-observaciones {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Estado Vacío */
+.hist-empty {
+  text-align: center;
+  padding: 40px 16px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  margin-top: 12px;
+}
+
+.hist-empty-icon {
+  color: var(--text-tertiary);
+  margin: 0 auto 12px;
+}
+
+.hist-empty-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hist-filters {
+    flex-direction: column;
+  }
+
+  .hist-search-input {
+    min-width: 100%;
+  }
+
+  .hist-type-select {
+    width: 100%;
+  }
+}
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .hist-filters {
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+
+  .hist-search-input {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  .hist-type-select {
+    padding: 10px 12px; /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  /* Table cells Mobile */
+  .hist-date-cell {
+    font-size: 11px;
+    gap: 2px;
+  }
+
+  .hist-date-time {
+    font-size: 9px;
+  }
+
+  .hist-tipo-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+    gap: 2px;
+  }
+
+  .hist-producto-codigo {
+    font-size: 11px;
+  }
+
+  .hist-producto-nombre {
+    font-size: 10px;
+  }
+
+  .hist-cantidad {
+    font-size: 12px;
+  }
+
+  .hist-usuario-cell {
+    gap: 4px;
+  }
+
+  .hist-usuario-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+  }
+
+  .hist-usuario-nombre {
+    font-size: 11px;
+  }
+
+  .hist-usuario-email {
+    font-size: 9px;
+  }
+
+  .hist-usuario-sistema {
+    font-size: 10px;
+  }
+
+  .hist-observaciones {
+    font-size: 10px;
+  }
+
+  /* Empty State Mobile */
+  .hist-empty {
+    padding: 30px 12px;
+    margin-top: 10px;
+  }
+
+  .hist-empty-text {
+    font-size: 13px;
+  }
+}
+
+/* Extra small devices (< 360px) */
+@media (max-width: 360px) {
+  .hist-search-input,
+  .hist-type-select {
+    font-size: 13px;
+    padding: 10px;
+  }
+
+  .hist-tipo-badge {
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+
+  .hist-usuario-avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 8px;
+  }
+}

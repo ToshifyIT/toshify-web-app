@@ -1,0 +1,1120 @@
+/* src/modules/nominas/NominasModule.css */
+/* Estilos para el módulo de Nóminas - Diseño igual a Conductores */
+/* Con soporte para Dark Mode mediante CSS Variables */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.nom-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   TABS
+   ===================================================== */
+
+.nom-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-primary);
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.nom-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.nom-tab:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.nom-tab.active {
+  background: #DC2626;
+  color: white;
+}
+
+.nom-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   SELECTOR DE SEMANA
+   ===================================================== */
+
+.nom-semana-selector {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-primary);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.nom-semana-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nom-nav-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.nom-nav-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-secondary);
+}
+
+.nom-semana-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 180px;
+}
+
+.nom-semana-titulo {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.nom-semana-fecha {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.nom-semana-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* =====================================================
+   HEADER - Estilo Conductores
+   ===================================================== */
+
+.nom-header {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.nom-header-title {
+  border-left: 4px solid #DC2626;
+  padding-left: 16px;
+}
+
+.nom-header-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.nom-header-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}
+
+/* =====================================================
+   STATS - Estilo Conductores
+   ===================================================== */
+
+.nom-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
+}
+
+.nom-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.nom-stats .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nom-stats .stat-card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
+  transform: translateY(-1px);
+}
+
+.nom-stats .stat-card.active {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: #DC2626;
+}
+
+.nom-stats .stat-card .stat-icon {
+  color: #DC2626;
+  flex-shrink: 0;
+}
+
+.nom-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nom-stats .stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.nom-stats .stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* Responsive Stats */
+@media (max-width: 1200px) {
+  .nom-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .nom-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .nom-header {
+    padding: 16px;
+  }
+
+  .nom-header-title h1 {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nom-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .nom-stats .stat-card {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .nom-stats .stat-value {
+    font-size: 14px;
+  }
+
+  .nom-stats .stat-label {
+    font-size: 10px;
+  }
+}
+
+/* =====================================================
+   TABLE CELLS - Estilos específicos
+   ===================================================== */
+
+/* Código */
+.nom-codigo {
+  font-family: monospace;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+/* Precio */
+.nom-precio {
+  font-family: monospace;
+  font-weight: 500;
+}
+
+/* Boolean badges */
+.nom-bool-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.nom-bool-badge.yes {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.nom-bool-badge.no {
+  background: #F3F4F6;
+  color: #9CA3AF;
+}
+
+/* =====================================================
+   BUTTONS
+   ===================================================== */
+
+.nom-btn-secondary,
+.nom-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid;
+}
+
+.nom-btn-secondary {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border-color: var(--border-primary);
+}
+
+.nom-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.nom-btn-primary {
+  background: #DC2626;
+  color: white;
+  border-color: #DC2626;
+}
+
+.nom-btn-primary:hover:not(:disabled) {
+  background: #B91C1C;
+  border-color: #B91C1C;
+}
+
+.nom-btn-secondary:disabled,
+.nom-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* =====================================================
+   MODAL / FORM
+   ===================================================== */
+
+.nom-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.nom-modal-content {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.nom-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  border-radius: 12px 12px 0 0;
+}
+
+.nom-modal-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.nom-modal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.nom-modal-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.nom-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.nom-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  border-radius: 0 0 12px 12px;
+}
+
+/* Form sections */
+.nom-form-section {
+  margin-bottom: 20px;
+}
+
+.nom-form-section:last-child {
+  margin-bottom: 0;
+}
+
+.nom-form-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.nom-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.nom-form-row.three-cols {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.nom-form-row:last-child {
+  margin-bottom: 0;
+}
+
+.nom-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nom-form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.nom-form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.nom-form-group label .required {
+  color: #DC2626;
+}
+
+.nom-form-group input,
+.nom-form-group select,
+.nom-form-group textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.nom-form-group input:focus,
+.nom-form-group select:focus,
+.nom-form-group textarea:focus {
+  outline: none;
+  border-color: #DC2626;
+}
+
+.nom-form-group input:disabled,
+.nom-form-group select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Checkbox inline */
+.nom-checkbox-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  height: 42px;
+}
+
+.nom-checkbox-inline input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #DC2626;
+}
+
+.nom-checkbox-inline span {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* IVA calculated display */
+.nom-iva-calculated {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  height: 42px;
+}
+
+.nom-iva-calculated .value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .nom-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .nom-form-row.three-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .nom-modal-content {
+    max-width: 100%;
+    margin: 10px;
+  }
+
+  .nom-semana-selector {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .nom-semana-actions {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .nom-tabs {
+    flex-wrap: wrap;
+  }
+}
+
+/* =====================================================
+   REPORTE DE NÓMINAS - ESTILOS ADICIONALES
+   ===================================================== */
+
+/* Stats grid con 6 columnas */
+.nom-stats-grid.six-cols {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+@media (max-width: 1400px) {
+  .nom-stats-grid.six-cols {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .nom-stats-grid.six-cols {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Iconos de stats con colores */
+.nom-stats .stat-icon.green {
+  color: #059669;
+}
+
+.nom-stats .stat-icon.red {
+  color: #DC2626;
+}
+
+/* Celdas de la tabla de nóminas */
+.nom-conductor-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nom-conductor-nombre {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.nom-conductor-dni {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.nom-patente {
+  font-family: monospace;
+  font-weight: 500;
+  font-size: 12px;
+  background: var(--bg-tertiary);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.nom-monto {
+  font-family: monospace;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.nom-monto.nom-cargo {
+  color: #DC2626;
+}
+
+.nom-monto.nom-credito {
+  color: #059669;
+}
+
+.nom-saldo {
+  font-family: monospace;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.nom-saldo.debe {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.nom-saldo.favor {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.nom-alertas {
+  display: flex;
+  gap: 6px;
+}
+
+.nom-alerta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+.nom-alerta.penalidad {
+  background: #FEF3C7;
+  color: #D97706;
+}
+
+.nom-alerta.siniestro {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+/* =====================================================
+   MODAL DE DETALLE DE NÓMINA
+   ===================================================== */
+
+.nom-modal-detalle {
+  max-width: 800px;
+}
+
+.nom-loading-detalle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: var(--text-tertiary);
+}
+
+.nom-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.nom-detalle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--border-primary);
+}
+
+.nom-detalle-conductor h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.nom-detalle-conductor span {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.nom-detalle-periodo {
+  text-align: right;
+}
+
+.nom-detalle-semana {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #DC2626;
+}
+
+.nom-detalle-fechas {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.nom-detalle-asignacion {
+  display: flex;
+  gap: 24px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.nom-info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nom-info-item .label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.nom-info-item .value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Secciones del detalle */
+.nom-detalle-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nom-seccion-titulo {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.nom-seccion-titulo.cargos {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.nom-seccion-titulo.creditos {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.nom-detalle-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nom-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+.nom-item.sub {
+  margin-left: 20px;
+  background: var(--bg-tertiary);
+  font-size: 12px;
+}
+
+.nom-item.total {
+  margin-top: 8px;
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  border-top: 1px solid var(--border-primary);
+}
+
+.nom-item-desc {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.nom-item-desc small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.nom-item-monto {
+  font-family: monospace;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.nom-item-monto.credito {
+  color: #059669;
+}
+
+/* Grupo de items */
+.nom-item-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nom-item-group-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Saldo final */
+.nom-detalle-saldo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 2px solid var(--border-primary);
+}
+
+.nom-saldo-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  letter-spacing: 0.5px;
+}
+
+.nom-saldo-valor {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: monospace;
+  margin: 8px 0;
+}
+
+.nom-saldo-valor.debe {
+  color: #DC2626;
+}
+
+.nom-saldo-valor.favor {
+  color: #059669;
+}
+
+.nom-saldo-estado {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Detalle por día */
+.nom-detalle-dias {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.nom-dia-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.nom-dia-nombre {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.nom-dia-fecha {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.nom-dia-tipo {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.nom-dia-tipo.turno {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+.nom-dia-tipo.cargo {
+  background: #DBEAFE;
+  color: #1D4ED8;
+}
+
+.nom-dia-precio {
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .nom-detalle-dias {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .nom-detalle-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .nom-detalle-periodo {
+    text-align: left;
+  }
+
+  .nom-detalle-asignacion {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nom-detalle-dias {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* No data */
+.nom-no-data {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-tertiary);
+}
+
+/* =====================================================
+   FILTROS DE COLUMNA Y EXPORTAR EXCEL
+   ===================================================== */
+
+.nom-filtros-columna {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-primary);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  flex-wrap: wrap;
+}
+
+.nom-filtros-grupo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--text-tertiary);
+}
+
+.nom-filtros-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.nom-filtro-select {
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.nom-filtro-select:focus {
+  outline: none;
+  border-color: #DC2626;
+}
+
+.nom-filtro-limpiar {
+  padding: 6px 12px;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.nom-filtro-limpiar:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.nom-export-btn-group {
+  display: flex;
+  gap: 8px;
+}
+
+.nom-btn-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid;
+  background: #059669;
+  color: white;
+  border-color: #059669;
+}
+
+.nom-btn-export:hover:not(:disabled) {
+  background: #047857;
+  border-color: #047857;
+}
+
+.nom-btn-export:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1024px) {
+  .nom-filtros-columna {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .nom-filtros-grupo {
+    width: 100%;
+  }
+
+  .nom-export-btn-group {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 768px) {
+  .nom-filtro-select {
+    min-width: 130px;
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+
+  .nom-filtros-grupo {
+    gap: 8px;
+  }
+}

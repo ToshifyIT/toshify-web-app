@@ -1,0 +1,421 @@
+/* src/styles/theme.css */
+/* Sistema de temas - Variables CSS para Light y Dark Mode */
+/* Mantiene consistencia de colores en toda la aplicación */
+
+:root {
+  /* ==========================================
+     COLOR SCHEME - LIGHT MODE (Default)
+     ========================================== */
+
+  /* Brand Colors */
+  --color-primary: #E63946;
+  --color-primary-hover: #D62828;
+  --color-primary-light: rgba(230, 57, 70, 0.1);
+  --color-primary-shadow: rgba(230, 57, 70, 0.2);
+
+  /* Semantic Colors */
+  --color-success: #10B981;
+  --color-success-light: #D1FAE5;
+  --color-success-dark: #065F46;
+  --color-success-hover: #059669;
+
+  --color-warning: #F59E0B;
+  --color-warning-light: #FEF3C7;
+  --color-warning-dark: #92400E;
+  --color-warning-hover: #D97706;
+
+  --color-danger: #DC2626;
+  --color-danger-light: #FEE2E2;
+  --color-danger-dark: #991B1B;
+  --color-danger-hover: #B91C1C;
+
+  --color-info: #3B82F6;
+  --color-info-light: #DBEAFE;
+  --color-info-dark: #1E40AF;
+  --color-info-hover: #2563EB;
+
+  --color-purple: #8B5CF6;
+  --color-purple-light: #F5F3FF;
+  --color-purple-dark: #6B21A8;
+
+  --color-indigo: #4F46E5;
+  --color-indigo-light: #E0E7FF;
+  --color-indigo-dark: #3730A3;
+
+  /* Neutral Colors */
+  --color-gray-50: #F9FAFB;
+  --color-gray-100: #F3F4F6;
+  --color-gray-200: #E5E7EB;
+  --color-gray-300: #D1D5DB;
+  --color-gray-400: #9CA3AF;
+  --color-gray-500: #6B7280;
+  --color-gray-600: #4B5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1F2937;
+  --color-gray-900: #111827;
+
+  /* Background Colors */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F9FAFB;
+  --bg-tertiary: #F3F4F6;
+  --bg-hover: #FAFAFA;
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+
+  /* Text Colors */
+  --text-primary: #1F2937;
+  --text-secondary: #6B7280;
+  --text-tertiary: #9CA3AF;
+  --text-inverse: #FFFFFF;
+  --text-muted: #9CA3AF;
+
+  /* Border Colors */
+  --border-primary: #E5E7EB;
+  --border-secondary: #F3F4F6;
+  --border-focus: #E63946;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+
+  /* Component Specific */
+  --table-header-bg: #F9FAFB;
+  --table-row-hover: #FAFAFA;
+  --table-border: #F3F4F6;
+
+  --input-bg: #FFFFFF;
+  --input-border: #E5E7EB;
+  --input-focus-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+
+  --modal-bg: #FFFFFF;
+  --card-bg: #FFFFFF;
+
+  --pagination-bg: #FAFAFA;
+
+  /* Status Badge Backgrounds */
+  --badge-green-bg: #D1FAE5;
+  --badge-green-text: #065F46;
+  --badge-blue-bg: #DBEAFE;
+  --badge-blue-text: #1E40AF;
+  --badge-yellow-bg: #FEF3C7;
+  --badge-yellow-text: #92400E;
+  --badge-red-bg: #FEE2E2;
+  --badge-red-text: #DC2626;
+  --badge-gray-bg: #F3F4F6;
+  --badge-gray-text: #6B7280;
+  --badge-purple-bg: #E9D5FF;
+  --badge-purple-text: #6B21A8;
+  --badge-indigo-bg: #E0E7FF;
+  --badge-indigo-text: #3730A3;
+  --badge-orange-bg: #FED7AA;
+  --badge-orange-text: #9A3412;
+}
+
+/* ==========================================
+   DARK MODE
+   ========================================== */
+[data-theme="dark"] {
+  /* Brand Colors - Ligeramente más brillantes para contraste */
+  --color-primary: #EF4444;
+  --color-primary-hover: #F87171;
+  --color-primary-light: rgba(239, 68, 68, 0.15);
+  --color-primary-shadow: rgba(239, 68, 68, 0.25);
+
+  /* Semantic Colors - Ajustados para dark mode */
+  --color-success: #22C55E;
+  --color-success-light: rgba(34, 197, 94, 0.15);
+  --color-success-dark: #86EFAC;
+  --color-success-hover: #4ADE80;
+
+  --color-warning: #FBBF24;
+  --color-warning-light: rgba(251, 191, 36, 0.15);
+  --color-warning-dark: #FDE68A;
+  --color-warning-hover: #FCD34D;
+
+  --color-danger: #EF4444;
+  --color-danger-light: rgba(239, 68, 68, 0.15);
+  --color-danger-dark: #FCA5A5;
+  --color-danger-hover: #F87171;
+
+  --color-info: #60A5FA;
+  --color-info-light: rgba(96, 165, 250, 0.15);
+  --color-info-dark: #93C5FD;
+  --color-info-hover: #93C5FD;
+
+  --color-purple: #A78BFA;
+  --color-purple-light: rgba(167, 139, 250, 0.15);
+  --color-purple-dark: #C4B5FD;
+
+  --color-indigo: #818CF8;
+  --color-indigo-light: rgba(129, 140, 248, 0.15);
+  --color-indigo-dark: #A5B4FC;
+
+  /* Neutral Colors - Invertidos */
+  --color-gray-50: #111827;
+  --color-gray-100: #1F2937;
+  --color-gray-200: #374151;
+  --color-gray-300: #4B5563;
+  --color-gray-400: #6B7280;
+  --color-gray-500: #9CA3AF;
+  --color-gray-600: #D1D5DB;
+  --color-gray-700: #E5E7EB;
+  --color-gray-800: #F3F4F6;
+  --color-gray-900: #F9FAFB;
+
+  /* Background Colors */
+  --bg-primary: #0F172A;
+  --bg-secondary: #1E293B;
+  --bg-tertiary: #334155;
+  --bg-hover: #1E293B;
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+
+  /* Text Colors */
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-tertiary: #64748B;
+  --text-inverse: #0F172A;
+  --text-muted: #64748B;
+
+  /* Border Colors */
+  --border-primary: #334155;
+  --border-secondary: #1E293B;
+  --border-focus: #EF4444;
+
+  /* Shadow - Más suave en dark mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+
+  /* Component Specific */
+  --table-header-bg: #1E293B;
+  --table-row-hover: #1E293B;
+  --table-border: #334155;
+
+  --input-bg: #1E293B;
+  --input-border: #334155;
+  --input-focus-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+
+  --modal-bg: #1E293B;
+  --card-bg: #1E293B;
+
+  --pagination-bg: #1E293B;
+
+  /* Status Badge Backgrounds - Dark variants */
+  --badge-green-bg: rgba(34, 197, 94, 0.2);
+  --badge-green-text: #86EFAC;
+  --badge-blue-bg: rgba(96, 165, 250, 0.2);
+  --badge-blue-text: #93C5FD;
+  --badge-yellow-bg: rgba(251, 191, 36, 0.2);
+  --badge-yellow-text: #FDE68A;
+  --badge-red-bg: rgba(239, 68, 68, 0.2);
+  --badge-red-text: #FCA5A5;
+  --badge-gray-bg: rgba(100, 116, 139, 0.2);
+  --badge-gray-text: #94A3B8;
+  --badge-purple-bg: rgba(167, 139, 250, 0.2);
+  --badge-purple-text: #C4B5FD;
+  --badge-indigo-bg: rgba(129, 140, 248, 0.2);
+  --badge-indigo-text: #A5B4FC;
+  --badge-orange-bg: rgba(251, 146, 60, 0.2);
+  --badge-orange-text: #FED7AA;
+}
+
+/* ==========================================
+   TRANSITIONS
+   ========================================== */
+body,
+.module-container,
+.modal-content,
+.dt-container,
+.card-bg {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* ==========================================
+   DARK MODE - Global Overrides
+   Aplica contraste correcto en modo oscuro
+   ========================================== */
+
+/* Body y contenedores principales */
+[data-theme="dark"] body {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Inputs y selects - Alta especificidad */
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+[data-theme="dark"] input:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus {
+  border-color: var(--border-focus) !important;
+  box-shadow: var(--input-focus-shadow) !important;
+}
+
+/* Tablas - Alta especificidad para sobrescribir inline styles */
+[data-theme="dark"] table {
+  background-color: var(--card-bg) !important;
+}
+
+[data-theme="dark"] thead,
+[data-theme="dark"] thead tr,
+[data-theme="dark"] th {
+  background-color: var(--table-header-bg) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="dark"] tbody tr {
+  background-color: var(--card-bg) !important;
+}
+
+[data-theme="dark"] tbody tr:hover {
+  background-color: var(--table-row-hover) !important;
+}
+
+[data-theme="dark"] td {
+  color: var(--text-primary) !important;
+  border-color: var(--table-border) !important;
+}
+
+/* Headers y títulos */
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] h4,
+[data-theme="dark"] h5,
+[data-theme="dark"] h6 {
+  color: var(--text-primary) !important;
+}
+
+/* Párrafos y textos */
+[data-theme="dark"] p {
+  color: var(--text-secondary) !important;
+}
+
+/* Labels */
+[data-theme="dark"] label {
+  color: var(--text-primary) !important;
+}
+
+/* Divs con role de contenedor de contenido */
+[data-theme="dark"] main > div,
+[data-theme="dark"] section,
+[data-theme="dark"] article {
+  color: var(--text-primary);
+}
+
+/* SweetAlert2 Dark Mode - Prioridad alta */
+[data-theme="dark"] .swal2-popup {
+  background-color: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-title {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-html-container {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .swal2-html-container p,
+[data-theme="dark"] .swal2-html-container strong {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-input,
+[data-theme="dark"] .swal2-textarea,
+[data-theme="dark"] .swal2-select {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-validation-message {
+  background-color: var(--badge-red-bg) !important;
+  color: var(--badge-red-text) !important;
+}
+
+[data-theme="dark"] .swal2-input-label {
+  color: var(--text-secondary) !important;
+}
+
+/* Modales */
+[data-theme="dark"] .modal-overlay {
+  background-color: var(--bg-overlay) !important;
+}
+
+[data-theme="dark"] .modal-content {
+  background-color: var(--modal-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Scrollbars para navegadores webkit */
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 4px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ==========================================
+   CLASES DE UTILIDAD PARA TEMA OSCURO
+   Usar estas clases en los componentes
+   ========================================== */
+
+/* Fondos */
+.bg-card {
+  background-color: var(--card-bg);
+}
+
+.bg-surface {
+  background-color: var(--bg-secondary);
+}
+
+.bg-input {
+  background-color: var(--input-bg);
+}
+
+/* Textos */
+.text-heading {
+  color: var(--text-primary);
+}
+
+.text-body {
+  color: var(--text-secondary);
+}
+
+.text-muted {
+  color: var(--text-tertiary);
+}
+
+/* Bordes */
+.border-default {
+  border-color: var(--border-primary);
+}
+
+.border-subtle {
+  border-color: var(--border-secondary);
+}

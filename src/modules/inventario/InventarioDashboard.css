@@ -1,0 +1,439 @@
+/* src/modules/inventario/InventarioDashboard.css */
+/* Estilos para el Dashboard de Inventario - Diseno Bitacora */
+/* Con soporte para Dark Mode mediante CSS Variables */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.inv-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   HEADER - Estilo Bitacora
+   ===================================================== */
+
+.inv-header {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.inv-header-title {
+  border-left: 4px solid #DC2626;
+  padding-left: 16px;
+}
+
+.inv-header-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.inv-header-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}
+
+/* =====================================================
+   CATEGORY CARDS - Cards clickeables por categoria
+   ===================================================== */
+
+.inv-category-cards {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.inv-category-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.inv-category-card:hover {
+  background: var(--bg-secondary);
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.inv-category-card.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.inv-category-card.active .inv-cat-icon,
+.inv-category-card.active .inv-cat-count,
+.inv-category-card.active .inv-cat-label {
+  color: var(--text-inverse);
+}
+
+.inv-category-card.alerta {
+  border-color: var(--color-warning);
+}
+
+.inv-category-card.alerta .inv-cat-icon {
+  color: var(--color-warning);
+}
+
+.inv-category-card.alerta.active {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
+.inv-cat-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.inv-cat-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.inv-cat-count {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.inv-cat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+/* Filtros legacy (mantenidos por compatibilidad) */
+.inv-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.inv-filter-btn {
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s;
+}
+
+.inv-filter-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-secondary);
+}
+
+.inv-filter-btn.active {
+  background: var(--color-primary);
+  color: var(--text-inverse);
+  border-color: var(--color-primary);
+}
+
+/* =====================================================
+   STATS - Estilo Bitacora
+   ===================================================== */
+
+.inv-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
+}
+
+.inv-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+.inv-stats .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.inv-stats .stat-card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
+  transform: translateY(-1px);
+}
+
+.inv-stats .stat-card.active {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: #DC2626;
+}
+
+.inv-stats .stat-card .stat-icon {
+  color: #DC2626;
+  flex-shrink: 0;
+}
+
+.inv-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.inv-stats .stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.inv-stats .stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* Tabla Header */
+.inv-table-header {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.inv-table-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Celdas especiales */
+.inv-codigo {
+  font-weight: 600;
+  color: var(--color-primary);
+  font-size: 13px;
+}
+
+.inv-nombre {
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.inv-tipo-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.inv-tipo-badge.herramienta {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+
+.inv-tipo-badge.repuesto {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+}
+
+.inv-total {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inv-disponible {
+  color: var(--color-success);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.inv-disponible.con-alerta {
+  color: var(--color-danger);
+}
+
+.inv-disponible .alerta-icon {
+  color: var(--color-danger);
+  animation: pulse-alert 1.5s infinite;
+}
+
+@keyframes pulse-alert {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.inv-en-uso { color: var(--color-warning); font-weight: 600; }
+.inv-en-transito { color: var(--color-purple); font-weight: 600; }
+.inv-dañado { color: var(--color-danger); font-weight: 600; }
+.inv-perdido { color: var(--text-secondary); font-weight: 600; }
+
+/* Responsive Stats */
+@media (max-width: 1440px) {
+  .inv-stats-grid {
+    gap: 10px;
+  }
+
+  .inv-category-cards {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .inv-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .inv-category-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .inv-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .inv-category-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .inv-category-card {
+    padding: 12px;
+  }
+
+  .inv-cat-count {
+    font-size: 18px;
+  }
+
+  .inv-header {
+    padding: 16px;
+  }
+
+  .inv-header-title h1 {
+    font-size: 16px;
+  }
+
+  .inv-filters {
+    flex-direction: column;
+  }
+
+  .inv-filter-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Mobile devices (< 480px) */
+@media (max-width: 480px) {
+  .inv-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .inv-category-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .inv-category-card {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .inv-cat-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .inv-cat-count {
+    font-size: 16px;
+  }
+
+  .inv-cat-label {
+    font-size: 10px;
+  }
+
+  .inv-stats .stat-card {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .inv-stats .stat-value {
+    font-size: 14px;
+  }
+
+  .inv-stats .stat-label {
+    font-size: 10px;
+  }
+
+  .inv-filters {
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .inv-filter-btn {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .inv-table-header {
+    padding: 10px;
+  }
+
+  .inv-table-title {
+    font-size: 13px;
+  }
+
+  /* Table cells Mobile */
+  .inv-codigo {
+    font-size: 11px;
+  }
+
+  .inv-nombre {
+    font-size: 11px;
+  }
+
+  .inv-tipo-badge {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+
+  .inv-total {
+    font-size: 11px;
+  }
+
+  .inv-disponible,
+  .inv-en-uso,
+  .inv-en-transito,
+  .inv-dañado,
+  .inv-perdido {
+    font-size: 11px;
+  }
+}

@@ -1,0 +1,430 @@
+/* src/components/ui/AvatarUploadModal/AvatarUploadModal.css */
+/* Modal de subida y recorte de avatar */
+
+/* =====================================================
+   OVERLAY
+   ===================================================== */
+
+.avatar-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* =====================================================
+   MODAL
+   ===================================================== */
+
+.avatar-modal {
+  background: var(--bg-primary);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =====================================================
+   HEADER
+   ===================================================== */
+
+.avatar-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.avatar-modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.avatar-modal-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: var(--bg-secondary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.avatar-modal-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* =====================================================
+   CONTENT
+   ===================================================== */
+
+.avatar-modal-content {
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* =====================================================
+   DROPZONE
+   ===================================================== */
+
+.avatar-dropzone {
+  border: 2px dashed var(--border-primary);
+  border-radius: 12px;
+  padding: 40px 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-secondary);
+}
+
+.avatar-dropzone:hover,
+.avatar-dropzone.dragging {
+  border-color: #DC2626;
+  background: rgba(220, 38, 38, 0.05);
+}
+
+.avatar-dropzone.dragging {
+  transform: scale(1.02);
+}
+
+.avatar-dropzone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.avatar-dropzone-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid var(--border-primary);
+  margin-bottom: 8px;
+}
+
+.avatar-dropzone-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-dropzone-icon {
+  width: 80px;
+  height: 80px;
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.avatar-dropzone-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.avatar-dropzone-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.avatar-dropzone-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.avatar-dropzone-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #DC2626;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.avatar-dropzone-btn:hover {
+  background: #B91C1C;
+}
+
+.avatar-dropzone-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* =====================================================
+   EDITOR
+   ===================================================== */
+
+.avatar-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.avatar-crop-container {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* =====================================================
+   CONTROLS
+   ===================================================== */
+
+.avatar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.avatar-control-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+}
+
+.avatar-control-group label {
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+}
+
+.avatar-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  outline: none;
+}
+
+.avatar-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #DC2626;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.avatar-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.avatar-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #DC2626;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+.avatar-control-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.avatar-control-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.avatar-control-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* =====================================================
+   ERROR
+   ===================================================== */
+
+.avatar-error {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: 8px;
+  color: #DC2626;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* =====================================================
+   FOOTER
+   ===================================================== */
+
+.avatar-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+.avatar-btn-cancel {
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.avatar-btn-cancel:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.avatar-btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.avatar-btn-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: #DC2626;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.avatar-btn-save:hover:not(:disabled) {
+  background: #B91C1C;
+}
+
+.avatar-btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.avatar-btn-save .animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 520px) {
+  .avatar-modal-overlay {
+    padding: 0;
+  }
+
+  .avatar-modal {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  .avatar-modal-header {
+    padding: 16px 20px;
+  }
+
+  .avatar-modal-content {
+    padding: 20px;
+  }
+
+  .avatar-dropzone {
+    padding: 30px 16px;
+  }
+
+  .avatar-crop-container {
+    height: 250px;
+  }
+
+  .avatar-modal-footer {
+    padding: 16px 20px;
+  }
+
+  .avatar-btn-cancel,
+  .avatar-btn-save {
+    flex: 1;
+    justify-content: center;
+  }
+}

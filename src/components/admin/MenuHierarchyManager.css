@@ -1,0 +1,144 @@
+/* src/components/admin/MenuHierarchyManager.css */
+/* Estilos para el Gestor de Menús - Diseño minimalista */
+
+/* Badges de tipo */
+.mhm-type-menu {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+}
+
+.mhm-type-submenu {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8B5CF6;
+}
+
+/* Indentación visual para submenús */
+.mhm-submenu-indicator {
+  color: var(--text-muted, #9CA3AF);
+  margin-right: 8px;
+}
+
+/* Código de ruta */
+.mhm-route-code {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-secondary, #6B7280);
+  background: var(--bg-secondary, #F3F4F6);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Botones de acción en header */
+.mhm-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Modal */
+.mhm-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.mhm-modal-content {
+  background: var(--bg-primary, white);
+  padding: 24px;
+  border-radius: 8px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-primary, #E5E7EB);
+}
+
+.mhm-modal-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #1F2937);
+}
+
+/* Formularios en modal */
+.mhm-form-group {
+  margin-bottom: 16px;
+}
+
+.mhm-form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary, #1F2937);
+}
+
+.mhm-form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary, #E5E7EB);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+  background: var(--input-bg, #fff);
+  color: var(--text-primary, #1F2937);
+  transition: border-color 0.15s;
+}
+
+.mhm-form-input:focus {
+  outline: none;
+  border-color: #E63946;
+  box-shadow: 0 0 0 2px rgba(230, 57, 70, 0.1);
+}
+
+.mhm-form-input:disabled {
+  background: var(--bg-secondary, #F9FAFB);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.mhm-form-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #6B7280);
+}
+
+.mhm-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .mhm-header-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .mhm-header-actions button {
+    width: 100%;
+  }
+
+  .mhm-modal-content {
+    padding: 20px;
+    margin: 16px;
+  }
+
+  .mhm-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .mhm-modal-actions button {
+    width: 100%;
+  }
+}
