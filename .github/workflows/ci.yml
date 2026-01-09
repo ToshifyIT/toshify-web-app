@@ -1,7 +1,7 @@
-# CI/CD Workflow - Trunk-Based Development
-# Valida en PRs, despliega con aprobación al mergear
+# CI Workflow - Validación de código
+# Dokploy maneja el deploy automáticamente con Autodeploy
 
-name: CI/CD
+name: CI
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ on:
 
 jobs:
   # =============================================
-  # CI - Validación (PRs y push a main)
+  # Validación - PRs y push a main
   # =============================================
   build:
     name: Build & Validate
@@ -39,33 +39,5 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
-  # =============================================
-  # Aprobación - Solo después de merge a main
-  # =============================================
-  approval:
-    name: Waiting Approval
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-    steps:
-      - name: Aprobación recibida
-        run: echo "Deploy aprobado por reviewer"
-
-  # =============================================
-  # CD - Deploy a Producción
-  # =============================================
-  deploy:
-    name: Deploy to Production
-    needs: approval
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Trigger Dokploy Deploy
-        run: |
-          curl -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            --fail --silent --show-error
-          echo "Deploy triggered successfully!"
+      - name: Build successful
+        run: echo "✅ Build validado - Dokploy desplegará automáticamente"
