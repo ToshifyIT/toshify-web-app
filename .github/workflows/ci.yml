@@ -1,17 +1,18 @@
-# CI Workflow - Validación de código
-# Dokploy maneja el deploy automáticamente con Autodeploy
+# CI/CD Workflow con Aprobaciones
+# Flujo: development → staging → main (producción)
+# Dokploy despliega automáticamente en main
 
-name: CI
+name: CI/CD
 
 on:
-  pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches: [development, staging, main]
+  pull_request:
+    branches: [staging, main]
 
 jobs:
   # =============================================
-  # Validación - PRs y push a main
+  # CI - Validación (todas las ramas)
   # =============================================
   build:
     name: Build & Validate
@@ -40,4 +41,39 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Build successful
-        run: echo "✅ Build validado - Dokploy desplegará automáticamente"
+        run: echo "✅ Build validado en ${{ github.ref_name }}"
+
+  # =============================================
+  # Gate: development → staging
+  # Requiere aprobación para promover a staging
+  # =============================================
+  approve-staging:
+    name: Aprobar para Staging
+    needs: build
+    if: github.ref == 'refs/heads/development' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    steps:
+      - name: Aprobación recibida
+        run: |
+          echo "✅ Aprobado para promover a staging"
+          echo "Crear PR: development → staging"
+
+  # =============================================
+  # Gate: staging → production
+  # Requiere aprobación para promover a producción
+  # =============================================
+  approve-production:
+    name: Aprobar para Producción
+    needs: build
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Aprobación recibida
+        run: |
+          echo "✅ Aprobado para promover a producción"
+          echo "Crear PR: staging → main"
+          echo "Dokploy desplegará automáticamente después del merge"
