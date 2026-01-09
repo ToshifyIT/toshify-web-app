@@ -100,6 +100,129 @@ async function authenticateCabify(): Promise<string> {
 }
 
 /**
+ * Cache de balances por compañía (evita múltiples llamadas)
+ */
+const balancesCache = new Map<string, any[]>()
+
+/**
+ * Obtener balances de una compañía (con cache)
+ */
+async function getCompanyBalances(token: string, companyId: string): Promise<any[]> {
+  if (balancesCache.has(companyId)) {
+    return balancesCache.get(companyId)!
+  }
+
+  try {
+    const balancesQuery = `
+      query GetBalances($companyId: String) {
+        balances(companyId: $companyId) {
+          id
+          name
+          currency
+        }
+      }
+    `
+
+    const response = await fetch(CABIFY_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        query: balancesQuery,
+        variables: { companyId },
+      }),
+    })
+
+    if (!response.ok) return []
+
+    const data = await response.json()
+    const balances = data.data?.balances || []
+    balancesCache.set(companyId, balances)
+    return balances
+  } catch (error) {
+    console.error(`Error en getCompanyBalances:`, error)
+    return []
+  }
+}
+
+/**
+ * Obtener peajes de un conductor desde Cabify
+ */
+async function getTollsForDriver(
+  token: string,
+  companyId: string,
+  driverId: string,
+  startDate: string,
+  endDate: string
+): Promise<number> {
+  try {
+    const balances = await getCompanyBalances(token, companyId)
+    if (balances.length === 0) return 0
+
+    let totalTolls = 0
+    const balancesToProcess = balances.slice(0, 3)
+
+    if (balancesToProcess.length > 0) {
+      try {
+        const balanceQueries = balancesToProcess.map((balance: any, idx: number) =>
+          `balance${idx}: paginatedBalanceMovements(
+            balanceId: "${balance.id}",
+            companyId: "${companyId}",
+            driverId: "${driverId}",
+            startAt: "${startDate}",
+            endAt: "${endDate}",
+            page: 1,
+            perPage: 500
+          ) {
+            movements {
+              breakdown { name value }
+            }
+          }`
+        ).join('\n')
+
+        const query = `query { ${balanceQueries} }`
+        const response = await fetch(CABIFY_GRAPHQL_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ query }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.data && !data.errors) {
+            Object.values(data.data).forEach((result: any) => {
+              if (result && result.movements) {
+                result.movements.forEach((movement: any) => {
+                  if (movement.breakdown) {
+                    movement.breakdown.forEach((b: any) => {
+                      if (b.name === 'supplement:toll') {
+                        totalTolls += Math.abs(b.value || 0)
+                      }
+                    })
+                  }
+                })
+              }
+            })
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️ Error en query de tolls:`, error)
+      }
+    }
+
+    return totalTolls / 100
+  } catch (error) {
+    console.error(`Error obteniendo peajes:`, error)
+    return 0
+  }
+}
+
+/**
  * Consultar datos de Cabify para un período
  */
 async function getCabifyData(token: string, startDate: string, endDate: string) {
@@ -254,6 +377,9 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
             const hoursFormatted = Math.floor(horasConectadas)
             const minutesFormatted = Math.floor((horasConectadas - hoursFormatted) * 60)
 
+            // Obtener peajes del conductor desde Cabify
+            const peajesDriver = await getTollsForDriver(token, companyId, driver.id, startDate, endDate)
+
             return {
               cabify_driver_id: driver.id,
               cabify_company_id: companyId,
@@ -287,7 +413,7 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
               horas_conectadas_formato: `${hoursFormatted}h ${minutesFormatted}m`,
               cobro_efectivo: Number((cobroEfectivoMinor / 100).toFixed(2)),
               cobro_app: Number((cobroAppMinor / 100).toFixed(2)),
-              peajes: 0,
+              peajes: peajesDriver,
               ganancia_total: Number((gananciaTotalViajesMinor / 100).toFixed(2)),
               ganancia_por_hora:
                 horasConectadas > 0 ? Number(((gananciaTotalViajesMinor / 100) / horasConectadas).toFixed(2)) : 0,

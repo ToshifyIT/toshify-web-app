@@ -30,6 +30,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { formatCurrency, formatDate, FACTURACION_CONFIG, calcularMora } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, differenceInDays, isAfter, isBefore } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
 
 // Tipos para datos de facturación generada
 interface FacturacionConductor {
@@ -146,6 +147,11 @@ export function ReporteFacturacionTab() {
   const [patenteFilter, setPatenteFilter] = useState<string[]>([])
   const [patenteSearch, setPatenteSearch] = useState('')
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
+
+  // RIT Preview mode
+  const [showRITPreview, setShowRITPreview] = useState(false)
+  const [ritPreviewData, setRitPreviewData] = useState<RITPreviewRow[]>([])
+  const [loadingRITPreview, setLoadingRITPreview] = useState(false)
 
   // Cargar facturaciones cuando cambia la semana
   useEffect(() => {
@@ -957,24 +963,34 @@ export function ReporteFacturacionTab() {
     }
   }
 
-  // Exportar formato RIT (para contabilidad)
-  async function exportarRIT() {
+  // Preparar datos para RIT Preview (formato Bruno Timoteo)
+  async function prepareRITPreview() {
     if (!periodo) return
 
-    setExportingExcel(true)
+    setLoadingRITPreview(true)
     try {
-      // Cargar todos los detalles de facturación del período con datos del conductor
+      // Cargar detalles de facturación con información del conductor
       const { data: detalles, error } = await supabase
         .from('facturacion_detalle')
         .select(`
           *,
           facturacion_conductores!inner(
+            id,
+            conductor_id,
             conductor_nombre,
             conductor_dni,
             conductor_cuit,
             vehiculo_patente,
             tipo_alquiler,
-            periodo_id
+            turnos_cobrados,
+            periodo_id,
+            subtotal_alquiler,
+            subtotal_garantia,
+            subtotal_cargos,
+            subtotal_descuentos,
+            saldo_anterior,
+            monto_mora,
+            total_a_pagar
           )
         `)
 
@@ -985,88 +1001,191 @@ export function ReporteFacturacionTab() {
         (d: any) => d.facturacion_conductores?.periodo_id === periodo.id
       )
 
-      if (detallesFiltrados.length === 0) {
-        Swal.fire('Sin datos', 'No hay detalles para exportar', 'warning')
-        setExportingExcel(false)
-        return
-      }
-
-      // Columnas RIT
-      const ritData: (string | number)[][] = [
-        ['REPORTE RIT - FACTURACIÓN TOSHIFY'],
-        [`Semana ${periodo.semana} del ${periodo.anio}`],
-        [`Período: ${format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')} al ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`],
-        [''],
-        [
-          'Tipo Comprobante',
-          'Tipo Factura',
-          'CUIT/DNI',
-          'Nombre',
-          'Fecha',
-          'Código Concepto',
-          'Descripción',
-          'Neto',
-          'IVA',
-          'Total'
-        ]
-      ]
-
+      // Agrupar por conductor
+      const conductoresMap = new Map<string, any>()
       detallesFiltrados.forEach((det: any) => {
         const fc = det.facturacion_conductores
-        const tieneCuit = fc?.conductor_cuit
+        if (!fc) return
 
-        // P004 (Tickets a Favor) es Nota Crédito, el resto es Nota Débito
-        const tipoComprobante = det.concepto_codigo === 'P004' ? 'NC' : 'ND'
-
-        // Tipo Factura: A si tiene CUIT, B si solo DNI
-        const tipoFactura = tieneCuit ? 'A' : 'B'
-
-        ritData.push([
-          tipoComprobante,
-          tipoFactura,
-          tieneCuit || fc?.conductor_dni || '-',
-          fc?.conductor_nombre || '-',
-          format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy'),
-          det.concepto_codigo,
-          det.concepto_descripcion,
-          det.subtotal || 0,
-          det.iva_monto || 0,
-          det.total || 0
-        ])
+        if (!conductoresMap.has(fc.id)) {
+          conductoresMap.set(fc.id, {
+            facturacion: fc,
+            detalles: []
+          })
+        }
+        conductoresMap.get(fc.id).detalles.push(det)
       })
 
-      // Agregar totales
-      const totalNeto = detallesFiltrados.reduce((sum: number, d: any) => sum + (d.subtotal || 0), 0)
-      const totalIva = detallesFiltrados.reduce((sum: number, d: any) => sum + (d.iva_monto || 0), 0)
-      const totalGeneral = detallesFiltrados.reduce((sum: number, d: any) => sum + (d.total || 0), 0)
+      // Cargar información de garantías para número de cuota
+      const { data: garantias } = await supabase
+        .from('garantias_conductores')
+        .select('conductor_id, cuotas_pagadas, cuotas_totales')
 
-      ritData.push([''])
-      ritData.push(['', '', '', '', '', '', 'TOTALES:', totalNeto, totalIva, totalGeneral])
+      const garantiasMap = new Map<string, { cuotas_pagadas: number; cuotas_totales: number }>(
+        (garantias || []).map((g: any) => [g.conductor_id, g])
+      )
 
-      const wb = XLSX.utils.book_new()
-      const wsRIT = XLSX.utils.aoa_to_sheet(ritData)
-      wsRIT['!cols'] = [
-        { wch: 16 }, { wch: 12 }, { wch: 18 }, { wch: 30 },
-        { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 14 },
-        { wch: 12 }, { wch: 14 }
-      ]
-      XLSX.utils.book_append_sheet(wb, wsRIT, 'RIT')
+      // Convertir a formato RITPreviewRow
+      const previewData: RITPreviewRow[] = []
 
-      const nombreArchivo = `RIT_Facturacion_Semana${periodo.semana}_${periodo.anio}.xlsx`
-      XLSX.writeFile(wb, nombreArchivo)
+      conductoresMap.forEach((data, facturacionId) => {
+        const fc = data.facturacion
+        const detallesArr = data.detalles
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Reporte RIT Exportado',
-        text: `Se descargó: ${nombreArchivo}`,
-        timer: 2000,
-        showConfirmButton: false
+        // Buscar valores específicos en detalles
+        let valorPeaje = 0
+        let excesoKm = 0
+        let valorMultas = 0
+        let descuentoRepuestos = 0
+        let ticketsFavor = 0
+        let comisionReferido = 0
+
+        detallesArr.forEach((det: any) => {
+          const codigo = det.concepto_codigo
+          const total = det.total || 0
+
+          if (codigo === 'P005') valorPeaje += total
+          else if (codigo === 'P006') excesoKm += total
+          else if (codigo === 'P007') valorMultas += total
+          else if (codigo === 'P008') descuentoRepuestos += total
+          else if (codigo === 'P004') {
+            // P004 puede ser tickets o comisión por referido
+            if (det.concepto_descripcion?.toLowerCase().includes('referido')) {
+              comisionReferido += total
+            } else {
+              ticketsFavor += total
+            }
+          }
+        })
+
+        // Obtener número de cuota de garantía
+        const garantia = garantiasMap.get(fc.conductor_id)
+        let numeroCuota = 'NA'
+        if (garantia && fc.subtotal_garantia > 0) {
+          numeroCuota = `${garantia.cuotas_pagadas}/${garantia.cuotas_totales}`
+        }
+
+        const row: RITPreviewRow = {
+          id: facturacionId,
+          semana: `S${periodo.semana}`,
+          corte: `${format(parseISO(periodo.fecha_inicio), 'dd/MM')} - ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`,
+          conductor: fc.conductor_nombre,
+          dni: fc.conductor_dni || '',
+          cuit: fc.conductor_cuit || '',
+          patente: fc.vehiculo_patente || '',
+          tipo: fc.tipo_alquiler,
+          valorAlquiler: fc.subtotal_alquiler || 0,
+          detalleTurno: fc.turnos_cobrados || 0,
+          cuotaGarantia: fc.subtotal_garantia || 0,
+          numeroCuota,
+          valorPeaje,
+          excesoKm,
+          valorMultas,
+          descuentoRepuestos,
+          interes5: fc.monto_mora || 0,
+          ticketsFavor,
+          comisionReferido,
+          totalPagar: fc.total_a_pagar || 0,
+          conductorId: fc.conductor_id,
+          tipoAlquiler: fc.tipo_alquiler,
+          saldoAnterior: fc.saldo_anterior || 0
+        }
+
+        previewData.push(row)
       })
+
+      // Ordenar por conductor
+      previewData.sort((a, b) => a.conductor.localeCompare(b.conductor))
+
+      setRitPreviewData(previewData)
+      setShowRITPreview(true)
+
     } catch (error) {
-      console.error('Error exportando RIT:', error)
-      Swal.fire('Error', 'No se pudo exportar el reporte RIT', 'error')
+      console.error('Error preparando preview RIT:', error)
+      Swal.fire('Error', 'No se pudo cargar los datos del preview', 'error')
     } finally {
-      setExportingExcel(false)
+      setLoadingRITPreview(false)
+    }
+  }
+
+  // Sincronizar cambios del preview RIT con la BD
+  async function syncRITChanges(updatedData: RITPreviewRow[]): Promise<boolean> {
+    if (!periodo) return false
+
+    try {
+      // Actualizar cada facturacion_conductores con los nuevos valores
+      for (const row of updatedData) {
+        const { error } = await (supabase
+          .from('facturacion_conductores') as any)
+          .update({
+            subtotal_alquiler: row.valorAlquiler,
+            turnos_cobrados: row.detalleTurno,
+            subtotal_garantia: row.cuotaGarantia,
+            monto_mora: row.interes5,
+            subtotal_descuentos: row.ticketsFavor + row.comisionReferido + row.descuentoRepuestos,
+            total_a_pagar: row.totalPagar
+          })
+          .eq('id', row.id)
+
+        if (error) {
+          console.error('Error actualizando facturación:', error)
+          throw error
+        }
+
+        // Actualizar detalles individuales si es necesario
+        // P005 - Peajes
+        if (row.valorPeaje > 0) {
+          await (supabase
+            .from('facturacion_detalle') as any)
+            .update({ total: row.valorPeaje, subtotal: row.valorPeaje })
+            .eq('facturacion_id', row.id)
+            .eq('concepto_codigo', 'P005')
+        }
+
+        // P006 - Exceso KM
+        if (row.excesoKm > 0) {
+          const netoExceso = Math.round(row.excesoKm / 1.21)
+          const ivaExceso = row.excesoKm - netoExceso
+          await (supabase
+            .from('facturacion_detalle') as any)
+            .update({ total: row.excesoKm, subtotal: netoExceso, iva_monto: ivaExceso })
+            .eq('facturacion_id', row.id)
+            .eq('concepto_codigo', 'P006')
+        }
+
+        // P007 - Multas
+        if (row.valorMultas > 0) {
+          await (supabase
+            .from('facturacion_detalle') as any)
+            .update({ total: row.valorMultas, subtotal: row.valorMultas })
+            .eq('facturacion_id', row.id)
+            .eq('concepto_codigo', 'P007')
+        }
+      }
+
+      // Actualizar totales del período
+      const totalNeto = updatedData.reduce((sum, r) => sum + r.totalPagar, 0)
+      const totalCargos = updatedData.reduce((sum, r) =>
+        sum + r.valorAlquiler + r.cuotaGarantia + r.valorPeaje + r.excesoKm + r.valorMultas + r.interes5, 0)
+      const totalDescuentos = updatedData.reduce((sum, r) =>
+        sum + r.ticketsFavor + r.comisionReferido + r.descuentoRepuestos, 0)
+
+      await (supabase
+        .from('periodos_facturacion') as any)
+        .update({
+          total_cargos: totalCargos,
+          total_descuentos: totalDescuentos,
+          total_neto: totalNeto
+        })
+        .eq('id', periodo.id)
+
+      // Recargar datos
+      await cargarFacturacion()
+
+      return true
+    } catch (error) {
+      console.error('Error sincronizando cambios:', error)
+      return false
     }
   }
 
@@ -1685,6 +1804,26 @@ export function ReporteFacturacionTab() {
     return { semana, anio, inicio, fin }
   }, [semanaActual])
 
+  // Si estamos en modo RIT Preview, mostrar el componente de preview
+  if (showRITPreview && periodo) {
+    const periodoAbierto = periodo.estado === 'abierto'
+    return (
+      <RITPreviewTable
+        data={ritPreviewData}
+        semana={periodo.semana}
+        anio={periodo.anio}
+        fechaInicio={format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')}
+        fechaFin={format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}
+        periodoAbierto={periodoAbierto}
+        onClose={() => {
+          setShowRITPreview(false)
+          setRitPreviewData([])
+        }}
+        onSync={periodoAbierto ? syncRITChanges : undefined}
+      />
+    )
+  }
+
   return (
     <>
       {/* Selector de semana */}
@@ -2074,11 +2213,11 @@ export function ReporteFacturacionTab() {
               </button>
               <button
                 className="fact-btn-export"
-                onClick={exportarRIT}
-                disabled={exportingExcel || facturacionesFiltradas.length === 0}
+                onClick={prepareRITPreview}
+                disabled={loadingRITPreview || facturacionesFiltradas.length === 0}
               >
-                {exportingExcel ? <Loader2 size={14} className="spinning" /> : <FileText size={14} />}
-                Exportar RIT
+                {loadingRITPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
+                {loadingRITPreview ? 'Cargando...' : 'Preview RIT'}
               </button>
             </div>
           </div>

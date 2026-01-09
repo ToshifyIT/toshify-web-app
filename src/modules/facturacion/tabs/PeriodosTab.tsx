@@ -289,7 +289,7 @@ export function PeriodosTab() {
         .map((a: any) => a.conductores?.id)
         .filter((id): id is string => !!id)
 
-      const [penalidadesRes, ticketsRes, saldosRes, excesosRes] = await Promise.all([
+      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes] = await Promise.all([
         supabase
           .from('penalidades')
           .select('*')
@@ -312,13 +312,28 @@ export function PeriodosTab() {
           .select('*')
           .in('conductor_id', conductorIds)
           .eq('periodo_id', periodoId)
-          .eq('aplicado', false) : Promise.resolve({ data: [] })
+          .eq('aplicado', false) : Promise.resolve({ data: [] }),
+        // Obtener peajes de Cabify para el período (P005)
+        supabase
+          .from('cabify_historico')
+          .select('dni, peajes')
+          .gte('fecha_inicio', semana.fecha_inicio + 'T00:00:00')
+          .lte('fecha_inicio', semana.fecha_fin + 'T23:59:59')
       ])
 
       const penalidades = penalidadesRes.data || []
       const tickets = ticketsRes.data || []
       const saldos = saldosRes.data || []
       const excesos = excesosRes.data || []
+
+      // Agregar peajes por DNI (de Cabify)
+      const peajesMap = new Map<string, number>()
+      ;((cabifyRes.data || []) as any[]).forEach((record: any) => {
+        if (record.dni && record.peajes) {
+          const actual = peajesMap.get(record.dni) || 0
+          peajesMap.set(record.dni, actual + (parseFloat(String(record.peajes)) || 0))
+        }
+      })
 
       // 5. Eliminar facturación anterior de este período (si existe)
       if (semana.periodo_id) {
@@ -375,14 +390,17 @@ export function PeriodosTab() {
         const excesosConductor = (excesos as any[]).filter((e: any) => e.conductor_id === conductor.id)
         const totalExcesos = excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
+        // Peajes del conductor desde Cabify (P005)
+        const totalPeajes = peajesMap.get(conductor.numero_dni) || 0
+
         // Saldo anterior
         const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.id)
         const saldoAnterior = saldoConductor?.saldo_actual || 0
         const diasMora = saldoAnterior > 0 ? Math.min(saldoConductor?.dias_mora || 0, 7) : 0
         const montoMora = saldoAnterior > 0 ? saldoAnterior * 0.01 * diasMora : 0
 
-        // Totales (incluye excesos de km) - usa garantía prorrateada
-        const subtotalCargos = precioSemanal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + montoMora
+        // Totales (incluye excesos de km y peajes de Cabify) - usa garantía prorrateada
+        const subtotalCargos = precioSemanal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora
         const subtotalDescuentos = totalTickets
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
@@ -522,6 +540,21 @@ export function PeriodosTab() {
             .from('excesos_kilometraje') as any)
             .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
             .eq('id', (exceso as any).id)
+        }
+
+        // Insertar peajes de Cabify como detalle (P005)
+        if (totalPeajes > 0) {
+          await (supabase.from('facturacion_detalle') as any).insert({
+            facturacion_id: (factConductor as any).id,
+            concepto_codigo: 'P005',
+            concepto_descripcion: 'Telepeajes (Cabify)',
+            cantidad: 1,
+            precio_unitario: totalPeajes,
+            subtotal: totalPeajes,
+            total: totalPeajes,
+            es_descuento: false,
+            referencia_tipo: 'cabify_peajes'
+          })
         }
 
         // Insertar mora si existe
