@@ -31,7 +31,7 @@ export interface RITPreviewRow {
   valorAlquiler: number
   detalleTurno: number // Días trabajados
   cuotaGarantia: number
-  numeroCuota: string // ej: "15/20" o "NA"
+  numeroCuota: string // ej: "15 de 20" o "NA"
   valorPeaje: number
   excesoKm: number
   valorMultas: number
@@ -464,6 +464,9 @@ export function RITPreviewTable({
     }
   }, [filteredData, totales, semana, anio, fechaInicio, fechaFin])
 
+  // Campos que NO deben usar formato moneda (solo mostrar número)
+  const nonCurrencyFields: (keyof RITPreviewRow)[] = ['detalleTurno']
+
   // Renderizar celda editable (solo si período abierto)
   const renderEditableCell = (row: RITPreviewRow, field: keyof RITPreviewRow, value: string | number, isNumeric: boolean) => {
     const isEditing = editingCell?.rowId === row.id && editingCell?.field === field
@@ -483,7 +486,16 @@ export function RITPreviewTable({
       )
     }
 
-    const displayValue = isNumeric && typeof value === 'number' ? formatCurrency(value) : value
+    // Determinar cómo mostrar el valor
+    let displayValue: string | number = value
+    if (isNumeric && typeof value === 'number') {
+      // Para campos que no son moneda, mostrar solo el número
+      if (nonCurrencyFields.includes(field)) {
+        displayValue = value
+      } else {
+        displayValue = formatCurrency(value)
+      }
+    }
 
     return (
       <span
