@@ -140,6 +140,7 @@ export function VehicleManagement() {
           .from('vehiculos')
           .select(`
             id, patente, marca, modelo, anio, color, kilometraje_actual, estado_id, created_at,
+            drive_folder_id, drive_folder_url,
             vehiculos_estados (id, codigo, descripcion)
           `)
           .order('created_at', { ascending: false }),
@@ -813,12 +814,12 @@ export function VehicleManagement() {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => {
-          const documentosUrl = (row.original as any).documentos_urls
+          const driveUrl = (row.original as any).drive_folder_url
           return (
             <div className="dt-actions">
-              {documentosUrl && (
+              {driveUrl && (
                 <a
-                  href={documentosUrl}
+                  href={driveUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="dt-btn-action"
