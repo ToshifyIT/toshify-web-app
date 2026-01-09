@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import {
   RotateCcw,
@@ -90,6 +91,11 @@ interface ProductoLote {
 // COMPONENTE PRINCIPAL
 // =====================================================
 export function MovimientosModule() {
+  const { canCreateInSubmenu } = usePermissions()
+
+  // Permisos específicos para el submenú de movimientos
+  const canCreate = canCreateInSubmenu('movimientos')
+
   // Estados de datos
   const [productos, setProductos] = useState<Producto[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
@@ -395,6 +401,12 @@ export function MovimientosModule() {
   // MANEJADOR PRINCIPAL
   // =====================================================
   const handleMovimiento = async () => {
+    // Validar permisos
+    if (!canCreate) {
+      Swal.fire('Sin permisos', 'No tienes permisos para registrar movimientos', 'error')
+      return
+    }
+
     // ===== MODO LOTE (ENTRADA) =====
     if (modoLote && tipoMovimiento === 'entrada') {
       if (!proveedorId) {
