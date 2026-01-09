@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import type { UserWithRole, Role } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { Users, UserCheck, UserX, Shield } from 'lucide-react'
+import { Users, UserCheck, UserX, Shield, KeyRound } from 'lucide-react'
 import Swal from 'sweetalert2'
 import './UserManagement.css'
 import './AdminStyles.css'
@@ -20,7 +20,8 @@ export function UserManagement() {
     email: '',
     password: '',
     fullName: '',
-    roleId: ''
+    roleId: '',
+    mustChangePassword: true // Por defecto, forzar cambio de contraseña
   })
 
   useEffect(() => {
@@ -127,7 +128,7 @@ export function UserManagement() {
         timer: 2000
       })
       setShowCreateModal(false)
-      setNewUser({ email: '', password: '', fullName: '', roleId: '' })
+      setNewUser({ email: '', password: '', fullName: '', roleId: '', mustChangePassword: true })
       await loadData()
     } catch (err: any) {
       Swal.fire({
@@ -208,6 +209,144 @@ export function UserManagement() {
     }
   }
 
+  // Generar contraseña aleatoria segura
+  const generatePassword = () => {
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    const lower = 'abcdefghijklmnopqrstuvwxyz'
+    const numbers = '0123456789'
+    const all = upper + lower + numbers
+
+    let password = ''
+    // Asegurar al menos uno de cada tipo
+    password += upper[Math.floor(Math.random() * upper.length)]
+    password += lower[Math.floor(Math.random() * lower.length)]
+    password += numbers[Math.floor(Math.random() * numbers.length)]
+
+    // Completar hasta 10 caracteres
+    for (let i = 0; i < 7; i++) {
+      password += all[Math.floor(Math.random() * all.length)]
+    }
+
+    // Mezclar
+    return password.split('').sort(() => Math.random() - 0.5).join('')
+  }
+
+  const forcePasswordChange = async (userId: string, userName: string, userEmail?: string) => {
+    // Generar contraseña
+    const newPassword = generatePassword()
+
+    const result = await Swal.fire({
+      icon: 'info',
+      title: 'Resetear Contraseña',
+      html: `
+        <p style="margin-bottom: 16px;">Nueva contraseña para <strong>${userName}</strong>:</p>
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+          <input type="text" id="password-display" value="${newPassword}" readonly style="flex: 1; background: #f3f4f6; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 18px; letter-spacing: 2px; border: 1px solid #e5e7eb; text-align: center;" />
+          <button type="button" id="copy-password-btn" style="padding: 12px 16px; background: #FF0033; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+            Copiar
+          </button>
+        </div>
+        <p style="font-size: 12px; color: #666;">
+          El usuario deberá cambiarla en el próximo inicio de sesión.
+        </p>
+      `,
+      didOpen: () => {
+        const copyBtn = document.getElementById('copy-password-btn')
+        const passwordInput = document.getElementById('password-display') as HTMLInputElement
+        if (copyBtn && passwordInput) {
+          copyBtn.onclick = () => {
+            passwordInput.select()
+            document.execCommand('copy')
+            copyBtn.textContent = 'Copiado!'
+            copyBtn.style.background = '#10b981'
+            setTimeout(() => {
+              copyBtn.textContent = 'Copiar'
+              copyBtn.style.background = '#FF0033'
+            }, 1500)
+          }
+        }
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Aplicar Cambio',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#FF0033'
+    })
+
+    if (result.isDismissed) return
+
+    try {
+      // Usar función RPC de base de datos (funciona en selfhosted)
+      const { data, error } = await supabase.rpc('admin_reset_user_password', {
+        target_user_id: userId,
+        new_password: newPassword
+      })
+
+      if (error) throw error
+      if (data && !data.success) throw new Error(data.error)
+
+      await loadData()
+
+      // Preguntar si quiere enviar por correo
+      if (userEmail) {
+        const emailResult = await Swal.fire({
+          icon: 'success',
+          title: 'Contraseña Actualizada',
+          html: `
+            <p>La contraseña de <strong>${userName}</strong> ha sido cambiada.</p>
+            <p style="margin-top: 12px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-family: monospace; font-size: 16px;">${newPassword}</p>
+            <p style="margin-top: 12px; font-size: 13px; color: #666;">¿Deseas enviarla por correo a <strong>${userEmail}</strong>?</p>
+          `,
+          showCancelButton: true,
+          confirmButtonText: 'Enviar por Correo',
+          cancelButtonText: 'No, solo copiar',
+          confirmButtonColor: '#FF0033'
+        })
+
+        if (emailResult.isConfirmed) {
+          try {
+            // Usar función RPC de PostgreSQL con pg_net para enviar email
+            const { data, error } = await supabase.rpc('send_password_email', {
+              user_email: userEmail,
+              user_name: userName,
+              user_password: newPassword
+            })
+
+            if (error) throw error
+            if (data && !data.success) throw new Error(data.error)
+
+            Swal.fire({
+              icon: 'success',
+              title: 'Correo Enviado',
+              html: `La contraseña fue enviada a <strong>${userEmail}</strong>`,
+              confirmButtonColor: '#FF0033'
+            })
+          } catch (emailErr: any) {
+            Swal.fire({
+              icon: 'error',
+              title: 'Error enviando correo',
+              text: emailErr.message,
+              confirmButtonColor: '#FF0033'
+            })
+          }
+        }
+      } else {
+        Swal.fire({
+          icon: 'success',
+          title: 'Contraseña Actualizada',
+          html: `La contraseña de <strong>${userName}</strong> ha sido cambiada.<br>Deberá cambiarla en el próximo inicio.`,
+          showConfirmButton: false,
+          timer: 3000
+        })
+      }
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al cambiar contraseña: ' + err.message
+      })
+    }
+  }
+
   // Definir columnas para DataTable
   const columns = useMemo<ColumnDef<UserWithRole, any>[]>(
     () => [
@@ -271,6 +410,13 @@ export function UserManagement() {
         enableSorting: false,
         cell: ({ row }) => (
           <div className="dt-actions">
+            <button
+              className="dt-btn-action dt-btn-warning"
+              onClick={() => forcePasswordChange(row.original.id, row.original.full_name || row.original.email, row.original.email)}
+              title="Forzar cambio de contraseña"
+            >
+              <KeyRound size={14} />
+            </button>
             <button
               className="dt-btn-action"
               onClick={() => toggleUserStatus(row.original.id, row.original.is_active)}
@@ -413,12 +559,27 @@ export function UserManagement() {
               </select>
             </div>
 
+            <div className="um-form-group">
+              <label className="um-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={newUser.mustChangePassword}
+                  onChange={(e) => setNewUser({ ...newUser, mustChangePassword: e.target.checked })}
+                  disabled={creating}
+                />
+                <span>Contraseña temporal (forzar cambio en primer inicio)</span>
+              </label>
+              <p className="um-form-hint">
+                Si está marcado, el usuario deberá cambiar su contraseña la primera vez que inicie sesión.
+              </p>
+            </div>
+
             <div className="um-modal-actions">
               <button
                 className="btn-secondary"
                 onClick={() => {
                   setShowCreateModal(false)
-                  setNewUser({ email: '', password: '', fullName: '', roleId: '' })
+                  setNewUser({ email: '', password: '', fullName: '', roleId: '', mustChangePassword: true })
                 }}
                 disabled={creating}
               >
