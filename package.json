@@ -19,7 +19,10 @@
     "sync:uss:excesos:week": "npx tsx scripts/backfill-uss-excesos.ts --days 7",
     "sync:wialon:bitacora": "npx tsx scripts/sync-wialon-bitacora-direct.ts",
     "sync:wialon:bitacora:realtime": "npx tsx scripts/sync-wialon-bitacora-realtime.ts",
-    "sync:wialon:bitacora:once": "npx tsx scripts/sync-wialon-bitacora-realtime.ts --once"
+    "sync:wialon:bitacora:once": "npx tsx scripts/sync-wialon-bitacora-realtime.ts --once",
+    "deploy:cron": "bash scripts/deploy-cron-jobs.sh",
+    "scheduler": "npx tsx scripts/scheduler-daemon.ts",
+    "scheduler:pm2": "pm2 start scripts/scheduler-daemon.ts --name toshify-scheduler --interpreter npx --interpreter-args tsx"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",

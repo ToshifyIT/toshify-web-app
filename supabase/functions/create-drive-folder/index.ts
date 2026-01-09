@@ -181,7 +181,8 @@ serve(async (req) => {
       .from('conductores')
       .update({
         url_documentacion: folder.webViewLink,
-        drive_folder_id: folder.id
+        drive_folder_id: folder.id,
+        drive_folder_url: folder.webViewLink
       })
       .eq('id', conductorId)
 

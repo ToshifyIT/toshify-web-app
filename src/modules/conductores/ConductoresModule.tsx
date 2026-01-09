@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, Calendar } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, Calendar, FolderOpen } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -347,6 +347,7 @@ export function ConductoresModule() {
             fecha_contratacion,
             estado_id,
             created_at,
+            drive_folder_url,
             conductores_estados (id, codigo, descripcion),
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
@@ -480,6 +481,7 @@ export function ConductoresModule() {
             fecha_contratacion,
             estado_id,
             created_at,
+            drive_folder_url,
             conductores_estados (id, codigo, descripcion),
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
@@ -1750,8 +1752,22 @@ export function ConductoresModule() {
       {
         id: "acciones",
         header: "Acciones",
-        cell: ({ row }) => (
+        cell: ({ row }) => {
+          const driveUrl = (row.original as any).drive_folder_url;
+          return (
           <div className="dt-actions">
+            {driveUrl && (
+              <a
+                href={driveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="dt-btn-action"
+                style={{ color: '#2563eb', background: 'rgba(37, 99, 235, 0.1)' }}
+                title="Ver documentación en Drive"
+              >
+                <FolderOpen size={16} />
+              </a>
+            )}
             <button
               className="dt-btn-action dt-btn-view"
               onClick={async () => {
@@ -1791,7 +1807,7 @@ export function ConductoresModule() {
               <Trash2 size={16} />
             </button>
           </div>
-        ),
+        )},
         enableSorting: false,
       },
     ],
