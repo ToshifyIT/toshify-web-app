@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
 import {
@@ -38,6 +39,13 @@ type TabType = 'incidencias' | 'penalidades' | 'por_aplicar'
 
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
+  const { canCreateInSubmenu, canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
+
+  // Permisos específicos para el submenú de incidencias
+  const canCreate = canCreateInSubmenu('incidencias')
+  const canEdit = canEditInSubmenu('incidencias')
+  const canDelete = canDeleteInSubmenu('incidencias')
+
   const [activeTab, setActiveTab] = useState<TabType>('incidencias')
   const [loading, setLoading] = useState(true)
 
@@ -551,6 +559,16 @@ export function IncidenciasModule() {
   }
 
   async function handleGuardarIncidencia() {
+    // Validar permisos
+    if (modalMode === 'create' && !canCreate) {
+      Swal.fire('Sin permisos', 'No tienes permisos para crear incidencias', 'error')
+      return
+    }
+    if (modalMode === 'edit' && !canEdit) {
+      Swal.fire('Sin permisos', 'No tienes permisos para editar incidencias', 'error')
+      return
+    }
+
     if (!incidenciaForm.estado_id || !incidenciaForm.fecha || !incidenciaForm.area) {
       Swal.fire('Error', 'Por favor complete los campos requeridos (fecha, estado, área)', 'warning')
       return
@@ -590,6 +608,16 @@ export function IncidenciasModule() {
   }
 
   async function handleGuardarPenalidad() {
+    // Validar permisos
+    if (modalMode === 'create' && !canCreate) {
+      Swal.fire('Sin permisos', 'No tienes permisos para crear penalidades', 'error')
+      return
+    }
+    if (modalMode === 'edit' && !canEdit) {
+      Swal.fire('Sin permisos', 'No tienes permisos para editar penalidades', 'error')
+      return
+    }
+
     if (!penalidadForm.fecha) {
       Swal.fire('Error', 'Por favor complete los campos requeridos', 'warning')
       return
@@ -819,7 +847,12 @@ export function IncidenciasModule() {
             <Download size={16} />
             Exportar
           </button>
-          <button className="btn-primary" onClick={activeTab === 'penalidades' || activeTab === 'por_aplicar' ? handleNuevaPenalidad : handleNuevaIncidencia}>
+          <button
+            className="btn-primary"
+            onClick={activeTab === 'penalidades' || activeTab === 'por_aplicar' ? handleNuevaPenalidad : handleNuevaIncidencia}
+            disabled={!canCreate}
+            title={!canCreate ? 'No tienes permisos para crear' : ''}
+          >
             <Plus size={16} />
             {activeTab === 'penalidades' || activeTab === 'por_aplicar' ? 'Nueva Penalidad' : 'Nueva Incidencia'}
           </button>

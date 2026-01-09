@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import Swal from 'sweetalert2'
@@ -117,6 +118,12 @@ type FiltroTipo = 'todos' | 'entrada' | 'salida' | 'asignacion' | 'devolucion'
 
 export function PedidosUnificadoModule() {
   const { user, profile } = useAuth()
+  const { canCreateInSubmenu, canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
+
+  // Permisos específicos para el submenú de pedidos
+  const canCreate = canCreateInSubmenu('pedidos')
+  const canEdit = canEditInSubmenu('pedidos')
+  const canDelete = canDeleteInSubmenu('pedidos')
 
   // Estado de tab activa
   const [activeTab, setActiveTab] = useState<TabActiva>('entradas')
@@ -312,6 +319,12 @@ export function PedidosUnificadoModule() {
   }
 
   const confirmarRecepcion = async (item: PedidoItem) => {
+    // Validar permisos
+    if (!canEdit) {
+      Swal.fire('Sin permisos', 'No tienes permisos para confirmar recepciones', 'error')
+      return
+    }
+
     const cantidadPendiente = item.cantidad_pendiente
 
     const { value: cantidad } = await Swal.fire({
@@ -453,6 +466,12 @@ export function PedidosUnificadoModule() {
   }
 
   const aprobarMovimiento = async (movimiento: MovimientoPendiente) => {
+    // Validar permisos
+    if (!canEdit) {
+      Swal.fire('Sin permisos', 'No tienes permisos para aprobar movimientos', 'error')
+      return
+    }
+
     const vehiculoInfo = movimiento.vehiculo_patente
       ? `<p><strong>Vehículo:</strong> ${movimiento.vehiculo_patente}</p>`
       : ''
@@ -509,6 +528,12 @@ export function PedidosUnificadoModule() {
   }
 
   const rechazarMovimiento = async (movimiento: MovimientoPendiente) => {
+    // Validar permisos
+    if (!canEdit) {
+      Swal.fire('Sin permisos', 'No tienes permisos para rechazar movimientos', 'error')
+      return
+    }
+
     const vehiculoInfo = movimiento.vehiculo_patente
       ? `<p><strong>Vehículo:</strong> ${movimiento.vehiculo_patente}</p>`
       : ''

@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { TimeInput24h } from '../../components/ui/TimeInput24h'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
@@ -43,6 +44,13 @@ type TabType = 'dashboard' | 'listado' | 'por_cobrar' | 'historico'
 
 export function SiniestrosModule() {
   const { user, profile } = useAuth()
+  const { canCreateInSubmenu, canEditInSubmenu, canDeleteInSubmenu } = usePermissions()
+
+  // Permisos específicos para el submenú de siniestros
+  const canCreate = canCreateInSubmenu('siniestros')
+  const canEdit = canEditInSubmenu('siniestros')
+  const canDelete = canDeleteInSubmenu('siniestros')
+
   const [activeTab, setActiveTab] = useState<TabType>('listado')
   const [loading, setLoading] = useState(true)
   const [siniestros, setSiniestros] = useState<SiniestroCompleto[]>([])
@@ -472,6 +480,16 @@ export function SiniestrosModule() {
   }
 
   async function handleGuardar() {
+    // Validar permisos
+    if (modalMode === 'create' && !canCreate) {
+      Swal.fire('Sin permisos', 'No tienes permisos para crear siniestros', 'error')
+      return
+    }
+    if (modalMode === 'edit' && !canEdit) {
+      Swal.fire('Sin permisos', 'No tienes permisos para editar siniestros', 'error')
+      return
+    }
+
     if (!formData.categoria_id || !formData.estado_id || !formData.fecha_siniestro) {
       Swal.fire('Error', 'Complete los campos requeridos', 'error')
       return
@@ -724,7 +742,12 @@ export function SiniestrosModule() {
             <Download size={16} />
             Exportar
           </button>
-          <button className="btn-primary" onClick={handleNuevoSiniestro}>
+          <button
+            className="btn-primary"
+            onClick={handleNuevoSiniestro}
+            disabled={!canCreate}
+            title={!canCreate ? 'No tienes permisos para crear siniestros' : ''}
+          >
             <Plus size={16} />
             Nuevo Siniestro
           </button>
