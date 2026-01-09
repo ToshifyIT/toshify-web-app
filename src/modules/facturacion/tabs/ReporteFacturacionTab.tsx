@@ -1806,6 +1806,7 @@ export function ReporteFacturacionTab() {
 
   // Si estamos en modo RIT Preview, mostrar el componente de preview
   if (showRITPreview && periodo) {
+    const periodoAbierto = periodo.estado === 'abierto'
     return (
       <RITPreviewTable
         data={ritPreviewData}
@@ -1813,11 +1814,12 @@ export function ReporteFacturacionTab() {
         anio={periodo.anio}
         fechaInicio={format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')}
         fechaFin={format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}
+        periodoAbierto={periodoAbierto}
         onClose={() => {
           setShowRITPreview(false)
           setRitPreviewData([])
         }}
-        onSync={syncRITChanges}
+        onSync={periodoAbierto ? syncRITChanges : undefined}
       />
     )
   }

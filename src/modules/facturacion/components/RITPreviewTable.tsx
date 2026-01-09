@@ -464,12 +464,12 @@ export function RITPreviewTable({
     }
   }, [filteredData, totales, semana, anio, fechaInicio, fechaFin])
 
-  // Renderizar celda editable
+  // Renderizar celda editable (solo si período abierto)
   const renderEditableCell = (row: RITPreviewRow, field: keyof RITPreviewRow, value: string | number, isNumeric: boolean) => {
     const isEditing = editingCell?.rowId === row.id && editingCell?.field === field
-    const isEditable = editableNumericFields.includes(field) || editableTextFields.includes(field)
+    const canEdit = periodoAbierto && (editableNumericFields.includes(field) || editableTextFields.includes(field))
 
-    if (isEditing) {
+    if (isEditing && canEdit) {
       return (
         <input
           type={isNumeric ? 'number' : 'text'}
@@ -487,9 +487,9 @@ export function RITPreviewTable({
 
     return (
       <span
-        className={`rit-preview-cell ${isEditable ? 'editable' : ''}`}
-        onClick={() => isEditable && startEditing(row.id, field, value)}
-        title={isEditable ? 'Click para editar' : ''}
+        className={`rit-preview-cell ${canEdit ? 'editable' : ''}`}
+        onClick={() => canEdit && startEditing(row.id, field, value)}
+        title={canEdit ? 'Click para editar' : ''}
       >
         {displayValue}
       </span>
@@ -513,7 +513,16 @@ export function RITPreviewTable({
           </div>
         </div>
         <div className="rit-preview-header-right">
-          {hasChanges && (
+          {/* Mostrar estado del período */}
+          {!periodoAbierto && (
+            <span className="rit-preview-badge closed">Período Cerrado</span>
+          )}
+          {periodoAbierto && (
+            <span className="rit-preview-badge open">Período Abierto</span>
+          )}
+
+          {/* Botones de acción - solo si hay cambios Y período abierto */}
+          {hasChanges && periodoAbierto && (
             <>
               <button className="rit-preview-btn secondary" onClick={resetData}>
                 <RotateCcw size={14} />
@@ -576,8 +585,12 @@ export function RITPreviewTable({
       </div>
 
       {/* Info de edición */}
-      <div className="rit-preview-edit-info">
-        <span>Haz click en los valores para editarlos antes de exportar</span>
+      <div className={`rit-preview-edit-info ${!periodoAbierto ? 'readonly' : ''}`}>
+        {periodoAbierto ? (
+          <span>Haz click en los valores para editarlos. Luego sincroniza con BD o exporta a Excel.</span>
+        ) : (
+          <span>Período cerrado - Solo lectura. Puedes exportar a Excel pero no editar valores.</span>
+        )}
       </div>
 
       {/* Tabla */}

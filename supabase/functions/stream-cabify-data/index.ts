@@ -4,6 +4,129 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 const CABIFY_AUTH_URL = 'https://id.cabify.com/oauth/v2/token'
 const CABIFY_GRAPHQL_URL = 'https://fleet-partner-services.cabify.com/graphql'
 
+/**
+ * Cache de balances por compañía
+ */
+const balancesCache = new Map<string, any[]>()
+
+/**
+ * Obtener balances de una compañía (con cache)
+ */
+async function getCompanyBalances(token: string, companyId: string): Promise<any[]> {
+  if (balancesCache.has(companyId)) {
+    return balancesCache.get(companyId)!
+  }
+
+  try {
+    const balancesQuery = `
+      query GetBalances($companyId: String) {
+        balances(companyId: $companyId) {
+          id
+          name
+          currency
+        }
+      }
+    `
+
+    const response = await fetch(CABIFY_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        query: balancesQuery,
+        variables: { companyId },
+      }),
+    })
+
+    if (!response.ok) return []
+
+    const data = await response.json()
+    const balances = data.data?.balances || []
+    balancesCache.set(companyId, balances)
+    return balances
+  } catch (error) {
+    console.error(`Error en getCompanyBalances:`, error)
+    return []
+  }
+}
+
+/**
+ * Obtener peajes de un conductor desde Cabify
+ */
+async function getTollsForDriver(
+  token: string,
+  companyId: string,
+  driverId: string,
+  startDate: string,
+  endDate: string
+): Promise<number> {
+  try {
+    const balances = await getCompanyBalances(token, companyId)
+    if (balances.length === 0) return 0
+
+    let totalTolls = 0
+    const balancesToProcess = balances.slice(0, 3)
+
+    if (balancesToProcess.length > 0) {
+      try {
+        const balanceQueries = balancesToProcess.map((balance: any, idx: number) =>
+          `balance${idx}: paginatedBalanceMovements(
+            balanceId: "${balance.id}",
+            companyId: "${companyId}",
+            driverId: "${driverId}",
+            startAt: "${startDate}",
+            endAt: "${endDate}",
+            page: 1,
+            perPage: 500
+          ) {
+            movements {
+              breakdown { name value }
+            }
+          }`
+        ).join('\n')
+
+        const query = `query { ${balanceQueries} }`
+        const response = await fetch(CABIFY_GRAPHQL_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ query }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.data && !data.errors) {
+            Object.values(data.data).forEach((result: any) => {
+              if (result && result.movements) {
+                result.movements.forEach((movement: any) => {
+                  if (movement.breakdown) {
+                    movement.breakdown.forEach((b: any) => {
+                      if (b.name === 'supplement:toll') {
+                        totalTolls += Math.abs(b.value || 0)
+                      }
+                    })
+                  }
+                })
+              }
+            })
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️ Error en query de tolls:`, error)
+      }
+    }
+
+    return totalTolls / 100
+  } catch (error) {
+    console.error(`Error obteniendo peajes:`, error)
+    return 0
+  }
+}
+
 serve(async (req) => {
   // CORS headers
   if (req.method === 'OPTIONS') {
@@ -191,6 +314,9 @@ serve(async (req) => {
                     const hoursFormatted = Math.floor(horasConectadas)
                     const minutesFormatted = Math.floor((horasConectadas - hoursFormatted) * 60)
 
+                    // Obtener peajes del conductor desde Cabify
+                    const peajesDriver = await getTollsForDriver(access_token, companyId, driver.id, startDate, endDate)
+
                     return {
                       id: driver.id,
                       companyId,
@@ -216,7 +342,7 @@ serve(async (req) => {
                       gananciaTotal: Number((gananciaTotalViajesMinor / 100).toFixed(2)),
                       gananciaPorHora:
                         horasConectadas > 0 ? Number(((gananciaTotalViajesMinor / 100) / horasConectadas).toFixed(2)) : 0,
-                      peajes: 0,
+                      peajes: peajesDriver,
                       permisoEfectivo: 'Desactivado',
                       vehiculo: '',
                       vehicleMake: '',
