@@ -18,6 +18,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "../../components/ui/DataTable";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
+import { createConductorDriveFolder } from "../../services/driveService";
 
 // Helper para normalizar la visualización de estados de conductor
 // Mantiene consistencia en el frontend independientemente de cómo se guarde en BD
@@ -624,6 +625,27 @@ export function ConductoresModule() {
           .insert(categoriasRelacion);
 
         if (categoriasError) throw categoriasError;
+      }
+
+      // Crear carpeta en Google Drive para el conductor
+      if (newConductor && newConductor.length > 0) {
+        const conductor = newConductor[0];
+        const nombreCompleto = `${formData.nombres} ${formData.apellidos}`;
+
+        // Intentar crear carpeta en Drive (no bloquea si falla)
+        createConductorDriveFolder(
+          conductor.id,
+          nombreCompleto,
+          formData.numero_dni
+        ).then((result) => {
+          if (result.success) {
+            console.log('Carpeta Drive creada:', result.folderUrl);
+          } else {
+            console.warn('No se pudo crear carpeta Drive:', result.error);
+          }
+        }).catch((err) => {
+          console.warn('Error creando carpeta Drive:', err);
+        });
       }
 
       Swal.fire({

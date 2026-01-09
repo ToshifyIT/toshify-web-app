@@ -516,3 +516,154 @@
     font-size: 15px;
   }
 }
+
+/* =====================================================
+   AUDIT MODULE STYLES
+   ===================================================== */
+
+.audit-filters {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
+}
+
+.audit-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.audit-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.audit-filter-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.audit-filter-group select,
+.audit-filter-group input {
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.audit-filter-group select:focus,
+.audit-filter-group input:focus {
+  outline: none;
+  border-color: #FF0033;
+}
+
+.audit-filter-clear {
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.audit-filter-clear:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Audit Table Cells */
+.audit-fecha {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audit-fecha-date {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.audit-fecha-time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.audit-modulo {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.audit-cambios {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.audit-usuario {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audit-usuario-nombre {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.audit-usuario-email {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Yellow badge for UPDATE */
+.dt-badge-yellow {
+  background: var(--badge-yellow-bg, #fef3c7);
+  color: var(--badge-yellow-text, #92400e);
+}
+
+/* Responsive Audit Filters */
+@media (max-width: 1024px) {
+  .audit-filter-group {
+    min-width: 120px;
+  }
+}
+
+@media (max-width: 768px) {
+  .audit-filters-row {
+    gap: 8px;
+  }
+
+  .audit-filter-group {
+    flex: 1;
+    min-width: calc(50% - 8px);
+  }
+
+  .audit-filter-clear {
+    width: 100%;
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .audit-filter-group {
+    min-width: 100%;
+  }
+
+  .audit-filter-group select,
+  .audit-filter-group input {
+    padding: 10px 12px;
+  }
+}
