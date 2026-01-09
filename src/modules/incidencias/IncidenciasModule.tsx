@@ -39,11 +39,11 @@ type TabType = 'incidencias' | 'penalidades' | 'por_aplicar'
 
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
-  const { canCreateInSubmenu, canEditInSubmenu } = usePermissions()
+  const { canCreateInMenu, canEditInMenu } = usePermissions()
 
-  // Permisos específicos para el submenú de incidencias
-  const canCreate = canCreateInSubmenu('incidencias')
-  const canEdit = canEditInSubmenu('incidencias')
+  // Permisos específicos para el menú de incidencias
+  const canCreate = canCreateInMenu('incidencias')
+  const canEdit = canEditInMenu('incidencias')
 
   const [activeTab, setActiveTab] = useState<TabType>('incidencias')
   const [loading, setLoading] = useState(true)

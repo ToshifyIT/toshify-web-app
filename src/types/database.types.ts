@@ -24,6 +24,7 @@ export interface Database {
       user_profiles: {
         Row: {
           id: string
+          email: string | null
           full_name: string | null
           role_id: string | null
           is_active: boolean
