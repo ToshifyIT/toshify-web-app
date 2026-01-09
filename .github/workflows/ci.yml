@@ -1,13 +1,18 @@
-# CI - Solo validación de código
-name: CI
+# CI/CD Pipeline Lineal
+# BUILD → APPROVAL STAGING → MERGE STAGING → APPROVAL PROD → MERGE MAIN
+
+name: CI/CD Pipeline
 
 on:
-  pull_request:
-    branches: [staging, main]
+  push:
+    branches: [development]
 
 jobs:
+  # ═══════════════════════════════════════════
+  # PASO 1: Build & Validate
+  # ═══════════════════════════════════════════
   build:
-    name: Build & Validate
+    name: "1. Build"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,3 +26,70 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+  # ═══════════════════════════════════════════
+  # PASO 2: Aprobación para Staging
+  # ═══════════════════════════════════════════
+  approval-staging:
+    name: "2. Approval Staging"
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    steps:
+      - run: echo "✅ Aprobado para Staging"
+
+  # ═══════════════════════════════════════════
+  # PASO 3: Merge a Staging
+  # ═══════════════════════════════════════════
+  merge-staging:
+    name: "3. Merge Staging"
+    needs: approval-staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Merge development → staging
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin staging
+          git checkout staging
+          git merge origin/development -m "Merge development → staging [skip ci]"
+          git push origin staging
+
+  # ═══════════════════════════════════════════
+  # PASO 4: Aprobación para Producción
+  # ═══════════════════════════════════════════
+  approval-production:
+    name: "4. Approval Prod"
+    needs: merge-staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - run: echo "✅ Aprobado para Producción"
+
+  # ═══════════════════════════════════════════
+  # PASO 5: Merge a Main (Producción)
+  # ═══════════════════════════════════════════
+  merge-main:
+    name: "5. Merge Main"
+    needs: approval-production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Merge staging → main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git merge origin/staging -m "Merge staging → main [skip ci]"
+          git push origin main
+      - run: echo "🚀 Dokploy desplegará automáticamente"
