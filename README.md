@@ -285,14 +285,33 @@ menu_permissions (role_id, menu_id, can_view)
 
 ## Despliegue
 
+### CI/CD Pipeline
+
+El proyecto usa GitHub Actions con un pipeline lineal con aprobaciones:
+
+```
+development → [Build] → [Approval] → staging → [Approval] → main → [Dokploy Deploy]
+```
+
+| Paso | Descripción |
+|------|-------------|
+| 1. Build | Compila y valida TypeScript |
+| 2. Approval Staging | Requiere aprobación manual |
+| 3. Merge Staging | Merge automático a staging |
+| 4. Approval Prod | Requiere aprobación manual |
+| 5. Merge Main | Merge a main + trigger Dokploy |
+
+### Flujo de Trabajo
+
+1. Desarrollar en rama `development`
+2. Push a `development` inicia el pipeline
+3. Aprobar para staging en GitHub Actions
+4. Aprobar para producción en GitHub Actions
+5. Dokploy despliega automáticamente
+
 ### Build de Producción
 ```bash
 npm run build
-```
-
-### Deploy a Vercel
-```bash
-vercel --prod
 ```
 
 ### Deploy Edge Functions (Self-hosted)
