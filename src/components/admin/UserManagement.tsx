@@ -276,13 +276,13 @@ export function UserManagement() {
 
     try {
       // Usar función RPC de base de datos (funciona en selfhosted)
-      const { data, error } = await supabase.rpc('admin_reset_user_password', {
+      const { data, error } = await supabase.rpc('admin_reset_user_password' as any, {
         target_user_id: userId,
         new_password: newPassword
       })
 
       if (error) throw error
-      if (data && !data.success) throw new Error(data.error)
+      if (data && !(data as any).success) throw new Error((data as any).error)
 
       await loadData()
 
@@ -304,15 +304,15 @@ export function UserManagement() {
 
         if (emailResult.isConfirmed) {
           try {
-            // Usar función RPC de PostgreSQL con pg_net para enviar email
-            const { data, error } = await supabase.rpc('send_password_email', {
+            // Usar función RPC de PostgreSQL con http extension para enviar email
+            const { data: emailData, error: emailError } = await supabase.rpc('send_password_email' as any, {
               user_email: userEmail,
               user_name: userName,
               user_password: newPassword
             })
 
-            if (error) throw error
-            if (data && !data.success) throw new Error(data.error)
+            if (emailError) throw emailError
+            if (emailData && !(emailData as any).success) throw new Error((emailData as any).error)
 
             Swal.fire({
               icon: 'success',
@@ -412,7 +412,7 @@ export function UserManagement() {
           <div className="dt-actions">
             <button
               className="dt-btn-action dt-btn-warning"
-              onClick={() => forcePasswordChange(row.original.id, row.original.full_name || row.original.email, row.original.email)}
+              onClick={() => forcePasswordChange(row.original.id, row.original.full_name || row.original.email || 'Usuario', row.original.email || undefined)}
               title="Forzar cambio de contraseña"
             >
               <KeyRound size={14} />
