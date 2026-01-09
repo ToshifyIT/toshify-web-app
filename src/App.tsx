@@ -1,7 +1,7 @@
 // src/App.tsx
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
-import { AuthProvider } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
 import { LoginPage } from './pages/LoginPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
@@ -10,6 +10,7 @@ import { AdminPage } from './pages/AdminPage'
 import { UnauthorizedPage } from './pages/UnauthorizedPage'
 import PermissionsDebugPage from './pages/PermissionsDebugPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal'
 
 // Componente para detectar flujo de recovery y redirigir
 function RecoveryRedirect({ children }: { children: React.ReactNode }) {
@@ -28,48 +29,72 @@ function RecoveryRedirect({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Componente que muestra modal de cambio de contraseña si es requerido
+function ForcePasswordChangeWrapper({ children }: { children: React.ReactNode }) {
+  const { mustChangePassword, user, loading, refreshProfile } = useAuth()
+
+  // Si está cargando o no hay usuario, mostrar children normalmente
+  if (loading || !user) {
+    return <>{children}</>
+  }
+
+  // Si debe cambiar contraseña, mostrar modal bloqueante
+  if (mustChangePassword) {
+    return (
+      <>
+        {children}
+        <ForcePasswordChangeModal onSuccess={() => refreshProfile()} />
+      </>
+    )
+  }
+
+  return <>{children}</>
+}
+
 function App() {
   return (
     <BrowserRouter>
       <RecoveryRedirect>
         <AuthProvider>
-          <PermissionsProvider>
-            <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/unauthorized" element={<UnauthorizedPage />} />
+          <ForcePasswordChangeWrapper>
+            <PermissionsProvider>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-            {/* Debug de permisos (solo desarrollo) */}
-            <Route
-              path="/debug/permisos"
-              element={
-                <ProtectedRoute>
-                  <PermissionsDebugPage />
-                </ProtectedRoute>
-              }
-            />
+                {/* Debug de permisos (solo desarrollo) */}
+                <Route
+                  path="/debug/permisos"
+                  element={
+                    <ProtectedRoute>
+                      <PermissionsDebugPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-            {/* Admin panel - mantener por compatibilidad (deprecado) */}
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <AdminPage />
-                </ProtectedRoute>
-              }
-            />
+                {/* Admin panel - mantener por compatibilidad (deprecado) */}
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute requireAdmin>
+                      <AdminPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-            {/* HomePage como layout principal para todos los usuarios autenticados */}
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <HomePage />
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </PermissionsProvider>
+                {/* HomePage como layout principal para todos los usuarios autenticados */}
+                <Route
+                  path="/*"
+                  element={
+                    <ProtectedRoute>
+                      <HomePage />
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </PermissionsProvider>
+          </ForcePasswordChangeWrapper>
         </AuthProvider>
       </RecoveryRedirect>
     </BrowserRouter>

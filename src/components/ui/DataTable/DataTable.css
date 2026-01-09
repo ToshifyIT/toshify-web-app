@@ -351,6 +351,16 @@
   background: var(--badge-red-bg);
 }
 
+.dt-btn-action.dt-btn-warning {
+  color: var(--color-warning, #f59e0b);
+}
+
+.dt-btn-action.dt-btn-warning:hover:not(:disabled) {
+  border-color: var(--color-warning, #f59e0b);
+  color: var(--color-warning, #f59e0b);
+  background: var(--badge-yellow-bg, rgba(245, 158, 11, 0.1));
+}
+
 /* Badge */
 .dt-badge {
   display: inline-block;

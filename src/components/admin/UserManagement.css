@@ -124,6 +124,36 @@
   margin-top: 24px;
 }
 
+/* Checkbox para contraseña temporal */
+.um-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.um-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--color-primary, #FF0033);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.um-checkbox-label span {
+  line-height: 1.4;
+}
+
+.um-form-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
 /* =====================================================
    RESPONSIVE - Multi-resolution support
    ===================================================== */

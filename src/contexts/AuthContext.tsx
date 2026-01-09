@@ -9,10 +9,12 @@ interface AuthContextType {
   profile: UserWithRole | null
   session: Session | null
   loading: boolean
+  mustChangePassword: boolean
   signIn: (email: string, password: string) => Promise<{ error: any }>
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
+  markPasswordChanged: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -22,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserWithRole | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mustChangePassword, setMustChangePassword] = useState(false)
 
   useEffect(() => {
     // Obtener sesión actual
@@ -71,6 +74,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
       setProfile(data as UserWithRole)
+      // Verificar si debe cambiar contraseña (campo agregado por migración)
+      setMustChangePassword((data as any).must_change_password === true)
     } catch (error) {
       console.error('Error cargando perfil:', error)
     } finally {
@@ -98,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut()
     setProfile(null)
+    setMustChangePassword(false)
   }
 
   const refreshProfile = async () => {
@@ -106,15 +112,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const markPasswordChanged = async () => {
+    try {
+      // Llamar a la función RPC que marca la contraseña como cambiada
+      const { error } = await supabase.rpc('mark_password_changed')
+      if (error) throw error
+      setMustChangePassword(false)
+    } catch (error) {
+      console.error('Error marcando contraseña como cambiada:', error)
+      throw error
+    }
+  }
+
   const value = {
     user,
     profile,
     session,
     loading,
+    mustChangePassword,
     signIn,
     signInWithGoogle,
     signOut,
     refreshProfile,
+    markPasswordChanged,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
