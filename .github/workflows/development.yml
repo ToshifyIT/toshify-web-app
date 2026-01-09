@@ -1,9 +1,9 @@
-# CI - Solo validación de código
-name: CI
+# Development → Staging
+name: Development
 
 on:
-  pull_request:
-    branches: [staging, main]
+  push:
+    branches: [development]
 
 jobs:
   build:
@@ -21,3 +21,12 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+  approve-staging:
+    name: Aprobar para Staging
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    steps:
+      - run: echo "✅ Aprobado - Crear PR development → staging"
