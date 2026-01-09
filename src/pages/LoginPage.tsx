@@ -13,7 +13,7 @@ export function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signIn } = useAuth()
+  const { signIn, signInWithGoogle } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: FormEvent) => {
@@ -41,13 +41,13 @@ export function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setError('')
-    await Swal.fire({
-      icon: 'info',
-      title: 'Próximamente',
-      text: 'El inicio de sesión con Google estará disponible pronto.',
-      confirmButtonText: 'Entendido',
-      confirmButtonColor: '#FF0033'
-    })
+    setLoading(true)
+    try {
+      await signInWithGoogle()
+    } catch {
+      setError('Error al iniciar sesión con Google. Intentá de nuevo.')
+      setLoading(false)
+    }
   }
 
   const handleForgotPassword = async (e: React.MouseEvent) => {
