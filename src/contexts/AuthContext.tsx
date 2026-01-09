@@ -114,9 +114,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const markPasswordChanged = async () => {
     try {
-      // Llamar a la función RPC que marca la contraseña como cambiada
-      const { error } = await supabase.rpc('mark_password_changed')
-      if (error) throw error
+      // Intentar con función RPC primero
+      const { error: rpcError } = await (supabase.rpc as any)('mark_password_changed')
+
+      if (rpcError) {
+        // Fallback: actualizar directamente la tabla
+        console.warn('RPC mark_password_changed falló, usando fallback directo:', rpcError)
+        const { error: updateError } = await (supabase
+          .from('user_profiles') as any)
+          .update({ must_change_password: false })
+          .eq('id', user?.id)
+
+        if (updateError) throw updateError
+      }
+
       setMustChangePassword(false)
     } catch (error) {
       console.error('Error marcando contraseña como cambiada:', error)

@@ -34,6 +34,7 @@ import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
 import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
+import { AuditoriaPage } from './administracion/AuditoriaPage'
 import { ProfilePage } from './profile/ProfilePage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
@@ -963,6 +964,11 @@ export function HomePage() {
               <Route path="/gestor-menus" element={
                 <ProtectedRoute submenuName="gestor-menus" action="view">
                   <GestorMenusPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/auditoria" element={
+                <ProtectedRoute submenuName="auditoria" action="view">
+                  <AuditoriaPage />
                 </ProtectedRoute>
               } />
 
