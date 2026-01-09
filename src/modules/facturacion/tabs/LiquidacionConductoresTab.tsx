@@ -111,56 +111,95 @@ export function LiquidacionConductoresTab() {
   }
 
   async function nuevaLiquidacion() {
-    // Cargar conductores activos con asignación
-    const { data: asignaciones } = await supabase
-      .from('asignaciones')
-      .select(`
-        conductor_id,
-        horario,
-        conductores:conductor_id(id, nombres, apellidos, dni, cuit),
-        vehiculos:vehiculo_id(id, patente)
-      `)
-      .eq('estado', 'activa')
+    // Cargar todos los conductores - EXACTAMENTE igual que TicketsFavorTab
+    const { data: conductores, error } = await supabase
+      .from('conductores')
+      .select('id, nombres, apellidos, numero_dni')
+      .order('apellidos')
 
-    const conductoresActivos: ConductorActivo[] = (asignaciones || []).map((a: any) => ({
-      id: a.conductores.id,
-      nombres: a.conductores.nombres,
-      apellidos: a.conductores.apellidos,
-      dni: a.conductores.dni,
-      cuit: a.conductores.cuit,
-      vehiculo_id: a.vehiculos?.id,
-      vehiculo_patente: a.vehiculos?.patente,
-      tipo_alquiler: a.horario
-    }))
+    // Guardar en variable global para el modal - EXACTAMENTE como Tickets
+    ;(window as any).__liquidacionConductores = conductores || []
 
-    if (conductoresActivos.length === 0) {
-      Swal.fire('Sin conductores', 'No hay conductores activos con asignación', 'warning')
+    if (!conductores || conductores.length === 0) {
+      Swal.fire('Sin conductores', `No hay conductores en el sistema. Error: ${error?.message || 'ninguno'}`, 'warning')
       return
     }
 
-    // Guardar en variable global para el modal
+    // Cargar asignaciones para mostrar vehículo/tipo (opcional pero útil)
+    const { data: asignacionesData } = await supabase
+      .from('asignaciones')
+      .select(`
+        id, horario,
+        vehiculos (id, patente),
+        asignaciones_conductores (conductor_id, horario)
+      `)
+      .in('estado', ['activa', 'programado'])
+
+    // Mapear asignaciones por conductor
+    const asignacionesPorConductor = new Map<string, { vehiculo_id: string | null; vehiculo_patente: string | null; tipo_alquiler: string | null }>()
+    for (const asig of (asignacionesData || []) as any[]) {
+      for (const ac of (asig.asignaciones_conductores || [])) {
+        if (ac.conductor_id && !asignacionesPorConductor.has(ac.conductor_id)) {
+          asignacionesPorConductor.set(ac.conductor_id, {
+            vehiculo_id: asig.vehiculos?.id || null,
+            vehiculo_patente: asig.vehiculos?.patente || null,
+            tipo_alquiler: ac.horario || asig.horario || null
+          })
+        }
+      }
+    }
+
+    // Crear lista de conductores con su info de asignación
+    const conductoresActivos: ConductorActivo[] = (conductores as any[]).map(c => {
+      const asig = asignacionesPorConductor.get(c.id)
+      return {
+        id: c.id,
+        nombres: c.nombres,
+        apellidos: c.apellidos,
+        dni: c.numero_dni,
+        cuit: c.cuit,
+        vehiculo_id: asig?.vehiculo_id || null,
+        vehiculo_patente: asig?.vehiculo_patente || null,
+        tipo_alquiler: asig?.tipo_alquiler || null
+      }
+    })
+
+    // Guardar en variable global para el modal (sobrescribe el anterior)
     ;(window as any).__liquidacionConductores = conductoresActivos
+
+    // Detectar tema oscuro
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    const colors = {
+      bg: isDark ? '#1E293B' : '#fff',
+      bgHover: isDark ? '#334155' : '#F3F4F6',
+      border: isDark ? '#334155' : '#D1D5DB',
+      borderLight: isDark ? '#475569' : '#E5E7EB',
+      text: isDark ? '#F1F5F9' : '#374151',
+      textSecondary: isDark ? '#94A3B8' : '#6B7280',
+      selectedBg: isDark ? 'rgba(59, 130, 246, 0.2)' : '#DBEAFE',
+      selectedText: isDark ? '#93C5FD' : '#1E40AF'
+    }
 
     const { value: formValues } = await Swal.fire({
       title: 'Nueva Liquidación',
       html: `
         <div style="text-align: left; padding: 0 8px;">
           <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #374151;">Conductor</label>
-            <input id="swal-conductor-search" type="text" placeholder="Buscar conductor..." style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box;">
-            <div id="swal-conductor-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px; background: #fff; margin-top: 4px;"></div>
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.5px;">Conductor</label>
+            <input id="swal-conductor-search" type="text" placeholder="Buscar conductor..." style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; box-sizing: border-box; background: ${colors.bg}; color: ${colors.text}; outline: none; font-size: 14px;">
+            <div id="swal-conductor-list" style="max-height: 150px; overflow-y: auto; border: 1px solid ${colors.borderLight}; border-radius: 6px; background: ${colors.bg}; margin-top: 4px;"></div>
             <input type="hidden" id="swal-conductor-id" value="">
-            <div id="swal-conductor-selected" style="margin-top: 8px; padding: 10px; background: #DBEAFE; border-radius: 6px; display: none;">
-              <span style="font-size: 13px; color: #1E40AF; font-weight: 500;"></span>
+            <div id="swal-conductor-selected" style="margin-top: 8px; padding: 10px 12px; background: ${colors.selectedBg}; border-radius: 6px; display: none;">
+              <span style="font-size: 13px; color: ${colors.selectedText}; font-weight: 500;"></span>
             </div>
           </div>
           <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #374151;">Fecha de Corte (último día trabajado)</label>
-            <input id="swal-fecha" type="date" value="${format(new Date(), 'yyyy-MM-dd')}" style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.5px;">Fecha de Corte (último día trabajado)</label>
+            <input id="swal-fecha" type="date" value="${format(new Date(), 'yyyy-MM-dd')}" style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; box-sizing: border-box; background: ${colors.bg}; color: ${colors.text}; outline: none; font-size: 14px;">
           </div>
           <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #374151;">Motivo de Baja</label>
-            <select id="swal-motivo" style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.5px;">Motivo de Baja</label>
+            <select id="swal-motivo" style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; background: ${colors.bg}; color: ${colors.text}; cursor: pointer; font-size: 14px;">
               <option value="renuncia">Renuncia voluntaria</option>
               <option value="despido">Despido</option>
               <option value="fin_contrato">Fin de contrato</option>
@@ -169,8 +208,8 @@ export function LiquidacionConductoresTab() {
             </select>
           </div>
           <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: #374151;">Notas adicionales</label>
-            <textarea id="swal-notas" rows="2" style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; resize: none; box-sizing: border-box;" placeholder="Opcional..."></textarea>
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.5px;">Notas adicionales</label>
+            <textarea id="swal-notas" rows="2" style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; resize: none; box-sizing: border-box; background: ${colors.bg}; color: ${colors.text}; font-size: 14px;" placeholder="Opcional..."></textarea>
           </div>
         </div>
       `,
@@ -179,6 +218,15 @@ export function LiquidacionConductoresTab() {
         const listContainer = document.getElementById('swal-conductor-list') as HTMLElement
         const conductorIdInput = document.getElementById('swal-conductor-id') as HTMLInputElement
         const selectedDiv = document.getElementById('swal-conductor-selected') as HTMLElement
+
+        // Colores para dark mode (re-detectar dentro del callback)
+        const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark'
+        const themeColors = {
+          text: isDarkMode ? '#F1F5F9' : '#374151',
+          textSecondary: isDarkMode ? '#94A3B8' : '#6B7280',
+          border: isDarkMode ? '#475569' : '#f0f0f0',
+          hoverBg: isDarkMode ? '#334155' : '#F3F4F6'
+        }
 
         const conductoresList = (window as any).__liquidacionConductores || []
 
@@ -191,7 +239,7 @@ export function LiquidacionConductoresTab() {
           )
 
           if (filtered.length === 0) {
-            listContainer.innerHTML = '<div style="padding: 12px; text-align: center; color: #6B7280; font-size: 13px;">No encontrado</div>'
+            listContainer.innerHTML = `<div style="padding: 12px; text-align: center; color: ${themeColors.textSecondary}; font-size: 13px;">No encontrado</div>`
             return
           }
 
@@ -202,17 +250,17 @@ export function LiquidacionConductoresTab() {
                  data-dni="${c.dni}"
                  data-patente="${c.vehiculo_patente || '-'}"
                  data-tipo="${c.tipo_alquiler || '-'}"
-                 style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px;">
+                 style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid ${themeColors.border}; font-size: 13px; color: ${themeColors.text};">
               <div style="display: flex; justify-content: space-between;">
-                <span style="font-weight: 500;">${c.nombres} ${c.apellidos}</span>
-                <span style="color: #6B7280; font-family: monospace; font-size: 11px;">${c.vehiculo_patente || '-'}</span>
+                <span style="font-weight: 500; color: ${themeColors.text};">${c.nombres} ${c.apellidos}</span>
+                <span style="color: ${themeColors.textSecondary}; font-family: monospace; font-size: 11px;">${c.vehiculo_patente || '-'}</span>
               </div>
-              <div style="font-size: 11px; color: #6B7280;">DNI: ${c.dni} | ${c.tipo_alquiler || '-'}</div>
+              <div style="font-size: 11px; color: ${themeColors.textSecondary};">DNI: ${c.dni} | ${c.tipo_alquiler || '-'}</div>
             </div>
           `).join('')
 
           listContainer.querySelectorAll('.swal-conductor-item').forEach((item: any) => {
-            item.addEventListener('mouseenter', () => item.style.background = '#F3F4F6')
+            item.addEventListener('mouseenter', () => item.style.background = themeColors.hoverBg)
             item.addEventListener('mouseleave', () => item.style.background = '')
             item.addEventListener('click', () => {
               conductorIdInput.value = item.dataset.id
@@ -287,13 +335,28 @@ export function LiquidacionConductoresTab() {
 
       if (!conductor) throw new Error('Conductor no encontrado')
 
-      // Obtener asignación activa
-      const { data: asignacion } = await supabase
-        .from('asignaciones')
-        .select(`vehiculo_id, horario, vehiculos:vehiculo_id(patente)`)
+      // Obtener asignación activa a través de asignaciones_conductores
+      const { data: asigConductor } = await supabase
+        .from('asignaciones_conductores')
+        .select(`
+          horario,
+          asignaciones!inner(
+            id,
+            vehiculo_id,
+            horario,
+            estado,
+            vehiculos:vehiculo_id(patente)
+          )
+        `)
         .eq('conductor_id', conductorId)
-        .eq('estado', 'activa')
+        .eq('asignaciones.estado', 'activa')
         .single()
+
+      const asignacion = asigConductor ? {
+        vehiculo_id: (asigConductor as any).asignaciones?.vehiculo_id,
+        horario: (asigConductor as any).horario || (asigConductor as any).asignaciones?.horario,
+        vehiculos: (asigConductor as any).asignaciones?.vehiculos
+      } : null
 
       // Calcular días trabajados en la semana
       const fechaCorteDate = new Date(fechaCorte)

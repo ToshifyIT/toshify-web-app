@@ -92,6 +92,19 @@ export function TicketsFavorTab() {
     // Guardar conductores en variable global temporal para el modal
     ;(window as any).__ticketConductores = conductores || []
 
+    // Detectar tema oscuro
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    const colors = {
+      bg: isDark ? '#1E293B' : '#fff',
+      bgHover: isDark ? '#334155' : '#F3F4F6',
+      border: isDark ? '#334155' : '#D1D5DB',
+      borderLight: isDark ? '#475569' : '#E5E7EB',
+      text: isDark ? '#F1F5F9' : '#374151',
+      textSecondary: isDark ? '#94A3B8' : '#6B7280',
+      selectedBg: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2',
+      selectedText: isDark ? '#FCA5A5' : '#991B1B'
+    }
+
     const tiposOptions = TIPOS_TICKET_FAVOR.map(t =>
       `<option value="${t.codigo}">${t.nombre}</option>`
     ).join('')
@@ -101,31 +114,31 @@ export function TicketsFavorTab() {
       html: `
         <div style="text-align: left; padding: 0 8px;">
           <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Conductor</label>
-            <input id="swal-conductor-search" type="text" placeholder="Buscar conductor..." style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box;">
-            <div id="swal-conductor-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px; background: #fff; margin-top: 4px;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.5px;">Conductor</label>
+            <input id="swal-conductor-search" type="text" placeholder="Buscar conductor..." style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box; background: ${colors.bg}; color: ${colors.text};">
+            <div id="swal-conductor-list" style="max-height: 150px; overflow-y: auto; border: 1px solid ${colors.borderLight}; border-radius: 6px; background: ${colors.bg}; margin-top: 4px;">
             </div>
             <input type="hidden" id="swal-conductor-id" value="">
             <input type="hidden" id="swal-conductor-nombre" value="">
             <input type="hidden" id="swal-conductor-dni" value="">
-            <div id="swal-conductor-selected" style="margin-top: 8px; padding: 10px 12px; background: #FEE2E2; border-radius: 6px; display: none;">
-              <span style="font-size: 13px; color: #991B1B; font-weight: 500;"></span>
+            <div id="swal-conductor-selected" style="margin-top: 8px; padding: 10px 12px; background: ${colors.selectedBg}; border-radius: 6px; display: none;">
+              <span style="font-size: 13px; color: ${colors.selectedText}; font-weight: 500;"></span>
             </div>
           </div>
           <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Tipo de Ticket</label>
-            <select id="swal-tipo" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; background: #fff; cursor: pointer;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.5px;">Tipo de Ticket</label>
+            <select id="swal-tipo" style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; font-size: 14px; outline: none; background: ${colors.bg}; color: ${colors.text}; cursor: pointer;">
               <option value="">Seleccionar...</option>
               ${tiposOptions}
             </select>
           </div>
           <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Monto</label>
-            <input id="swal-monto" type="number" placeholder="0" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box;">
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.5px;">Monto</label>
+            <input id="swal-monto" type="number" placeholder="0" style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box; background: ${colors.bg}; color: ${colors.text};">
           </div>
           <div style="margin-bottom: 8px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Descripción</label>
-            <textarea id="swal-desc" placeholder="Descripción del ticket" style="width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; outline: none; min-height: 80px; resize: vertical; box-sizing: border-box;"></textarea>
+            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.5px;">Descripción</label>
+            <textarea id="swal-desc" placeholder="Descripción del ticket" style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; font-size: 14px; outline: none; min-height: 80px; resize: vertical; box-sizing: border-box; background: ${colors.bg}; color: ${colors.text};"></textarea>
           </div>
         </div>
       `,
@@ -137,6 +150,15 @@ export function TicketsFavorTab() {
         const conductorDniInput = document.getElementById('swal-conductor-dni') as HTMLInputElement
         const selectedDiv = document.getElementById('swal-conductor-selected') as HTMLElement
 
+        // Colores para dark mode (re-detectar)
+        const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark'
+        const themeColors = {
+          text: isDarkMode ? '#F1F5F9' : '#374151',
+          textSecondary: isDarkMode ? '#94A3B8' : '#6B7280',
+          border: isDarkMode ? '#475569' : '#f0f0f0',
+          hoverBg: isDarkMode ? '#334155' : '#F3F4F6'
+        }
+
         const conductoresList = (window as any).__ticketConductores || []
 
         const renderList = (filter: string = '') => {
@@ -147,7 +169,7 @@ export function TicketsFavorTab() {
           )
 
           if (filtered.length === 0) {
-            listContainer.innerHTML = '<div style="padding: 12px; text-align: center; color: #6B7280; font-size: 13px;">No se encontraron conductores</div>'
+            listContainer.innerHTML = `<div style="padding: 12px; text-align: center; color: ${themeColors.textSecondary}; font-size: 13px;">No se encontraron conductores</div>`
             return
           }
 
@@ -156,16 +178,16 @@ export function TicketsFavorTab() {
                  data-id="${c.id}"
                  data-nombre="${c.apellidos}, ${c.nombres}"
                  data-dni="${c.numero_dni || ''}"
-                 style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
-              <span>${c.apellidos}, ${c.nombres}</span>
-              <span style="color: #6B7280; font-family: monospace; font-size: 12px;">${c.numero_dni || '-'}</span>
+                 style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid ${themeColors.border}; font-size: 13px; display: flex; justify-content: space-between; align-items: center; color: ${themeColors.text};">
+              <span style="color: ${themeColors.text};">${c.apellidos}, ${c.nombres}</span>
+              <span style="color: ${themeColors.textSecondary}; font-family: monospace; font-size: 12px;">${c.numero_dni || '-'}</span>
             </div>
           `).join('')
 
           // Agregar eventos de hover y click
           listContainer.querySelectorAll('.swal-conductor-item').forEach((item: any) => {
             item.addEventListener('mouseenter', () => {
-              item.style.background = '#F3F4F6'
+              item.style.background = themeColors.hoverBg
             })
             item.addEventListener('mouseleave', () => {
               item.style.background = ''

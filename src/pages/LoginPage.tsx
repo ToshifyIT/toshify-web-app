@@ -473,6 +473,102 @@ export function LoginPage() {
             gap: 12px;
           }
         }
+
+        /* Dark Mode Support */
+        [data-theme="dark"] .login-page {
+          background-color: #0F172A;
+        }
+
+        [data-theme="dark"] .login-card {
+          background: #1E293B;
+          border-color: #334155;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] .form-title {
+          color: #F1F5F9;
+        }
+
+        [data-theme="dark"] .form-subtitle {
+          color: #94A3B8;
+        }
+
+        [data-theme="dark"] .form-label {
+          color: #E2E8F0;
+        }
+
+        [data-theme="dark"] .form-input {
+          background: #0F172A;
+          border-color: #475569;
+          color: #F1F5F9;
+        }
+
+        [data-theme="dark"] .form-input::placeholder {
+          color: #64748B;
+        }
+
+        [data-theme="dark"] .form-input:hover:not(:focus) {
+          border-color: #64748B;
+        }
+
+        [data-theme="dark"] .form-input:focus {
+          border-color: var(--red);
+          box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.15);
+        }
+
+        [data-theme="dark"] .password-toggle {
+          color: #64748B;
+        }
+
+        [data-theme="dark"] .password-toggle:hover {
+          color: #94A3B8;
+          background: #334155;
+        }
+
+        [data-theme="dark"] .remember-group span {
+          color: #94A3B8;
+        }
+
+        [data-theme="dark"] .divider-line {
+          background: #334155;
+        }
+
+        [data-theme="dark"] .divider-text {
+          color: #64748B;
+        }
+
+        [data-theme="dark"] .btn-google {
+          background: #0F172A;
+          color: #E2E8F0;
+          border-color: #475569;
+        }
+
+        [data-theme="dark"] .btn-google:hover {
+          background: #1E293B;
+          border-color: #64748B;
+        }
+
+        [data-theme="dark"] .btn-google:active {
+          background: #334155;
+        }
+
+        [data-theme="dark"] .form-footer p {
+          color: #64748B;
+        }
+
+        [data-theme="dark"] .form-footer a {
+          color: #94A3B8;
+        }
+
+        [data-theme="dark"] .form-footer a:hover {
+          color: #F1F5F9;
+        }
+
+        [data-theme="dark"] .error-message {
+          background: rgba(239, 68, 68, 0.15);
+          border-color: rgba(239, 68, 68, 0.3);
+          color: #FCA5A5;
+        }
       `}</style>
 
       <div className="login-page">
