@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, Calendar, FolderOpen } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, Calendar, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -103,6 +103,9 @@ export function ConductoresModule() {
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
   const [affectedAssignments, setAffectedAssignments] = useState<any[]>([]);
   const [pendingBajaUpdate, setPendingBajaUpdate] = useState(false);
+
+  // Estado para creación de carpeta de Drive
+  const [creatingDriveFolder, setCreatingDriveFolder] = useState<string | null>(null);
 
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions();
   const { profile } = useAuth();
@@ -422,6 +425,73 @@ export function ConductoresModule() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Crear carpeta de Drive para un conductor
+  const handleCreateDriveFolder = async (conductor: any) => {
+    const conductorId = conductor.id;
+    const conductorNombre = `${conductor.nombres} ${conductor.apellidos}`;
+    const conductorDni = conductor.numero_dni;
+
+    setCreatingDriveFolder(conductorId);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('No hay sesión activa');
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-drive-folder`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            conductorId,
+            conductorNombre,
+            conductorDni,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error al crear carpeta');
+      }
+
+      // Actualizar el conductor en la lista local
+      setConductores(prev => prev.map(c =>
+        c.id === conductorId
+          ? { ...c, drive_folder_url: result.folderUrl, drive_folder_id: result.folderId }
+          : c
+      ));
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Carpeta creada',
+        text: `Se creó la carpeta "${result.folderName}" en Google Drive`,
+        confirmButtonColor: '#E63946',
+        timer: 3000,
+      });
+
+      // Abrir la carpeta en nueva pestaña
+      window.open(result.folderUrl, '_blank');
+
+    } catch (err: any) {
+      console.error('Error creando carpeta de Drive:', err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.message || 'No se pudo crear la carpeta de Drive',
+        confirmButtonColor: '#E63946',
+      });
+    } finally {
+      setCreatingDriveFolder(null);
     }
   };
 
@@ -1754,9 +1824,11 @@ export function ConductoresModule() {
         header: "Acciones",
         cell: ({ row }) => {
           const driveUrl = (row.original as any).drive_folder_url;
+          const isCreatingFolder = creatingDriveFolder === row.original.id;
           return (
           <div className="dt-actions">
-            {driveUrl && (
+            {/* Botón de Drive: abrir si existe, crear si no */}
+            {driveUrl ? (
               <a
                 href={driveUrl}
                 target="_blank"
@@ -1767,6 +1839,23 @@ export function ConductoresModule() {
               >
                 <FolderOpen size={16} />
               </a>
+            ) : (
+              <button
+                className="dt-btn-action"
+                style={{
+                  color: isCreatingFolder ? '#9ca3af' : '#6b7280',
+                  background: 'rgba(107, 114, 128, 0.1)'
+                }}
+                onClick={() => handleCreateDriveFolder(row.original)}
+                disabled={isCreatingFolder}
+                title="Crear carpeta en Drive"
+              >
+                {isCreatingFolder ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <FolderPlus size={16} />
+                )}
+              </button>
             )}
             <button
               className="dt-btn-action dt-btn-view"
@@ -1811,7 +1900,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cuilsFiltrados, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cuilsFiltrados, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados, creatingDriveFolder],
   );
 
   return (
