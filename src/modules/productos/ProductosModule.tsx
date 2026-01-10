@@ -98,6 +98,9 @@ export function ProductosModule() {
   const [tipoFilter, setTipoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
+  // Stat card filter state
+  const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
+
   useEffect(() => {
     loadProductos()
     loadUnidadesMedida()
@@ -162,10 +165,44 @@ export function ProductosModule() {
     )
   }
 
-  // Filtrar productos según los filtros de columna (multiselect tipo Excel)
+  // Generar filtros externos para mostrar en la barra de filtros del DataTable
+  const externalFilters = useMemo(() => {
+    if (!activeStatCard) return []
+
+    const labels: Record<string, string> = {
+      total: 'Total',
+      herramientas: 'Herramientas',
+      repuestos: 'Repuestos',
+      retornables: 'Retornables'
+    }
+
+    return [{
+      id: activeStatCard,
+      label: labels[activeStatCard] || activeStatCard,
+      onClear: () => setActiveStatCard(null)
+    }]
+  }, [activeStatCard])
+
+  // Filtrar productos - STAT CARD PREVALECE sobre filtros de columna
   const filteredProductos = useMemo(() => {
     let result = productos
 
+    // Si hay stat card activo, SOLO aplicar ese filtro (ignorar filtros de columna)
+    if (activeStatCard) {
+      switch (activeStatCard) {
+        case 'herramientas':
+          return productos.filter(p => p.tipo === 'HERRAMIENTAS')
+        case 'repuestos':
+          return productos.filter(p => p.tipo === 'REPUESTOS')
+        case 'retornables':
+          return productos.filter(p => p.es_retornable)
+        case 'total':
+        default:
+          return productos
+      }
+    }
+
+    // Sin stat card activo → aplicar filtros de columna
     if (codigoFilter.length > 0) {
       result = result.filter(p =>
         codigoFilter.includes(p.codigo || '')
@@ -183,7 +220,7 @@ export function ProductosModule() {
     }
 
     return result
-  }, [productos, codigoFilter, nombreFilter, tipoFilter])
+  }, [productos, codigoFilter, nombreFilter, tipoFilter, activeStatCard])
 
   const loadProductos = async () => {
     try {
@@ -808,31 +845,43 @@ export function ProductosModule() {
 
   return (
     <div className="prod-module">
-      {/* Stats Cards - Estilo Bitacora */}
+      {/* Stats Cards - Estilo Bitacora (clickeables como filtros) */}
       <div className="prod-stats">
         <div className="prod-stats-grid">
-          <button className={`stat-card${tipoFilter.length === 0 ? ' active' : ''}`} onClick={() => setTipoFilter([])}>
+          <button
+            className={`stat-card${!activeStatCard ? ' active' : ''}`}
+            onClick={() => setActiveStatCard(null)}
+          >
             <Package size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.total}</span>
               <span className="stat-label">Total</span>
             </div>
           </button>
-          <button className={`stat-card${tipoFilter.length === 1 && tipoFilter[0] === 'herramienta' ? ' active' : ''}`} onClick={() => setTipoFilter(['herramienta'])}>
+          <button
+            className={`stat-card${activeStatCard === 'herramientas' ? ' active' : ''}`}
+            onClick={() => setActiveStatCard(activeStatCard === 'herramientas' ? null : 'herramientas')}
+          >
             <Wrench size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.herramientas}</span>
               <span className="stat-label">Herramientas</span>
             </div>
           </button>
-          <button className={`stat-card${tipoFilter.length === 1 && tipoFilter[0] === 'repuesto' ? ' active' : ''}`} onClick={() => setTipoFilter(['repuesto'])}>
+          <button
+            className={`stat-card${activeStatCard === 'repuestos' ? ' active' : ''}`}
+            onClick={() => setActiveStatCard(activeStatCard === 'repuestos' ? null : 'repuestos')}
+          >
             <Box size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.repuestos}</span>
               <span className="stat-label">Repuestos</span>
             </div>
           </button>
-          <button className={`stat-card${tipoFilter.length === 1 && tipoFilter[0] === 'retornable' ? ' active' : ''}`} onClick={() => setTipoFilter(['retornable'])}>
+          <button
+            className={`stat-card${activeStatCard === 'retornables' ? ' active' : ''}`}
+            onClick={() => setActiveStatCard(activeStatCard === 'retornables' ? null : 'retornables')}
+          >
             <Tag size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.retornables}</span>
@@ -858,6 +907,17 @@ export function ProductosModule() {
             </button>
           ) : undefined
         }
+        externalFilters={externalFilters}
+        onClearAllFilters={() => {
+          // Limpiar filtros de columna
+          setCodigoFilter([])
+          setCodigoSearch('')
+          setNombreFilter([])
+          setNombreSearch('')
+          setTipoFilter([])
+          // Limpiar stat card
+          setActiveStatCard(null)
+        }}
       />
 
       {/* Create Modal */}
