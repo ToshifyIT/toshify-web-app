@@ -113,27 +113,16 @@ export function CabifyModule() {
   const [accordionState, setAccordionState] = useState(INITIAL_ACCORDION_STATE)
 
   // Column filter states - Multiselect tipo Excel
-  const [companyFilter, setCompanyFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
 
   // Excel filter hook for portal-based dropdowns
   const { openFilterId, setOpenFilterId } = useExcelFilters()
-
-  // Valores únicos para filtros tipo Excel
-  const companiesUnicas = useMemo(() => {
-    const companies = drivers.map(d => d.companyName).filter(Boolean) as string[]
-    return [...new Set(companies)].sort()
-  }, [drivers])
 
   const estadoOptions = ['activo', 'inactivo']
 
   // Filtrar drivers según los filtros de columna
   const filteredDrivers = useMemo(() => {
     let result = drivers
-
-    if (companyFilter.length > 0) {
-      result = result.filter(d => companyFilter.includes(d.companyName || ''))
-    }
 
     if (estadoFilter.length > 0) {
       result = result.filter(d => {
@@ -143,7 +132,7 @@ export function CabifyModule() {
     }
 
     return result
-  }, [drivers, companyFilter, estadoFilter])
+  }, [drivers, estadoFilter])
 
   // Handlers
   const handleToggleAccordion = useCallback((key: AccordionKey) => {
@@ -158,9 +147,6 @@ export function CabifyModule() {
   const columns = useTableColumns(
     asignaciones,
     {
-      companyFilter,
-      setCompanyFilter,
-      companiesUnicas,
       estadoFilter,
       setEstadoFilter,
       estadoOptions,
@@ -380,7 +366,7 @@ function DriversWithoutAssignmentSection({
         </div>
         <div className="cabify-unassigned-summary">
           <span className="summary-item">
-            ${totals.totalGanancias.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+            {totals.totalGanancias.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 })}
           </span>
           <span className="summary-separator">•</span>
           <span className="summary-item">{totals.totalViajes} viajes</span>
@@ -404,7 +390,7 @@ function DriversWithoutAssignmentSection({
                 <span className="stat-score">Score {driver.score ? Number(driver.score).toFixed(2) : '0.00'}</span>
                 <span className="stat-separator">•</span>
                 <span className="stat-ganancias">
-                  ${Number(driver.gananciaTotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  {Number(driver.gananciaTotal || 0).toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -422,9 +408,6 @@ function DriversWithoutAssignmentSection({
 import type { AsignacionActiva } from '../../../services/asignacionesService'
 
 interface FilterState {
-  companyFilter: string[]
-  setCompanyFilter: (filters: string[]) => void
-  companiesUnicas: string[]
   estadoFilter: string[]
   setEstadoFilter: (filters: string[]) => void
   estadoOptions: string[]
@@ -438,11 +421,11 @@ function useTableColumns(
 ): ColumnDef<CabifyDriver, unknown>[] {
   return useMemo<ColumnDef<CabifyDriver, unknown>[]>(
     () => [
-      createCompanyColumnWithFilter(filters),
+      // COMPANYNAME column hidden per user request
       createConductorColumn(),
       createTextColumn('email', 'Email'),
       createTextColumn('nationalIdNumber', 'DNI'),
-      createEstadoSistemaColumn(asignaciones),
+      createModalidadColumn(asignaciones),
       createTextColumn('driverLicense', 'Licencia'),
       createTelefonoColumn(),
       createVehiculoColumn(),
@@ -466,28 +449,7 @@ function useTableColumns(
   )
 }
 
-// Columna de Compañía con filtro Excel
-function createCompanyColumnWithFilter(filters: FilterState): ColumnDef<CabifyDriver, unknown> {
-  return {
-    accessorKey: 'companyName',
-    header: () => (
-      <ExcelColumnFilter
-        label="Compañía"
-        options={filters.companiesUnicas}
-        selectedValues={filters.companyFilter}
-        onSelectionChange={filters.setCompanyFilter}
-        filterId="company"
-        openFilterId={filters.openFilterId}
-        onOpenChange={filters.setOpenFilterId}
-      />
-    ),
-    cell: ({ getValue }) => (
-      <span className="cabify-company">{(getValue() as string) || '-'}</span>
-    ),
-  }
-}
-
-// Columna de Estado con filtro Excel (reemplaza createEstadoColumn)
+// Columna de Estado con filtro Excel
 function createEstadoColumnWithFilter(filters: FilterState): ColumnDef<CabifyDriver, unknown> {
   return {
     accessorKey: 'disabled',
@@ -556,8 +518,16 @@ function createMoneyColumn(
     accessorKey: key,
     header,
     cell: ({ getValue }) => {
-      const value = `$${(getValue() as string) || '0.00'}`
-      return className ? <span className={className}>{value}</span> : value
+      const rawValue = getValue() as string | number
+      const numValue = Number(rawValue) || 0
+      // Formato pesos argentinos
+      const formatted = numValue.toLocaleString('es-AR', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })
+      return className ? <span className={className}>{formatted}</span> : formatted
     },
   }
 }
@@ -596,12 +566,12 @@ function createVehiculoColumn(): ColumnDef<CabifyDriver, unknown> {
   }
 }
 
-function createEstadoSistemaColumn(
+function createModalidadColumn(
   asignaciones: Map<string, AsignacionActiva>
 ): ColumnDef<CabifyDriver, unknown> {
   return {
-    id: 'estadoSistema',
-    header: 'Estado Sistema',
+    id: 'modalidad',
+    header: 'Modalidad',
     accessorFn: (row) => {
       const asig = row.nationalIdNumber
         ? asignaciones.get(row.nationalIdNumber)

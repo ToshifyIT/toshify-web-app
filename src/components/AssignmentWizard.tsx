@@ -41,6 +41,9 @@ interface Conductor {
     descripcion: string
   }
   tieneAsignacionActiva?: boolean
+  tieneAsignacionProgramada?: boolean
+  tieneAsignacionDiurna?: boolean
+  tieneAsignacionNocturna?: boolean
 }
 
 // Helper para formatear preferencia de turno
@@ -281,21 +284,42 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           c.conductores_estados?.codigo?.toLowerCase().includes('activo')
         ) as Conductor[]
 
-        // Verificar qué conductores tienen asignaciones activas
-        const { data: asignacionesActivas, error: asignacionesError } = await supabase
-          .from('asignaciones_conductores')
-          .select('conductor_id, asignaciones!inner(estado)')
-          .eq('asignaciones.estado', 'activa') as { data: { conductor_id: string }[] | null; error: any }
+        // Verificar qué conductores tienen asignaciones activas o programadas (con horario)
+        const [asignacionesActivasRes, asignacionesProgramadasRes] = await Promise.all([
+          supabase
+            .from('asignaciones_conductores')
+            .select('conductor_id, horario, asignaciones!inner(estado)')
+            .eq('asignaciones.estado', 'activa'),
+          supabase
+            .from('asignaciones_conductores')
+            .select('conductor_id, horario, asignaciones!inner(estado)')
+            .eq('asignaciones.estado', 'programado')
+        ])
 
-        if (asignacionesError) {
-          console.error('Error verificando asignaciones:', asignacionesError)
+        if (asignacionesActivasRes.error) {
+          console.error('Error verificando asignaciones activas:', asignacionesActivasRes.error)
+        }
+        if (asignacionesProgramadasRes.error) {
+          console.error('Error verificando asignaciones programadas:', asignacionesProgramadasRes.error)
         }
 
-        // Marcar conductores con asignación activa
-        const conductoresConEstado = conductoresActivos.map(conductor => ({
-          ...conductor,
-          tieneAsignacionActiva: asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false
-        }))
+        const asignacionesActivas = asignacionesActivasRes.data as { conductor_id: string; horario: string }[] | null
+        const asignacionesProgramadas = asignacionesProgramadasRes.data as { conductor_id: string; horario: string }[] | null
+
+        // Combinar asignaciones activas y programadas para verificar turnos ocupados
+        const todasAsignaciones = [...(asignacionesActivas || []), ...(asignacionesProgramadas || [])]
+
+        // Marcar conductores con asignación activa o programada, incluyendo turno específico
+        const conductoresConEstado = conductoresActivos.map(conductor => {
+          const asignacionesConductor = todasAsignaciones.filter(a => a.conductor_id === conductor.id)
+          return {
+            ...conductor,
+            tieneAsignacionActiva: asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false,
+            tieneAsignacionProgramada: asignacionesProgramadas?.some((a: any) => a.conductor_id === conductor.id) || false,
+            tieneAsignacionDiurna: asignacionesConductor.some(a => a.horario === 'diurno'),
+            tieneAsignacionNocturna: asignacionesConductor.some(a => a.horario === 'nocturno')
+          }
+        })
 
         setConductores(conductoresConEstado)
       } catch (error) {
@@ -560,6 +584,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     })
 
   // Filtrar y ordenar conductores: disponibles primero, luego activos
+  // Los conductores con asignaciones ocupadas aparecerán deshabilitados (no ocultos)
   const filteredAvailableConductores = availableConductores
     .filter(c => {
       // Filtro por búsqueda de texto (nombre, apellido o DNI)
@@ -581,7 +606,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       return matchesSearch && matchesStatus && matchesTurno
     })
     .sort((a, b) => {
-      // Disponibles primero (sin asignación activa), luego activos
+      // Ordenar por disponibilidad: disponibles primero, ocupados al final
+      // Calcular "peso" de ocupación (0 = disponible, 1 = un turno ocupado, 2 = ambos ocupados)
+      const pesoA = (a.tieneAsignacionDiurna ? 1 : 0) + (a.tieneAsignacionNocturna ? 1 : 0)
+      const pesoB = (b.tieneAsignacionDiurna ? 1 : 0) + (b.tieneAsignacionNocturna ? 1 : 0)
+      if (pesoA !== pesoB) return pesoA - pesoB
+
+      // Si mismo peso, ordenar por estado activo (disponibles primero)
       if (a.tieneAsignacionActiva === b.tieneAsignacionActiva) return 0
       return a.tieneAsignacionActiva ? 1 : -1
     })
@@ -1573,52 +1604,101 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           {conductorSearch ? 'No se encontraron conductores' : 'No hay conductores disponibles'}
                         </div>
                       ) : (
-                        filteredAvailableConductores.map((conductor) => (
-                          <div
-                            key={conductor.id}
-                            className="conductor-item"
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData('conductorId', conductor.id)
-                              e.dataTransfer.effectAllowed = 'move'
-                            }}
-                            style={{ cursor: 'grab' }}
-                          >
-                            <div className="conductor-avatar">
-                              {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
+                        filteredAvailableConductores.map((conductor) => {
+                          // Verificar si el conductor tiene turnos ocupados
+                          const ambosOcupados = conductor.tieneAsignacionDiurna && conductor.tieneAsignacionNocturna
+                          const algunoOcupado = conductor.tieneAsignacionDiurna || conductor.tieneAsignacionNocturna
+
+                          // En modo TURNO: deshabilitado solo si tiene AMBOS turnos ocupados
+                          // En modo CARGO: deshabilitado si tiene CUALQUIER turno ocupado
+                          const estaDeshabilitado = isTurnoMode ? ambosOcupados : algunoOcupado
+
+                          // Mensaje de turno ocupado
+                          let turnoOcupadoMsg = ''
+                          if (isTurnoMode) {
+                            if (ambosOcupados) {
+                              turnoOcupadoMsg = 'Ambos turnos ocupados'
+                            } else if (conductor.tieneAsignacionDiurna) {
+                              turnoOcupadoMsg = 'Turno diurno ocupado'
+                            } else if (conductor.tieneAsignacionNocturna) {
+                              turnoOcupadoMsg = 'Turno nocturno ocupado'
+                            }
+                          } else if (algunoOcupado) {
+                            // Modo CARGO
+                            turnoOcupadoMsg = 'Ya tiene asignación activa'
+                          }
+
+                          return (
+                            <div
+                              key={conductor.id}
+                              className="conductor-item"
+                              draggable={!estaDeshabilitado}
+                              onDragStart={(e) => {
+                                if (estaDeshabilitado) {
+                                  e.preventDefault()
+                                  return
+                                }
+                                e.dataTransfer.setData('conductorId', conductor.id)
+                                e.dataTransfer.effectAllowed = 'move'
+                              }}
+                              style={{
+                                cursor: estaDeshabilitado ? 'not-allowed' : 'grab',
+                                opacity: estaDeshabilitado ? 0.5 : 1,
+                                background: estaDeshabilitado ? '#f5f5f5' : undefined
+                              }}
+                              title={estaDeshabilitado ? turnoOcupadoMsg : ''}
+                            >
+                              <div className="conductor-avatar" style={{ opacity: estaDeshabilitado ? 0.5 : 1 }}>
+                                {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
+                              </div>
+                              <div className="conductor-info">
+                                <p className="conductor-name">
+                                  {conductor.nombres} {conductor.apellidos}
+                                </p>
+                                <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span>DNI: {conductor.numero_dni || '-'}</span>
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    background: getPreferenciaBadge(conductor.preferencia_turno).bg,
+                                    color: getPreferenciaBadge(conductor.preferencia_turno).color
+                                  }}>
+                                    {formatPreferencia(conductor.preferencia_turno)}
+                                  </span>
+                                </p>
+                                {turnoOcupadoMsg ? (
+                                  <span style={{
+                                    fontSize: '10px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    marginTop: '4px',
+                                    display: 'inline-block',
+                                    background: ambosOcupados ? '#FEE2E2' : '#FEF3C7',
+                                    color: ambosOcupados ? '#991B1B' : '#92400E'
+                                  }}>
+                                    {turnoOcupadoMsg}
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    fontSize: '10px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    marginTop: '4px',
+                                    display: 'inline-block',
+                                    background: conductor.tieneAsignacionActiva ? '#D1FAE5' : '#FEF3C7',
+                                    color: conductor.tieneAsignacionActiva ? '#065F46' : '#92400E'
+                                  }}>
+                                    {conductor.tieneAsignacionActiva ? 'Activo' : 'Disponible'}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="conductor-info">
-                              <p className="conductor-name">
-                                {conductor.nombres} {conductor.apellidos}
-                              </p>
-                              <p className="conductor-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                <span>DNI: {conductor.numero_dni || '-'}</span>
-                                <span style={{
-                                  fontSize: '9px',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  fontWeight: '600',
-                                  background: getPreferenciaBadge(conductor.preferencia_turno).bg,
-                                  color: getPreferenciaBadge(conductor.preferencia_turno).color
-                                }}>
-                                  {formatPreferencia(conductor.preferencia_turno)}
-                                </span>
-                              </p>
-                              <span style={{
-                                fontSize: '10px',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                fontWeight: '600',
-                                marginTop: '4px',
-                                display: 'inline-block',
-                                background: conductor.tieneAsignacionActiva ? '#D1FAE5' : '#FEF3C7',
-                                color: conductor.tieneAsignacionActiva ? '#065F46' : '#92400E'
-                              }}>
-                                {conductor.tieneAsignacionActiva ? 'Activo' : 'Disponible'}
-                              </span>
-                            </div>
-                          </div>
-                        ))
+                          )
+                        })
                       )}
                     </div>
                   </div>
@@ -1645,6 +1725,16 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                             e.currentTarget.classList.remove('drag-over')
                             const conductorId = e.dataTransfer.getData('conductorId')
                             if (conductorId) {
+                              const conductor = conductores.find(c => c.id === conductorId)
+                              if (conductor?.tieneAsignacionDiurna) {
+                                Swal.fire({
+                                  icon: 'warning',
+                                  title: 'Conductor no disponible',
+                                  text: `${conductor.nombres} ${conductor.apellidos} ya tiene una asignación activa o programada en el turno diurno.`,
+                                  confirmButtonColor: '#3085d6'
+                                })
+                                return
+                              }
                               handleSelectConductorDiurno(conductorId)
                             }
                           }}
@@ -1707,6 +1797,16 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                             e.currentTarget.classList.remove('drag-over')
                             const conductorId = e.dataTransfer.getData('conductorId')
                             if (conductorId) {
+                              const conductor = conductores.find(c => c.id === conductorId)
+                              if (conductor?.tieneAsignacionNocturna) {
+                                Swal.fire({
+                                  icon: 'warning',
+                                  title: 'Conductor no disponible',
+                                  text: `${conductor.nombres} ${conductor.apellidos} ya tiene una asignación activa o programada en el turno nocturno.`,
+                                  confirmButtonColor: '#3085d6'
+                                })
+                                return
+                              }
                               handleSelectConductorNocturno(conductorId)
                             }
                           }}
@@ -1772,6 +1872,16 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           e.currentTarget.classList.remove('drag-over')
                           const conductorId = e.dataTransfer.getData('conductorId')
                           if (conductorId) {
+                            const conductor = conductores.find(c => c.id === conductorId)
+                            if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
+                              Swal.fire({
+                                icon: 'warning',
+                                title: 'Conductor no disponible',
+                                text: `${conductor.nombres} ${conductor.apellidos} ya tiene una asignación activa o programada.`,
+                                confirmButtonColor: '#3085d6'
+                              })
+                              return
+                            }
                             handleSelectConductorCargo(conductorId)
                           }
                         }}

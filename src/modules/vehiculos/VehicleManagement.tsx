@@ -17,6 +17,28 @@ import { VehiculoWizard } from './components/VehiculoWizard'
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import './VehicleManagement.css'
 
+// Mapping de códigos de estado a etiquetas para mostrar en filtros y celdas
+const ESTADO_LABELS: Record<string, string> = {
+  'DISPONIBLE': 'Disponible',
+  'EN_USO': 'En Uso',
+  'CORPORATIVO': 'Corporativo',
+  'PKG_ON_BASE': 'PKG ON',
+  'PKG_OFF_BASE': 'PKG OFF',
+  'PKG_OFF_FRANCIA': 'PKG Francia',
+  'TALLER_AXIS': 'Taller Axis',
+  'TALLER_CHAPA_PINTURA': 'Chapa&Pintura',
+  'TALLER_ALLIANCE': 'Taller Alliance',
+  'TALLER_KALZALO': 'Taller Kalzalo',
+  'TALLER_BASE_VALIENTE': 'Base Valiente',
+  'INSTALACION_GNC': 'Inst. GNC',
+  'RETENIDO_COMISARIA': 'Retenido',
+  'ROBO': 'Robo',
+  'DESTRUCCION_TOTAL': 'Destrucción',
+  'JUBILADO': 'Jubilado',
+  'PROGRAMADO': 'Programado'
+}
+
+
 export function VehicleManagement() {
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,8 +78,9 @@ export function VehicleManagement() {
   const [patenteFilter, setPatenteFilter] = useState<string[]>([])
   const [marcaFilter, setMarcaFilter] = useState<string[]>([])
   const [modeloFilter, setModeloFilter] = useState<string[]>([])
-  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+  const [estadoFilter, setEstadoFilter] = useState<string[]>([]) // Filtro de columna Estado
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
+  const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]) // Filtro separado para stat cards
 
   // Excel filter hook for portal-based dropdowns
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -621,51 +644,71 @@ export function VehicleManagement() {
   }
 
   // Manejar click en stat cards para filtrar
+  // IMPORTANTE: NO limpiar filtros de columna - deben funcionar en conjunto con el stat card
   const handleStatCardClick = (cardType: string) => {
-    // Limpiar filtros de columna
-    setPatenteFilter([])
-    setMarcaFilter([])
-    setModeloFilter([])
-
-    // Si hace click en el mismo, desactivar
+    // Si hace click en el mismo, desactivar solo el filtro de stat card
     if (activeStatCard === cardType) {
       setActiveStatCard(null)
-      setEstadoFilter([])
+      setStatCardEstadoFilter([]) // Solo limpiar el filtro del stat card, NO el de columna
       return
     }
 
     setActiveStatCard(cardType)
 
-    // Definir estados para cada categoría
-    const estadosEnCochera = ['PKG_ON_BASE'] // Solo disponibles (listos para usar)
-    const estadosEnUso = ['EN_USO']
-    const estadosTallerMecanico = ['TALLER_AXIS', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_BASE_VALIENTE', 'INSTALACION_GNC']
-    const estadosChapaPintura = ['TALLER_CHAPA_PINTURA']
-    const estadosCorporativos = ['CORPORATIVO']
+    // Definir estados para cada categoría (usando labels formateados)
+    const estadosEnCochera = ['PKG ON'] // Solo disponibles (listos para usar)
+    const estadosEnUso = ['En Uso']
+    const estadosTallerMecanico = ['Taller Axis', 'Taller Alliance', 'Taller Kalzalo', 'Base Valiente', 'Inst. GNC']
+    const estadosChapaPintura = ['Chapa&Pintura']
+    const estadosCorporativos = ['Corporativo']
 
+    // Usar statCardEstadoFilter para no interferir con el filtro de columna
     switch (cardType) {
       case 'total':
-        setEstadoFilter([])
+        setStatCardEstadoFilter([])
         break
       case 'enCochera':
-        setEstadoFilter(estadosEnCochera)
+        setStatCardEstadoFilter(estadosEnCochera)
         break
       case 'enUso':
-        setEstadoFilter(estadosEnUso)
+        setStatCardEstadoFilter(estadosEnUso)
         break
       case 'tallerMecanico':
-        setEstadoFilter(estadosTallerMecanico)
+        setStatCardEstadoFilter(estadosTallerMecanico)
         break
       case 'chapaPintura':
-        setEstadoFilter(estadosChapaPintura)
+        setStatCardEstadoFilter(estadosChapaPintura)
         break
       case 'corporativos':
-        setEstadoFilter(estadosCorporativos)
+        setStatCardEstadoFilter(estadosCorporativos)
         break
       default:
-        setEstadoFilter([])
+        setStatCardEstadoFilter([])
     }
   }
+
+  // Generar filtros externos para mostrar en la barra de filtros del DataTable
+  const externalFilters = useMemo(() => {
+    if (!activeStatCard) return []
+
+    const labels: Record<string, string> = {
+      total: 'Total Flota',
+      enCochera: 'Disponibles',
+      enUso: 'En Uso',
+      tallerMecanico: 'Taller Mecánico',
+      chapaPintura: 'Chapa y Pintura',
+      corporativos: 'Corporativos'
+    }
+
+    return [{
+      id: activeStatCard,
+      label: labels[activeStatCard] || activeStatCard,
+      onClear: () => {
+        setActiveStatCard(null)
+        setStatCardEstadoFilter([]) // Solo limpiar el filtro del stat card
+      }
+    }]
+  }, [activeStatCard])
 
   // Extraer marcas y modelos únicos para autocomplete
   const marcasExistentes = useMemo(() => {
@@ -690,11 +733,12 @@ export function VehicleManagement() {
     return [...new Set(patentes)].sort()
   }, [vehiculos])
 
+  // Mostrar labels formateados en el filtro (en vez de códigos como EN_USO)
   const estadosUnicos = useMemo(() => {
-    return vehiculosEstados.map(e => e.codigo).sort()
+    return vehiculosEstados.map(e => ESTADO_LABELS[e.codigo] || e.codigo).sort()
   }, [vehiculosEstados])
 
-  // Filtrar vehículos según los filtros de columna (multiselect tipo Excel)
+  // Filtrar vehículos según los filtros de columna (multiselect tipo Excel) Y stat cards
   const filteredVehiculos = useMemo(() => {
     let result = vehiculos
 
@@ -716,10 +760,22 @@ export function VehicleManagement() {
       )
     }
 
+    // Filtro de columna Estado (desde ExcelColumnFilter)
     if (estadoFilter.length > 0) {
-      result = result.filter(v =>
-        estadoFilter.includes(v.vehiculos_estados?.codigo || '')
-      )
+      result = result.filter(v => {
+        const estadoCodigo = v.vehiculos_estados?.codigo || ''
+        const estadoLabel = ESTADO_LABELS[estadoCodigo] || estadoCodigo
+        return estadoFilter.includes(estadoLabel) || estadoFilter.includes(estadoCodigo)
+      })
+    }
+
+    // Filtro de Stat Card (ADICIONAL al filtro de columna)
+    if (statCardEstadoFilter.length > 0) {
+      result = result.filter(v => {
+        const estadoCodigo = v.vehiculos_estados?.codigo || ''
+        const estadoLabel = ESTADO_LABELS[estadoCodigo] || estadoCodigo
+        return statCardEstadoFilter.includes(estadoLabel) || statCardEstadoFilter.includes(estadoCodigo)
+      })
     }
 
     // Ordenar por estado: En Uso, PKG ON, PKG OFF, Chapa&Pintura, luego el resto
@@ -738,7 +794,7 @@ export function VehicleManagement() {
     })
 
     return result
-  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, estadoFilter])
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, estadoFilter, statCardEstadoFilter])
 
 
   // Definir columnas para TanStack Table
@@ -1089,6 +1145,7 @@ export function VehicleManagement() {
             + Crear Vehiculo
           </button>
         }
+        externalFilters={externalFilters}
       />
 
       {/* MODALS */}

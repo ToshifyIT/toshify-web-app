@@ -7,6 +7,7 @@ import { useState, useMemo } from 'react'
 import { useBitacoraData } from './hooks/useBitacoraData'
 import { BitacoraHeader, BitacoraStats, BitacoraTable } from './components'
 import './styles/bitacora.css'
+import '../styles/uss.css' // Para estilos del dropdown de fecha
 
 export function BitacoraModule() {
   const {
@@ -40,14 +41,6 @@ export function BitacoraModule() {
 
   return (
     <div className="bitacora-module">
-      <BitacoraHeader
-        dateRange={dateRange}
-        onDateRangePreset={setDateRangePreset}
-        onCustomDateRange={setCustomDateRange}
-        isLoading={queryState.loading}
-        lastUpdate={queryState.lastUpdate}
-      />
-
       {queryState.error && (
         <div className="bitacora-error">
           <p>{queryState.error}</p>
@@ -67,6 +60,15 @@ export function BitacoraModule() {
         onChecklistChange={updateChecklist}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
+        headerControls={
+          <BitacoraHeader
+            dateRange={dateRange}
+            onDateRangePreset={setDateRangePreset}
+            onCustomDateRange={setCustomDateRange}
+            isLoading={queryState.loading}
+            lastUpdate={queryState.lastUpdate}
+          />
+        }
       />
     </div>
   )
