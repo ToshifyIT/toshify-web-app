@@ -521,6 +521,66 @@
    AUDIT MODULE STYLES
    ===================================================== */
 
+/* Audit Tabs */
+.audit-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 4px;
+  border: 1px solid var(--border-primary);
+}
+
+.audit-tab {
+  flex: 1;
+  padding: 12px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.audit-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.audit-tab.active {
+  background: #FF0033;
+  color: white;
+}
+
+.audit-tab .tab-count {
+  background: rgba(255,255,255,0.2);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.audit-tab:not(.active) .tab-count {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 480px) {
+  .audit-tabs {
+    flex-direction: column;
+  }
+
+  .audit-tab {
+    padding: 14px 16px;
+  }
+}
+
 .audit-filters {
   background: var(--bg-primary);
   border-radius: 8px;

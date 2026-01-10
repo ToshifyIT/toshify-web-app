@@ -1,4 +1,4 @@
-// Edge Function: Create Google Drive Folder for Conductor
+// Edge Function: Create Google Drive Folder for Conductor or Vehiculo
 // Crea una carpeta en Google Drive usando Service Account
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -125,13 +125,21 @@ serve(async (req) => {
   }
 
   try {
+    // Obtener datos del request primero para saber qué tipo es
+    const body = await req.json()
+    const { tipo = 'conductor' } = body // 'conductor' o 'vehiculo'
+
     // Obtener credenciales de variables de entorno
     const clientEmail = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_EMAIL')
     const privateKey = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY')?.replace(/\\n/g, '\n')
-    const parentFolderId = Deno.env.get('GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID')
+
+    // Seleccionar carpeta padre según el tipo
+    const parentFolderId = tipo === 'vehiculo'
+      ? Deno.env.get('GOOGLE_DRIVE_VEHICULOS_FOLDER_ID')
+      : Deno.env.get('GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID')
 
     if (!clientEmail || !privateKey || !parentFolderId) {
-      throw new Error('Missing Google Drive configuration. Check environment variables.')
+      throw new Error(`Missing Google Drive configuration for ${tipo}. Check environment variables.`)
     }
 
     // Verificar autenticación Supabase
@@ -154,19 +162,33 @@ serve(async (req) => {
       throw new Error('Usuario no autenticado')
     }
 
-    // Obtener datos del request
-    const { conductorId, conductorNombre, conductorDni } = await req.json()
+    // Extraer datos del body según el tipo
+    const { conductorId, conductorNombre, conductorDni, vehiculoId, vehiculoPatente } = body
 
-    if (!conductorId || !conductorNombre) {
-      throw new Error('Faltan parámetros: conductorId y conductorNombre')
+    let entityId: string
+    let folderName: string
+    let tableName: string
+
+    if (tipo === 'vehiculo') {
+      if (!vehiculoId || !vehiculoPatente) {
+        throw new Error('Faltan parámetros: vehiculoId y vehiculoPatente')
+      }
+      entityId = vehiculoId
+      folderName = vehiculoPatente.toUpperCase()
+      tableName = 'vehiculos'
+    } else {
+      if (!conductorId || !conductorNombre) {
+        throw new Error('Faltan parámetros: conductorId y conductorNombre')
+      }
+      entityId = conductorId
+      // Crear nombre de carpeta: "DNI - NombreApellido" o "ID - NombreApellido"
+      folderName = conductorDni
+        ? `${conductorDni} - ${conductorNombre}`
+        : `${conductorId.slice(0, 8)} - ${conductorNombre}`
+      tableName = 'conductores'
     }
 
-    // Crear nombre de carpeta: "DNI - NombreApellido" o "ID - NombreApellido"
-    const folderName = conductorDni
-      ? `${conductorDni} - ${conductorNombre}`
-      : `${conductorId.slice(0, 8)} - ${conductorNombre}`
-
-    console.log('Creating folder:', folderName)
+    console.log(`Creating ${tipo} folder:`, folderName)
 
     // Obtener access token de Google
     const accessToken = await getGoogleAccessToken(clientEmail, privateKey)
@@ -176,18 +198,18 @@ serve(async (req) => {
 
     console.log('Folder created:', folder)
 
-    // Actualizar conductor con el link de la carpeta
+    // Actualizar la entidad con el link de la carpeta
     const { error: updateError } = await supabaseAdmin
-      .from('conductores')
+      .from(tableName)
       .update({
         url_documentacion: folder.webViewLink,
         drive_folder_id: folder.id,
         drive_folder_url: folder.webViewLink
       })
-      .eq('id', conductorId)
+      .eq('id', entityId)
 
     if (updateError) {
-      console.error('Error updating conductor:', updateError)
+      console.error(`Error updating ${tipo}:`, updateError)
       // No lanzar error, la carpeta ya se creó
     }
 

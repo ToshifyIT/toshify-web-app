@@ -3,10 +3,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { History, Eye, Filter, Calendar, User, Database } from 'lucide-react'
+import { History, Eye, Filter, Calendar, User, Database, Monitor, Users } from 'lucide-react'
 import Swal from 'sweetalert2'
 import './UserManagement.css'
 import './AdminStyles.css'
+
+type TabType = 'sistema' | 'usuarios'
 
 interface AuditLog {
   id: string
@@ -54,6 +56,8 @@ export function AuditModule() {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<TabType>('usuarios')
+  const [tabCounts, setTabCounts] = useState({ sistema: 0, usuarios: 0 })
 
   // Filtros
   const [filtroTabla, setFiltroTabla] = useState<string>('')
@@ -67,7 +71,29 @@ export function AuditModule() {
 
   useEffect(() => {
     loadLogs()
-  }, [filtroTabla, filtroAccion, filtroUsuario, filtroFechaInicio, filtroFechaFin])
+  }, [filtroTabla, filtroAccion, filtroUsuario, filtroFechaInicio, filtroFechaFin, activeTab])
+
+  // Cargar contadores de pestañas
+  useEffect(() => {
+    const loadCounts = async () => {
+      const [sistemaResult, usuariosResult] = await Promise.all([
+        supabase
+          .from('audit_log')
+          .select('id', { count: 'exact', head: true })
+          .or('usuario_nombre.is.null,usuario_nombre.eq.Sistema'),
+        supabase
+          .from('audit_log')
+          .select('id', { count: 'exact', head: true })
+          .not('usuario_nombre', 'is', null)
+          .neq('usuario_nombre', 'Sistema')
+      ])
+      setTabCounts({
+        sistema: sistemaResult.count || 0,
+        usuarios: usuariosResult.count || 0
+      })
+    }
+    loadCounts()
+  }, [])
 
   const loadLogs = async () => {
     setLoading(true)
@@ -79,6 +105,14 @@ export function AuditModule() {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(500)
+
+      // Filtrar por tipo de log (sistema o usuario)
+      if (activeTab === 'sistema') {
+        query = query.or('usuario_nombre.is.null,usuario_nombre.eq.Sistema')
+      } else {
+        query = query.not('usuario_nombre', 'is', null)
+          .neq('usuario_nombre', 'Sistema')
+      }
 
       // Aplicar filtros
       if (filtroTabla) {
@@ -260,17 +294,41 @@ export function AuditModule() {
     []
   )
 
-  // Estadísticas
+  // Los logs ya vienen filtrados del backend según la pestaña activa
+  const filteredLogs = logs
+
+
+  // Estadísticas basadas en los logs filtrados
   const stats = useMemo(() => {
-    const total = logs.length
-    const inserts = logs.filter(l => l.accion === 'INSERT').length
-    const updates = logs.filter(l => l.accion === 'UPDATE').length
-    const deletes = logs.filter(l => l.accion === 'DELETE').length
+    const total = filteredLogs.length
+    const inserts = filteredLogs.filter(l => l.accion === 'INSERT').length
+    const updates = filteredLogs.filter(l => l.accion === 'UPDATE').length
+    const deletes = filteredLogs.filter(l => l.accion === 'DELETE').length
     return { total, inserts, updates, deletes }
-  }, [logs])
+  }, [filteredLogs])
 
   return (
     <div className="admin-module">
+      {/* Tabs */}
+      <div className="audit-tabs">
+        <button
+          className={`audit-tab ${activeTab === 'usuarios' ? 'active' : ''}`}
+          onClick={() => setActiveTab('usuarios')}
+        >
+          <Users size={16} />
+          Logs de Usuarios
+          <span className="tab-count">{tabCounts.usuarios}</span>
+        </button>
+        <button
+          className={`audit-tab ${activeTab === 'sistema' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sistema')}
+        >
+          <Monitor size={16} />
+          Logs de Sistema
+          <span className="tab-count">{tabCounts.sistema}</span>
+        </button>
+      </div>
+
       {/* Stats Cards */}
       <div className="admin-stats">
         <div className="admin-stats-grid">
@@ -364,14 +422,14 @@ export function AuditModule() {
 
       {/* DataTable */}
       <DataTable
-        data={logs}
+        data={filteredLogs}
         columns={columns}
         loading={loading}
         error={error}
         searchPlaceholder="Buscar en registros..."
         emptyIcon={<History size={48} />}
-        emptyTitle="No hay registros de auditoría"
-        emptyDescription="Los cambios en el sistema aparecerán aquí"
+        emptyTitle={activeTab === 'usuarios' ? "No hay logs de usuarios" : "No hay logs de sistema"}
+        emptyDescription={activeTab === 'usuarios' ? "Las acciones realizadas por usuarios aparecerán aquí" : "Los cambios automáticos del sistema aparecerán aquí"}
         pageSize={20}
         pageSizeOptions={[20, 50, 100]}
       />

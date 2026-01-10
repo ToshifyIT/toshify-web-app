@@ -1,6 +1,6 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -26,6 +26,7 @@ export function VehicleManagement() {
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
+  const [creatingDriveFolder, setCreatingDriveFolder] = useState<string | null>(null)
 
   // Stats calculados desde datos cargados (ver calculatedStats useMemo)
 
@@ -507,6 +508,61 @@ export function VehicleManagement() {
     })
   }
 
+  // Crear carpeta en Google Drive para vehículo
+  const handleCreateDriveFolder = async (vehiculo: VehiculoWithRelations) => {
+    setCreatingDriveFolder(vehiculo.id)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData.session) {
+        throw new Error('No hay sesión activa')
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-drive-folder`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionData.session.access_token}`
+        },
+        body: JSON.stringify({
+          tipo: 'vehiculo',
+          vehiculoId: vehiculo.id,
+          vehiculoPatente: vehiculo.patente
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error al crear carpeta')
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Carpeta creada',
+        text: `Se creó la carpeta "${result.folderName}" en Google Drive`,
+        confirmButtonColor: '#E63946'
+      })
+
+      // Recargar datos para mostrar el nuevo link
+      await loadAllData()
+
+      // Abrir la carpeta en nueva pestaña
+      if (result.folderUrl) {
+        window.open(result.folderUrl, '_blank')
+      }
+    } catch (err: any) {
+      console.error('Error creando carpeta Drive:', err)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.message || 'No se pudo crear la carpeta en Drive',
+        confirmButtonColor: '#E63946'
+      })
+    } finally {
+      setCreatingDriveFolder(null)
+    }
+  }
+
   // Manejar click en stat cards para filtrar
   const handleStatCardClick = (cardType: string) => {
     // Limpiar filtros de columna
@@ -815,9 +871,10 @@ export function VehicleManagement() {
         header: 'Acciones',
         cell: ({ row }) => {
           const driveUrl = (row.original as any).drive_folder_url
+          const isCreatingFolder = creatingDriveFolder === row.original.id
           return (
             <div className="dt-actions">
-              {driveUrl && (
+              {driveUrl ? (
                 <a
                   href={driveUrl}
                   target="_blank"
@@ -828,6 +885,16 @@ export function VehicleManagement() {
                 >
                   <FolderOpen size={16} />
                 </a>
+              ) : (
+                <button
+                  className="dt-btn-action"
+                  style={{ color: '#6b7280', background: 'rgba(107, 114, 128, 0.1)' }}
+                  onClick={() => handleCreateDriveFolder(row.original)}
+                  disabled={isCreatingFolder}
+                  title="Crear carpeta en Drive"
+                >
+                  {isCreatingFolder ? <Loader2 size={16} className="animate-spin" /> : <FolderPlus size={16} />}
+                </button>
               )}
               <button
                 className="dt-btn-action dt-btn-view"
@@ -858,7 +925,7 @@ export function VehicleManagement() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, estadosUnicos]
+    [canUpdate, canDelete, patenteFilter, marcaFilter, modeloFilter, estadoFilter, openFilterId, patentesUnicas, marcasExistentes, modelosExistentes, estadosUnicos, creatingDriveFolder]
   )
 
   return (
