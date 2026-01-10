@@ -1,6 +1,7 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2, X, FileText, FileImage, File, ExternalLink } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2 } from 'lucide-react'
+import { DriveFilesModal } from '../../components/DriveFilesModal'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -617,25 +618,6 @@ export function VehicleManagement() {
     } finally {
       setLoadingDriveFiles(false)
     }
-  }
-
-  // Helper para obtener icono según tipo de archivo
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.includes('image')) return <FileImage size={20} className="text-blue-500" />
-    if (mimeType.includes('pdf')) return <FileText size={20} className="text-red-500" />
-    if (mimeType.includes('document') || mimeType.includes('word')) return <FileText size={20} className="text-blue-600" />
-    if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return <FileText size={20} className="text-green-600" />
-    if (mimeType.includes('folder')) return <FolderOpen size={20} className="text-yellow-500" />
-    return <File size={20} className="text-gray-500" />
-  }
-
-  // Helper para formatear tamaño de archivo
-  const formatFileSize = (bytes?: string) => {
-    if (!bytes) return ''
-    const size = parseInt(bytes)
-    if (size < 1024) return `${size} B`
-    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`
   }
 
   // Manejar click en stat cards para filtrar
@@ -1657,92 +1639,14 @@ export function VehicleManagement() {
       )}
 
       {/* Modal Drive Files */}
-      {showDriveModal && (
-        <div className="modal-overlay" onClick={() => setShowDriveModal(false)}>
-          <div className="modal-content" style={{ maxWidth: '700px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FolderOpen size={24} style={{ color: '#16a34a' }} />
-                {driveModalTitle}
-              </h2>
-              <button
-                className="modal-close"
-                onClick={() => setShowDriveModal(false)}
-                type="button"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="modal-body" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-              {loadingDriveFiles ? (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px' }}>
-                  <Loader2 size={32} className="animate-spin" style={{ color: '#16a34a' }} />
-                  <span style={{ marginLeft: '12px', color: '#666' }}>Cargando archivos...</span>
-                </div>
-              ) : driveFiles.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-                  <File size={48} style={{ marginBottom: '12px', opacity: 0.5 }} />
-                  <p>No hay archivos en esta carpeta</p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {driveFiles.map((file) => (
-                    <a
-                      key={file.id}
-                      href={file.webViewLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '12px 16px',
-                        background: '#f8f9fa',
-                        borderRadius: '8px',
-                        textDecoration: 'none',
-                        color: 'inherit',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.background = '#e9ecef'}
-                      onMouseOut={(e) => e.currentTarget.style.background = '#f8f9fa'}
-                    >
-                      {getFileIcon(file.mimeType)}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {file.name}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#666', display: 'flex', gap: '12px' }}>
-                          {file.size && <span>{formatFileSize(file.size)}</span>}
-                          <span>{new Date(file.modifiedTime).toLocaleDateString('es-AR')}</span>
-                        </div>
-                      </div>
-                      <ExternalLink size={16} style={{ color: '#999', flexShrink: 0 }} />
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <a
-                href={driveModalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-primary"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
-              >
-                <ExternalLink size={16} />
-                Abrir en Drive
-              </a>
-              <button
-                className="btn-secondary"
-                onClick={() => setShowDriveModal(false)}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DriveFilesModal
+        isOpen={showDriveModal}
+        onClose={() => setShowDriveModal(false)}
+        title={driveModalTitle}
+        driveUrl={driveModalUrl}
+        files={driveFiles}
+        loading={loadingDriveFiles}
+      />
     </div>
   )
 }
