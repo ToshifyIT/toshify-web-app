@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "PORT=3001 node server.js",
     "build": "tsc -b && vite build",
+    "start": "node server.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "sync:cabify": "npx tsx scripts/sync-cabify-historical.ts",
@@ -26,6 +28,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",
+    "express": "^4.21.2",
+    "googleapis": "^144.0.0",
     "@tanstack/react-table": "^8.21.3",
     "axios": "^1.13.2",
     "date-fns": "^4.1.0",
