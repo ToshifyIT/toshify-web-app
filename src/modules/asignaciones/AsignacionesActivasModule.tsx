@@ -204,15 +204,9 @@ export function AsignacionesActivasModule() {
     }
   }
 
+  // IMPORTANTE: NO limpiar filtros de columna - deben funcionar en conjunto con el stat card
   const handleStatCardClick = (filterType: string) => {
-    // Limpiar TODOS los filtros de columna primero
-    setCodigoFilter([])
-    setCodigoSearch('')
-    setVehiculoFilter([])
-    setVehiculoSearch('')
-    setModalidadFilter([])
-
-    // Toggle: si ya está activo, desactivar
+    // Toggle: si ya está activo, desactivar solo el filtro de stat card
     if (activeStatFilter === filterType) {
       setActiveStatFilter(null)
       return

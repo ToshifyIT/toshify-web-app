@@ -69,6 +69,10 @@ export function ProveedoresModule() {
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
+  // Stat card filter state - SEPARADO del filtro de columna
+  const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
+  const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([])
+
   useEffect(() => {
     loadProveedores()
   }, [])
@@ -113,16 +117,41 @@ export function ProveedoresModule() {
     )
   }
 
+  // Handler para stat cards - NO afecta el filtro de columna
+  const handleStatCardClick = (cardType: string) => {
+    if (activeStatCard === cardType) {
+      // Deseleccionar: limpia solo el filtro del stat card
+      setActiveStatCard(null)
+      setStatCardEstadoFilter([])
+      return
+    }
+
+    setActiveStatCard(cardType)
+    switch (cardType) {
+      case 'total':
+        setStatCardEstadoFilter([]) // Total muestra todos
+        break
+      case 'activos':
+        setStatCardEstadoFilter(['true'])
+        break
+      case 'inactivos':
+        setStatCardEstadoFilter(['false'])
+        break
+    }
+  }
+
   // Filtrar proveedores según los filtros de columna (multiselect tipo Excel)
   const filteredProveedores = useMemo(() => {
     let result = proveedores
 
+    // Filtro de columna Razón Social
     if (razonSocialFilter.length > 0) {
       result = result.filter(p =>
         razonSocialFilter.includes(p.razon_social || '')
       )
     }
 
+    // Filtro de columna Estado
     if (estadoFilter.length > 0) {
       result = result.filter(p => {
         const estadoStr = p.activo ? 'true' : 'false'
@@ -130,8 +159,16 @@ export function ProveedoresModule() {
       })
     }
 
+    // Filtro de Stat Card (ADICIONAL al filtro de columna)
+    if (statCardEstadoFilter.length > 0) {
+      result = result.filter(p => {
+        const estadoStr = p.activo ? 'true' : 'false'
+        return statCardEstadoFilter.includes(estadoStr)
+      })
+    }
+
     return result
-  }, [proveedores, razonSocialFilter, estadoFilter])
+  }, [proveedores, razonSocialFilter, estadoFilter, statCardEstadoFilter])
 
   const loadProveedores = async () => {
     try {
@@ -555,21 +592,30 @@ export function ProveedoresModule() {
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prov-stats">
         <div className="prov-stats-grid">
-          <button className={`stat-card${estadoFilter.length === 0 ? ' active' : ''}`} onClick={() => setEstadoFilter([])}>
+          <button
+            className={`stat-card${activeStatCard === 'total' ? ' active' : ''}`}
+            onClick={() => handleStatCardClick('total')}
+          >
             <Building2 size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.total}</span>
               <span className="stat-label">Total</span>
             </div>
           </button>
-          <button className={`stat-card${estadoFilter.length === 1 && estadoFilter[0] === 'activo' ? ' active' : ''}`} onClick={() => setEstadoFilter(['activo'])}>
+          <button
+            className={`stat-card${activeStatCard === 'activos' ? ' active' : ''}`}
+            onClick={() => handleStatCardClick('activos')}
+          >
             <CheckCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.activos}</span>
               <span className="stat-label">Activos</span>
             </div>
           </button>
-          <button className={`stat-card${estadoFilter.length === 1 && estadoFilter[0] === 'inactivo' ? ' active' : ''}`} onClick={() => setEstadoFilter(['inactivo'])}>
+          <button
+            className={`stat-card${activeStatCard === 'inactivos' ? ' active' : ''}`}
+            onClick={() => handleStatCardClick('inactivos')}
+          >
             <XCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{statsData.inactivos}</span>
@@ -595,6 +641,27 @@ export function ProveedoresModule() {
             </button>
           ) : undefined
         }
+        externalFilters={
+          activeStatCard && activeStatCard !== 'total'
+            ? [
+                {
+                  label: activeStatCard === 'activos' ? 'Estado: Activos' : 'Estado: Inactivos',
+                  onClear: () => {
+                    setActiveStatCard(null)
+                    setStatCardEstadoFilter([])
+                  }
+                }
+              ]
+            : undefined
+        }
+        onClearAllFilters={() => {
+          // Limpiar TODO: filtros de columna + stat cards
+          setRazonSocialFilter([])
+          setRazonSocialSearch('')
+          setEstadoFilter([])
+          setActiveStatCard(null)
+          setStatCardEstadoFilter([])
+        }}
       />
 
       {/* Create Modal */}

@@ -26,6 +26,7 @@ interface BitacoraTableProps {
   ) => Promise<void>
   searchTerm: string
   onSearchChange: (term: string) => void
+  headerControls?: React.ReactNode
 }
 
 export function BitacoraTable({
@@ -39,6 +40,7 @@ export function BitacoraTable({
   onChecklistChange,
   searchTerm,
   onSearchChange,
+  headerControls,
 }: BitacoraTableProps) {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const totalPages = Math.ceil(totalCount / pageSize)
@@ -347,7 +349,7 @@ export function BitacoraTable({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {/* Búsqueda externa */}
+      {/* Toolbar con búsqueda y controles */}
       <div className="dt-header-bar">
         <div className="dt-search-wrapper">
           <Search size={18} className="dt-search-icon" />
@@ -359,6 +361,7 @@ export function BitacoraTable({
             className="dt-search-input"
           />
         </div>
+        {headerControls}
         <span style={{ color: 'var(--text-secondary)', fontSize: '13px', whiteSpace: 'nowrap' }}>
           {totalCount.toLocaleString()} registros
         </span>

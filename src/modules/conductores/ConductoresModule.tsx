@@ -95,6 +95,11 @@ export function ConductoresModule() {
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
 
+  // Filtros separados para stat cards (no interfieren con filtros de columna)
+  const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]);
+  const [statCardAsignacionFilter, setStatCardAsignacionFilter] = useState<string[]>([]);
+  const [statCardLicenciaFilter, setStatCardLicenciaFilter] = useState(false);
+
   // Estados para modal de confirmación de baja
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
   const [affectedAssignments, setAffectedAssignments] = useState<any[]>([]);
@@ -227,26 +232,24 @@ export function ConductoresModule() {
   }, [conductores]);
 
   // Helper para manejar clicks en stat cards
+  // IMPORTANTE: Usar filtros separados para stat cards, NO los mismos que los filtros de columna
   const handleStatCardClick = (cardType: string) => {
-    // Limpiar todos los filtros primero
-    setNombreFilter([]);
-    setNombreSearch('');
-    setDniFilter([]);
-    setDniSearch('');
-    setCbuFilter([]);
-    setCbuSearch('');
-    setEstadoFilter([]);
-    setTurnoFilter([]);
-    setAsignacionFilter([]);
-    setLicenciaVencerFilter(false);
-
-    // Si se hace click en la misma card activa, solo limpiar
+    // Si se hace click en la misma card activa, solo desactivar el filtro de stat card
     if (activeStatCard === cardType) {
       setActiveStatCard(null);
+      // Solo limpiar los filtros de stat card, NO los filtros de columna
+      setStatCardEstadoFilter([]);
+      setStatCardAsignacionFilter([]);
+      setStatCardLicenciaFilter(false);
       return;
     }
 
-    // Aplicar filtro según el tipo de card
+    // Limpiar los filtros de stat card anteriores antes de aplicar el nuevo
+    setStatCardEstadoFilter([]);
+    setStatCardAsignacionFilter([]);
+    setStatCardLicenciaFilter(false);
+
+    // Aplicar filtro según el tipo de card (usando filtros de stat card)
     setActiveStatCard(cardType);
     switch (cardType) {
       case 'total':
@@ -254,22 +257,50 @@ export function ConductoresModule() {
         setActiveStatCard(null);
         break;
       case 'activos':
-        setEstadoFilter(['ACTIVO']);
+        setStatCardEstadoFilter(['ACTIVO']);
         break;
       case 'disponibles':
-        setAsignacionFilter(['disponible']);
+        setStatCardAsignacionFilter(['disponible']);
         break;
       case 'asignados':
-        setAsignacionFilter(['asignado']);
+        setStatCardAsignacionFilter(['asignado']);
         break;
       case 'baja':
-        setEstadoFilter(['BAJA']);
+        setStatCardEstadoFilter(['BAJA']);
         break;
       case 'licencias':
-        setLicenciaVencerFilter(true);
+        setStatCardLicenciaFilter(true);
         break;
     }
   };
+
+  // Generar filtros externos para mostrar en la barra de filtros del DataTable
+  const externalFilters = useMemo(() => {
+    if (!activeStatCard) return [];
+
+    const labels: Record<string, string> = {
+      total: 'Total',
+      activos: 'Activos',
+      disponibles: 'Disponibles',
+      asignados: 'Asignados',
+      baja: 'De Baja',
+      licencias: 'Licencias por Vencer'
+    };
+
+    // Solo limpiar filtros de stat card, mantener filtros de columna
+    const clearStatCardFilters = () => {
+      setActiveStatCard(null);
+      setStatCardEstadoFilter([]);
+      setStatCardAsignacionFilter([]);
+      setStatCardLicenciaFilter(false);
+    };
+
+    return [{
+      id: activeStatCard,
+      label: labels[activeStatCard] || activeStatCard,
+      onClear: clearStatCardFilters
+    }];
+  }, [activeStatCard]);
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo (conductores + catálogos)
   const loadAllData = async () => {
@@ -1334,10 +1365,11 @@ export function ConductoresModule() {
     );
   };
 
-  // Filtrar conductores según los filtros de columna (multiselect tipo Excel)
+  // Filtrar conductores según filtros de columna Y stat cards (ambos se aplican)
   const filteredConductores = useMemo(() => {
     let result = conductores;
 
+    // === FILTROS DE COLUMNA (desde ExcelColumnFilter) ===
     if (nombreFilter.length > 0) {
       result = result.filter(c =>
         nombreFilter.includes(`${c.nombres} ${c.apellidos}`)
@@ -1378,13 +1410,42 @@ export function ConductoresModule() {
       });
     }
 
-    // Filtro por licencias por vencer (próximos 30 días, solo activos CON asignación)
     if (licenciaVencerFilter) {
       const hoy = new Date();
       const en30Dias = new Date();
       en30Dias.setDate(en30Dias.getDate() + 30);
       result = result.filter(c => {
-        // Solo conductores activos CON asignación
+        const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
+        if (estadoCodigo !== 'activo') return false;
+        if (!(c as any).vehiculo_asignado) return false;
+        if (!c.licencia_vencimiento) return false;
+        const fechaVenc = new Date(c.licencia_vencimiento);
+        return fechaVenc >= hoy && fechaVenc <= en30Dias;
+      });
+    }
+
+    // === FILTROS DE STAT CARDS (adicionales, se aplican EN CONJUNTO con filtros de columna) ===
+    if (statCardEstadoFilter.length > 0) {
+      result = result.filter(c =>
+        statCardEstadoFilter.includes(c.conductores_estados?.codigo || '')
+      );
+    }
+
+    if (statCardAsignacionFilter.length > 0) {
+      result = result.filter(c => {
+        const tieneAsignacion = !!(c as any).vehiculo_asignado;
+        const esActivo = c.conductores_estados?.codigo?.toLowerCase() === 'activo';
+        if (statCardAsignacionFilter.includes('asignado') && tieneAsignacion) return true;
+        if (statCardAsignacionFilter.includes('disponible') && !tieneAsignacion && esActivo) return true;
+        return false;
+      });
+    }
+
+    if (statCardLicenciaFilter) {
+      const hoy = new Date();
+      const en30Dias = new Date();
+      en30Dias.setDate(en30Dias.getDate() + 30);
+      result = result.filter(c => {
         const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
         if (estadoCodigo !== 'activo') return false;
         if (!(c as any).vehiculo_asignado) return false;
@@ -1398,12 +1459,11 @@ export function ConductoresModule() {
     return result.sort((a, b) => {
       const estadoA = a.conductores_estados?.codigo?.toLowerCase();
       const estadoB = b.conductores_estados?.codigo?.toLowerCase();
-      // Activos primero (0), baja después (1), otros al final (2)
       const prioridadA = estadoA === 'activo' ? 0 : estadoA === 'baja' ? 1 : 2;
       const prioridadB = estadoB === 'activo' ? 0 : estadoB === 'baja' ? 1 : 2;
       return prioridadA - prioridadB;
     });
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter, licenciaVencerFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -1975,6 +2035,7 @@ export function ConductoresModule() {
             + Crear Conductor
           </button>
         }
+        externalFilters={externalFilters}
       />
 
       {/* Modales definidos en componente separado para reducir tamaño del archivo */}

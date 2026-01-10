@@ -193,6 +193,23 @@
   font-size: 13px;
 }
 
+.uss-date-apply-btn {
+  margin-top: 4px;
+  padding: 8px 16px;
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.uss-date-apply-btn:hover {
+  background-color: var(--color-primary-hover);
+}
+
 /* Filter Toggle */
 .uss-filter-toggle {
   display: flex;

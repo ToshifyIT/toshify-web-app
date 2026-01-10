@@ -183,20 +183,20 @@ export function AsignacionesModule() {
       return fechaCancelacion === hoyStr
     }).length
 
-    // Conductores por documento - entregas realizadas HOY
-    const conductoresCartaOfertaSet = new Set<string>()
-    const conductoresAnexoSet = new Set<string>()
+    // Conductores por documento - asignaciones ACTIVAS y PROGRAMADAS
+    // Contamos asignaciones (no conductores únicos) para que coincida con el filtro de la tabla
+    let asignacionesCartaOferta = 0
+    let asignacionesAnexo = 0
 
     for (const a of asignaciones) {
-      // Solo contar entregas realizadas hoy (estado finalizada con fecha_inicio de hoy)
-      if (a.estado !== 'finalizada' || !a.fecha_inicio) continue
-      const fechaEntrega = a.fecha_inicio.split('T')[0]
-      if (fechaEntrega !== hoyStr) continue
+      // Solo contar asignaciones activas o programadas
+      if (a.estado !== 'activa' && a.estado !== 'programado') continue
 
-      for (const c of a.asignaciones_conductores || []) {
-        if (c.documento === 'CARTA_OFERTA') conductoresCartaOfertaSet.add(c.conductor_id)
-        else if (c.documento === 'ANEXO') conductoresAnexoSet.add(c.conductor_id)
-      }
+      const tieneCartaOferta = (a.asignaciones_conductores || []).some(c => c.documento === 'CARTA_OFERTA')
+      const tieneAnexo = (a.asignaciones_conductores || []).some(c => c.documento === 'ANEXO')
+
+      if (tieneCartaOferta) asignacionesCartaOferta++
+      if (tieneAnexo) asignacionesAnexo++
     }
 
     return {
@@ -215,8 +215,8 @@ export function AsignacionesModule() {
       unidadesDisponibles,
       entregasCompletadasHoy,
       entregasCanceladasHoy,
-      conductoresCartaOferta: conductoresCartaOfertaSet.size,
-      conductoresAnexo: conductoresAnexoSet.size
+      conductoresCartaOferta: asignacionesCartaOferta,
+      conductoresAnexo: asignacionesAnexo
     }
   }, [vehiculosData, conductoresData, asignaciones])
 
@@ -311,8 +311,13 @@ export function AsignacionesModule() {
 
 
   // Filtrar solo por stat cards - los filtros de columna los maneja DataTable automáticamente
+  // IMPORTANTE: Los filtros deben coincidir EXACTAMENTE con lo que cuentan los stats
   const filteredAsignaciones = useMemo(() => {
     let result = asignaciones
+
+    // Calcular fecha de hoy para filtros de completadas/canceladas
+    const hoy = new Date()
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
 
     // Filtro por stat card activa
     switch (activeStatCard) {
@@ -323,18 +328,34 @@ export function AsignacionesModule() {
         result = result.filter(a => a.estado === 'activa')
         break
       case 'completadas':
-        result = result.filter(a => a.estado === 'finalizada')
+        // Completadas HOY - debe coincidir con el stat entregasCompletadasHoy
+        result = result.filter(a => {
+          if (a.estado !== 'finalizada' || !a.fecha_inicio) return false
+          const fechaEntrega = a.fecha_inicio.split('T')[0]
+          return fechaEntrega === hoyStr
+        })
         break
       case 'canceladas':
-        result = result.filter(a => a.estado === 'cancelada')
+        // Canceladas HOY - debe coincidir con el stat entregasCanceladasHoy
+        result = result.filter(a => {
+          if (a.estado !== 'cancelada') return false
+          const fechaRef = a.fecha_fin || a.created_at
+          if (!fechaRef) return false
+          const fechaCancelacion = fechaRef.split('T')[0]
+          return fechaCancelacion === hoyStr
+        })
         break
       case 'cartaOferta':
+        // Solo asignaciones ACTIVAS o PROGRAMADAS con Carta Oferta - coincide con stat
         result = result.filter(a =>
+          (a.estado === 'activa' || a.estado === 'programado') &&
           a.asignaciones_conductores?.some(c => c.documento === 'CARTA_OFERTA')
         )
         break
       case 'anexo':
+        // Solo asignaciones ACTIVAS o PROGRAMADAS con Anexo - coincide con stat
         result = result.filter(a =>
+          (a.estado === 'activa' || a.estado === 'programado') &&
           a.asignaciones_conductores?.some(c => c.documento === 'ANEXO')
         )
         break
@@ -426,6 +447,25 @@ export function AsignacionesModule() {
     // Toggle: si hace click en el mismo, desactivar; si no, activar el nuevo
     setActiveStatCard(prev => prev === cardType ? null : cardType)
   }
+
+  // Generar filtros externos para mostrar en la barra de filtros del DataTable
+  const externalFilters = useMemo(() => {
+    if (!activeStatCard) return []
+
+    const labels: Record<string, string> = {
+      programadas: 'Programadas',
+      completadas: 'Completadas Hoy',
+      canceladas: 'Canceladas Hoy',
+      cartaOferta: 'Carta Oferta (Activas/Prog.)',
+      anexo: 'Anexo (Activas/Prog.)'
+    }
+
+    return [{
+      id: activeStatCard,
+      label: labels[activeStatCard] || activeStatCard,
+      onClear: () => setActiveStatCard(null)
+    }]
+  }, [activeStatCard])
 
   const handleDelete = async (id: string) => {
     if (isSubmitting || !canDelete) return
@@ -749,6 +789,15 @@ export function AsignacionesModule() {
     {
       id: 'hora_entrega',
       header: 'Hora',
+      accessorFn: (row) => {
+        const estado = row.estado
+        const fechaMostrar = (estado === 'activa' || estado === 'finalizada')
+          ? row.fecha_inicio
+          : row.fecha_programada
+        return fechaMostrar
+          ? new Date(fechaMostrar).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+          : '-'
+      },
       cell: ({ row }) => {
         const estado = row.original.estado
         // Si está activa o finalizada, mostrar hora real de entrega (fecha_inicio)
@@ -769,6 +818,16 @@ export function AsignacionesModule() {
     {
       id: 'tipo_documento',
       header: 'Documento',
+      accessorFn: (row) => {
+        const conductores = row.asignaciones_conductores || []
+        const documentos = [...new Set(conductores.map((c: any) => c.documento).filter(Boolean))]
+        if (documentos.length === 0) return '-'
+        // Retornar solo el primer documento para el filtro (prioridad: CARTA_OFERTA > ANEXO > otros)
+        const primerDoc = documentos.includes('CARTA_OFERTA') ? 'CARTA_OFERTA'
+          : documentos.includes('ANEXO') ? 'ANEXO'
+          : documentos[0]
+        return primerDoc === 'CARTA_OFERTA' ? 'Carta Oferta' : primerDoc === 'ANEXO' ? 'Anexo' : 'N/A'
+      },
       cell: ({ row }) => {
         const conductores = row.original.asignaciones_conductores || []
         // Obtener documentos únicos de los conductores
@@ -962,6 +1021,7 @@ export function AsignacionesModule() {
             Nueva Asignación
           </button>
         }
+        externalFilters={externalFilters}
       />
 
       {/* Wizard Modal */}
