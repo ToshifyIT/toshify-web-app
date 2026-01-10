@@ -1961,6 +1961,7 @@ export function ConductoresModule() {
             ? 'Crea el primero usando el boton "+ Crear Conductor".'
             : ""
         }
+        disableAutoFilters={true}
         headerAction={
           <button
             className="btn-primary"

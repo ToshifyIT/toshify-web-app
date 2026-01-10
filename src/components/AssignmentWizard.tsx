@@ -41,6 +41,7 @@ interface Conductor {
     descripcion: string
   }
   tieneAsignacionActiva?: boolean
+  tieneAsignacionProgramada?: boolean
 }
 
 // Helper para formatear preferencia de turno
@@ -281,20 +282,33 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           c.conductores_estados?.codigo?.toLowerCase().includes('activo')
         ) as Conductor[]
 
-        // Verificar qué conductores tienen asignaciones activas
-        const { data: asignacionesActivas, error: asignacionesError } = await supabase
-          .from('asignaciones_conductores')
-          .select('conductor_id, asignaciones!inner(estado)')
-          .eq('asignaciones.estado', 'activa') as { data: { conductor_id: string }[] | null; error: any }
+        // Verificar qué conductores tienen asignaciones activas o programadas
+        const [asignacionesActivasRes, asignacionesProgramadasRes] = await Promise.all([
+          supabase
+            .from('asignaciones_conductores')
+            .select('conductor_id, asignaciones!inner(estado)')
+            .eq('asignaciones.estado', 'activa'),
+          supabase
+            .from('asignaciones_conductores')
+            .select('conductor_id, asignaciones!inner(estado)')
+            .eq('asignaciones.estado', 'programado')
+        ])
 
-        if (asignacionesError) {
-          console.error('Error verificando asignaciones:', asignacionesError)
+        if (asignacionesActivasRes.error) {
+          console.error('Error verificando asignaciones activas:', asignacionesActivasRes.error)
+        }
+        if (asignacionesProgramadasRes.error) {
+          console.error('Error verificando asignaciones programadas:', asignacionesProgramadasRes.error)
         }
 
-        // Marcar conductores con asignación activa
+        const asignacionesActivas = asignacionesActivasRes.data as { conductor_id: string }[] | null
+        const asignacionesProgramadas = asignacionesProgramadasRes.data as { conductor_id: string }[] | null
+
+        // Marcar conductores con asignación activa o programada
         const conductoresConEstado = conductoresActivos.map(conductor => ({
           ...conductor,
-          tieneAsignacionActiva: asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false
+          tieneAsignacionActiva: asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false,
+          tieneAsignacionProgramada: asignacionesProgramadas?.some((a: any) => a.conductor_id === conductor.id) || false
         }))
 
         setConductores(conductoresConEstado)
@@ -560,8 +574,12 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     })
 
   // Filtrar y ordenar conductores: disponibles primero, luego activos
+  // EXCLUIR conductores que ya tienen asignación programada pendiente
   const filteredAvailableConductores = availableConductores
     .filter(c => {
+      // NO mostrar conductores que ya tienen una asignación programada
+      if (c.tieneAsignacionProgramada) return false
+
       // Filtro por búsqueda de texto (nombre, apellido o DNI)
       const matchesSearch = c.nombres.toLowerCase().includes(conductorSearch.toLowerCase()) ||
         c.apellidos.toLowerCase().includes(conductorSearch.toLowerCase()) ||

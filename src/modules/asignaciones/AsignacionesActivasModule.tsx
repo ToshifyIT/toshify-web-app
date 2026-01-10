@@ -61,6 +61,7 @@ export function AsignacionesActivasModule() {
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null)
+  const [resetFiltersKey, setResetFiltersKey] = useState(0)
 
   // Column filter states - Multiselect tipo Excel
   const [codigoFilter, setCodigoFilter] = useState<string[]>([])
@@ -230,6 +231,8 @@ export function AsignacionesActivasModule() {
     setVehiculoSearch('')
     setModalidadFilter([])
     setActiveStatFilter(null)
+    // Reset DataTable internal filters
+    setResetFiltersKey(prev => prev + 1)
   }
 
   // Toggle functions para multiselect
@@ -1030,6 +1033,8 @@ export function AsignacionesActivasModule() {
         emptyIcon={<ClipboardList size={64} />}
         emptyTitle="No hay asignaciones activas"
         emptyDescription="Actualmente no hay asignaciones en estado activo"
+        disableAutoFilters={true}
+        resetFiltersKey={resetFiltersKey}
       />
 
       {/* Modal de Detalles */}

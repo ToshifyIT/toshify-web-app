@@ -60,6 +60,10 @@ export interface DataTableProps<T> {
   alwaysVisibleColumns?: string[];
   /** Número máximo de columnas a mostrar antes de colapsar (sin contar acciones) @default 6 */
   maxVisibleColumns?: number;
+  /** Key para resetear filtros internos - cuando cambia, se limpian todos los filtros */
+  resetFiltersKey?: number | string;
+  /** Desactiva los filtros automáticos de columna (para módulos con filtros personalizados) */
+  disableAutoFilters?: boolean;
 }
 
 export function DataTable<T>({
@@ -79,6 +83,8 @@ export function DataTable<T>({
   headerAction,
   alwaysVisibleColumns = ["acciones", "actions"],
   maxVisibleColumns = 0, // 0 = show all columns that fit
+  resetFiltersKey,
+  disableAutoFilters = false,
 }: DataTableProps<T>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -97,8 +103,10 @@ export function DataTable<T>({
 
   // Helper: Check if column is date type based on accessor key or data
   const isDateColumn = useCallback((colId: string): boolean => {
-    const dateKeywords = ['fecha', 'date', 'created', 'updated', 'vencimiento', 'entrega', 'inicio', 'fin'];
     const lowerColId = colId.toLowerCase();
+    // Excluir columnas de hora (tienen "hora" en el nombre pero no son fechas)
+    if (lowerColId.includes('hora')) return false;
+    const dateKeywords = ['fecha', 'date', 'created', 'updated', 'vencimiento', 'inicio', 'fin'];
     return dateKeywords.some(keyword => lowerColId.includes(keyword));
   }, []);
 
@@ -116,17 +124,79 @@ export function DataTable<T>({
     return value;
   }, []);
 
-  // Get unique values for a column (for select filter)
+  // Reset filters when resetFiltersKey changes
+  useEffect(() => {
+    if (resetFiltersKey !== undefined) {
+      setColumnFilters({});
+      setDateFilters({});
+      setOpenFilterId(null);
+    }
+  }, [resetFiltersKey]);
+
+  // Get data filtered by all columns EXCEPT the specified one (Excel behavior)
+  const getDataFilteredExcluding = useCallback((excludeColId: string): T[] => {
+    let result = [...data];
+
+    // Apply column filters except the excluded column
+    Object.entries(columnFilters).forEach(([colId, selectedValues]) => {
+      if (colId !== excludeColId && selectedValues.length > 0) {
+        result = result.filter((row) => {
+          const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
+          const strValue = value !== null && value !== undefined ? String(value) : '';
+          return selectedValues.includes(strValue);
+        });
+      }
+    });
+
+    // Apply date filters except the excluded column
+    Object.entries(dateFilters).forEach(([colId, range]) => {
+      if (colId !== excludeColId && (range.from || range.to)) {
+        result = result.filter((row) => {
+          const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
+          if (!value) return false;
+
+          const dateStr = String(value);
+          let dateValue: Date | null = null;
+          if (dateStr.includes('/')) {
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+              dateValue = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            }
+          } else {
+            dateValue = new Date(dateStr);
+          }
+
+          if (!dateValue || isNaN(dateValue.getTime())) return false;
+
+          if (range.from) {
+            const fromDate = new Date(range.from);
+            if (dateValue < fromDate) return false;
+          }
+          if (range.to) {
+            const toDate = new Date(range.to);
+            toDate.setHours(23, 59, 59, 999);
+            if (dateValue > toDate) return false;
+          }
+          return true;
+        });
+      }
+    });
+
+    return result;
+  }, [data, columnFilters, dateFilters, getNestedValueForFilter]);
+
+  // Get unique values for a column from data filtered by OTHER columns (Excel behavior)
   const getUniqueValues = useCallback((colId: string): string[] => {
+    const filteredByOthers = getDataFilteredExcluding(colId);
     const values = new Set<string>();
-    data.forEach((row) => {
+    filteredByOthers.forEach((row) => {
       const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
       if (value !== null && value !== undefined && value !== '') {
         values.add(String(value));
       }
     });
     return Array.from(values).sort();
-  }, [data, getNestedValueForFilter]);
+  }, [getDataFilteredExcluding, getNestedValueForFilter]);
 
   // Filter data based on column filters and date filters
   const filteredData = useMemo(() => {
@@ -441,14 +511,24 @@ export function DataTable<T>({
     );
   }, [openFilterId, columnFilters, dateFilters, isDateColumn, getUniqueValues]);
 
-  // Wrap columns with auto-filters
+  // Wrap columns with auto-filters (if enabled)
   const columnsWithFilters = useMemo(() => {
+    // If auto-filters are disabled, return columns as-is
+    if (disableAutoFilters) {
+      return visibleColumns;
+    }
+
     return visibleColumns.map(col => {
       const colDef = col as { accessorKey?: string; id?: string; header?: unknown };
       const colId = colDef.accessorKey || colDef.id || "";
 
       // Skip if no accessorKey (custom columns like expand)
       if (!colId) return col;
+
+      // Skip if header is already a custom function (module has its own filter)
+      if (typeof colDef.header === 'function') {
+        return col;
+      }
 
       // Get original header label
       let headerLabel = colId.split('.').pop() || colId;
@@ -462,7 +542,7 @@ export function DataTable<T>({
         header: () => <FilterHeader colId={colId} label={headerLabel} />,
       } as ColumnDef<T, unknown>;
     });
-  }, [visibleColumns, FilterHeader]);
+  }, [visibleColumns, FilterHeader, disableAutoFilters]);
 
   // Memoize final columns to prevent unnecessary re-renders that reset expand state
   const finalColumns = useMemo<ColumnDef<T, unknown>[]>(() => {
