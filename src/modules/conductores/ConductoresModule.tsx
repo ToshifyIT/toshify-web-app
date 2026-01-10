@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, Filter, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
@@ -91,8 +91,9 @@ export function ConductoresModule() {
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
-  const [licenciaVencerFilter] = useState(false);
+  const [licenciaVencerFilter, setLicenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
+  const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
 
   // Estados para modal de confirmación de baja
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
@@ -174,6 +175,101 @@ export function ConductoresModule() {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [openColumnFilter]);
+
+  // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
+  const calculatedStats = useMemo(() => {
+    const hoy = new Date();
+    const en30Dias = new Date();
+    en30Dias.setDate(en30Dias.getDate() + 30);
+    const hoyStr = hoy.toISOString().split('T')[0];
+    const en30DiasStr = en30Dias.toISOString().split('T')[0];
+
+    // Calcular todo en UNA SOLA PASADA
+    let totalConductores = 0;
+    let conductoresActivos = 0;
+    let conductoresBaja = 0;
+    let conductoresAsignados = 0;
+    let licenciasPorVencer = 0;
+
+    for (const c of conductores) {
+      totalConductores++;
+
+      const estadoCodigo = (c as any).conductores_estados?.codigo?.toLowerCase();
+
+      if (estadoCodigo === 'activo') {
+        conductoresActivos++;
+      } else if (estadoCodigo === 'baja') {
+        conductoresBaja++;
+      }
+
+      // Verificar si tiene vehículo asignado
+      if ((c as any).vehiculo_asignado) {
+        conductoresAsignados++;
+      }
+
+      // Licencias por vencer (solo conductores activos CON asignación)
+      const vencimiento = c.licencia_vencimiento;
+      if (estadoCodigo === 'activo' && (c as any).vehiculo_asignado && vencimiento && vencimiento >= hoyStr && vencimiento <= en30DiasStr) {
+        licenciasPorVencer++;
+      }
+    }
+
+    const conductoresDisponibles = Math.max(0, conductoresActivos - conductoresAsignados);
+
+    return {
+      totalConductores,
+      conductoresActivos,
+      conductoresDisponibles,
+      conductoresAsignados,
+      conductoresBaja,
+      licenciasPorVencer,
+    };
+  }, [conductores]);
+
+  // Helper para manejar clicks en stat cards
+  const handleStatCardClick = (cardType: string) => {
+    // Limpiar todos los filtros primero
+    setNombreFilter([]);
+    setNombreSearch('');
+    setDniFilter([]);
+    setDniSearch('');
+    setCbuFilter([]);
+    setCbuSearch('');
+    setEstadoFilter([]);
+    setTurnoFilter([]);
+    setAsignacionFilter([]);
+    setLicenciaVencerFilter(false);
+
+    // Si se hace click en la misma card activa, solo limpiar
+    if (activeStatCard === cardType) {
+      setActiveStatCard(null);
+      return;
+    }
+
+    // Aplicar filtro según el tipo de card
+    setActiveStatCard(cardType);
+    switch (cardType) {
+      case 'total':
+        // No aplicar filtro, mostrar todos
+        setActiveStatCard(null);
+        break;
+      case 'activos':
+        setEstadoFilter(['ACTIVO']);
+        break;
+      case 'disponibles':
+        setAsignacionFilter(['disponible']);
+        break;
+      case 'asignados':
+        setAsignacionFilter(['asignado']);
+        break;
+      case 'baja':
+        setEstadoFilter(['BAJA']);
+        break;
+      case 'licencias':
+        setLicenciaVencerFilter(true);
+        break;
+    }
+  };
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo (conductores + catálogos)
   const loadAllData = async () => {
@@ -1801,6 +1897,56 @@ export function ConductoresModule() {
 
   return (
     <div className="cond-module">
+      {/* Stats Cards */}
+      <div className="cond-stats">
+        <div className="cond-stats-grid">
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'asignados' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('asignados')}
+            title="Conductores activos con vehículo asignado"
+          >
+            <UserCheck size={18} className="stat-icon" style={{ color: '#22C55E' }} />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.conductoresAsignados}</span>
+              <span className="stat-label">Activos con Auto</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'disponibles' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('disponibles')}
+            title="Conductores activos esperando vehículo"
+          >
+            <Clock size={18} className="stat-icon" style={{ color: '#F59E0B' }} />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.conductoresDisponibles}</span>
+              <span className="stat-label">En Espera</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'baja' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('baja')}
+            title="Conductores de baja"
+          >
+            <UserX size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.conductoresBaja}</span>
+              <span className="stat-label">Bajas</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('licencias')}
+            title="Licencias por vencer en los próximos 30 días (solo conductores con asignación)"
+          >
+            <AlertTriangle size={18} className="stat-icon" style={{ color: '#EF4444' }} />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.licenciasPorVencer}</span>
+              <span className="stat-label">Lic. por Vencer</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* DataTable with integrated action button */}
       <DataTable
         data={filteredConductores}
