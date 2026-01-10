@@ -35,11 +35,13 @@ interface StockProducto {
 }
 
 type FilterCategoria = 'all' | 'maquinaria' | 'herramientas' | 'repuestos' | 'insumos'
+type FilterEstadoStock = 'all' | 'disponible' | 'en_uso' | 'en_transito' | 'dañado' | 'perdido'
 
 export function InventarioDashboardModule() {
   const [stockProductos, setStockProductos] = useState<StockProducto[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterCategoria>('all')
+  const [filterEstadoStock, setFilterEstadoStock] = useState<FilterEstadoStock>('all')
 
   // Excel-style column filter states con Portal
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -131,9 +133,44 @@ export function InventarioDashboardModule() {
     [...new Set(categoryFilteredData.map(p => p.es_retornable ? 'Herramienta' : 'Repuesto'))],
     [categoryFilteredData]
   )
-  // Final filtered data with column filters
+  // Generar filtros externos para mostrar en la barra de filtros del DataTable
+  const externalFilters = useMemo(() => {
+    if (filterEstadoStock === 'all') return []
+
+    const labels: Record<string, string> = {
+      disponible: 'Disponible',
+      en_uso: 'En Uso',
+      en_transito: 'En Tránsito',
+      dañado: 'Dañado',
+      perdido: 'Perdido'
+    }
+
+    return [{
+      id: filterEstadoStock,
+      label: labels[filterEstadoStock] || filterEstadoStock,
+      onClear: () => setFilterEstadoStock('all')
+    }]
+  }, [filterEstadoStock])
+
+  // Final filtered data - STAT CARD PREVALECE sobre filtros de columna
   const filteredData = useMemo(() => {
     let data = categoryFilteredData
+
+    // Si hay stat card de estado activo, SOLO aplicar ese filtro (ignorar filtros de columna)
+    if (filterEstadoStock !== 'all') {
+      return categoryFilteredData.filter(p => {
+        switch (filterEstadoStock) {
+          case 'disponible': return p.disponible > 0
+          case 'en_uso': return p.en_uso > 0
+          case 'en_transito': return p.en_transito > 0
+          case 'dañado': return p.dañado > 0
+          case 'perdido': return p.perdido > 0
+          default: return true
+        }
+      })
+    }
+
+    // Sin stat card activo → aplicar filtros de columna
     if (codigoFilter.length > 0) {
       data = data.filter(p => codigoFilter.includes(p.codigo))
     }
@@ -149,8 +186,9 @@ export function InventarioDashboardModule() {
     if (categoriaFilter.length > 0) {
       data = data.filter(p => p.categoria && categoriaFilter.includes(p.categoria))
     }
+
     return data
-  }, [categoryFilteredData, codigoFilter, nombreFilter, tipoFilter, categoriaFilter])
+  }, [categoryFilteredData, codigoFilter, nombreFilter, tipoFilter, categoriaFilter, filterEstadoStock])
 
   // Calcular totales generales
   // Stock Total = Disponible + En Uso + En Tránsito (NO incluye dañado ni perdido)
@@ -352,45 +390,63 @@ export function InventarioDashboardModule() {
         </button>
       </div>
 
-      {/* Stats Cards - Estilo Bitacora */}
+      {/* Stats Cards - Estado de Stock (clickeables como filtros) */}
       <div className="inv-stats">
         <div className="inv-stats-grid">
-          <button className={`stat-card${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>
+          <button
+            className={`stat-card${filterEstadoStock === 'all' ? ' active' : ''}`}
+            onClick={() => setFilterEstadoStock(filterEstadoStock === 'all' ? 'all' : 'all')}
+          >
             <Package size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{filteredData.length}</span>
+              <span className="stat-value">{categoryFilteredData.length}</span>
               <span className="stat-label">Productos</span>
             </div>
           </button>
-          <button className="stat-card" onClick={() => setFilter('all')}>
+          <button
+            className={`stat-card${filterEstadoStock === 'disponible' ? ' active' : ''}`}
+            onClick={() => setFilterEstadoStock(filterEstadoStock === 'disponible' ? 'all' : 'disponible')}
+          >
             <CheckCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.disponible}</span>
               <span className="stat-label">Disponible</span>
             </div>
           </button>
-          <button className="stat-card" onClick={() => setFilter('all')}>
+          <button
+            className={`stat-card${filterEstadoStock === 'en_uso' ? ' active' : ''}`}
+            onClick={() => setFilterEstadoStock(filterEstadoStock === 'en_uso' ? 'all' : 'en_uso')}
+          >
             <Activity size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.en_uso}</span>
               <span className="stat-label">En Uso</span>
             </div>
           </button>
-          <button className="stat-card" onClick={() => setFilter('all')}>
+          <button
+            className={`stat-card${filterEstadoStock === 'en_transito' ? ' active' : ''}`}
+            onClick={() => setFilterEstadoStock(filterEstadoStock === 'en_transito' ? 'all' : 'en_transito')}
+          >
             <Truck size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.en_transito}</span>
               <span className="stat-label">En Tránsito</span>
             </div>
           </button>
-          <button className="stat-card" onClick={() => setFilter('all')}>
+          <button
+            className={`stat-card${filterEstadoStock === 'dañado' ? ' active' : ''}`}
+            onClick={() => setFilterEstadoStock(filterEstadoStock === 'dañado' ? 'all' : 'dañado')}
+          >
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.dañado}</span>
               <span className="stat-label">Dañado</span>
             </div>
           </button>
-          <button className="stat-card" onClick={() => setFilter('all')}>
+          <button
+            className={`stat-card${filterEstadoStock === 'perdido' ? ' active' : ''}`}
+            onClick={() => setFilterEstadoStock(filterEstadoStock === 'perdido' ? 'all' : 'perdido')}
+          >
             <XCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{totales.perdido}</span>
@@ -412,6 +468,15 @@ export function InventarioDashboardModule() {
         showSearch={true}
         showPagination={true}
         pageSize={20}
+        externalFilters={externalFilters}
+        onClearAllFilters={() => {
+          // Limpiar filtros de columna
+          setCodigoFilter([])
+          setNombreFilter([])
+          setTipoFilter([])
+          // Limpiar stat card de estado
+          setFilterEstadoStock('all')
+        }}
       />
     </div>
   )

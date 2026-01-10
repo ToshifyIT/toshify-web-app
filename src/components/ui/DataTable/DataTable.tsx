@@ -160,14 +160,18 @@ export function DataTable<T>({
   const getDataFilteredExcluding = useCallback((excludeColId: string): T[] => {
     let result = [...data];
 
-    // Apply column filters except the excluded column
+    // Apply column filters except the excluded column - case-insensitive matching
     Object.entries(columnFilters).forEach(([colId, selectedValues]) => {
       if (colId !== excludeColId && selectedValues.length > 0) {
+        // Normalize selected values for comparison
+        const normalizedSelected = selectedValues.map(v => v.toUpperCase().trim().replace(/\s+/g, ' '));
         result = result.filter((row) => {
           const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
-          // Trim to match how we store unique values
-          const strValue = value !== null && value !== undefined ? String(value).trim() : '';
-          return selectedValues.includes(strValue);
+          // Normalize: trim, collapse multiple spaces, uppercase for comparison
+          const strValue = value !== null && value !== undefined
+            ? String(value).trim().replace(/\s+/g, ' ').toUpperCase()
+            : '';
+          return normalizedSelected.includes(strValue);
         });
       }
     });
@@ -212,32 +216,42 @@ export function DataTable<T>({
   // Get unique values for a column from data filtered by OTHER columns (Excel behavior)
   const getUniqueValues = useCallback((colId: string): string[] => {
     const filteredByOthers = getDataFilteredExcluding(colId);
-    const values = new Set<string>();
+    // Map: normalizedKey -> originalValue (keep first occurrence)
+    const uniqueMap = new Map<string, string>();
     filteredByOthers.forEach((row) => {
       const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
       if (value !== null && value !== undefined && value !== '') {
-        // Trim whitespace to avoid duplicates that look identical
-        const trimmedValue = String(value).trim();
-        if (trimmedValue) {
-          values.add(trimmedValue);
+        // Normalize: trim, collapse multiple spaces, and use uppercase for comparison
+        const trimmedValue = String(value).trim().replace(/\s+/g, ' ');
+        const normalizedKey = trimmedValue.toUpperCase();
+        // Keep the first occurrence (to preserve original casing)
+        if (trimmedValue && !uniqueMap.has(normalizedKey)) {
+          uniqueMap.set(normalizedKey, trimmedValue);
         }
       }
     });
-    return Array.from(values).sort();
+    // Return original values sorted
+    return Array.from(uniqueMap.values()).sort((a, b) =>
+      a.toUpperCase().localeCompare(b.toUpperCase())
+    );
   }, [getDataFilteredExcluding, getNestedValueForFilter]);
 
   // Filter data based on column filters and date filters
   const filteredData = useMemo(() => {
     let result = [...data];
 
-    // Apply column filters (text/select)
+    // Apply column filters (text/select) - case-insensitive matching
     Object.entries(columnFilters).forEach(([colId, selectedValues]) => {
       if (selectedValues.length > 0) {
+        // Normalize selected values for comparison
+        const normalizedSelected = selectedValues.map(v => v.toUpperCase().trim().replace(/\s+/g, ' '));
         result = result.filter((row) => {
           const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
-          // Trim to match how we store unique values
-          const strValue = value !== null && value !== undefined ? String(value).trim() : '';
-          return selectedValues.includes(strValue);
+          // Normalize: trim, collapse multiple spaces, uppercase for comparison
+          const strValue = value !== null && value !== undefined
+            ? String(value).trim().replace(/\s+/g, ' ').toUpperCase()
+            : '';
+          return normalizedSelected.includes(strValue);
         });
       }
     });
