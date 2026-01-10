@@ -1,8 +1,6 @@
 // src/services/driveService.ts
 // Servicio para integración con Google Drive
 
-import { supabase } from '../lib/supabase'
-
 interface CreateFolderResponse {
   success: boolean
   folderId?: string
@@ -24,37 +22,23 @@ export async function createConductorDriveFolder(
   conductorDni?: string | null
 ): Promise<CreateFolderResponse> {
   try {
-    // Obtener sesión actual para el token
-    const { data: { session } } = await supabase.auth.getSession()
-
-    if (!session?.access_token) {
-      throw new Error('No hay sesión activa')
-    }
-
-    // Obtener URL base de Supabase
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-
-    // Llamar a la Edge Function
-    const response = await fetch(
-      `${supabaseUrl}/functions/v1/create-drive-folder`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conductorId,
-          conductorNombre,
-          conductorDni: conductorDni || undefined
-        })
-      }
-    )
+    const response = await fetch('/api/create-drive-folder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tipo: 'conductor',
+        conductorId,
+        conductorNombre,
+        conductorDni: conductorDni || undefined
+      })
+    })
 
     const data = await response.json()
 
     if (!response.ok) {
-      console.error('Error from Edge Function:', data)
+      console.error('Error creating folder:', data)
       return {
         success: false,
         error: data.error || 'Error al crear carpeta en Drive'

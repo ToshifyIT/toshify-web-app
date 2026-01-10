@@ -528,16 +528,10 @@ export function VehicleManagement() {
   const handleCreateDriveFolder = async (vehiculo: VehiculoWithRelations) => {
     setCreatingDriveFolder(vehiculo.id)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      if (!sessionData.session) {
-        throw new Error('No hay sesión activa')
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-drive-folder`, {
+      const response = await fetch('/api/create-drive-folder', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionData.session.access_token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           tipo: 'vehiculo',
@@ -551,6 +545,12 @@ export function VehicleManagement() {
       if (!response.ok) {
         throw new Error(result.error || 'Error al crear carpeta')
       }
+
+      // Guardar URL en la base de datos
+      await (supabase as any)
+        .from('vehiculos')
+        .update({ drive_folder_url: result.folderUrl })
+        .eq('id', vehiculo.id)
 
       Swal.fire({
         icon: 'success',
