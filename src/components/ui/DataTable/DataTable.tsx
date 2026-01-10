@@ -116,10 +116,11 @@ export function DataTable<T>({
       const width = tableWrapperRef.current.offsetWidth;
 
       // Calculate how many columns can fit
-      // Use smaller avg width for better responsiveness
-      const avgColWidth = 120;
-      const actionsWidth = 120;
-      const availableWidth = width - actionsWidth;
+      // Use conservative width estimate (100px) to show more columns
+      const avgColWidth = 100;
+      const actionsWidth = 140;
+      const expandBtnWidth = 50;
+      const availableWidth = width - actionsWidth - expandBtnWidth;
       const fittingColumns = Math.floor(availableWidth / avgColWidth);
 
       // Show all columns that fit, minimum 2, maximum is total columns or maxVisibleColumns
@@ -135,9 +136,14 @@ export function DataTable<T>({
       setVisibleColumnCount(newCount);
     }
 
+    // Run on mount and after a small delay to ensure container is sized
     handleResize();
+    const timer = setTimeout(handleResize, 100);
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", handleResize);
+    };
   }, [maxVisibleColumns, columns, alwaysVisibleColumns]);
 
   // Separate columns into visible and hidden - memoized to prevent unnecessary re-renders
@@ -298,9 +304,10 @@ export function DataTable<T>({
   const resetColumns = () => {
     if (tableWrapperRef.current) {
       const width = tableWrapperRef.current.offsetWidth;
-      const avgColWidth = 120;
-      const actionsWidth = 120;
-      const availableWidth = width - actionsWidth;
+      const avgColWidth = 100;
+      const actionsWidth = 140;
+      const expandBtnWidth = 50;
+      const availableWidth = width - actionsWidth - expandBtnWidth;
       const fittingColumns = Math.floor(availableWidth / avgColWidth);
       const maxToShow = maxVisibleColumns > 0 ? maxVisibleColumns : regularColumns.length;
       const newCount = Math.max(2, Math.min(fittingColumns, maxToShow, regularColumns.length));
