@@ -25,12 +25,12 @@ interface DriveFilesModalProps {
 
 // Helper para obtener icono según tipo de archivo
 function getFileIcon(mimeType: string) {
-  if (mimeType.includes('image')) return <FileImage size={20} className="text-blue-500" />
-  if (mimeType.includes('pdf')) return <FileText size={20} className="text-red-500" />
-  if (mimeType.includes('document') || mimeType.includes('word')) return <FileText size={20} className="text-blue-600" />
-  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return <FileText size={20} className="text-green-600" />
-  if (mimeType.includes('folder')) return <FolderOpen size={20} className="text-yellow-500" />
-  return <File size={20} className="text-gray-500" />
+  if (mimeType.includes('image')) return <FileImage size={20} style={{ color: '#60a5fa' }} />
+  if (mimeType.includes('pdf')) return <FileText size={20} style={{ color: '#f87171' }} />
+  if (mimeType.includes('document') || mimeType.includes('word')) return <FileText size={20} style={{ color: '#3b82f6' }} />
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return <FileText size={20} style={{ color: '#22c55e' }} />
+  if (mimeType.includes('folder')) return <FolderOpen size={20} style={{ color: '#facc15' }} />
+  return <File size={20} style={{ color: '#6b7280' }} />
 }
 
 // Helper para formatear tamaño de archivo
@@ -63,7 +63,7 @@ export function DriveFilesModal({ isOpen, onClose, title, driveUrl, files, loadi
       >
         <div className="modal-header">
           <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FolderOpen size={24} />
+            <FolderOpen size={24} style={{ color: '#16a34a' }} />
             {title}
           </h2>
           <button className="modal-close" onClick={onClose}>
@@ -73,11 +73,12 @@ export function DriveFilesModal({ isOpen, onClose, title, driveUrl, files, loadi
 
         <div className="modal-body" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
           {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px', gap: '12px' }}>
               <Loader2 size={32} className="animate-spin" style={{ color: '#E63946' }} />
+              <span style={{ color: 'var(--text-secondary, #9ca3af)' }}>Cargando archivos...</span>
             </div>
           ) : files.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary, #9ca3af)' }}>
               <FolderOpen size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
               <p>No hay archivos en esta carpeta</p>
             </div>
@@ -86,13 +87,26 @@ export function DriveFilesModal({ isOpen, onClose, title, driveUrl, files, loadi
               {files.map(file => (
                 <div
                   key={file.id}
+                  className="drive-file-item"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     padding: '12px 16px',
-                    background: 'rgba(255,255,255,0.03)',
+                    background: 'var(--bg-tertiary, rgba(255,255,255,0.05))',
                     borderRadius: '8px',
-                    gap: '12px'
+                    gap: '12px',
+                    border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+                    transition: 'background 0.2s, border-color 0.2s',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => file.webViewLink && window.open(file.webViewLink, '_blank')}
+                  onMouseOver={e => {
+                    e.currentTarget.style.background = 'var(--bg-hover, rgba(255,255,255,0.08))'
+                    e.currentTarget.style.borderColor = 'var(--border-hover, rgba(255,255,255,0.2))'
+                  }}
+                  onMouseOut={e => {
+                    e.currentTarget.style.background = 'var(--bg-tertiary, rgba(255,255,255,0.05))'
+                    e.currentTarget.style.borderColor = 'var(--border-color, rgba(255,255,255,0.1))'
                   }}
                 >
                   {getFileIcon(file.mimeType)}
@@ -101,33 +115,19 @@ export function DriveFilesModal({ isOpen, onClose, title, driveUrl, files, loadi
                       fontWeight: 500,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      color: 'var(--text-primary, #fff)'
                     }}>
                       {file.name}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary, #9ca3af)' }}>
                       {formatFileSize(file.size)}
                       {file.size && ' • '}
                       {formatDate(file.modifiedTime)}
                     </div>
                   </div>
                   {file.webViewLink && (
-                    <a
-                      href={file.webViewLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        padding: '6px',
-                        borderRadius: '4px',
-                        color: '#9ca3af',
-                        transition: 'color 0.2s'
-                      }}
-                      onMouseOver={e => (e.currentTarget.style.color = '#E63946')}
-                      onMouseOut={e => (e.currentTarget.style.color = '#9ca3af')}
-                      title="Abrir archivo"
-                    >
-                      <ExternalLink size={18} />
-                    </a>
+                    <ExternalLink size={18} style={{ color: 'var(--text-secondary, #9ca3af)', flexShrink: 0 }} />
                   )}
                 </div>
               ))}
