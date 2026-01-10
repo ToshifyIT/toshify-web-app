@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 80
 app.use(express.json())
 
 // Google Drive service
-function getDriveService() {
+function getDriveService(writeAccess = false) {
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
   const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
 
@@ -25,12 +25,16 @@ function getDriveService() {
     throw new Error('Missing Google Service Account credentials')
   }
 
+  const scopes = writeAccess
+    ? ['https://www.googleapis.com/auth/drive.file']
+    : ['https://www.googleapis.com/auth/drive.readonly']
+
   const auth = new google.auth.GoogleAuth({
     credentials: {
       client_email: clientEmail,
       private_key: privateKey
     },
-    scopes: ['https://www.googleapis.com/auth/drive.readonly']
+    scopes
   })
 
   return google.drive({ version: 'v3', auth })
@@ -75,6 +79,62 @@ app.post('/api/list-drive-files', async (req, res) => {
       return res.status(403).json({ error: 'Sin permisos para acceder a esta carpeta' })
     }
 
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// API: Create Drive folder
+app.post('/api/create-drive-folder', async (req, res) => {
+  try {
+    const { tipo = 'conductor', conductorId, conductorNombre, conductorDni, vehiculoId, vehiculoPatente } = req.body
+
+    // Get parent folder ID based on type
+    const parentFolderId = tipo === 'vehiculo'
+      ? process.env.GOOGLE_DRIVE_VEHICULOS_FOLDER_ID
+      : process.env.GOOGLE_DRIVE_CONDUCTORES_FOLDER_ID
+
+    if (!parentFolderId) {
+      return res.status(500).json({ error: `Falta configurar GOOGLE_DRIVE_${tipo.toUpperCase()}S_FOLDER_ID` })
+    }
+
+    let folderName
+    if (tipo === 'vehiculo') {
+      if (!vehiculoPatente) {
+        return res.status(400).json({ error: 'Falta parametro: vehiculoPatente' })
+      }
+      folderName = vehiculoPatente.toUpperCase()
+    } else {
+      if (!conductorNombre) {
+        return res.status(400).json({ error: 'Falta parametro: conductorNombre' })
+      }
+      folderName = conductorDni
+        ? `${conductorDni} - ${conductorNombre}`
+        : conductorNombre
+    }
+
+    console.log(`Creating ${tipo} folder: ${folderName}`)
+
+    const drive = getDriveService(true)
+    const response = await drive.files.create({
+      requestBody: {
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentFolderId]
+      },
+      fields: 'id, webViewLink'
+    })
+
+    const folder = response.data
+    console.log('Folder created:', folder)
+
+    res.json({
+      success: true,
+      folderId: folder.id,
+      folderUrl: folder.webViewLink,
+      folderName
+    })
+  } catch (error) {
+    console.error('Error creating folder:', error.message)
     res.status(500).json({ error: error.message })
   }
 })

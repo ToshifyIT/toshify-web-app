@@ -453,26 +453,18 @@ export function ConductoresModule() {
     setCreatingDriveFolder(conductorId);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('No hay sesión activa');
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-drive-folder`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            conductorId,
-            conductorNombre,
-            conductorDni,
-          }),
-        }
-      );
+      const response = await fetch('/api/create-drive-folder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tipo: 'conductor',
+          conductorId,
+          conductorNombre,
+          conductorDni,
+        }),
+      });
 
       const result = await response.json();
 
@@ -480,10 +472,16 @@ export function ConductoresModule() {
         throw new Error(result.error || 'Error al crear carpeta');
       }
 
+      // Actualizar en la base de datos
+      await (supabase as any)
+        .from('conductores')
+        .update({ drive_folder_url: result.folderUrl })
+        .eq('id', conductorId);
+
       // Actualizar el conductor en la lista local
       setConductores(prev => prev.map(c =>
         c.id === conductorId
-          ? { ...c, drive_folder_url: result.folderUrl, drive_folder_id: result.folderId }
+          ? { ...c, drive_folder_url: result.folderUrl }
           : c
       ));
 
