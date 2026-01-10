@@ -591,16 +591,10 @@ export function VehicleManagement() {
     setDriveFiles([])
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      if (!sessionData.session) {
-        throw new Error('No hay sesión activa')
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-drive-files`, {
+      const response = await fetch('/api/list-drive-files', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionData.session.access_token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ folderUrl: driveUrl })
       })
