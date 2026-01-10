@@ -66,6 +66,7 @@ export function ProveedoresModule() {
   // Column filter states - Multiselect tipo Excel
   const [razonSocialFilter, setRazonSocialFilter] = useState<string[]>([])
   const [razonSocialSearch, setRazonSocialSearch] = useState('')
+  const [categoriaFilter, setCategoriaFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
@@ -104,10 +105,24 @@ export function ProveedoresModule() {
     { value: 'false', label: 'Inactivo' }
   ]
 
+  // Valores únicos para filtro de categoría
+  const categoriasUnicas = useMemo(() => {
+    const cats = proveedores
+      .map(p => p.categoria)
+      .filter((c): c is CategoriaProveedor => !!c)
+    return [...new Set(cats)].sort()
+  }, [proveedores])
+
   // Toggle functions para multiselect
   const toggleRazonSocialFilter = (razon: string) => {
     setRazonSocialFilter(prev =>
       prev.includes(razon) ? prev.filter(r => r !== razon) : [...prev, razon]
+    )
+  }
+
+  const toggleCategoriaFilter = (cat: string) => {
+    setCategoriaFilter(prev =>
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
     )
   }
 
@@ -140,18 +155,31 @@ export function ProveedoresModule() {
     }
   }
 
-  // Filtrar proveedores según los filtros de columna (multiselect tipo Excel)
+  // Filtrar proveedores - STAT CARD PREVALECE sobre filtros de columna
   const filteredProveedores = useMemo(() => {
     let result = proveedores
 
-    // Filtro de columna Razón Social
+    // Si hay stat card activo, SOLO aplicar ese filtro (ignorar filtros de columna)
+    if (statCardEstadoFilter.length > 0) {
+      return proveedores.filter(p => {
+        const estadoStr = p.activo ? 'true' : 'false'
+        return statCardEstadoFilter.includes(estadoStr)
+      })
+    }
+
+    // Sin stat card activo → aplicar filtros de columna
     if (razonSocialFilter.length > 0) {
       result = result.filter(p =>
         razonSocialFilter.includes(p.razon_social || '')
       )
     }
 
-    // Filtro de columna Estado
+    if (categoriaFilter.length > 0) {
+      result = result.filter(p =>
+        p.categoria && categoriaFilter.includes(p.categoria)
+      )
+    }
+
     if (estadoFilter.length > 0) {
       result = result.filter(p => {
         const estadoStr = p.activo ? 'true' : 'false'
@@ -159,16 +187,8 @@ export function ProveedoresModule() {
       })
     }
 
-    // Filtro de Stat Card (ADICIONAL al filtro de columna)
-    if (statCardEstadoFilter.length > 0) {
-      result = result.filter(p => {
-        const estadoStr = p.activo ? 'true' : 'false'
-        return statCardEstadoFilter.includes(estadoStr)
-      })
-    }
-
     return result
-  }, [proveedores, razonSocialFilter, estadoFilter, statCardEstadoFilter])
+  }, [proveedores, razonSocialFilter, categoriaFilter, estadoFilter, statCardEstadoFilter])
 
   const loadProveedores = async () => {
     try {
@@ -462,7 +482,52 @@ export function ProveedoresModule() {
       },
       {
         accessorKey: 'categoria',
-        header: 'Categoría',
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Categoría {categoriaFilter.length > 0 && `(${categoriaFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${categoriaFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenColumnFilter(openColumnFilter === 'categoria' ? null : 'categoria')
+              }}
+              title="Filtrar por categoría"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'categoria' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <div className="dt-excel-filter-list">
+                  {categoriasUnicas.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin categorías</div>
+                  ) : (
+                    categoriasUnicas.map(cat => {
+                      const catInfo = CATEGORIAS_PROVEEDOR.find(c => c.value === cat)
+                      return (
+                        <label key={cat} className={`dt-column-filter-checkbox ${categoriaFilter.includes(cat) ? 'selected' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={categoriaFilter.includes(cat)}
+                            onChange={() => toggleCategoriaFilter(cat)}
+                          />
+                          <span>{catInfo?.label || cat}</span>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+                {categoriaFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => setCategoriaFilter([])}
+                  >
+                    Limpiar ({categoriaFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ getValue }) => {
           const value = getValue() as CategoriaProveedor | null
           if (!value) return <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>-</span>
@@ -576,7 +641,7 @@ export function ProveedoresModule() {
         ),
       },
     ],
-    [canView, canEdit, canDelete, razonSocialFilter, estadoFilter, openColumnFilter]
+    [canView, canEdit, canDelete, razonSocialFilter, categoriaFilter, categoriasUnicas, estadoFilter, openColumnFilter]
   )
 
   // Calcular estadísticas
@@ -659,6 +724,7 @@ export function ProveedoresModule() {
           // Limpiar TODO: filtros de columna + stat cards
           setRazonSocialFilter([])
           setRazonSocialSearch('')
+          setCategoriaFilter([])
           setEstadoFilter([])
           setActiveStatCard(null)
           setStatCardEstadoFilter([])
