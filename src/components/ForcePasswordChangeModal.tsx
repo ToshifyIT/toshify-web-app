@@ -94,7 +94,9 @@ export function ForcePasswordChangeModal({ onSuccess }: Props) {
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.7);
+          background: rgba(0, 0, 0, 0.95);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
           display: flex;
           align-items: center;
           justify-content: center;
