@@ -1,6 +1,6 @@
 // src/modules/conductores/ConductoresModule.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, Calendar, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, Filter, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
@@ -91,14 +91,8 @@ export function ConductoresModule() {
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
-  const [licenciaVencerFilter, setLicenciaVencerFilter] = useState(false);
+  const [licenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
-  const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
-
-  // Estados para filtro de fechas en métricas
-  const [metricsDateFilter, setMetricsDateFilter] = useState<'all' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'custom'>('all');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
 
   // Estados para modal de confirmación de baja
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
@@ -180,158 +174,6 @@ export function ConductoresModule() {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [openColumnFilter]);
-
-  // Helper para calcular rango de fechas según el filtro seleccionado
-  const getDateRange = () => {
-    const today = new Date();
-    const startOfWeek = (date: Date) => {
-      const d = new Date(date);
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Lunes como inicio de semana
-      return new Date(d.setDate(diff));
-    };
-
-    switch (metricsDateFilter) {
-      case 'thisWeek': {
-        const start = startOfWeek(today);
-        const end = new Date(start);
-        end.setDate(end.getDate() + 6);
-        return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
-      }
-      case 'lastWeek': {
-        const thisWeekStart = startOfWeek(today);
-        const start = new Date(thisWeekStart);
-        start.setDate(start.getDate() - 7);
-        const end = new Date(start);
-        end.setDate(end.getDate() + 6);
-        return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
-      }
-      case 'thisMonth': {
-        const start = new Date(today.getFullYear(), today.getMonth(), 1);
-        const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
-      }
-      case 'lastMonth': {
-        const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        const end = new Date(today.getFullYear(), today.getMonth(), 0);
-        return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
-      }
-      case 'custom': {
-        if (customStartDate && customEndDate) {
-          return { start: customStartDate, end: customEndDate };
-        }
-        return null;
-      }
-      default:
-        return null;
-    }
-  };
-
-  // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
-  const calculatedStats = useMemo(() => {
-    const dateRange = getDateRange();
-    const hoy = new Date();
-    const en30Dias = new Date();
-    en30Dias.setDate(en30Dias.getDate() + 30);
-    const hoyStr = hoy.toISOString().split('T')[0];
-    const en30DiasStr = en30Dias.toISOString().split('T')[0];
-
-    // Filtrar por rango de fechas si aplica
-    let filteredConductores = conductores;
-    if (dateRange) {
-      filteredConductores = conductores.filter(c => {
-        const fechaContratacion = c.fecha_contratacion;
-        if (!fechaContratacion) return false;
-        return fechaContratacion >= dateRange.start && fechaContratacion <= dateRange.end;
-      });
-    }
-
-    // Calcular todo en UNA SOLA PASADA
-    let totalConductores = 0;
-    let conductoresActivos = 0;
-    let conductoresBaja = 0;
-    let conductoresAsignados = 0;
-    let licenciasPorVencer = 0;
-
-    for (const c of filteredConductores) {
-      totalConductores++;
-
-      const estadoCodigo = (c as any).conductores_estados?.codigo?.toLowerCase();
-
-      if (estadoCodigo === 'activo') {
-        conductoresActivos++;
-      } else if (estadoCodigo === 'baja') {
-        conductoresBaja++;
-      }
-
-      // Verificar si tiene vehículo asignado
-      if ((c as any).vehiculo_asignado) {
-        conductoresAsignados++;
-      }
-
-      // Licencias por vencer (solo conductores activos CON asignación)
-      const vencimiento = c.licencia_vencimiento;
-      if (estadoCodigo === 'activo' && (c as any).vehiculo_asignado && vencimiento && vencimiento >= hoyStr && vencimiento <= en30DiasStr) {
-        licenciasPorVencer++;
-      }
-    }
-
-    const conductoresDisponibles = Math.max(0, conductoresActivos - conductoresAsignados);
-
-    return {
-      totalConductores,
-      conductoresActivos,
-      conductoresDisponibles,
-      conductoresAsignados,
-      conductoresBaja,
-      licenciasPorVencer,
-    };
-  }, [conductores, metricsDateFilter, customStartDate, customEndDate]);
-
-  // Helper para manejar clicks en stat cards
-  const handleStatCardClick = (cardType: string) => {
-    // Limpiar todos los filtros primero
-    setNombreFilter([]);
-    setNombreSearch('');
-    setDniFilter([]);
-    setDniSearch('');
-    setCbuFilter([]);
-    setCbuSearch('');
-    setEstadoFilter([]);
-    setTurnoFilter([]);
-    setAsignacionFilter([]);
-    setLicenciaVencerFilter(false);
-
-    // Si se hace click en la misma card activa, solo limpiar
-    if (activeStatCard === cardType) {
-      setActiveStatCard(null);
-      return;
-    }
-
-    // Aplicar filtro según el tipo de card
-    setActiveStatCard(cardType);
-    switch (cardType) {
-      case 'total':
-        // No aplicar filtro, mostrar todos
-        setActiveStatCard(null);
-        break;
-      case 'activos':
-        setEstadoFilter(['ACTIVO']);
-        break;
-      case 'disponibles':
-        setAsignacionFilter(['disponible']);
-        break;
-      case 'asignados':
-        setAsignacionFilter(['asignado']);
-        break;
-      case 'baja':
-        setEstadoFilter(['BAJA']);
-        break;
-      case 'licencias':
-        setLicenciaVencerFilter(true);
-        break;
-    }
-  };
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo (conductores + catálogos)
   const loadAllData = async () => {
@@ -1959,96 +1801,6 @@ export function ConductoresModule() {
 
   return (
     <div className="cond-module">
-      {/* Stats Cards - Métricas principales */}
-      <div className="cond-stats">
-        {/* Header con filtro de fechas */}
-        <div className="cond-stats-header">
-          <div className="cond-stats-title">
-            <Calendar size={16} />
-            <span>Métricas</span>
-          </div>
-          <div className="cond-stats-filters">
-            <select
-              className="cond-date-filter-select"
-              value={metricsDateFilter}
-              onChange={(e) => setMetricsDateFilter(e.target.value as typeof metricsDateFilter)}
-            >
-              <option value="all">Todo el tiempo</option>
-              <option value="thisWeek">Esta semana</option>
-              <option value="lastWeek">Semana anterior</option>
-              <option value="thisMonth">Este mes</option>
-              <option value="lastMonth">Mes anterior</option>
-              <option value="custom">Rango personalizado</option>
-            </select>
-            {metricsDateFilter === 'custom' && (
-              <div className="cond-custom-date-inputs">
-                <input
-                  type="date"
-                  className="cond-date-input"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  placeholder="Desde"
-                />
-                <span className="cond-date-separator">-</span>
-                <input
-                  type="date"
-                  className="cond-date-input"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  placeholder="Hasta"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="cond-stats-grid">
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'asignados' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('asignados')}
-            title="Conductores activos con vehículo asignado"
-          >
-            <UserCheck size={18} className="stat-icon" style={{ color: '#22C55E' }} />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.conductoresAsignados}</span>
-              <span className="stat-label">Activos con Auto</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'disponibles' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('disponibles')}
-            title="Conductores activos esperando vehículo"
-          >
-            <Clock size={18} className="stat-icon" style={{ color: '#F59E0B' }} />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.conductoresDisponibles}</span>
-              <span className="stat-label">En Espera</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'baja' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('baja')}
-            title="Conductores de baja"
-          >
-            <UserX size={18} className="stat-icon" style={{ color: '#6B7280' }} />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.conductoresBaja}</span>
-              <span className="stat-label">Bajas</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
-            onClick={() => handleStatCardClick('licencias')}
-            title="Licencias por vencer en los próximos 30 días (solo conductores con asignación)"
-          >
-            <AlertTriangle size={18} className="stat-icon" style={{ color: '#EF4444' }} />
-            <div className="stat-content">
-              <span className="stat-value">{calculatedStats.licenciasPorVencer}</span>
-              <span className="stat-label">Lic. por Vencer</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* DataTable with integrated action button */}
       <DataTable
         data={filteredConductores}
