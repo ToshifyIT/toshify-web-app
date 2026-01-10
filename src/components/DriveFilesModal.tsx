@@ -54,10 +54,8 @@ function formatDate(dateString: string) {
 export function DriveFilesModal({ isOpen, onClose, title, driveUrl, files, loading }: DriveFilesModalProps) {
   if (!isOpen) return null
 
-  // Detectar tema oscuro
-  const isDark = document.documentElement.classList.contains('dark') ||
-                 document.body.classList.contains('dark-theme') ||
-                 window.matchMedia('(prefers-color-scheme: dark)').matches
+  // Detectar tema oscuro - usar data-theme del HTML que es lo que usa la app
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
 
   const styles = {
     overlay: {

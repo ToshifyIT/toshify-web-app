@@ -5,7 +5,7 @@
  * con filas expandibles y columna de acciones sticky.
  */
 
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import React, { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -73,14 +73,14 @@ export function DataTable<T>({
   onTableReady,
   headerAction,
   alwaysVisibleColumns = ["acciones", "actions"],
-  maxVisibleColumns = 6,
+  maxVisibleColumns = 0, // 0 = show all columns that fit
 }: DataTableProps<T>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [showColumnMenu, setShowColumnMenu] = useState(false);
-  const [visibleColumnCount, setVisibleColumnCount] = useState(maxVisibleColumns);
+  const [visibleColumnCount, setVisibleColumnCount] = useState(100); // Start high, resize will adjust
   const columnMenuRef = useRef<HTMLDivElement>(null);
   const columnBtnRef = useRef<HTMLButtonElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
@@ -116,47 +116,58 @@ export function DataTable<T>({
       const width = tableWrapperRef.current.offsetWidth;
 
       // Calculate how many columns can fit
-      // Assuming ~120px per column average
-      const avgColWidth = 130;
-      const actionsWidth = 100;
-      const expandBtnWidth = 50;
-      const availableWidth = width - actionsWidth - expandBtnWidth;
+      // Use smaller avg width for better responsiveness
+      const avgColWidth = 120;
+      const actionsWidth = 120;
+      const availableWidth = width - actionsWidth;
       const fittingColumns = Math.floor(availableWidth / avgColWidth);
 
-      // Clamp between 2 and maxVisibleColumns
-      const newCount = Math.max(2, Math.min(fittingColumns, maxVisibleColumns));
+      // Show all columns that fit, minimum 2, maximum is total columns or maxVisibleColumns
+      const totalRegularCols = columns.filter(col => {
+        const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
+                      (col as { id?: string }).id || "";
+        return !alwaysVisibleColumns.includes(colId);
+      }).length;
+
+      // maxVisibleColumns = 0 means show all that fit, otherwise use as limit
+      const maxToShow = maxVisibleColumns > 0 ? maxVisibleColumns : totalRegularCols;
+      const newCount = Math.max(2, Math.min(fittingColumns, maxToShow, totalRegularCols));
       setVisibleColumnCount(newCount);
     }
 
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [maxVisibleColumns]);
+  }, [maxVisibleColumns, columns, alwaysVisibleColumns]);
 
-  // Separate columns into visible and hidden
-  const regularColumns = columns.filter(col => {
-    const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
-                  (col as { id?: string }).id || "";
-    return !alwaysVisibleColumns.includes(colId);
-  });
+  // Separate columns into visible and hidden - memoized to prevent unnecessary re-renders
+  const { regularColumns, actionsColumn } = useMemo(() => {
+    const regular = columns.filter(col => {
+      const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
+                    (col as { id?: string }).id || "";
+      return !alwaysVisibleColumns.includes(colId);
+    });
 
-  const actionsColumn = columns.filter(col => {
-    const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
-                  (col as { id?: string }).id || "";
-    return alwaysVisibleColumns.includes(colId);
-  });
+    const actions = columns.filter(col => {
+      const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
+                    (col as { id?: string }).id || "";
+      return alwaysVisibleColumns.includes(colId);
+    });
 
-  const visibleColumns = regularColumns.slice(0, visibleColumnCount);
-  const hiddenColumns = regularColumns.slice(visibleColumnCount);
+    return { regularColumns: regular, actionsColumn: actions };
+  }, [columns, alwaysVisibleColumns]);
+
+  const visibleColumns = useMemo(() => regularColumns.slice(0, visibleColumnCount), [regularColumns, visibleColumnCount]);
+  const hiddenColumns = useMemo(() => regularColumns.slice(visibleColumnCount), [regularColumns, visibleColumnCount]);
   const hasHiddenColumns = hiddenColumns.length > 0;
 
-  // Build the expandable column if there are hidden columns
-  const expandColumn: ColumnDef<T, unknown> = {
-    id: "expand",
-    header: "",
-    cell: ({ row }) => {
-      if (!hasHiddenColumns) return null;
-      return (
+  // Memoize final columns to prevent unnecessary re-renders that reset expand state
+  const finalColumns = useMemo<ColumnDef<T, unknown>[]>(() => {
+    // Build the expandable column if there are hidden columns
+    const expandColumn: ColumnDef<T, unknown> = {
+      id: "expand",
+      header: "",
+      cell: ({ row }) => (
         <button
           className="dt-expand-btn"
           onClick={(e) => {
@@ -171,18 +182,18 @@ export function DataTable<T>({
             <ChevronRight size={16} />
           )}
         </button>
-      );
-    },
-    size: 40,
-    enableSorting: false,
-  };
+      ),
+      size: 40,
+      enableSorting: false,
+    };
 
-  // Final column order: expand (if needed) + visible + actions
-  const finalColumns: ColumnDef<T, unknown>[] = [
-    ...(hasHiddenColumns ? [expandColumn] : []),
-    ...visibleColumns,
-    ...actionsColumn,
-  ];
+    // Final column order: expand (if needed) + visible + actions
+    return [
+      ...(hasHiddenColumns ? [expandColumn] : []),
+      ...visibleColumns,
+      ...actionsColumn,
+    ];
+  }, [hasHiddenColumns, visibleColumns, actionsColumn]);
 
   const table = useReactTable({
     data,
@@ -214,43 +225,61 @@ export function DataTable<T>({
     }
   }, [table, onTableReady]);
 
-  // Render expanded row content
-  const renderExpandedContent = (row: ReturnType<typeof table.getRowModel>['rows'][0]) => {
+  // Helper to get nested value from object using dot notation (e.g., "vehiculos_estados.codigo")
+  const getNestedValue = (obj: Record<string, unknown>, path: string): unknown => {
+    const keys = path.split('.');
+    let value: unknown = obj;
+    for (const key of keys) {
+      if (value && typeof value === 'object' && key in (value as Record<string, unknown>)) {
+        value = (value as Record<string, unknown>)[key];
+      } else {
+        return undefined;
+      }
+    }
+    return value;
+  };
+
+  // Render expanded row content - use original columns to access data
+  const renderExpandedContent = (rowData: T) => {
     if (!hasHiddenColumns) return null;
 
-    const rowData = row.original as Record<string, unknown>;
+    const data = rowData as Record<string, unknown>;
 
     return (
       <div className="dt-expanded-content">
         <div className="dt-expanded-grid">
           {hiddenColumns.map((col) => {
-            const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
-                          (col as { id?: string }).id || "";
-            const header = typeof col.header === "string"
-              ? col.header
-              : colId.charAt(0).toUpperCase() + colId.slice(1).replace(/([A-Z])/g, ' $1');
+            const colDef = col as { accessorKey?: string; id?: string; header?: unknown; cell?: unknown };
+            const colId = colDef.accessorKey || colDef.id || "";
 
-            // Get the cell value
-            let value: unknown = rowData[colId];
+            // Get header text - try to extract from header function/string
+            let headerText = colId.split('.').pop() || colId;
+            headerText = headerText.charAt(0).toUpperCase() + headerText.slice(1).replace(/_/g, ' ').replace(/([A-Z])/g, ' $1');
+            if (typeof colDef.header === "string") {
+              headerText = colDef.header;
+            }
 
-            // If there's a cell renderer, use it
-            if (col.cell && typeof col.cell === 'function') {
-              const cell = row.getAllCells().find(c => {
-                const cId = (c.column.columnDef as { accessorKey?: string; id?: string }).accessorKey ||
-                           (c.column.columnDef as { id?: string }).id;
-                return cId === colId;
-              });
-              if (cell) {
-                value = flexRender(col.cell, cell.getContext());
+            // Get the raw value - handle nested paths with dot notation
+            const rawValue = colId.includes('.') ? getNestedValue(data, colId) : data[colId];
+
+            // Format value for display
+            let displayValue: React.ReactNode = "-";
+            if (rawValue !== null && rawValue !== undefined) {
+              if (typeof rawValue === 'boolean') {
+                displayValue = rawValue ? 'Sí' : 'No';
+              } else if (rawValue instanceof Date) {
+                displayValue = rawValue.toLocaleDateString('es-AR');
+              } else if (typeof rawValue === 'object') {
+                displayValue = JSON.stringify(rawValue);
+              } else {
+                displayValue = String(rawValue);
               }
             }
 
             return (
               <div key={colId} className="dt-expanded-item">
-                <span className="dt-expanded-label">{header}</span>
-                <span className="dt-expanded-value">
-                  {value !== null && value !== undefined ? String(value) : "-"}
-                </span>
+                <span className="dt-expanded-label">{headerText}</span>
+                <span className="dt-expanded-value">{displayValue}</span>
               </div>
             );
           })}
@@ -265,9 +294,18 @@ export function DataTable<T>({
     setShowColumnMenu(false);
   };
 
-  // Reset to auto columns
+  // Reset to auto columns - recalculate based on container width
   const resetColumns = () => {
-    setVisibleColumnCount(maxVisibleColumns);
+    if (tableWrapperRef.current) {
+      const width = tableWrapperRef.current.offsetWidth;
+      const avgColWidth = 120;
+      const actionsWidth = 120;
+      const availableWidth = width - actionsWidth;
+      const fittingColumns = Math.floor(availableWidth / avgColWidth);
+      const maxToShow = maxVisibleColumns > 0 ? maxVisibleColumns : regularColumns.length;
+      const newCount = Math.max(2, Math.min(fittingColumns, maxToShow, regularColumns.length));
+      setVisibleColumnCount(newCount);
+    }
     setShowColumnMenu(false);
   };
 
@@ -329,8 +367,8 @@ export function DataTable<T>({
             </div>
           )}
 
-          {/* Column visibility toggle */}
-          {regularColumns.length > maxVisibleColumns && (
+          {/* Column visibility toggle - show when there are hidden columns or could be hidden */}
+          {(hasHiddenColumns || regularColumns.length > 3) && (
             <div className="dt-column-toggle-wrapper">
               <button
                 ref={columnBtnRef}
@@ -430,8 +468,8 @@ export function DataTable<T>({
                 </tr>
               ) : (
                 table.getRowModel().rows.map((row) => (
-                  <>
-                    <tr key={row.id} className={row.getIsExpanded() ? "dt-row-expanded" : ""}>
+                  <React.Fragment key={row.id}>
+                    <tr className={row.getIsExpanded() ? "dt-row-expanded" : ""}>
                       {row.getVisibleCells().map((cell) => {
                         const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
                         const isExpandColumn = cell.column.id === "expand";
@@ -452,13 +490,13 @@ export function DataTable<T>({
                       })}
                     </tr>
                     {row.getIsExpanded() && hasHiddenColumns && (
-                      <tr key={`${row.id}-expanded`} className="dt-expanded-row">
+                      <tr className="dt-expanded-row">
                         <td colSpan={finalColumns.length}>
-                          {renderExpandedContent(row)}
+                          {renderExpandedContent(row.original)}
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 ))
               )}
             </tbody>
