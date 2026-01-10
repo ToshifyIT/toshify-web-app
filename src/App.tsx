@@ -6,7 +6,6 @@ import { PermissionsProvider } from './contexts/PermissionsContext'
 import { LoginPage } from './pages/LoginPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { HomePage } from './pages/HomePage'
-import { AdminPage } from './pages/AdminPage'
 import { UnauthorizedPage } from './pages/UnauthorizedPage'
 import PermissionsDebugPage from './pages/PermissionsDebugPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
@@ -71,17 +70,7 @@ function App() {
                       <PermissionsDebugPage />
                     </ProtectedRoute>
                   }
-                />
-
-                {/* Admin panel - mantener por compatibilidad (deprecado) */}
-                <Route
-                  path="/admin"
-                  element={
-                    <ProtectedRoute requireAdmin>
-                      <AdminPage />
-                    </ProtectedRoute>
-                  }
-                />
+                />            
 
                 {/* HomePage como layout principal para todos los usuarios autenticados */}
                 <Route
