@@ -38,10 +38,6 @@ const ESTADO_LABELS: Record<string, string> = {
   'PROGRAMADO': 'Programado'
 }
 
-// Mapping inverso: label -> codigo (reservado para uso futuro)
-const _LABEL_TO_CODIGO: Record<string, string> = Object.fromEntries(
-  Object.entries(ESTADO_LABELS).map(([codigo, label]) => [label, codigo])
-)
 
 export function VehicleManagement() {
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])

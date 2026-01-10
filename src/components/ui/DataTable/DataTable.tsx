@@ -66,6 +66,8 @@ export interface DataTableProps<T> {
   disableAutoFilters?: boolean;
   /** Filtros externos (ej: desde stat cards) para mostrar en la barra de filtros activos */
   externalFilters?: Array<{ id: string; label: string; onClear: () => void }>;
+  /** Callback para limpiar todos los filtros (internos y externos) */
+  onClearAllFilters?: () => void;
 }
 
 export function DataTable<T>({
@@ -88,6 +90,7 @@ export function DataTable<T>({
   resetFiltersKey,
   disableAutoFilters = false,
   externalFilters = [],
+  onClearAllFilters,
 }: DataTableProps<T>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -785,6 +788,8 @@ export function DataTable<T>({
     setOpenFilterId(null);
     // Also clear external filters
     externalFilters.forEach(f => f.onClear());
+    // Call parent's onClearAllFilters if provided
+    onClearAllFilters?.();
   };
 
   // Clear a specific filter
