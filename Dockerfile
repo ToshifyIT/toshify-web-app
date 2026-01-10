@@ -56,8 +56,8 @@ COPY --from=builder /app/dist ./dist
 # Copy server file
 COPY server.js ./
 
-# Expose port 3000
-EXPOSE 3000
+# Expose port 80
+EXPOSE 80
 
 # Start the server
 CMD ["npm", "start"]
