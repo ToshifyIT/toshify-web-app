@@ -1,48 +1,27 @@
 // src/components/ui/DataTable/DataTable.tsx
 /**
  * @fileoverview Componente DataTable reutilizable basado en TanStack Table v8.
- * Proporciona búsqueda global, ordenamiento, paginación y diseño responsive.
- *
- * @module components/ui/DataTable
- * @author Toshify Team
- * @version 1.0.0
- * @see {@link https://tanstack.com/table/v8} TanStack Table Documentation
+ * Proporciona búsqueda global, ordenamiento, paginación, diseño responsive
+ * con filas expandibles y columna de acciones sticky.
  */
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
+  getExpandedRowModel,
   flexRender,
   type ColumnDef,
   type SortingState,
   type Table,
+  type ExpandedState,
 } from "@tanstack/react-table";
+import { ChevronDown, ChevronRight, Columns3, Check } from "lucide-react";
 import "./DataTable.css";
 
-/**
- * Props para el componente DataTable.
- *
- * @template T - Tipo de datos de cada fila de la tabla
- *
- * @example
- * ```tsx
- * interface User {
- *   id: string;
- *   name: string;
- * }
- *
- * const props: DataTableProps<User> = {
- *   data: users,
- *   columns: userColumns,
- *   searchPlaceholder: "Buscar usuarios...",
- *   pageSize: 20,
- * };
- * ```
- */
 export interface DataTableProps<T> {
   /** Array de datos a mostrar en la tabla */
   data: T[];
@@ -72,58 +51,12 @@ export interface DataTableProps<T> {
   onTableReady?: (table: Table<T>) => void;
   /** Acción a mostrar en el header junto al buscador (ej: botón de crear) */
   headerAction?: ReactNode;
+  /** IDs de columnas que siempre deben estar visibles (ej: ['acciones']) */
+  alwaysVisibleColumns?: string[];
+  /** Número máximo de columnas a mostrar antes de colapsar (sin contar acciones) @default 6 */
+  maxVisibleColumns?: number;
 }
 
-/**
- * Componente de tabla de datos reutilizable con búsqueda, ordenamiento y paginación.
- *
- * @template T - Tipo de datos de cada fila
- *
- * @param {DataTableProps<T>} props - Props del componente
- * @returns {JSX.Element} Tabla renderizada con controles
- *
- * @example
- * ```tsx
- * // Uso básico
- * <DataTable
- *   data={users}
- *   columns={columns}
- *   searchPlaceholder="Buscar usuarios..."
- * />
- * ```
- *
- * @example
- * ```tsx
- * // Con estados de carga y error
- * <DataTable
- *   data={products}
- *   columns={productColumns}
- *   loading={isLoading}
- *   error={errorMessage}
- *   emptyIcon={<PackageIcon />}
- *   emptyTitle="Sin productos"
- * />
- * ```
- *
- * @example
- * ```tsx
- * // Acceso a la instancia de tabla
- * const [table, setTable] = useState<Table<User> | null>(null);
- *
- * <DataTable
- *   data={users}
- *   columns={columns}
- *   onTableReady={setTable}
- * />
- *
- * // Luego usar table.getFilteredRowModel() para exportar, etc.
- * ```
- *
- * @throws {Error} Si columns está vacío y hay datos
- *
- * @see {@link DataTableProps} Para la definición completa de props
- * @see {@link https://tanstack.com/table/v8/docs/guide/column-defs} Para definir columnas
- */
 export function DataTable<T>({
   data,
   columns,
@@ -139,10 +72,18 @@ export function DataTable<T>({
   showPagination = true,
   onTableReady,
   headerAction,
+  alwaysVisibleColumns = ["acciones", "actions"],
+  maxVisibleColumns = 6,
 }: DataTableProps<T>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [expanded, setExpanded] = useState<ExpandedState>({});
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
+  const [visibleColumnCount, setVisibleColumnCount] = useState(maxVisibleColumns);
+  const columnMenuRef = useRef<HTMLDivElement>(null);
+  const columnBtnRef = useRef<HTMLButtonElement>(null);
+  const tableWrapperRef = useRef<HTMLDivElement>(null);
 
   // Debounce search (300ms)
   useEffect(() => {
@@ -152,19 +93,113 @@ export function DataTable<T>({
     return () => clearTimeout(timer);
   }, [globalFilter]);
 
+  // Close column menu on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        columnMenuRef.current &&
+        !columnMenuRef.current.contains(event.target as Node) &&
+        columnBtnRef.current &&
+        !columnBtnRef.current.contains(event.target as Node)
+      ) {
+        setShowColumnMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Adjust visible columns based on container width
+  useEffect(() => {
+    function handleResize() {
+      if (!tableWrapperRef.current) return;
+      const width = tableWrapperRef.current.offsetWidth;
+
+      // Calculate how many columns can fit
+      // Assuming ~120px per column average
+      const avgColWidth = 130;
+      const actionsWidth = 100;
+      const expandBtnWidth = 50;
+      const availableWidth = width - actionsWidth - expandBtnWidth;
+      const fittingColumns = Math.floor(availableWidth / avgColWidth);
+
+      // Clamp between 2 and maxVisibleColumns
+      const newCount = Math.max(2, Math.min(fittingColumns, maxVisibleColumns));
+      setVisibleColumnCount(newCount);
+    }
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [maxVisibleColumns]);
+
+  // Separate columns into visible and hidden
+  const regularColumns = columns.filter(col => {
+    const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
+                  (col as { id?: string }).id || "";
+    return !alwaysVisibleColumns.includes(colId);
+  });
+
+  const actionsColumn = columns.filter(col => {
+    const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
+                  (col as { id?: string }).id || "";
+    return alwaysVisibleColumns.includes(colId);
+  });
+
+  const visibleColumns = regularColumns.slice(0, visibleColumnCount);
+  const hiddenColumns = regularColumns.slice(visibleColumnCount);
+  const hasHiddenColumns = hiddenColumns.length > 0;
+
+  // Build the expandable column if there are hidden columns
+  const expandColumn: ColumnDef<T, unknown> = {
+    id: "expand",
+    header: "",
+    cell: ({ row }) => {
+      if (!hasHiddenColumns) return null;
+      return (
+        <button
+          className="dt-expand-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            row.toggleExpanded();
+          }}
+          title={row.getIsExpanded() ? "Ocultar detalles" : "Ver más"}
+        >
+          {row.getIsExpanded() ? (
+            <ChevronDown size={16} />
+          ) : (
+            <ChevronRight size={16} />
+          )}
+        </button>
+      );
+    },
+    size: 40,
+    enableSorting: false,
+  };
+
+  // Final column order: expand (if needed) + visible + actions
+  const finalColumns: ColumnDef<T, unknown>[] = [
+    ...(hasHiddenColumns ? [expandColumn] : []),
+    ...visibleColumns,
+    ...actionsColumn,
+  ];
+
   const table = useReactTable({
     data,
-    columns,
+    columns: finalColumns,
     state: {
       sorting,
       globalFilter: debouncedSearch,
+      expanded,
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setDebouncedSearch,
+    onExpandedChange: setExpanded,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
     initialState: {
       pagination: {
         pageSize,
@@ -178,6 +213,63 @@ export function DataTable<T>({
       onTableReady(table);
     }
   }, [table, onTableReady]);
+
+  // Render expanded row content
+  const renderExpandedContent = (row: ReturnType<typeof table.getRowModel>['rows'][0]) => {
+    if (!hasHiddenColumns) return null;
+
+    const rowData = row.original as Record<string, unknown>;
+
+    return (
+      <div className="dt-expanded-content">
+        <div className="dt-expanded-grid">
+          {hiddenColumns.map((col) => {
+            const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
+                          (col as { id?: string }).id || "";
+            const header = typeof col.header === "string"
+              ? col.header
+              : colId.charAt(0).toUpperCase() + colId.slice(1).replace(/([A-Z])/g, ' $1');
+
+            // Get the cell value
+            let value: unknown = rowData[colId];
+
+            // If there's a cell renderer, use it
+            if (col.cell && typeof col.cell === 'function') {
+              const cell = row.getAllCells().find(c => {
+                const cId = (c.column.columnDef as { accessorKey?: string; id?: string }).accessorKey ||
+                           (c.column.columnDef as { id?: string }).id;
+                return cId === colId;
+              });
+              if (cell) {
+                value = flexRender(col.cell, cell.getContext());
+              }
+            }
+
+            return (
+              <div key={colId} className="dt-expanded-item">
+                <span className="dt-expanded-label">{header}</span>
+                <span className="dt-expanded-value">
+                  {value !== null && value !== undefined ? String(value) : "-"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // Show all columns toggle
+  const showAllColumns = () => {
+    setVisibleColumnCount(regularColumns.length);
+    setShowColumnMenu(false);
+  };
+
+  // Reset to auto columns
+  const resetColumns = () => {
+    setVisibleColumnCount(maxVisibleColumns);
+    setShowColumnMenu(false);
+  };
 
   if (loading) {
     return (
@@ -210,7 +302,7 @@ export function DataTable<T>({
 
   return (
     <div className="dt-wrapper">
-      {/* Header with Search and Action */}
+      {/* Header with Search, Column Toggle and Action */}
       {(showSearch || headerAction) && (
         <div className="dt-header-bar">
           {showSearch && (
@@ -236,6 +328,48 @@ export function DataTable<T>({
               />
             </div>
           )}
+
+          {/* Column visibility toggle */}
+          {regularColumns.length > maxVisibleColumns && (
+            <div className="dt-column-toggle-wrapper">
+              <button
+                ref={columnBtnRef}
+                className={`dt-column-toggle-btn ${hasHiddenColumns ? "has-hidden" : ""}`}
+                onClick={() => setShowColumnMenu(!showColumnMenu)}
+                title="Mostrar/ocultar columnas"
+              >
+                <Columns3 size={16} />
+                <span className="dt-column-toggle-text">Columnas</span>
+                {hasHiddenColumns && (
+                  <span className="dt-column-hidden-badge">{hiddenColumns.length}</span>
+                )}
+                <ChevronDown size={14} className={showColumnMenu ? "rotated" : ""} />
+              </button>
+
+              {showColumnMenu && (
+                <div ref={columnMenuRef} className="dt-column-menu">
+                  <div className="dt-column-menu-header">
+                    <span>Columnas ({visibleColumnCount} de {regularColumns.length})</span>
+                  </div>
+                  <div className="dt-column-menu-actions">
+                    <button onClick={showAllColumns} className="dt-column-menu-btn">
+                      <Check size={14} />
+                      Mostrar todas
+                    </button>
+                    <button onClick={resetColumns} className="dt-column-menu-btn">
+                      Ajustar auto
+                    </button>
+                  </div>
+                  <div className="dt-column-menu-info">
+                    {hasHiddenColumns && (
+                      <p>Haz clic en ▶ en cada fila para ver las {hiddenColumns.length} columnas ocultas</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {headerAction && (
             <div className="dt-header-action">{headerAction}</div>
           )}
@@ -244,59 +378,87 @@ export function DataTable<T>({
 
       {/* Table */}
       <div className="dt-container">
-        <div className="dt-table-wrapper">
-          <table className="dt-table">
+        <div className="dt-table-wrapper" ref={tableWrapperRef}>
+          <table className="dt-table dt-table-responsive">
             <thead>
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      onClick={header.column.getToggleSortingHandler()}
-                      className={header.column.getCanSort() ? "dt-sortable" : ""}
-                    >
-                      <div
-                        className={`dt-header-content ${
-                          header.id === "acciones" ? "dt-header-center" : ""
-                        }`}
+                  {headerGroup.headers.map((header) => {
+                    const isActionsColumn = alwaysVisibleColumns.includes(header.id);
+                    const isExpandColumn = header.id === "expand";
+                    return (
+                      <th
+                        key={header.id}
+                        onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                        className={`
+                          ${header.column.getCanSort() ? "dt-sortable" : ""}
+                          ${isActionsColumn ? "dt-sticky-col" : ""}
+                          ${isExpandColumn ? "dt-expand-col" : ""}
+                        `}
+                        style={isExpandColumn ? { width: '40px' } : undefined}
                       >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                        {header.column.getCanSort() && (
-                          <span className="dt-sort-indicator">
-                            {{
-                              asc: " \u2191",
-                              desc: " \u2193",
-                            }[header.column.getIsSorted() as string] ?? " \u2195"}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                  ))}
+                        <div
+                          className={`dt-header-content ${
+                            isActionsColumn ? "dt-header-center" : ""
+                          }`}
+                        >
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                          {header.column.getCanSort() && (
+                            <span className="dt-sort-indicator">
+                              {{
+                                asc: " ↑",
+                                desc: " ↓",
+                              }[header.column.getIsSorted() as string] ?? " ↕"}
+                            </span>
+                          )}
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               ))}
             </thead>
             <tbody>
               {table.getRowModel().rows.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length} className="dt-no-results">
+                  <td colSpan={finalColumns.length} className="dt-no-results">
                     No se encontraron resultados
                   </td>
                 </tr>
               ) : (
                 table.getRowModel().rows.map((row) => (
-                  <tr key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </td>
-                    ))}
-                  </tr>
+                  <>
+                    <tr key={row.id} className={row.getIsExpanded() ? "dt-row-expanded" : ""}>
+                      {row.getVisibleCells().map((cell) => {
+                        const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
+                        const isExpandColumn = cell.column.id === "expand";
+                        return (
+                          <td
+                            key={cell.id}
+                            className={`
+                              ${isActionsColumn ? "dt-sticky-col" : ""}
+                              ${isExpandColumn ? "dt-expand-col" : ""}
+                            `}
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    {row.getIsExpanded() && hasHiddenColumns && (
+                      <tr key={`${row.id}-expanded`} className="dt-expanded-row">
+                        <td colSpan={finalColumns.length}>
+                          {renderExpandedContent(row)}
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))
               )}
             </tbody>
