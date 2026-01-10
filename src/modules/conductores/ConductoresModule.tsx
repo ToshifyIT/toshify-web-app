@@ -91,7 +91,7 @@ export function ConductoresModule() {
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
-  const [licenciaVencerFilter, setLicenciaVencerFilter] = useState(false);
+  const [licenciaVencerFilter, _setLicenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
 

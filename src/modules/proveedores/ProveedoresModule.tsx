@@ -645,6 +645,7 @@ export function ProveedoresModule() {
           activeStatCard && activeStatCard !== 'total'
             ? [
                 {
+                  id: 'stat-estado',
                   label: activeStatCard === 'activos' ? 'Estado: Activos' : 'Estado: Inactivos',
                   onClear: () => {
                     setActiveStatCard(null)

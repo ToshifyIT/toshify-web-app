@@ -679,7 +679,7 @@ export function DataTable<T>({
             let displayValue: React.ReactNode;
             if (typeof colDef.cell === 'function') {
               // Use flexRender with the column's cell definition
-              displayValue = flexRender(colDef.cell, { row: mockRow } as any);
+              displayValue = flexRender(colDef.cell as ColumnDef<T>['cell'], { row: mockRow } as any);
             } else {
               // Fallback to generic value formatting
               const rawValue = colId.includes('.') ? getNestedValue(data, colId) : data[colId];
