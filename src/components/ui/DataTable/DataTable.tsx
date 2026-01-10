@@ -671,8 +671,8 @@ export function DataTable<T>({
             </div>
           )}
 
-          {/* Column visibility toggle - show when there are hidden columns or could be hidden */}
-          {(hasHiddenColumns || regularColumns.length > 3) && (
+          {/* Column visibility toggle - only show when there are hidden columns */}
+          {hasHiddenColumns && (
             <div className="dt-column-toggle-wrapper">
               <button
                 ref={columnBtnRef}
