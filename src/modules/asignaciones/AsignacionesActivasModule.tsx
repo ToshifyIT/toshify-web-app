@@ -150,7 +150,7 @@ export function AsignacionesActivasModule() {
       // Procesar estadísticas de vehículos en una sola pasada
       if (vehiculosResult.data) {
         const vehiculos = vehiculosResult.data as any[]
-        const asignacionesData = asignacionesResult.data || []
+        const asignacionesData = (asignacionesResult.data || []) as AsignacionActiva[]
 
         // Set de vehículos que tienen asignación activa
         const vehiculosConAsignacion = new Set(asignacionesData.map(a => a.vehiculo_id))
