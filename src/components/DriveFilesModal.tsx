@@ -54,97 +54,218 @@ function formatDate(dateString: string) {
 export function DriveFilesModal({ isOpen, onClose, title, driveUrl, files, loading }: DriveFilesModalProps) {
   if (!isOpen) return null
 
+  // Detectar tema oscuro
+  const isDark = document.documentElement.classList.contains('dark') ||
+                 document.body.classList.contains('dark-theme') ||
+                 window.matchMedia('(prefers-color-scheme: dark)').matches
+
+  const styles = {
+    overlay: {
+      position: 'fixed' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.6)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+      padding: '20px'
+    },
+    modal: {
+      backgroundColor: isDark ? '#1a1a2e' : '#ffffff',
+      borderRadius: '16px',
+      width: '100%',
+      maxWidth: '500px',
+      maxHeight: '80vh',
+      display: 'flex',
+      flexDirection: 'column' as const,
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+      border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb',
+      overflow: 'hidden'
+    },
+    header: {
+      padding: '24px 24px 16px',
+      textAlign: 'center' as const,
+      position: 'relative' as const,
+      borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb'
+    },
+    closeBtn: {
+      position: 'absolute' as const,
+      top: '16px',
+      right: '16px',
+      background: 'transparent',
+      border: 'none',
+      cursor: 'pointer',
+      padding: '4px',
+      color: isDark ? '#9ca3af' : '#6b7280',
+      borderRadius: '4px'
+    },
+    iconContainer: {
+      width: '56px',
+      height: '56px',
+      borderRadius: '50%',
+      border: '2px solid #16a34a',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      margin: '0 auto 16px'
+    },
+    title: {
+      fontSize: '18px',
+      fontWeight: 600,
+      color: isDark ? '#ffffff' : '#1f2937',
+      margin: 0
+    },
+    body: {
+      padding: '16px 24px',
+      overflowY: 'auto' as const,
+      flex: 1
+    },
+    fileItem: {
+      display: 'flex',
+      alignItems: 'center',
+      padding: '12px',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb',
+      borderRadius: '8px',
+      gap: '12px',
+      marginBottom: '8px',
+      cursor: 'pointer',
+      border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e5e7eb',
+      transition: 'all 0.15s ease'
+    },
+    fileItemHover: {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#f3f4f6',
+      borderColor: isDark ? 'rgba(255,255,255,0.15)' : '#d1d5db'
+    },
+    fileName: {
+      fontWeight: 500,
+      color: isDark ? '#ffffff' : '#1f2937',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap' as const,
+      fontSize: '14px'
+    },
+    fileMeta: {
+      fontSize: '12px',
+      color: isDark ? '#9ca3af' : '#6b7280',
+      marginTop: '2px'
+    },
+    footer: {
+      padding: '16px 24px',
+      display: 'flex',
+      gap: '12px',
+      justifyContent: 'center',
+      borderTop: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb'
+    },
+    primaryBtn: {
+      backgroundColor: '#E63946',
+      color: '#ffffff',
+      border: 'none',
+      borderRadius: '8px',
+      padding: '10px 20px',
+      fontSize: '14px',
+      fontWeight: 500,
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    },
+    secondaryBtn: {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#f3f4f6',
+      color: isDark ? '#ffffff' : '#374151',
+      border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #d1d5db',
+      borderRadius: '8px',
+      padding: '10px 20px',
+      fontSize: '14px',
+      fontWeight: 500,
+      cursor: 'pointer'
+    },
+    emptyState: {
+      textAlign: 'center' as const,
+      padding: '40px 20px',
+      color: isDark ? '#9ca3af' : '#6b7280'
+    },
+    loadingState: {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: '40px',
+      gap: '12px',
+      color: isDark ? '#9ca3af' : '#6b7280'
+    }
+  }
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal-container"
-        style={{ maxWidth: '700px', maxHeight: '80vh' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FolderOpen size={24} style={{ color: '#16a34a' }} />
-            {title}
-          </h2>
-          <button className="modal-close" onClick={onClose}>
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={styles.header}>
+          <button style={styles.closeBtn} onClick={onClose}>
             <X size={20} />
           </button>
+          <div style={styles.iconContainer}>
+            <FolderOpen size={28} style={{ color: '#16a34a' }} />
+          </div>
+          <h2 style={styles.title}>{title}</h2>
         </div>
 
-        <div className="modal-body" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+        {/* Body */}
+        <div style={styles.body}>
           {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px', gap: '12px' }}>
-              <Loader2 size={32} className="animate-spin" style={{ color: '#E63946' }} />
-              <span style={{ color: 'var(--text-secondary, #9ca3af)' }}>Cargando archivos...</span>
+            <div style={styles.loadingState}>
+              <Loader2 size={24} className="animate-spin" style={{ color: '#E63946' }} />
+              <span>Cargando archivos...</span>
             </div>
           ) : files.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary, #9ca3af)' }}>
+            <div style={styles.emptyState}>
               <FolderOpen size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-              <p>No hay archivos en esta carpeta</p>
+              <p style={{ margin: 0 }}>No hay archivos en esta carpeta</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <>
               {files.map(file => (
                 <div
                   key={file.id}
-                  className="drive-file-item"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '12px 16px',
-                    background: 'var(--bg-tertiary, rgba(255,255,255,0.05))',
-                    borderRadius: '8px',
-                    gap: '12px',
-                    border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
-                    transition: 'background 0.2s, border-color 0.2s',
-                    cursor: 'pointer'
-                  }}
+                  style={styles.fileItem}
                   onClick={() => file.webViewLink && window.open(file.webViewLink, '_blank')}
-                  onMouseOver={e => {
-                    e.currentTarget.style.background = 'var(--bg-hover, rgba(255,255,255,0.08))'
-                    e.currentTarget.style.borderColor = 'var(--border-hover, rgba(255,255,255,0.2))'
+                  onMouseEnter={e => {
+                    Object.assign(e.currentTarget.style, styles.fileItemHover)
                   }}
-                  onMouseOut={e => {
-                    e.currentTarget.style.background = 'var(--bg-tertiary, rgba(255,255,255,0.05))'
-                    e.currentTarget.style.borderColor = 'var(--border-color, rgba(255,255,255,0.1))'
+                  onMouseLeave={e => {
+                    e.currentTarget.style.backgroundColor = styles.fileItem.backgroundColor
+                    e.currentTarget.style.borderColor = styles.fileItem.border.split(' ')[2]
                   }}
                 >
                   {getFileIcon(file.mimeType)}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontWeight: 500,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      color: 'var(--text-primary, #fff)'
-                    }}>
-                      {file.name}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary, #9ca3af)' }}>
+                    <div style={styles.fileName}>{file.name}</div>
+                    <div style={styles.fileMeta}>
                       {formatFileSize(file.size)}
                       {file.size && ' • '}
                       {formatDate(file.modifiedTime)}
                     </div>
                   </div>
                   {file.webViewLink && (
-                    <ExternalLink size={18} style={{ color: 'var(--text-secondary, #9ca3af)', flexShrink: 0 }} />
+                    <ExternalLink size={16} style={{ color: isDark ? '#9ca3af' : '#6b7280', flexShrink: 0 }} />
                   )}
                 </div>
               ))}
-            </div>
+            </>
           )}
         </div>
 
-        <div className="modal-footer" style={{ display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
+        {/* Footer */}
+        <div style={styles.footer}>
           <button
-            className="btn-primary"
+            style={styles.primaryBtn}
             onClick={() => window.open(driveUrl, '_blank')}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
             <ExternalLink size={16} />
             Abrir en Drive
           </button>
-          <button className="btn-secondary" onClick={onClose}>
+          <button style={styles.secondaryBtn} onClick={onClose}>
             Cerrar
           </button>
         </div>
