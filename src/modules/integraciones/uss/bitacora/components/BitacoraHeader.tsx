@@ -1,6 +1,6 @@
 // src/modules/integraciones/uss/bitacora/components/BitacoraHeader.tsx
-import { useState } from 'react'
-import { Radio } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Calendar, ChevronDown, Radio } from 'lucide-react'
 import type { BitacoraDateRange } from '../types/bitacora.types'
 import { BITACORA_CONSTANTS } from '../constants/bitacora.constants'
 
@@ -19,24 +19,6 @@ export function BitacoraHeader({
   isLoading,
   lastUpdate,
 }: BitacoraHeaderProps) {
-  const [showCustomRange, setShowCustomRange] = useState(false)
-  const [customStart, setCustomStart] = useState(dateRange.startDate)
-  const [customEnd, setCustomEnd] = useState(dateRange.endDate)
-
-  const handlePresetChange = (preset: string) => {
-    if (preset === 'custom') {
-      setShowCustomRange(true)
-    } else {
-      setShowCustomRange(false)
-      onDateRangePreset(preset)
-    }
-  }
-
-  const handleApplyCustomRange = () => {
-    onCustomDateRange(customStart, customEnd)
-    setShowCustomRange(false)
-  }
-
   const formatLastUpdate = (date: Date | null) => {
     if (!date) return 'Nunca'
     return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
@@ -45,63 +27,135 @@ export function BitacoraHeader({
   const isRealtime = dateRange.label === 'Hoy'
 
   return (
-    <div className="bitacora-header">
-      <div className="header-controls">
-        {/* Filtros de fecha */}
-        <div className="date-range-selector">
-          <span className="filter-label">Período:</span>
-          <div className="date-presets">
-            {BITACORA_CONSTANTS.DATE_RANGES.map((range) => (
-              <button
-                key={range.value}
-                className={`preset-btn ${dateRange.label === range.label ? 'active' : ''}`}
-                onClick={() => handlePresetChange(range.value)}
-              >
-                {range.label}
-              </button>
-            ))}
-          </div>
-        </div>
+    <div className="uss-controls">
+      <DateRangeSelector
+        dateRange={dateRange}
+        isLoading={isLoading}
+        onPresetChange={onDateRangePreset}
+        onCustomChange={onCustomDateRange}
+      />
 
-        {/* Rango personalizado */}
-        {showCustomRange && (
-          <div className="custom-range">
-            <input
-              type="date"
-              value={customStart}
-              onChange={(e) => setCustomStart(e.target.value)}
-              className="date-input"
-            />
-            <span className="range-separator">a</span>
-            <input
-              type="date"
-              value={customEnd}
-              onChange={(e) => setCustomEnd(e.target.value)}
-              className="date-input"
-            />
-            <button className="btn-apply" onClick={handleApplyCustomRange}>
-              Aplicar
-            </button>
+      <div className="uss-status">
+        <span className="uss-last-update">
+          Actualizado: {formatLastUpdate(lastUpdate)}
+          {isLoading && <span className="uss-loading"> (cargando...)</span>}
+        </span>
+        {isRealtime && (
+          <div className="uss-realtime-indicator">
+            <Radio size={14} className="pulse-icon" />
+            <span>Tiempo real</span>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
 
-        {/* Metadata y estado */}
-        <div className="header-right">
-          <div className="header-meta">
-            <span className="current-date">{dateRange.startDate === dateRange.endDate ? dateRange.startDate : `${dateRange.startDate} - ${dateRange.endDate}`}</span>
-            <span className="last-update">
-              Última actualización: {formatLastUpdate(lastUpdate)}
-              {isLoading && <span className="loading-indicator"> (cargando...)</span>}
-            </span>
+interface DateRangeSelectorProps {
+  readonly dateRange: BitacoraDateRange
+  readonly isLoading: boolean
+  readonly onPresetChange: (preset: string) => void
+  readonly onCustomChange: (startDate: string, endDate: string) => void
+}
+
+function DateRangeSelector({ dateRange, isLoading, onPresetChange, onCustomChange }: DateRangeSelectorProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [customMode, setCustomMode] = useState(false)
+  const [customStart, setCustomStart] = useState(dateRange.startDate)
+  const [customEnd, setCustomEnd] = useState(dateRange.endDate)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handlePresetClick = (preset: typeof BITACORA_CONSTANTS.DATE_RANGES[number]) => {
+    if (preset.value === 'custom') {
+      setCustomMode(true)
+      setCustomStart(dateRange.startDate)
+      setCustomEnd(dateRange.endDate)
+    } else {
+      onPresetChange(preset.value)
+      setIsOpen(false)
+      setCustomMode(false)
+    }
+  }
+
+  const handleApplyCustom = () => {
+    onCustomChange(customStart, customEnd)
+    setIsOpen(false)
+    setCustomMode(false)
+  }
+
+  return (
+    <div className="uss-date-picker" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        disabled={isLoading}
+        className="uss-date-picker-btn"
+      >
+        <Calendar size={16} />
+        <span>{dateRange.label}</span>
+        <ChevronDown size={14} className={isOpen ? 'rotate' : ''} />
+      </button>
+
+      {isOpen && (
+        <div className="uss-date-dropdown">
+          <div className="uss-date-presets">
+            {BITACORA_CONSTANTS.DATE_RANGES.filter(r => r.value !== 'custom').map((preset) => (
+              <button
+                key={preset.value}
+                onClick={() => handlePresetClick(preset)}
+                className={dateRange.label === preset.label ? 'active' : ''}
+              >
+                {preset.label}
+              </button>
+            ))}
+            <button
+              onClick={() => handlePresetClick({ value: 'custom', label: 'Personalizado' })}
+              className={customMode || dateRange.label === 'Personalizado' ? 'active' : ''}
+            >
+              Personalizado
+            </button>
           </div>
-          {isRealtime && (
-            <div className="realtime-indicator">
-              <Radio size={14} className="pulse-icon" />
-              <span>Tiempo real</span>
+
+          {customMode && (
+            <div className="uss-date-custom">
+              <div className="uss-date-row">
+                <label>Desde:</label>
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="uss-date-input"
+                />
+              </div>
+              <div className="uss-date-row">
+                <label>Hasta:</label>
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="uss-date-input"
+                />
+              </div>
+              <button
+                className="uss-date-apply-btn"
+                onClick={handleApplyCustom}
+              >
+                Aplicar
+              </button>
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
