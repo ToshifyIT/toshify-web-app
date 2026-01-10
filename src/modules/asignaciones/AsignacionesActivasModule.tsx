@@ -56,6 +56,7 @@ export function AsignacionesActivasModule() {
   const [vehiculosOperativos, setVehiculosOperativos] = useState(0) // PKG_ON_BASE + EN_USO
   const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0) // Solo PKG_ON_BASE
   const [vehiculosEnUso, setVehiculosEnUso] = useState(0) // Solo EN_USO
+  const [vehiculosPkgOnSinAsignacion, setVehiculosPkgOnSinAsignacion] = useState<any[]>([]) // PKG_ON_BASE sin asignación
   const [loading, setLoading] = useState(true)
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -136,10 +137,10 @@ export function AsignacionesActivasModule() {
           .in('estado', ['activo', 'activa'])
           .order('created_at', { ascending: false }),
 
-        // Query 2: Vehículos con estado (una sola query con join)
+        // Query 2: Vehículos con estado y datos completos para PKG_ON_BASE
         supabase
           .from('vehiculos')
-          .select('id, estado_id, vehiculos_estados(codigo)')
+          .select('id, patente, marca, modelo, anio, estado_id, vehiculos_estados(codigo, descripcion), vehiculos_tipos(descripcion)')
       ])
 
       // Procesar asignaciones
@@ -149,12 +150,17 @@ export function AsignacionesActivasModule() {
       // Procesar estadísticas de vehículos en una sola pasada
       if (vehiculosResult.data) {
         const vehiculos = vehiculosResult.data as any[]
+        const asignacionesData = (asignacionesResult.data || []) as AsignacionActiva[]
+
+        // Set de vehículos que tienen asignación activa
+        const vehiculosConAsignacion = new Set(asignacionesData.map(a => a.vehiculo_id))
 
         // Calcular todo en una sola iteración
         let totalFlota = 0
         let operativos = 0
         let pkgOn = 0
         let enUso = 0
+        const pkgOnSinAsignacion: any[] = []
 
         for (const v of vehiculos) {
           const estadoCodigo = v.vehiculos_estados?.codigo || ''
@@ -168,6 +174,10 @@ export function AsignacionesActivasModule() {
           if (estadoCodigo === 'PKG_ON_BASE') {
             operativos++
             pkgOn++
+            // Si no tiene asignación, guardarlo para mostrarlo
+            if (!vehiculosConAsignacion.has(v.id)) {
+              pkgOnSinAsignacion.push(v)
+            }
           } else if (estadoCodigo === 'EN_USO') {
             operativos++
             enUso++
@@ -178,6 +188,7 @@ export function AsignacionesActivasModule() {
         setVehiculosOperativos(operativos)
         setVehiculosPkgOn(pkgOn)
         setVehiculosEnUso(enUso)
+        setVehiculosPkgOnSinAsignacion(pkgOnSinAsignacion)
       }
     } catch (err: any) {
       console.error('Error cargando datos:', err)
@@ -291,7 +302,6 @@ export function AsignacionesActivasModule() {
     let vehiculosOcupados = 0
     let vehiculosOperacionalesCount = 0
     let vehiculosOcupadosOperacionales = 0
-    let autosDisponibles = 0 // PKG_ON_BASE con vacantes (no A CARGO)
 
     // UNA SOLA ITERACIÓN sobre asignaciones
     for (const a of asignaciones) {
@@ -340,20 +350,6 @@ export function AsignacionesActivasModule() {
       // Contar operacionales
       if (esOperacional) vehiculosOperacionalesCount++
 
-      // Contar autos disponibles: PKG_ON_BASE + TURNO con vacantes (no A CARGO)
-      if (estadoVehiculo === 'PKG_ON_BASE' && a.horario === 'TURNO') {
-        const conductorD = conductores.find(ac =>
-          ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D'
-        )
-        const conductorN = conductores.find(ac =>
-          ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N'
-        )
-        // Disponible si tiene al menos una vacante
-        if (!conductorD?.conductor_id || !conductorN?.conductor_id) {
-          autosDisponibles++
-        }
-      }
-
       // Agregar a sets
       if (a.vehiculo_id) vehiculosSet.add(a.vehiculo_id)
       for (const ac of conductores) {
@@ -396,7 +392,7 @@ export function AsignacionesActivasModule() {
       porcentajeOcupacionGeneral,
       porcentajeOcupacionOperacional,
       porcentajeOperatividad,
-      autosDisponibles
+      autosDisponibles: vehiculosPkgOn // Todos los vehículos PKG_ON_BASE
     }
   }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOn, vehiculosEnUso])
 
@@ -420,24 +416,10 @@ export function AsignacionesActivasModule() {
           })
           break
         case 'autosDisponibles':
-          // Vehículos PKG_ON_BASE que tienen vacantes (realmente disponibles)
-          // Excluir A CARGO (tienen conductor asignado a tiempo completo)
+          // Todos los vehículos PKG_ON_BASE (con o sin asignación)
           result = result.filter(a => {
             const estadoCodigo = (a.vehiculos as any)?.vehiculos_estados?.codigo?.toUpperCase()
-            if (estadoCodigo !== 'PKG_ON_BASE') return false
-
-            // Si es A CARGO, NO es disponible (tiene conductor asignado)
-            if (a.horario === 'CARGO') return false
-
-            // Si es TURNO, verificar que tenga al menos una vacante
-            if (a.horario === 'TURNO') {
-              const conductores = a.asignaciones_conductores || []
-              const diurno = conductores.find(ac => ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D')
-              const nocturno = conductores.find(ac => ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N')
-              return !diurno?.conductor_id || !nocturno?.conductor_id
-            }
-
-            return true
+            return estadoCodigo === 'PKG_ON_BASE'
           })
           break
         // Para totalFlota y vehiculosActivos no hay filtrado especial
@@ -458,12 +440,51 @@ export function AsignacionesActivasModule() {
       result = result.filter(a => modalidadFilter.includes(a.horario))
     }
 
+    // Si el filtro es autosDisponibles, agregar vehículos PKG_ON_BASE sin asignación
+    if (activeStatFilter === 'autosDisponibles') {
+      // Crear filas "fake" para vehículos sin asignación
+      const vehiculosSinAsignacionRows = vehiculosPkgOnSinAsignacion.map(v => ({
+        id: `sin-asignacion-${v.id}`,
+        codigo: '-',
+        vehiculo_id: v.id,
+        fecha_programada: null,
+        fecha_inicio: '-',
+        modalidad: '-',
+        horario: '-',
+        estado: 'sin_asignacion',
+        created_at: '',
+        vehiculos: {
+          patente: v.patente,
+          marca: v.marca,
+          modelo: v.modelo,
+          anio: v.anio,
+          vehiculos_tipos: v.vehiculos_tipos,
+          vehiculos_estados: v.vehiculos_estados
+        },
+        asignaciones_conductores: []
+      })) as AsignacionActiva[]
+
+      result = [...result, ...vehiculosSinAsignacionRows]
+    }
+
     return result
-  }, [asignaciones, codigoFilter, vehiculoFilter, modalidadFilter, activeStatFilter])
+  }, [asignaciones, codigoFilter, vehiculoFilter, modalidadFilter, activeStatFilter, vehiculosPkgOnSinAsignacion])
 
   // Procesar asignaciones - UNA fila por asignación (no expandir)
   const processedAsignaciones = useMemo(() => {
     return filteredAsignaciones.map((asignacion: any) => {
+      // Para vehículos sin asignación, mostrar campos vacíos
+      if (asignacion.estado === 'sin_asignacion') {
+        return {
+          ...asignacion,
+          conductoresTurno: {
+            diurno: null,
+            nocturno: null
+          },
+          conductorCargo: null
+        }
+      }
+
       // Para TURNO, organizar conductores por turno
       if (asignacion.horario === 'TURNO') {
         const diurno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'diurno')
@@ -912,7 +933,7 @@ export function AsignacionesActivasModule() {
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'autosDisponibles' ? 'stat-card-active' : ''}`}
-            title="Vehículos PKG_ON_BASE con vacantes (TURNO sin conductor completo)"
+            title="Todos los vehículos con estado PKG_ON_BASE (disponibles en base)"
             onClick={() => handleStatCardClick('autosDisponibles')}
           >
             <Car size={18} className="stat-icon" />
