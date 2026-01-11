@@ -2,6 +2,13 @@
 /* Estilos para el módulo de Cabify - Diseño compacto */
 /* Con soporte para Dark Mode mediante CSS Variables */
 
+/* Override module-container para ancho completo */
+.module-container:has(.cabify-header),
+.module-container:has(.cabify-tops-container) {
+  max-width: none;
+  width: 100%;
+}
+
 /* Header - Compact Version */
 .cabify-header {
   margin-bottom: 16px;
@@ -146,7 +153,7 @@
   border-radius: 8px;
   box-shadow: var(--shadow-lg);
   padding: 12px;
-  z-index: 100;
+  z-index: 900;
   min-width: 200px;
 }
 
@@ -181,13 +188,256 @@
 
 .cabify-date-input:focus {
   outline: none;
-  border-color: var(--color-purple);
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 .cabify-date-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* =====================================================
+   Week Calendar Selector (Estilo Cabify)
+   ===================================================== */
+
+.week-calendar-selector {
+  position: relative;
+}
+
+.week-calendar-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.week-calendar-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  border-color: var(--color-primary);
+}
+
+.week-calendar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.week-calendar-btn svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.week-calendar-btn svg.rotate {
+  transform: rotate(180deg);
+}
+
+.week-calendar-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 16px;
+  z-index: 1000;
+  min-width: 280px;
+}
+
+/* Pestañas Día/Semana */
+.week-calendar-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 12px;
+}
+
+.week-calendar-tab {
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.week-calendar-tab.active {
+  color: var(--color-primary);
+  font-weight: 600;
+  border-bottom: 2px solid var(--color-primary);
+  margin-bottom: -13px;
+}
+
+.week-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.week-calendar-month {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.week-calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.week-calendar-nav:hover {
+  color: var(--text-primary);
+}
+
+.week-calendar-days-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+
+.week-calendar-day-name {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  padding: 4px 0;
+}
+
+.week-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+}
+
+.week-calendar-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-width: 36px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.1s;
+  user-select: none;
+}
+
+.week-calendar-day span {
+  pointer-events: none;
+}
+
+.week-calendar-day:hover:not(.selected):not(.unavailable) {
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+}
+
+.week-calendar-day.other-month {
+  color: var(--text-tertiary);
+  opacity: 0.4;
+}
+
+.week-calendar-day.unavailable {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+
+/* Día seleccionado en modo día - círculo completo */
+.week-calendar-day.day-selected {
+  background: var(--color-primary);
+  color: white;
+  border-radius: 50%;
+  font-weight: 500;
+}
+
+.week-calendar-day.today:not(.selected) {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Selección de semana - franja continua */
+.week-calendar-day.selected {
+  background: var(--color-primary-light);
+  color: var(--text-primary);
+}
+
+/* Bordes redondeados al inicio de fila */
+.week-calendar-day.selected.row-start {
+  border-radius: 50% 0 0 50%;
+}
+
+/* Bordes redondeados al fin de fila */
+.week-calendar-day.selected.row-end {
+  border-radius: 0 50% 50% 0;
+}
+
+/* Inicio de semana (domingo) - círculo púrpura */
+.week-calendar-day.week-start {
+  background: var(--color-primary);
+  color: white;
+  border-radius: 50%;
+  font-weight: 500;
+}
+
+/* Fin de semana (sábado) - círculo púrpura */
+.week-calendar-day.week-end {
+  background: var(--color-primary);
+  color: white;
+  border-radius: 50%;
+  font-weight: 500;
+}
+
+.week-calendar-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.week-calendar-shortcut {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--color-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.week-calendar-shortcut:hover {
+  background: var(--bg-secondary);
+}
+
+.week-calendar-shortcut.active {
+  background: var(--color-primary-light);
+  font-weight: 500;
 }
 
 /* Info Card - Estilo pill como indicador de tiempo real */
@@ -356,8 +606,9 @@
 .cabify-tops-container {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 16px;
+  width: 100%;
 }
 
 .cabify-top-card {
@@ -395,6 +646,7 @@
 
 .cabify-top-list {
   padding: 0;
+  width: 100%;
 }
 
 .cabify-top-item {
@@ -424,6 +676,7 @@
 .cabify-top-info {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .cabify-top-name {
@@ -466,9 +719,9 @@
 }
 
 .cabify-top-amount {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  min-width: 90px;
+  min-width: 120px;
   text-align: right;
 }
 
@@ -485,6 +738,109 @@
   text-align: center;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+
+/* Expandable item wrapper */
+.cabify-top-item-wrapper {
+  border-bottom: 1px solid var(--table-border);
+}
+
+.cabify-top-item-wrapper:last-child {
+  border-bottom: none;
+}
+
+.cabify-top-item-wrapper.expanded {
+  background-color: var(--bg-secondary);
+}
+
+.cabify-top-item-wrapper .cabify-top-item {
+  border-bottom: none;
+  cursor: pointer;
+}
+
+.cabify-top-expand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* Expanded content */
+.cabify-top-expanded {
+  padding: 0 14px 14px 14px;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cabify-top-expanded-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.cabify-top-expanded-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cabify-top-expanded-item .label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.cabify-top-expanded-item .value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cabify-top-expanded-item .value.highlight {
+  color: var(--color-success);
+  font-weight: 700;
+}
+
+/* Responsive for expanded */
+@media (max-width: 768px) {
+  .cabify-top-expanded-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .cabify-top-expanded {
+    padding: 0 10px 10px 10px;
+  }
+
+  .cabify-top-expanded-grid {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .cabify-top-expanded-item .label {
+    font-size: 9px;
+  }
+
+  .cabify-top-expanded-item .value {
+    font-size: 12px;
+  }
 }
 
 /* ==========================================
@@ -505,11 +861,17 @@
   border: 1px solid var(--border-primary);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-  margin-bottom: 10px;
+  margin-bottom: 0;
+  width: 100%;
 }
 
 .cabify-accordion-card.estadisticas {
   border-top: 3px solid var(--border-secondary);
+  margin-bottom: 16px;
+}
+
+.cabify-accordion-card.estadisticas .cabify-accordion-content {
+  padding: 14px;
 }
 
 .cabify-accordion-card.mejores {
@@ -558,7 +920,7 @@
 }
 
 .cabify-accordion-content {
-  padding: 14px;
+  padding: 0;
 }
 
 /* ==========================================
