@@ -4,8 +4,7 @@
  * Principio: Single Responsibility - Solo UI de encabezado
  */
 
-import { useState, useRef, useEffect } from 'react'
-import { Calendar, ChevronDown, Radio } from 'lucide-react'
+import { Radio } from 'lucide-react'
 import type { WeekOption } from '../types/cabify.types'
 import { formatDateTimeAR } from '../../../../utils/dateUtils'
 import { WeekCalendarSelector } from './WeekCalendarSelector'
@@ -24,9 +23,7 @@ interface CabifyHeaderProps {
   readonly isLoading: boolean
   readonly availableWeeks: readonly WeekOption[]
   readonly selectedWeek: WeekOption | null
-  readonly customDateRange: DateRange | null
   readonly onWeekChange: (week: WeekOption) => void
-  readonly onCustomDateChange: (range: DateRange) => void
 }
 
 // =====================================================
@@ -38,9 +35,7 @@ export function CabifyHeader({
   isLoading,
   availableWeeks,
   selectedWeek,
-  customDateRange,
   onWeekChange,
-  onCustomDateChange,
 }: CabifyHeaderProps) {
   const isDisabled = isLoading || availableWeeks.length === 0
 
@@ -52,11 +47,6 @@ export function CabifyHeader({
           availableWeeks={availableWeeks}
           isDisabled={isDisabled}
           onWeekChange={onWeekChange}
-        />
-        <DateRangePicker
-          dateRange={customDateRange}
-          isDisabled={isDisabled}
-          onChange={onCustomDateChange}
         />
         {isLoading && (
           <div className="cabify-loading-indicator">
@@ -80,107 +70,4 @@ export function CabifyHeader({
   )
 }
 
-// =====================================================
-// SUBCOMPONENTES
-// =====================================================
-
-interface DateRangePickerProps {
-  readonly dateRange: DateRange | null
-  readonly isDisabled: boolean
-  readonly onChange: (range: DateRange) => void
-}
-
-function DateRangePicker({
-  dateRange,
-  isDisabled,
-  onChange,
-}: DateRangePickerProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  // Cerrar dropdown al hacer clic fuera
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const formatDateForInput = (isoDate: string | undefined): string => {
-    if (!isoDate) return ''
-    return isoDate.split('T')[0]
-  }
-
-  const formatDateDisplay = (isoDate: string | undefined): string => {
-    if (!isoDate) return ''
-    return new Date(isoDate).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
-  }
-
-  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newStartDate = e.target.value
-    if (newStartDate) {
-      onChange({
-        startDate: new Date(newStartDate + 'T00:00:00').toISOString(),
-        endDate: dateRange?.endDate || new Date().toISOString()
-      })
-    }
-  }
-
-  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newEndDate = e.target.value
-    if (newEndDate) {
-      onChange({
-        startDate: dateRange?.startDate || new Date().toISOString(),
-        endDate: new Date(newEndDate + 'T23:59:59').toISOString()
-      })
-    }
-  }
-
-  const displayLabel = dateRange
-    ? `${formatDateDisplay(dateRange.startDate)} - ${formatDateDisplay(dateRange.endDate)}`
-    : 'Seleccionar fechas'
-
-  return (
-    <div className="cabify-date-picker-wrapper" ref={dropdownRef}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        disabled={isDisabled}
-        className="cabify-date-picker-btn"
-      >
-        <Calendar size={16} />
-        <span>{displayLabel}</span>
-        <ChevronDown size={14} className={isOpen ? 'rotate' : ''} />
-      </button>
-
-      {isOpen && (
-        <div className="cabify-date-dropdown">
-          <div className="cabify-date-dropdown-row">
-            <label>Desde:</label>
-            <input
-              type="date"
-              value={formatDateForInput(dateRange?.startDate)}
-              onChange={handleStartDateChange}
-              disabled={isDisabled}
-              className="cabify-date-input"
-            />
-          </div>
-          <div className="cabify-date-dropdown-row">
-            <label>Hasta:</label>
-            <input
-              type="date"
-              value={formatDateForInput(dateRange?.endDate)}
-              onChange={handleEndDateChange}
-              disabled={isDisabled}
-              className="cabify-date-input"
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
