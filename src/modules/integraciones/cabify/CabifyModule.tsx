@@ -200,9 +200,7 @@ export function CabifyModule() {
         isLoading={isLoading}
         availableWeeks={availableWeeks}
         selectedWeek={selectedWeek}
-        customDateRange={customDateRange}
         onWeekChange={setSelectedWeek}
-        onCustomDateChange={handleCustomDateChange}
       />
 
       <ProgressBanner

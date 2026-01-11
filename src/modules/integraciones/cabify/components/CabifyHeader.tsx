@@ -23,9 +23,7 @@ interface CabifyHeaderProps {
   readonly isLoading: boolean
   readonly availableWeeks: readonly WeekOption[]
   readonly selectedWeek: WeekOption | null
-  readonly customDateRange: DateRange | null
   readonly onWeekChange: (week: WeekOption) => void
-  readonly onCustomDateChange: (range: DateRange) => void
 }
 
 // =====================================================
@@ -37,9 +35,7 @@ export function CabifyHeader({
   isLoading,
   availableWeeks,
   selectedWeek,
-  customDateRange,
   onWeekChange,
-  onCustomDateChange,
 }: CabifyHeaderProps) {
   const isDisabled = isLoading || availableWeeks.length === 0
 
