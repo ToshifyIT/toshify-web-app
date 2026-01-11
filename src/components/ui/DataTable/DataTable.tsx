@@ -661,6 +661,12 @@ export function DataTable<T>({
       original: rowData,
       index: rowIndex,
       id: String(rowIndex),
+      depth: 0,
+      getIsExpanded: () => true,
+      getCanExpand: () => false,
+      toggleExpanded: () => {},
+      getVisibleCells: () => [],
+      getAllCells: () => [],
       getValue: (columnId: string) => {
         const colDef = hiddenColumns.find(col => {
           const def = col as { accessorKey?: string; id?: string };
@@ -696,7 +702,15 @@ export function DataTable<T>({
             let displayValue: React.ReactNode;
             if (typeof colDef.cell === 'function') {
               // Use flexRender with the column's cell definition
-              displayValue = flexRender(colDef.cell as ColumnDef<T>['cell'], { row: mockRow } as any);
+              // Wrap in try-catch to prevent crashes from incompatible cell renderers
+              try {
+                displayValue = flexRender(colDef.cell as ColumnDef<T>['cell'], { row: mockRow, getValue: mockRow.getValue } as any);
+              } catch (e) {
+                console.warn('Error rendering expanded cell:', colId, e);
+                // Fallback to raw value
+                const rawValue = colId.includes('.') ? getNestedValue(data, colId) : data[colId];
+                displayValue = rawValue !== null && rawValue !== undefined ? String(rawValue) : '-';
+              }
             } else {
               // Fallback to generic value formatting
               const rawValue = colId.includes('.') ? getNestedValue(data, colId) : data[colId];

@@ -462,6 +462,7 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
                   name surname email nationalIdNumber mobileNum driverLicense
                   stats(startAt: $startAt, endAt: $endAt) {
                     accepted missed offered assigned available score
+                    rejected dropOffs connected
                   }
                 }
               }
@@ -493,22 +494,24 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
             // Stats pueden venir de driverInfo o ser 0 si no hay datos del período
             const stats = driverInfo?.stats || {}
             const assignedSeconds = Number(stats.assigned || 0)
-            const availableSeconds = Number(stats.available || 0)
-            const connectedSeconds = assignedSeconds + availableSeconds
+            // Usar stats.connected directamente de la API (tiempo total conectado)
+            const connectedSeconds = Number(stats.connected || 0)
             const horasConectadas = connectedSeconds / 3600
             const tasaOcupacion = connectedSeconds > 0 ? (assignedSeconds / connectedSeconds) * 100 : 0
 
             const accepted = Number(stats.accepted || 0)
             const missed = Number(stats.missed || 0)
             const offered = Number(stats.offered || 0)
-            const rejected = Math.max(offered - accepted - missed, 0)
+            // Usar stats.rejected directamente de la API
+            const rejected = Number(stats.rejected || 0)
+            // Usar stats.dropOffs directamente de la API (viajes finalizados)
+            const viajesFinalizadosAPI = Number(stats.dropOffs || 0)
             const totalConsidered = accepted + rejected + missed
             const tasaAceptacion = totalConsidered > 0 ? (accepted / totalConsidered) * 100 : 0
 
             let cobroEfectivoMinor = 0
             let cobroAppMinor = 0
             let gananciaTotalViajesMinor = 0
-            let viajesCompletados = 0
             const assetIds = new Set<string>()
 
             journeys.forEach((j: any) => {
@@ -519,7 +522,6 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
                 gananciaTotalViajesMinor += amt
                 if (j.paymentMethod === 'cash') cobroEfectivoMinor += amt
                 else cobroAppMinor += amt
-                if (j.finishReason === 'drop_off') viajesCompletados++
               }
             })
 
@@ -548,7 +550,7 @@ async function getCabifyData(token: string, startDate: string, endDate: string) 
               first_asset_id: firstAssetId, // Temporal para el batch
               fecha_inicio: startDate,
               fecha_fin: endDate,
-              viajes_finalizados: viajesCompletados,
+              viajes_finalizados: viajesFinalizadosAPI,
               viajes_rechazados: rejected,
               viajes_perdidos: missed,
               viajes_aceptados: accepted,
