@@ -275,12 +275,6 @@
 }
 
 /* Celdas especiales */
-.cabify-company {
-  font-weight: 600;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
 .cabify-driver-name {
   font-weight: 600;
 }
