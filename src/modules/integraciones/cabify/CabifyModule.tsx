@@ -23,7 +23,7 @@ import { useCabifyData, useCabifyStats } from './hooks'
 import { useCabifyRankings } from './hooks/useCabifyRankings'
 
 // Componentes
-import { CabifyHeader, StatsAccordion, TopDriversSection } from './components'
+import { CabifyHeader, type DateRange, StatsAccordion, TopDriversSection } from './components'
 
 // Utilidades y constantes
 import { getScoreLevel, getRateLevel, buildLoadingMessage } from './utils/cabify.utils'
