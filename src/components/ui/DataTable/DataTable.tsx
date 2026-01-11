@@ -704,7 +704,10 @@ export function DataTable<T>({
               // Use flexRender with the column's cell definition
               // Wrap in try-catch to prevent crashes from incompatible cell renderers
               try {
-                displayValue = flexRender(colDef.cell as ColumnDef<T>['cell'], { row: mockRow, getValue: mockRow.getValue } as any);
+                // Create a getValue function specific to THIS column
+                // Cell renderers call getValue() without arguments, expecting the value for their column
+                const cellGetValue = () => mockRow.getValue(colId);
+                displayValue = flexRender(colDef.cell as ColumnDef<T>['cell'], { row: mockRow, getValue: cellGetValue } as any);
               } catch (e) {
                 console.warn('Error rendering expanded cell:', colId, e);
                 // Fallback to raw value

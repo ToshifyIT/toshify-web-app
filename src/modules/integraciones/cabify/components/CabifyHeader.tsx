@@ -8,6 +8,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Calendar, ChevronDown, Radio } from 'lucide-react'
 import type { WeekOption } from '../types/cabify.types'
 import { formatDateTimeAR } from '../../../../utils/dateUtils'
+import { WeekCalendarSelector } from './WeekCalendarSelector'
 
 // =====================================================
 // TIPOS
@@ -41,25 +42,16 @@ export function CabifyHeader({
   onWeekChange,
   onCustomDateChange,
 }: CabifyHeaderProps) {
-  const handleWeekChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const weeksAgo = Number(event.target.value)
-    const selected = availableWeeks.find((w) => w.weeksAgo === weeksAgo)
-
-    if (selected) {
-      onWeekChange(selected)
-    }
-  }
-
   const isDisabled = isLoading || availableWeeks.length === 0
 
   return (
     <div className="cabify-header cabify-header-compact">
       <div className="cabify-controls">
-        <WeekSelector
+        <WeekCalendarSelector
           selectedWeek={selectedWeek}
           availableWeeks={availableWeeks}
           isDisabled={isDisabled}
-          onChange={handleWeekChange}
+          onWeekChange={onWeekChange}
         />
         <DateRangePicker
           dateRange={customDateRange}
@@ -91,37 +83,6 @@ export function CabifyHeader({
 // =====================================================
 // SUBCOMPONENTES
 // =====================================================
-
-interface WeekSelectorProps {
-  readonly selectedWeek: WeekOption | null
-  readonly availableWeeks: readonly WeekOption[]
-  readonly isDisabled: boolean
-  readonly onChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
-}
-
-function WeekSelector({
-  selectedWeek,
-  availableWeeks,
-  isDisabled,
-  onChange,
-}: WeekSelectorProps) {
-  return (
-    <div className="cabify-week-selector">
-      <label>Semana:</label>
-      <select
-        value={selectedWeek?.weeksAgo.toString() ?? ''}
-        onChange={onChange}
-        disabled={isDisabled}
-      >
-        {availableWeeks.map((week) => (
-          <option key={week.weeksAgo} value={week.weeksAgo}>
-            {week.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  )
-}
 
 interface DateRangePickerProps {
   readonly dateRange: DateRange | null

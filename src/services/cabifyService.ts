@@ -1474,80 +1474,59 @@ class CabifyService {
   }
 
   /**
-   * Obtener lunes y domingo de una semana específica en Buenos Aires
-   * EXACTAMENTE como script.gs.txt getLastWeekInfo() - líneas 718-761
+   * Obtener lunes y domingo de una semana específica
+   * CABIFY USA LUNES-DOMINGO
    *
    * weeksAgo: cuántas semanas atrás desde HOY (0 = semana actual, 1 = semana pasada, etc.)
    */
   getWeekRange(weeksAgo: number = 0): { startDate: string; endDate: string; label: string } {
-    // PASO 1: Obtener fecha actual en Argentina (como script.gs línea 719)
-    const today = this.getArgentinaDate()
-    const dow = today.getDay()
+    // PASO 1: Obtener fecha actual
+    const today = new Date()
+    const dow = today.getDay() // 0 = domingo, 1 = lunes, ... 6 = sábado
 
-    // PASO 2: Calcular el lunes de ESTA semana (como script.gs líneas 722-725)
+    // PASO 2: Calcular el LUNES de ESTA semana
+    // Si hoy es domingo (0), retroceder 6 días al lunes
+    // Si hoy es lunes (1), no retroceder
+    // Si hoy es otro día, retroceder (dow - 1) días
     const currentMonday = new Date(today)
-    const deltaToMonday = (dow === 0 ? -6 : 1 - dow)
-    currentMonday.setDate(currentMonday.getDate() + deltaToMonday)
+    const daysToMonday = dow === 0 ? 6 : dow - 1
+    currentMonday.setDate(currentMonday.getDate() - daysToMonday)
     currentMonday.setHours(0, 0, 0, 0)
 
-    // PASO 3: Calcular el lunes de la semana deseada
-    let monday: Date
-    let sunday: Date
+    // PASO 3: Calcular el lunes y domingo de la semana deseada
+    let mondayStart: Date
+    let sundayEnd: Date
 
     if (weeksAgo === 0) {
-      // SEMANA ACTUAL: desde lunes 00:00 hasta AHORA
-      monday = new Date(currentMonday)
-      sunday = new Date(today) // Hora actual
+      // SEMANA ACTUAL
+      mondayStart = new Date(currentMonday)
+      sundayEnd = new Date(currentMonday)
+      sundayEnd.setDate(sundayEnd.getDate() + 6)
     } else {
-      // SEMANAS ANTERIORES: desde lunes 00:00 hasta domingo 23:59:59
-      monday = new Date(currentMonday)
-      monday.setDate(monday.getDate() - (weeksAgo * 7))
+      // SEMANAS ANTERIORES
+      mondayStart = new Date(currentMonday)
+      mondayStart.setDate(mondayStart.getDate() - (weeksAgo * 7))
 
-      sunday = new Date(monday)
-      sunday.setDate(sunday.getDate() + 6)
-      sunday.setHours(23, 59, 59, 999)
+      sundayEnd = new Date(mondayStart)
+      sundayEnd.setDate(sundayEnd.getDate() + 6)
     }
 
-    // PASO 4: Convertir a UTC con offset +3 (script.gs líneas 742-754)
-    // Inicio: día a las 03:00 UTC
+    // PASO 4: Convertir a UTC (00:00 UTC para inicio, 23:59:59 UTC para fin)
     const startUTC = new Date(Date.UTC(
-      monday.getFullYear(),
-      monday.getMonth(),
-      monday.getDate(),
-      3, 0, 0, 0
+      mondayStart.getFullYear(),
+      mondayStart.getMonth(),
+      mondayStart.getDate(),
+      0, 0, 0, 0
     ))
 
-    // Fin: día siguiente a las 02:59:59.999 UTC
-    let endUTC: Date
-    if (weeksAgo === 0) {
-      // Para semana actual, usar la hora actual convertida a UTC
-      endUTC = new Date(Date.UTC(
-        sunday.getFullYear(),
-        sunday.getMonth(),
-        sunday.getDate(),
-        sunday.getHours() + 3, // Agregar offset de Argentina
-        sunday.getMinutes(),
-        sunday.getSeconds(),
-        sunday.getMilliseconds()
-      ))
-    } else {
-      // Para semanas anteriores, usar fin fijo (domingo 23:59 -> lunes 02:59 UTC)
-      endUTC = new Date(Date.UTC(
-        sunday.getFullYear(),
-        sunday.getMonth(),
-        sunday.getDate() + 1,
-        2, 59, 59, 999
-      ))
-    }
+    const endUTC = new Date(Date.UTC(
+      sundayEnd.getFullYear(),
+      sundayEnd.getMonth(),
+      sundayEnd.getDate(),
+      23, 59, 59, 999
+    ))
 
-    // Generar label con número de semana ISO
-    const formatDate = (date: Date) => {
-      const day = String(date.getDate()).padStart(2, '0')
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      return `${day}/${month}`
-    }
-
-    // Calcular número de semana ISO (lunes = inicio de semana)
+    // Calcular número de semana ISO (basado en el lunes)
     const getWeekNumber = (date: Date): number => {
       const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
       const dayNum = d.getUTCDay() || 7
@@ -1556,18 +1535,13 @@ class CabifyService {
       return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
     }
 
-    const weekNum = getWeekNumber(monday)
-
-    // Calcular el domingo real de la semana (para el label)
-    const actualSunday = new Date(monday)
-    actualSunday.setDate(monday.getDate() + 6)
+    const weekNum = getWeekNumber(mondayStart)
 
     let label: string
     if (weeksAgo === 0) {
-      // Semana actual: mostrar rango completo lunes-domingo
-      label = `Semana en curso (${formatDate(monday)} - ${formatDate(actualSunday)})`
+      label = `Esta semana (S${weekNum})`
     } else {
-      label = `Sem ${weekNum} (${formatDate(monday)} - ${formatDate(actualSunday)})`
+      label = `Semana pasada (S${weekNum})`
     }
 
     return {
