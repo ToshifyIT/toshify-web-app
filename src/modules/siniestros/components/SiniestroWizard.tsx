@@ -795,6 +795,8 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
   const [asignacionActiva, setAsignacionActiva] = useState<AsignacionActiva | null>(null)
   const [loadingAsignacion, setLoadingAsignacion] = useState(false)
   const [finalizarAsignacion, setFinalizarAsignacion] = useState(false)
+  // Estado para controlar si el vehículo queda inhabilitado
+  const [vehiculoInhabilitado, setVehiculoInhabilitado] = useState(formData.habilitado_circular === false)
 
   // Estados permitidos para siniestros - SOLO mostrar estos estados específicos
   const ESTADOS_SINIESTRO = [
@@ -862,6 +864,27 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
     }
   }
 
+  // Handler para cambiar checkbox de inhabilitado
+  function handleInhabilitadoChange(checked: boolean) {
+    setVehiculoInhabilitado(checked)
+    if (checked) {
+      // Si se marca inhabilitado, establecer estado por defecto
+      const estadoDefault = estadosNoHabilitados.find(e => e.codigo === 'SINIESTRADO')?.codigo || estadosNoHabilitados[0]?.codigo || ''
+      setFormData(prev => ({
+        ...prev,
+        estado_vehiculo: estadoDefault,
+        habilitado_circular: false
+      }))
+    } else {
+      // Si se desmarca, limpiar estado del vehículo
+      setFormData(prev => ({
+        ...prev,
+        estado_vehiculo: undefined,
+        habilitado_circular: undefined
+      }))
+    }
+  }
+
   // Handler para cambiar estado del vehiculo
   function handleEstadoVehiculoChange(estado: string) {
     setFormData(prev => ({
@@ -882,62 +905,86 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
 
   return (
     <div className="wizard-step-content">
-      {/* Estado del vehiculo - Solo estados no habilitados */}
+      {/* Checkbox para vehículo inhabilitado */}
       <div className="vehicle-status-section" style={{
-        background: 'var(--color-danger-light)',
-        border: '1px solid var(--color-danger)',
+        background: vehiculoInhabilitado ? 'var(--color-danger-light)' : 'var(--bg-secondary)',
+        border: `1px solid ${vehiculoInhabilitado ? 'var(--color-danger)' : 'var(--border-primary)'}`,
         borderRadius: '8px',
         padding: '16px',
-        marginBottom: '20px'
+        marginBottom: '20px',
+        transition: 'all 0.2s ease'
       }}>
         <label style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
-          fontWeight: 600,
-          fontSize: '14px',
-          color: 'var(--color-danger)',
-          marginBottom: '8px'
+          gap: '12px',
+          cursor: 'pointer',
+          marginBottom: vehiculoInhabilitado ? '16px' : '0'
         }}>
-          <Car size={18} />
-          Estado del Vehiculo
+          <input
+            type="checkbox"
+            checked={vehiculoInhabilitado}
+            onChange={(e) => handleInhabilitadoChange(e.target.checked)}
+            style={{
+              width: '20px',
+              height: '20px',
+              accentColor: 'var(--color-danger)',
+              cursor: 'pointer'
+            }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Car size={18} color={vehiculoInhabilitado ? 'var(--color-danger)' : 'var(--text-secondary)'} />
+            <span style={{
+              fontWeight: 600,
+              fontSize: '14px',
+              color: vehiculoInhabilitado ? 'var(--color-danger)' : 'var(--text-primary)'
+            }}>
+              Vehículo inhabilitado para circular
+            </span>
+          </div>
         </label>
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px 0' }}>
-          Al registrar un siniestro, el vehiculo quedara en un estado no habilitado para circular.
-        </p>
-        <select
-          value={formData.estado_vehiculo || estadosNoHabilitados.find(e => e.codigo === 'SINIESTRADO')?.codigo || estadosNoHabilitados[0]?.codigo || ''}
-          onChange={(e) => handleEstadoVehiculoChange(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            border: '2px solid var(--color-danger)',
-            background: 'var(--bg-secondary)',
-            fontSize: '14px',
-            fontWeight: 500,
-            color: 'var(--text-primary)',
-            cursor: 'pointer'
-          }}
-        >
-          {estadosNoHabilitados.map(estado => (
-            <option key={estado.id} value={estado.codigo}>{estado.descripcion || estado.codigo}</option>
-          ))}
-        </select>
-        <div style={{
-          marginTop: '10px',
-          padding: '8px 12px',
-          borderRadius: '6px',
-          background: 'var(--color-danger-light)',
-          fontSize: '13px',
-          fontWeight: 500,
-          color: 'var(--color-danger)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px'
-        }}>
-          Vehiculo NO habilitado para circular
-        </div>
+
+        {/* Solo mostrar select de estado si está marcado */}
+        {vehiculoInhabilitado && (
+          <>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px 0' }}>
+              Seleccione el estado en que quedará el vehículo:
+            </p>
+            <select
+              value={formData.estado_vehiculo || estadosNoHabilitados.find(e => e.codigo === 'SINIESTRADO')?.codigo || estadosNoHabilitados[0]?.codigo || ''}
+              onChange={(e) => handleEstadoVehiculoChange(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                border: '2px solid var(--color-danger)',
+                background: 'var(--bg-secondary)',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+                cursor: 'pointer'
+              }}
+            >
+              {estadosNoHabilitados.map(estado => (
+                <option key={estado.id} value={estado.codigo}>{estado.descripcion || estado.codigo}</option>
+              ))}
+            </select>
+            <div style={{
+              marginTop: '10px',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: 'var(--color-danger)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              El vehículo quedará NO habilitado para circular
+            </div>
+          </>
+        )}
       </div>
 
       {/* Alerta de asignacion activa */}
