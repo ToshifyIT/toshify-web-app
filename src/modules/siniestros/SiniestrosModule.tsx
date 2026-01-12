@@ -419,6 +419,60 @@ export function SiniestrosModule() {
       }
     },
     {
+      id: 'habilitar',
+      header: 'Habilitar',
+      cell: ({ row }) => {
+        const isHabilitado = row.original.habilitado_circular
+        const hasVehiculo = !!row.original.vehiculo_id
+
+        // Si ya está habilitado, mostrar check verde
+        if (isHabilitado) {
+          return (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '24px',
+              height: '24px',
+              borderRadius: '4px',
+              background: 'rgba(16, 185, 129, 0.15)',
+              color: '#10b981'
+            }}>
+              ✓
+            </span>
+          )
+        }
+
+        // Si no tiene vehículo, mostrar deshabilitado
+        if (!hasVehiculo) {
+          return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+        }
+
+        // Mostrar checkbox para habilitar
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleHabilitarVehiculo(row.original)
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '24px',
+              height: '24px',
+              borderRadius: '4px',
+              border: '2px solid #ef4444',
+              background: 'transparent',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            title="Habilitar vehículo (PKG_ON_BASE)"
+          />
+        )
+      }
+    },
+    {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
@@ -589,6 +643,57 @@ export function SiniestrosModule() {
     setFormData(prev => ({ ...prev, vehiculo_id: vehiculoId }))
 
     // TODO: Auto-seleccionar conductor asignado y seguro del vehículo
+  }
+
+  // Habilitar vehículo: cambiar estado a PKG_ON_BASE
+  async function handleHabilitarVehiculo(siniestro: SiniestroCompleto) {
+    if (!siniestro.vehiculo_id) {
+      Swal.fire('Error', 'Este siniestro no tiene vehículo asociado', 'error')
+      return
+    }
+
+    const result = await Swal.fire({
+      title: 'Habilitar Vehículo',
+      text: `¿Desea habilitar el vehículo ${siniestro.vehiculo_patente} para circular?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, habilitar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#10b981'
+    })
+
+    if (!result.isConfirmed) return
+
+    try {
+      // Actualizar siniestro
+      const { error: siniestroError } = await (supabase.from('siniestros' as any) as any).update({
+        estado_vehiculo: 'PKG_ON_BASE',
+        habilitado_circular: true
+      }).eq('id', siniestro.id)
+
+      if (siniestroError) throw siniestroError
+
+      // También actualizar el vehículo directamente
+      const estadoPkgOn = vehiculosEstados.find(e => e.codigo === 'PKG_ON_BASE')
+      if (estadoPkgOn) {
+        await (supabase.from('vehiculos') as any).update({
+          estado_id: estadoPkgOn.id
+        }).eq('id', siniestro.vehiculo_id)
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Vehículo habilitado',
+        text: `${siniestro.vehiculo_patente} ahora está en estado PKG_ON_BASE`,
+        timer: 2000,
+        showConfirmButton: false
+      })
+
+      cargarDatos()
+    } catch (error) {
+      console.error('Error habilitando vehículo:', error)
+      Swal.fire('Error', 'No se pudo habilitar el vehículo', 'error')
+    }
   }
 
   function formatMoney(value: number | undefined | null) {
