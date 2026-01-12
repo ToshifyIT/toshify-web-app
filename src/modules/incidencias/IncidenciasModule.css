@@ -1333,6 +1333,28 @@
   font-weight: 500;
 }
 
+.conductor-select-turno {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.conductor-select-turno.diurno {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.conductor-select-turno.nocturno {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.conductor-select-turno.a-cargo {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
 .conductor-select-skip {
   width: 100%;
   padding: 12px;
