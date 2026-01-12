@@ -44,11 +44,12 @@ type TabType = 'dashboard' | 'listado' | 'por_cobrar' | 'historico'
 
 export function SiniestrosModule() {
   const { user, profile } = useAuth()
-  const { canCreateInSubmenu, canEditInSubmenu } = usePermissions()
+  const { canCreateInSubmenu, canEditInSubmenu, isAdmin } = usePermissions()
 
   // Permisos específicos para el submenú de siniestros
-  const canCreate = canCreateInSubmenu('siniestros')
-  const canEdit = canEditInSubmenu('siniestros')
+  // Admin siempre tiene acceso completo
+  const canCreate = isAdmin() || canCreateInSubmenu('siniestros')
+  const canEdit = isAdmin() || canEditInSubmenu('siniestros')
 
   const [activeTab, setActiveTab] = useState<TabType>('listado')
   const [loading, setLoading] = useState(true)
