@@ -180,11 +180,25 @@ export function useBitacoraData() {
       const registrosEnriquecidos = bitacoraResult.data.map((r) => {
         const asignacion = asignaciones.get(r.patente_normalizada)
         if (asignacion) {
-          // Buscar el conductor que coincida por nombre (si existe conductor_wialon en el registro)
           const conductorWialon = r.conductor_wialon?.toLowerCase() || ''
-          const conductorMatch = asignacion.conductores.find(c =>
-            conductorWialon.includes(c.conductor_nombre.toLowerCase())
+
+          // Buscar conductor que coincida por nombre
+          let conductorMatch = asignacion.conductores.find(c =>
+            conductorWialon && conductorWialon.includes(c.conductor_nombre.toLowerCase())
           )
+
+          // Si no hay match por nombre pero hay conductores asignados:
+          // - Para CARGO: usar el único conductor (o el primero si hay varios)
+          // - Para TURNO sin conductor_wialon: usar el primer conductor como fallback
+          if (!conductorMatch && asignacion.conductores.length > 0) {
+            if (asignacion.modalidad === 'CARGO') {
+              // En modalidad CARGO, típicamente hay un solo conductor
+              conductorMatch = asignacion.conductores[0]
+            } else if (!conductorWialon) {
+              // Si no hay conductor_wialon y hay conductores, usar el primero
+              conductorMatch = asignacion.conductores[0]
+            }
+          }
 
           // Determinar el turno del conductor
           let turnoIndicador: string | null = null
@@ -198,7 +212,7 @@ export function useBitacoraData() {
             ...r,
             conductor_wialon: conductorMatch?.conductor_completo || r.conductor_wialon,
             tipo_turno: asignacion.modalidad, // TURNO o CARGO
-            turno_indicador: turnoIndicador, // D, N, o null
+            turno_indicador: turnoIndicador, // Diurno, Nocturno, o null
           }
         }
         return { ...r, tipo_turno: null, turno_indicador: null }
