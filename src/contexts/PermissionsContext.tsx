@@ -355,6 +355,17 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
       }
 
+      // DEBUG: Ver permisos cargados
+      console.log('🔐 Permisos cargados:', {
+        user: user!.email,
+        role: (profileData as any).roles?.name,
+        submenus: submenusData.map(s => ({
+          name: s.name,
+          can_create: s.permissions.can_create,
+          can_edit: s.permissions.can_edit
+        }))
+      })
+
       setUserPermissions({
         user_id: user!.id,
         email: user!.email || '',
@@ -377,16 +388,16 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   // Se recalculan solo cuando cambia userPermissions
   // =====================================================
 
-  /** Map de menús indexado por nombre - O(1) lookup */
+  /** Map de menús indexado por nombre (lowercase) - O(1) lookup */
   const menusByName = useMemo<Map<string, MenuPermission>>(() => {
     if (!userPermissions?.menus) return new Map()
-    return new Map(userPermissions.menus.map(m => [m.name, m]))
+    return new Map(userPermissions.menus.map(m => [m.name.toLowerCase(), m]))
   }, [userPermissions?.menus])
 
-  /** Map de submenús indexado por nombre - O(1) lookup */
+  /** Map de submenús indexado por nombre (lowercase) - O(1) lookup */
   const submenusByName = useMemo<Map<string, SubmenuPermission>>(() => {
     if (!userPermissions?.submenus) return new Map()
-    return new Map(userPermissions.submenus.map(s => [s.name, s]))
+    return new Map(userPermissions.submenus.map(s => [s.name.toLowerCase(), s]))
   }, [userPermissions?.submenus])
 
   /** Menús visibles pre-calculados y ordenados */
@@ -425,53 +436,54 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   // FUNCIONES DE PERMISOS - Usando Map.get() O(1)
   // =====================================================
 
-  // Funciones para menús - O(1) con Map
+  // Funciones para menús - O(1) con Map (case-insensitive)
   const canViewMenu = useCallback((menuName: string): boolean => {
-    return menusByName.get(menuName)?.permissions.can_view ?? false
+    return menusByName.get(menuName.toLowerCase())?.permissions.can_view ?? false
   }, [menusByName])
 
   const canCreateInMenu = useCallback((menuName: string): boolean => {
-    return menusByName.get(menuName)?.permissions.can_create ?? false
+    return menusByName.get(menuName.toLowerCase())?.permissions.can_create ?? false
   }, [menusByName])
 
   const canEditInMenu = useCallback((menuName: string): boolean => {
-    return menusByName.get(menuName)?.permissions.can_edit ?? false
+    return menusByName.get(menuName.toLowerCase())?.permissions.can_edit ?? false
   }, [menusByName])
 
   const canDeleteInMenu = useCallback((menuName: string): boolean => {
-    return menusByName.get(menuName)?.permissions.can_delete ?? false
+    return menusByName.get(menuName.toLowerCase())?.permissions.can_delete ?? false
   }, [menusByName])
 
-  // Funciones para submenús - O(1) con Map
+  // Funciones para submenús - O(1) con Map (case-insensitive)
   const canViewSubmenu = useCallback((submenuName: string): boolean => {
-    return submenusByName.get(submenuName)?.permissions.can_view ?? false
+    return submenusByName.get(submenuName.toLowerCase())?.permissions.can_view ?? false
   }, [submenusByName])
 
   const canCreateInSubmenu = useCallback((submenuName: string): boolean => {
-    return submenusByName.get(submenuName)?.permissions.can_create ?? false
+    return submenusByName.get(submenuName.toLowerCase())?.permissions.can_create ?? false
   }, [submenusByName])
 
   const canEditInSubmenu = useCallback((submenuName: string): boolean => {
-    return submenusByName.get(submenuName)?.permissions.can_edit ?? false
+    return submenusByName.get(submenuName.toLowerCase())?.permissions.can_edit ?? false
   }, [submenusByName])
 
   const canDeleteInSubmenu = useCallback((submenuName: string): boolean => {
-    return submenusByName.get(submenuName)?.permissions.can_delete ?? false
+    return submenusByName.get(submenuName.toLowerCase())?.permissions.can_delete ?? false
   }, [submenusByName])
 
-  // Función general que busca en menús y submenús - O(1) con Maps
+  // Función general que busca en menús y submenús - O(1) con Maps (case-insensitive)
   const canAccess = useCallback((
     menuOrSubmenuName: string,
     action: 'view' | 'create' | 'edit' | 'delete' = 'view'
   ): boolean => {
     const permKey = `can_${action}` as const
+    const nameLower = menuOrSubmenuName.toLowerCase()
 
     // Buscar primero en menús (más común) - O(1)
-    const menu = menusByName.get(menuOrSubmenuName)
+    const menu = menusByName.get(nameLower)
     if (menu) return menu.permissions[permKey] ?? false
 
     // Buscar en submenús - O(1)
-    const submenu = submenusByName.get(menuOrSubmenuName)
+    const submenu = submenusByName.get(nameLower)
     if (submenu) return submenu.permissions[permKey] ?? false
 
     return false
