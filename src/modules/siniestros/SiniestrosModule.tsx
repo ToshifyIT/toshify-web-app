@@ -676,7 +676,7 @@ export function SiniestrosModule() {
       // También actualizar el vehículo directamente
       const estadoPkgOn = vehiculosEstados.find(e => e.codigo === 'PKG_ON_BASE')
       if (estadoPkgOn) {
-        await supabase.from('vehiculos').update({
+        await (supabase.from('vehiculos') as any).update({
           estado_id: estadoPkgOn.id
         }).eq('id', siniestro.vehiculo_id)
       }
