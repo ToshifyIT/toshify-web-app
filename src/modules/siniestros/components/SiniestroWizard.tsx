@@ -266,6 +266,13 @@ export function SiniestroWizard({
 // PASO 1: DATOS DEL EVENTO
 // =====================================================
 
+interface ConductorAsignado {
+  id: string
+  nombre_completo: string
+  horario: string // TURNO o CARGO (de asignacion)
+  turno: string // Diurno, Nocturno, A cargo
+}
+
 interface Step1Props {
   formData: SiniestroFormData
   setFormData: React.Dispatch<React.SetStateAction<SiniestroFormData>>
@@ -281,8 +288,98 @@ function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculo
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
   const [showConductorDropdown, setShowConductorDropdown] = useState(false)
 
+  // Estado para modal de selección de conductor
+  const [showConductorSelectModal, setShowConductorSelectModal] = useState(false)
+  const [conductoresAsignados, setConductoresAsignados] = useState<ConductorAsignado[]>([])
+  const [loadingConductores, setLoadingConductores] = useState(false)
+
   const selectedVehiculo = vehiculos.find(v => v.id === formData.vehiculo_id)
   const selectedConductor = conductores.find(c => c.id === formData.conductor_id)
+
+  // Buscar conductores asignados al vehículo seleccionado
+  async function buscarConductoresAsignados(vehiculoId: string) {
+    setLoadingConductores(true)
+    try {
+      // Consultar asignaciones activas del vehículo con sus conductores
+      const { data, error } = await supabase
+        .from('asignaciones')
+        .select(`
+          id,
+          horario,
+          asignaciones_conductores (
+            horario,
+            conductores (
+              id,
+              nombres,
+              apellidos
+            )
+          )
+        `)
+        .eq('vehiculo_id', vehiculoId)
+        .eq('estado', 'activa')
+
+      if (error) throw error
+
+      // Extraer conductores de asignaciones_conductores
+      const conductoresData: ConductorAsignado[] = []
+      for (const asig of (data || [])) {
+        const asigConductores = (asig as any).asignaciones_conductores || []
+        for (const ac of asigConductores) {
+          if (ac.conductores) {
+            // Mapear turno: diurno -> Diurno, nocturno -> Nocturno, todo_dia -> A cargo
+            let turnoDisplay = 'A cargo'
+            if (ac.horario === 'diurno') turnoDisplay = 'Diurno'
+            else if (ac.horario === 'nocturno') turnoDisplay = 'Nocturno'
+
+            conductoresData.push({
+              id: ac.conductores.id,
+              nombre_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
+              horario: (asig as any).horario === 'TURNO' ? 'Turno' : 'A Cargo',
+              turno: turnoDisplay
+            })
+          }
+        }
+      }
+
+      if (conductoresData.length === 1) {
+        // Solo un conductor, auto-seleccionar
+        setFormData(prev => ({
+          ...prev,
+          conductor_id: conductoresData[0].id
+        }))
+        setConductorSearch('')
+      } else if (conductoresData.length > 1) {
+        // Múltiples conductores, mostrar modal para elegir
+        setConductoresAsignados(conductoresData)
+        setShowConductorSelectModal(true)
+      }
+      // Si no hay conductores asignados, no hacer nada (permite búsqueda manual)
+    } catch (error) {
+      console.error('Error buscando conductores asignados:', error)
+    } finally {
+      setLoadingConductores(false)
+    }
+  }
+
+  // Manejar selección de vehículo
+  function handleSelectVehiculo(vehiculo: VehiculoSimple) {
+    onVehiculoChange(vehiculo.id)
+    setVehiculoSearch('')
+    setShowVehiculoDropdown(false)
+    // Buscar conductores asignados
+    buscarConductoresAsignados(vehiculo.id)
+  }
+
+  // Manejar selección de conductor desde modal
+  function handleSelectConductorFromModal(conductor: ConductorAsignado) {
+    setFormData(prev => ({
+      ...prev,
+      conductor_id: conductor.id
+    }))
+    setConductorSearch('')
+    setShowConductorSelectModal(false)
+    setConductoresAsignados([])
+  }
 
   const filteredVehiculos = vehiculos.filter(v => {
     const searchTerm = vehiculoSearch.toLowerCase()
@@ -297,144 +394,183 @@ function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculo
   }).slice(0, 8)
 
   return (
-    <div className="wizard-step-content">
-      <div className="form-row">
-        <div className="form-group">
-          <label>Patente del Vehículo</label>
-          <div className="searchable-select">
-            <input
-              type="text"
-              value={selectedVehiculo ? `${selectedVehiculo.patente} - ${selectedVehiculo.marca} ${selectedVehiculo.modelo}` : vehiculoSearch}
-              onChange={(e) => {
-                setVehiculoSearch(e.target.value)
-                setShowVehiculoDropdown(true)
-                if (formData.vehiculo_id) onVehiculoChange('')
-              }}
-              onFocus={() => setShowVehiculoDropdown(true)}
-              onBlur={() => setTimeout(() => setShowVehiculoDropdown(false), 200)}
-              placeholder="Buscar por patente..."
-            />
-            {showVehiculoDropdown && vehiculoSearch && filteredVehiculos.length > 0 && (
-              <div className="searchable-dropdown">
-                {filteredVehiculos.map(v => (
-                  <div
-                    key={v.id}
-                    className="searchable-option"
-                    onClick={() => {
-                      onVehiculoChange(v.id)
-                      setVehiculoSearch('')
-                      setShowVehiculoDropdown(false)
-                    }}
-                  >
-                    <strong>{v.patente}</strong> - {v.marca} {v.modelo}
-                  </div>
-                ))}
-              </div>
-            )}
-            {selectedVehiculo && (
-              <button
-                type="button"
-                className="clear-selection"
-                onClick={() => {
-                  onVehiculoChange('')
-                  setVehiculoSearch('')
+    <>
+      <div className="wizard-step-content">
+        <div className="form-row">
+          <div className="form-group">
+            <label>Patente del Vehículo</label>
+            <div className="searchable-select">
+              <input
+                type="text"
+                value={selectedVehiculo ? `${selectedVehiculo.patente} - ${selectedVehiculo.marca} ${selectedVehiculo.modelo}` : vehiculoSearch}
+                onChange={(e) => {
+                  setVehiculoSearch(e.target.value)
+                  setShowVehiculoDropdown(true)
+                  if (formData.vehiculo_id) {
+                    onVehiculoChange('')
+                    setFormData(prev => ({ ...prev, conductor_id: undefined }))
+                  }
                 }}
-              >
-                <X size={14} />
-              </button>
+                onFocus={() => setShowVehiculoDropdown(true)}
+                onBlur={() => setTimeout(() => setShowVehiculoDropdown(false), 200)}
+                placeholder="Buscar por patente..."
+              />
+              {showVehiculoDropdown && vehiculoSearch && filteredVehiculos.length > 0 && (
+                <div className="searchable-dropdown">
+                  {filteredVehiculos.map(v => (
+                    <div
+                      key={v.id}
+                      className="searchable-option"
+                      onClick={() => handleSelectVehiculo(v)}
+                    >
+                      <strong>{v.patente}</strong> - {v.marca} {v.modelo}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {selectedVehiculo && (
+                <button
+                  type="button"
+                  className="clear-selection"
+                  onClick={() => {
+                    onVehiculoChange('')
+                    setVehiculoSearch('')
+                    setFormData(prev => ({ ...prev, conductor_id: undefined }))
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            {loadingConductores && (
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                Buscando conductores asignados...
+              </span>
             )}
           </div>
+          <div className="form-group">
+            <label>Conductor</label>
+            <div className="searchable-select">
+              <input
+                type="text"
+                value={selectedConductor ? selectedConductor.nombre_completo : conductorSearch}
+                onChange={(e) => {
+                  setConductorSearch(e.target.value)
+                  setShowConductorDropdown(true)
+                  if (formData.conductor_id) setFormData(prev => ({ ...prev, conductor_id: undefined }))
+                }}
+                onFocus={() => setShowConductorDropdown(true)}
+                onBlur={() => setTimeout(() => setShowConductorDropdown(false), 200)}
+                placeholder="Buscar conductor..."
+              />
+              {showConductorDropdown && conductorSearch && filteredConductores.length > 0 && (
+                <div className="searchable-dropdown">
+                  {filteredConductores.map(c => (
+                    <div
+                      key={c.id}
+                      className="searchable-option"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, conductor_id: c.id }))
+                        setConductorSearch('')
+                        setShowConductorDropdown(false)
+                      }}
+                    >
+                      {c.nombre_completo}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {selectedConductor && (
+                <button
+                  type="button"
+                  className="clear-selection"
+                  onClick={() => {
+                    setFormData(prev => ({ ...prev, conductor_id: undefined }))
+                    setConductorSearch('')
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="form-group">
-          <label>Conductor</label>
-          <div className="searchable-select">
+
+        <div className="form-row">
+          {/* Campo oculto temporalmente */}
+          <div className="form-group" style={{ display: 'none' }}>
+            <label>Conductor (texto libre)</label>
             <input
               type="text"
-              value={selectedConductor ? selectedConductor.nombre_completo : conductorSearch}
-              onChange={(e) => {
-                setConductorSearch(e.target.value)
-                setShowConductorDropdown(true)
-                if (formData.conductor_id) setFormData(prev => ({ ...prev, conductor_id: undefined }))
-              }}
-              onFocus={() => setShowConductorDropdown(true)}
-              onBlur={() => setTimeout(() => setShowConductorDropdown(false), 200)}
-              placeholder="Buscar conductor..."
+              value={formData.conductor_nombre || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, conductor_nombre: e.target.value }))}
+              placeholder="Si no está en el sistema"
             />
-            {showConductorDropdown && conductorSearch && filteredConductores.length > 0 && (
-              <div className="searchable-dropdown">
-                {filteredConductores.map(c => (
-                  <div
-                    key={c.id}
-                    className="searchable-option"
-                    onClick={() => {
-                      setFormData(prev => ({ ...prev, conductor_id: c.id }))
-                      setConductorSearch('')
-                      setShowConductorDropdown(false)
-                    }}
-                  >
-                    {c.nombre_completo}
-                  </div>
-                ))}
-              </div>
-            )}
-            {selectedConductor && (
-              <button
-                type="button"
-                className="clear-selection"
-                onClick={() => {
-                  setFormData(prev => ({ ...prev, conductor_id: undefined }))
-                  setConductorSearch('')
-                }}
-              >
-                <X size={14} />
-              </button>
-            )}
+          </div>
+          <div className="form-group">
+            <label>Fecha <span className="required">*</span></label>
+            <input
+              type="date"
+              value={formData.fecha_siniestro}
+              onChange={(e) => setFormData(prev => ({ ...prev, fecha_siniestro: e.target.value }))}
+              className={errors.fecha_siniestro ? 'input-error' : ''}
+            />
+            {errors.fecha_siniestro && <span className="error-message">{errors.fecha_siniestro}</span>}
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label>Hora</label>
+            <TimeInput24h
+              value={formData.hora_siniestro || '09:00'}
+              onChange={(value) => setFormData(prev => ({ ...prev, hora_siniestro: value }))}
+            />
+          </div>
+          <div className="form-group">
+            <label>Ubicación</label>
+            <input
+              type="text"
+              value={formData.ubicacion || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, ubicacion: e.target.value }))}
+              placeholder="Dirección o referencia"
+            />
           </div>
         </div>
       </div>
 
-      <div className="form-row">
-        {/* Campo oculto temporalmente */}
-        <div className="form-group" style={{ display: 'none' }}>
-          <label>Conductor (texto libre)</label>
-          <input
-            type="text"
-            value={formData.conductor_nombre || ''}
-            onChange={(e) => setFormData(prev => ({ ...prev, conductor_nombre: e.target.value }))}
-            placeholder="Si no está en el sistema"
-          />
+      {/* Modal de selección de conductor */}
+      {showConductorSelectModal && (
+        <div className="conductor-select-modal-overlay" onClick={() => setShowConductorSelectModal(false)}>
+          <div className="conductor-select-modal" onClick={e => e.stopPropagation()}>
+            <div className="conductor-select-modal-header">
+              <h4>Seleccionar Conductor</h4>
+              <p>Este vehículo tiene múltiples conductores asignados</p>
+            </div>
+            <div className="conductor-select-modal-list">
+              {conductoresAsignados.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="conductor-select-option"
+                  onClick={() => handleSelectConductorFromModal(c)}
+                >
+                  <span className="conductor-select-name">{c.nombre_completo}</span>
+                  <span className={`conductor-select-turno ${c.turno.toLowerCase().replace(' ', '-')}`}>{c.turno}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="conductor-select-skip"
+              onClick={() => setShowConductorSelectModal(false)}
+            >
+              Omitir selección
+            </button>
+          </div>
         </div>
-        <div className="form-group">
-          <label>Fecha <span className="required">*</span></label>
-          <input
-            type="date"
-            value={formData.fecha_siniestro}
-            onChange={(e) => setFormData(prev => ({ ...prev, fecha_siniestro: e.target.value }))}
-            className={errors.fecha_siniestro ? 'input-error' : ''}
-          />
-          {errors.fecha_siniestro && <span className="error-message">{errors.fecha_siniestro}</span>}
-        </div>
-      </div>
-
-      <div className="form-row">
-        <div className="form-group">
-          <label>Hora</label>
-          <TimeInput24h
-            value={formData.hora_siniestro || '09:00'}
-            onChange={(value) => setFormData(prev => ({ ...prev, hora_siniestro: value }))}
-          />
-        </div>
-        <div className="form-group">
-          <label>Ubicación</label>
-          <input
-            type="text"
-            value={formData.ubicacion || ''}
-            onChange={(e) => setFormData(prev => ({ ...prev, ubicacion: e.target.value }))}
-            placeholder="Dirección o referencia"
-          />
-        </div>
-      </div>
-    </div>
+      )}
+    </>
   )
 }
 
@@ -660,9 +796,16 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
   const [loadingAsignacion, setLoadingAsignacion] = useState(false)
   const [finalizarAsignacion, setFinalizarAsignacion] = useState(false)
 
-  // Estados NO habilitados para siniestros (filtrar los habilitados: DISPONIBLE, EN-USO, PKG_ON_BASE)
-  const ESTADOS_HABILITADOS = ['DISPONIBLE', 'EN-USO', 'PKG_ON_BASE']
-  const estadosNoHabilitados = vehiculosEstados.filter(e => !ESTADOS_HABILITADOS.includes(e.codigo))
+  // Estados permitidos para siniestros - SOLO mostrar estos estados específicos
+  const ESTADOS_SINIESTRO = [
+    'SINIESTRADO',
+    'DESTRUCCION_TOTAL',
+    'RETENIDO_COMISARIA',
+    'ROBO',
+    'TALLER_CHAPA_PINTURA',
+    'TALLER_MECANICO'
+  ]
+  const estadosNoHabilitados = vehiculosEstados.filter(e => ESTADOS_SINIESTRO.includes(e.codigo))
 
   // Cargar asignacion activa del vehiculo
   useEffect(() => {
