@@ -1,8 +1,10 @@
 // src/modules/siniestros/components/SiniestroWizard.tsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Check, X, Car, AlertTriangle, FileText, Users, Briefcase } from 'lucide-react'
+import { supabase } from '../../../lib/supabase'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import type { SiniestroFormData, SiniestroCategoria, SiniestroEstado, VehiculoSimple, ConductorSimple } from '../../../types/siniestros.types'
+import type { VehiculoEstado } from '../../../types/database.types'
 
 // =====================================================
 // TIPOS
@@ -31,6 +33,7 @@ interface SiniestroWizardProps {
   estados: SiniestroEstado[]
   vehiculos: VehiculoSimple[]
   conductores: ConductorSimple[]
+  vehiculosEstados: VehiculoEstado[]
   onVehiculoChange: (id: string) => void
   onCancel: () => void
   onSubmit: () => void
@@ -48,6 +51,7 @@ export function SiniestroWizard({
   estados,
   vehiculos,
   conductores,
+  vehiculosEstados,
   onVehiculoChange,
   onCancel,
   onSubmit,
@@ -191,6 +195,7 @@ export function SiniestroWizard({
           <Step5Gestion
             formData={formData}
             setFormData={setFormData}
+            vehiculosEstados={vehiculosEstados}
           />
         )}
       </div>
@@ -640,15 +645,104 @@ function Step4Tercero({ formData, setFormData }: Step4Props) {
 interface Step5Props {
   formData: SiniestroFormData
   setFormData: React.Dispatch<React.SetStateAction<SiniestroFormData>>
+  vehiculosEstados: VehiculoEstado[]
 }
 
-function Step5Gestion({ formData, setFormData }: Step5Props) {
+interface AsignacionActiva {
+  id: string
+  horario: string
+  conductores: string[]
+  fecha_inicio: string
+}
+
+function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
+  const [asignacionActiva, setAsignacionActiva] = useState<AsignacionActiva | null>(null)
+  const [loadingAsignacion, setLoadingAsignacion] = useState(false)
+  const [finalizarAsignacion, setFinalizarAsignacion] = useState(false)
+
+  // Estados NO habilitados para siniestros (filtrar los habilitados: DISPONIBLE, EN-USO, PKG_ON_BASE)
+  const ESTADOS_HABILITADOS = ['DISPONIBLE', 'EN-USO', 'PKG_ON_BASE']
+  const estadosNoHabilitados = vehiculosEstados.filter(e => !ESTADOS_HABILITADOS.includes(e.codigo))
+
+  // Cargar asignacion activa del vehiculo
+  useEffect(() => {
+    if (formData.vehiculo_id) {
+      cargarAsignacionActiva()
+    } else {
+      setAsignacionActiva(null)
+    }
+  }, [formData.vehiculo_id])
+
+  async function cargarAsignacionActiva() {
+    if (!formData.vehiculo_id) return
+    setLoadingAsignacion(true)
+    try {
+      const { data, error } = await supabase
+        .from('asignaciones')
+        .select(`
+          id,
+          horario,
+          fecha_inicio,
+          asignaciones_conductores (
+            conductores (
+              nombres,
+              apellidos
+            )
+          )
+        `)
+        .eq('vehiculo_id', formData.vehiculo_id)
+        .eq('estado', 'activa')
+        .single()
+
+      if (error && error.code !== 'PGRST116') throw error
+
+      if (data) {
+        const asignacion = data as any
+        const conductoresNombres = (asignacion.asignaciones_conductores || [])
+          .map((ac: any) => ac.conductores ? `${ac.conductores.nombres} ${ac.conductores.apellidos}` : '')
+          .filter((n: string) => n)
+
+        setAsignacionActiva({
+          id: asignacion.id,
+          horario: asignacion.horario,
+          fecha_inicio: asignacion.fecha_inicio,
+          conductores: conductoresNombres
+        })
+      } else {
+        setAsignacionActiva(null)
+      }
+    } catch (error) {
+      console.error('Error cargando asignacion:', error)
+      setAsignacionActiva(null)
+    } finally {
+      setLoadingAsignacion(false)
+    }
+  }
+
+  // Handler para cambiar estado del vehiculo
+  function handleEstadoVehiculoChange(estado: string) {
+    setFormData(prev => ({
+      ...prev,
+      estado_vehiculo: estado,
+      habilitado_circular: false // Siempre false porque son estados no habilitados
+    }))
+  }
+
+  // Guardar la preferencia de finalizar asignacion en el formData
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      _finalizarAsignacion: finalizarAsignacion,
+      _asignacionId: asignacionActiva?.id
+    } as any))
+  }, [finalizarAsignacion, asignacionActiva])
+
   return (
     <div className="wizard-step-content">
-      {/* Estado del vehículo - Importante para asignaciones */}
+      {/* Estado del vehiculo - Solo estados no habilitados */}
       <div className="vehicle-status-section" style={{
-        background: formData.habilitado_circular === false ? '#fef2f2' : '#f0fdf4',
-        border: `1px solid ${formData.habilitado_circular === false ? '#fecaca' : '#bbf7d0'}`,
+        background: 'var(--color-danger-light)',
+        border: '1px solid var(--color-danger)',
         borderRadius: '8px',
         padding: '16px',
         marginBottom: '20px'
@@ -659,56 +753,145 @@ function Step5Gestion({ formData, setFormData }: Step5Props) {
           gap: '10px',
           fontWeight: 600,
           fontSize: '14px',
-          color: formData.habilitado_circular === false ? '#dc2626' : '#16a34a',
+          color: 'var(--color-danger)',
           marginBottom: '8px'
         }}>
           <Car size={18} />
-          Estado del Vehículo
+          Estado del Vehiculo
         </label>
-        <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 12px 0' }}>
-          Si el vehículo queda inhabilitado, las asignaciones activas se verán afectadas.
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px 0' }}>
+          Al registrar un siniestro, el vehiculo quedara en un estado no habilitado para circular.
         </p>
-        <div className="radio-group" style={{ display: 'flex', gap: '16px' }}>
-          <label className={`radio-option-card ${formData.habilitado_circular !== false ? 'selected' : ''}`} style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 16px',
-            borderRadius: '6px',
-            border: `2px solid ${formData.habilitado_circular !== false ? '#16a34a' : '#e2e8f0'}`,
-            background: formData.habilitado_circular !== false ? '#dcfce7' : '#fff',
-            cursor: 'pointer',
-            flex: 1
-          }}>
-            <input
-              type="radio"
-              name="habilitado_circular"
-              checked={formData.habilitado_circular !== false}
-              onChange={() => setFormData(prev => ({ ...prev, habilitado_circular: true }))}
-            />
-            <span style={{ fontWeight: 500 }}>Habilitado para circular</span>
-          </label>
-          <label className={`radio-option-card ${formData.habilitado_circular === false ? 'selected' : ''}`} style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 16px',
-            borderRadius: '6px',
-            border: `2px solid ${formData.habilitado_circular === false ? '#dc2626' : '#e2e8f0'}`,
-            background: formData.habilitado_circular === false ? '#fee2e2' : '#fff',
-            cursor: 'pointer',
-            flex: 1
-          }}>
-            <input
-              type="radio"
-              name="habilitado_circular"
-              checked={formData.habilitado_circular === false}
-              onChange={() => setFormData(prev => ({ ...prev, habilitado_circular: false }))}
-            />
-            <span style={{ fontWeight: 500 }}>Inhabilitado (Siniestrado)</span>
-          </label>
+        <select
+          value={formData.estado_vehiculo || estadosNoHabilitados.find(e => e.codigo === 'SINIESTRADO')?.codigo || estadosNoHabilitados[0]?.codigo || ''}
+          onChange={(e) => handleEstadoVehiculoChange(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            border: '2px solid var(--color-danger)',
+            background: 'var(--bg-secondary)',
+            fontSize: '14px',
+            fontWeight: 500,
+            color: 'var(--text-primary)',
+            cursor: 'pointer'
+          }}
+        >
+          {estadosNoHabilitados.map(estado => (
+            <option key={estado.id} value={estado.codigo}>{estado.descripcion || estado.codigo}</option>
+          ))}
+        </select>
+        <div style={{
+          marginTop: '10px',
+          padding: '8px 12px',
+          borderRadius: '6px',
+          background: 'var(--color-danger-light)',
+          fontSize: '13px',
+          fontWeight: 500,
+          color: 'var(--color-danger)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
+        }}>
+          Vehiculo NO habilitado para circular
         </div>
       </div>
+
+      {/* Alerta de asignacion activa */}
+      {loadingAsignacion ? (
+        <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
+          Verificando asignaciones...
+        </div>
+      ) : asignacionActiva ? (
+        <div style={{
+          background: 'var(--color-warning-light)',
+          border: '1px solid var(--color-warning)',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '20px'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontWeight: 600,
+            fontSize: '14px',
+            color: 'var(--color-warning)',
+            marginBottom: '12px'
+          }}>
+            <AlertTriangle size={18} />
+            Este vehiculo tiene una asignacion activa
+          </div>
+
+          <div style={{
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: '6px',
+            padding: '12px',
+            marginBottom: '12px'
+          }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+              <div>
+                <span style={{ color: 'var(--text-secondary)' }}>Modalidad:</span>{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>{asignacionActiva.horario === 'TURNO' ? 'Por Turno' : 'A Cargo'}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)' }}>Desde:</span>{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>{new Date(asignacionActiva.fecha_inicio).toLocaleDateString('es-AR')}</strong>
+              </div>
+              {asignacionActiva.conductores.length > 0 && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Conductor(es):</span>{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>{asignacionActiva.conductores.join(', ')}</strong>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '12px',
+            background: finalizarAsignacion ? 'var(--color-danger-light)' : 'var(--bg-secondary)',
+            border: `2px solid ${finalizarAsignacion ? 'var(--color-danger)' : 'var(--border-primary)'}`,
+            borderRadius: '6px',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}>
+            <input
+              type="checkbox"
+              checked={finalizarAsignacion}
+              onChange={(e) => setFinalizarAsignacion(e.target.checked)}
+              style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }}
+            />
+            <div>
+              <div style={{ fontWeight: 600, color: finalizarAsignacion ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                Finalizar asignacion automaticamente
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                La asignacion se marcara como finalizada al registrar el siniestro
+              </div>
+            </div>
+          </label>
+        </div>
+      ) : formData.vehiculo_id ? (
+        <div style={{
+          background: 'var(--color-success-light)',
+          border: '1px solid var(--color-success)',
+          borderRadius: '8px',
+          padding: '12px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '13px',
+          color: 'var(--color-success)'
+        }}>
+          <Check size={18} />
+          Este vehiculo no tiene asignaciones activas
+        </div>
+      ) : null}
 
       <p className="step-description">
         Indique si el siniestro fue enviado a la abogada o a la rentadora para su gestión.
