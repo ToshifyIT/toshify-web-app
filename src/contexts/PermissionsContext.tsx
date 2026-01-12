@@ -213,12 +213,19 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           permission_source: 'role_inherited' as const
         }))
       } else {
-        // Para usuarios NO admin, cargar permisos del rol
+        // Para usuarios NO admin, cargar permisos combinando:
+        // 1. Permisos específicos del usuario (tienen prioridad)
+        // 2. Permisos del rol (como fallback)
         const roleId = (profileData as any).role_id
+        const userId = user!.id
 
+        // Maps para indexar permisos por menu_id/submenu_id
+        const menuPermsMap = new Map<string, any>()
+        const submenuPermsMap = new Map<string, any>()
+
+        // 1. Cargar permisos del ROL primero (base)
         if (roleId) {
-          // Cargar permisos de menús del rol
-          const { data: roleMenuPerms, error: menuError } = await supabase
+          const { data: roleMenuPerms } = await supabase
             .from('role_menu_permissions')
             .select(`
               can_view, can_create, can_edit, can_delete,
@@ -227,10 +234,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             .eq('role_id', roleId)
             .eq('can_view', true)
 
-          if (menuError) console.error('🔐 Error cargando menús:', menuError)
-
-          // Cargar permisos de submenús del rol
-          const { data: roleSubmenuPerms, error: submenuError } = await supabase
+          const { data: roleSubmenuPerms } = await supabase
             .from('role_submenu_permissions')
             .select(`
               can_view, can_create, can_edit, can_delete,
@@ -239,48 +243,102 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             .eq('role_id', roleId)
             .eq('can_view', true)
 
-          if (submenuError) console.error('🔐 Error cargando submenús:', submenuError)
+          // Agregar permisos del rol al map
+          for (const p of (roleMenuPerms || [])) {
+            if ((p as any).menus?.is_active) {
+              menuPermsMap.set((p as any).menus.id, {
+                ...p,
+                permission_source: 'role_inherited'
+              })
+            }
+          }
 
-          // Convertir permisos de menús
-          const filteredMenuPerms = (roleMenuPerms || []).filter((p: any) => p.menus?.is_active)
+          for (const p of (roleSubmenuPerms || [])) {
+            if ((p as any).submenus?.is_active) {
+              submenuPermsMap.set((p as any).submenus.id, {
+                ...p,
+                permission_source: 'role_inherited'
+              })
+            }
+          }
+        }
 
-          menusData = filteredMenuPerms.map((p: any) => ({
-              id: p.menus.id,
-              name: p.menus.name,
-              label: p.menus.label,
-              route: p.menus.route,
-              order_index: p.menus.order_index || 0,
-              permissions: {
-                can_view: p.can_view || false,
-                can_create: p.can_create || false,
-                can_edit: p.can_edit || false,
-                can_delete: p.can_delete || false
-              },
-              permission_source: 'role_inherited' as const
-            }))
+        // 2. Cargar permisos del USUARIO (sobrescriben los del rol)
+        const { data: userMenuPerms } = await supabase
+          .from('user_menu_permissions')
+          .select(`
+            can_view, can_create, can_edit, can_delete,
+            menus (id, name, label, route, order_index, is_active)
+          `)
+          .eq('user_id', userId)
 
-          // Convertir permisos de submenús
-          const filteredSubmenuPerms = (roleSubmenuPerms || []).filter((p: any) => p.submenus?.is_active)
+        const { data: userSubmenuPerms } = await supabase
+          .from('user_submenu_permissions')
+          .select(`
+            can_view, can_create, can_edit, can_delete,
+            submenus (id, name, label, route, order_index, menu_id, parent_id, level, is_active)
+          `)
+          .eq('user_id', userId)
 
-          submenusData = filteredSubmenuPerms.map((p: any) => ({
-              id: p.submenus.id,
-              name: p.submenus.name,
-              label: p.submenus.label,
-              route: p.submenus.route,
-              order_index: p.submenus.order_index || 0,
-              menu_id: p.submenus.menu_id,
-              parent_id: p.submenus.parent_id || null,
-              level: p.submenus.level || 1,
-              permissions: {
-                can_view: p.can_view || false,
-                can_create: p.can_create || false,
-                can_edit: p.can_edit || false,
-                can_delete: p.can_delete || false
-              },
-              permission_source: 'role_inherited' as const
-            }))
-        } else {
-          console.warn('⚠️ Usuario sin role_id asignado - no se cargarán permisos')
+        // Sobrescribir con permisos de usuario (tienen prioridad)
+        for (const p of (userMenuPerms || [])) {
+          if ((p as any).menus?.is_active) {
+            menuPermsMap.set((p as any).menus.id, {
+              ...p,
+              permission_source: 'user_override'
+            })
+          }
+        }
+
+        for (const p of (userSubmenuPerms || [])) {
+          if ((p as any).submenus?.is_active) {
+            submenuPermsMap.set((p as any).submenus.id, {
+              ...p,
+              permission_source: 'user_override'
+            })
+          }
+        }
+
+        // 3. Convertir maps a arrays finales
+        menusData = Array.from(menuPermsMap.values())
+          .filter((p: any) => p.can_view)
+          .map((p: any) => ({
+            id: p.menus.id,
+            name: p.menus.name,
+            label: p.menus.label,
+            route: p.menus.route,
+            order_index: p.menus.order_index || 0,
+            permissions: {
+              can_view: p.can_view || false,
+              can_create: p.can_create || false,
+              can_edit: p.can_edit || false,
+              can_delete: p.can_delete || false
+            },
+            permission_source: p.permission_source as 'user_override' | 'role_inherited'
+          }))
+
+        submenusData = Array.from(submenuPermsMap.values())
+          .filter((p: any) => p.can_view)
+          .map((p: any) => ({
+            id: p.submenus.id,
+            name: p.submenus.name,
+            label: p.submenus.label,
+            route: p.submenus.route,
+            order_index: p.submenus.order_index || 0,
+            menu_id: p.submenus.menu_id,
+            parent_id: p.submenus.parent_id || null,
+            level: p.submenus.level || 1,
+            permissions: {
+              can_view: p.can_view || false,
+              can_create: p.can_create || false,
+              can_edit: p.can_edit || false,
+              can_delete: p.can_delete || false
+            },
+            permission_source: p.permission_source as 'user_override' | 'role_inherited'
+          }))
+
+        if (!roleId && menusData.length === 0) {
+          console.warn('⚠️ Usuario sin role_id y sin permisos de usuario - no se cargarán permisos')
         }
       }
 
