@@ -353,9 +353,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             permission_source: p.permission_source as 'user_override' | 'role_inherited'
           }))
 
-        if (!roleId && menusData.length === 0) {
-          console.warn('⚠️ Usuario sin role_id y sin permisos de usuario - no se cargarán permisos')
-        }
       }
 
       setUserPermissions({
