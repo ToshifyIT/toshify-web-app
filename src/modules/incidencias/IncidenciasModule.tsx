@@ -1051,7 +1051,8 @@ interface IncidenciaFormProps {
 interface ConductorAsignado {
   id: string
   nombre_completo: string
-  horario: string
+  horario: string // TURNO o CARGO (de asignacion)
+  turno: string // diurno, nocturno, todo_dia (de asignaciones_conductores)
 }
 
 function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, disabled }: IncidenciaFormProps) {
@@ -1072,40 +1073,61 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
   async function buscarConductoresAsignados(vehiculoId: string) {
     setLoadingConductores(true)
     try {
+      // Consultar asignaciones activas del vehículo con sus conductores
       const { data, error } = await supabase
         .from('asignaciones')
         .select(`
           id,
           horario,
-          conductores (
-            id,
-            nombres,
-            apellidos
+          asignaciones_conductores (
+            horario,
+            conductores (
+              id,
+              nombres,
+              apellidos
+            )
           )
         `)
         .eq('vehiculo_id', vehiculoId)
-        .eq('activo', true)
+        .eq('estado', 'activa')
 
       if (error) throw error
 
-      const conductoresData: ConductorAsignado[] = (data || [])
-        .filter((a: any) => a.conductores)
-        .map((a: any) => ({
-          id: a.conductores.id,
-          nombre_completo: `${a.conductores.nombres} ${a.conductores.apellidos}`,
-          horario: a.horario === 'TURNO' ? 'Turno' : 'A Cargo'
-        }))
+      // Extraer conductores de asignaciones_conductores
+      const conductoresData: ConductorAsignado[] = []
+      for (const asig of (data || [])) {
+        const asigConductores = (asig as any).asignaciones_conductores || []
+        for (const ac of asigConductores) {
+          if (ac.conductores) {
+            // Mapear turno: diurno -> Diurno, nocturno -> Nocturno, todo_dia -> A cargo
+            let turnoDisplay = 'A cargo'
+            if (ac.horario === 'diurno') turnoDisplay = 'Diurno'
+            else if (ac.horario === 'nocturno') turnoDisplay = 'Nocturno'
+
+            conductoresData.push({
+              id: ac.conductores.id,
+              nombre_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
+              horario: (asig as any).horario === 'TURNO' ? 'Turno' : 'A Cargo',
+              turno: turnoDisplay
+            })
+          }
+        }
+      }
 
       if (conductoresData.length === 1) {
-        // Solo un conductor, auto-seleccionar
-        setFormData(prev => ({ ...prev, conductor_id: conductoresData[0].id }))
+        // Solo un conductor, auto-seleccionar y setear turno
+        setFormData(prev => ({
+          ...prev,
+          conductor_id: conductoresData[0].id,
+          turno: conductoresData[0].turno
+        }))
         setConductorSearch('')
       } else if (conductoresData.length > 1) {
-        // Múltiples conductores, mostrar modal
+        // Múltiples conductores, mostrar modal para elegir
         setConductoresAsignados(conductoresData)
         setShowConductorSelectModal(true)
       }
-      // Si no hay conductores asignados, no hacer nada
+      // Si no hay conductores asignados, no hacer nada (permite búsqueda manual)
     } catch (error) {
       console.error('Error buscando conductores asignados:', error)
     } finally {
@@ -1124,7 +1146,11 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
 
   // Manejar selección de conductor desde modal
   function handleSelectConductorFromModal(conductor: ConductorAsignado) {
-    setFormData(prev => ({ ...prev, conductor_id: conductor.id }))
+    setFormData(prev => ({
+      ...prev,
+      conductor_id: conductor.id,
+      turno: conductor.turno // Auto-setear el turno del conductor
+    }))
     setConductorSearch('')
     setShowConductorSelectModal(false)
     setConductoresAsignados([])
@@ -1363,7 +1389,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                   onClick={() => handleSelectConductorFromModal(c)}
                 >
                   <span className="conductor-select-name">{c.nombre_completo}</span>
-                  <span className="conductor-select-horario">{c.horario}</span>
+                  <span className={`conductor-select-turno ${c.turno.toLowerCase().replace(' ', '-')}`}>{c.turno}</span>
                 </button>
               ))}
             </div>
@@ -1408,36 +1434,53 @@ function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos, condu
   async function buscarConductoresAsignados(vehiculoId: string) {
     setLoadingConductores(true)
     try {
+      // Consultar asignaciones activas del vehículo con sus conductores
       const { data, error } = await supabase
         .from('asignaciones')
         .select(`
           id,
           horario,
-          conductores (
-            id,
-            nombres,
-            apellidos
+          asignaciones_conductores (
+            horario,
+            conductores (
+              id,
+              nombres,
+              apellidos
+            )
           )
         `)
         .eq('vehiculo_id', vehiculoId)
-        .eq('activo', true)
+        .eq('estado', 'activa')
 
       if (error) throw error
 
-      const conductoresData: ConductorAsignado[] = (data || [])
-        .filter((a: any) => a.conductores)
-        .map((a: any) => ({
-          id: a.conductores.id,
-          nombre_completo: `${a.conductores.nombres} ${a.conductores.apellidos}`,
-          horario: a.horario === 'TURNO' ? 'Turno' : 'A Cargo'
-        }))
+      // Extraer conductores de asignaciones_conductores
+      const conductoresData: ConductorAsignado[] = []
+      for (const asig of (data || [])) {
+        const asigConductores = (asig as any).asignaciones_conductores || []
+        for (const ac of asigConductores) {
+          if (ac.conductores) {
+            // Mapear turno: diurno -> Diurno, nocturno -> Nocturno, todo_dia -> A cargo
+            let turnoDisplay = 'A cargo'
+            if (ac.horario === 'diurno') turnoDisplay = 'Diurno'
+            else if (ac.horario === 'nocturno') turnoDisplay = 'Nocturno'
+
+            conductoresData.push({
+              id: ac.conductores.id,
+              nombre_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
+              horario: (asig as any).horario === 'TURNO' ? 'Turno' : 'A Cargo',
+              turno: turnoDisplay
+            })
+          }
+        }
+      }
 
       if (conductoresData.length === 1) {
         // Solo un conductor, auto-seleccionar
         setFormData(prev => ({ ...prev, conductor_id: conductoresData[0].id }))
         setConductorSearch('')
       } else if (conductoresData.length > 1) {
-        // Múltiples conductores, mostrar modal
+        // Múltiples conductores, mostrar modal para elegir
         setConductoresAsignados(conductoresData)
         setShowConductorSelectModal(true)
       }
@@ -1730,7 +1773,7 @@ function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos, condu
                   onClick={() => handleSelectConductorFromModal(c)}
                 >
                   <span className="conductor-select-name">{c.nombre_completo}</span>
-                  <span className="conductor-select-horario">{c.horario}</span>
+                  <span className={`conductor-select-turno ${c.turno.toLowerCase().replace(' ', '-')}`}>{c.turno}</span>
                 </button>
               ))}
             </div>
