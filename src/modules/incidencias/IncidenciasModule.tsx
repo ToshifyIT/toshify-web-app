@@ -37,6 +37,48 @@ import './IncidenciasModule.css'
 
 type TabType = 'incidencias' | 'penalidades' | 'por_aplicar'
 
+// Helper para mapear rol de usuario a área (para incidencias)
+function getAreaPorRol(roleName: string | undefined | null): string {
+  if (!roleName) return ''
+  const rol = roleName.toLowerCase()
+
+  // Roles administrativos
+  if (rol.includes('admin') || rol.includes('superadmin')) {
+    return 'Administración'
+  }
+  // Roles de data entry
+  if (rol.includes('data') || rol.includes('entry')) {
+    return 'Data Entry'
+  }
+  // Roles de logística/operaciones
+  if (rol.includes('logist') || rol.includes('operador') || rol.includes('operacion')) {
+    return 'Logística'
+  }
+
+  return ''
+}
+
+// Helper para mapear rol de usuario a área responsable (para penalidades - valores en mayúsculas)
+function getAreaResponsablePorRol(roleName: string | undefined | null): string {
+  if (!roleName) return ''
+  const rol = roleName.toLowerCase()
+
+  // Roles administrativos
+  if (rol.includes('admin') || rol.includes('superadmin')) {
+    return 'ADMINISTRACION'
+  }
+  // Roles de data entry
+  if (rol.includes('data') || rol.includes('entry')) {
+    return 'DATA ENTRY'
+  }
+  // Roles de logística/operaciones
+  if (rol.includes('logist') || rol.includes('operador') || rol.includes('operacion')) {
+    return 'LOGISTICA'
+  }
+
+  return ''
+}
+
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
   const { canCreateInMenu, canEditInMenu } = usePermissions()
@@ -458,10 +500,12 @@ export function IncidenciasModule() {
 
   function handleNuevaIncidencia() {
     const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')
+    const areaUsuario = getAreaPorRol(profile?.roles?.name)
     setIncidenciaForm({
       estado_id: estadoPendiente?.id || '',
       fecha: getLocalDateString(),
-      registrado_por: profile?.full_name || ''
+      registrado_por: profile?.full_name || '',
+      area: areaUsuario || undefined
     })
     setSelectedIncidencia(null)
     setModalMode('create')
@@ -470,9 +514,11 @@ export function IncidenciasModule() {
   }
 
   function handleNuevaPenalidad() {
+    const areaResponsable = getAreaResponsablePorRol(profile?.roles?.name)
     setPenalidadForm({
       fecha: getLocalDateString(),
-      aplicado: false
+      aplicado: false,
+      area_responsable: areaResponsable || undefined
     })
     setSelectedPenalidad(null)
     setModalMode('create')
