@@ -102,8 +102,8 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
         .order('patente')
 
       // Si el siniestro tiene un vehículo, asegurarnos de incluirlo
-      let vehiculosList = vehData || []
-      if (siniestro.vehiculo_id && !vehiculosList.find((v: any) => v.id === siniestro.vehiculo_id)) {
+      let vehiculosList: VehiculoSimple[] = (vehData || []) as VehiculoSimple[]
+      if (siniestro.vehiculo_id && !vehiculosList.find(v => v.id === siniestro.vehiculo_id)) {
         // Agregar el vehículo del siniestro si no está en la lista
         vehiculosList = [{
           id: siniestro.vehiculo_id,
@@ -121,13 +121,15 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
         .eq('is_active', true)
         .order('apellidos')
 
-      let conductoresFormatted = (condData || []).map((c: any) => ({
-        ...c,
+      let conductoresFormatted: ConductorSimple[] = (condData || []).map((c: any) => ({
+        id: c.id,
+        nombres: c.nombres,
+        apellidos: c.apellidos,
         nombre_completo: `${c.nombres} ${c.apellidos}`
       }))
 
       // Si el siniestro tiene un conductor, asegurarnos de incluirlo
-      if (siniestro.conductor_id && !conductoresFormatted.find((c: any) => c.id === siniestro.conductor_id)) {
+      if (siniestro.conductor_id && !conductoresFormatted.find(c => c.id === siniestro.conductor_id)) {
         // Agregar el conductor del siniestro si no está en la lista
         conductoresFormatted = [{
           id: siniestro.conductor_id,
