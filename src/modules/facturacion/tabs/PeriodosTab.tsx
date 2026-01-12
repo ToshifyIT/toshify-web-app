@@ -671,6 +671,75 @@ export function PeriodosTab() {
     }
   }
 
+  async function verDetallePeriodo(semana: SemanaFacturacion) {
+    if (!semana.periodo_id) return
+
+    // Cargar facturaciones del período
+    const { data: facturaciones, error } = await supabase
+      .from('facturacion_conductores')
+      .select('*')
+      .eq('periodo_id', semana.periodo_id)
+      .order('conductor_nombre')
+
+    if (error) {
+      Swal.fire('Error', 'No se pudo cargar el detalle', 'error')
+      return
+    }
+
+    const conductores = facturaciones || []
+    const topDeudores = [...conductores]
+      .sort((a: any, b: any) => b.total_a_pagar - a.total_a_pagar)
+      .slice(0, 5)
+
+    Swal.fire({
+      title: `Semana ${semana.semana} - ${semana.anio}`,
+      html: `
+        <div style="text-align: left; max-height: 400px; overflow-y: auto;">
+          <div style="background: #F3F4F6; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
+              <div><span style="color: #6B7280;">Período:</span> <strong>${format(new Date(semana.fecha_inicio), 'dd/MM', { locale: es })} - ${format(new Date(semana.fecha_fin), 'dd/MM/yyyy', { locale: es })}</strong></div>
+              <div><span style="color: #6B7280;">Estado:</span> <strong style="text-transform: uppercase; color: ${semana.estado === 'cerrado' ? '#DC2626' : '#059669'};">${semana.estado}</strong></div>
+              <div><span style="color: #6B7280;">Conductores:</span> <strong>${semana.total_conductores}</strong></div>
+              <div><span style="color: #6B7280;">Total Neto:</span> <strong style="color: #DC2626;">${formatCurrency(semana.total_neto)}</strong></div>
+            </div>
+          </div>
+
+          <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">Top 5 - Mayor facturación:</div>
+          <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+            <thead>
+              <tr style="background: #F9FAFB; border-bottom: 1px solid #E5E7EB;">
+                <th style="padding: 8px; text-align: left;">Conductor</th>
+                <th style="padding: 8px; text-align: right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${topDeudores.map((c: any) => `
+                <tr style="border-bottom: 1px solid #F3F4F6;">
+                  <td style="padding: 8px;">
+                    <div style="font-weight: 500;">${c.conductor_nombre}</div>
+                    <div style="font-size: 11px; color: #6B7280;">${c.vehiculo_patente || '-'}</div>
+                  </td>
+                  <td style="padding: 8px; text-align: right; font-weight: 600; color: ${c.total_a_pagar < 0 ? '#DC2626' : '#059669'};">
+                    ${formatCurrency(c.total_a_pagar)}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          ${semana.fecha_cierre ? `
+            <div style="margin-top: 12px; font-size: 11px; color: #6B7280;">
+              Cerrado el ${format(new Date(semana.fecha_cierre), 'dd/MM/yyyy HH:mm', { locale: es })}
+            </div>
+          ` : ''}
+        </div>
+      `,
+      width: 500,
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#6B7280'
+    })
+  }
+
   const columns = useMemo<ColumnDef<SemanaFacturacion>[]>(() => [
     {
       accessorKey: 'semana',
@@ -794,7 +863,7 @@ export function PeriodosTab() {
               <>
                 <button
                   className="fact-table-btn fact-table-btn-view"
-                  onClick={() => {}}
+                  onClick={() => verDetallePeriodo(sem)}
                   title="Ver detalle"
                 >
                   <Eye size={14} />

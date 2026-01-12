@@ -3045,10 +3045,11 @@ export function ReporteFacturacionTab() {
                         </div>
                       ))}
 
+                      {/* Saldo anterior positivo = debe pagar */}
                       {detalleFacturacion.saldo_anterior > 0 && (
-                        <div className="fact-item">
-                          <span className="fact-item-desc">Saldo Anterior</span>
-                          <span className="fact-item-monto">{formatCurrency(detalleFacturacion.saldo_anterior)}</span>
+                        <div className="fact-item" style={{ background: '#FEF3C7', padding: '6px 8px', borderRadius: '4px', marginTop: '4px' }}>
+                          <span className="fact-item-desc" style={{ color: '#92400E' }}>Saldo Anterior (Deuda)</span>
+                          <span className="fact-item-monto" style={{ color: '#DC2626' }}>{formatCurrency(detalleFacturacion.saldo_anterior)}</span>
                         </div>
                       )}
 
@@ -3062,16 +3063,16 @@ export function ReporteFacturacionTab() {
                       <div className="fact-item total">
                         <span className="fact-item-desc">SUBTOTAL CARGOS</span>
                         <span className="fact-item-monto">
-                          {formatCurrency(detalleFacturacion.subtotal_cargos + detalleFacturacion.saldo_anterior + detalleFacturacion.monto_mora)}
+                          {formatCurrency(detalleFacturacion.subtotal_cargos + Math.max(0, detalleFacturacion.saldo_anterior) + detalleFacturacion.monto_mora)}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Sección de Descuentos */}
-                  {detalleItems.some(d => d.es_descuento) && (
+                  {/* Sección de Descuentos / Créditos */}
+                  {(detalleItems.some(d => d.es_descuento) || detalleFacturacion.saldo_anterior < 0) && (
                     <div className="fact-detalle-seccion">
-                      <h4 className="fact-seccion-titulo creditos">Descuentos (A Favor)</h4>
+                      <h4 className="fact-seccion-titulo creditos">Descuentos / Créditos (A Favor)</h4>
                       <div className="fact-detalle-items">
                         {detalleItems.filter(d => d.es_descuento).map(item => (
                           <div key={item.id} className="fact-item">
@@ -3080,9 +3081,21 @@ export function ReporteFacturacionTab() {
                           </div>
                         ))}
 
+                        {/* Saldo anterior negativo = crédito a favor */}
+                        {detalleFacturacion.saldo_anterior < 0 && (
+                          <div className="fact-item" style={{ background: '#D1FAE5', padding: '6px 8px', borderRadius: '4px', marginTop: '4px' }}>
+                            <span className="fact-item-desc" style={{ color: '#065F46' }}>Saldo a Favor (Crédito Acumulado)</span>
+                            <span className="fact-item-monto credito" style={{ color: '#059669', fontWeight: 600 }}>
+                              -{formatCurrency(Math.abs(detalleFacturacion.saldo_anterior))}
+                            </span>
+                          </div>
+                        )}
+
                         <div className="fact-item total">
                           <span className="fact-item-desc">SUBTOTAL DESCUENTOS</span>
-                          <span className="fact-item-monto credito">-{formatCurrency(detalleFacturacion.subtotal_descuentos)}</span>
+                          <span className="fact-item-monto credito">
+                            -{formatCurrency(detalleFacturacion.subtotal_descuentos + Math.abs(Math.min(0, detalleFacturacion.saldo_anterior)))}
+                          </span>
                         </div>
                       </div>
                     </div>
