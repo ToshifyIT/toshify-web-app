@@ -386,17 +386,24 @@ export function UserMenuPermissionsManager() {
 
         if (error) throw error
       } else {
-        // Crear nuevo permiso
+        // Crear nuevo permiso - heredar valores del rol primero
+        const rolePerm = roleMenuPermissions.find(p => p.menu_id === validatedMenuId)
+        const basePerms = {
+          can_view: rolePerm?.can_view || false,
+          can_create: rolePerm?.can_create || false,
+          can_edit: rolePerm?.can_edit || false,
+          can_delete: rolePerm?.can_delete || false
+        }
+        // Sobrescribir solo el campo que se está cambiando
+        basePerms[validatedField] = newValue
+
         const { error } = await supabase
           .from('user_menu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
             user_id: validatedUserId,
             menu_id: validatedMenuId,
-            can_view: validatedField === 'can_view',
-            can_create: validatedField === 'can_create',
-            can_edit: validatedField === 'can_edit',
-            can_delete: validatedField === 'can_delete'
+            ...basePerms
           }])
 
         if (error) throw error
@@ -412,16 +419,17 @@ export function UserMenuPermissionsManager() {
           updated[index] = { ...updated[index], [validatedField]: newValue }
           return updated
         } else {
-          // Agregar nuevo permiso al estado
+          // Agregar nuevo permiso al estado - heredar del rol
           const menu = menus.find(m => m.id === validatedMenuId)
+          const rolePerm = roleMenuPermissions.find(p => p.menu_id === validatedMenuId)
           return [...prev, {
             menu_id: validatedMenuId,
             menu_name: menu?.name || '',
             menu_label: menu?.label || '',
-            can_view: validatedField === 'can_view' ? newValue : false,
-            can_create: validatedField === 'can_create' ? newValue : false,
-            can_edit: validatedField === 'can_edit' ? newValue : false,
-            can_delete: validatedField === 'can_delete' ? newValue : false
+            can_view: validatedField === 'can_view' ? newValue : (rolePerm?.can_view || false),
+            can_create: validatedField === 'can_create' ? newValue : (rolePerm?.can_create || false),
+            can_edit: validatedField === 'can_edit' ? newValue : (rolePerm?.can_edit || false),
+            can_delete: validatedField === 'can_delete' ? newValue : (rolePerm?.can_delete || false)
           }]
         }
       })
@@ -449,7 +457,7 @@ export function UserMenuPermissionsManager() {
       setSaving(false)
       setTimeout(() => setNotification(null), 3000)
     }
-  }, [selectedUser, menuPermissions, menus, user])
+  }, [selectedUser, menuPermissions, menus, user, roleMenuPermissions])
 
   const toggleSubmenuPermission = useCallback(async (
     submenuId: string,
@@ -498,17 +506,24 @@ export function UserMenuPermissionsManager() {
 
         if (error) throw error
       } else {
-        // Crear nuevo permiso
+        // Crear nuevo permiso - heredar valores del rol primero
+        const rolePerm = roleSubmenuPermissions.find(p => p.submenu_id === validatedSubmenuId)
+        const basePerms = {
+          can_view: rolePerm?.can_view || false,
+          can_create: rolePerm?.can_create || false,
+          can_edit: rolePerm?.can_edit || false,
+          can_delete: rolePerm?.can_delete || false
+        }
+        // Sobrescribir solo el campo que se está cambiando
+        basePerms[validatedField] = newValue
+
         const { error } = await supabase
           .from('user_submenu_permissions')
           // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
             user_id: validatedUserId,
             submenu_id: validatedSubmenuId,
-            can_view: validatedField === 'can_view',
-            can_create: validatedField === 'can_create',
-            can_edit: validatedField === 'can_edit',
-            can_delete: validatedField === 'can_delete'
+            ...basePerms
           }])
 
         if (error) throw error
@@ -524,18 +539,19 @@ export function UserMenuPermissionsManager() {
           updated[index] = { ...updated[index], [validatedField]: newValue }
           return updated
         } else {
-          // Agregar nuevo permiso al estado
+          // Agregar nuevo permiso al estado - heredar del rol
           const submenu = submenus.find(s => s.id === validatedSubmenuId)
           const menu = menus.find(m => m.id === submenu?.menu_id)
+          const rolePerm = roleSubmenuPermissions.find(p => p.submenu_id === validatedSubmenuId)
           return [...prev, {
             submenu_id: validatedSubmenuId,
             menu_name: menu?.name || '',
             submenu_name: submenu?.name || '',
             submenu_label: submenu?.label || '',
-            can_view: validatedField === 'can_view' ? newValue : false,
-            can_create: validatedField === 'can_create' ? newValue : false,
-            can_edit: validatedField === 'can_edit' ? newValue : false,
-            can_delete: validatedField === 'can_delete' ? newValue : false
+            can_view: validatedField === 'can_view' ? newValue : (rolePerm?.can_view || false),
+            can_create: validatedField === 'can_create' ? newValue : (rolePerm?.can_create || false),
+            can_edit: validatedField === 'can_edit' ? newValue : (rolePerm?.can_edit || false),
+            can_delete: validatedField === 'can_delete' ? newValue : (rolePerm?.can_delete || false)
           }]
         }
       })
@@ -563,7 +579,7 @@ export function UserMenuPermissionsManager() {
       setSaving(false)
       setTimeout(() => setNotification(null), 3000)
     }
-  }, [selectedUser, submenuPermissions, submenus, menus, user])
+  }, [selectedUser, submenuPermissions, submenus, menus, user, roleSubmenuPermissions])
 
   // Obtener permiso con herencia del rol
   const getMenuPermission = (menuId: string, field: keyof MenuPermission) => {
