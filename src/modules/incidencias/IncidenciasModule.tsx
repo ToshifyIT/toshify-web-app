@@ -34,6 +34,7 @@ import type {
   ConductorSimple
 } from '../../types/incidencias.types'
 import './IncidenciasModule.css'
+import { PenalidadForm } from '../../components/shared/PenalidadForm'
 
 type TabType = 'incidencias' | 'penalidades' | 'por_aplicar'
 
@@ -146,6 +147,64 @@ export function IncidenciasModule() {
   useEffect(() => {
     cargarDatos()
   }, [])
+
+  // Verificar si hay datos precargados desde siniestros
+  useEffect(() => {
+    const preloadData = localStorage.getItem('incidencia_preload')
+    const urlParams = new URLSearchParams(window.location.search)
+    const crearParam = urlParams.get('crear')
+
+    if (preloadData && crearParam) {
+      try {
+        const data = JSON.parse(preloadData)
+
+        // Si es penalidad, abrir el modal de penalidad
+        if (crearParam === 'penalidad' || data.tipo === 'penalidad') {
+          // Cambiar a tab de penalidades
+          setActiveTab('penalidades')
+
+          // Pre-llenar formulario de penalidad
+          setPenalidadForm(prev => ({
+            ...prev,
+            vehiculo_id: data.vehiculo_id || undefined,
+            conductor_id: data.conductor_id || undefined,
+            monto: data.monto || undefined,
+            detalle: 'Cobro',
+            observaciones: data.descripcion || '',
+            fecha: getLocalDateString(),
+            aplicado: false
+          }))
+
+          // Abrir modal de penalidad
+          setModalType('penalidad')
+          setModalMode('create')
+          setShowModal(true)
+        } else {
+          // Pre-llenar formulario de incidencia
+          setIncidenciaForm(prev => ({
+            ...prev,
+            vehiculo_id: data.vehiculo_id || undefined,
+            conductor_id: data.conductor_id || undefined,
+            descripcion: data.descripcion || '',
+            area: data.area || '',
+            fecha: getLocalDateString(),
+            registrado_por: profile?.full_name || ''
+          }))
+
+          setModalType('incidencia')
+          setModalMode('create')
+          setShowModal(true)
+        }
+
+        // Limpiar localStorage y URL
+        localStorage.removeItem('incidencia_preload')
+        window.history.replaceState({}, '', window.location.pathname)
+      } catch (error) {
+        console.error('Error parseando datos precargados:', error)
+        localStorage.removeItem('incidencia_preload')
+      }
+    }
+  }, [profile])
 
   async function cargarDatos() {
     setLoading(true)
@@ -1429,399 +1488,6 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               placeholder="¿Qué se hizo para resolver?"
               disabled={disabled}
             />
-          </div>
-        </div>
-      </div>
-
-      {/* Modal de selección de conductor */}
-      {showConductorSelectModal && (
-        <div className="conductor-select-modal-overlay" onClick={() => setShowConductorSelectModal(false)}>
-          <div className="conductor-select-modal" onClick={e => e.stopPropagation()}>
-            <div className="conductor-select-modal-header">
-              <h4>Seleccionar Conductor</h4>
-              <p>Este vehículo tiene múltiples conductores asignados</p>
-            </div>
-            <div className="conductor-select-modal-list">
-              {conductoresAsignados.map(c => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="conductor-select-option"
-                  onClick={() => handleSelectConductorFromModal(c)}
-                >
-                  <span className="conductor-select-name">{c.nombre_completo}</span>
-                  <span className={`conductor-select-turno ${c.turno.toLowerCase().replace(' ', '-')}`}>{c.turno}</span>
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              className="conductor-select-skip"
-              onClick={() => setShowConductorSelectModal(false)}
-            >
-              Omitir selección
-            </button>
-          </div>
-        </div>
-      )}
-    </>
-  )
-}
-
-interface PenalidadFormProps {
-  formData: PenalidadFormData
-  setFormData: React.Dispatch<React.SetStateAction<PenalidadFormData>>
-  tiposPenalidad: TipoPenalidad[]
-  vehiculos: VehiculoSimple[]
-  conductores: ConductorSimple[]
-  disabled?: boolean
-}
-
-function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos, conductores, disabled }: PenalidadFormProps) {
-  const [conductorSearch, setConductorSearch] = useState('')
-  const [showConductorDropdown, setShowConductorDropdown] = useState(false)
-  const [vehiculoSearch, setVehiculoSearch] = useState('')
-  const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
-
-  // Estado para modal de selección de conductor
-  const [showConductorSelectModal, setShowConductorSelectModal] = useState(false)
-  const [conductoresAsignados, setConductoresAsignados] = useState<ConductorAsignado[]>([])
-  const [loadingConductores, setLoadingConductores] = useState(false)
-
-  const selectedConductor = conductores.find(c => c.id === formData.conductor_id)
-  const selectedVehiculo = vehiculos.find(v => v.id === formData.vehiculo_id)
-
-  // Buscar conductores asignados al vehículo seleccionado
-  async function buscarConductoresAsignados(vehiculoId: string) {
-    setLoadingConductores(true)
-    try {
-      // Consultar asignaciones activas del vehículo con sus conductores
-      const { data, error } = await supabase
-        .from('asignaciones')
-        .select(`
-          id,
-          horario,
-          asignaciones_conductores (
-            horario,
-            conductores (
-              id,
-              nombres,
-              apellidos
-            )
-          )
-        `)
-        .eq('vehiculo_id', vehiculoId)
-        .eq('estado', 'activa')
-
-      if (error) throw error
-
-      // Extraer conductores de asignaciones_conductores
-      const conductoresData: ConductorAsignado[] = []
-      for (const asig of (data || [])) {
-        const asigConductores = (asig as any).asignaciones_conductores || []
-        for (const ac of asigConductores) {
-          if (ac.conductores) {
-            // Mapear turno: diurno -> Diurno, nocturno -> Nocturno, todo_dia -> A cargo
-            let turnoDisplay = 'A cargo'
-            if (ac.horario === 'diurno') turnoDisplay = 'Diurno'
-            else if (ac.horario === 'nocturno') turnoDisplay = 'Nocturno'
-
-            conductoresData.push({
-              id: ac.conductores.id,
-              nombre_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
-              horario: (asig as any).horario === 'TURNO' ? 'Turno' : 'A Cargo',
-              turno: turnoDisplay
-            })
-          }
-        }
-      }
-
-      if (conductoresData.length === 1) {
-        // Solo un conductor, auto-seleccionar y setear turno
-        setFormData(prev => ({
-          ...prev,
-          conductor_id: conductoresData[0].id,
-          turno: conductoresData[0].turno
-        }))
-        setConductorSearch('')
-      } else if (conductoresData.length > 1) {
-        // Múltiples conductores, mostrar modal para elegir
-        setConductoresAsignados(conductoresData)
-        setShowConductorSelectModal(true)
-      }
-    } catch (error) {
-      console.error('Error buscando conductores asignados:', error)
-    } finally {
-      setLoadingConductores(false)
-    }
-  }
-
-  // Manejar selección de vehículo
-  function handleSelectVehiculoPenalidad(vehiculo: VehiculoSimple) {
-    setFormData(prev => ({ ...prev, vehiculo_id: vehiculo.id, vehiculo_patente: undefined }))
-    setVehiculoSearch('')
-    setShowVehiculoDropdown(false)
-    // Buscar conductores asignados
-    buscarConductoresAsignados(vehiculo.id)
-  }
-
-  // Manejar selección de conductor desde modal
-  function handleSelectConductorFromModal(conductor: ConductorAsignado) {
-    setFormData(prev => ({
-      ...prev,
-      conductor_id: conductor.id,
-      turno: conductor.turno // Auto-setear el turno del conductor
-    }))
-    setConductorSearch('')
-    setShowConductorSelectModal(false)
-    setConductoresAsignados([])
-  }
-
-  // Calcular número de semana ISO 8601
-  const getWeekNumber = (dateStr: string): number => {
-    if (!dateStr) return 0
-    // Parsear la fecha usando componentes locales para evitar problemas de timezone
-    const [year, month, day] = dateStr.split('-').map(Number)
-    const date = new Date(year, month - 1, day, 12, 0, 0) // mediodía hora local
-
-    // ISO week: la semana 1 es la que contiene el primer jueves del año
-    const thursday = new Date(date)
-    thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3) // Ir al jueves de la semana
-
-    const firstThursday = new Date(thursday.getFullYear(), 0, 4) // 4 de enero siempre está en semana 1
-    firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
-
-    const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-    return weekNumber
-  }
-
-  const semanaCalculada = getWeekNumber(formData.fecha)
-
-  const filteredConductores = conductores.filter(c => {
-    return c.nombre_completo.toLowerCase().includes(conductorSearch.toLowerCase())
-  }).slice(0, 10)
-
-  const filteredVehiculos = vehiculos.filter(v => {
-    const term = vehiculoSearch.toLowerCase()
-    return v.patente.toLowerCase().includes(term) || v.marca.toLowerCase().includes(term)
-  }).slice(0, 10)
-
-  // Lista de tipos de cobros/descuentos
-  const tiposCobrosDescuentos = [
-    'Entrega tardía del vehículo',
-    'Llegada tarde o inasistencia injustificada a revisión técnica',
-    'Ingreso a zonas restringidas',
-    'Falta de lavado',
-    'Falta de restitución de la unidad',
-    'Pérdida o daño de elementos de seguridad',
-    'Falta restitución de GNC',
-    'Falta restitución de Nafta',
-    'Mora en canon',
-    'Exceso de kilometraje',
-    'Manipulación no autorizada de GPS',
-    'Abandono del vehículo',
-    'No disponer de lugar seguro para la guarda del vehículo',
-    'I button',
-    'Multa de tránsito',
-    'Reparación Siniestro'
-  ]
-
-  return (
-    <>
-      <div className="form-section">
-        <div className="form-section-title">Datos del Cobro/Descuento</div>
-        <div className="form-row">
-          <div className="form-group">
-            <label>Patente</label>
-            <div className="searchable-select">
-              <input
-                type="text"
-                autoComplete="off"
-                value={selectedVehiculo ? `${selectedVehiculo.patente} - ${selectedVehiculo.marca} ${selectedVehiculo.modelo}` : vehiculoSearch}
-                onChange={e => {
-                  setVehiculoSearch(e.target.value)
-                  setShowVehiculoDropdown(true)
-                  if (formData.vehiculo_id) setFormData(prev => ({ ...prev, vehiculo_id: undefined }))
-                }}
-                onFocus={() => setShowVehiculoDropdown(true)}
-                onBlur={() => setTimeout(() => setShowVehiculoDropdown(false), 200)}
-                placeholder="Buscar patente..."
-                disabled={disabled}
-              />
-              {showVehiculoDropdown && vehiculoSearch && filteredVehiculos.length > 0 && (
-                <div className="searchable-dropdown">
-                  {filteredVehiculos.map(v => (
-                    <div key={v.id} className="searchable-option" onClick={() => handleSelectVehiculoPenalidad(v)}>
-                      <strong>{v.patente}</strong> - {v.marca} {v.modelo}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {loadingConductores && (
-                <div className="searchable-loading">Buscando conductores...</div>
-              )}
-              {selectedVehiculo && (
-                <button type="button" className="clear-selection" onClick={() => {
-                  setFormData(prev => ({ ...prev, vehiculo_id: undefined, conductor_id: undefined }))
-                  setVehiculoSearch('')
-                }}>
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="form-group">
-            <label>Conductor <span className="required">*</span></label>
-            <div className="searchable-select">
-              <input
-                type="text"
-                autoComplete="off"
-                value={selectedConductor ? selectedConductor.nombre_completo : conductorSearch}
-                onChange={e => {
-                  setConductorSearch(e.target.value)
-                  setShowConductorDropdown(true)
-                  if (formData.conductor_id) setFormData(prev => ({ ...prev, conductor_id: undefined }))
-                }}
-                onFocus={() => setShowConductorDropdown(true)}
-                onBlur={() => setTimeout(() => setShowConductorDropdown(false), 200)}
-                placeholder="Buscar conductor..."
-                disabled={disabled}
-              />
-              {showConductorDropdown && conductorSearch && filteredConductores.length > 0 && (
-                <div className="searchable-dropdown">
-                  {filteredConductores.map(c => (
-                    <div key={c.id} className="searchable-option" onClick={() => {
-                      setFormData(prev => ({ ...prev, conductor_id: c.id }))
-                      setConductorSearch('')
-                      setShowConductorDropdown(false)
-                    }}>
-                      {c.nombre_completo}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {selectedConductor && (
-                <button type="button" className="clear-selection" onClick={() => {
-                  setFormData(prev => ({ ...prev, conductor_id: undefined }))
-                  setConductorSearch('')
-                }}>
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="form-row three-cols">
-          <div className="form-group">
-            <label>Fecha <span className="required">*</span></label>
-            <input
-              type="date"
-              value={formData.fecha}
-              onChange={e => setFormData(prev => ({ ...prev, fecha: e.target.value }))}
-              disabled={disabled}
-            />
-          </div>
-          <div className="form-group">
-            <label>Semana</label>
-            <input
-              type="text"
-              value={semanaCalculada || '-'}
-              readOnly
-              className="form-input-readonly"
-            />
-          </div>
-          <div className="form-group">
-            <label>Modalidad</label>
-            <select value={formData.turno || ''} onChange={e => setFormData(prev => ({ ...prev, turno: e.target.value }))} disabled={disabled}>
-              <option value="">Seleccionar</option>
-              <option value="Diurno">Diurno</option>
-              <option value="Nocturno">Nocturno</option>
-              <option value="A cargo">A cargo</option>
-            </select>
-          </div>
-        </div>
-        <div className="form-row three-cols">
-          <div className="form-group">
-            <label>Tipo</label>
-            <select value={formData.tipo_penalidad_id || ''} onChange={e => setFormData(prev => ({ ...prev, tipo_penalidad_id: e.target.value || undefined }))} disabled={disabled}>
-              <option value="">Seleccionar</option>
-              {tiposPenalidad.length > 0 ? (
-                tiposPenalidad.map(t => (
-                  <option key={t.id} value={t.id}>{t.nombre}</option>
-                ))
-              ) : (
-                tiposCobrosDescuentos.map(tipo => (
-                  <option key={tipo} value={tipo}>{tipo}</option>
-                ))
-              )}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Acción a realizar</label>
-            <select value={formData.detalle || ''} onChange={e => setFormData(prev => ({ ...prev, detalle: e.target.value }))} disabled={disabled}>
-              <option value="">Seleccionar</option>
-              <option value="Descuento">Descuento</option>
-              <option value="Cobro">Cobro</option>
-              <option value="A favor">A favor</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Monto (ARS)</label>
-            <input
-              type="number"
-              value={formData.monto || ''}
-              onChange={e => setFormData(prev => ({ ...prev, monto: Number(e.target.value) || undefined }))}
-              placeholder="0"
-              disabled={disabled}
-            />
-          </div>
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label>Área Responsable</label>
-            <select value={formData.area_responsable || ''} onChange={e => setFormData(prev => ({ ...prev, area_responsable: e.target.value }))} disabled={disabled}>
-              <option value="">Seleccionar</option>
-              <option value="LOGISTICA">Logística</option>
-              <option value="DATA ENTRY">Data Entry</option>
-              <option value="ADMINISTRACION">Administración</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Patente</label>
-            <input
-              type="text"
-              value={selectedVehiculo ? selectedVehiculo.patente : (formData.vehiculo_patente || '-')}
-              readOnly
-              className="form-input-readonly"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="form-section">
-        <div className="form-section-title">Observaciones</div>
-        <div className="form-row">
-          <div className="form-group full-width">
-            <textarea
-              value={formData.observaciones || ''}
-              onChange={e => setFormData(prev => ({ ...prev, observaciones: e.target.value }))}
-              placeholder="Notas adicionales..."
-              disabled={disabled}
-            />
-          </div>
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <div className="checkbox-group">
-              <input
-                type="checkbox"
-                id="aplicado"
-                checked={formData.aplicado}
-                onChange={e => setFormData(prev => ({ ...prev, aplicado: e.target.checked }))}
-                disabled={disabled}
-              />
-              <span>Marcar como aplicado</span>
-            </div>
           </div>
         </div>
       </div>
