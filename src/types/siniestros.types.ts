@@ -107,18 +107,23 @@ export interface SiniestroCompleto extends Siniestro {
 export interface SiniestroSeguimiento {
   id: string
   siniestro_id: string
-  tipo_evento: 'estado_cambio' | 'nota' | 'documento' | 'pago'
+  tipo_evento: 'estado_cambio' | 'nota' | 'documento' | 'pago' | 'cobro_conductor'
   descripcion?: string
   estado_anterior_id?: string
   estado_nuevo_id?: string
   monto?: number
+  cobrar_conductor?: boolean
+  incidencia_id?: string
+  penalidad_id?: string
   created_by?: string
+  created_by_name?: string
   created_at: string
 }
 
 export interface SiniestroSeguimientoConEstados extends SiniestroSeguimiento {
   estado_anterior_nombre?: string
   estado_nuevo_nombre?: string
+  incidencia_numero?: number
 }
 
 // Tipo para ticket de reparación
