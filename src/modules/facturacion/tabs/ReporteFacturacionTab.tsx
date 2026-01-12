@@ -158,6 +158,9 @@ export function ReporteFacturacionTab() {
   const [ritPreviewData, setRitPreviewData] = useState<RITPreviewRow[]>([])
   const [loadingRITPreview, setLoadingRITPreview] = useState(false)
 
+  // Recalcular período abierto
+  const [recalculando, setRecalculando] = useState(false)
+
   // Cargar facturaciones cuando cambia la semana
   useEffect(() => {
     // Resetear modo vista previa al cambiar de semana
@@ -584,6 +587,449 @@ export function ReporteFacturacionTab() {
   // Función pública para recalcular
   function cargarVistaPrevia() {
     cargarVistaPreviaInterno(true)
+  }
+
+  // Recalcular período abierto - actualiza excesos, tickets y penalidades en la BD
+  async function recalcularPeriodoAbierto() {
+    if (!periodo || periodo.estado !== 'abierto') {
+      Swal.fire('Error', 'Solo se puede recalcular un período abierto', 'error')
+      return
+    }
+
+    const confirmResult = await Swal.fire({
+      title: '¿Recalcular facturación?',
+      html: `
+        <p>Esto actualizará los datos de facturación incorporando:</p>
+        <ul style="text-align:left; margin-top:10px;">
+          <li>Excesos de KM pendientes</li>
+          <li>Tickets a favor aprobados</li>
+          <li>Penalidades del período</li>
+          <li>Peajes de Cabify</li>
+          <li>Multas de Tránsito</li>
+        </ul>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, recalcular',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: 'var(--color-primary)'
+    })
+
+    if (!confirmResult.isConfirmed) return
+
+    setRecalculando(true)
+    try {
+      const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
+      const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
+
+      // 0. Cargar conceptos de nómina para vincular concepto_id
+      const { data: conceptosData } = await supabase
+        .from('conceptos_nomina')
+        .select('id, codigo, descripcion, precio_final, iva_porcentaje, tipo')
+
+      const conceptosMap = new Map<string, { id: string; descripcion: string; precio_final: number; iva_porcentaje: number; tipo: string }>()
+      ;(conceptosData || []).forEach((c: any) => {
+        conceptosMap.set(c.codigo, {
+          id: c.id,
+          descripcion: c.descripcion,
+          precio_final: c.precio_final,
+          iva_porcentaje: c.iva_porcentaje || 0,
+          tipo: c.tipo
+        })
+      })
+
+      // 1. Cargar tickets a favor aprobados (no aplicados)
+      const { data: tickets } = await (supabase
+        .from('tickets_favor') as any)
+        .select('conductor_id, monto, estado')
+        .eq('estado', 'aprobado')
+
+      const ticketsMap = new Map<string, number>()
+      ;(tickets || []).forEach((t: any) => {
+        const actual = ticketsMap.get(t.conductor_id) || 0
+        ticketsMap.set(t.conductor_id, actual + t.monto)
+      })
+
+      // 2. Cargar excesos de km pendientes
+      const { data: excesosData } = await (supabase
+        .from('excesos_kilometraje') as any)
+        .select('conductor_id, km_exceso, monto_total, aplicado')
+        .eq('aplicado', false)
+
+      const excesosMap = new Map<string, { kmExceso: number; monto: number }>()
+      ;(excesosData || []).forEach((e: any) => {
+        const actual = excesosMap.get(e.conductor_id) || { kmExceso: 0, monto: 0 }
+        excesosMap.set(e.conductor_id, {
+          kmExceso: actual.kmExceso + e.km_exceso,
+          monto: actual.monto + e.monto_total
+        })
+      })
+
+      // 3. Cargar penalidades pendientes (P007)
+      const { data: penalidadesData } = await (supabase
+        .from('penalidades') as any)
+        .select('conductor_id, monto, detalle, aplicado')
+        .gte('fecha', fechaInicio)
+        .lte('fecha', fechaFin)
+        .eq('aplicado', false)
+
+      const penalidadesMap = new Map<string, number>()
+      ;(penalidadesData || []).forEach((p: any) => {
+        const actual = penalidadesMap.get(p.conductor_id) || 0
+        penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+      })
+
+      // 4. Cargar peajes de Cabify
+      const { data: cabifyData } = await supabase
+        .from('cabify_historico')
+        .select('dni, peajes')
+        .gte('fecha_inicio', fechaInicio + 'T00:00:00')
+        .lte('fecha_inicio', fechaFin + 'T23:59:59')
+
+      const peajesMap = new Map<string, number>()
+      ;(cabifyData || []).forEach((record: any) => {
+        if (record.dni) {
+          const actual = peajesMap.get(record.dni) || 0
+          const peajes = parseFloat(String(record.peajes)) || 0
+          peajesMap.set(record.dni, actual + peajes)
+        }
+      })
+
+      // 5. Cargar multas de tránsito (P008)
+      const { data: multasData } = await (supabase
+        .from('multas_historico') as any)
+        .select('patente, importe, fecha_infraccion, detalle, infraccion')
+        .gte('fecha_infraccion', fechaInicio)
+        .lte('fecha_infraccion', fechaFin)
+
+      const multasMap = new Map<string, { monto: number; cantidad: number }>()
+      ;(multasData || []).forEach((m: any) => {
+        if (m.patente) {
+          const patenteNorm = m.patente.toUpperCase().replace(/\s+/g, '')
+          const actual = multasMap.get(patenteNorm) || { monto: 0, cantidad: 0 }
+          // El importe puede venir como string con formato "Gs. 1.234.567"
+          let montoMulta = 0
+          if (typeof m.importe === 'string') {
+            montoMulta = parseFloat(m.importe.replace(/[^\d.-]/g, '')) || 0
+          } else {
+            montoMulta = parseFloat(m.importe) || 0
+          }
+          multasMap.set(patenteNorm, {
+            monto: actual.monto + montoMulta,
+            cantidad: actual.cantidad + 1
+          })
+        }
+      })
+
+      // 6. Para cada facturación existente, recalcular con los nuevos datos
+      let actualizados = 0
+      for (const fact of facturaciones) {
+        const conductorId = fact.conductor_id
+        const dniConductor = fact.conductor_dni || ''
+
+        // Obtener valores actualizados
+        const exceso = excesosMap.get(conductorId)
+        const montoExcesos = exceso?.monto || 0
+        const kmExceso = exceso?.kmExceso || 0
+        const montoPeajes = peajesMap.get(dniConductor) || 0
+        const montoPenalidades = penalidadesMap.get(conductorId) || 0
+        const subtotalDescuentos = ticketsMap.get(conductorId) || 0
+
+        // Obtener multas por patente del vehículo
+        const patenteNorm = (fact.vehiculo_patente || '').toUpperCase().replace(/\s+/g, '')
+        const multasVehiculo = multasMap.get(patenteNorm)
+        const montoMultas = multasVehiculo?.monto || 0
+        const cantidadMultas = multasVehiculo?.cantidad || 0
+
+        // Recalcular cargos totales (incluye multas)
+        const subtotalCargos = fact.subtotal_alquiler + fact.subtotal_garantia + montoExcesos + montoPeajes + montoPenalidades + montoMultas
+        const subtotalNeto = subtotalCargos - subtotalDescuentos
+        const totalAPagar = subtotalNeto + fact.saldo_anterior + fact.monto_mora
+
+        // Actualizar facturacion_conductores
+        const { error: errUpdate } = await (supabase
+          .from('facturacion_conductores') as any)
+          .update({
+            subtotal_cargos: subtotalCargos,
+            subtotal_descuentos: subtotalDescuentos,
+            subtotal_neto: subtotalNeto,
+            total_a_pagar: totalAPagar,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', fact.id)
+
+        if (errUpdate) {
+          console.error('Error actualizando facturación:', errUpdate)
+          continue
+        }
+
+        // Actualizar/crear detalles de excesos (P006)
+        if (montoExcesos > 0) {
+          const netoExceso = Math.round(montoExcesos / 1.21)
+          const ivaExceso = montoExcesos - netoExceso
+
+          // Buscar si ya existe el detalle
+          const { data: existingDet } = await (supabase
+            .from('facturacion_detalle') as any)
+            .select('id')
+            .eq('facturacion_id', fact.id)
+            .eq('concepto_codigo', 'P006')
+            .maybeSingle()
+
+          const conceptoP006 = conceptosMap.get('P006')
+          if (existingDet) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({
+                concepto_id: conceptoP006?.id || null,
+                concepto_descripcion: conceptoP006?.descripcion || `Exceso KM (${kmExceso} km)`,
+                precio_unitario: montoExcesos,
+                subtotal: netoExceso,
+                iva_monto: ivaExceso,
+                total: montoExcesos
+              })
+              .eq('id', existingDet.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: fact.id,
+                concepto_id: conceptoP006?.id || null,
+                concepto_codigo: 'P006',
+                concepto_descripcion: conceptoP006?.descripcion || `Exceso KM (${kmExceso} km)`,
+                cantidad: 1,
+                precio_unitario: montoExcesos,
+                subtotal: netoExceso,
+                iva_porcentaje: conceptoP006?.iva_porcentaje || 21,
+                iva_monto: ivaExceso,
+                total: montoExcesos,
+                es_descuento: false
+              })
+          }
+        }
+
+        // Actualizar/crear detalles de penalidades (P007)
+        if (montoPenalidades > 0) {
+          const { data: existingPen } = await (supabase
+            .from('facturacion_detalle') as any)
+            .select('id')
+            .eq('facturacion_id', fact.id)
+            .eq('concepto_codigo', 'P007')
+            .maybeSingle()
+
+          const conceptoP007 = conceptosMap.get('P007')
+          if (existingPen) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({
+                concepto_id: conceptoP007?.id || null,
+                concepto_descripcion: conceptoP007?.descripcion || 'Multas/Infracciones',
+                precio_unitario: montoPenalidades,
+                subtotal: montoPenalidades,
+                total: montoPenalidades
+              })
+              .eq('id', existingPen.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: fact.id,
+                concepto_id: conceptoP007?.id || null,
+                concepto_codigo: 'P007',
+                concepto_descripcion: conceptoP007?.descripcion || 'Multas/Infracciones',
+                cantidad: 1,
+                precio_unitario: montoPenalidades,
+                subtotal: montoPenalidades,
+                iva_porcentaje: conceptoP007?.iva_porcentaje || 0,
+                iva_monto: 0,
+                total: montoPenalidades,
+                es_descuento: false
+              })
+          }
+        }
+
+        // Actualizar/crear detalles de tickets (P004)
+        if (subtotalDescuentos > 0) {
+          const { data: existingTkt } = await (supabase
+            .from('facturacion_detalle') as any)
+            .select('id')
+            .eq('facturacion_id', fact.id)
+            .eq('concepto_codigo', 'P004')
+            .maybeSingle()
+
+          const conceptoP004 = conceptosMap.get('P004')
+          if (existingTkt) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({
+                concepto_id: conceptoP004?.id || null,
+                concepto_descripcion: conceptoP004?.descripcion || 'Tickets a Favor',
+                precio_unitario: subtotalDescuentos,
+                subtotal: subtotalDescuentos,
+                total: subtotalDescuentos
+              })
+              .eq('id', existingTkt.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: fact.id,
+                concepto_id: conceptoP004?.id || null,
+                concepto_codigo: 'P004',
+                concepto_descripcion: conceptoP004?.descripcion || 'Tickets a Favor',
+                cantidad: 1,
+                precio_unitario: subtotalDescuentos,
+                subtotal: subtotalDescuentos,
+                iva_porcentaje: conceptoP004?.iva_porcentaje || 0,
+                iva_monto: 0,
+                total: subtotalDescuentos,
+                es_descuento: true
+              })
+          }
+        }
+
+        // Actualizar/crear detalles de peajes (P005)
+        if (montoPeajes > 0) {
+          const { data: existingPeaje } = await (supabase
+            .from('facturacion_detalle') as any)
+            .select('id')
+            .eq('facturacion_id', fact.id)
+            .eq('concepto_codigo', 'P005')
+            .maybeSingle()
+
+          const conceptoP005 = conceptosMap.get('P005')
+          if (existingPeaje) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({
+                concepto_id: conceptoP005?.id || null,
+                concepto_descripcion: conceptoP005?.descripcion || 'Peajes Cabify',
+                precio_unitario: montoPeajes,
+                subtotal: montoPeajes,
+                total: montoPeajes
+              })
+              .eq('id', existingPeaje.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: fact.id,
+                concepto_id: conceptoP005?.id || null,
+                concepto_codigo: 'P005',
+                concepto_descripcion: conceptoP005?.descripcion || 'Peajes Cabify',
+                cantidad: 1,
+                precio_unitario: montoPeajes,
+                subtotal: montoPeajes,
+                iva_porcentaje: conceptoP005?.iva_porcentaje || 0,
+                iva_monto: 0,
+                total: montoPeajes,
+                es_descuento: false
+              })
+          }
+        }
+
+        // Actualizar/crear detalles de multas de tránsito (P008)
+        if (montoMultas > 0) {
+          const { data: existingMulta } = await (supabase
+            .from('facturacion_detalle') as any)
+            .select('id')
+            .eq('facturacion_id', fact.id)
+            .eq('concepto_codigo', 'P008')
+            .maybeSingle()
+
+          const conceptoP008 = conceptosMap.get('P008')
+          if (existingMulta) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({
+                concepto_id: conceptoP008?.id || null,
+                concepto_descripcion: conceptoP008?.descripcion || `Multas de Tránsito (${cantidadMultas})`,
+                precio_unitario: montoMultas,
+                cantidad: cantidadMultas,
+                subtotal: montoMultas,
+                total: montoMultas
+              })
+              .eq('id', existingMulta.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: fact.id,
+                concepto_id: conceptoP008?.id || null,
+                concepto_codigo: 'P008',
+                concepto_descripcion: conceptoP008?.descripcion || `Multas de Tránsito (${cantidadMultas})`,
+                cantidad: cantidadMultas,
+                precio_unitario: Math.round(montoMultas / cantidadMultas),
+                subtotal: montoMultas,
+                iva_porcentaje: conceptoP008?.iva_porcentaje || 0,
+                iva_monto: 0,
+                total: montoMultas,
+                es_descuento: false
+              })
+          }
+        }
+
+        actualizados++
+      }
+
+      // Actualizar totales del período
+      const totalCargos = facturaciones.reduce((sum, f) => {
+        const exceso = excesosMap.get(f.conductor_id)
+        const montoExcesos = exceso?.monto || 0
+        const montoPeajes = peajesMap.get(f.conductor_dni || '') || 0
+        const montoPenalidades = penalidadesMap.get(f.conductor_id) || 0
+        const patenteNorm = (f.vehiculo_patente || '').toUpperCase().replace(/\s+/g, '')
+        const montoMultas = multasMap.get(patenteNorm)?.monto || 0
+        return sum + f.subtotal_alquiler + f.subtotal_garantia + montoExcesos + montoPeajes + montoPenalidades + montoMultas
+      }, 0)
+
+      const totalDescuentos = facturaciones.reduce((sum, f) => {
+        return sum + (ticketsMap.get(f.conductor_id) || 0)
+      }, 0)
+
+      await (supabase.from('periodos_facturacion') as any)
+        .update({
+          total_cargos: totalCargos,
+          total_descuentos: totalDescuentos,
+          total_neto: totalCargos - totalDescuentos,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', periodo.id)
+
+      // Contar totales incorporados para el resumen
+      const totalExcesosIncorp = Array.from(excesosMap.values()).reduce((sum, e) => sum + e.monto, 0)
+      const totalPeajesIncorp = Array.from(peajesMap.values()).reduce((sum, p) => sum + p, 0)
+      const totalPenalidadesIncorp = Array.from(penalidadesMap.values()).reduce((sum, p) => sum + p, 0)
+      const totalTicketsIncorp = Array.from(ticketsMap.values()).reduce((sum, t) => sum + t, 0)
+      const totalMultasIncorp = Array.from(multasMap.values()).reduce((sum, m) => sum + m.monto, 0)
+      const cantidadMultasIncorp = Array.from(multasMap.values()).reduce((sum, m) => sum + m.cantidad, 0)
+
+      // Recargar datos
+      await cargarFacturacion()
+
+      // Mostrar resumen detallado
+      const formatMonto = (m: number) => m.toLocaleString('es-PY', { maximumFractionDigits: 0 })
+      const detallesIncorp: string[] = []
+      if (totalExcesosIncorp > 0) detallesIncorp.push(`Excesos KM: Gs. ${formatMonto(totalExcesosIncorp)}`)
+      if (totalPeajesIncorp > 0) detallesIncorp.push(`Peajes: Gs. ${formatMonto(totalPeajesIncorp)}`)
+      if (totalPenalidadesIncorp > 0) detallesIncorp.push(`Penalidades: Gs. ${formatMonto(totalPenalidadesIncorp)}`)
+      if (totalMultasIncorp > 0) detallesIncorp.push(`Multas de Tránsito (${cantidadMultasIncorp}): Gs. ${formatMonto(totalMultasIncorp)}`)
+      if (totalTicketsIncorp > 0) detallesIncorp.push(`Tickets a Favor: Gs. ${formatMonto(totalTicketsIncorp)}`)
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Recálculo completado',
+        html: `
+          <p>Se actualizaron <strong>${actualizados}</strong> registros de facturación</p>
+          ${detallesIncorp.length > 0 ? `
+            <div style="text-align:left; margin-top:10px; padding:10px; background:#f5f5f5; border-radius:5px;">
+              <strong>Conceptos incorporados:</strong>
+              <ul style="margin:5px 0 0 0; padding-left:20px;">
+                ${detallesIncorp.map(d => `<li>${d}</li>`).join('')}
+              </ul>
+            </div>
+          ` : '<p style="color:#666;">No se encontraron conceptos adicionales para incorporar</p>'}
+        `,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: 'var(--color-primary)'
+      })
+
+    } catch (error) {
+      console.error('Error recalculando período:', error)
+      Swal.fire('Error', 'No se pudo recalcular el período', 'error')
+    } finally {
+      setRecalculando(false)
+    }
   }
 
   // Ver detalle de facturación
@@ -2146,6 +2592,17 @@ export function ReporteFacturacionTab() {
             <RefreshCw size={14} className={loading ? 'spinning' : ''} />
             Actualizar
           </button>
+          {periodo?.estado === 'abierto' && (
+            <button
+              className="fact-btn-primary"
+              onClick={recalcularPeriodoAbierto}
+              disabled={recalculando || loading}
+              title="Recalcular incorporando excesos, tickets y penalidades"
+            >
+              <Calculator size={14} className={recalculando ? 'spinning' : ''} />
+              {recalculando ? 'Recalculando...' : 'Recalcular'}
+            </button>
+          )}
         </div>
       </div>
 
