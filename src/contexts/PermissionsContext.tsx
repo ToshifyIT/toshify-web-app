@@ -244,19 +244,27 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             .eq('can_view', true)
 
           // Agregar permisos del rol al map
-          for (const p of (roleMenuPerms || [])) {
-            if ((p as any).menus?.is_active) {
-              menuPermsMap.set((p as any).menus.id, {
-                ...p,
+          for (const p of (roleMenuPerms || []) as any[]) {
+            if (p.menus?.is_active) {
+              menuPermsMap.set(p.menus.id, {
+                can_view: p.can_view,
+                can_create: p.can_create,
+                can_edit: p.can_edit,
+                can_delete: p.can_delete,
+                menus: p.menus,
                 permission_source: 'role_inherited'
               })
             }
           }
 
-          for (const p of (roleSubmenuPerms || [])) {
-            if ((p as any).submenus?.is_active) {
-              submenuPermsMap.set((p as any).submenus.id, {
-                ...p,
+          for (const p of (roleSubmenuPerms || []) as any[]) {
+            if (p.submenus?.is_active) {
+              submenuPermsMap.set(p.submenus.id, {
+                can_view: p.can_view,
+                can_create: p.can_create,
+                can_edit: p.can_edit,
+                can_delete: p.can_delete,
+                submenus: p.submenus,
                 permission_source: 'role_inherited'
               })
             }
@@ -281,19 +289,27 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           .eq('user_id', userId)
 
         // Sobrescribir con permisos de usuario (tienen prioridad)
-        for (const p of (userMenuPerms || [])) {
-          if ((p as any).menus?.is_active) {
-            menuPermsMap.set((p as any).menus.id, {
-              ...p,
+        for (const p of (userMenuPerms || []) as any[]) {
+          if (p.menus?.is_active) {
+            menuPermsMap.set(p.menus.id, {
+              can_view: p.can_view,
+              can_create: p.can_create,
+              can_edit: p.can_edit,
+              can_delete: p.can_delete,
+              menus: p.menus,
               permission_source: 'user_override'
             })
           }
         }
 
-        for (const p of (userSubmenuPerms || [])) {
-          if ((p as any).submenus?.is_active) {
-            submenuPermsMap.set((p as any).submenus.id, {
-              ...p,
+        for (const p of (userSubmenuPerms || []) as any[]) {
+          if (p.submenus?.is_active) {
+            submenuPermsMap.set(p.submenus.id, {
+              can_view: p.can_view,
+              can_create: p.can_create,
+              can_edit: p.can_edit,
+              can_delete: p.can_delete,
+              submenus: p.submenus,
               permission_source: 'user_override'
             })
           }
