@@ -246,6 +246,11 @@ export function UserManagement() {
             Copiar
           </button>
         </div>
+        ${userEmail ? `
+        <p style="font-size: 13px; color: #059669; background: #d1fae5; padding: 10px; border-radius: 6px; margin-bottom: 12px;">
+          <strong>Al aplicar el cambio</strong>, se te preguntará si deseas enviar la contraseña al correo: <strong>${userEmail}</strong>
+        </p>
+        ` : ''}
         <p style="font-size: 12px; color: #666;">
           El usuario deberá cambiarla en el próximo inicio de sesión.
         </p>
