@@ -645,6 +645,71 @@ interface Step5Props {
 function Step5Gestion({ formData, setFormData }: Step5Props) {
   return (
     <div className="wizard-step-content">
+      {/* Estado del vehículo - Importante para asignaciones */}
+      <div className="vehicle-status-section" style={{
+        background: formData.habilitado_circular === false ? '#fef2f2' : '#f0fdf4',
+        border: `1px solid ${formData.habilitado_circular === false ? '#fecaca' : '#bbf7d0'}`,
+        borderRadius: '8px',
+        padding: '16px',
+        marginBottom: '20px'
+      }}>
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontWeight: 600,
+          fontSize: '14px',
+          color: formData.habilitado_circular === false ? '#dc2626' : '#16a34a',
+          marginBottom: '8px'
+        }}>
+          <Car size={18} />
+          Estado del Vehículo
+        </label>
+        <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 12px 0' }}>
+          Si el vehículo queda inhabilitado, las asignaciones activas se verán afectadas.
+        </p>
+        <div className="radio-group" style={{ display: 'flex', gap: '16px' }}>
+          <label className={`radio-option-card ${formData.habilitado_circular !== false ? 'selected' : ''}`} style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 16px',
+            borderRadius: '6px',
+            border: `2px solid ${formData.habilitado_circular !== false ? '#16a34a' : '#e2e8f0'}`,
+            background: formData.habilitado_circular !== false ? '#dcfce7' : '#fff',
+            cursor: 'pointer',
+            flex: 1
+          }}>
+            <input
+              type="radio"
+              name="habilitado_circular"
+              checked={formData.habilitado_circular !== false}
+              onChange={() => setFormData(prev => ({ ...prev, habilitado_circular: true }))}
+            />
+            <span style={{ fontWeight: 500 }}>Habilitado para circular</span>
+          </label>
+          <label className={`radio-option-card ${formData.habilitado_circular === false ? 'selected' : ''}`} style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 16px',
+            borderRadius: '6px',
+            border: `2px solid ${formData.habilitado_circular === false ? '#dc2626' : '#e2e8f0'}`,
+            background: formData.habilitado_circular === false ? '#fee2e2' : '#fff',
+            cursor: 'pointer',
+            flex: 1
+          }}>
+            <input
+              type="radio"
+              name="habilitado_circular"
+              checked={formData.habilitado_circular === false}
+              onChange={() => setFormData(prev => ({ ...prev, habilitado_circular: false }))}
+            />
+            <span style={{ fontWeight: 500 }}>Inhabilitado (Siniestrado)</span>
+          </label>
+        </div>
+      </div>
+
       <p className="step-description">
         Indique si el siniestro fue enviado a la abogada o a la rentadora para su gestión.
       </p>

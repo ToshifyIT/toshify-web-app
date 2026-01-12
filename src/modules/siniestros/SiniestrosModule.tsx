@@ -39,6 +39,7 @@ import type {
 import './SiniestrosModule.css'
 import { SiniestroWizard } from './components/SiniestroWizard'
 import { ReparacionTicket } from './components/ReparacionTicket'
+import { SiniestroSeguimiento } from './components/SiniestroSeguimiento'
 
 type TabType = 'dashboard' | 'listado' | 'por_cobrar' | 'historico'
 
@@ -385,6 +386,8 @@ export function SiniestrosModule() {
           checked={row.original.habilitado_circular || false}
           onChange={() => handleToggleHabilitado(row.original.id, !row.original.habilitado_circular)}
           onClick={(e) => e.stopPropagation()}
+          disabled={!canEdit}
+          title={!canEdit ? 'Sin permisos para modificar' : ''}
         />
       )
     },
@@ -414,7 +417,7 @@ export function SiniestrosModule() {
         </div>
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, categoriasUnicas, categoriaFilter, responsableFilter, estadosUnicos, estadoFilter, openFilterId])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, categoriasUnicas, categoriaFilter, responsableFilter, estadosUnicos, estadoFilter, openFilterId, canEdit])
 
   function handleNuevoSiniestro() {
     const estadoRegistrado = estados.find(e => e.codigo === 'REGISTRADO')
@@ -425,7 +428,8 @@ export function SiniestrosModule() {
       responsable: 'sin_info',
       hay_lesionados: false,
       enviado_abogada: false,
-      enviado_alliance: false
+      enviado_alliance: false,
+      habilitado_circular: true // Por defecto habilitado
     })
     setSelectedSiniestro(null)
     setModalMode('create')
@@ -548,6 +552,12 @@ export function SiniestrosModule() {
   }
 
   async function handleToggleHabilitado(siniestroId: string, habilitado: boolean) {
+    // Verificar permisos
+    if (!canEdit) {
+      Swal.fire('Sin permisos', 'No tienes permisos para modificar siniestros', 'error')
+      return
+    }
+
     try {
       const { error } = await (supabase.from('siniestros' as any) as any)
         .update({ habilitado_circular: habilitado })
@@ -564,9 +574,8 @@ export function SiniestrosModule() {
         timer: 1500,
         showConfirmButton: false
       })
-    } catch (error) {
-      console.error('Error:', error)
-      Swal.fire('Error', 'No se pudo actualizar el estado', 'error')
+    } catch (error: any) {
+      Swal.fire('Error', error?.message || 'No se pudo actualizar el estado', 'error')
     }
   }
 
@@ -1511,6 +1520,7 @@ interface SiniestroDetailViewProps {
 
 function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailViewProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'reparacion'>('info')
+  const [showSeguimiento, setShowSeguimiento] = useState(false)
 
   function formatMoney(value: number | undefined | null) {
     if (!value) return '-'
@@ -1554,6 +1564,14 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="btn-primary"
+              onClick={() => setShowSeguimiento(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Clock size={14} />
+              Seguimiento
+            </button>
             {siniestro.carpeta_drive_url && (
               <a
                 href={siniestro.carpeta_drive_url}
@@ -1731,6 +1749,32 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
           } : null}
           onSave={onReload}
         />
+      )}
+
+      {/* Modal Seguimiento */}
+      {showSeguimiento && (
+        <div className="modal-overlay" onClick={() => setShowSeguimiento(false)}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>Seguimiento del Siniestro</h2>
+              <button className="modal-close" onClick={() => setShowSeguimiento(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <SiniestroSeguimiento
+                siniestro={siniestro}
+                onReload={() => {
+                  onReload()
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
