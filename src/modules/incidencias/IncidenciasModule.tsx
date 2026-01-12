@@ -381,6 +381,20 @@ export function IncidenciasModule() {
       cell: ({ row }) => row.original.registrado_por || '-'
     },
     {
+      accessorKey: 'created_at',
+      header: 'Creado',
+      cell: ({ row }) => {
+        if (!row.original.created_at) return '-'
+        return new Date(row.original.created_at).toLocaleDateString('es-AR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      }
+    },
+    {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
@@ -764,6 +778,7 @@ export function IncidenciasModule() {
       'Descripción': i.descripcion || '',
       'Acción Ejecutada': i.accion_ejecutada || '',
       'Registrado por': i.registrado_por || '',
+      'Fecha Creación': i.created_at ? new Date(i.created_at).toLocaleString('es-AR') : '',
       'Total Penalidades': i.total_penalidades || 0
     }))
 
@@ -774,7 +789,7 @@ export function IncidenciasModule() {
     const colWidths = [
       { wch: 12 }, { wch: 8 }, { wch: 10 }, { wch: 20 }, { wch: 25 },
       { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 35 },
-      { wch: 35 }, { wch: 15 }, { wch: 12 }
+      { wch: 35 }, { wch: 15 }, { wch: 18 }, { wch: 12 }
     ]
     ws['!cols'] = colWidths
 
@@ -1522,8 +1537,12 @@ function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos, condu
       }
 
       if (conductoresData.length === 1) {
-        // Solo un conductor, auto-seleccionar
-        setFormData(prev => ({ ...prev, conductor_id: conductoresData[0].id }))
+        // Solo un conductor, auto-seleccionar y setear turno
+        setFormData(prev => ({
+          ...prev,
+          conductor_id: conductoresData[0].id,
+          turno: conductoresData[0].turno
+        }))
         setConductorSearch('')
       } else if (conductoresData.length > 1) {
         // Múltiples conductores, mostrar modal para elegir
@@ -1548,7 +1567,11 @@ function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos, condu
 
   // Manejar selección de conductor desde modal
   function handleSelectConductorFromModal(conductor: ConductorAsignado) {
-    setFormData(prev => ({ ...prev, conductor_id: conductor.id }))
+    setFormData(prev => ({
+      ...prev,
+      conductor_id: conductor.id,
+      turno: conductor.turno // Auto-setear el turno del conductor
+    }))
     setConductorSearch('')
     setShowConductorSelectModal(false)
     setConductoresAsignados([])
@@ -1713,6 +1736,7 @@ function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos, condu
               <option value="">Seleccionar</option>
               <option value="Diurno">Diurno</option>
               <option value="Nocturno">Nocturno</option>
+              <option value="A cargo">A cargo</option>
             </select>
           </div>
         </div>
