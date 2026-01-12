@@ -36,6 +36,7 @@ import type {
   ConductorSimple,
   SiniestroStats
 } from '../../types/siniestros.types'
+import type { VehiculoEstado } from '../../types/database.types'
 import './SiniestrosModule.css'
 import { SiniestroWizard } from './components/SiniestroWizard'
 import { ReparacionTicket } from './components/ReparacionTicket'
@@ -49,8 +50,16 @@ export function SiniestrosModule() {
 
   // Permisos específicos para el submenú de siniestros
   // Admin siempre tiene acceso completo
-  const canCreate = isAdmin() || canCreateInSubmenu('siniestros')
+  const canCreateSiniestros = canCreateInSubmenu('siniestros')
+  const canCreate = isAdmin() || canCreateSiniestros
   const canEdit = isAdmin() || canEditInSubmenu('siniestros')
+
+  // DEBUG: Ver permisos de siniestros
+  console.log('🚨 Permisos Siniestros:', {
+    isAdmin: isAdmin(),
+    canCreateInSubmenu_siniestros: canCreateSiniestros,
+    canCreate_final: canCreate
+  })
 
   const [activeTab, setActiveTab] = useState<TabType>('listado')
   const [loading, setLoading] = useState(true)
@@ -60,6 +69,7 @@ export function SiniestrosModule() {
   const [seguros, setSeguros] = useState<Seguro[]>([])
   const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
+  const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
   const [stats, setStats] = useState<SiniestroStats | null>(null)
 
   // Filtros por columna tipo Excel con Portal
@@ -106,7 +116,8 @@ export function SiniestrosModule() {
         segurosRes,
         vehiculosRes,
         conductoresRes,
-        siniestrosRes
+        siniestrosRes,
+        vehiculosEstadosRes
       ] = await Promise.all([
         supabase.from('siniestros_categorias' as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('siniestros_estados' as any).select('*').eq('is_active', true).order('orden'),
@@ -115,7 +126,8 @@ export function SiniestrosModule() {
         estadoActivoId
           ? supabase.from('conductores').select('id, nombres, apellidos').eq('estado_id', estadoActivoId).order('apellidos')
           : supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
-        supabase.from('v_siniestros_completos' as any).select('*').order('fecha_siniestro', { ascending: false })
+        supabase.from('v_siniestros_completos' as any).select('*').order('fecha_siniestro', { ascending: false }),
+        supabase.from('vehiculos_estados').select('id, codigo, descripcion').eq('activo', true).order('descripcion')
       ])
 
       const categoriasData = categoriasRes.data as SiniestroCategoria[] | null
@@ -124,6 +136,7 @@ export function SiniestrosModule() {
       const vehiculosData = vehiculosRes.data as VehiculoSimple[] | null
       const conductoresData = conductoresRes.data as { id: string; nombres: string; apellidos: string }[] | null
       const siniestrosData = siniestrosRes.data as SiniestroCompleto[] | null
+      const vehiculosEstadosData = vehiculosEstadosRes.data as VehiculoEstado[] | null
 
       setCategorias(categoriasData || [])
       setEstados(estadosData || [])
@@ -136,6 +149,7 @@ export function SiniestrosModule() {
         nombre_completo: `${c.nombres} ${c.apellidos}`
       })))
       setSiniestros(siniestrosData || [])
+      setVehiculosEstados(vehiculosEstadosData || [])
 
       // Calcular estadísticas
       if (siniestrosData) {
@@ -378,18 +392,31 @@ export function SiniestrosModule() {
       }
     },
     {
-      accessorKey: 'habilitado_circular',
-      header: 'Hab.',
-      cell: ({ row }) => (
-        <input
-          type="checkbox"
-          checked={row.original.habilitado_circular || false}
-          onChange={() => handleToggleHabilitado(row.original.id, !row.original.habilitado_circular)}
-          onClick={(e) => e.stopPropagation()}
-          disabled={!canEdit}
-          title={!canEdit ? 'Sin permisos para modificar' : ''}
-        />
-      )
+      accessorKey: 'estado_vehiculo',
+      header: 'Estado Vehículo',
+      cell: ({ row }) => {
+        const estado = row.original.estado_vehiculo
+        if (!estado) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+
+        // Determinar color según el estado
+        const isHabilitado = row.original.habilitado_circular
+        const bgColor = isHabilitado ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'
+        const textColor = isHabilitado ? '#10b981' : '#ef4444'
+
+        return (
+          <span style={{
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: 500,
+            background: bgColor,
+            color: textColor,
+            whiteSpace: 'nowrap'
+          }}>
+            {estado}
+          </span>
+        )
+      }
     },
     {
       id: 'acciones',
@@ -501,9 +528,15 @@ export function SiniestrosModule() {
 
     setSaving(true)
     try {
+      // Extraer campos temporales del wizard
+      const { _finalizarAsignacion, _asignacionId, ...formDataClean } = formData as any
+
+      // Si no se selecciono estado_vehiculo, usar 'SINIESTRADO' por defecto
       const dataToSave = {
-        ...formData,
-        fecha_siniestro: new Date(formData.fecha_siniestro).toISOString(),
+        ...formDataClean,
+        estado_vehiculo: formDataClean.estado_vehiculo || 'SINIESTRADO',
+        habilitado_circular: false, // Siempre false para siniestros
+        fecha_siniestro: new Date(formDataClean.fecha_siniestro).toISOString(),
         created_by: user?.id
       }
 
@@ -514,10 +547,27 @@ export function SiniestrosModule() {
         })
         if (error) throw error
 
+        // Si hay que finalizar la asignacion
+        if (_finalizarAsignacion && _asignacionId) {
+          const { error: asigError } = await (supabase
+            .from('asignaciones') as any)
+            .update({
+              estado: 'finalizada',
+              fecha_fin: new Date().toISOString().split('T')[0],
+              motivo_finalizacion: 'Vehiculo siniestrado'
+            })
+            .eq('id', _asignacionId)
+
+          if (asigError) {
+            console.error('Error finalizando asignacion:', asigError)
+          }
+        }
+
         Swal.fire({
           icon: 'success',
           title: 'Siniestro registrado',
-          timer: 1500,
+          text: _finalizarAsignacion ? 'La asignacion fue finalizada automaticamente' : undefined,
+          timer: 2000,
           showConfirmButton: false
         })
       } else if (modalMode === 'edit' && selectedSiniestro) {
@@ -549,34 +599,6 @@ export function SiniestrosModule() {
     setFormData(prev => ({ ...prev, vehiculo_id: vehiculoId }))
 
     // TODO: Auto-seleccionar conductor asignado y seguro del vehículo
-  }
-
-  async function handleToggleHabilitado(siniestroId: string, habilitado: boolean) {
-    // Verificar permisos
-    if (!canEdit) {
-      Swal.fire('Sin permisos', 'No tienes permisos para modificar siniestros', 'error')
-      return
-    }
-
-    try {
-      const { error } = await (supabase.from('siniestros' as any) as any)
-        .update({ habilitado_circular: habilitado })
-        .eq('id', siniestroId)
-
-      if (error) throw error
-
-      // El trigger de BD actualiza automáticamente el estado del vehículo
-      cargarDatos()
-
-      Swal.fire({
-        icon: 'success',
-        title: habilitado ? 'Vehículo habilitado para circular' : 'Vehículo marcado como siniestrado',
-        timer: 1500,
-        showConfirmButton: false
-      })
-    } catch (error: any) {
-      Swal.fire('Error', error?.message || 'No se pudo actualizar el estado', 'error')
-    }
   }
 
   function formatMoney(value: number | undefined | null) {
@@ -824,6 +846,7 @@ export function SiniestrosModule() {
                   estados={estados}
                   vehiculos={vehiculos}
                   conductores={conductores}
+                  vehiculosEstados={vehiculosEstados}
                   onVehiculoChange={handleVehiculoChange}
                   onCancel={() => setShowModal(false)}
                   onSubmit={handleGuardar}

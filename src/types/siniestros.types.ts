@@ -70,6 +70,7 @@ export interface Siniestro {
   observaciones?: string
   // Nuevos campos
   habilitado_circular?: boolean
+  estado_vehiculo?: string
   costos_reparacion?: number
   total_reparacion_pagada?: number
   fecha_cierre?: string
@@ -174,6 +175,7 @@ export interface SiniestroFormData {
   observaciones?: string
   // Nuevos campos
   habilitado_circular?: boolean
+  estado_vehiculo?: string
   costos_reparacion?: number
   total_reparacion_pagada?: number
   fecha_cierre?: string
