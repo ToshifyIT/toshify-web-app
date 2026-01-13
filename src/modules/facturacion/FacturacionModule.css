@@ -19,10 +19,9 @@
 .fact-tabs {
   display: flex;
   gap: 4px;
-  background: var(--bg-primary);
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border-primary);
+  background: transparent;
+  padding: 0;
+  flex-wrap: wrap;
 }
 
 .fact-tab {
