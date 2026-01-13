@@ -276,31 +276,69 @@ export function ConductoresModule() {
 
   // Generar filtros externos para mostrar en la barra de filtros del DataTable
   const externalFilters = useMemo(() => {
-    if (!activeStatCard) return [];
+    const filters: Array<{ id: string; label: string; onClear: () => void }> = [];
 
-    const labels: Record<string, string> = {
-      total: 'Total',
-      activos: 'Activos',
-      disponibles: 'Disponibles',
-      asignados: 'Asignados',
-      baja: 'De Baja',
-      licencias: 'Licencias por Vencer'
-    };
+    // Stat card filter
+    if (activeStatCard) {
+      const labels: Record<string, string> = {
+        total: 'Total',
+        activos: 'Activos',
+        disponibles: 'Disponibles',
+        asignados: 'Asignados',
+        baja: 'De Baja',
+        licencias: 'Licencias por Vencer'
+      };
+      filters.push({
+        id: activeStatCard,
+        label: labels[activeStatCard] || activeStatCard,
+        onClear: () => {
+          setActiveStatCard(null);
+          setStatCardEstadoFilter([]);
+          setStatCardAsignacionFilter([]);
+          setStatCardLicenciaFilter(false);
+        }
+      });
+    }
 
-    // Solo limpiar filtros de stat card, mantener filtros de columna
-    const clearStatCardFilters = () => {
-      setActiveStatCard(null);
-      setStatCardEstadoFilter([]);
-      setStatCardAsignacionFilter([]);
-      setStatCardLicenciaFilter(false);
-    };
+    // Column filters
+    if (nombreFilter.length > 0) {
+      filters.push({
+        id: 'nombre',
+        label: `Nombre: ${nombreFilter.length === 1 ? nombreFilter[0] : `${nombreFilter.length} seleccionados`}`,
+        onClear: () => setNombreFilter([])
+      });
+    }
+    if (dniFilter.length > 0) {
+      filters.push({
+        id: 'dni',
+        label: `DNI: ${dniFilter.length === 1 ? dniFilter[0] : `${dniFilter.length} seleccionados`}`,
+        onClear: () => setDniFilter([])
+      });
+    }
+    if (cbuFilter.length > 0) {
+      filters.push({
+        id: 'cuil',
+        label: `CUIL: ${cbuFilter.length === 1 ? cbuFilter[0] : `${cbuFilter.length} seleccionados`}`,
+        onClear: () => setCbuFilter([])
+      });
+    }
+    if (turnoFilter.length > 0) {
+      filters.push({
+        id: 'turno',
+        label: `Turno: ${turnoFilter.join(', ')}`,
+        onClear: () => setTurnoFilter([])
+      });
+    }
+    if (estadoFilter.length > 0) {
+      filters.push({
+        id: 'estado',
+        label: `Estado: ${estadoFilter.length === 1 ? estadoFilter[0] : `${estadoFilter.length} seleccionados`}`,
+        onClear: () => setEstadoFilter([])
+      });
+    }
 
-    return [{
-      id: activeStatCard,
-      label: labels[activeStatCard] || activeStatCard,
-      onClear: clearStatCardFilters
-    }];
-  }, [activeStatCard]);
+    return filters;
+  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter]);
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo (conductores + catálogos)
   const loadAllData = async () => {
@@ -1534,7 +1572,7 @@ export function ConductoresModule() {
           </div>
         ),
         cell: ({ row }) => (
-          <strong>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
+          <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
         ),
         enableSorting: true,
       },
