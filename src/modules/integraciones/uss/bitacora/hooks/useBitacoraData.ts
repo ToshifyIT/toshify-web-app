@@ -194,23 +194,16 @@ export function useBitacoraData() {
             conductorWialon && conductorWialon.includes(c.conductor_nombre.toLowerCase())
           )
 
-          // Si no hay match por nombre pero hay conductores asignados:
-          // - Para CARGO: usar el único conductor (o el primero si hay varios)
-          // - Para TURNO sin conductor_wialon: usar el primer conductor como fallback
+          // Si no hay match por nombre pero hay conductores asignados, usar fallback
+          // Esto aplica tanto para CARGO como para TURNO
           if (!conductorMatch && asignacion.conductores.length > 0) {
-            if (asignacion.modalidad === 'CARGO') {
-              // En modalidad CARGO, típicamente hay un solo conductor
-              conductorMatch = asignacion.conductores[0]
-            } else if (!conductorWialon) {
-              // Si no hay conductor_wialon y hay conductores, usar el primero
-              conductorMatch = asignacion.conductores[0]
-            }
+            // Usar el primer conductor disponible como fallback
+            conductorMatch = asignacion.conductores[0]
           }
 
           // Determinar el turno del conductor
           let turnoIndicador: string | null = null
           if (asignacion.modalidad === 'TURNO' && conductorMatch?.turno) {
-            // Usar nombre completo: Diurno o Nocturno
             if (conductorMatch.turno === 'diurno') turnoIndicador = 'Diurno'
             else if (conductorMatch.turno === 'nocturno') turnoIndicador = 'Nocturno'
           }
@@ -218,8 +211,8 @@ export function useBitacoraData() {
           return {
             ...r,
             conductor_wialon: conductorMatch?.conductor_completo || r.conductor_wialon,
-            tipo_turno: asignacion.modalidad, // TURNO o CARGO
-            turno_indicador: turnoIndicador, // Diurno, Nocturno, o null
+            tipo_turno: asignacion.modalidad,
+            turno_indicador: turnoIndicador,
           }
         }
         return { ...r, tipo_turno: null, turno_indicador: null }
