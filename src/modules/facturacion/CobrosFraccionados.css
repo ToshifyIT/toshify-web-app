@@ -1,0 +1,240 @@
+.cobros-fraccionados-tab {
+  padding: 20px;
+}
+
+.tab-header {
+  margin-bottom: 30px;
+}
+
+.tab-header h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+}
+
+.tab-header p {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.cobros-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cobro-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.cobro-header {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: #fafafa;
+  border-bottom: 1px solid #eee;
+  transition: background-color 0.2s;
+}
+
+.cobro-header:hover {
+  background: #f5f5f5;
+}
+
+.cobro-info {
+  flex: 1;
+  min-width: 250px;
+}
+
+.cobro-titulo {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.cobro-titulo .id {
+  font-size: 12px;
+  background: #e0e0e0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.cobro-titulo .conductor {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.cobro-detalles {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #666;
+}
+
+.cobro-detalles .monto {
+  font-weight: 600;
+  color: #2196F3;
+}
+
+.cobro-progreso {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 150px;
+}
+
+.barra-progreso {
+  width: 140px;
+  height: 8px;
+  background: #eee;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.barra-llena {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #45a049);
+  transition: width 0.3s;
+}
+
+.porcentaje {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+}
+
+.proxima-cuota {
+  min-width: 220px;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.proxima-cuota .label {
+  display: block;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.proxima-cuota .valor {
+  display: block;
+  font-weight: 600;
+  color: #333;
+}
+
+.proxima-cuota .valor.completado {
+  color: #4CAF50;
+}
+
+.btn-expandir {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-expandir:hover {
+  color: #333;
+}
+
+.cobro-detalle {
+  padding: 20px;
+  background: white;
+}
+
+.cuotas-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.cuotas-table thead {
+  background: #f5f5f5;
+  border-bottom: 2px solid #ddd;
+}
+
+.cuotas-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+}
+
+.cuotas-table td {
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.cuotas-table tr.aplicada {
+  background: #f1f8f4;
+}
+
+.cuotas-table tr.pendiente:hover {
+  background: #fffbf0;
+}
+
+.cuotas-table td:last-child {
+  text-align: right;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .cobro-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .cobro-info {
+    flex-basis: 100%;
+  }
+
+  .proxima-cuota {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .cobro-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cobro-progreso {
+    width: 100%;
+  }
+
+  .barra-progreso {
+    width: 100%;
+  }
+
+  .proxima-cuota {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .cuotas-table {
+    font-size: 11px;
+  }
+
+  .cuotas-table th,
+  .cuotas-table td {
+    padding: 8px;
+  }
+}

@@ -1114,10 +1114,92 @@ export interface Database {
           last_activity?: string
         }
       }
+      cobros_incidencias: {
+        Row: {
+          id: string
+          incidencia_id: string
+          conductor_id: string
+          monto_total: number
+          descripcion: string | null
+          estado: 'por_aplicar' | 'fraccionado' | 'aplicado_completo'
+          fraccionado: boolean
+          cantidad_cuotas: number | null
+          creado_por: string
+          creado_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          incidencia_id: string
+          conductor_id: string
+          monto_total: number
+          descripcion?: string | null
+          estado?: 'por_aplicar' | 'fraccionado' | 'aplicado_completo'
+          fraccionado?: boolean
+          cantidad_cuotas?: number | null
+          creado_por: string
+          creado_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          incidencia_id?: string
+          conductor_id?: string
+          monto_total?: number
+          descripcion?: string | null
+          estado?: 'por_aplicar' | 'fraccionado' | 'aplicado_completo'
+          fraccionado?: boolean
+          cantidad_cuotas?: number | null
+          creado_por?: string
+          creado_at?: string
+          updated_at?: string
+        }
+      }
+      cobros_cuotas_fraccionadas: {
+        Row: {
+          id: string
+          cobro_id: string
+          numero_cuota: number
+          monto_cuota: number
+          periodo_id: string
+          semana: number
+          anio: number
+          aplicado: boolean
+          fecha_aplicacion: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          cobro_id: string
+          numero_cuota: number
+          monto_cuota: number
+          periodo_id: string
+          semana: number
+          anio: number
+          aplicado?: boolean
+          fecha_aplicacion?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          cobro_id?: string
+          numero_cuota?: number
+          monto_cuota?: number
+          periodo_id?: string
+          semana?: number
+          anio?: number
+          aplicado?: boolean
+          fecha_aplicacion?: string | null
+          created_at?: string
+        }
+      }
     }
     Views: {}
     Functions: {}
-    Enums: {}
+    Enums: {
+      incidencia_tipo: 'logistica' | 'cobro'
+      cobro_estado: 'por_aplicar' | 'fraccionado' | 'aplicado_completo'
+    }
   }
 }
 
@@ -1153,6 +1235,8 @@ export type ProductoEstado = Database['public']['Tables']['productos_estados']['
 export type Producto = Database['public']['Tables']['productos']['Row']
 export type ProductoCategoria = Database['public']['Tables']['productos_categorias']['Row']
 export type UserSession = Database['public']['Tables']['user_sessions']['Row']
+export type CobroIncidencia = Database['public']['Tables']['cobros_incidencias']['Row']
+export type CobroCuotaFraccionada = Database['public']['Tables']['cobros_cuotas_fraccionadas']['Row']
 
 // Tipo para usuario con rol y permisos
 export interface UserWithRole extends UserProfile {

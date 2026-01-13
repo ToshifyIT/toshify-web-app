@@ -12,7 +12,6 @@ import {
   Edit2,
   AlertTriangle,
   Car,
-  Users,
   DollarSign,
   FileText,
   TrendingUp,
@@ -42,8 +41,6 @@ import { SiniestroWizard } from './components/SiniestroWizard'
 import { ReparacionTicket } from './components/ReparacionTicket'
 import { SiniestroSeguimiento } from './components/SiniestroSeguimiento'
 
-type TabType = 'dashboard' | 'listado' | 'por_cobrar' | 'historico'
-
 export function SiniestrosModule() {
   const { user, profile } = useAuth()
   const { canCreateInSubmenu, canEditInSubmenu, isAdmin } = usePermissions()
@@ -61,7 +58,6 @@ export function SiniestrosModule() {
     canCreate_final: canCreate
   })
 
-  const [activeTab, setActiveTab] = useState<TabType>('listado')
   const [loading, setLoading] = useState(true)
   const [siniestros, setSiniestros] = useState<SiniestroCompleto[]>([])
   const [categorias, setCategorias] = useState<SiniestroCategoria[]>([])
@@ -230,27 +226,7 @@ export function SiniestrosModule() {
   const siniestrosFiltrados = useMemo(() => {
     let filtered = [...siniestros]
 
-    // Filtrar por tab
-    if (activeTab === 'por_cobrar') {
-      filtered = filtered.filter(s => {
-        const estadoCobrado = estados.find(e => e.codigo === 'COBRADO')
-        const estadoCerrado = estados.find(e => e.codigo === 'CERRADO')
-        return s.estado_id !== estadoCobrado?.id &&
-               s.estado_id !== estadoCerrado?.id &&
-               (s.presupuesto_real || 0) > 0
-      })
-    } else if (activeTab === 'historico') {
-      filtered = filtered.filter(s => {
-        const estadoCerrado = estados.find(e => e.codigo === 'CERRADO')
-        return s.estado_id === estadoCerrado?.id
-      })
-    } else if (activeTab === 'listado') {
-      // Excluir cerrados del listado principal
-      filtered = filtered.filter(s => {
-        const estadoCerrado = estados.find(e => e.codigo === 'CERRADO')
-        return s.estado_id !== estadoCerrado?.id
-      })
-    }
+    // Mostrar todos los siniestros (se filtra por columnas)
 
     // Aplicar filtros tipo Excel
     if (patenteFilter.length > 0) {
@@ -270,7 +246,7 @@ export function SiniestrosModule() {
     }
 
     return filtered
-  }, [siniestros, activeTab, patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter, estados])
+  }, [siniestros, patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter])
 
   // Conductores con más siniestros (para alertas)
   const conductoresReincidentes = useMemo(() => {
@@ -764,24 +740,10 @@ export function SiniestrosModule() {
     ]
     ws['!cols'] = colWidths
 
-    const tabName = activeTab === 'por_cobrar' ? 'PorCobrar' : activeTab === 'historico' ? 'Historico' : 'Listado'
+    const tabName = 'Listado'
     const fecha = new Date().toISOString().split('T')[0]
     XLSX.writeFile(wb, `Siniestros_${tabName}_${fecha}.xlsx`)
   }
-
-  // Contadores para tabs
-  const countPorCobrar = siniestros.filter(s => {
-    const estadoCobrado = estados.find(e => e.codigo === 'COBRADO')
-    const estadoCerrado = estados.find(e => e.codigo === 'CERRADO')
-    return s.estado_id !== estadoCobrado?.id &&
-           s.estado_id !== estadoCerrado?.id &&
-           (s.presupuesto_real || 0) > 0
-  }).length
-
-  const countHistorico = siniestros.filter(s => {
-    const estadoCerrado = estados.find(e => e.codigo === 'CERRADO')
-    return s.estado_id === estadoCerrado?.id
-  }).length
 
   return (
     <div className="siniestros-module">
@@ -822,37 +784,12 @@ export function SiniestrosModule() {
       {/* Tabs + Action Button */}
       <div className="siniestros-tabs-row">
         <div className="siniestros-tabs">
-        {/* Dashboard tab oculto temporalmente */}
         <button
-          className={`siniestros-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setActiveTab('dashboard')}
-          style={{ display: 'none' }}
-        >
-          <TrendingUp size={16} />
-          Dashboard
-        </button>
-        <button
-          className={`siniestros-tab ${activeTab === 'listado' ? 'active' : ''}`}
-          onClick={() => setActiveTab('listado')}
+          className="siniestros-tab active"
         >
           <FileText size={16} />
           Listado
-        </button>
-        <button
-          className={`siniestros-tab ${activeTab === 'por_cobrar' ? 'active' : ''}`}
-          onClick={() => setActiveTab('por_cobrar')}
-        >
-          <DollarSign size={16} />
-          Por Cobrar
-          {countPorCobrar > 0 && <span className="tab-badge">{countPorCobrar}</span>}
-        </button>
-        <button
-          className={`siniestros-tab ${activeTab === 'historico' ? 'active' : ''}`}
-          onClick={() => setActiveTab('historico')}
-        >
-          <Clock size={16} />
-          Histórico
-          {countHistorico > 0 && <span className="tab-badge">{countHistorico}</span>}
+          <span className="tab-badge">{siniestros.length}</span>
         </button>
         </div>
         <div className="tabs-actions">
@@ -871,7 +808,7 @@ export function SiniestrosModule() {
       </div>
 
       {/* Alertas de conductores reincidentes */}
-      {conductoresReincidentes.length > 0 && activeTab !== 'dashboard' && (
+      {conductoresReincidentes.length > 0 && (
         <div className="siniestros-alerts">
           <div className="alert-item">
             <AlertTriangle size={16} />
@@ -883,24 +820,16 @@ export function SiniestrosModule() {
         </div>
       )}
 
-      {/* Contenido según tab */}
-      {activeTab === 'dashboard' ? (
-        <DashboardContent
-          stats={stats}
-          conductoresReincidentes={conductoresReincidentes}
-          loading={loading}
-        />
-      ) : (
-        <DataTable
-          data={siniestrosFiltrados}
-          columns={siniestrosColumns}
-          loading={loading}
-          searchPlaceholder="Buscar por patente, conductor..."
-          emptyIcon={<Shield size={40} />}
-          emptyTitle="No hay siniestros para mostrar"
-          emptyDescription="Los siniestros aparecerán aquí cuando se registren."
-        />
-      )}
+      {/* Tabla de siniestros */}
+      <DataTable
+        data={siniestrosFiltrados}
+        columns={siniestrosColumns}
+        loading={loading}
+        searchPlaceholder="Buscar por patente, conductor..."
+        emptyIcon={<Shield size={40} />}
+        emptyTitle="No hay siniestros para mostrar"
+        emptyDescription="Los siniestros aparecerán aquí cuando se registren."
+      />
 
       {/* Modal */}
       {showModal && (
@@ -975,151 +904,6 @@ export function SiniestrosModule() {
         </div>
       )}
     </div>
-  )
-}
-
-// Componente Dashboard
-interface DashboardContentProps {
-  stats: SiniestroStats | null
-  conductoresReincidentes: { nombre: string; cantidad: number }[]
-  loading: boolean
-}
-
-function DashboardContent({ stats, conductoresReincidentes, loading }: DashboardContentProps) {
-  if (loading || !stats) {
-    return (
-      <div className="siniestros-stats">
-        <div className="stats-grid">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="stat-card skeleton">
-              <div className="skeleton-content" />
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <>
-      {/* KPIs grandes */}
-      <div className="siniestros-stats">
-        <div className="stats-grid">
-          <div className="stat-card">
-            <FileText size={24} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.total}</span>
-              <span className="stat-label">Total Siniestros</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <Users size={24} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">
-                {stats.por_responsable.find(r => r.responsable === 'Tercero')?.cantidad || 0}
-              </span>
-              <span className="stat-label">Resp. Tercero</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <DollarSign size={24} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">
-                {new Intl.NumberFormat('es-AR', {
-                  style: 'currency',
-                  currency: 'ARS',
-                  maximumFractionDigits: 0,
-                  notation: 'compact'
-                }).format(stats.presupuesto_total)}
-              </span>
-              <span className="stat-label">Presupuesto Total</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <TrendingUp size={24} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">
-                {new Intl.NumberFormat('es-AR', {
-                  style: 'currency',
-                  currency: 'ARS',
-                  maximumFractionDigits: 0,
-                  notation: 'compact'
-                }).format(stats.total_cobrado)}
-              </span>
-              <span className="stat-label">Total Cobrado</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <AlertTriangle size={24} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.con_lesionados}</span>
-              <span className="stat-label">Con Lesionados</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Dashboard grid */}
-      <div className="dashboard-grid">
-        {/* Por estado */}
-        <div className="dashboard-card">
-          <div className="dashboard-card-title">Por Estado</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {stats.por_estado.map(e => (
-              <div key={e.estado} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className={`estado-badge estado-${e.color}`}>{e.estado}</span>
-                <span style={{ fontWeight: 600 }}>{e.cantidad}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Por categoría */}
-        <div className="dashboard-card">
-          <div className="dashboard-card-title">Por Categoría</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {stats.por_categoria.slice(0, 6).map(c => (
-              <div key={c.categoria} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{c.categoria}</span>
-                <span style={{ fontWeight: 600 }}>{c.cantidad}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Conductores reincidentes */}
-        <div className="dashboard-card full-width">
-          <div className="dashboard-card-title">Conductores con más siniestros</div>
-          {conductoresReincidentes.length === 0 ? (
-            <p style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>
-              No hay conductores con 3 o más siniestros
-            </p>
-          ) : (
-            <table className="top-conductores-table">
-              <thead>
-                <tr>
-                  <th>Conductor</th>
-                  <th style={{ textAlign: 'right' }}>Cantidad</th>
-                </tr>
-              </thead>
-              <tbody>
-                {conductoresReincidentes.map((c, i) => (
-                  <tr key={i}>
-                    <td>{c.nombre}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span className="conductor-alert">
-                        <AlertTriangle size={14} />
-                        {c.cantidad}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-    </>
   )
 }
 

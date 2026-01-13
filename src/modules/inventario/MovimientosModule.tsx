@@ -558,7 +558,7 @@ export function MovimientosModule() {
       const { data: userData } = await supabase.auth.getUser()
 
       // Construir observaciones (ahora categoría se guarda aparte)
-      let observacionesFinal = observaciones || ''
+      const observacionesFinal = observaciones || ''
 
       // Obtener la categoría de servicio a guardar
       const categoriaServicioFinal = (tipoMovimiento === 'salida' || tipoMovimiento === 'asignacion')
