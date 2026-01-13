@@ -1534,7 +1534,7 @@ export function ConductoresModule() {
           </div>
         ),
         cell: ({ row }) => (
-          <strong>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
+          <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
         ),
         enableSorting: true,
       },

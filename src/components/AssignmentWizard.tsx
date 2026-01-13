@@ -1606,49 +1606,40 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       ) : (
                         filteredAvailableConductores.map((conductor) => {
                           // Verificar si el conductor tiene turnos ocupados
-                          const ambosOcupados = conductor.tieneAsignacionDiurna && conductor.tieneAsignacionNocturna
                           const algunoOcupado = conductor.tieneAsignacionDiurna || conductor.tieneAsignacionNocturna
 
-                          // En modo TURNO: deshabilitado solo si tiene AMBOS turnos ocupados
-                          // En modo CARGO: deshabilitado si tiene CUALQUIER turno ocupado
-                          const estaDeshabilitado = isTurnoMode ? ambosOcupados : algunoOcupado
-
-                          // Mensaje de turno ocupado
-                          let turnoOcupadoMsg = ''
+                          // Mensaje informativo (pero YA NO bloquea selección)
+                          let infoMsg = ''
                           if (isTurnoMode) {
-                            if (ambosOcupados) {
-                              turnoOcupadoMsg = 'Ambos turnos ocupados'
+                            if (conductor.tieneAsignacionDiurna && conductor.tieneAsignacionNocturna) {
+                              infoMsg = 'Ambos turnos ocupados'
                             } else if (conductor.tieneAsignacionDiurna) {
-                              turnoOcupadoMsg = 'Turno diurno ocupado'
+                              infoMsg = 'Turno diurno ocupado'
                             } else if (conductor.tieneAsignacionNocturna) {
-                              turnoOcupadoMsg = 'Turno nocturno ocupado'
+                              infoMsg = 'Turno nocturno ocupado'
                             }
                           } else if (algunoOcupado) {
-                            // Modo CARGO
-                            turnoOcupadoMsg = 'Ya tiene asignación activa'
+                            infoMsg = 'Ya tiene asignación activa'
                           }
 
                           return (
                             <div
                               key={conductor.id}
                               className="conductor-item"
-                              draggable={!estaDeshabilitado}
+                              draggable={true}
                               onDragStart={(e) => {
-                                if (estaDeshabilitado) {
-                                  e.preventDefault()
-                                  return
-                                }
                                 e.dataTransfer.setData('conductorId', conductor.id)
                                 e.dataTransfer.effectAllowed = 'move'
                               }}
                               style={{
-                                cursor: estaDeshabilitado ? 'not-allowed' : 'grab',
-                                opacity: estaDeshabilitado ? 0.5 : 1,
-                                background: estaDeshabilitado ? '#f5f5f5' : undefined
+                                cursor: 'grab',
+                                // Fondo amarillo suave si tiene asignación activa (para indicar que cambiará de auto)
+                                background: algunoOcupado ? '#FFFBEB' : undefined,
+                                borderColor: algunoOcupado ? '#FCD34D' : undefined
                               }}
-                              title={estaDeshabilitado ? turnoOcupadoMsg : ''}
+                              title={infoMsg || ''}
                             >
-                              <div className="conductor-avatar" style={{ opacity: estaDeshabilitado ? 0.5 : 1 }}>
+                              <div className="conductor-avatar">
                                 {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
                               </div>
                               <div className="conductor-info">
@@ -1668,7 +1659,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                     {formatPreferencia(conductor.preferencia_turno)}
                                   </span>
                                 </p>
-                                {turnoOcupadoMsg ? (
+                                {infoMsg ? (
                                   <span style={{
                                     fontSize: '10px',
                                     padding: '2px 6px',
@@ -1676,10 +1667,10 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                                     fontWeight: '600',
                                     marginTop: '4px',
                                     display: 'inline-block',
-                                    background: ambosOcupados ? '#FEE2E2' : '#FEF3C7',
-                                    color: ambosOcupados ? '#991B1B' : '#92400E'
+                                    background: '#FEF3C7',
+                                    color: '#92400E'
                                   }}>
-                                    {turnoOcupadoMsg}
+                                    {infoMsg}
                                   </span>
                                 ) : (
                                   <span style={{
@@ -1726,14 +1717,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                             const conductorId = e.dataTransfer.getData('conductorId')
                             if (conductorId) {
                               const conductor = conductores.find(c => c.id === conductorId)
+                              // Mostrar advertencia si tiene asignación pero PERMITIR continuar
                               if (conductor?.tieneAsignacionDiurna) {
                                 Swal.fire({
-                                  icon: 'warning',
-                                  title: 'Conductor no disponible',
-                                  text: `${conductor.nombres} ${conductor.apellidos} ya tiene una asignación activa o programada en el turno diurno.`,
+                                  icon: 'info',
+                                  title: 'Conductor con asignación activa',
+                                  html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa en turno diurno.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
+                                  confirmButtonText: 'Entendido, continuar',
                                   confirmButtonColor: '#3085d6'
                                 })
-                                return
                               }
                               handleSelectConductorDiurno(conductorId)
                             }
@@ -1798,14 +1790,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                             const conductorId = e.dataTransfer.getData('conductorId')
                             if (conductorId) {
                               const conductor = conductores.find(c => c.id === conductorId)
+                              // Mostrar advertencia si tiene asignación pero PERMITIR continuar
                               if (conductor?.tieneAsignacionNocturna) {
                                 Swal.fire({
-                                  icon: 'warning',
-                                  title: 'Conductor no disponible',
-                                  text: `${conductor.nombres} ${conductor.apellidos} ya tiene una asignación activa o programada en el turno nocturno.`,
+                                  icon: 'info',
+                                  title: 'Conductor con asignación activa',
+                                  html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa en turno nocturno.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
+                                  confirmButtonText: 'Entendido, continuar',
                                   confirmButtonColor: '#3085d6'
                                 })
-                                return
                               }
                               handleSelectConductorNocturno(conductorId)
                             }
@@ -1873,14 +1866,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           const conductorId = e.dataTransfer.getData('conductorId')
                           if (conductorId) {
                             const conductor = conductores.find(c => c.id === conductorId)
+                            // Mostrar advertencia si tiene asignación pero PERMITIR continuar
                             if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
                               Swal.fire({
-                                icon: 'warning',
-                                title: 'Conductor no disponible',
-                                text: `${conductor.nombres} ${conductor.apellidos} ya tiene una asignación activa o programada.`,
+                                icon: 'info',
+                                title: 'Conductor con asignación activa',
+                                html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
+                                confirmButtonText: 'Entendido, continuar',
                                 confirmButtonColor: '#3085d6'
                               })
-                              return
                             }
                             handleSelectConductorCargo(conductorId)
                           }
