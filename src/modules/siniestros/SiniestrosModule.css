@@ -37,9 +37,8 @@
   display: flex;
   gap: 4px;
   background: var(--bg-primary);
-  padding: 4px;
+  padding: 8px;
   border-radius: 8px;
-  border: 1px solid var(--border-primary);
 }
 
 .siniestros-tab {

@@ -312,12 +312,20 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         // Marcar conductores con asignación activa o programada, incluyendo turno específico
         const conductoresConEstado = conductoresActivos.map(conductor => {
           const asignacionesConductor = todasAsignaciones.filter(a => a.conductor_id === conductor.id)
+          const tieneAsignacionActiva = asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false
+          const tieneAsignacionProgramada = asignacionesProgramadas?.some((a: any) => a.conductor_id === conductor.id) || false
+          const tieneAsignacionDiurna = asignacionesConductor.some(a => a.horario === 'diurno')
+          const tieneAsignacionNocturna = asignacionesConductor.some(a => a.horario === 'nocturno')
+          // Para A CARGO: horario puede ser 'todo_dia' o cualquier otro valor
+          const tieneAsignacionCargo = asignacionesConductor.some(a => a.horario !== 'diurno' && a.horario !== 'nocturno')
+          
           return {
             ...conductor,
-            tieneAsignacionActiva: asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false,
-            tieneAsignacionProgramada: asignacionesProgramadas?.some((a: any) => a.conductor_id === conductor.id) || false,
-            tieneAsignacionDiurna: asignacionesConductor.some(a => a.horario === 'diurno'),
-            tieneAsignacionNocturna: asignacionesConductor.some(a => a.horario === 'nocturno')
+            tieneAsignacionActiva,
+            tieneAsignacionProgramada,
+            // Si tiene asignación A CARGO, marcar ambos turnos como ocupados para el filtro
+            tieneAsignacionDiurna: tieneAsignacionDiurna || tieneAsignacionCargo,
+            tieneAsignacionNocturna: tieneAsignacionNocturna || tieneAsignacionCargo
           }
         })
 
@@ -593,15 +601,17 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         (c.numero_dni && c.numero_dni.toLowerCase().includes(conductorSearch.toLowerCase()))
 
       // Filtro por estado
+      const tieneAsignacion = c.tieneAsignacionDiurna || c.tieneAsignacionNocturna
       const matchesStatus = conductorStatusFilter === '' ||
-        (conductorStatusFilter === 'disponible' && !c.tieneAsignacionActiva) ||
-        (conductorStatusFilter === 'activo' && c.tieneAsignacionActiva)
+        (conductorStatusFilter === 'disponible' && !tieneAsignacion) ||
+        (conductorStatusFilter === 'activo' && !tieneAsignacion) ||
+        (conductorStatusFilter === 'con_asignacion' && tieneAsignacion)
 
-      // Filtro por preferencia de turno (solo cuando está en modo TURNO)
+      // Filtro por preferencia de turno (para modo TURNO y A CARGO)
       const matchesTurno = conductorTurnoFilter === '' ||
         (conductorTurnoFilter === 'diurno' && (c.preferencia_turno === 'DIURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno)) ||
         (conductorTurnoFilter === 'nocturno' && (c.preferencia_turno === 'NOCTURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno)) ||
-        (conductorTurnoFilter === 'cargo' && (c.preferencia_turno === 'A_CARGO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno))
+        (conductorTurnoFilter === 'cargo' && (c.preferencia_turno === 'A_CARGO'))
 
       return matchesSearch && matchesStatus && matchesTurno
     })
@@ -771,8 +781,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           flex: 1;
           overflow-y: auto;
           overflow-x: hidden;
-          padding: 20px 28px;
+          padding: 20px 24px;
           background: #FAFBFC;
+          box-sizing: border-box;
         }
 
         .wizard-content::-webkit-scrollbar {
@@ -789,6 +800,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           display: flex;
           flex-direction: column;
           height: 100%;
+          width: 100%;
+          max-width: 100%;
+          overflow: hidden;
         }
 
         .wizard-footer {
@@ -1015,10 +1029,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 16px;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
         }
 
         .conductores-layout.turno-mode {
-          grid-template-columns: 1fr 1fr 1fr;
+          grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
           gap: 12px;
         }
 
@@ -1030,8 +1047,10 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           flex-direction: column;
           background: white;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-          min-height: 350px;
-          max-height: 420px;
+          min-height: 300px;
+          max-height: 380px;
+          min-width: 0;
+          overflow: hidden;
         }
 
         .conductores-list {
@@ -1064,8 +1083,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
           box-shadow: 0 4px 12px rgba(251, 191, 36, 0.15);
           overflow: hidden;
-          min-height: auto;
-          max-height: none;
+          min-height: 300px;
+          max-height: 380px;
+          min-width: 0;
         }
 
         .conductores-column.turno-nocturno {
@@ -1073,8 +1093,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
           box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
           overflow: hidden;
-          min-height: auto;
-          max-height: none;
+          min-height: 300px;
+          max-height: 380px;
+          min-width: 0;
         }
 
         .conductores-column.a-cargo {
@@ -1082,8 +1103,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           background: linear-gradient(135deg, #F0FDF4 0%, #D1FAE5 100%);
           box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
           overflow: hidden;
-          min-height: auto;
-          max-height: none;
+          min-height: 300px;
+          max-height: 380px;
+          min-width: 0;
         }
 
         .conductores-column h4 {
@@ -1288,6 +1310,19 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           box-shadow: 0 2px 8px rgba(230, 57, 70, 0.15);
         }
 
+        @media (max-width: 1024px) {
+          .conductores-layout.turno-mode {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 10px;
+          }
+          
+          .conductores-column {
+            min-height: 250px;
+            max-height: 320px;
+            padding: 12px;
+          }
+        }
+
         @media (max-width: 768px) {
           .wizard-container {
             max-width: 100%;
@@ -1299,8 +1334,15 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
             grid-template-columns: 1fr;
           }
 
-          .conductores-layout {
+          .conductores-layout,
+          .conductores-layout.turno-mode {
             grid-template-columns: 1fr;
+            gap: 12px;
+          }
+
+          .conductores-column {
+            min-height: 200px;
+            max-height: 280px;
           }
 
           .step-connector {
@@ -1572,30 +1614,31 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           minWidth: '90px'
                         }}
                       >
-                        <option value="">Todos</option>
+                        <option value="">Estado</option>
                         <option value="disponible">Disponible</option>
                         <option value="activo">Activo</option>
+                        <option value="con_asignacion">Con Asignación</option>
                       </select>
-                      {isTurnoMode && (
-                        <select
-                          value={conductorTurnoFilter}
-                          onChange={(e) => setConductorTurnoFilter(e.target.value)}
-                          style={{
-                            padding: '8px 10px',
-                            border: '1px solid #E5E7EB',
-                            borderRadius: '6px',
-                            fontSize: 'clamp(10px, 0.9vw, 12px)',
-                            fontFamily: 'inherit',
-                            background: 'white',
-                            cursor: 'pointer',
-                            minWidth: '90px'
-                          }}
-                        >
-                          <option value="">Turno</option>
-                          <option value="diurno">Diurno</option>
-                          <option value="nocturno">Nocturno</option>
-                        </select>
-                      )}
+                      {/* Filtro de preferencia de turno - para TURNO y A CARGO */}
+                      <select
+                        value={conductorTurnoFilter}
+                        onChange={(e) => setConductorTurnoFilter(e.target.value)}
+                        style={{
+                          padding: '8px 10px',
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '6px',
+                          fontSize: 'clamp(10px, 0.9vw, 12px)',
+                          fontFamily: 'inherit',
+                          background: 'white',
+                          cursor: 'pointer',
+                          minWidth: '90px'
+                        }}
+                      >
+                        <option value="">Todos</option>
+                        <option value="diurno">Diurno</option>
+                        <option value="nocturno">Nocturno</option>
+                        <option value="cargo">A Cargo</option>
+                      </select>
                     </div>
 
                     <div className="conductores-list">

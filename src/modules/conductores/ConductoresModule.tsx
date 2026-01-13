@@ -17,6 +17,7 @@ import type {
 } from "../../types/database.types";
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "../../components/ui/DataTable";
+import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
 import { createConductorDriveFolder } from "../../services/driveService";
@@ -90,6 +91,7 @@ export function ConductoresModule() {
   const [cbuSearch, setCbuSearch] = useState('');
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
+  const [categoriaFilter, setCategoriaFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
   const [licenciaVencerFilter, _setLicenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
@@ -1438,6 +1440,14 @@ export function ConductoresModule() {
       );
     }
 
+    if (categoriaFilter.length > 0) {
+      result = result.filter(c => {
+        const categorias = c.licencias_categorias;
+        if (!Array.isArray(categorias) || categorias.length === 0) return false;
+        return categorias.some((cat: any) => categoriaFilter.includes(cat.codigo));
+      });
+    }
+
     if (asignacionFilter.length > 0) {
       result = result.filter(c => {
         const tieneAsignacion = !!(c as any).vehiculo_asignado;
@@ -1513,6 +1523,21 @@ export function ConductoresModule() {
       }
     });
     return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [conductores]);
+
+  // Obtener lista única de categorías de licencia para el filtro
+  const uniqueCategorias = useMemo(() => {
+    const categorias = new Map<string, string>();
+    conductores.forEach(c => {
+      if (Array.isArray(c.licencias_categorias)) {
+        c.licencias_categorias.forEach((cat: any) => {
+          if (cat?.codigo) {
+            categorias.set(cat.codigo, cat.codigo);
+          }
+        });
+      }
+    });
+    return Array.from(categorias.keys()).sort();
   }, [conductores]);
 
   // Definir columnas para TanStack Table
@@ -1749,7 +1774,17 @@ export function ConductoresModule() {
       },
       {
         accessorKey: "licencias_categorias",
-        header: "Categorias",
+        header: () => (
+          <ExcelColumnFilter
+            label="Categorias"
+            options={uniqueCategorias}
+            selectedValues={categoriaFilter}
+            onSelectionChange={setCategoriaFilter}
+            filterId="categoria"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
+        ),
         cell: ({ row }) => {
           const categorias = row.original.licencias_categorias;
           if (Array.isArray(categorias) && categorias.length > 0) {
