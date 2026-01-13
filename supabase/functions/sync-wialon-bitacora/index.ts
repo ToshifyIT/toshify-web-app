@@ -279,7 +279,7 @@ serve(async (req) => {
       const { error: upsertError } = await supabase
         .from('wialon_bitacora')
         .upsert(batch, {
-          onConflict: 'patente_normalizada,fecha_turno,hora_inicio',
+          onConflict: 'patente_normalizada,fecha_turno',
           ignoreDuplicates: false,
         })
 

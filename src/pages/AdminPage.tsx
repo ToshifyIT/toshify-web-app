@@ -4,8 +4,7 @@ import { Crown } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
 import { useTheme } from '../contexts/ThemeContext'
-import logoRed from '../assets/logo-toshify-red.svg'
-import logoWhite from '../assets/logo-toshify-white.svg'
+import logoToshify from '../assets/logo-toshify.png'
 import { useNavigate } from 'react-router-dom'
 import { UserManagement } from '../components/admin/UserManagement'
 import { RoleManagement } from '../components/admin/RoleManagement'
@@ -32,7 +31,7 @@ type TabType =
 export function AdminPage() {
   const { profile, signOut } = useAuth()
   const { isAdmin, canViewMenu } = usePermissions()
-  const { resolvedTheme } = useTheme()
+  useTheme() // Para mantener el contexto del tema activo
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabType>('vehiculos')
   const [administracionMenuOpen, setAdministracionMenuOpen] = useState(false)
@@ -429,7 +428,7 @@ export function AdminPage() {
           <div className="sidebar-header">
             <div className="sidebar-logo">
               <img
-                src={resolvedTheme === 'dark' ? logoWhite : logoRed}
+                src={logoToshify}
                 alt="Toshify"
                 className="sidebar-logo-img"
               />

@@ -5,8 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
 import { useTheme } from '../contexts/ThemeContext'
-import logoRed from '../assets/logo-toshify-red.svg'
-import logoWhite from '../assets/logo-toshify-white.svg'
+import logoToshify from '../assets/logo-toshify.png'
 
 // Importar páginas
 import { UsuariosPage } from './usuarios/UsuariosPage'
@@ -56,7 +55,7 @@ export function HomePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
-  const { resolvedTheme } = useTheme()
+  useTheme() // Para mantener el contexto del tema activo
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -740,7 +739,7 @@ export function HomePage() {
             <div className="sidebar-header-row">
               <div className="sidebar-logo">
                 <img
-                  src={resolvedTheme === 'dark' ? logoWhite : logoRed}
+                  src={logoToshify}
                   alt="Toshify"
                   className="sidebar-logo-img"
                 />
