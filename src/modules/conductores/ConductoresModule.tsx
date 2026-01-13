@@ -1511,7 +1511,7 @@ export function ConductoresModule() {
       const prioridadB = estadoB === 'activo' ? 0 : estadoB === 'baja' ? 1 : 2;
       return prioridadA - prioridadB;
     });
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, asignacionFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -2025,7 +2025,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cuilsFiltrados, estadoFilter, turnoFilter, asignacionFilter, openColumnFilter, uniqueEstados, creatingDriveFolder],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cuilsFiltrados, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, openColumnFilter, uniqueEstados, creatingDriveFolder],
   );
 
   return (
