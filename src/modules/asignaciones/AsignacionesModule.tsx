@@ -1147,6 +1147,20 @@ export function AsignacionesModule() {
                           .in('id', asignacionesACerrar.map((a: any) => a.id))
                       }
 
+                      // Cerrar asignaciones anteriores de los CONDUCTORES (cuando cambian de vehículo)
+                      const conductoresIds = selectedAsignacion.asignaciones_conductores?.map((c: any) => c.conductor_id).filter(Boolean) || []
+                      if (conductoresIds.length > 0) {
+                        for (const conductorId of conductoresIds) {
+                          // Cerrar asignaciones_conductores anteriores
+                          await (supabase as any)
+                            .from('asignaciones_conductores')
+                            .update({ estado: 'finalizado', fecha_fin: ahora })
+                            .eq('conductor_id', conductorId)
+                            .eq('estado', 'asignado')
+                            .neq('asignacion_id', selectedAsignacion.id)
+                        }
+                      }
+
                       // Activar la asignación
                       await (supabase as any)
                         .from('asignaciones')

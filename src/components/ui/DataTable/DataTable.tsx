@@ -605,6 +605,42 @@ export function DataTable<T>({
     ];
   }, [hasHiddenColumns, columnsWithFilters, actionsColumn]);
 
+  // Función de filtro global que busca en TODOS los valores string del objeto
+  // Optimizada: concatena todo en un string y busca
+  const globalFilterFn = useCallback((row: { original: T }, _columnId: string, filterValue: string) => {
+    if (!filterValue) return true
+    const searchLower = filterValue.toLowerCase().trim()
+    const original = row.original as Record<string, unknown>
+
+    // Recolectar todos los valores string en un solo texto (rápido, sin recursión profunda)
+    const collectStrings = (obj: unknown, depth = 0): string => {
+      if (depth > 2) return '' // Limitar profundidad para performance
+      if (obj === null || obj === undefined) return ''
+      if (typeof obj === 'string') return obj + ' '
+      if (typeof obj === 'number') return String(obj) + ' '
+      if (Array.isArray(obj)) return obj.map(item => collectStrings(item, depth + 1)).join(' ')
+      if (typeof obj === 'object') {
+        return Object.values(obj as Record<string, unknown>)
+          .map(val => collectStrings(val, depth + 1))
+          .join(' ')
+      }
+      return ''
+    }
+
+    const allText = collectStrings(original).toLowerCase()
+
+    // Buscar el término completo O todas las palabras individuales
+    if (allText.includes(searchLower)) return true
+
+    // Si no encuentra el término completo, buscar cada palabra
+    const words = searchLower.split(/\s+/).filter(w => w.length > 0)
+    if (words.length > 1) {
+      return words.every(word => allText.includes(word))
+    }
+
+    return false
+  }, [])
+
   const table = useReactTable({
     data: filteredData,
     columns: finalColumns,
@@ -616,6 +652,7 @@ export function DataTable<T>({
     onSortingChange: setSorting,
     onGlobalFilterChange: setDebouncedSearch,
     onExpandedChange: setExpanded,
+    globalFilterFn,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
