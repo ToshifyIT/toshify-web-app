@@ -97,57 +97,64 @@ export function useBitacoraData() {
   })
 
   // Cargar asignaciones activas con conductores y sus turnos
+  // Usando queries separadas para evitar problemas con nested joins de Supabase
   const loadAsignaciones = useCallback(async () => {
-    const { data } = await supabase
-      .from('asignaciones')
-      .select(`
-        vehiculo_id,
-        horario,
-        vehiculos!inner(patente),
-        asignaciones_conductores(
-          horario,
-          conductores(nombres, apellidos)
-        )
-      `)
-      .eq('estado', 'activa') as {
-      data: Array<{
-        vehiculo_id: string
-        horario: string | null
-        vehiculos: { patente: string }
-        asignaciones_conductores: Array<{
-          horario: string | null
-          conductores: { nombres: string; apellidos: string }
-        }>
-      }> | null
-    }
+    try {
+      // Query 1: Obtener asignaciones activas con vehículos
+      const { data: asignacionesData } = await (supabase
+        .from('asignaciones')
+        .select('id, vehiculo_id, horario, vehiculos!inner(patente)')
+        .eq('estado', 'activa') as any)
 
-    if (data) {
+      if (!asignacionesData || asignacionesData.length === 0) {
+        setAsignaciones(new Map())
+        return
+      }
+
+      // Query 2: Obtener TODOS los conductores de asignaciones activas
+      const asignacionIds = asignacionesData.map((a: any) => a.id)
+      const { data: conductoresData } = await (supabase
+        .from('asignaciones_conductores')
+        .select('asignacion_id, horario, conductor_id, conductores(nombres, apellidos)')
+        .in('asignacion_id', asignacionIds) as any)
+
+      // Agrupar conductores por asignacion_id
+      const conductoresPorAsignacion = new Map<string, ConductorTurno[]>()
+      for (const ac of (conductoresData || [])) {
+        const conductor = ac.conductores
+        if (conductor) {
+          const asigId = ac.asignacion_id
+          if (!conductoresPorAsignacion.has(asigId)) {
+            conductoresPorAsignacion.set(asigId, [])
+          }
+          conductoresPorAsignacion.get(asigId)!.push({
+            conductor_nombre: conductor.nombres,
+            conductor_completo: `${conductor.nombres} ${conductor.apellidos}`,
+            turno: ac.horario,
+          })
+        }
+      }
+
+      // Construir mapa de asignaciones
       const map = new Map<string, AsignacionActiva>()
-      for (const row of data) {
-        const vehiculo = row.vehiculos
-        const asigConductores = row.asignaciones_conductores || []
-
+      for (const asig of asignacionesData) {
+        const vehiculo = asig.vehiculos
         if (vehiculo) {
           const patenteNorm = vehiculo.patente.replace(/\s/g, '').toUpperCase()
-
-          // Mapear conductores con sus turnos
-          const conductores: ConductorTurno[] = asigConductores
-            .filter(ac => ac.conductores)
-            .map(ac => ({
-              conductor_nombre: ac.conductores.nombres,
-              conductor_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
-              turno: ac.horario, // diurno, nocturno, todo_dia
-            }))
+          const conductores = conductoresPorAsignacion.get(asig.id) || []
 
           map.set(patenteNorm, {
             patente: vehiculo.patente,
             patente_normalizada: patenteNorm,
-            modalidad: row.horario, // TURNO, CARGO
+            modalidad: asig.horario,
             conductores,
           })
         }
       }
       setAsignaciones(map)
+    } catch (error) {
+      console.error('[Bitacora] Error cargando asignaciones:', error)
+      setAsignaciones(new Map())
     }
   }, [])
 
