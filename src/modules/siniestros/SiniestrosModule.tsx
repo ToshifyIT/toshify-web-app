@@ -572,14 +572,11 @@ export function SiniestrosModule() {
 
     setSaving(true)
     try {
-      // Extraer campos temporales del wizard
-      const { _finalizarAsignacion, _asignacionId, ...formDataClean } = formData as any
+      // Extraer campos temporales del wizard y campos que no existen en la tabla
+      const { _finalizarAsignacion, _asignacionId, estado_vehiculo, habilitado_circular, ...formDataClean } = formData as any
 
-      // Si no se selecciono estado_vehiculo, usar 'SINIESTRADO' por defecto
       const dataToSave = {
         ...formDataClean,
-        estado_vehiculo: formDataClean.estado_vehiculo || 'SINIESTRADO',
-        habilitado_circular: false, // Siempre false para siniestros
         fecha_siniestro: new Date(formDataClean.fecha_siniestro).toISOString(),
         created_by: user?.id
       }
@@ -631,9 +628,10 @@ export function SiniestrosModule() {
 
       setShowModal(false)
       cargarDatos()
-    } catch (error) {
-      console.error('Error guardando:', error)
-      Swal.fire('Error', 'No se pudo guardar el siniestro', 'error')
+    } catch (error: any) {
+      console.error('Error guardando siniestro:', error)
+      const errorMsg = error?.message || error?.details || error?.hint || 'Error desconocido'
+      Swal.fire('Error', `No se pudo guardar: ${errorMsg}`, 'error')
     } finally {
       setSaving(false)
     }
@@ -665,26 +663,20 @@ export function SiniestrosModule() {
     if (!result.isConfirmed) return
 
     try {
-      // Actualizar siniestro
-      const { error: siniestroError } = await (supabase.from('siniestros' as any) as any).update({
-        estado_vehiculo: 'PKG_ON_BASE',
-        habilitado_circular: true
-      }).eq('id', siniestro.id)
-
-      if (siniestroError) throw siniestroError
-
-      // También actualizar el vehículo directamente
+      // Actualizar el estado del vehículo directamente (las columnas estado_vehiculo y habilitado_circular no existen en siniestros)
       const estadoPkgOn = vehiculosEstados.find(e => e.codigo === 'PKG_ON_BASE')
       if (estadoPkgOn) {
-        await (supabase.from('vehiculos') as any).update({
+        const { error } = await (supabase.from('vehiculos') as any).update({
           estado_id: estadoPkgOn.id
         }).eq('id', siniestro.vehiculo_id)
+
+        if (error) throw error
       }
 
       Swal.fire({
         icon: 'success',
         title: 'Vehículo habilitado',
-        text: `${siniestro.vehiculo_patente} ahora está en estado PKG_ON_BASE`,
+        text: `${siniestro.vehiculo_patente} ahora puede circular`,
         timer: 2000,
         showConfirmButton: false
       })
