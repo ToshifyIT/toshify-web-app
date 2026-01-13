@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, Filter, TrendingUp, X } from 'lucide-react'
+import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, TrendingUp, X, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
@@ -63,28 +63,9 @@ export function AsignacionesActivasModule() {
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null)
   const [resetFiltersKey, setResetFiltersKey] = useState(0)
 
-  // Column filter states - Multiselect tipo Excel
-  const [codigoFilter, setCodigoFilter] = useState<string[]>([])
-  const [codigoSearch, setCodigoSearch] = useState('')
-  const [vehiculoFilter, setVehiculoFilter] = useState<string[]>([])
-  const [vehiculoSearch, setVehiculoSearch] = useState('')
-  const [modalidadFilter, setModalidadFilter] = useState<string[]>([])
-  const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
-
   useEffect(() => {
     loadAllData()
   }, [])
-
-  // Cerrar dropdown de filtro al hacer click fuera
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (openColumnFilter) {
-        setOpenColumnFilter(null)
-      }
-    }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [openColumnFilter])
 
   // ✅ OPTIMIZADO: Una sola función que carga todo en paralelo
   const loadAllData = async () => {
@@ -214,67 +195,15 @@ export function AsignacionesActivasModule() {
     setActiveStatFilter(filterType)
   }
 
-  // Verificar si hay filtros activos
-  const hasActiveFilters = codigoFilter.length > 0 || vehiculoFilter.length > 0 || modalidadFilter.length > 0 || activeStatFilter
+  // Verificar si hay filtros activos (solo stat card filter ahora)
+  const hasActiveFilters = activeStatFilter !== null
 
   // Limpiar todos los filtros
   const clearAllFilters = () => {
-    setCodigoFilter([])
-    setCodigoSearch('')
-    setVehiculoFilter([])
-    setVehiculoSearch('')
-    setModalidadFilter([])
     setActiveStatFilter(null)
     // Reset DataTable internal filters
     setResetFiltersKey(prev => prev + 1)
   }
-
-  // Toggle functions para multiselect
-  const toggleCodigoFilter = (codigo: string) => {
-    setCodigoFilter(prev =>
-      prev.includes(codigo)
-        ? prev.filter(c => c !== codigo)
-        : [...prev, codigo]
-    )
-  }
-
-  const toggleVehiculoFilter = (patente: string) => {
-    setVehiculoFilter(prev =>
-      prev.includes(patente)
-        ? prev.filter(p => p !== patente)
-        : [...prev, patente]
-    )
-  }
-
-  const toggleModalidadFilter = (modalidad: string) => {
-    setModalidadFilter(prev =>
-      prev.includes(modalidad)
-        ? prev.filter(m => m !== modalidad)
-        : [...prev, modalidad]
-    )
-  }
-
-  // Valores únicos para dropdowns tipo Excel
-  const codigosUnicos = useMemo(() => {
-    const codigos = asignaciones.map(a => a.codigo).filter(Boolean)
-    return [...new Set(codigos)].sort()
-  }, [asignaciones])
-
-  const patentesUnicas = useMemo(() => {
-    const patentes = asignaciones.map(a => a.vehiculos?.patente).filter(Boolean) as string[]
-    return [...new Set(patentes)].sort()
-  }, [asignaciones])
-
-  // Opciones filtradas por búsqueda
-  const codigosFiltrados = useMemo(() => {
-    if (!codigoSearch) return codigosUnicos
-    return codigosUnicos.filter(c => c.toLowerCase().includes(codigoSearch.toLowerCase()))
-  }, [codigosUnicos, codigoSearch])
-
-  const patentesFiltradas = useMemo(() => {
-    if (!vehiculoSearch) return patentesUnicas
-    return patentesUnicas.filter(p => p.toLowerCase().includes(vehiculoSearch.toLowerCase()))
-  }, [patentesUnicas, vehiculoSearch])
 
   const openDetailsModal = (asignacion: AsignacionActiva) => {
     setSelectedAsignacion(asignacion)
@@ -425,18 +354,6 @@ export function AsignacionesActivasModule() {
       }
     }
 
-    if (codigoFilter.length > 0) {
-      result = result.filter(a => codigoFilter.includes(a.codigo))
-    }
-
-    if (vehiculoFilter.length > 0) {
-      result = result.filter(a => a.vehiculos?.patente && vehiculoFilter.includes(a.vehiculos.patente))
-    }
-
-    if (modalidadFilter.length > 0) {
-      result = result.filter(a => modalidadFilter.includes(a.horario))
-    }
-
     // Si el filtro es autosDisponibles, agregar vehículos PKG_ON_BASE sin asignación
     if (activeStatFilter === 'autosDisponibles') {
       // Crear filas "fake" para vehículos sin asignación
@@ -465,7 +382,7 @@ export function AsignacionesActivasModule() {
     }
 
     return result
-  }, [asignaciones, codigoFilter, vehiculoFilter, modalidadFilter, activeStatFilter, vehiculosPkgOnSinAsignacion])
+  }, [asignaciones, activeStatFilter, vehiculosPkgOnSinAsignacion])
 
   // Procesar asignaciones - UNA fila por asignación (no expandir)
   const processedAsignaciones = useMemo(() => {
@@ -523,61 +440,7 @@ export function AsignacionesActivasModule() {
     () => [
       {
         accessorKey: 'codigo',
-        header: () => (
-          <div className="dt-column-filter">
-            <span>Número</span>
-            <button
-              className={`dt-column-filter-btn ${codigoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpenColumnFilter(openColumnFilter === 'codigo' ? null : 'codigo')
-                if (openColumnFilter === 'codigo') setCodigoSearch('')
-              }}
-              title="Filtrar por número"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'codigo' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={codigoSearch}
-                  onChange={(e) => setCodigoSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {codigosFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    codigosFiltrados.slice(0, 50).map(codigo => (
-                      <label key={codigo} className={`dt-column-filter-checkbox ${codigoFilter.includes(codigo) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={codigoFilter.includes(codigo)}
-                          onChange={() => toggleCodigoFilter(codigo)}
-                        />
-                        <span>{codigo}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {codigoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => {
-                      setCodigoFilter([])
-                      setCodigoSearch('')
-                    }}
-                  >
-                    Limpiar ({codigoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ),
+        header: 'Número',
         cell: ({ getValue }) => (
           <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
             {getValue() as string}
@@ -587,61 +450,7 @@ export function AsignacionesActivasModule() {
       },
       {
         accessorKey: 'vehiculos.patente',
-        header: () => (
-          <div className="dt-column-filter">
-            <span>Vehículo</span>
-            <button
-              className={`dt-column-filter-btn ${vehiculoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpenColumnFilter(openColumnFilter === 'vehiculo' ? null : 'vehiculo')
-                if (openColumnFilter === 'vehiculo') setVehiculoSearch('')
-              }}
-              title="Filtrar por vehículo"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'vehiculo' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar patente..."
-                  value={vehiculoSearch}
-                  onChange={(e) => setVehiculoSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {patentesFiltradas.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    patentesFiltradas.slice(0, 50).map(patente => (
-                      <label key={patente} className={`dt-column-filter-checkbox ${vehiculoFilter.includes(patente) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={vehiculoFilter.includes(patente)}
-                          onChange={() => toggleVehiculoFilter(patente)}
-                        />
-                        <span>{patente}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {vehiculoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => {
-                      setVehiculoFilter([])
-                      setVehiculoSearch('')
-                    }}
-                  >
-                    Limpiar ({vehiculoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ),
+        header: 'Vehículo',
         cell: ({ row }) => {
           const vehiculo = row.original.vehiculos
           return vehiculo ? (
@@ -702,58 +511,7 @@ export function AsignacionesActivasModule() {
       },
       {
         accessorKey: 'horario',
-        header: () => (
-          <div className="dt-column-filter">
-            <span>Modalidad</span>
-            <button
-              className={`dt-column-filter-btn ${modalidadFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpenColumnFilter(openColumnFilter === 'modalidad' ? null : 'modalidad')
-              }}
-              title="Filtrar por modalidad"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'modalidad' && (
-              <div className="dt-column-filter-dropdown" style={{ minWidth: '160px' }}>
-                <label
-                  className={`dt-column-filter-checkbox ${modalidadFilter.includes('TURNO') ? 'selected' : ''}`}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <input
-                    type="checkbox"
-                    checked={modalidadFilter.includes('TURNO')}
-                    onChange={() => toggleModalidadFilter('TURNO')}
-                  />
-                  <span>Turno</span>
-                </label>
-                <label
-                  className={`dt-column-filter-checkbox ${modalidadFilter.includes('CARGO') ? 'selected' : ''}`}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <input
-                    type="checkbox"
-                    checked={modalidadFilter.includes('CARGO')}
-                    onChange={() => toggleModalidadFilter('CARGO')}
-                  />
-                  <span>A Cargo</span>
-                </label>
-                {modalidadFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setModalidadFilter([])
-                    }}
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ),
+        header: 'Modalidad',
         cell: ({ getValue }) => {
           const horario = getValue() as string
           return (
@@ -799,7 +557,7 @@ export function AsignacionesActivasModule() {
         enableSorting: false,
       },
     ],
-    [codigoFilter, vehiculoFilter, modalidadFilter, openColumnFilter]
+    []
   )
 
   return (
@@ -956,7 +714,7 @@ export function AsignacionesActivasModule() {
         </div>
       </div>
 
-      {/* Barra de Filtros Activos */}
+      {/* Barra de Filtros Activos (solo para stat cards) */}
       {hasActiveFilters && (
         <div className="asig-active-filters">
           <div className="asig-filters-label">
@@ -964,30 +722,6 @@ export function AsignacionesActivasModule() {
             <span>Filtros activos:</span>
           </div>
           <div className="asig-filters-chips">
-            {codigoFilter.length > 0 && (
-              <span className="asig-filter-chip">
-                Número: {codigoFilter.length === 1 ? codigoFilter[0] : `${codigoFilter.length} seleccionados`}
-                <button onClick={() => setCodigoFilter([])} className="asig-filter-chip-remove">
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            {vehiculoFilter.length > 0 && (
-              <span className="asig-filter-chip">
-                Vehículo: {vehiculoFilter.length === 1 ? vehiculoFilter[0] : `${vehiculoFilter.length} seleccionados`}
-                <button onClick={() => setVehiculoFilter([])} className="asig-filter-chip-remove">
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            {modalidadFilter.length > 0 && (
-              <span className="asig-filter-chip">
-                Modalidad: {modalidadFilter.map(m => m === 'TURNO' ? 'Turno' : 'A Cargo').join(', ')}
-                <button onClick={() => setModalidadFilter([])} className="asig-filter-chip-remove">
-                  <X size={12} />
-                </button>
-              </span>
-            )}
             {activeStatFilter && (
               <span className="asig-filter-chip">
                 {activeStatFilter === 'vacantes' ? 'Solo Vacantes' :
@@ -1027,7 +761,6 @@ export function AsignacionesActivasModule() {
         emptyIcon={<ClipboardList size={64} />}
         emptyTitle="No hay asignaciones activas"
         emptyDescription="Actualmente no hay asignaciones en estado activo"
-        disableAutoFilters={true}
         resetFiltersKey={resetFiltersKey}
       />
 

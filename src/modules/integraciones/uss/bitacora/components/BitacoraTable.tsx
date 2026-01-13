@@ -45,30 +45,68 @@ export function BitacoraTable({
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const totalPages = Math.ceil(totalCount / pageSize)
 
-  // Estados para filtros Excel
+  // Estados para filtros Excel - TODAS las columnas
   const { openFilterId, setOpenFilterId } = useExcelFilters()
+  const [fechaFilter, setFechaFilter] = useState<string[]>([])
   const [patenteFilter, setPatenteFilter] = useState<string[]>([])
+  const [ibuttonFilter, setIbuttonFilter] = useState<string[]>([])
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
   const [tipoFilter, setTipoFilter] = useState<string[]>([])
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
+  const [inicioFilter, setInicioFilter] = useState<string[]>([])
+  const [cierreFilter, setCierreFilter] = useState<string[]>([])
+  const [kmFilter, setKmFilter] = useState<string[]>([])
+  const [gncFilter, setGncFilter] = useState<string[]>([])
+  const [lavadoFilter, setLavadoFilter] = useState<string[]>([])
+  const [naftaFilter, setNaftaFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
 
+  // Función para formatear fecha
+  const formatDateStr = (date: string) => {
+    const d = new Date(date + 'T00:00:00')
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
   // Listas únicas para filtros
+  const fechasUnicas = useMemo(() =>
+    [...new Set(registros.map(r => formatDateStr(r.fecha_turno)))].sort().reverse()
+  , [registros])
+
   const patentesUnicas = useMemo(() =>
     [...new Set(registros.map(r => r.patente.replace(/\s/g, '')))].filter(Boolean).sort()
   , [registros])
 
+  const ibuttonsUnicos = useMemo(() =>
+    [...new Set(registros.map(r => r.ibutton || '-'))].sort()
+  , [registros])
+
   const conductoresUnicos = useMemo(() =>
-    [...new Set(registros.map(r => r.conductor_wialon).filter(Boolean) as string[])].sort()
+    [...new Set(registros.map(r => r.conductor_wialon || '-'))].sort()
   , [registros])
 
   const tiposUnicos = useMemo(() =>
-    [...new Set(registros.map(r => r.tipo_turno).filter(Boolean) as string[])].sort()
+    [...new Set(registros.map(r => r.tipo_turno || '-'))].sort()
   , [registros])
 
   const turnosUnicos = useMemo(() =>
-    [...new Set(registros.map(r => r.turno_indicador).filter(Boolean) as string[])].sort()
+    [...new Set(registros.map(r => r.turno_indicador || '-'))].sort()
   , [registros])
+
+  const iniciosUnicos = useMemo(() =>
+    [...new Set(registros.map(r => r.hora_inicio ? r.hora_inicio.substring(0, 5) : '-'))].sort()
+  , [registros])
+
+  const cierresUnicos = useMemo(() =>
+    [...new Set(registros.map(r => r.hora_cierre ? r.hora_cierre.substring(0, 5) : '-'))].sort()
+  , [registros])
+
+  const kmsUnicos = useMemo(() =>
+    [...new Set(registros.map(r => r.kilometraje.toLocaleString('es-AR', { maximumFractionDigits: 1 })))].sort((a, b) => parseFloat(a.replace(',', '.')) - parseFloat(b.replace(',', '.')))
+  , [registros])
+
+  const gncUnicos = useMemo(() => ['Sí', 'No'], [])
+  const lavadoUnicos = useMemo(() => ['Sí', 'No'], [])
+  const naftaUnicos = useMemo(() => ['Sí', 'No'], [])
 
   const estadosUnicos = useMemo(() =>
     [...new Set(registros.map(r => r.estado))].filter(Boolean).sort()
@@ -77,14 +115,31 @@ export function BitacoraTable({
   // Datos filtrados
   const registrosFiltrados = useMemo(() => {
     return registros.filter(r => {
+      if (fechaFilter.length > 0 && !fechaFilter.includes(formatDateStr(r.fecha_turno))) return false
       if (patenteFilter.length > 0 && !patenteFilter.includes(r.patente.replace(/\s/g, ''))) return false
-      if (conductorFilter.length > 0 && !conductorFilter.includes(r.conductor_wialon || '')) return false
-      if (tipoFilter.length > 0 && !tipoFilter.includes(r.tipo_turno || '')) return false
-      if (turnoFilter.length > 0 && !turnoFilter.includes(r.turno_indicador || '')) return false
+      if (ibuttonFilter.length > 0 && !ibuttonFilter.includes(r.ibutton || '-')) return false
+      if (conductorFilter.length > 0 && !conductorFilter.includes(r.conductor_wialon || '-')) return false
+      if (tipoFilter.length > 0 && !tipoFilter.includes(r.tipo_turno || '-')) return false
+      if (turnoFilter.length > 0 && !turnoFilter.includes(r.turno_indicador || '-')) return false
+      if (inicioFilter.length > 0 && !inicioFilter.includes(r.hora_inicio ? r.hora_inicio.substring(0, 5) : '-')) return false
+      if (cierreFilter.length > 0 && !cierreFilter.includes(r.hora_cierre ? r.hora_cierre.substring(0, 5) : '-')) return false
+      if (kmFilter.length > 0 && !kmFilter.includes(r.kilometraje.toLocaleString('es-AR', { maximumFractionDigits: 1 }))) return false
+      if (gncFilter.length > 0) {
+        const gncStr = r.gnc_cargado ? 'Sí' : 'No'
+        if (!gncFilter.includes(gncStr)) return false
+      }
+      if (lavadoFilter.length > 0) {
+        const lavadoStr = r.lavado_realizado ? 'Sí' : 'No'
+        if (!lavadoFilter.includes(lavadoStr)) return false
+      }
+      if (naftaFilter.length > 0) {
+        const naftaStr = r.nafta_cargada ? 'Sí' : 'No'
+        if (!naftaFilter.includes(naftaStr)) return false
+      }
       if (estadoFilter.length > 0 && !estadoFilter.includes(r.estado)) return false
       return true
     })
-  }, [registros, patenteFilter, conductorFilter, tipoFilter, turnoFilter, estadoFilter])
+  }, [registros, fechaFilter, patenteFilter, ibuttonFilter, conductorFilter, tipoFilter, turnoFilter, inicioFilter, cierreFilter, kmFilter, gncFilter, lavadoFilter, naftaFilter, estadoFilter])
 
   const handleCheckboxChange = async (
     id: string,
@@ -109,11 +164,21 @@ export function BitacoraTable({
     return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  // Columnas con filtros Excel
+  // Columnas con filtros Excel en TODAS
   const columns = useMemo<ColumnDef<BitacoraRegistroTransformado, unknown>[]>(() => [
     {
       accessorKey: 'fecha_turno',
-      header: 'Fecha',
+      header: () => (
+        <ExcelColumnFilter
+          label="Fecha"
+          options={fechasUnicas}
+          selectedValues={fechaFilter}
+          onSelectionChange={setFechaFilter}
+          filterId="fecha"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => formatDate(row.original.fecha_turno),
       enableSorting: true,
     },
@@ -139,7 +204,17 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'ibutton',
-      header: 'iButton',
+      header: () => (
+        <ExcelColumnFilter
+          label="iButton"
+          options={ibuttonsUnicos}
+          selectedValues={ibuttonFilter}
+          onSelectionChange={setIbuttonFilter}
+          filterId="ibutton"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => (
         <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>
           {row.original.ibutton || '-'}
@@ -207,19 +282,49 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'hora_inicio',
-      header: 'Inicio',
+      header: () => (
+        <ExcelColumnFilter
+          label="Inicio"
+          options={iniciosUnicos}
+          selectedValues={inicioFilter}
+          onSelectionChange={setInicioFilter}
+          filterId="inicio"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => formatTime(row.original.hora_inicio),
       enableSorting: true,
     },
     {
       accessorKey: 'hora_cierre',
-      header: 'Cierre',
+      header: () => (
+        <ExcelColumnFilter
+          label="Cierre"
+          options={cierresUnicos}
+          selectedValues={cierreFilter}
+          onSelectionChange={setCierreFilter}
+          filterId="cierre"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => formatTime(row.original.hora_cierre),
       enableSorting: true,
     },
     {
       accessorKey: 'kilometraje',
-      header: 'Km',
+      header: () => (
+        <ExcelColumnFilter
+          label="Km"
+          options={kmsUnicos}
+          selectedValues={kmFilter}
+          onSelectionChange={setKmFilter}
+          filterId="km"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => {
         const km = row.original.kilometraje
         const isLow = km < BITACORA_CONSTANTS.POCO_KM_THRESHOLD
@@ -236,7 +341,17 @@ export function BitacoraTable({
     },
     {
       id: 'gnc_cargado',
-      header: 'GNC',
+      header: () => (
+        <ExcelColumnFilter
+          label="GNC"
+          options={gncUnicos}
+          selectedValues={gncFilter}
+          onSelectionChange={setGncFilter}
+          filterId="gnc"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => (
         <div style={{ textAlign: 'center' }}>
           <input
@@ -252,7 +367,17 @@ export function BitacoraTable({
     },
     {
       id: 'lavado_realizado',
-      header: 'Lavado',
+      header: () => (
+        <ExcelColumnFilter
+          label="Lavado"
+          options={lavadoUnicos}
+          selectedValues={lavadoFilter}
+          onSelectionChange={setLavadoFilter}
+          filterId="lavado"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => (
         <div style={{ textAlign: 'center' }}>
           <input
@@ -268,7 +393,17 @@ export function BitacoraTable({
     },
     {
       id: 'nafta_cargada',
-      header: 'Nafta',
+      header: () => (
+        <ExcelColumnFilter
+          label="Nafta"
+          options={naftaUnicos}
+          selectedValues={naftaFilter}
+          onSelectionChange={setNaftaFilter}
+          filterId="nafta"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => (
         <div style={{ textAlign: 'center' }}>
           <input
@@ -306,10 +441,18 @@ export function BitacoraTable({
       enableSorting: false,
     },
   ], [
+    fechasUnicas, fechaFilter,
     patentesUnicas, patenteFilter,
+    ibuttonsUnicos, ibuttonFilter,
     conductoresUnicos, conductorFilter,
     tiposUnicos, tipoFilter,
     turnosUnicos, turnoFilter,
+    iniciosUnicos, inicioFilter,
+    cierresUnicos, cierreFilter,
+    kmsUnicos, kmFilter,
+    gncUnicos, gncFilter,
+    lavadoUnicos, lavadoFilter,
+    naftaUnicos, naftaFilter,
     estadosUnicos, estadoFilter,
     openFilterId, updatingId,
   ])
