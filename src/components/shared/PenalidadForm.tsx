@@ -2,8 +2,8 @@
 // Componente compartido para formulario de penalidades
 // Usado en: IncidenciasModule y SiniestroSeguimiento
 
-import { useState } from 'react'
-import { X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Link, Search } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type {
   PenalidadFormData,
@@ -17,6 +17,18 @@ interface ConductorAsignado {
   nombre_completo: string
   horario: string
   turno: string
+}
+
+// Tipo para incidencias de cobro disponibles
+interface IncidenciaCobro {
+  id: string
+  fecha: string
+  descripcion: string
+  conductor_id: string | null
+  vehiculo_id: string | null
+  conductor_display: string
+  patente_display: string
+  monto_penalidades: number
 }
 
 export interface PenalidadFormProps {
@@ -38,6 +50,94 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos
   const [showConductorSelectModal, setShowConductorSelectModal] = useState(false)
   const [conductoresAsignados, setConductoresAsignados] = useState<ConductorAsignado[]>([])
   const [loadingConductores, setLoadingConductores] = useState(false)
+
+  // Estado para enlazar con incidencia de cobro
+  const [enlazarIncidencia, setEnlazarIncidencia] = useState(false)
+  const [incidenciasCobro, setIncidenciasCobro] = useState<IncidenciaCobro[]>([])
+  const [incidenciaSearch, setIncidenciaSearch] = useState('')
+  const [showIncidenciaDropdown, setShowIncidenciaDropdown] = useState(false)
+  const [loadingIncidencias, setLoadingIncidencias] = useState(false)
+  const [selectedIncidencia, setSelectedIncidencia] = useState<IncidenciaCobro | null>(null)
+
+  // Cargar incidencias de cobro cuando se activa el enlace
+  useEffect(() => {
+    if (enlazarIncidencia && incidenciasCobro.length === 0) {
+      cargarIncidenciasCobro()
+    }
+  }, [enlazarIncidencia])
+
+  async function cargarIncidenciasCobro() {
+    setLoadingIncidencias(true)
+    try {
+      // Obtener incidencias de tipo 'cobro' con sus datos
+      const { data, error } = await (supabase
+        .from('v_incidencias_completas') as any)
+        .select('*')
+        .order('fecha', { ascending: false })
+        .limit(100)
+
+      if (error) throw error
+
+      // Filtrar por tipo cobro (obtenemos el tipo de la tabla incidencias)
+      const { data: tiposData } = await (supabase
+        .from('incidencias') as any)
+        .select('id, tipo')
+
+      const tipoMap = new Map((tiposData || []).map((i: any) => [i.id, i.tipo]))
+      
+      const incidenciasFiltradas = (data || [])
+        .filter((inc: any) => tipoMap.get(inc.id) === 'cobro')
+        .map((inc: any) => ({
+          id: inc.id,
+          fecha: inc.fecha,
+          descripcion: inc.descripcion || '',
+          conductor_id: inc.conductor_id,
+          vehiculo_id: inc.vehiculo_id,
+          conductor_display: inc.conductor_display || 'Sin conductor',
+          patente_display: inc.patente_display || 'Sin patente',
+          monto_penalidades: inc.monto_penalidades || 0
+        }))
+
+      setIncidenciasCobro(incidenciasFiltradas)
+    } catch (error) {
+      console.error('Error cargando incidencias de cobro:', error)
+    } finally {
+      setLoadingIncidencias(false)
+    }
+  }
+
+  function handleSelectIncidencia(incidencia: IncidenciaCobro) {
+    setSelectedIncidencia(incidencia)
+    setIncidenciaSearch('')
+    setShowIncidenciaDropdown(false)
+    
+    // Auto-completar datos del formulario
+    setFormData(prev => ({
+      ...prev,
+      incidencia_id: incidencia.id,
+      conductor_id: incidencia.conductor_id || undefined,
+      vehiculo_id: incidencia.vehiculo_id || undefined,
+      observaciones: incidencia.descripcion || prev.observaciones,
+      monto: incidencia.monto_penalidades || prev.monto
+    }))
+  }
+
+  function handleClearIncidencia() {
+    setSelectedIncidencia(null)
+    setFormData(prev => ({
+      ...prev,
+      incidencia_id: undefined
+    }))
+  }
+
+  const filteredIncidencias = incidenciasCobro.filter(inc => {
+    const term = incidenciaSearch.toLowerCase()
+    return (
+      inc.descripcion.toLowerCase().includes(term) ||
+      inc.conductor_display.toLowerCase().includes(term) ||
+      inc.patente_display.toLowerCase().includes(term)
+    )
+  }).slice(0, 10)
 
   const selectedConductor = conductores.find(c => c.id === formData.conductor_id)
   const selectedVehiculo = vehiculos.find(v => v.id === formData.vehiculo_id)
@@ -167,6 +267,116 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos
 
   return (
     <>
+      {/* Sección para enlazar con incidencia de cobro */}
+      <div className="form-section">
+        <div className="form-section-title">
+          <Link size={16} style={{ marginRight: '8px' }} />
+          Enlazar con Incidencia
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <div className="checkbox-group" style={{ marginBottom: '12px' }}>
+              <input
+                type="checkbox"
+                id="enlazarIncidencia"
+                checked={enlazarIncidencia}
+                onChange={e => {
+                  setEnlazarIncidencia(e.target.checked)
+                  if (!e.target.checked) {
+                    handleClearIncidencia()
+                  }
+                }}
+                disabled={disabled}
+              />
+              <span>Enlazar con una Incidencia de Cobro existente</span>
+            </div>
+          </div>
+        </div>
+
+        {enlazarIncidencia && (
+          <div className="form-row">
+            <div className="form-group full-width">
+              <label>Buscar Incidencia de Cobro</label>
+              <div className="searchable-select">
+                <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#666' }} />
+                <input
+                  type="text"
+                  autoComplete="off"
+                  style={{ paddingLeft: '36px' }}
+                  value={selectedIncidencia 
+                    ? `${selectedIncidencia.patente_display} - ${selectedIncidencia.conductor_display} - ${selectedIncidencia.descripcion.substring(0, 50)}...`
+                    : incidenciaSearch
+                  }
+                  onChange={e => {
+                    setIncidenciaSearch(e.target.value)
+                    setShowIncidenciaDropdown(true)
+                    if (selectedIncidencia) {
+                      handleClearIncidencia()
+                    }
+                  }}
+                  onFocus={() => setShowIncidenciaDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowIncidenciaDropdown(false), 200)}
+                  placeholder="Buscar por patente, conductor o descripción..."
+                  disabled={disabled || loadingIncidencias}
+                />
+                {loadingIncidencias && (
+                  <div className="searchable-loading">Cargando incidencias...</div>
+                )}
+                {showIncidenciaDropdown && !loadingIncidencias && filteredIncidencias.length > 0 && (
+                  <div className="searchable-dropdown" style={{ maxHeight: '300px' }}>
+                    {filteredIncidencias.map(inc => (
+                      <div 
+                        key={inc.id} 
+                        className="searchable-option" 
+                        onClick={() => handleSelectIncidencia(inc)}
+                        style={{ padding: '10px 12px', borderBottom: '1px solid #eee' }}
+                      >
+                        <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+                          {inc.patente_display} - {inc.conductor_display}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>
+                          {new Date(inc.fecha).toLocaleDateString('es-AR')} - {inc.descripcion.substring(0, 60)}...
+                        </div>
+                        {inc.monto_penalidades > 0 && (
+                          <div style={{ fontSize: '12px', color: '#F59E0B', fontWeight: 600, marginTop: '4px' }}>
+                            Monto: ${inc.monto_penalidades.toLocaleString('es-AR')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showIncidenciaDropdown && !loadingIncidencias && incidenciaSearch && filteredIncidencias.length === 0 && (
+                  <div className="searchable-dropdown">
+                    <div className="searchable-option" style={{ color: '#666', fontStyle: 'italic' }}>
+                      No se encontraron incidencias de cobro
+                    </div>
+                  </div>
+                )}
+                {selectedIncidencia && (
+                  <button type="button" className="clear-selection" onClick={handleClearIncidencia}>
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              {selectedIncidencia && (
+                <div style={{ 
+                  marginTop: '8px', 
+                  padding: '10px', 
+                  backgroundColor: '#f0fdf4', 
+                  borderRadius: '6px',
+                  border: '1px solid #86efac'
+                }}>
+                  <div style={{ fontSize: '12px', color: '#166534', fontWeight: 600 }}>
+                    ✓ Incidencia enlazada - Los datos se han completado automáticamente
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="form-section">
         <div className="form-section-title">Datos del Cobro/Descuento</div>
         <div className="form-row">

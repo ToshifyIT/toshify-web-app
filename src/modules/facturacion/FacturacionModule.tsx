@@ -9,7 +9,8 @@ import {
   Gauge,
   Ban,
   UserMinus,
-  AlertTriangle
+  AlertTriangle,
+  CreditCard
 } from 'lucide-react'
 import { ReporteFacturacionTab } from './tabs/ReporteFacturacionTab'
 import { PeriodosTab } from './tabs/PeriodosTab'
@@ -21,9 +22,10 @@ import { ExcesosKmTab } from './tabs/ExcesosKmTab'
 import { BloqueosConductoresTab } from './tabs/BloqueosConductoresTab'
 import { LiquidacionConductoresTab } from './tabs/LiquidacionConductoresTab'
 import { MultasTab } from './tabs/MultasTab'
+import { CobrosFraccionadosTab } from './tabs/CobrosFraccionadosTab'
 import './FacturacionModule.css'
 
-type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'multas' | 'bloqueos' | 'liquidacion' | 'conceptos'
+type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'multas' | 'bloqueos' | 'liquidacion' | 'conceptos' | 'cobros_fraccionados'
 
 const TABS = [
   { id: 'reporte' as TabType, label: 'Reporte', icon: FileText },
@@ -35,6 +37,7 @@ const TABS = [
   { id: 'multas' as TabType, label: 'Multas', icon: AlertTriangle },
   { id: 'bloqueos' as TabType, label: 'Bloqueos', icon: Ban },
   { id: 'liquidacion' as TabType, label: 'Liquidación', icon: UserMinus },
+  { id: 'cobros_fraccionados' as TabType, label: 'Cobros Fraccionados', icon: CreditCard },
   { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings }
 ]
 
@@ -60,19 +63,20 @@ export function FacturacionModule() {
         })}
       </div>
 
-      {/* Contenido */}
-      <div className="fact-tab-content">
-        {activeTab === 'reporte' && <ReporteFacturacionTab />}
-        {activeTab === 'periodos' && <PeriodosTab />}
-        {activeTab === 'garantias' && <GarantiasTab />}
-        {activeTab === 'saldos' && <SaldosAbonosTab />}
-        {activeTab === 'tickets' && <TicketsFavorTab />}
-        {activeTab === 'excesos' && <ExcesosKmTab />}
-        {activeTab === 'multas' && <MultasTab />}
-        {activeTab === 'bloqueos' && <BloqueosConductoresTab />}
-        {activeTab === 'liquidacion' && <LiquidacionConductoresTab />}
-        {activeTab === 'conceptos' && <ConceptosFacturacionTab />}
-      </div>
+       {/* Contenido */}
+       <div className="fact-tab-content">
+         {activeTab === 'reporte' && <ReporteFacturacionTab />}
+         {activeTab === 'periodos' && <PeriodosTab />}
+         {activeTab === 'garantias' && <GarantiasTab />}
+         {activeTab === 'saldos' && <SaldosAbonosTab />}
+         {activeTab === 'tickets' && <TicketsFavorTab />}
+         {activeTab === 'excesos' && <ExcesosKmTab />}
+         {activeTab === 'multas' && <MultasTab />}
+         {activeTab === 'bloqueos' && <BloqueosConductoresTab />}
+         {activeTab === 'liquidacion' && <LiquidacionConductoresTab />}
+         {activeTab === 'cobros_fraccionados' && <CobrosFraccionadosTab />}
+         {activeTab === 'conceptos' && <ConceptosFacturacionTab />}
+       </div>
     </div>
   )
 }

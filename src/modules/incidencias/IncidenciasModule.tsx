@@ -36,7 +36,7 @@ import type {
 import './IncidenciasModule.css'
 import { PenalidadForm } from '../../components/shared/PenalidadForm'
 
-type TabType = 'incidencias' | 'penalidades' | 'por_aplicar'
+type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar'
 
 // Helper para mapear rol de usuario a área (para incidencias)
 function getAreaPorRol(roleName: string | undefined | null): string {
@@ -88,7 +88,7 @@ export function IncidenciasModule() {
   const canCreate = canCreateInMenu('incidencias')
   const canEdit = canEditInMenu('incidencias')
 
-  const [activeTab, setActiveTab] = useState<TabType>('incidencias')
+  const [activeTab, setActiveTab] = useState<TabType>('logistica')
   const [loading, setLoading] = useState(true)
 
   // Data
@@ -215,14 +215,17 @@ export function IncidenciasModule() {
         vehiculosRes,
         conductoresRes,
         incidenciasRes,
-        penalidadesRes
+        penalidadesRes,
+        incidenciasTipoRes
       ] = await Promise.all([
         (supabase.from('incidencias_estados' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
         supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
         (supabase.from('v_incidencias_completas' as any) as any).select('*').order('fecha', { ascending: false }),
-        (supabase.from('v_penalidades_completas' as any) as any).select('*').order('fecha', { ascending: false })
+        (supabase.from('v_penalidades_completas' as any) as any).select('*').order('fecha', { ascending: false }),
+        // Obtener el campo 'tipo' de la tabla incidencias
+        (supabase.from('incidencias' as any) as any).select('id, tipo')
       ])
 
       setEstados(estadosRes.data || [])
@@ -234,7 +237,14 @@ export function IncidenciasModule() {
         apellidos: c.apellidos,
         nombre_completo: `${c.nombres} ${c.apellidos}`
       })))
-      setIncidencias(incidenciasRes.data || [])
+      
+      // Combinar datos de la vista con el campo 'tipo' de la tabla
+      const tipoMap = new Map((incidenciasTipoRes.data || []).map((i: any) => [i.id, i.tipo]))
+      const incidenciasConTipo = (incidenciasRes.data || []).map((inc: any) => ({
+        ...inc,
+        tipo: tipoMap.get(inc.id) || 'cobro' // Default a 'cobro' si no tiene tipo
+      }))
+      setIncidencias(incidenciasConTipo)
       setPenalidades(penalidadesRes.data || [])
 
       // Estado inicial del form
@@ -289,9 +299,9 @@ export function IncidenciasModule() {
   , [penalidades])
 
 
-  // Filtrar incidencias con filtros tipo Excel
-  const incidenciasFiltradas = useMemo(() => {
-    let filtered = [...incidencias]
+  // Filtrar incidencias LOGÍSTICAS (sin tipo o tipo='logistica')
+  const incidenciasLogisticas = useMemo(() => {
+    let filtered = incidencias.filter(i => !i.tipo || i.tipo === 'logistica')
 
     if (patenteFilter.length > 0) {
       filtered = filtered.filter(i => patenteFilter.includes(i.patente_display || ''))
@@ -311,6 +321,32 @@ export function IncidenciasModule() {
 
     return filtered
   }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter])
+
+  // Filtrar incidencias de COBRO (tipo='cobro')
+  const incidenciasCobro = useMemo(() => {
+    let filtered = incidencias.filter(i => i.tipo === 'cobro')
+
+    if (patenteFilter.length > 0) {
+      filtered = filtered.filter(i => patenteFilter.includes(i.patente_display || ''))
+    }
+    if (conductorFilter.length > 0) {
+      filtered = filtered.filter(i => conductorFilter.includes(i.conductor_display || ''))
+    }
+    if (estadoFilter.length > 0) {
+      filtered = filtered.filter(i => estadoFilter.includes(i.estado_nombre || ''))
+    }
+    if (turnoFilter.length > 0) {
+      filtered = filtered.filter(i => turnoFilter.includes(i.turno || ''))
+    }
+    if (areaFilter.length > 0) {
+      filtered = filtered.filter(i => areaFilter.includes(i.area || ''))
+    }
+
+    return filtered
+  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter])
+
+  // Incidencias filtradas según tab activo
+  const incidenciasFiltradas = activeTab === 'logistica' ? incidenciasLogisticas : incidenciasCobro
 
   // Filtrar penalidades con filtros tipo Excel
   const penalidadesFiltradas = useMemo(() => {
@@ -930,12 +966,20 @@ export function IncidenciasModule() {
       <div className="incidencias-tabs-row">
         <div className="incidencias-tabs">
           <button
-            className={`incidencias-tab ${activeTab === 'incidencias' ? 'active' : ''}`}
-            onClick={() => setActiveTab('incidencias')}
+            className={`incidencias-tab ${activeTab === 'logistica' ? 'active' : ''}`}
+            onClick={() => setActiveTab('logistica')}
           >
             <FileText size={16} />
-            Listado
-            <span className="tab-badge">{incidencias.length}</span>
+            Incidencia Logística
+            <span className="tab-badge">{incidenciasLogisticas.length}</span>
+          </button>
+          <button
+            className={`incidencias-tab ${activeTab === 'cobro' ? 'active' : ''}`}
+            onClick={() => setActiveTab('cobro')}
+          >
+            <DollarSign size={16} />
+            Incidencia (Cobro)
+            <span className="tab-badge">{incidenciasCobro.length}</span>
           </button>
           <button
             className={`incidencias-tab ${activeTab === 'penalidades' ? 'active' : ''}`}
@@ -960,7 +1004,7 @@ export function IncidenciasModule() {
         <div className="tabs-actions">
           <button
             className="btn-secondary"
-            onClick={activeTab === 'incidencias' ? handleExportarIncidencias : handleExportarPenalidades}
+            onClick={(activeTab === 'logistica' || activeTab === 'cobro') ? handleExportarIncidencias : handleExportarPenalidades}
             title="Exportar a Excel"
           >
             <Download size={16} />
@@ -978,18 +1022,36 @@ export function IncidenciasModule() {
         </div>
       </div>
 
-      {/* Incidencias Tab */}
-      {activeTab === 'incidencias' && (
+      {/* Incidencias Logística Tab */}
+      {activeTab === 'logistica' && (
         <>
           {/* Tabla con DataTable */}
           <DataTable
-            data={incidenciasFiltradas}
+            data={incidenciasLogisticas}
             columns={incidenciasColumns}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<Shield size={48} />}
-            emptyTitle="Sin incidencias"
-            emptyDescription="No hay incidencias registradas"
+            emptyTitle="Sin incidencias logísticas"
+            emptyDescription="No hay incidencias logísticas registradas"
+            pageSize={20}
+            pageSizeOptions={[10, 20, 50, 100]}
+          />
+        </>
+      )}
+
+      {/* Incidencias Cobro Tab */}
+      {activeTab === 'cobro' && (
+        <>
+          {/* Tabla con DataTable */}
+          <DataTable
+            data={incidenciasCobro}
+            columns={incidenciasColumns}
+            loading={loading}
+            searchPlaceholder="Buscar por patente, conductor..."
+            emptyIcon={<DollarSign size={48} />}
+            emptyTitle="Sin incidencias de cobro"
+            emptyDescription="Las incidencias que generan cobros aparecerán aquí"
             pageSize={20}
             pageSizeOptions={[10, 20, 50, 100]}
           />
