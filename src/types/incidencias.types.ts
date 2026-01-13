@@ -39,6 +39,8 @@ export interface Incidencia {
   created_by?: string
   created_at: string
   updated_at: string
+  tipo?: TipoIncidencia
+  siniestro_id?: string
 }
 
 export interface IncidenciaCompleta extends Incidencia {
@@ -177,4 +179,71 @@ export interface ConductorSimple {
   nombres: string
   apellidos: string
   nombre_completo: string
+}
+
+// ============================================
+// TIPOS PARA COBROS E INCIDENCIAS DE COBRO
+// ============================================
+
+export type TipoIncidencia = 'logistica' | 'cobro'
+
+export interface CobroIncidencia {
+  id: string
+  incidencia_id: string
+  conductor_id: string
+  monto_total: number
+  descripcion?: string
+  estado: 'por_aplicar' | 'fraccionado' | 'aplicado_completo'
+  fraccionado: boolean
+  cantidad_cuotas?: number
+  creado_por: string
+  creado_at: string
+  updated_at: string
+}
+
+export interface CobroIncidenciaConRelaciones extends CobroIncidencia {
+  incidencia?: Incidencia
+  conductor?: ConductorSimple
+  cuotas?: CobroCuotaFraccionada[]
+}
+
+export interface CobroCuotaFraccionada {
+  id: string
+  cobro_id: string
+  numero_cuota: number
+  monto_cuota: number
+  periodo_id: string
+  semana: number
+  anio: number
+  aplicado: boolean
+  fecha_aplicacion?: string
+  created_at: string
+}
+
+export interface CobroCuotaFraccionadaConPeriodo extends CobroCuotaFraccionada {
+  periodo?: {
+    id: string
+    semana: number
+    anio: number
+    fecha_inicio: string
+    fecha_fin: string
+    estado: string
+  }
+}
+
+// Para formularios
+export interface CrearCobroFormData {
+  incidencia_id: string
+  fraccionado: boolean
+  cantidad_cuotas?: number
+}
+
+// Estadísticas
+export interface ControlCobrosStats {
+  total_cobros: number
+  total_monto: number
+  cobros_fraccionados: number
+  cobros_aplicados_completo: number
+  proximas_cuotas: number
+  monto_proximo: number
 }

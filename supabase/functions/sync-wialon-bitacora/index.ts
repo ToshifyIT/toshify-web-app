@@ -269,7 +269,7 @@ serve(async (req) => {
     // 4. Upsert en wialon_bitacora
     console.log(`💾 Guardando ${registros.length} turnos...`)
 
-    let nuevos = 0
+    const nuevos = 0
     let actualizados = 0
 
     // Procesar en batches de 100
