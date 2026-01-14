@@ -20,6 +20,19 @@ export interface TipoPenalidad {
   created_at: string
 }
 
+// Tipo unificado para cobros/descuentos (usado en incidencias tipo=cobro y penalidades)
+export interface TipoCobroDescuento {
+  id: string
+  codigo: string
+  nombre: string
+  descripcion?: string
+  categoria?: string // P004, P006, P007
+  es_a_favor: boolean // true = conductor recibe, false = conductor paga
+  orden: number
+  is_active: boolean
+  created_at: string
+}
+
 export interface Incidencia {
   id: string
   vehiculo_id?: string
@@ -41,6 +54,7 @@ export interface Incidencia {
   updated_at: string
   tipo?: TipoIncidencia
   siniestro_id?: string
+  tipo_cobro_descuento_id?: string // Nueva FK a tipos_cobro_descuento
 }
 
 export interface IncidenciaCompleta extends Incidencia {
@@ -56,6 +70,11 @@ export interface IncidenciaCompleta extends Incidencia {
   patente_display: string
   total_penalidades: number
   monto_penalidades: number
+  // Campos del tipo de cobro/descuento
+  tipo_cobro_codigo?: string
+  tipo_cobro_nombre?: string
+  tipo_cobro_categoria?: string
+  tipo_cobro_es_a_favor?: boolean
 }
 
 export interface Penalidad {
@@ -63,7 +82,8 @@ export interface Penalidad {
   incidencia_id?: string
   vehiculo_id?: string
   conductor_id?: string
-  tipo_penalidad_id?: string
+  tipo_penalidad_id?: string // Legacy, preferir tipo_cobro_descuento_id
+  tipo_cobro_descuento_id?: string // Nueva FK unificada
   semana?: number
   fecha: string
   turno?: string
@@ -84,6 +104,8 @@ export interface Penalidad {
 export interface PenalidadCompleta extends Penalidad {
   tipo_codigo?: string
   tipo_nombre?: string
+  tipo_categoria?: string
+  tipo_es_a_favor?: boolean
   vehiculo_patente_sistema?: string
   vehiculo_marca?: string
   vehiculo_modelo?: string
@@ -113,14 +135,16 @@ export interface IncidenciaFormData {
   auto_a_cargo?: boolean
   monto?: number  // Monto para incidencias de cobro
   tipo?: TipoIncidencia  // Tipo de incidencia (logistica o cobro)
-  tipo_incidencia?: string  // Tipo específico (ej: "Exceso de kilometraje", "Falta de lavado")
+  tipo_incidencia?: string  // Legacy: Tipo específico (ej: "Exceso de kilometraje", "Falta de lavado")
+  tipo_cobro_descuento_id?: string // Nueva FK unificada
 }
 
 export interface PenalidadFormData {
   incidencia_id?: string
   vehiculo_id?: string
   conductor_id?: string
-  tipo_penalidad_id?: string
+  tipo_penalidad_id?: string // Legacy
+  tipo_cobro_descuento_id?: string // Nueva FK unificada
   semana?: number
   fecha: string
   turno?: string

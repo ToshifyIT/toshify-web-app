@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import type {
   PenalidadFormData,
   TipoPenalidad,
+  TipoCobroDescuento,
   VehiculoSimple,
   ConductorSimple
 } from '../../types/incidencias.types'
@@ -23,12 +24,13 @@ export interface PenalidadFormProps {
   formData: PenalidadFormData
   setFormData: React.Dispatch<React.SetStateAction<PenalidadFormData>>
   tiposPenalidad: TipoPenalidad[]
+  tiposCobroDescuento?: TipoCobroDescuento[]  // Nueva tabla unificada
   vehiculos: VehiculoSimple[]
   conductores: ConductorSimple[]
   disabled?: boolean
 }
 
-export function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos, conductores, disabled }: PenalidadFormProps) {
+export function PenalidadForm({ formData, setFormData, tiposPenalidad, tiposCobroDescuento = [], vehiculos, conductores, disabled }: PenalidadFormProps) {
   const [conductorSearch, setConductorSearch] = useState('')
   const [showConductorDropdown, setShowConductorDropdown] = useState(false)
   const [vehiculoSearch, setVehiculoSearch] = useState('')
@@ -300,13 +302,55 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos
         <div className="form-row three-cols">
           <div className="form-group">
             <label>Tipo</label>
-            <select value={formData.tipo_penalidad_id || ''} onChange={e => setFormData(prev => ({ ...prev, tipo_penalidad_id: e.target.value || undefined }))} disabled={disabled}>
+            <select 
+              value={formData.tipo_cobro_descuento_id || formData.tipo_penalidad_id || ''} 
+              onChange={e => setFormData(prev => ({ 
+                ...prev, 
+                tipo_cobro_descuento_id: e.target.value || undefined,
+                tipo_penalidad_id: undefined // Limpiar el legacy
+              }))} 
+              disabled={disabled}
+            >
               <option value="">Seleccionar</option>
-              {tiposPenalidad.length > 0 ? (
+              {tiposCobroDescuento.length > 0 ? (
+                // Usar la nueva tabla unificada, agrupada por categoría
+                <>
+                  {/* P006 - Exceso KM */}
+                  {tiposCobroDescuento.filter(t => t.categoria === 'P006').length > 0 && (
+                    <optgroup label="P006 - Exceso KM">
+                      {tiposCobroDescuento.filter(t => t.categoria === 'P006').map(tipo => (
+                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {/* P004 - Tickets a Favor */}
+                  {tiposCobroDescuento.filter(t => t.categoria === 'P004').length > 0 && (
+                    <optgroup label="P004 - Tickets a Favor">
+                      {tiposCobroDescuento.filter(t => t.categoria === 'P004').map(tipo => (
+                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {/* P007 - Multas/Penalidades */}
+                  {tiposCobroDescuento.filter(t => t.categoria === 'P007').length > 0 && (
+                    <optgroup label="P007 - Multas/Penalidades">
+                      {tiposCobroDescuento.filter(t => t.categoria === 'P007').map(tipo => (
+                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {/* Sin categoría */}
+                  {tiposCobroDescuento.filter(t => !t.categoria).map(tipo => (
+                    <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                  ))}
+                </>
+              ) : tiposPenalidad.length > 0 ? (
+                // Fallback a la tabla legacy
                 tiposPenalidad.map(t => (
                   <option key={t.id} value={t.id}>{t.nombre}</option>
                 ))
               ) : (
+                // Fallback a lista hardcodeada
                 tiposCobrosDescuentos.map(tipo => (
                   <option key={tipo} value={tipo}>{tipo}</option>
                 ))
@@ -343,15 +387,6 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, vehiculos
               <option value="ADMINISTRACION">Administracion</option>
               <option value="SINIESTROS">Siniestros</option>
             </select>
-          </div>
-          <div className="form-group">
-            <label>Patente</label>
-            <input
-              type="text"
-              value={selectedVehiculo ? selectedVehiculo.patente : (formData.vehiculo_patente || '-')}
-              readOnly
-              className="form-input-readonly"
-            />
           </div>
         </div>
       </div>
