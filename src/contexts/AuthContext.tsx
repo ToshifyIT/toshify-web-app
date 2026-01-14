@@ -56,8 +56,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
+    // Heartbeat: refrescar token cada 10 minutos para mantener sesión activa
+    const heartbeatInterval = setInterval(async () => {
+      const { data: { session: currentSession } } = await supabase.auth.getSession()
+      if (currentSession) {
+        // Forzar refresh del token para mantener sesión viva
+        await supabase.auth.refreshSession()
+      }
+    }, 10 * 60 * 1000) // Cada 10 minutos
+
     return () => {
       subscription.unsubscribe()
+      clearInterval(heartbeatInterval)
     }
   }, [])
 
