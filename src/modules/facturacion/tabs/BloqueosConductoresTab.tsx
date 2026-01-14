@@ -718,7 +718,7 @@ export function BloqueosConductoresTab() {
             ? 'No hay conductores bloqueados'
             : 'No hay conductores registrados'
         }
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
       />
     </>

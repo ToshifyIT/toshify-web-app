@@ -430,8 +430,8 @@ export function MenuHierarchyManager() {
         emptyIcon={<MenuIcon size={48} />}
         emptyTitle="No hay menús"
         emptyDescription="Crea el primer menú usando el botón '+ Menú'"
-        pageSize={20}
-        pageSizeOptions={[10, 20, 50]}
+pageSize={100}
+        pageSizeOptions={[10, 20, 50, 100]}
         headerAction={
           <div className="mhm-header-actions">
             <button className="btn-primary" onClick={() => setShowMenuModal(true)}>

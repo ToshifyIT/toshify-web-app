@@ -467,7 +467,8 @@ export function InventarioDashboardModule() {
         emptyDescription=""
         showSearch={true}
         showPagination={true}
-        pageSize={20}
+pageSize={100}
+        pageSizeOptions={[10, 20, 50, 100]}
         externalFilters={externalFilters}
         onClearAllFilters={() => {
           // Limpiar filtros de columna

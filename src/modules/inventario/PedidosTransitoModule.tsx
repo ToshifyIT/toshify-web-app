@@ -604,8 +604,8 @@ export function PedidosTransitoModule() {
           emptyIcon={<ArrowDownCircle size={48} />}
           emptyTitle="No hay entradas pendientes de recepcion"
           emptyDescription="Las entradas aprobadas pendientes de recepcionar apareceran aqui"
-          pageSize={20}
-          pageSizeOptions={[10, 20, 50]}
+pageSize={100}
+          pageSizeOptions={[10, 20, 50, 100]}
         />
       )}
 

@@ -1525,7 +1525,7 @@ export function ReporteNominasTab() {
         emptyIcon={<FileText size={48} />}
         emptyTitle="No hay facturación"
         emptyDescription="No hay conductores con asignaciones activas para esta semana"
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
         onTableReady={setTableInstance}
       />

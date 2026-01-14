@@ -280,8 +280,8 @@ export function AsignacionesActivasModule() {
         emptyIcon={<Package size={48} />}
         emptyTitle="No hay herramientas asignadas"
         emptyDescription="Las herramientas asignadas a vehiculos apareceran aqui"
-        pageSize={20}
-        pageSizeOptions={[10, 20, 50]}
+pageSize={100}
+        pageSizeOptions={[10, 20, 50, 100]}
       />
     </div>
   )
