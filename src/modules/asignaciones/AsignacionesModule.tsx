@@ -1,15 +1,13 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, LayoutGrid, List, Loader2, Car, User, MessageCircle, Phone, Edit2 } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
-import { KanbanBoard } from './components/KanbanBoard'
-import { ProgramacionWizard } from './components/ProgramacionWizard'
-import type { ProgramacionOnboardingCompleta, EstadoKanban } from '../../types/onboarding.types'
+// KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
 import './AsignacionesModule.css'
 
@@ -64,9 +62,8 @@ interface ExpandedAsignacion extends Asignacion {
 }
 
 export function AsignacionesModule() {
-  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+  const { canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
-  const canCreate = canCreateInMenu('asignaciones')
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
 
@@ -88,15 +85,7 @@ export function AsignacionesModule() {
   const [conductoresData, setConductoresData] = useState<Array<{ id: string; estadoCodigo?: string }>>([])
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   
-  // Tabs: 'programacion' o 'asignaciones' - programacion es el default
-  const [activeTab, setActiveTab] = useState<'asignaciones' | 'programacion'>('programacion')
-  
-  // Kanban state
-  const [programaciones, setProgramaciones] = useState<ProgramacionOnboardingCompleta[]>([])
-  const [loadingProgramaciones, setLoadingProgramaciones] = useState(false)
-  const [showProgramacionWizard, setShowProgramacionWizard] = useState(false)
-  const [editingProgramacion, setEditingProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
-  const [previewProgramacion, setPreviewProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
+  // Programacion de entregas movida a /onboarding/programacion
 
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (elimina 14+ queries)
   const calculatedStats = useMemo(() => {
@@ -322,101 +311,7 @@ export function AsignacionesModule() {
     loadAllData()
   }, [])
 
-  // Cargar programaciones para el Kanban
-  const loadProgramaciones = async () => {
-    setLoadingProgramaciones(true)
-    try {
-      const { data, error: queryError } = await supabase
-        .from('v_programaciones_onboarding')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (queryError) throw queryError
-      setProgramaciones((data || []) as ProgramacionOnboardingCompleta[])
-    } catch (err: any) {
-      console.error('Error loading programaciones:', err)
-    } finally {
-      setLoadingProgramaciones(false)
-    }
-  }
-
-  // Cargar programaciones cuando se cambia a la tab de Kanban
-  useEffect(() => {
-    if (activeTab === 'programacion') {
-      loadProgramaciones()
-    }
-  }, [activeTab])
-
-  // Handlers para Kanban
-  const handleUpdateEstadoProgramacion = async (id: string, nuevoEstado: EstadoKanban) => {
-    try {
-      const { error } = await (supabase.from('programaciones_onboarding') as any)
-        .update({ estado: nuevoEstado })
-        .eq('id', id)
-
-      if (error) throw error
-      
-      // Actualizar localmente
-      setProgramaciones(prev => prev.map(p => 
-        p.id === id ? { ...p, estado: nuevoEstado } : p
-      ))
-    } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al actualizar estado', 'error')
-    }
-  }
-
-  const handleEditProgramacion = (programacion: ProgramacionOnboardingCompleta) => {
-    setEditingProgramacion(programacion)
-    setShowProgramacionWizard(true)
-  }
-
-  const handleDeleteProgramacion = async (id: string) => {
-    const result = await Swal.fire({
-      title: 'Eliminar programacion?',
-      text: 'Esta accion no se puede deshacer',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#DC2626',
-      confirmButtonText: 'Si, eliminar',
-      cancelButtonText: 'Cancelar'
-    })
-
-    if (result.isConfirmed) {
-      try {
-        const { error } = await supabase
-          .from('programaciones_onboarding')
-          .delete()
-          .eq('id', id)
-
-        if (error) throw error
-
-        setProgramaciones(prev => prev.filter(p => p.id !== id))
-        Swal.fire('Eliminado', 'La programacion fue eliminada', 'success')
-      } catch (err: any) {
-        Swal.fire('Error', err.message || 'Error al eliminar', 'error')
-      }
-    }
-  }
-
-  const handleCreateAsignacionFromProgramacion = (programacion: ProgramacionOnboardingCompleta) => {
-    // Abrir el AssignmentWizard con datos pre-llenados
-    // Por ahora solo notificar - TODO: pasar datos al wizard
-    Swal.fire({
-      title: 'Crear Asignacion',
-      html: `Se creara asignacion para:<br><strong>${programacion.vehiculo_entregar_patente}</strong><br>${programacion.conductor_display}`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Continuar'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        setShowWizard(true)
-      }
-    })
-  }
-
-  const handlePreviewProgramacion = (programacion: ProgramacionOnboardingCompleta) => {
-    setPreviewProgramacion(programacion)
-  }
+  // Programacion de entregas movida a /onboarding/programacion
 
   // Filtrar solo por stat cards - los filtros de columna los maneja DataTable automáticamente
   // IMPORTANTE: Los filtros deben coincidir EXACTAMENTE con lo que cuentan los stats
@@ -1035,26 +930,6 @@ export function AsignacionesModule() {
 
   return (
     <div className="asig-module">
-      {/* Tabs de navegacion - Programacion primero */}
-      <div className="asig-tabs">
-        <button 
-          className={`asig-tab ${activeTab === 'programacion' ? 'active' : ''}`}
-          onClick={() => setActiveTab('programacion')}
-        >
-          <LayoutGrid size={16} />
-          Programacion
-        </button>
-        <button 
-          className={`asig-tab ${activeTab === 'asignaciones' ? 'active' : ''}`}
-          onClick={() => setActiveTab('asignaciones')}
-        >
-          <List size={16} />
-          Asignaciones
-        </button>
-      </div>
-
-      {activeTab === 'asignaciones' ? (
-        <>
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
         <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
@@ -1524,300 +1399,6 @@ export function AsignacionesModule() {
               </button>
             </div>
           </div>
-        </div>
-      )}
-        </>
-      ) : (
-        /* Tab de Programacion - Kanban */
-        <div className="asig-kanban-container">
-          <div className="asig-kanban-header">
-            <div>
-              <h2>Programacion de Entregas</h2>
-              <p>Arrastra las tarjetas para actualizar el estado</p>
-            </div>
-            <button 
-              className="btn-primary"
-              onClick={() => setShowProgramacionWizard(true)}
-              disabled={!canCreate}
-            >
-              <Plus size={18} />
-              Nueva Programacion
-            </button>
-          </div>
-
-          {loadingProgramaciones ? (
-            <div className="asig-kanban-loading">
-              <Loader2 size={32} className="spinning" />
-              <span>Cargando programaciones...</span>
-            </div>
-          ) : (
-            <KanbanBoard
-              programaciones={programaciones}
-              onUpdateEstado={handleUpdateEstadoProgramacion}
-              onEdit={handleEditProgramacion}
-              onDelete={handleDeleteProgramacion}
-              onCreateAsignacion={handleCreateAsignacionFromProgramacion}
-              onPreview={handlePreviewProgramacion}
-            />
-          )}
-
-          {/* Wizard para nueva/editar programacion */}
-          {showProgramacionWizard && (
-            <ProgramacionWizard
-              onClose={() => {
-                setShowProgramacionWizard(false)
-                setEditingProgramacion(null)
-              }}
-              onSuccess={() => {
-                loadProgramaciones()
-                setShowProgramacionWizard(false)
-                setEditingProgramacion(null)
-              }}
-              editingData={editingProgramacion}
-            />
-          )}
-
-          {/* Modal de Preview de Programacion */}
-          {previewProgramacion && (
-            <div className="asig-modal-overlay" onClick={() => setPreviewProgramacion(null)}>
-              <div className="asig-modal-content asig-preview-modal" onClick={e => e.stopPropagation()}>
-                <div className="asig-preview-header">
-                  <h2>Detalle de Programacion</h2>
-                  <button className="asig-preview-close" onClick={() => setPreviewProgramacion(null)}>
-                    <XCircle size={20} />
-                  </button>
-                </div>
-
-                <div className="asig-preview-body">
-                  {/* Vehiculo */}
-                  <div className="asig-preview-section">
-                    <h3><Car size={16} /> Vehiculo a Entregar</h3>
-                    <div className="asig-preview-grid">
-                      <div>
-                        <label>Patente</label>
-                        <p className="asig-preview-value highlight">
-                          {previewProgramacion.vehiculo_entregar_patente || previewProgramacion.vehiculo_entregar_patente_sistema || '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <label>Modelo</label>
-                        <p className="asig-preview-value">
-                          {previewProgramacion.vehiculo_entregar_modelo || previewProgramacion.vehiculo_entregar_modelo_sistema || '-'}
-                        </p>
-                      </div>
-                      {previewProgramacion.vehiculo_entregar_color && (
-                        <div>
-                          <label>Color</label>
-                          <p className="asig-preview-value">{previewProgramacion.vehiculo_entregar_color}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Vehiculo Cambio (si aplica) */}
-                  {previewProgramacion.tipo_asignacion === 'cambio_auto' && (
-                    <div className="asig-preview-section">
-                      <h3><Car size={16} /> Vehiculo a Devolver</h3>
-                      <div className="asig-preview-grid">
-                        <div>
-                          <label>Patente</label>
-                          <p className="asig-preview-value">
-                            {previewProgramacion.vehiculo_cambio_patente || '-'}
-                          </p>
-                        </div>
-                        <div>
-                          <label>Modelo</label>
-                          <p className="asig-preview-value">
-                            {previewProgramacion.vehiculo_cambio_modelo || '-'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Conductor */}
-                  <div className="asig-preview-section">
-                    <h3><User size={16} /> Conductor</h3>
-                    <div className="asig-preview-grid">
-                      <div>
-                        <label>Nombre</label>
-                        <p className="asig-preview-value highlight">
-                          {previewProgramacion.conductor_display || previewProgramacion.conductor_nombre || '-'}
-                        </p>
-                      </div>
-                      {previewProgramacion.conductor_dni && (
-                        <div>
-                          <label>DNI</label>
-                          <p className="asig-preview-value">{previewProgramacion.conductor_dni}</p>
-                        </div>
-                      )}
-                      {previewProgramacion.tipo_candidato && (
-                        <div>
-                          <label>Tipo</label>
-                          <p className="asig-preview-value">
-                            <span className={`kanban-tag candidato-${previewProgramacion.tipo_candidato}`}>
-                              {previewProgramacion.tipo_candidato === 'nuevo' ? 'Nuevo' :
-                               previewProgramacion.tipo_candidato === 'antiguo' ? 'Antiguo' : 'Reingreso'}
-                            </span>
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Asignacion */}
-                  <div className="asig-preview-section">
-                    <h3><FileText size={16} /> Tipo de Asignacion</h3>
-                    <div className="asig-preview-grid">
-                      <div>
-                        <label>Tipo</label>
-                        <p className="asig-preview-value">
-                          {previewProgramacion.tipo_asignacion === 'entrega_auto' ? 'Entrega de Auto' :
-                           previewProgramacion.tipo_asignacion === 'cambio_auto' ? 'Cambio de Auto' :
-                           previewProgramacion.tipo_asignacion === 'asignacion_companero' ? 'Asignacion de Companero' : '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <label>Modalidad</label>
-                        <p className="asig-preview-value">
-                          <span className={`dt-badge ${previewProgramacion.modalidad === 'TURNO' ? 'asig-badge-turno' : 'asig-badge-cargo'}`}>
-                            {previewProgramacion.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}
-                          </span>
-                        </p>
-                      </div>
-                      {previewProgramacion.modalidad === 'TURNO' && previewProgramacion.turno && (
-                        <div>
-                          <label>Turno</label>
-                          <p className="asig-preview-value">
-                            <span className={`kanban-tag turno-${previewProgramacion.turno}`}>
-                              {previewProgramacion.turno === 'diurno' ? 'Diurno' : 'Nocturno'}
-                            </span>
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Cita */}
-                  <div className="asig-preview-section">
-                    <h3><Calendar size={16} /> Cita Programada</h3>
-                    <div className="asig-preview-grid">
-                      <div>
-                        <label>Fecha</label>
-                        <p className="asig-preview-value">
-                          {previewProgramacion.fecha_cita 
-                            ? new Date(previewProgramacion.fecha_cita).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
-                            : '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <label>Hora</label>
-                        <p className="asig-preview-value highlight">
-                          {previewProgramacion.hora_cita?.substring(0, 5) || '-'}
-                        </p>
-                      </div>
-                      {previewProgramacion.zona && (
-                        <div>
-                          <label>Zona</label>
-                          <p className="asig-preview-value">
-                            {previewProgramacion.zona === 'norte' ? 'Norte' :
-                             previewProgramacion.zona === 'sur' ? 'Sur' :
-                             previewProgramacion.zona === 'caba' ? 'CABA' :
-                             previewProgramacion.zona === 'oeste' ? 'Oeste' : previewProgramacion.zona}
-                          </p>
-                        </div>
-                      )}
-                      {previewProgramacion.distancia_minutos && (
-                        <div>
-                          <label>Distancia</label>
-                          <p className="asig-preview-value">{previewProgramacion.distancia_minutos} min</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Checklist */}
-                  <div className="asig-preview-section">
-                    <h3><CheckCircle size={16} /> Checklist</h3>
-                    <div className="asig-preview-checklist">
-                      <div className={`asig-preview-check ${previewProgramacion.grupo_whatsapp ? 'checked' : ''}`}>
-                        <MessageCircle size={16} />
-                        <span>Grupo WhatsApp</span>
-                        {previewProgramacion.grupo_whatsapp ? <CheckCircle size={14} className="check-icon" /> : <XCircle size={14} className="x-icon" />}
-                      </div>
-                      <div className={`asig-preview-check ${previewProgramacion.citado_ypf ? 'checked' : ''}`}>
-                        <Phone size={16} />
-                        <span>Citado YPF</span>
-                        {previewProgramacion.citado_ypf ? <CheckCircle size={14} className="check-icon" /> : <XCircle size={14} className="x-icon" />}
-                      </div>
-                      <div className={`asig-preview-check ${previewProgramacion.documento_listo ? 'checked' : ''}`}>
-                        <FileText size={16} />
-                        <span>Documento Listo</span>
-                        {previewProgramacion.documento_listo ? <CheckCircle size={14} className="check-icon" /> : <XCircle size={14} className="x-icon" />}
-                      </div>
-                      <div className={`asig-preview-check ${previewProgramacion.confirmacion_asistencia === 'confirmo' ? 'checked' : ''}`}>
-                        <UserCheck size={16} />
-                        <span>Confirmo Asistencia</span>
-                        {previewProgramacion.confirmacion_asistencia === 'confirmo' ? <CheckCircle size={14} className="check-icon" /> : <XCircle size={14} className="x-icon" />}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Documento */}
-                  {previewProgramacion.tipo_documento && (
-                    <div className="asig-preview-section">
-                      <h3><FileText size={16} /> Documento</h3>
-                      <p className="asig-preview-value">
-                        {previewProgramacion.tipo_documento === 'contrato' ? 'Contrato' :
-                         previewProgramacion.tipo_documento === 'anexo' ? 'Anexo' : 'N/A'}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Especialista */}
-                  {previewProgramacion.especialista_nombre && (
-                    <div className="asig-preview-section">
-                      <h3><User size={16} /> Especialista Asignado</h3>
-                      <p className="asig-preview-value">{previewProgramacion.especialista_nombre}</p>
-                    </div>
-                  )}
-
-                  {/* Observaciones */}
-                  {previewProgramacion.observaciones && (
-                    <div className="asig-preview-section">
-                      <h3><FileText size={16} /> Observaciones</h3>
-                      <p className="asig-preview-observations">{previewProgramacion.observaciones}</p>
-                    </div>
-                  )}
-
-                  {/* Metadatos */}
-                  <div className="asig-preview-meta">
-                    <span>Creado por: {previewProgramacion.created_by_name || 'Sistema'}</span>
-                    <span>Fecha: {previewProgramacion.created_at ? new Date(previewProgramacion.created_at).toLocaleString('es-AR') : '-'}</span>
-                  </div>
-                </div>
-
-                <div className="asig-preview-footer">
-                  <button 
-                    className="btn-secondary"
-                    onClick={() => setPreviewProgramacion(null)}
-                  >
-                    Cerrar
-                  </button>
-                  <button 
-                    className="btn-primary"
-                    onClick={() => {
-                      setPreviewProgramacion(null)
-                      handleEditProgramacion(previewProgramacion)
-                    }}
-                  >
-                    <Edit2 size={16} />
-                    Editar
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

@@ -35,7 +35,8 @@ import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
 import { AuditoriaPage } from './administracion/AuditoriaPage'
 import { ProfilePage } from './profile/ProfilePage'
-// OnboardingPage eliminado - Kanban integrado en AsignacionesPage
+// Onboarding
+import ProgramacionPage from './onboarding/ProgramacionPage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 
@@ -912,7 +913,12 @@ export function HomePage() {
                   <AsignacionesPage />
                 </ProtectedRoute>
               } />
-{/* Ruta /onboarding eliminada - Kanban integrado en /asignaciones */}
+              {/* Onboarding - Programacion de Entregas */}
+              <Route path="/onboarding/programacion" element={
+                <ProtectedRoute submenuName="programacion-entregas" action="view">
+                  <ProgramacionPage />
+                </ProtectedRoute>
+              } />
 
               {/* Integraciones */}
               <Route path="/uss" element={

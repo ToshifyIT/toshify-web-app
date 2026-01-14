@@ -201,15 +201,17 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
   function canAdvance(): boolean {
     switch (step) {
       case 1:
-        return !!formData.tipo_asignacion && !!formData.modalidad
+        // Tipo y Modalidad requeridos
+        // Si modalidad es TURNO, tambien se requiere el turno
+        const tipoOk = !!formData.tipo_asignacion && !!formData.modalidad
+        const turnoOk = formData.modalidad === 'CARGO' || !!formData.turno
+        return tipoOk && turnoOk
       case 2:
         return !!formData.vehiculo_entregar_id || !!formData.vehiculo_entregar_patente
       case 3:
         // Conductor requerido siempre
         const tieneConductor = !!formData.conductor_id || !!formData.conductor_nombre
-        // Turno solo requerido si modalidad es TURNO
-        const turnoOk = formData.modalidad === 'CARGO' || !!formData.turno
-        return tieneConductor && turnoOk
+        return tieneConductor
       case 4:
         return true
       default:
@@ -342,13 +344,31 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
                         <div
                           key={mod}
                           className={`option-card ${formData.modalidad === mod ? 'selected' : ''}`}
-                          onClick={() => setFormData(prev => ({ ...prev, modalidad: mod }))}
+                          onClick={() => setFormData(prev => ({ ...prev, modalidad: mod, turno: mod === 'CARGO' ? undefined : prev.turno }))}
                         >
                           <span>{mod === 'TURNO' ? 'Turno' : 'A Cargo'}</span>
                         </div>
                       ))}
                     </div>
                   </div>
+
+                  {/* Mostrar selector de Turno si la modalidad es TURNO */}
+                  {formData.modalidad === 'TURNO' && (
+                    <div className="form-group" style={{ marginTop: '20px' }}>
+                      <label>Que turno?</label>
+                      <div className="option-cards horizontal">
+                        {(['diurno', 'nocturno'] as TurnoOnboarding[]).map(turno => (
+                          <div
+                            key={turno}
+                            className={`option-card ${formData.turno === turno ? 'selected' : ''}`}
+                            onClick={() => setFormData(prev => ({ ...prev, turno }))}
+                          >
+                            <span>{turno === 'diurno' ? 'Diurno' : 'Nocturno'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -515,33 +535,17 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
                     </div>
                   )}
 
-                  <div className="form-row" style={{ marginTop: '20px' }}>
-                    <div className="form-group">
-                      <label>Tipo de candidato</label>
-                      <select
-                        value={formData.tipo_candidato || ''}
-                        onChange={e => setFormData(prev => ({ ...prev, tipo_candidato: e.target.value as TipoCandidato }))}
-                      >
-                        <option value="">Seleccionar</option>
-                        <option value="nuevo">Nuevo</option>
-                        <option value="antiguo">Antiguo</option>
-                        <option value="reingreso">Reingreso</option>
-                      </select>
-                    </div>
-                    {/* Solo mostrar Turno si la modalidad es TURNO (vehiculo compartido) */}
-                    {formData.modalidad === 'TURNO' && (
-                      <div className="form-group">
-                        <label>Turno</label>
-                        <select
-                          value={formData.turno || ''}
-                          onChange={e => setFormData(prev => ({ ...prev, turno: e.target.value as TurnoOnboarding }))}
-                        >
-                          <option value="">Seleccionar</option>
-                          <option value="diurno">Diurno</option>
-                          <option value="nocturno">Nocturno</option>
-                        </select>
-                      </div>
-                    )}
+                  <div className="form-group" style={{ marginTop: '20px' }}>
+                    <label>Tipo de candidato</label>
+                    <select
+                      value={formData.tipo_candidato || ''}
+                      onChange={e => setFormData(prev => ({ ...prev, tipo_candidato: e.target.value as TipoCandidato }))}
+                    >
+                      <option value="">Seleccionar</option>
+                      <option value="nuevo">Nuevo</option>
+                      <option value="antiguo">Antiguo</option>
+                      <option value="reingreso">Reingreso</option>
+                    </select>
                   </div>
                 </div>
               )}

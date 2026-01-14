@@ -1836,13 +1836,13 @@ input[type="date"].asig-status-select {
 }
 
 .option-card:hover {
-  border-color: var(--primary-color, #F59E0B);
+  border-color: #DC2626;
   background: var(--bg-secondary);
 }
 
 .option-card.selected {
-  border-color: var(--primary-color, #F59E0B);
-  background: rgba(245, 158, 11, 0.1);
+  border-color: #DC2626;
+  background: rgba(220, 38, 38, 0.08);
 }
 
 .option-card span {
