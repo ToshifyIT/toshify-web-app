@@ -13,6 +13,7 @@ import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { ProgramacionWizard } from '../asignaciones/components/ProgramacionWizard'
+import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
 import type { ProgramacionOnboardingCompleta, EstadoKanban } from '../../types/onboarding.types'
 import Swal from 'sweetalert2'
 import './ProgramacionModule.css'
@@ -84,7 +85,7 @@ function generarMensajeAgenda(prog: ProgramacionOnboardingCompleta): string {
 
 export function ProgramacionModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const canCreate = canCreateInMenu('programacion-entregas')
   const canEdit = canEditInMenu('programacion-entregas')
   const canDelete = canDeleteInMenu('programacion-entregas')
@@ -98,7 +99,8 @@ export function ProgramacionModule() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
   
   // Modals
-  const [showWizard, setShowWizard] = useState(false)
+  const [showCreateWizard, setShowCreateWizard] = useState(false)
+  const [showEditWizard, setShowEditWizard] = useState(false)
   const [editingProgramacion, setEditingProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
   const [previewProgramacion, setPreviewProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
   
@@ -135,9 +137,13 @@ export function ProgramacionModule() {
   }, [])
 
   // Handlers
+  const handleCreate = () => {
+    setShowCreateWizard(true)
+  }
+
   const handleEdit = (prog: ProgramacionOnboardingCompleta) => {
     setEditingProgramacion(prog)
-    setShowWizard(true)
+    setShowEditWizard(true)
   }
 
   const handleDelete = async (id: string) => {
@@ -273,11 +279,13 @@ export function ProgramacionModule() {
         .insert({
           codigo,
           vehiculo_id: prog.vehiculo_entregar_id,
-          horario: prog.modalidad || 'CARGO',
-          fecha_programada: prog.fecha_cita ? `${prog.fecha_cita}T${prog.hora_cita || '10:00'}:00` : new Date().toISOString(),
+          modalidad: prog.turno ? 'turno' : 'a_cargo',
+          horario: prog.turno ? 'TURNO' : 'CARGO',
+          fecha_programada: prog.fecha_cita ? `${prog.fecha_cita}T${(prog.hora_cita || '10:00').substring(0, 5)}:00` : new Date().toISOString(),
           estado: 'programado',
           notas: prog.observaciones || `Creado desde programacion. Tipo: ${TIPO_ASIGNACION_LABELS[prog.tipo_asignacion || ''] || prog.tipo_asignacion}`,
-          created_by: profile?.full_name || 'Sistema'
+          created_by: user?.id || null,
+          created_by_name: profile?.full_name || 'Sistema'
         })
         .select()
         .single()
@@ -427,6 +435,14 @@ export function ProgramacionModule() {
             <Eye size={16} />
           </button>
           <button
+            className="prog-btn prog-btn-send"
+            title="Enviar a Entrega"
+            onClick={() => handleEnviarAEntrega(row.original)}
+            disabled={!!row.original.asignacion_id}
+          >
+            <Send size={16} />
+          </button>
+          <button
             className="prog-btn prog-btn-estado"
             title="Cambiar estado"
             onClick={() => handleCambiarEstado(row.original)}
@@ -569,23 +585,34 @@ export function ProgramacionModule() {
         pageSize={20}
         pageSizeOptions={[10, 20, 50, 100]}
         headerAction={(
-          <button className="btn-primary" onClick={() => setShowWizard(true)}>
+          <button className="btn-primary" onClick={handleCreate}>
             <Plus size={16} />
             Nueva Programación
           </button>
         )}
       />
 
-      {/* Wizard Modal */}
-      {showWizard && (
+      {/* Wizard Modal para CREAR (nuevo diseño visual) */}
+      {showCreateWizard && (
+        <ProgramacionAssignmentWizard
+          onClose={() => setShowCreateWizard(false)}
+          onSuccess={() => {
+            loadProgramaciones()
+            setShowCreateWizard(false)
+          }}
+        />
+      )}
+
+      {/* Wizard Modal para EDITAR (wizard existente) */}
+      {showEditWizard && (
         <ProgramacionWizard
           onClose={() => {
-            setShowWizard(false)
+            setShowEditWizard(false)
             setEditingProgramacion(null)
           }}
           onSuccess={() => {
             loadProgramaciones()
-            setShowWizard(false)
+            setShowEditWizard(false)
             setEditingProgramacion(null)
           }}
           editingData={editingProgramacion}
