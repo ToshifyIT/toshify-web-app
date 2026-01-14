@@ -94,7 +94,7 @@ export function MovimientosModule() {
   const { canCreateInSubmenu } = usePermissions()
 
   // Permisos específicos para el submenú de movimientos
-  const canCreate = canCreateInSubmenu('movimientos')
+  const canCreate = canCreateInSubmenu('inventario-movimientos')
 
   // Estados de datos
   const [productos, setProductos] = useState<Producto[]>([])

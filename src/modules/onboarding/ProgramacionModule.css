@@ -126,6 +126,86 @@
   color: var(--text-primary);
 }
 
+/* Sin asignar */
+.prog-sin-conductor {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* =====================================================
+   COLUMNA ASIGNADOS - Estilo igual que Asignaciones
+   ===================================================== */
+
+/* Container compacto para conductores */
+.prog-conductores-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+/* Conductor con turno asignado */
+.prog-conductor-turno {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Turno vacante */
+.prog-turno-vacante {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* Label de turno (D/N) */
+.prog-turno-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Label Diurno */
+.prog-label-diurno {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #92400E;
+}
+
+/* Label Nocturno */
+.prog-label-nocturno {
+  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+  color: #1E40AF;
+}
+
+/* Turno Diurno - fondo sutil */
+.prog-turno-diurno {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(254, 243, 199, 0.3);
+}
+
+/* Turno Nocturno - fondo sutil */
+.prog-turno-nocturno {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(219, 234, 254, 0.3);
+}
+
 /* Celda de Fecha - Sin icono */
 .prog-fecha-cell {
   display: flex;

@@ -12,7 +12,7 @@ import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
-import { ProgramacionWizard } from '../asignaciones/components/ProgramacionWizard'
+
 import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
 import type { ProgramacionOnboardingCompleta, EstadoKanban } from '../../types/onboarding.types'
 import Swal from 'sweetalert2'
@@ -354,14 +354,66 @@ export function ProgramacionModule() {
       )
     },
     {
-      accessorFn: (row) => row.conductor_display || row.conductor_nombre || '',
-      id: 'conductor',
-      header: 'Conductor',
-      cell: ({ row }) => (
-        <span className="prog-conductor-cell">
-          {row.original.conductor_display || row.original.conductor_nombre || '-'}
-        </span>
-      )
+      id: 'programados',
+      header: 'Programados',
+      accessorFn: (row) => {
+        // Para modalidad A CARGO, usar el conductor legacy o el diurno
+        if (row.modalidad === 'CARGO' || !row.modalidad) {
+          return row.conductor_display || row.conductor_nombre || row.conductor_diurno_nombre || ''
+        }
+        // Para TURNO, concatenar ambos conductores para busqueda
+        const d = row.conductor_diurno_nombre || row.conductor_nombre || ''
+        const n = row.conductor_nocturno_nombre || ''
+        return `${d} ${n}`.trim()
+      },
+      cell: ({ row }) => {
+        const { modalidad, conductor_diurno_nombre, conductor_nocturno_nombre, conductor_display, conductor_nombre, turno } = row.original
+
+        // Si es A CARGO, mostrar solo el conductor
+        if (modalidad === 'CARGO' || !modalidad) {
+          const nombre = conductor_display || conductor_nombre || conductor_diurno_nombre
+          if (nombre) {
+            return <span className="prog-conductor-cell">{nombre}</span>
+          }
+          return <span className="prog-sin-conductor">Sin asignar</span>
+        }
+
+        // Si es TURNO con nuevo sistema dual
+        if (conductor_diurno_nombre || conductor_nocturno_nombre) {
+          return (
+            <div className="prog-conductores-compact">
+              <span className={conductor_diurno_nombre ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
+                <span className="prog-turno-label prog-label-diurno">D</span>
+                {conductor_diurno_nombre ? conductor_diurno_nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+              </span>
+              <span className={conductor_nocturno_nombre ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
+                <span className="prog-turno-label prog-label-nocturno">N</span>
+                {conductor_nocturno_nombre ? conductor_nocturno_nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+              </span>
+            </div>
+          )
+        }
+
+        // Fallback: sistema legacy con un solo conductor y turno
+        const nombre = conductor_display || conductor_nombre
+        if (nombre && turno) {
+          const isDiurno = turno === 'diurno'
+          return (
+            <div className="prog-conductores-compact">
+              <span className={isDiurno ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
+                <span className="prog-turno-label prog-label-diurno">D</span>
+                {isDiurno ? nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+              </span>
+              <span className={!isDiurno ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
+                <span className="prog-turno-label prog-label-nocturno">N</span>
+                {!isDiurno ? nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+              </span>
+            </div>
+          )
+        }
+
+        return <span className="prog-sin-conductor">Sin asignar</span>
+      }
     },
     {
       accessorKey: 'tipo_asignacion',
@@ -380,15 +432,6 @@ export function ProgramacionModule() {
           {row.original.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}
         </span>
       )
-    },
-    {
-      accessorKey: 'turno',
-      header: 'Turno',
-      cell: ({ row }) => row.original.turno ? (
-        <span className={`prog-turno-badge ${row.original.turno}`}>
-          {row.original.turno === 'diurno' ? 'Diurno' : 'Nocturno'}
-        </span>
-      ) : <span className="text-muted">-</span>
     },
     {
       accessorKey: 'fecha_cita',
@@ -603,9 +646,9 @@ export function ProgramacionModule() {
         />
       )}
 
-      {/* Wizard Modal para EDITAR (wizard existente) */}
-      {showEditWizard && (
-        <ProgramacionWizard
+      {/* Wizard Modal para EDITAR (mismo wizard) */}
+      {showEditWizard && editingProgramacion && (
+        <ProgramacionAssignmentWizard
           onClose={() => {
             setShowEditWizard(false)
             setEditingProgramacion(null)
@@ -615,7 +658,7 @@ export function ProgramacionModule() {
             setShowEditWizard(false)
             setEditingProgramacion(null)
           }}
-          editingData={editingProgramacion}
+          editData={editingProgramacion}
         />
       )}
 

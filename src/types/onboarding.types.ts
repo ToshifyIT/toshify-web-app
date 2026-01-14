@@ -32,12 +32,26 @@ export interface ProgramacionOnboarding {
   id: string
   estado: EstadoKanban
   
-  // Conductor
+  // Conductor (legacy - single conductor)
   conductor_id?: string
   conductor_nombre?: string
   conductor_dni?: string
   tipo_candidato?: TipoCandidato
   turno?: TurnoOnboarding
+  
+  // Conductor Diurno (nuevo - dual conductor)
+  conductor_diurno_id?: string
+  conductor_diurno_nombre?: string
+  conductor_diurno_dni?: string
+  documento_diurno?: TipoDocumento
+  zona_diurno?: string
+  
+  // Conductor Nocturno (nuevo - dual conductor)
+  conductor_nocturno_id?: string
+  conductor_nocturno_nombre?: string
+  conductor_nocturno_dni?: string
+  documento_nocturno?: TipoDocumento
+  zona_nocturno?: string
   
   // Vehículo a entregar
   vehiculo_entregar_id?: string
@@ -118,12 +132,26 @@ export interface ProgramacionOnboardingCompleta extends ProgramacionOnboarding {
 
 // Formulario para crear/editar programación
 export interface ProgramacionOnboardingFormData {
-  // Conductor
+  // Conductor (legacy - single conductor)
   conductor_id?: string
   conductor_nombre?: string
   conductor_dni?: string
   tipo_candidato?: TipoCandidato
   turno?: TurnoOnboarding
+  
+  // Conductor Diurno (nuevo - dual conductor)
+  conductor_diurno_id?: string
+  conductor_diurno_nombre?: string
+  conductor_diurno_dni?: string
+  documento_diurno?: TipoDocumento
+  zona_diurno?: string
+  
+  // Conductor Nocturno (nuevo - dual conductor)
+  conductor_nocturno_id?: string
+  conductor_nocturno_nombre?: string
+  conductor_nocturno_dni?: string
+  documento_nocturno?: TipoDocumento
+  zona_nocturno?: string
   
   // Vehículo a entregar
   vehiculo_entregar_id?: string
