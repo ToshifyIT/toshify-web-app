@@ -925,7 +925,7 @@ export function ExcesosKmTab() {
         emptyIcon={<Gauge size={48} />}
         emptyTitle="Sin excesos de kilometraje"
         emptyDescription="No hay excesos registrados. Use el botón 'Registrar Exceso' para agregar uno."
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
       />
     </>

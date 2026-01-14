@@ -2837,7 +2837,7 @@ export function ReporteFacturacionTab() {
             emptyIcon={<Calculator size={48} />}
             emptyTitle="Sin asignaciones activas"
             emptyDescription="No hay conductores con asignaciones activas para esta semana"
-            pageSize={20}
+            pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
             onTableReady={setTableInstance}
           />
@@ -2965,7 +2965,7 @@ export function ReporteFacturacionTab() {
             emptyIcon={<FileText size={48} />}
             emptyTitle="Sin facturaciones"
             emptyDescription="No hay conductores facturados en este período"
-            pageSize={20}
+            pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
             onTableReady={setTableInstance}
           />

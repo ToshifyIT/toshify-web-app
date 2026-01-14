@@ -582,7 +582,7 @@ export function ProgramacionModule() {
         emptyIcon={<Calendar size={48} />}
         emptyTitle="No hay programaciones"
         emptyDescription={canCreate ? "Crea una nueva programacion para comenzar" : "No tienes programaciones asignadas"}
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
         headerAction={(
           <button className="btn-primary" onClick={handleCreate}>

@@ -1219,7 +1219,7 @@ export function IncidenciasModule() {
             emptyIcon={<Shield size={48} />}
             emptyTitle="Sin incidencias logísticas"
             emptyDescription="No hay incidencias logísticas registradas"
-            pageSize={20}
+            pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
           />
         </>
@@ -1237,7 +1237,7 @@ export function IncidenciasModule() {
             emptyIcon={<DollarSign size={48} />}
             emptyTitle="Sin incidencias de cobro"
             emptyDescription="Las incidencias que generan cobros aparecerán aquí"
-            pageSize={20}
+            pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
           />
         </>
@@ -1275,7 +1275,7 @@ export function IncidenciasModule() {
             emptyIcon={<Shield size={48} />}
             emptyTitle="Sin cobros/descuentos pendientes"
             emptyDescription="Los cobros generados desde incidencias aparecerán aquí"
-            pageSize={20}
+            pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
           />
         </>

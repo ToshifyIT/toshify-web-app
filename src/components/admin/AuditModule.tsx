@@ -430,8 +430,8 @@ export function AuditModule() {
         emptyIcon={<History size={48} />}
         emptyTitle={activeTab === 'usuarios' ? "No hay logs de usuarios" : "No hay logs de sistema"}
         emptyDescription={activeTab === 'usuarios' ? "Las acciones realizadas por usuarios aparecerán aquí" : "Los cambios automáticos del sistema aparecerán aquí"}
-        pageSize={20}
-        pageSizeOptions={[20, 50, 100]}
+        pageSize={100}
+        pageSizeOptions={[10, 20, 50, 100]}
       />
     </div>
   )

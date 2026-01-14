@@ -1035,7 +1035,7 @@ export function LiquidacionConductoresTab() {
         emptyIcon={<UserMinus size={48} />}
         emptyTitle="Sin liquidaciones"
         emptyDescription="No hay liquidaciones registradas. Use el botón 'Nueva Liquidación' para dar de baja a un conductor."
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
       />
     </>
