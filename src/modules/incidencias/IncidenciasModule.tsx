@@ -505,6 +505,152 @@ export function IncidenciasModule() {
     }
   ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId])
 
+  // Columnas específicas para incidencias de COBRO (incluye botón generar cobro/descuento)
+  const incidenciasCobroColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => [
+    {
+      accessorKey: 'fecha',
+      header: 'Fecha',
+      cell: ({ row }) => formatDate(row.original.fecha)
+    },
+    {
+      accessorKey: 'semana',
+      header: 'Sem',
+      cell: ({ row }) => row.original.semana || '-'
+    },
+    {
+      accessorKey: 'patente_display',
+      header: () => (
+        <ExcelColumnFilter
+          label="Patente"
+          options={patentesUnicas}
+          selectedValues={patenteFilter}
+          onSelectionChange={setPatenteFilter}
+          filterId="inc_cobro_patente"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => <span className="dt-badge dt-badge-gray">{row.original.patente_display || '-'}</span>
+    },
+    {
+      accessorKey: 'conductor_display',
+      header: () => (
+        <ExcelColumnFilter
+          label="Conductor"
+          options={conductoresUnicos}
+          selectedValues={conductorFilter}
+          onSelectionChange={setConductorFilter}
+          filterId="inc_cobro_conductor"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => row.original.conductor_display || '-'
+    },
+    {
+      accessorKey: 'monto_penalidades',
+      header: 'Monto',
+      cell: ({ row }) => {
+        const monto = row.original.monto_penalidades
+        if (!monto) return '-'
+        return <span style={{ fontWeight: 600, color: '#F59E0B' }}>{formatMoney(monto)}</span>
+      }
+    },
+    {
+      accessorKey: 'turno',
+      header: () => (
+        <ExcelColumnFilter
+          label="Tipo"
+          options={turnosUnicos}
+          selectedValues={turnoFilter}
+          onSelectionChange={setTurnoFilter}
+          filterId="inc_cobro_turno"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => {
+        const turno = row.original.turno
+        if (!turno) return '-'
+        const color = turno === 'Diurno' ? 'yellow' : turno === 'Nocturno' ? 'blue' : 'gray'
+        return <span className={`dt-badge dt-badge-${color}`}>{turno}</span>
+      }
+    },
+    {
+      accessorKey: 'area',
+      header: () => (
+        <ExcelColumnFilter
+          label="Area"
+          options={areasUnicas}
+          selectedValues={areaFilter}
+          onSelectionChange={setAreaFilter}
+          filterId="inc_cobro_area"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => row.original.area || '-'
+    },
+    {
+      accessorKey: 'estado_nombre',
+      header: () => (
+        <ExcelColumnFilter
+          label="Estado"
+          options={estadosUnicos}
+          selectedValues={estadoFilter}
+          onSelectionChange={setEstadoFilter}
+          filterId="inc_cobro_estado"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => {
+        const color = row.original.estado_color || 'gray'
+        return <span className={`dt-badge dt-badge-${color}`}>{row.original.estado_nombre}</span>
+      }
+    },
+    {
+      accessorKey: 'registrado_por',
+      header: 'Responsable',
+      cell: ({ row }) => row.original.registrado_por || '-'
+    },
+    {
+      accessorKey: 'created_at',
+      header: 'Creado',
+      cell: ({ row }) => {
+        if (!row.original.created_at) return '-'
+        return new Date(row.original.created_at).toLocaleDateString('es-AR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      }
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      cell: ({ row }) => (
+        <div className="dt-actions">
+          <button className="dt-btn-action dt-btn-view" title="Ver" onClick={() => handleVerIncidencia(row.original)}>
+            <Eye size={14} />
+          </button>
+          <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarIncidencia(row.original)}>
+            <Edit2 size={14} />
+          </button>
+          <button 
+            className="dt-btn-action dt-btn-warning" 
+            title="Generar Cobro/Descuento" 
+            onClick={() => handleGenerarCobroDesdeIncidencia(row.original)}
+          >
+            <DollarSign size={14} />
+          </button>
+        </div>
+      )
+    }
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId])
+
   // Columnas para tabla de penalidades
   const penalidadesColumns = useMemo<ColumnDef<PenalidadCompleta>[]>(() => [
     {
@@ -622,13 +768,26 @@ export function IncidenciasModule() {
     setShowModal(true)
   }
 
-  function handleNuevaPenalidad() {
+  // Generar Cobro/Descuento (penalidad) desde una incidencia de cobro
+  function handleGenerarCobroDesdeIncidencia(incidencia: IncidenciaCompleta) {
     const areaResponsable = getAreaResponsablePorRol(profile?.roles?.name)
+    
+    // Pre-llenar el formulario de penalidad con los datos de la incidencia
     setPenalidadForm({
-      fecha: getLocalDateString(),
+      incidencia_id: incidencia.id,
+      vehiculo_id: incidencia.vehiculo_id,
+      conductor_id: incidencia.conductor_id,
+      fecha: incidencia.fecha || getLocalDateString(),
+      turno: incidencia.turno,
+      area_responsable: areaResponsable || 'LOGISTICA',
+      detalle: 'Cobro por incidencia',
+      monto: incidencia.monto_penalidades || 0,
+      observaciones: incidencia.descripcion || '',
       aplicado: false,
-      area_responsable: areaResponsable || undefined
+      conductor_nombre: incidencia.conductor_nombre,
+      vehiculo_patente: incidencia.vehiculo_patente
     })
+    
     setSelectedPenalidad(null)
     setModalMode('create')
     setModalType('penalidad')
@@ -728,6 +887,13 @@ export function IncidenciasModule() {
       return
     }
 
+    // Si es incidencia de cobro, validar que tenga monto
+    const esCobro = activeTab === 'cobro'
+    if (esCobro && (!incidenciaForm.monto || incidenciaForm.monto <= 0)) {
+      Swal.fire('Error', 'Por favor ingrese el monto del cobro', 'warning')
+      return
+    }
+
     setSaving(true)
     try {
       // Calcular semana basada en la fecha
@@ -735,7 +901,9 @@ export function IncidenciasModule() {
       const dataToSave = {
         ...incidenciaForm,
         semana: semanaCalculada,
-        created_by: user?.id
+        created_by: user?.id,
+        tipo: esCobro ? 'cobro' : 'logistica',  // Asignar tipo según tab activo
+        monto_penalidades: esCobro ? incidenciaForm.monto : null  // Guardar monto en campo correcto
       }
 
       if (modalMode === 'edit' && selectedIncidencia) {
@@ -981,13 +1149,7 @@ export function IncidenciasModule() {
             Incidencia (Cobro)
             <span className="tab-badge">{incidenciasCobro.length}</span>
           </button>
-          <button
-            className={`incidencias-tab ${activeTab === 'penalidades' ? 'active' : ''}`}
-            onClick={() => setActiveTab('penalidades')}
-          >
-            <DollarSign size={16} />
-            Cobros&Descuentos
-          </button>
+          {/* Tab Por Aplicar - muestra penalidades pendientes */}
           <button
             className={`incidencias-tab ${activeTab === 'por_aplicar' ? 'active' : ''}`}
             onClick={() => setActiveTab('por_aplicar')}
@@ -1004,21 +1166,23 @@ export function IncidenciasModule() {
         <div className="tabs-actions">
           <button
             className="btn-secondary"
-            onClick={(activeTab === 'logistica' || activeTab === 'cobro') ? handleExportarIncidencias : handleExportarPenalidades}
+            onClick={activeTab === 'por_aplicar' ? handleExportarPenalidades : handleExportarIncidencias}
             title="Exportar a Excel"
           >
             <Download size={16} />
             Exportar
           </button>
-          <button
-            className="btn-primary"
-            onClick={activeTab === 'penalidades' || activeTab === 'por_aplicar' ? handleNuevaPenalidad : handleNuevaIncidencia}
-            disabled={!canCreate}
-            title={!canCreate ? 'No tienes permisos para crear' : ''}
-          >
-            <Plus size={16} />
-            {activeTab === 'penalidades' || activeTab === 'por_aplicar' ? 'Nueva Penalidad' : 'Nueva Incidencia'}
-          </button>
+          {activeTab !== 'por_aplicar' && (
+            <button
+              className="btn-primary"
+              onClick={handleNuevaIncidencia}
+              disabled={!canCreate}
+              title={!canCreate ? 'No tienes permisos para crear' : ''}
+            >
+              <Plus size={16} />
+              Nueva Incidencia
+            </button>
+          )}
         </div>
       </div>
 
@@ -1043,10 +1207,10 @@ export function IncidenciasModule() {
       {/* Incidencias Cobro Tab */}
       {activeTab === 'cobro' && (
         <>
-          {/* Tabla con DataTable */}
+          {/* Tabla con DataTable - usa columnas específicas con botón Generar Cobro */}
           <DataTable
             data={incidenciasCobro}
-            columns={incidenciasColumns}
+            columns={incidenciasCobroColumns}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<DollarSign size={48} />}
@@ -1058,77 +1222,26 @@ export function IncidenciasModule() {
         </>
       )}
 
-      {/* Penalidades / Por Aplicar Tab */}
-      {(activeTab === 'penalidades' || activeTab === 'por_aplicar') && (
+      {/* Por Aplicar Tab - Cobros/Descuentos pendientes */}
+      {activeTab === 'por_aplicar' && (
         <>
-          {/* Stats - diferentes según tab */}
+          {/* Stats - pendientes */}
           <div className="incidencias-stats">
             <div className="stats-grid">
-              {activeTab === 'por_aplicar' ? (
-                // Tab Por Aplicar - solo mostrar pendientes
-                <>
-                  <div className="stat-card active">
-                    <Clock size={20} className="stat-icon" />
-                    <div className="stat-content">
-                      <span className="stat-value">{penalidadesFiltradas.length}</span>
-                      <span className="stat-label">Pendientes</span>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <DollarSign size={20} className="stat-icon" />
-                    <div className="stat-content">
-                      <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
-                      <span className="stat-label">$ Pendiente</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                // Tab Cobros&Descuentos - mostrar pendientes, aplicadas y totales
-                <>
-                  <div className="stat-card">
-                    <Clock size={20} className="stat-icon" />
-                    <div className="stat-content">
-                      <span className="stat-value">{penalidades.filter(p => !p.aplicado).length}</span>
-                      <span className="stat-label">Pendientes</span>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <DollarSign size={20} className="stat-icon" />
-                    <div className="stat-content">
-                      <span className="stat-value">{formatMoney(penalidades.filter(p => !p.aplicado).reduce((s, p) => s + (p.monto || 0), 0))}</span>
-                      <span className="stat-label">$ Pendiente</span>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <CheckCircle size={20} className="stat-icon" />
-                    <div className="stat-content">
-                      <span className="stat-value">{penalidades.filter(p => p.aplicado).length}</span>
-                      <span className="stat-label">Aplicadas</span>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <DollarSign size={20} className="stat-icon" />
-                    <div className="stat-content">
-                      <span className="stat-value">{formatMoney(penalidades.filter(p => p.aplicado).reduce((s, p) => s + (p.monto || 0), 0))}</span>
-                      <span className="stat-label">$ Aplicado</span>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <FileText size={20} className="stat-icon" />
-                    <div className="stat-content">
-                      <span className="stat-value">{penalidades.length}</span>
-                      <span className="stat-label">Total</span>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <DollarSign size={20} className="stat-icon" />
-                    <div className="stat-content">
-                      <span className="stat-value">{formatMoney(penalidades.reduce((s, p) => s + (p.monto || 0), 0))}</span>
-                      <span className="stat-label">$ Total</span>
-                    </div>
-                  </div>
-                </>
-              )}
+              <div className="stat-card active">
+                <Clock size={20} className="stat-icon" />
+                <div className="stat-content">
+                  <span className="stat-value">{penalidadesFiltradas.length}</span>
+                  <span className="stat-label">Pendientes</span>
+                </div>
+              </div>
+              <div className="stat-card">
+                <DollarSign size={20} className="stat-icon" />
+                <div className="stat-content">
+                  <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
+                  <span className="stat-label">$ Pendiente</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1139,8 +1252,8 @@ export function IncidenciasModule() {
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<Shield size={48} />}
-            emptyTitle="Sin penalidades"
-            emptyDescription="No hay penalidades registradas"
+            emptyTitle="Sin cobros/descuentos pendientes"
+            emptyDescription="Los cobros generados desde incidencias aparecerán aquí"
             pageSize={20}
             pageSizeOptions={[10, 20, 50, 100]}
           />
@@ -1183,6 +1296,7 @@ export function IncidenciasModule() {
                   vehiculos={vehiculos}
                   conductores={conductores}
                   disabled={saving}
+                  esCobro={activeTab === 'cobro'}
                 />
               ) : (
                 <PenalidadForm
@@ -1228,6 +1342,7 @@ interface IncidenciaFormProps {
   vehiculos: VehiculoSimple[]
   conductores: ConductorSimple[]
   disabled?: boolean
+  esCobro?: boolean  // Indica si es incidencia de cobro (muestra campo monto)
 }
 
 interface ConductorAsignado {
@@ -1237,7 +1352,7 @@ interface ConductorAsignado {
   turno: string // diurno, nocturno, todo_dia (de asignaciones_conductores)
 }
 
-function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, disabled }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, disabled, esCobro = false }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -1452,7 +1567,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             </div>
           </div>
         </div>
-        <div className="form-row">
+        <div className="form-row three-cols">
           <div className="form-group">
             <label>Fecha <span className="required">*</span></label>
             <input
@@ -1471,15 +1586,65 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               className="form-input-readonly"
             />
           </div>
+          <div className="form-group">
+            <label>Turno</label>
+            <input
+              type="text"
+              value={formData.turno || '-'}
+              readOnly
+              className="form-input-readonly"
+              placeholder="Se carga del conductor"
+            />
+          </div>
         </div>
         <div className="form-row three-cols">
           <div className="form-group">
-            <label>Tipo</label>
-            <select value={formData.turno || ''} onChange={e => setFormData(prev => ({ ...prev, turno: e.target.value }))} disabled={disabled}>
+            <label>Tipo de Incidencia <span className="required">*</span></label>
+            <select 
+              value={formData.tipo_incidencia || ''} 
+              onChange={e => setFormData(prev => ({ ...prev, tipo_incidencia: e.target.value }))} 
+              disabled={disabled}
+            >
               <option value="">Seleccionar</option>
-              <option value="Diurno">Diurno</option>
-              <option value="Nocturno">Nocturno</option>
-              <option value="A cargo">A cargo</option>
+              {esCobro ? (
+                // Tipos que generan COBRO (van a facturación)
+                <>
+                  <optgroup label="P006 - Exceso KM">
+                    <option value="Exceso de kilometraje">Exceso de kilometraje</option>
+                  </optgroup>
+                  <optgroup label="P004 - Tickets a Favor">
+                    <option value="Bono 5% ventas">Bono 5% ventas</option>
+                    <option value="Bono por evento Toshify">Bono por evento Toshify</option>
+                    <option value="Tickets de peajes">Tickets de peajes</option>
+                    <option value="Comision referidos">Comisión referidos</option>
+                  </optgroup>
+                  <optgroup label="P007 - Multas/Penalidades">
+                    <option value="Entrega tardia del vehiculo">Entrega tardía del vehículo</option>
+                    <option value="Llegada tarde revision tecnica">Llegada tarde o inasistencia a revisión técnica</option>
+                    <option value="Ingreso a zonas restringidas">Ingreso a zonas restringidas</option>
+                    <option value="Falta de lavado">Falta de lavado</option>
+                    <option value="Falta de restitucion de la unidad">Falta de restitución de la unidad</option>
+                    <option value="Perdida o dano elementos seguridad">Pérdida o daño de elementos de seguridad</option>
+                    <option value="Falta restitucion de GNC">Falta restitución de GNC</option>
+                    <option value="Falta restitucion de Nafta">Falta restitución de Nafta</option>
+                    <option value="Mora en canon">Mora en canon</option>
+                  </optgroup>
+                </>
+              ) : (
+                // Tipos de LOGÍSTICA (no generan cobro)
+                <>
+                  <option value="Manipulacion no autorizada de GPS">Manipulación no autorizada de GPS</option>
+                  <option value="Abandono del vehiculo">Abandono del vehículo</option>
+                  <option value="No disponer lugar seguro guarda">No disponer de lugar seguro para guarda</option>
+                  <option value="I button">I button</option>
+                  <option value="Multa de transito">Multa de tránsito</option>
+                  <option value="Reparacion Siniestro">Reparación Siniestro</option>
+                  <option value="Falta de reporte Intercom">Falta de reporte (Intercom)</option>
+                  <option value="Vehiculo en taller">Vehículo en taller</option>
+                  <option value="Conductor no se presento">Conductor no se presentó</option>
+                  <option value="Otro">Otro</option>
+                </>
+              )}
             </select>
           </div>
           <div className="form-group">
@@ -1489,6 +1654,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               <option value="Logística">Logística</option>
               <option value="Data Entry">Data Entry</option>
               <option value="Administración">Administración</option>
+              <option value="Siniestros">Siniestros</option>
             </select>
           </div>
           <div className="form-group">
@@ -1501,31 +1667,78 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             </select>
           </div>
         </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label>Estado del Vehículo</label>
-            <select value={formData.estado_vehiculo || ''} onChange={e => setFormData(prev => ({ ...prev, estado_vehiculo: e.target.value }))} disabled={disabled}>
-              <option value="">Seleccionar</option>
-              <option value="En uso">En uso</option>
-              <option value="Parking-Disponible">Parking-Disponible</option>
-              <option value="Parking-No disponible">Parking-No disponible</option>
-              <option value="Taller">Taller</option>
-              <option value="Taller mecanico">Taller mecánico</option>
-              <option value="Taller chapa & pintura">Taller chapa & pintura</option>
-              <option value="Sin asignar">Sin asignar</option>
-            </select>
+        {/* Monto solo para cobro */}
+        {esCobro && (
+          <div className="form-row">
+            <div className="form-group">
+              <label>Monto <span className="required">*</span></label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.monto || ''}
+                onChange={e => setFormData(prev => ({ ...prev, monto: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                placeholder="0.00"
+                disabled={disabled}
+              />
+            </div>
+            <div className="form-group">
+              <label>Estado del Vehículo</label>
+              <select value={formData.estado_vehiculo || ''} onChange={e => setFormData(prev => ({ ...prev, estado_vehiculo: e.target.value }))} disabled={disabled}>
+                <option value="">Seleccionar</option>
+                <option value="En uso">En uso</option>
+                <option value="Parking-Disponible">Parking-Disponible</option>
+                <option value="Parking-No disponible">Parking-No disponible</option>
+                <option value="Taller">Taller</option>
+                <option value="Taller mecanico">Taller mecánico</option>
+                <option value="Taller chapa & pintura">Taller chapa & pintura</option>
+                <option value="Sin asignar">Sin asignar</option>
+              </select>
+            </div>
           </div>
-          <div className="form-group">
-            <label>Registrado por</label>
-            <input
-              type="text"
-              value={formData.registrado_por || ''}
-              readOnly
-              className="form-input-readonly"
-              placeholder="Se asigna automáticamente"
-            />
+        )}
+        {/* Estado vehículo para logística */}
+        {!esCobro && (
+          <div className="form-row">
+            <div className="form-group">
+              <label>Estado del Vehículo</label>
+              <select value={formData.estado_vehiculo || ''} onChange={e => setFormData(prev => ({ ...prev, estado_vehiculo: e.target.value }))} disabled={disabled}>
+                <option value="">Seleccionar</option>
+                <option value="En uso">En uso</option>
+                <option value="Parking-Disponible">Parking-Disponible</option>
+                <option value="Parking-No disponible">Parking-No disponible</option>
+                <option value="Taller">Taller</option>
+                <option value="Taller mecanico">Taller mecánico</option>
+                <option value="Taller chapa & pintura">Taller chapa & pintura</option>
+                <option value="Sin asignar">Sin asignar</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Registrado por</label>
+              <input
+                type="text"
+                value={formData.registrado_por || ''}
+                readOnly
+                className="form-input-readonly"
+                placeholder="Se asigna automáticamente"
+              />
+            </div>
           </div>
-        </div>
+        )}
+        {esCobro && (
+          <div className="form-row">
+            <div className="form-group">
+              <label>Registrado por</label>
+              <input
+                type="text"
+                value={formData.registrado_por || ''}
+                readOnly
+                className="form-input-readonly"
+                placeholder="Se asigna automáticamente"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="form-section">

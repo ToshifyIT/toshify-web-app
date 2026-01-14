@@ -111,6 +111,9 @@ export interface IncidenciaFormData {
   conductor_nombre?: string
   vehiculo_patente?: string
   auto_a_cargo?: boolean
+  monto?: number  // Monto para incidencias de cobro
+  tipo?: TipoIncidencia  // Tipo de incidencia (logistica o cobro)
+  tipo_incidencia?: string  // Tipo específico (ej: "Exceso de kilometraje", "Falta de lavado")
 }
 
 export interface PenalidadFormData {
