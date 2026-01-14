@@ -181,66 +181,27 @@ export function CobrosPorAplicarTab({ loading, onRefresh }: CobrosPorAplicarTabP
             {!cobro.fraccionado && cobro.monto_total > 1000000 && (
               <button
                 onClick={() => aplicarFraccionamiento(cobro.id, cobro.monto_total)}
-                className="btn-small"
-                style={{
-                  backgroundColor: '#2196F3',
-                  color: 'white',
-                  padding: '6px 10px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  display: 'flex',
-                  gap: '4px',
-                  alignItems: 'center'
-                }}
+                className="dt-btn-action dt-btn-view"
                 title="Fraccionamiento"
               >
-                <Zap size={12} />
-                Fraccionar
+                <Zap size={14} />
               </button>
             )}
             {!cobro.fraccionado && cobro.monto_total <= 1000000 && (
               <button
                 onClick={() => aprobarCobroDirecto(cobro.id)}
-                className="btn-small"
-                style={{
-                  backgroundColor: '#4CAF50',
-                  color: 'white',
-                  padding: '6px 10px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  display: 'flex',
-                  gap: '4px',
-                  alignItems: 'center'
-                }}
+                className="dt-btn-action dt-btn-success"
                 title="Aprobar"
               >
-                <Check size={12} />
-                Aprobar
+                <Check size={14} />
               </button>
             )}
             <button
               onClick={() => rechazarCobro()}
-              className="btn-small"
-              style={{
-                backgroundColor: '#f44336',
-                color: 'white',
-                padding: '6px 10px',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                display: 'flex',
-                gap: '4px',
-                alignItems: 'center'
-              }}
+              className="dt-btn-action dt-btn-delete"
               title="Rechazar"
             >
-              <X size={12} />
-              Rechazar
+              <X size={14} />
             </button>
           </div>
         )

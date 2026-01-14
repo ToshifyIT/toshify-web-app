@@ -693,6 +693,16 @@
   background: var(--badge-yellow-bg, rgba(245, 158, 11, 0.1));
 }
 
+.dt-btn-action.dt-btn-success {
+  color: var(--color-success, #22c55e);
+}
+
+.dt-btn-action.dt-btn-success:hover:not(:disabled) {
+  border-color: var(--color-success, #22c55e);
+  color: var(--color-success, #22c55e);
+  background: var(--badge-green-bg, rgba(34, 197, 94, 0.1));
+}
+
 /* Badge */
 .dt-badge {
   display: inline-block;
