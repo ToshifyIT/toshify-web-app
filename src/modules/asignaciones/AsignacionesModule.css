@@ -1768,12 +1768,12 @@ input[type="date"].asig-status-select {
 }
 
 .wizard-step.active .step-number {
-  background: var(--primary-color, #F59E0B);
+  background: #DC2626;
   color: white;
 }
 
 .wizard-step.current .step-number {
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.3);
 }
 
 .wizard-step .step-label {
