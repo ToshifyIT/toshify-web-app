@@ -931,7 +931,7 @@ function SiniestroForm({
   conductores,
   onVehiculoChange,
   disabled,
-  isEditMode = false
+  isEditMode: _isEditMode = false
 }: SiniestroFormProps) {
   // Todos los campos son editables en modo edición
   const isFieldDisabled = (_fieldName: string) => {
