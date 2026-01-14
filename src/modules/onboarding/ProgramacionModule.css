@@ -1,0 +1,539 @@
+/* src/modules/onboarding/ProgramacionModule.css */
+/* Estilos para el módulo de Programación - Consistente con AsignacionesModule */
+/* Con soporte para Dark Mode mediante CSS Variables */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.prog-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   STATS - Estilo Bitácora (igual que Asignaciones)
+   ===================================================== */
+
+.prog-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.prog-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+.prog-stats .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.prog-stats .stat-card .stat-icon {
+  color: #DC2626;
+  flex-shrink: 0;
+}
+
+.prog-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.prog-stats .stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prog-stats .stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+/* Stat Cards Clickables */
+.prog-stats .stat-card-clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.prog-stats .stat-card-clickable:hover {
+  background: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.prog-stats .stat-card-active {
+  border-color: #DC2626;
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 1px #DC2626;
+}
+
+/* Responsive Stats */
+@media (max-width: 1200px) {
+  .prog-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .prog-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* =====================================================
+   CELDAS DE TABLA - Estilo limpio sin iconos
+   ===================================================== */
+
+/* Celda de Vehículo - Patente arriba, modelo abajo */
+.prog-vehiculo-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prog-patente {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.prog-modelo {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Celda de Conductor - Solo texto */
+.prog-conductor-cell {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Celda de Fecha - Sin icono */
+.prog-fecha-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.prog-hora {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* =====================================================
+   BADGES - Consistentes con Asignaciones
+   ===================================================== */
+
+/* Badge de Tipo (texto simple) */
+.prog-tipo-badge {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Badge de Modalidad - Igual que Asignaciones */
+.prog-modalidad-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.prog-modalidad-badge.turno {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-modalidad-badge.cargo {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #92400E;
+}
+
+/* Badge de Turno */
+.prog-turno-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.prog-turno-badge.diurno {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #92400E;
+}
+
+.prog-turno-badge.nocturno {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+/* Badge de Zona */
+.prog-zona-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #5B21B6);
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* Badge de Estado - Igual que Asignaciones */
+.prog-estado-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.prog-estado-badge.por_agendar {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-estado-badge.agendado {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-estado-badge.en_curso {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #92400E);
+}
+
+.prog-estado-badge.completado {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #065F46);
+}
+
+/* Estado Select - Minimalista */
+.prog-estado-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 100px;
+}
+
+.prog-estado-select:focus {
+  outline: none;
+  border-color: #DC2626;
+}
+
+.prog-estado-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =====================================================
+   CHECKLIST - Compacto
+   ===================================================== */
+
+.prog-checklist {
+  display: flex;
+  gap: 4px;
+}
+
+.prog-check-item {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.prog-check-item.checked {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+/* =====================================================
+   ACCIONES - Igual que Asignaciones
+   ===================================================== */
+
+.prog-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.prog-btn {
+  padding: 6px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.prog-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.prog-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Botón Enviar a Entrega */
+.prog-btn-send {
+  color: #059669;
+}
+
+.prog-btn-send:hover:not(:disabled) {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: #059669;
+}
+
+/* Botón Ver */
+.prog-btn-view {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-view:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+/* Botón Editar */
+.prog-btn-edit {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-edit:hover:not(:disabled) {
+  color: #3B82F6;
+}
+
+/* Botón Eliminar */
+.prog-btn-delete {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-delete:hover:not(:disabled) {
+  color: #DC2626;
+}
+
+/* Link a asignación */
+.prog-asignacion-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #059669;
+  padding: 6px;
+}
+
+/* =====================================================
+   MODAL DE DETALLE
+   ===================================================== */
+
+.prog-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.prog-modal {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.prog-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.prog-modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prog-modal-header button {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.prog-modal-header button:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.prog-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.prog-modal-section {
+  margin-bottom: 20px;
+}
+
+.prog-modal-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.prog-modal-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.prog-modal-section h3 svg {
+  color: #DC2626;
+}
+
+.prog-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.prog-modal-grid label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.prog-modal-grid p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.prog-asignacion-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--badge-green-bg, #D1FAE5);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--badge-green-text, #065F46);
+}
+
+.prog-observaciones {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.prog-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+/* =====================================================
+   HELPERS
+   ===================================================== */
+
+.text-muted {
+  color: var(--text-tertiary);
+}
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .prog-modal {
+    width: 95%;
+    max-height: 90vh;
+  }
+
+  .prog-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .prog-modal-footer {
+    flex-direction: column;
+  }
+
+  .prog-modal-footer button {
+    width: 100%;
+    justify-content: center;
+  }
+}
