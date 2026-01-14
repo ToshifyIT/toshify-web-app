@@ -32,11 +32,6 @@ interface Conductor {
   numero_dni: string
 }
 
-interface Usuario {
-  id: string
-  full_name: string
-}
-
 interface Props {
   onClose: () => void
   onSuccess: () => void
@@ -54,7 +49,6 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
   // Datos para selects
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
-  const [especialistas, setEspecialistas] = useState<Usuario[]>([])
 
   // Busquedas
   const [vehiculoEntregarSearch, setVehiculoEntregarSearch] = useState('')
@@ -88,7 +82,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
         grupo_whatsapp: editingData.grupo_whatsapp || false,
         citado_ypf: editingData.citado_ypf || false,
         estado_cabify: editingData.estado_cabify || 'pendiente',
-        especialista_id: editingData.especialista_id || user?.id,
+        especialista_nombre: editingData.especialista_nombre || '',
         observaciones: editingData.observaciones || '',
         ...initialData
       }
@@ -116,7 +110,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
       grupo_whatsapp: false,
       citado_ypf: false,
       estado_cabify: 'pendiente',
-      especialista_id: user?.id,
+        especialista_nombre: '',
       observaciones: '',
       ...initialData
     }
@@ -130,15 +124,13 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
   async function loadData() {
     setLoading(true)
     try {
-      const [vehiculosRes, conductoresRes, usuariosRes] = await Promise.all([
+      const [vehiculosRes, conductoresRes] = await Promise.all([
         supabase.from('vehiculos').select('id, patente, marca, modelo, color').order('patente'),
-        supabase.from('conductores').select('id, nombres, apellidos, numero_dni').order('apellidos'),
-        supabase.from('profiles').select('id, full_name').order('full_name')
+        supabase.from('conductores').select('id, nombres, apellidos, numero_dni').order('apellidos')
       ])
 
       setVehiculos(vehiculosRes.data || [])
       setConductores(conductoresRes.data || [])
-      setEspecialistas((usuariosRes.data || []).map((u: any) => ({ id: u.id, full_name: u.full_name })))
     } catch (error) {
       console.error('Error cargando datos:', error)
     } finally {
@@ -226,8 +218,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
       const dataToSave = {
         ...formData,
         // Si modalidad es CARGO, limpiar el turno
-        turno: formData.modalidad === 'CARGO' ? null : formData.turno,
-        especialista_nombre: especialistas.find(e => e.id === formData.especialista_id)?.full_name
+        turno: formData.modalidad === 'CARGO' ? null : formData.turno
       }
 
       if (isEditing && editingData) {
@@ -614,15 +605,12 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
                     </div>
                     <div className="form-group">
                       <label>Especialista</label>
-                      <select
-                        value={formData.especialista_id || ''}
-                        onChange={e => setFormData(prev => ({ ...prev, especialista_id: e.target.value }))}
-                      >
-                        <option value="">Seleccionar</option>
-                        {especialistas.map(esp => (
-                          <option key={esp.id} value={esp.id}>{esp.full_name}</option>
-                        ))}
-                      </select>
+                      <input
+                        type="text"
+                        value={formData.especialista_nombre || ''}
+                        onChange={e => setFormData(prev => ({ ...prev, especialista_nombre: e.target.value }))}
+                        placeholder="Nombre del especialista..."
+                      />
                     </div>
                   </div>
 

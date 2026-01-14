@@ -4,8 +4,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { 
   Car, User, Calendar, FileText, Plus,
-  Eye, Edit2, Trash2, CheckCircle, XCircle, Send,
-  MessageCircle, Phone, ClipboardList, UserPlus
+  Eye, Trash2, CheckCircle, XCircle, Send,
+  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -31,6 +31,57 @@ const TIPO_ASIGNACION_LABELS: Record<string, string> = {
   asignacion_companero: 'Asignacion Companero'
 }
 
+// Labels para mensajes de agenda
+const TIPO_ASIGNACION_MSG: Record<string, string> = {
+  entrega_auto: 'Entrega de auto',
+  cambio_auto: 'Cambio de auto',
+  asignacion_companero: 'Asignacion de companero'
+}
+
+// Funcion para generar mensaje de agenda
+function generarMensajeAgenda(prog: ProgramacionOnboardingCompleta): string {
+  const tipoMsg = TIPO_ASIGNACION_MSG[prog.tipo_asignacion || ''] || 'Asignacion'
+  const conductor = prog.conductor_display || prog.conductor_nombre || 'SIN NOMBRE'
+  const patente = prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || 'N/A'
+  const zona = prog.zona || 'N/A'
+  const distancia = prog.distancia_minutos || 'N/A'
+  const documento = prog.tipo_documento === 'contrato' ? 'Contrato' : 
+                    prog.tipo_documento === 'anexo' ? 'Anexo' : 'N/A'
+  
+  // Formatear fecha
+  let fechaStr = 'N/A'
+  if (prog.fecha_cita) {
+    const fecha = new Date(prog.fecha_cita + 'T12:00:00')
+    const dias = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    const dia = dias[fecha.getDay()]
+    fechaStr = `${dia} ${fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+  }
+  
+  const hora = prog.hora_cita?.substring(0, 5) || 'N/A'
+  
+  // Turno de la fila (diurno/nocturno) o vacio si es A CARGO
+  const turnoEmoji = prog.turno === 'diurno' ? '🌞' : prog.turno === 'nocturno' ? '🌙' : ''
+  const turnoLabel = prog.turno === 'diurno' ? 'Diurno' : prog.turno === 'nocturno' ? 'Nocturno' : ''
+  
+  // Generar mensaje unico por fila
+  let mensaje = `– ${tipoMsg} a ${conductor.toUpperCase()}
+🗓️ Fecha: ${fechaStr}
+🕓 Hora: ${hora}
+🚗 Auto asignado: ${patente}`
+
+  // Agregar turno solo si tiene (modalidad TURNO)
+  if (turnoLabel) {
+    mensaje += `\n${turnoEmoji} Turno: ${turnoLabel}`
+  }
+
+  mensaje += `
+📍 Ubicacion: ${zona}
+👥 Distancia: ${distancia} minutos
+📄 Documento: ${documento}`
+
+  return mensaje
+}
+
 export function ProgramacionModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
@@ -50,6 +101,15 @@ export function ProgramacionModule() {
   const [showWizard, setShowWizard] = useState(false)
   const [editingProgramacion, setEditingProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
   const [previewProgramacion, setPreviewProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
+  
+  // Modal cambiar estado
+  const [showEstadoModal, setShowEstadoModal] = useState(false)
+  const [estadoModalProg, setEstadoModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
+  const [nuevoEstado, setNuevoEstado] = useState('')
+  
+  // Modal copiar mensaje
+  const [showMensajeModal, setShowMensajeModal] = useState(false)
+  const [mensajeModalProg, setMensajeModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
 
   // Cargar programaciones
   const loadProgramaciones = async () => {
@@ -104,6 +164,67 @@ export function ProgramacionModule() {
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al eliminar', 'error')
       }
+    }
+  }
+
+  // Abrir modal cambiar estado
+  const handleCambiarEstado = (prog: ProgramacionOnboardingCompleta) => {
+    setEstadoModalProg(prog)
+    setNuevoEstado(prog.estado)
+    setShowEstadoModal(true)
+  }
+
+  // Guardar nuevo estado
+  const handleGuardarEstado = async () => {
+    if (!estadoModalProg || !nuevoEstado) return
+    
+    if (nuevoEstado === estadoModalProg.estado) {
+      setShowEstadoModal(false)
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('programaciones_onboarding')
+        .update({ estado: nuevoEstado })
+        .eq('id', estadoModalProg.id)
+
+      if (error) throw error
+
+      // Actualizar estado local
+      setProgramaciones(prev => prev.map(p => 
+        p.id === estadoModalProg.id ? { ...p, estado: nuevoEstado } : p
+      ))
+
+      setShowEstadoModal(false)
+      Swal.fire({
+        icon: 'success',
+        title: 'Estado actualizado',
+        timer: 1500,
+        showConfirmButton: false
+      })
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'Error al cambiar estado', 'error')
+    }
+  }
+
+  // Abrir modal copiar mensaje
+  const handleCopiarMensaje = (prog: ProgramacionOnboardingCompleta) => {
+    setMensajeModalProg(prog)
+    setShowMensajeModal(true)
+  }
+
+  // Copiar al portapapeles
+  const handleCopiarAlPortapapeles = async () => {
+    if (!mensajeModalProg) return
+    const mensaje = generarMensajeAgenda(mensajeModalProg)
+    
+    try {
+      await navigator.clipboard.writeText(mensaje)
+      setShowMensajeModal(false)
+    } catch (err) {
+      // Si falla el clipboard, el usuario puede copiar manualmente del preview
+      console.error('Error copiando:', err)
     }
   }
 
@@ -292,26 +413,7 @@ export function ProgramacionModule() {
         </span>
       )
     },
-    {
-      id: 'checklist',
-      header: 'Checklist',
-      cell: ({ row }) => (
-        <div className="prog-checklist">
-          <div className={`prog-check-item ${row.original.grupo_whatsapp ? 'checked' : ''}`} title="Grupo WhatsApp">
-            <MessageCircle size={12} />
-          </div>
-          <div className={`prog-check-item ${row.original.citado_ypf ? 'checked' : ''}`} title="Citado">
-            <Phone size={12} />
-          </div>
-          <div className={`prog-check-item ${row.original.documento_listo ? 'checked' : ''}`} title="Documento">
-            <FileText size={12} />
-          </div>
-          <div className={`prog-check-item ${row.original.confirmacion_asistencia === 'confirmo' ? 'checked' : ''}`} title="Confirmo">
-            <CheckCircle size={12} />
-          </div>
-        </div>
-      )
-    },
+
     {
       id: 'acciones',
       header: 'Acciones',
@@ -325,12 +427,27 @@ export function ProgramacionModule() {
             <Eye size={16} />
           </button>
           <button
+            className="prog-btn prog-btn-estado"
+            title="Cambiar estado"
+            onClick={() => handleCambiarEstado(row.original)}
+            disabled={!!row.original.asignacion_id}
+          >
+            <ArrowRightLeft size={16} />
+          </button>
+          <button
+            className="prog-btn prog-btn-copy"
+            title="Generar mensaje WhatsApp"
+            onClick={() => handleCopiarMensaje(row.original)}
+          >
+            <MessageSquareText size={16} />
+          </button>
+          <button
             className="prog-btn prog-btn-edit"
             title="Editar"
             onClick={() => handleEdit(row.original)}
             disabled={!!row.original.asignacion_id}
           >
-            <Edit2 size={16} />
+            <Pencil size={16} />
           </button>
           <button
             className="prog-btn prog-btn-delete"
@@ -451,12 +568,12 @@ export function ProgramacionModule() {
         emptyDescription={canCreate ? "Crea una nueva programacion para comenzar" : "No tienes programaciones asignadas"}
         pageSize={20}
         pageSizeOptions={[10, 20, 50, 100]}
-        headerAction={canCreate ? (
+        headerAction={(
           <button className="btn-primary" onClick={() => setShowWizard(true)}>
             <Plus size={16} />
-            Nueva Programacion
+            Nueva Programación
           </button>
-        ) : undefined}
+        )}
       />
 
       {/* Wizard Modal */}
@@ -595,7 +712,7 @@ export function ProgramacionModule() {
                       handleEdit(previewProgramacion)
                     }}
                   >
-                    <Edit2 size={16} />
+                    <Pencil size={16} />
                     Editar
                   </button>
                   <button 
@@ -609,6 +726,81 @@ export function ProgramacionModule() {
                   </button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Cambiar Estado */}
+      {showEstadoModal && estadoModalProg && (
+        <div className="prog-modal-overlay" onClick={() => setShowEstadoModal(false)}>
+          <div className="prog-modal prog-modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="prog-modal-header">
+              <h2>Cambiar Estado</h2>
+              <button onClick={() => setShowEstadoModal(false)}>
+                <XCircle size={20} />
+              </button>
+            </div>
+            <div className="prog-modal-body">
+              <div className="prog-modal-info">
+                <p><strong>Conductor:</strong> {estadoModalProg.conductor_display || estadoModalProg.conductor_nombre || 'Sin conductor'}</p>
+                <p><strong>Vehiculo:</strong> {estadoModalProg.vehiculo_entregar_patente || '-'}</p>
+                <p><strong>Estado actual:</strong> <span className={`prog-estado-badge ${estadoModalProg.estado}`}>{ESTADO_LABELS[estadoModalProg.estado]}</span></p>
+              </div>
+              <div className="form-group">
+                <label>Nuevo Estado</label>
+                <select 
+                  value={nuevoEstado} 
+                  onChange={e => setNuevoEstado(e.target.value)}
+                  className="form-select"
+                >
+                  <option value="por_agendar">Por Agendar</option>
+                  <option value="agendado">Agendado</option>
+                  <option value="en_curso">En Curso</option>
+                  <option value="completado">Completado</option>
+                </select>
+              </div>
+            </div>
+            <div className="prog-modal-footer">
+              <button className="btn-secondary" onClick={() => setShowEstadoModal(false)}>
+                Cancelar
+              </button>
+              <button className="btn-primary" onClick={handleGuardarEstado}>
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Copiar Mensaje */}
+      {showMensajeModal && mensajeModalProg && (
+        <div className="prog-modal-overlay" onClick={() => setShowMensajeModal(false)}>
+          <div className="prog-modal" onClick={e => e.stopPropagation()}>
+            <div className="prog-modal-header">
+              <h2>Mensaje de Agenda</h2>
+              <button onClick={() => setShowMensajeModal(false)}>
+                <XCircle size={20} />
+              </button>
+            </div>
+            <div className="prog-modal-body">
+              <div className="prog-modal-info">
+                <p><strong>Conductor:</strong> {mensajeModalProg.conductor_display || mensajeModalProg.conductor_nombre}</p>
+                <p><strong>Modalidad:</strong> {mensajeModalProg.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
+                {mensajeModalProg.turno && <p><strong>Turno:</strong> {mensajeModalProg.turno === 'diurno' ? 'Diurno' : 'Nocturno'}</p>}
+              </div>
+              <div className="prog-mensaje-preview">
+                <pre>{generarMensajeAgenda(mensajeModalProg)}</pre>
+              </div>
+            </div>
+            <div className="prog-modal-footer">
+              <button className="btn-secondary" onClick={() => setShowMensajeModal(false)}>
+                Cerrar
+              </button>
+              <button className="btn-primary" onClick={handleCopiarAlPortapapeles}>
+                <Copy size={16} />
+                Copiar Mensaje
+              </button>
             </div>
           </div>
         </div>

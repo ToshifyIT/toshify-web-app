@@ -537,3 +537,109 @@
     justify-content: center;
   }
 }
+
+/* =====================================================
+   BOTONES ADICIONALES
+   ===================================================== */
+
+/* Botón Cambiar Estado */
+.prog-btn-estado {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-estado:hover:not(:disabled) {
+  color: #F59E0B;
+  background: #FEF3C7;
+}
+
+/* Botón Copiar */
+.prog-btn-copy {
+  color: var(--text-tertiary);
+}
+
+.prog-btn-copy:hover:not(:disabled) {
+  color: #8B5CF6;
+  background: #EDE9FE;
+}
+
+/* =====================================================
+   MODAL PEQUEÑO (para cambiar estado)
+   ===================================================== */
+
+.prog-modal-sm {
+  max-width: 400px;
+}
+
+.prog-modal-info {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.prog-modal-info p {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.prog-modal-info p:last-child {
+  margin-bottom: 0;
+}
+
+.prog-modal-info strong {
+  color: var(--text-primary);
+}
+
+/* Form Select dentro del modal */
+.prog-modal .form-group {
+  margin-bottom: 0;
+}
+
+.prog-modal .form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.prog-modal .form-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.prog-modal .form-select:focus {
+  outline: none;
+  border-color: #DC2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+/* =====================================================
+   PREVIEW MENSAJE (para copiar mensaje)
+   ===================================================== */
+
+.prog-mensaje-preview {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.prog-mensaje-preview pre {
+  margin: 0;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--text-primary);
+}
