@@ -933,12 +933,9 @@ function SiniestroForm({
   disabled,
   isEditMode = false
 }: SiniestroFormProps) {
-  // En modo edición solo se puede modificar estado_id y responsable
-  const isFieldDisabled = (fieldName: string) => {
-    if (disabled) return true
-    if (!isEditMode) return false
-    // En modo edición, solo estado_id y responsable son editables
-    return !['estado_id', 'responsable'].includes(fieldName)
+  // Todos los campos son editables en modo edición
+  const isFieldDisabled = (_fieldName: string) => {
+    return disabled || false
   }
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
