@@ -159,6 +159,7 @@ export interface ProgramacionOnboardingFormData {
   
   // Especialista
   especialista_id?: string
+  especialista_nombre?: string
   
   // Observaciones
   observaciones?: string

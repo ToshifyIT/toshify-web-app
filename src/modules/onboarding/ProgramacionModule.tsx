@@ -184,8 +184,8 @@ export function ProgramacionModule() {
     }
 
     try {
-      const { error } = await supabase
-        .from('programaciones_onboarding')
+      const { error } = await (supabase
+        .from('programaciones_onboarding') as any)
         .update({ estado: nuevoEstado })
         .eq('id', estadoModalProg.id)
 
@@ -193,7 +193,7 @@ export function ProgramacionModule() {
 
       // Actualizar estado local
       setProgramaciones(prev => prev.map(p => 
-        p.id === estadoModalProg.id ? { ...p, estado: nuevoEstado } : p
+        p.id === estadoModalProg.id ? { ...p, estado: nuevoEstado as EstadoKanban } : p
       ))
 
       setShowEstadoModal(false)
