@@ -84,7 +84,7 @@ function generarMensajeAgenda(prog: ProgramacionOnboardingCompleta): string {
 
 export function ProgramacionModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const canCreate = canCreateInMenu('programacion-entregas')
   const canEdit = canEditInMenu('programacion-entregas')
   const canDelete = canDeleteInMenu('programacion-entregas')
@@ -273,11 +273,13 @@ export function ProgramacionModule() {
         .insert({
           codigo,
           vehiculo_id: prog.vehiculo_entregar_id,
-          horario: prog.modalidad || 'CARGO',
-          fecha_programada: prog.fecha_cita ? `${prog.fecha_cita}T${prog.hora_cita || '10:00'}:00` : new Date().toISOString(),
+          modalidad: prog.turno ? 'turno' : 'a_cargo',
+          horario: prog.turno ? 'TURNO' : 'CARGO',
+          fecha_programada: prog.fecha_cita ? `${prog.fecha_cita}T${(prog.hora_cita || '10:00').substring(0, 5)}:00` : new Date().toISOString(),
           estado: 'programado',
           notas: prog.observaciones || `Creado desde programacion. Tipo: ${TIPO_ASIGNACION_LABELS[prog.tipo_asignacion || ''] || prog.tipo_asignacion}`,
-          created_by: profile?.full_name || 'Sistema'
+          created_by: user?.id || null,
+          created_by_name: profile?.full_name || 'Sistema'
         })
         .select()
         .single()
@@ -425,6 +427,14 @@ export function ProgramacionModule() {
             onClick={() => setPreviewProgramacion(row.original)}
           >
             <Eye size={16} />
+          </button>
+          <button
+            className="prog-btn prog-btn-send"
+            title="Enviar a Entrega"
+            onClick={() => handleEnviarAEntrega(row.original)}
+            disabled={!!row.original.asignacion_id}
+          >
+            <Send size={16} />
           </button>
           <button
             className="prog-btn prog-btn-estado"
