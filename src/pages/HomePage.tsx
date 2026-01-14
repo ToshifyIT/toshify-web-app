@@ -188,13 +188,17 @@ export function HomePage() {
         .sidebar-logo {
           display: flex;
           flex-direction: column;
-          align-items: flex-start;
+          align-items: center;
+          justify-content: center;
           gap: 4px;
+          overflow: hidden;
         }
 
         .sidebar-logo-img {
-          height: 22px;
+          height: 140px;
           width: auto;
+          object-fit: contain;
+          margin: -45px 0;
         }
 
         .sidebar-logo-subtitle {
