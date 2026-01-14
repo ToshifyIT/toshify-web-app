@@ -1,12 +1,13 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, Plus, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
+// KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
 import './AsignacionesModule.css'
 
@@ -61,9 +62,8 @@ interface ExpandedAsignacion extends Asignacion {
 }
 
 export function AsignacionesModule() {
-  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+  const { canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
-  const canCreate = canCreateInMenu('asignaciones')
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
 
@@ -84,6 +84,8 @@ export function AsignacionesModule() {
   const [vehiculosData, setVehiculosData] = useState<Array<{ id: string; estado_id: string; estadoCodigo?: string }>>([])
   const [conductoresData, setConductoresData] = useState<Array<{ id: string; estadoCodigo?: string }>>([])
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
+  
+  // Programacion de entregas movida a /onboarding/programacion
 
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (elimina 14+ queries)
   const calculatedStats = useMemo(() => {
@@ -309,6 +311,7 @@ export function AsignacionesModule() {
     loadAllData()
   }, [])
 
+  // Programacion de entregas movida a /onboarding/programacion
 
   // Filtrar solo por stat cards - los filtros de columna los maneja DataTable automáticamente
   // IMPORTANTE: Los filtros deben coincidir EXACTAMENTE con lo que cuentan los stats
@@ -998,7 +1001,7 @@ export function AsignacionesModule() {
         </div>
       </div>
 
-      {/* DataTable with integrated action button */}
+      {/* DataTable - sin boton de crear, se crea desde Programacion/Kanban */}
       <DataTable
         data={expandedAsignaciones}
         columns={columns}
@@ -1007,20 +1010,9 @@ export function AsignacionesModule() {
         searchPlaceholder="Buscar por vehículo, conductor o número..."
         emptyIcon={<FileText size={48} />}
         emptyTitle="No hay asignaciones"
-        emptyDescription="Crea la primera asignación usando el botón 'Nueva Asignación'"
+        emptyDescription="Las asignaciones se crean desde la pestaña Programacion"
         pageSize={20}
         pageSizeOptions={[10, 20, 50, 100]}
-        headerAction={
-          <button
-            className="btn-primary"
-            onClick={() => setShowWizard(true)}
-            disabled={!canCreate}
-            title={!canCreate ? 'No tienes permisos para crear asignaciones' : 'Nueva Asignación'}
-          >
-            <Plus size={18} />
-            Nueva Asignación
-          </button>
-        }
         externalFilters={externalFilters}
       />
 
