@@ -29,6 +29,7 @@ import type {
   IncidenciaFormData,
   PenalidadCompleta,
   TipoPenalidad,
+  TipoCobroDescuento,
   PenalidadFormData,
   VehiculoSimple,
   ConductorSimple
@@ -96,6 +97,7 @@ export function IncidenciasModule() {
   const [penalidades, setPenalidades] = useState<PenalidadCompleta[]>([])
   const [estados, setEstados] = useState<IncidenciaEstado[]>([])
   const [tiposPenalidad, setTiposPenalidad] = useState<TipoPenalidad[]>([])
+  const [tiposCobroDescuento, setTiposCobroDescuento] = useState<TipoCobroDescuento[]>([])
   const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
 
@@ -212,6 +214,7 @@ export function IncidenciasModule() {
       const [
         estadosRes,
         tiposRes,
+        tiposCobroRes,
         vehiculosRes,
         conductoresRes,
         incidenciasRes,
@@ -220,16 +223,18 @@ export function IncidenciasModule() {
       ] = await Promise.all([
         (supabase.from('incidencias_estados' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('*').eq('is_active', true).order('orden'),
+        (supabase.from('tipos_cobro_descuento' as any) as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
         supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
         (supabase.from('v_incidencias_completas' as any) as any).select('*').order('fecha', { ascending: false }),
         (supabase.from('v_penalidades_completas' as any) as any).select('*').order('fecha', { ascending: false }),
         // Obtener el campo 'tipo' de la tabla incidencias
-        (supabase.from('incidencias' as any) as any).select('id, tipo')
+        (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id')
       ])
 
       setEstados(estadosRes.data || [])
       setTiposPenalidad(tiposRes.data || [])
+      setTiposCobroDescuento(tiposCobroRes.data || [])
       setVehiculos(vehiculosRes.data || [])
       setConductores((conductoresRes.data || []).map((c: any) => ({
         id: c.id,
@@ -239,11 +244,15 @@ export function IncidenciasModule() {
       })))
       
       // Combinar datos de la vista con el campo 'tipo' de la tabla
-      const tipoMap = new Map((incidenciasTipoRes.data || []).map((i: any) => [i.id, i.tipo]))
-      const incidenciasConTipo = (incidenciasRes.data || []).map((inc: any) => ({
-        ...inc,
-        tipo: tipoMap.get(inc.id) || 'cobro' // Default a 'cobro' si no tiene tipo
-      }))
+      const tipoMap = new Map<string, { tipo: string; tipo_cobro_descuento_id: string | null }>((incidenciasTipoRes.data || []).map((i: any) => [i.id, { tipo: i.tipo, tipo_cobro_descuento_id: i.tipo_cobro_descuento_id }]))
+      const incidenciasConTipo = (incidenciasRes.data || []).map((inc: any) => {
+        const tipoData = tipoMap.get(inc.id)
+        return {
+          ...inc,
+          tipo: tipoData?.tipo || 'cobro', // Default a 'cobro' si no tiene tipo
+          tipo_cobro_descuento_id: tipoData?.tipo_cobro_descuento_id || inc.tipo_cobro_descuento_id
+        }
+      })
       setIncidencias(incidenciasConTipo)
       setPenalidades(penalidadesRes.data || [])
 
@@ -773,10 +782,12 @@ export function IncidenciasModule() {
     const areaResponsable = getAreaResponsablePorRol(profile?.roles?.name)
     
     // Pre-llenar el formulario de penalidad con los datos de la incidencia
+    // Usar el tipo_cobro_descuento_id de la incidencia si existe
     setPenalidadForm({
       incidencia_id: incidencia.id,
       vehiculo_id: incidencia.vehiculo_id,
       conductor_id: incidencia.conductor_id,
+      tipo_cobro_descuento_id: incidencia.tipo_cobro_descuento_id, // Copiar el tipo desde la incidencia
       fecha: incidencia.fecha || getLocalDateString(),
       turno: incidencia.turno,
       area_responsable: areaResponsable || 'LOGISTICA',
@@ -816,7 +827,8 @@ export function IncidenciasModule() {
       accion_ejecutada: incidencia.accion_ejecutada,
       registrado_por: incidencia.registrado_por,
       conductor_nombre: incidencia.conductor_nombre,
-      vehiculo_patente: incidencia.vehiculo_patente
+      vehiculo_patente: incidencia.vehiculo_patente,
+      tipo_cobro_descuento_id: incidencia.tipo_cobro_descuento_id // Incluir el tipo
     })
     setModalMode('edit')
     setModalType('incidencia')
@@ -898,12 +910,21 @@ export function IncidenciasModule() {
     try {
       // Calcular semana basada en la fecha
       const semanaCalculada = getWeekNumber(incidenciaForm.fecha)
+      
+      // Para logística, el tipo_cobro_descuento_id viene con prefijo "__" (no es UUID)
+      // En ese caso, guardamos el valor en tipo_incidencia (legacy) y no en la FK
+      const tipoCobroId = incidenciaForm.tipo_cobro_descuento_id
+      const esLogisticaTipo = tipoCobroId?.startsWith('__')
+      
       const dataToSave = {
         ...incidenciaForm,
         semana: semanaCalculada,
         created_by: user?.id,
         tipo: esCobro ? 'cobro' : 'logistica',  // Asignar tipo según tab activo
-        monto_penalidades: esCobro ? incidenciaForm.monto : null  // Guardar monto en campo correcto
+        monto_penalidades: esCobro ? incidenciaForm.monto : null,  // Guardar monto en campo correcto
+        // Si es logística, guardar en tipo_incidencia (legacy), si es cobro guardar en tipo_cobro_descuento_id
+        tipo_incidencia: esLogisticaTipo ? tipoCobroId?.replace('__', '').replace(/_/g, ' ') : undefined,
+        tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null
       }
 
       if (modalMode === 'edit' && selectedIncidencia) {
@@ -1295,6 +1316,7 @@ export function IncidenciasModule() {
                   estados={estados}
                   vehiculos={vehiculos}
                   conductores={conductores}
+                  tiposCobroDescuento={tiposCobroDescuento}
                   disabled={saving}
                   esCobro={activeTab === 'cobro'}
                 />
@@ -1303,6 +1325,7 @@ export function IncidenciasModule() {
                   formData={penalidadForm}
                   setFormData={setPenalidadForm}
                   tiposPenalidad={tiposPenalidad}
+                  tiposCobroDescuento={tiposCobroDescuento}
                   vehiculos={vehiculos}
                   conductores={conductores}
                   disabled={saving}
@@ -1341,6 +1364,7 @@ interface IncidenciaFormProps {
   estados: IncidenciaEstado[]
   vehiculos: VehiculoSimple[]
   conductores: ConductorSimple[]
+  tiposCobroDescuento: TipoCobroDescuento[]
   disabled?: boolean
   esCobro?: boolean  // Indica si es incidencia de cobro (muestra campo monto)
 }
@@ -1352,7 +1376,7 @@ interface ConductorAsignado {
   turno: string // diurno, nocturno, todo_dia (de asignaciones_conductores)
 }
 
-function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, disabled, esCobro = false }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, disabled, esCobro = false }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -1601,48 +1625,57 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
           <div className="form-group">
             <label>Tipo de Incidencia <span className="required">*</span></label>
             <select 
-              value={formData.tipo_incidencia || ''} 
-              onChange={e => setFormData(prev => ({ ...prev, tipo_incidencia: e.target.value }))} 
+              value={formData.tipo_cobro_descuento_id || ''} 
+              onChange={e => setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: e.target.value || undefined }))} 
               disabled={disabled}
             >
               <option value="">Seleccionar</option>
               {esCobro ? (
-                // Tipos que generan COBRO (van a facturación)
+                // Tipos que generan COBRO - agrupados por categoría
                 <>
-                  <optgroup label="P006 - Exceso KM">
-                    <option value="Exceso de kilometraje">Exceso de kilometraje</option>
-                  </optgroup>
-                  <optgroup label="P004 - Tickets a Favor">
-                    <option value="Bono 5% ventas">Bono 5% ventas</option>
-                    <option value="Bono por evento Toshify">Bono por evento Toshify</option>
-                    <option value="Tickets de peajes">Tickets de peajes</option>
-                    <option value="Comision referidos">Comisión referidos</option>
-                  </optgroup>
-                  <optgroup label="P007 - Multas/Penalidades">
-                    <option value="Entrega tardia del vehiculo">Entrega tardía del vehículo</option>
-                    <option value="Llegada tarde revision tecnica">Llegada tarde o inasistencia a revisión técnica</option>
-                    <option value="Ingreso a zonas restringidas">Ingreso a zonas restringidas</option>
-                    <option value="Falta de lavado">Falta de lavado</option>
-                    <option value="Falta de restitucion de la unidad">Falta de restitución de la unidad</option>
-                    <option value="Perdida o dano elementos seguridad">Pérdida o daño de elementos de seguridad</option>
-                    <option value="Falta restitucion de GNC">Falta restitución de GNC</option>
-                    <option value="Falta restitucion de Nafta">Falta restitución de Nafta</option>
-                    <option value="Mora en canon">Mora en canon</option>
-                  </optgroup>
+                  {/* P006 - Exceso KM */}
+                  {tiposCobroDescuento.filter(t => t.categoria === 'P006').length > 0 && (
+                    <optgroup label="P006 - Exceso KM">
+                      {tiposCobroDescuento.filter(t => t.categoria === 'P006').map(tipo => (
+                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {/* P004 - Tickets a Favor */}
+                  {tiposCobroDescuento.filter(t => t.categoria === 'P004').length > 0 && (
+                    <optgroup label="P004 - Tickets a Favor">
+                      {tiposCobroDescuento.filter(t => t.categoria === 'P004').map(tipo => (
+                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {/* P007 - Multas/Penalidades */}
+                  {tiposCobroDescuento.filter(t => t.categoria === 'P007').length > 0 && (
+                    <optgroup label="P007 - Multas/Penalidades">
+                      {tiposCobroDescuento.filter(t => t.categoria === 'P007').map(tipo => (
+                        <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {/* Sin categoría */}
+                  {tiposCobroDescuento.filter(t => !t.categoria).map(tipo => (
+                    <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                  ))}
                 </>
               ) : (
-                // Tipos de LOGÍSTICA (no generan cobro)
+                // Tipos de LOGÍSTICA (no generan cobro) - mostrar los que NO son a favor (penalidades generales)
                 <>
-                  <option value="Manipulacion no autorizada de GPS">Manipulación no autorizada de GPS</option>
-                  <option value="Abandono del vehiculo">Abandono del vehículo</option>
-                  <option value="No disponer lugar seguro guarda">No disponer de lugar seguro para guarda</option>
-                  <option value="I button">I button</option>
-                  <option value="Multa de transito">Multa de tránsito</option>
-                  <option value="Reparacion Siniestro">Reparación Siniestro</option>
-                  <option value="Falta de reporte Intercom">Falta de reporte (Intercom)</option>
-                  <option value="Vehiculo en taller">Vehículo en taller</option>
-                  <option value="Conductor no se presento">Conductor no se presentó</option>
-                  <option value="Otro">Otro</option>
+                  <option value="">Seleccionar</option>
+                  <option value="__MANIPULACION_GPS">Manipulación no autorizada de GPS</option>
+                  <option value="__ABANDONO_VEHICULO">Abandono del vehículo</option>
+                  <option value="__SIN_LUGAR_GUARDA">No disponer de lugar seguro para guarda</option>
+                  <option value="__IBUTTON">I button</option>
+                  <option value="__MULTA_TRANSITO">Multa de tránsito</option>
+                  <option value="__REPARACION_SINIESTRO">Reparación Siniestro</option>
+                  <option value="__FALTA_REPORTE">Falta de reporte (Intercom)</option>
+                  <option value="__VEHICULO_TALLER">Vehículo en taller</option>
+                  <option value="__CONDUCTOR_NO_PRESENTO">Conductor no se presentó</option>
+                  <option value="__OTRO">Otro</option>
                 </>
               )}
             </select>
