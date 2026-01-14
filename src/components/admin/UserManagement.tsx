@@ -490,8 +490,8 @@ export function UserManagement() {
         emptyIcon={<Users size={48} />}
         emptyTitle="No hay usuarios registrados"
         emptyDescription="Crea el primero usando el botón '+ Crear Usuario'"
-        pageSize={10}
-        pageSizeOptions={[10, 20, 30, 50]}
+pageSize={100}
+        pageSizeOptions={[10, 20, 50, 100]}
         headerAction={
           <button
             className="btn-primary"

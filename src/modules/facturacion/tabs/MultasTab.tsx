@@ -709,7 +709,7 @@ export function MultasTab() {
         emptyIcon={<AlertTriangle size={48} />}
         emptyTitle="Sin multas registradas"
         emptyDescription="No hay multas de transito. Use el boton 'Registrar Multa' para agregar una."
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
       />
     </>

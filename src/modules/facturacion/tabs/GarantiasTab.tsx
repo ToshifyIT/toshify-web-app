@@ -520,7 +520,7 @@ export function GarantiasTab() {
         emptyIcon={<Shield size={48} />}
         emptyTitle="Sin garantías"
         emptyDescription="No hay garantías registradas"
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
       />
     </>

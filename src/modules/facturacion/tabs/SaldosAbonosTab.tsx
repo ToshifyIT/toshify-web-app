@@ -487,7 +487,7 @@ export function SaldosAbonosTab() {
         emptyIcon={<Wallet size={48} />}
         emptyTitle="Sin saldos"
         emptyDescription="No hay saldos registrados"
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
       />
     </>

@@ -644,7 +644,7 @@ export function TicketsFavorTab() {
         emptyIcon={<Ticket size={48} />}
         emptyTitle="Sin tickets"
         emptyDescription="No hay tickets registrados"
-        pageSize={20}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
       />
     </>

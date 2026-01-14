@@ -546,8 +546,8 @@ export function ConceptosTab() {
         emptyIcon={<Package size={48} />}
         emptyTitle="No hay conceptos"
         emptyDescription="Agregue un nuevo concepto de nómina"
-        pageSize={20}
-        pageSizeOptions={[10, 20, 50]}
+        pageSize={100}
+        pageSizeOptions={[10, 20, 50, 100]}
         headerAction={
           <button className="nom-btn-primary" onClick={handleCreate}>
             <Plus size={16} />
