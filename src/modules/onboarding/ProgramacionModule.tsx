@@ -13,6 +13,7 @@ import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { ProgramacionWizard } from '../asignaciones/components/ProgramacionWizard'
+import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
 import type { ProgramacionOnboardingCompleta, EstadoKanban } from '../../types/onboarding.types'
 import Swal from 'sweetalert2'
 import './ProgramacionModule.css'
@@ -98,7 +99,8 @@ export function ProgramacionModule() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
   
   // Modals
-  const [showWizard, setShowWizard] = useState(false)
+  const [showCreateWizard, setShowCreateWizard] = useState(false)
+  const [showEditWizard, setShowEditWizard] = useState(false)
   const [editingProgramacion, setEditingProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
   const [previewProgramacion, setPreviewProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
   
@@ -135,9 +137,13 @@ export function ProgramacionModule() {
   }, [])
 
   // Handlers
+  const handleCreate = () => {
+    setShowCreateWizard(true)
+  }
+
   const handleEdit = (prog: ProgramacionOnboardingCompleta) => {
     setEditingProgramacion(prog)
-    setShowWizard(true)
+    setShowEditWizard(true)
   }
 
   const handleDelete = async (id: string) => {
@@ -579,23 +585,34 @@ export function ProgramacionModule() {
         pageSize={20}
         pageSizeOptions={[10, 20, 50, 100]}
         headerAction={(
-          <button className="btn-primary" onClick={() => setShowWizard(true)}>
+          <button className="btn-primary" onClick={handleCreate}>
             <Plus size={16} />
             Nueva Programación
           </button>
         )}
       />
 
-      {/* Wizard Modal */}
-      {showWizard && (
+      {/* Wizard Modal para CREAR (nuevo diseño visual) */}
+      {showCreateWizard && (
+        <ProgramacionAssignmentWizard
+          onClose={() => setShowCreateWizard(false)}
+          onSuccess={() => {
+            loadProgramaciones()
+            setShowCreateWizard(false)
+          }}
+        />
+      )}
+
+      {/* Wizard Modal para EDITAR (wizard existente) */}
+      {showEditWizard && (
         <ProgramacionWizard
           onClose={() => {
-            setShowWizard(false)
+            setShowEditWizard(false)
             setEditingProgramacion(null)
           }}
           onSuccess={() => {
             loadProgramaciones()
-            setShowWizard(false)
+            setShowEditWizard(false)
             setEditingProgramacion(null)
           }}
           editingData={editingProgramacion}
