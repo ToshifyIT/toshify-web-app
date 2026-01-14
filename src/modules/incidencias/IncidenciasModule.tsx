@@ -1663,18 +1663,24 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                   ))}
                 </>
               ) : (
-                // Tipos de LOGÍSTICA (no generan cobro) - mostrar los que NO son a favor (penalidades generales)
+                // Tipos de LOGÍSTICA (no generan cobro)
                 <>
-                  <option value="">Seleccionar</option>
+                  <option value="__ENTREGA_TARDIA">Entrega tardía del vehículo</option>
+                  <option value="__LLEGADA_TARDE_REVISION">Llegada tarde o inasistencia injustificada a revisión técnica</option>
+                  <option value="__ZONAS_RESTRINGIDAS">Ingreso a zonas restringidas</option>
+                  <option value="__FALTA_LAVADO">Falta de lavado</option>
+                  <option value="__FALTA_RESTITUCION_UNIDAD">Falta de restitución de la unidad</option>
+                  <option value="__PERDIDA_DANO_SEGURIDAD">Pérdida o daño de elementos de seguridad</option>
+                  <option value="__FALTA_RESTITUCION_GNC">Falta restitución de GNC</option>
+                  <option value="__FALTA_RESTITUCION_NAFTA">Falta restitución de Nafta</option>
+                  <option value="__MORA_CANON">Mora en canon</option>
                   <option value="__MANIPULACION_GPS">Manipulación no autorizada de GPS</option>
                   <option value="__ABANDONO_VEHICULO">Abandono del vehículo</option>
-                  <option value="__SIN_LUGAR_GUARDA">No disponer de lugar seguro para guarda</option>
+                  <option value="__SIN_LUGAR_GUARDA">No disponer de lugar seguro para la guarda del vehículo</option>
                   <option value="__IBUTTON">I button</option>
                   <option value="__MULTA_TRANSITO">Multa de tránsito</option>
                   <option value="__REPARACION_SINIESTRO">Reparación Siniestro</option>
                   <option value="__FALTA_REPORTE">Falta de reporte (Intercom)</option>
-                  <option value="__VEHICULO_TALLER">Vehículo en taller</option>
-                  <option value="__CONDUCTOR_NO_PRESENTO">Conductor no se presentó</option>
                   <option value="__OTRO">Otro</option>
                 </>
               )}
