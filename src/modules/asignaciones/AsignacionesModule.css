@@ -1296,3 +1296,864 @@ input[type="date"].asig-status-select {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* =====================================================
+   TABS DE NAVEGACION
+   ===================================================== */
+
+.asig-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  width: fit-content;
+}
+
+.asig-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.asig-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.asig-tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* =====================================================
+   KANBAN CONTAINER
+   ===================================================== */
+
+.asig-kanban-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: calc(100vh - 160px);
+  min-height: 500px;
+}
+
+.asig-kanban-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--bg-primary);
+  border-radius: 8px 8px 0 0;
+  border: 1px solid var(--border-primary);
+  border-bottom: none;
+  flex-shrink: 0;
+}
+
+.asig-kanban-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.asig-kanban-header p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.asig-kanban-header .btn-primary {
+  flex-shrink: 0;
+}
+
+.asig-kanban-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-secondary);
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+/* =====================================================
+   KANBAN BOARD
+   ===================================================== */
+
+.kanban-board {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0 0 8px 8px;
+}
+
+.kanban-column {
+  flex: 1;
+  min-width: 250px;
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  transition: background 0.2s, box-shadow 0.2s;
+  border: 1px solid var(--border-primary);
+}
+
+.kanban-column.drag-over {
+  background: var(--bg-secondary);
+  box-shadow: inset 0 0 0 2px var(--primary-color, #F59E0B);
+}
+
+.kanban-column-header {
+  padding: 16px;
+  border-top: 4px solid #6B7280;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kanban-column-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.kanban-column-count {
+  background: #6B7280;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.kanban-column-content {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+}
+
+/* =====================================================
+   KANBAN CARD
+   ===================================================== */
+
+.kanban-card {
+  background: var(--bg-primary);
+  border-radius: 10px;
+  padding: 12px;
+  cursor: grab;
+  transition: box-shadow 0.2s, transform 0.2s;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.kanban-card:hover {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+.kanban-card.dragging {
+  opacity: 0.8;
+  transform: rotate(3deg) scale(1.02);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15), 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.kanban-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.kanban-card-vehicle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.kanban-card-menu {
+  position: relative;
+}
+
+.kanban-menu-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 4px;
+}
+
+.kanban-menu-btn:hover {
+  background: var(--bg-secondary);
+}
+
+.kanban-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  min-width: 150px;
+  overflow: hidden;
+}
+
+.kanban-menu-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.kanban-menu-dropdown button:hover {
+  background: var(--bg-secondary);
+}
+
+.kanban-menu-dropdown button.danger {
+  color: #EF4444;
+}
+
+.kanban-menu-dropdown button.danger:hover {
+  background: #FEE2E2;
+}
+
+.kanban-card-model {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.kanban-card-conductor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.kanban-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.kanban-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.kanban-tag.turno-diurno {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.kanban-tag.turno-nocturno {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.kanban-tag.candidato-nuevo {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.kanban-tag.candidato-antiguo {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+.kanban-tag.candidato-reingreso {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.kanban-tag.zona {
+  background: #EDE9FE;
+  color: #5B21B6;
+}
+
+.kanban-card-datetime {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.kanban-card-checklist {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.checklist-item {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+}
+
+.checklist-item.checked {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.kanban-card-tipo {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.kanban-card-asignacion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px;
+  background: #D1FAE5;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #059669;
+  font-weight: 500;
+}
+
+/* Empty state */
+.kanban-empty {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =====================================================
+   WIZARD STYLES (para ProgramacionWizard)
+   ===================================================== */
+
+.wizard-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.wizard-container {
+  background: var(--bg-primary);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wizard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wizard-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.wizard-close {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 8px;
+}
+
+.wizard-close:hover {
+  background: var(--bg-secondary);
+}
+
+.wizard-progress {
+  display: flex;
+  padding: 20px 24px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wizard-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.wizard-step .step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wizard-step.active .step-number {
+  background: var(--primary-color, #F59E0B);
+  color: white;
+}
+
+.wizard-step.current .step-number {
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+}
+
+.wizard-step .step-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.wizard-step.active .step-label {
+  color: var(--text-primary);
+}
+
+.wizard-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.wizard-step-content h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 20px 0;
+}
+
+.wizard-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-secondary);
+}
+
+.wizard-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Option cards para wizard */
+.option-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.option-cards.horizontal {
+  flex-direction: row;
+}
+
+.option-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.option-card:hover {
+  border-color: var(--primary-color, #F59E0B);
+  background: var(--bg-secondary);
+}
+
+.option-card.selected {
+  border-color: var(--primary-color, #F59E0B);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.option-card span {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+/* Form styles para wizard */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color, #F59E0B);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Searchable select */
+.searchable-select {
+  position: relative;
+}
+
+.searchable-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.searchable-option {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.searchable-option:hover {
+  background: var(--bg-secondary);
+}
+
+.clear-selection {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-secondary);
+  border: none;
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.clear-selection:hover {
+  background: var(--bg-tertiary);
+}
+
+/* =====================================================
+   PREVIEW MODAL - Modal de detalle de programacion
+   ===================================================== */
+
+.asig-preview-modal {
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.asig-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.asig-preview-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.asig-preview-close {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.asig-preview-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.asig-preview-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.asig-preview-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.asig-preview-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.asig-preview-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.asig-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.asig-preview-grid label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.asig-preview-value {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.asig-preview-value.highlight {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Checklist en preview */
+.asig-preview-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.asig-preview-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.asig-preview-check.checked {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.asig-preview-check .check-icon {
+  margin-left: auto;
+  color: #059669;
+}
+
+.asig-preview-check .x-icon {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+/* Observaciones */
+.asig-preview-observations {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+/* Metadatos */
+.asig-preview-meta {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px dashed var(--border-color);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Footer del preview */
+.asig-preview-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .asig-tabs {
+    width: 100%;
+  }
+  
+  .asig-tab {
+    flex: 1;
+    justify-content: center;
+    padding: 10px 12px;
+  }
+  
+  .asig-kanban-container {
+    height: auto;
+    min-height: calc(100vh - 200px);
+  }
+  
+  .asig-kanban-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .asig-kanban-header button {
+    width: 100%;
+  }
+  
+  .kanban-board {
+    flex-direction: column;
+  }
+  
+  .kanban-column {
+    max-width: 100%;
+    min-width: auto;
+  }
+  
+  .wizard-container {
+    width: 95%;
+    max-height: 95vh;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .asig-preview-modal {
+    max-width: 95%;
+    margin: 10px;
+  }
+  
+  .asig-preview-checklist {
+    grid-template-columns: 1fr;
+  }
+  
+  .asig-preview-meta {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
