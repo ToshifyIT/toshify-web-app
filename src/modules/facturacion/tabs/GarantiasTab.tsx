@@ -10,7 +10,8 @@ import {
   Eye,
   Plus,
   DollarSign,
-  Filter
+  Filter,
+  Edit3
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -177,6 +178,118 @@ export function GarantiasTab() {
       cargarGarantias()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
+    }
+  }
+
+  async function editarCuotas(garantia: GarantiaConductor) {
+    const { value: formValues } = await Swal.fire({
+      title: `<span style="font-size: 16px; font-weight: 600;">Editar Cuotas</span>`,
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
+            <div style="display: flex; gap: 12px; margin-top: 4px;">
+              <span style="color: #6B7280; font-size: 12px;">Tipo: <strong style="color: #374151;">${garantia.tipo_alquiler}</strong></span>
+            </div>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Cuotas Pagadas:</label>
+            <input id="swal-cuotas-pagadas" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${garantia.cuotas_pagadas}">
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Cuotas Totales:</label>
+            <input id="swal-cuotas-totales" type="number" min="1" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${garantia.cuotas_totales}">
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Pagado:</label>
+            <input id="swal-monto-pagado" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${garantia.monto_pagado}">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Total:</label>
+            <input id="swal-monto-total" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${garantia.monto_total}">
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280',
+      width: 340,
+      customClass: {
+        popup: 'swal-compact',
+        title: 'swal-title-compact',
+        htmlContainer: 'swal-html-compact'
+      },
+      preConfirm: () => {
+        const cuotasPagadas = parseInt((document.getElementById('swal-cuotas-pagadas') as HTMLInputElement).value)
+        const cuotasTotales = parseInt((document.getElementById('swal-cuotas-totales') as HTMLInputElement).value)
+        const montoPagado = parseFloat((document.getElementById('swal-monto-pagado') as HTMLInputElement).value)
+        const montoTotal = parseFloat((document.getElementById('swal-monto-total') as HTMLInputElement).value)
+
+        if (isNaN(cuotasPagadas) || cuotasPagadas < 0) {
+          Swal.showValidationMessage('Cuotas pagadas debe ser un número válido')
+          return false
+        }
+        if (isNaN(cuotasTotales) || cuotasTotales < 1) {
+          Swal.showValidationMessage('Cuotas totales debe ser al menos 1')
+          return false
+        }
+        if (cuotasPagadas > cuotasTotales) {
+          Swal.showValidationMessage('Cuotas pagadas no puede ser mayor que cuotas totales')
+          return false
+        }
+        if (isNaN(montoPagado) || montoPagado < 0) {
+          Swal.showValidationMessage('Monto pagado debe ser un número válido')
+          return false
+        }
+        if (isNaN(montoTotal) || montoTotal <= 0) {
+          Swal.showValidationMessage('Monto total debe ser mayor a 0')
+          return false
+        }
+
+        return { cuotasPagadas, cuotasTotales, montoPagado, montoTotal }
+      }
+    })
+
+    if (!formValues) return
+
+    try {
+      // Determinar nuevo estado basado en los valores
+      let nuevoEstado = garantia.estado
+      if (formValues.montoPagado >= formValues.montoTotal || formValues.cuotasPagadas >= formValues.cuotasTotales) {
+        nuevoEstado = 'completada'
+      } else if (formValues.montoPagado > 0 || formValues.cuotasPagadas > 0) {
+        nuevoEstado = 'en_curso'
+      } else {
+        nuevoEstado = 'pendiente'
+      }
+
+      const { error } = await supabase
+        .from('garantias_conductores')
+        .update({
+          cuotas_pagadas: formValues.cuotasPagadas,
+          cuotas_totales: formValues.cuotasTotales,
+          monto_pagado: formValues.montoPagado,
+          monto_total: formValues.montoTotal,
+          estado: nuevoEstado
+        })
+        .eq('id', garantia.id)
+
+      if (error) throw error
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Actualizado',
+        text: 'Los datos de la garantía han sido actualizados',
+        timer: 2000,
+        showConfirmButton: false
+      })
+
+      cargarGarantias()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo actualizar la garantía', 'error')
     }
   }
 
@@ -421,11 +534,14 @@ export function GarantiasTab() {
       header: '',
       cell: ({ row }) => (
         <div className="fact-table-actions">
-          <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} title="Ver historial">
+          <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
             <Eye size={14} />
           </button>
+          <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarCuotas(row.original)} data-tooltip="Editar">
+            <Edit3 size={14} />
+          </button>
           {row.original.estado !== 'completada' && (
-            <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarPago(row.original)} title="Registrar pago">
+            <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago">
               <Plus size={14} />
             </button>
           )}

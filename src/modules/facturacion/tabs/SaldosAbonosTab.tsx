@@ -11,7 +11,8 @@ import {
   Plus,
   DollarSign,
   Clock,
-  Filter
+  Filter,
+  Edit3
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -183,6 +184,92 @@ export function SaldosAbonosTab() {
       cargarSaldos()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar', 'error')
+    }
+  }
+
+  async function editarSaldo(saldo: SaldoConductor) {
+    const { value: formValues } = await Swal.fire({
+      title: `<span style="font-size: 16px; font-weight: 600;">Editar Saldo</span>`,
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Saldo Actual:</label>
+            <input id="swal-saldo" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.saldo_actual}">
+            <span style="font-size: 10px; color: #6B7280;">Positivo = A Favor | Negativo = Deuda</span>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Días en Mora:</label>
+            <input id="swal-dias-mora" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.dias_mora || 0}">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Mora Acumulada:</label>
+            <input id="swal-mora-acum" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.monto_mora_acumulada || 0}">
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280',
+      width: 340,
+      customClass: {
+        popup: 'swal-compact',
+        title: 'swal-title-compact',
+        htmlContainer: 'swal-html-compact'
+      },
+      preConfirm: () => {
+        const saldoActual = parseFloat((document.getElementById('swal-saldo') as HTMLInputElement).value)
+        const diasMora = parseInt((document.getElementById('swal-dias-mora') as HTMLInputElement).value) || 0
+        const moraAcumulada = parseFloat((document.getElementById('swal-mora-acum') as HTMLInputElement).value) || 0
+
+        if (isNaN(saldoActual)) {
+          Swal.showValidationMessage('Ingrese un saldo válido')
+          return false
+        }
+        if (diasMora < 0) {
+          Swal.showValidationMessage('Los días de mora no pueden ser negativos')
+          return false
+        }
+        if (moraAcumulada < 0) {
+          Swal.showValidationMessage('La mora acumulada no puede ser negativa')
+          return false
+        }
+
+        return { saldoActual, diasMora, moraAcumulada }
+      }
+    })
+
+    if (!formValues) return
+
+    try {
+      const { error } = await supabase
+        .from('saldos_conductores')
+        .update({
+          saldo_actual: formValues.saldoActual,
+          dias_mora: formValues.diasMora,
+          monto_mora_acumulada: formValues.moraAcumulada,
+          ultima_actualizacion: new Date().toISOString()
+        })
+        .eq('id', saldo.id)
+
+      if (error) throw error
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Actualizado',
+        text: 'El saldo ha sido actualizado correctamente',
+        timer: 2000,
+        showConfirmButton: false
+      })
+
+      cargarSaldos()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
     }
   }
 
@@ -378,10 +465,13 @@ export function SaldosAbonosTab() {
       header: '',
       cell: ({ row }) => (
         <div className="fact-table-actions">
-          <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} title="Ver historial">
+          <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
             <Eye size={14} />
           </button>
-          <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarAbono(row.original)} title="Registrar movimiento">
+          <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar">
+            <Edit3 size={14} />
+          </button>
+          <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarAbono(row.original)} data-tooltip="Registrar movimiento">
             <Plus size={14} />
           </button>
         </div>

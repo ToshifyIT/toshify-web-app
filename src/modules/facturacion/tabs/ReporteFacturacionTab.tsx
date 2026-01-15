@@ -2529,7 +2529,7 @@ export function ReporteFacturacionTab() {
         <button
           className="dt-btn-action dt-btn-view"
           onClick={(e) => { e.stopPropagation(); verDetalle(row.original) }}
-          title="Ver detalle completo"
+          data-tooltip="Ver detalle"
           style={{ padding: '6px' }}
         >
           <Eye size={14} />

@@ -11,6 +11,7 @@ import {
   CheckCircle,
   XCircle,
   Play,
+  RefreshCw,
   FileText,
   Users,
   DollarSign,
@@ -864,7 +865,7 @@ export function PeriodosTab() {
                 <button
                   className="fact-table-btn fact-table-btn-view"
                   onClick={() => verDetallePeriodo(sem)}
-                  title="Ver detalle"
+                  data-tooltip="Ver detalle"
                 >
                   <Eye size={14} />
                 </button>
@@ -873,14 +874,14 @@ export function PeriodosTab() {
                     <button
                       className="fact-table-btn fact-table-btn-edit"
                       onClick={() => generarFacturacion(sem)}
-                      title="Regenerar"
+                      data-tooltip="Recalcular"
                     >
-                      <Play size={14} />
+                      <RefreshCw size={14} />
                     </button>
                     <button
                       className="fact-table-btn fact-table-btn-delete"
                       onClick={() => cerrarPeriodo(sem)}
-                      title="Cerrar período"
+                      data-tooltip="Cerrar período"
                     >
                       <Lock size={14} />
                     </button>
@@ -890,7 +891,7 @@ export function PeriodosTab() {
                   <button
                     className="fact-table-btn fact-table-btn-success"
                     onClick={() => reabrirPeriodo(sem)}
-                    title="Reabrir período"
+                    data-tooltip="Reabrir período"
                   >
                     <Unlock size={14} />
                   </button>
