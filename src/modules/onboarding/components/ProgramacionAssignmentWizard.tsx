@@ -739,7 +739,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.conductor_nocturno_dni = null
         saveData.tipo_candidato_diurno = null
         saveData.tipo_candidato_nocturno = null
-        // tipo_asignacion_diurno y tipo_asignacion_nocturno no existen en BD aún
+        saveData.tipo_asignacion_diurno = null
+        saveData.tipo_asignacion_nocturno = null
         saveData.documento_diurno = null
         saveData.documento_nocturno = null
         saveData.zona_diurno = null
@@ -752,7 +753,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.conductor_diurno_nombre = formData.conductor_diurno_nombre || null
         saveData.conductor_diurno_dni = formData.conductor_diurno_dni || null
         saveData.tipo_candidato_diurno = formData.tipo_candidato_diurno || null
-        // tipo_asignacion_diurno no existe en BD aún
+        saveData.tipo_asignacion_diurno = formData.tipo_asignacion_diurno || null
         saveData.documento_diurno = formData.documento_diurno || null
         saveData.zona_diurno = formData.zona_diurno || null
         saveData.distancia_diurno = formData.distancia_diurno || null
@@ -761,7 +762,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.conductor_nocturno_nombre = formData.conductor_nocturno_nombre || null
         saveData.conductor_nocturno_dni = formData.conductor_nocturno_dni || null
         saveData.tipo_candidato_nocturno = formData.tipo_candidato_nocturno || null
-        // tipo_asignacion_nocturno no existe en BD aún
+        saveData.tipo_asignacion_nocturno = formData.tipo_asignacion_nocturno || null
         saveData.documento_nocturno = formData.documento_nocturno || null
         saveData.zona_nocturno = formData.zona_nocturno || null
         saveData.distancia_nocturno = formData.distancia_nocturno || null
@@ -770,7 +771,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.zona = formData.zona_diurno || formData.zona_nocturno
         // Tipo candidato general = primero disponible
         saveData.tipo_candidato = formData.tipo_candidato_diurno || formData.tipo_candidato_nocturno || null
-        // Tipo asignacion general = usar el primero seleccionado (columnas individuales no existen en BD)
+        // Tipo asignacion general = usar el primero seleccionado (para compatibilidad)
         saveData.tipo_asignacion = formData.tipo_asignacion_diurno || formData.tipo_asignacion_nocturno || 'entrega_auto'
         // Distancia general = primera disponible
         saveData.distancia_minutos = formData.distancia_diurno || formData.distancia_nocturno || null
