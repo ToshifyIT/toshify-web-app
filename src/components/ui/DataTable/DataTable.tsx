@@ -892,12 +892,42 @@ export function DataTable<T>({
 
   if (data.length === 0) {
     return (
-      <div className="dt-empty">
-        {emptyIcon && <div className="dt-empty-icon">{emptyIcon}</div>}
-        <h3 className="dt-empty-title">{emptyTitle}</h3>
-        {emptyDescription && (
-          <p className="dt-empty-description">{emptyDescription}</p>
+      <div className="dt-wrapper">
+        {/* Active Filters Bar - mostrar incluso cuando no hay datos */}
+        {hasActiveFilters && (
+          <div className="dt-active-filters">
+            <div className="dt-active-filters-label">
+              <Filter size={14} />
+              <span>Filtros activos:</span>
+            </div>
+            <div className="dt-active-filters-list">
+              {/* External filters (from stat cards) */}
+              {externalFilters.map(filter => (
+                <div key={filter.id} className="dt-active-filter-chip">
+                  <span className="dt-chip-value">{filter.label}</span>
+                  <button
+                    type="button"
+                    className="dt-chip-remove"
+                    onClick={filter.onClear}
+                    title="Quitar filtro"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button className="dt-clear-all-filters" onClick={clearAllFilters}>
+              Limpiar todo
+            </button>
+          </div>
         )}
+        <div className="dt-empty">
+          {emptyIcon && <div className="dt-empty-icon">{emptyIcon}</div>}
+          <h3 className="dt-empty-title">{emptyTitle}</h3>
+          {emptyDescription && (
+            <p className="dt-empty-description">{emptyDescription}</p>
+          )}
+        </div>
       </div>
     );
   }
