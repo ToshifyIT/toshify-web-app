@@ -378,6 +378,14 @@ export function AsignacionesModule() {
           a.asignaciones_conductores?.some(c => c.documento === 'ANEXO')
         )
         break
+      case 'entregasHoy':
+        // Entregas programadas para HOY - coincide con stat entregasHoy
+        result = result.filter(a => {
+          if (a.estado !== 'programado' || !a.fecha_programada) return false
+          const fecha = a.fecha_programada.split('T')[0]
+          return fecha === hoyStr
+        })
+        break
     }
 
     // Ordenar: programados primero, luego por fecha_programada ascendente
@@ -1118,7 +1126,11 @@ export function AsignacionesModule() {
               <span className="stat-label">Cond. Anexo</span>
             </div>
           </div>
-          <div className="stat-card stat-card-clickable" title="Entregas de vehículos programadas para hoy" onClick={() => setActiveStatCard(null)}>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'entregasHoy' ? 'stat-card-active' : ''}`}
+            title="Entregas de vehículos programadas para hoy"
+            onClick={() => handleStatCardClick('entregasHoy')}
+          >
             <Calendar size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.entregasHoy}</span>

@@ -6,7 +6,7 @@ import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
   ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw,
-  Check, X, MapPin
+  MapPin
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -1093,45 +1093,7 @@ export function ProgramacionModule() {
       }
     },
     // Columnas de gestión diaria
-    {
-      accessorKey: 'documento_listo',
-      header: 'Doc ✓',
-      cell: ({ row }) => (
-        <button
-          className={`prog-check-btn ${row.original.documento_listo ? 'checked' : ''}`}
-          onClick={() => handleUpdateField(row.original.id, 'documento_listo', !row.original.documento_listo)}
-          title={row.original.documento_listo ? 'Documento listo' : 'Documento pendiente'}
-        >
-          {row.original.documento_listo ? <Check size={14} /> : <X size={14} />}
-        </button>
-      )
-    },
-    {
-      accessorKey: 'grupo_whatsapp',
-      header: 'Wpp',
-      cell: ({ row }) => (
-        <button
-          className={`prog-check-btn ${row.original.grupo_whatsapp ? 'checked' : ''}`}
-          onClick={() => handleUpdateField(row.original.id, 'grupo_whatsapp', !row.original.grupo_whatsapp)}
-          title={row.original.grupo_whatsapp ? 'En grupo WhatsApp' : 'Sin grupo WhatsApp'}
-        >
-          {row.original.grupo_whatsapp ? <Check size={14} /> : <X size={14} />}
-        </button>
-      )
-    },
-    {
-      accessorKey: 'citado_ypf',
-      header: 'Citado',
-      cell: ({ row }) => (
-        <button
-          className={`prog-check-btn ${row.original.citado_ypf ? 'checked' : ''}`}
-          onClick={() => handleUpdateField(row.original.id, 'citado_ypf', !row.original.citado_ypf)}
-          title={row.original.citado_ypf ? 'Citado YPF' : 'No citado'}
-        >
-          {row.original.citado_ypf ? <Check size={14} /> : <X size={14} />}
-        </button>
-      )
-    },
+    // NOTA: Se ocultaron las columnas DOC, WPP, CITADO por solicitud del usuario
     {
       accessorKey: 'confirmacion_asistencia',
       header: 'Confirmación',
