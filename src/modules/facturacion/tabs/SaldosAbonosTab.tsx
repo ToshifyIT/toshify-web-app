@@ -247,8 +247,8 @@ export function SaldosAbonosTab() {
     if (!formValues) return
 
     try {
-      const { error } = await supabase
-        .from('saldos_conductores')
+      const { error } = await (supabase
+        .from('saldos_conductores') as any)
         .update({
           saldo_actual: formValues.saldoActual,
           dias_mora: formValues.diasMora,

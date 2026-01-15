@@ -266,8 +266,8 @@ export function GarantiasTab() {
         nuevoEstado = 'pendiente'
       }
 
-      const { error } = await supabase
-        .from('garantias_conductores')
+      const { error } = await (supabase
+        .from('garantias_conductores') as any)
         .update({
           cuotas_pagadas: formValues.cuotasPagadas,
           cuotas_totales: formValues.cuotasTotales,
