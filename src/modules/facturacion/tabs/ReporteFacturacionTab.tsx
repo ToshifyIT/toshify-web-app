@@ -417,18 +417,51 @@ export function ReporteFacturacionTab() {
 
       setExcesos((excesosData || []) as ExcesoKm[])
 
-      // 5.1 Cargar penalidades pendientes (P007)
-      const { data: penalidadesData } = await (supabase
+      // 5.1 Cargar penalidades/cobros para la semana (P007)
+      // Incluye: 
+      //   a) Penalidades aplicadas completas (no fraccionadas) para esta semana
+      //   b) Cuotas de penalidades fraccionadas que corresponden a esta semana
+      
+      const semanaDelPeriodo = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
+      const anioDelPeriodo = getYear(parseISO(fechaInicio))
+      
+      // a) Penalidades aplicadas completas en esta semana
+      const { data: penalidadesCompletas } = await (supabase
         .from('penalidades') as any)
-        .select('conductor_id, monto, detalle, aplicado')
-        .gte('fecha', fechaInicio)
-        .lte('fecha', fechaFin)
+        .select('conductor_id, monto, detalle')
+        .eq('aplicado', true)
+        .eq('fraccionado', false)
+        .eq('semana_aplicacion', semanaDelPeriodo)
+        .eq('anio_aplicacion', anioDelPeriodo)
+      
+      // b) Cuotas fraccionadas de esta semana (no aplicadas aún)
+      const { data: cuotasSemana } = await (supabase
+        .from('penalidades_cuotas') as any)
+        .select(`
+          monto_cuota,
+          penalidad:penalidades!penalidad_id(conductor_id)
+        `)
+        .eq('semana', semanaDelPeriodo)
+        .eq('anio', anioDelPeriodo)
         .eq('aplicado', false)
 
       const penalidadesMap = new Map<string, number>()
-      ;(penalidadesData || []).forEach((p: any) => {
-        const actual = penalidadesMap.get(p.conductor_id) || 0
-        penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+      
+      // Sumar penalidades completas
+      ;(penalidadesCompletas || []).forEach((p: any) => {
+        if (p.conductor_id) {
+          const actual = penalidadesMap.get(p.conductor_id) || 0
+          penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+        }
+      })
+      
+      // Sumar cuotas fraccionadas
+      ;(cuotasSemana || []).forEach((c: any) => {
+        const conductorId = c.penalidad?.conductor_id
+        if (conductorId) {
+          const actual = penalidadesMap.get(conductorId) || 0
+          penalidadesMap.set(conductorId, actual + (c.monto_cuota || 0))
+        }
       })
 
       // 6. Calcular facturación proyectada para cada conductor
@@ -665,18 +698,47 @@ export function ReporteFacturacionTab() {
         })
       })
 
-      // 3. Cargar penalidades pendientes (P007)
-      const { data: penalidadesData } = await (supabase
+      // 3. Cargar penalidades/cobros para la semana (P007)
+      const semanaDelPeriodoRecalc = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
+      const anioDelPeriodoRecalc = getYear(parseISO(fechaInicio))
+      
+      // a) Penalidades aplicadas completas en esta semana
+      const { data: penalidadesCompletas } = await (supabase
         .from('penalidades') as any)
-        .select('conductor_id, monto, detalle, aplicado')
-        .gte('fecha', fechaInicio)
-        .lte('fecha', fechaFin)
+        .select('conductor_id, monto, detalle')
+        .eq('aplicado', true)
+        .eq('fraccionado', false)
+        .eq('semana_aplicacion', semanaDelPeriodoRecalc)
+        .eq('anio_aplicacion', anioDelPeriodoRecalc)
+      
+      // b) Cuotas fraccionadas de esta semana
+      const { data: cuotasSemanaRecalc } = await (supabase
+        .from('penalidades_cuotas') as any)
+        .select(`
+          monto_cuota,
+          penalidad:penalidades!penalidad_id(conductor_id)
+        `)
+        .eq('semana', semanaDelPeriodoRecalc)
+        .eq('anio', anioDelPeriodoRecalc)
         .eq('aplicado', false)
 
       const penalidadesMap = new Map<string, number>()
-      ;(penalidadesData || []).forEach((p: any) => {
-        const actual = penalidadesMap.get(p.conductor_id) || 0
-        penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+      
+      // Sumar penalidades completas
+      ;(penalidadesCompletas || []).forEach((p: any) => {
+        if (p.conductor_id) {
+          const actual = penalidadesMap.get(p.conductor_id) || 0
+          penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+        }
+      })
+      
+      // Sumar cuotas fraccionadas
+      ;(cuotasSemanaRecalc || []).forEach((c: any) => {
+        const conductorId = c.penalidad?.conductor_id
+        if (conductorId) {
+          const actual = penalidadesMap.get(conductorId) || 0
+          penalidadesMap.set(conductorId, actual + (c.monto_cuota || 0))
+        }
       })
 
       // 4. Cargar peajes de Cabify

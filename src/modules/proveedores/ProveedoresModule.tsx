@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
-import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle } from 'lucide-react'
+import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
 import { formatDateTimeAR } from '../../utils/dateUtils'
@@ -193,9 +193,11 @@ export function ProveedoresModule() {
   const loadProveedores = async () => {
     try {
       setLoading(true)
+      // Cargar todos los proveedores (activos e inactivos)
       const { data, error } = await supabase
         .from('proveedores')
         .select('*')
+        .order('activo', { ascending: false }) // Activos primero
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -318,19 +320,77 @@ export function ProveedoresModule() {
       Swal.fire({
         icon: 'error',
         title: 'Sin permisos',
-        text: 'No tienes permisos para eliminar proveedores'
+        text: 'No tienes permisos para desactivar proveedores'
       })
       return
     }
 
+    // Buscar el proveedor para mostrar su nombre
+    const proveedor = proveedores.find(p => p.id === id)
+    const nombreProveedor = proveedor?.razon_social || 'este proveedor'
+
     const result = await Swal.fire({
-      title: '¿Estás seguro?',
-      text: 'Esta acción no se puede deshacer',
+      title: '¿Desactivar proveedor?',
+      html: `El proveedor <strong>${nombreProveedor}</strong> será marcado como inactivo y ya no aparecerá en las listas.`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#EF4444',
       cancelButtonColor: '#6B7280',
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, desactivar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (result.isConfirmed) {
+      try {
+        // Soft delete: marcar como inactivo en lugar de eliminar
+        const { error } = await (supabase
+          .from('proveedores') as any)
+          .update({ activo: false, updated_at: new Date().toISOString() })
+          .eq('id', id)
+
+        if (error) throw error
+
+        Swal.fire({
+          icon: 'success',
+          title: 'Proveedor desactivado',
+          text: `${nombreProveedor} ha sido desactivado correctamente.`,
+          timer: 2500,
+          showConfirmButton: false
+        })
+
+        loadProveedores()
+      } catch (err: any) {
+        console.error('Error desactivando proveedor:', err)
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: err.message || 'No se pudo desactivar el proveedor',
+        })
+      }
+    }
+  }
+
+  const handleReactivar = async (id: string) => {
+    if (!canEdit) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Sin permisos',
+        text: 'No tienes permisos para reactivar proveedores'
+      })
+      return
+    }
+
+    const proveedor = proveedores.find(p => p.id === id)
+    const nombreProveedor = proveedor?.razon_social || 'este proveedor'
+
+    const result = await Swal.fire({
+      title: '¿Reactivar proveedor?',
+      html: `El proveedor <strong>${nombreProveedor}</strong> será marcado como activo nuevamente.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#10B981',
+      cancelButtonColor: '#6B7280',
+      confirmButtonText: 'Sí, reactivar',
       cancelButtonText: 'Cancelar'
     })
 
@@ -338,25 +398,26 @@ export function ProveedoresModule() {
       try {
         const { error } = await (supabase
           .from('proveedores') as any)
-          .delete()
+          .update({ activo: true, updated_at: new Date().toISOString() })
           .eq('id', id)
 
         if (error) throw error
 
         Swal.fire({
           icon: 'success',
-          title: 'Proveedor eliminado',
-          timer: 2000,
+          title: 'Proveedor reactivado',
+          text: `${nombreProveedor} ha sido reactivado correctamente.`,
+          timer: 2500,
           showConfirmButton: false
         })
 
         loadProveedores()
       } catch (err: any) {
-        console.error('Error eliminando proveedor:', err)
+        console.error('Error reactivando proveedor:', err)
         Swal.fire({
           icon: 'error',
           title: 'Error',
-          text: err.message || 'No se pudo eliminar el proveedor',
+          text: err.message || 'No se pudo reactivar el proveedor',
         })
       }
     }
@@ -628,20 +689,29 @@ export function ProveedoresModule() {
                 <Edit size={16} />
               </button>
             )}
-            {canDelete && (
+            {canDelete && row.original.activo && (
               <button
                 className="dt-btn-action dt-btn-delete"
                 onClick={() => handleDelete(row.original.id)}
-                title="Eliminar"
+                title="Desactivar"
               >
                 <Trash2 size={16} />
+              </button>
+            )}
+            {canEdit && !row.original.activo && (
+              <button
+                className="dt-btn-action dt-btn-reactivar"
+                onClick={() => handleReactivar(row.original.id)}
+                title="Reactivar"
+              >
+                <RotateCcw size={16} />
               </button>
             )}
           </div>
         ),
       },
     ],
-    [canView, canEdit, canDelete, razonSocialFilter, categoriaFilter, categoriasUnicas, estadoFilter, openColumnFilter]
+    [canView, canEdit, canDelete, razonSocialFilter, categoriaFilter, categoriasUnicas, estadoFilter, openColumnFilter, handleReactivar]
   )
 
   // Calcular estadísticas

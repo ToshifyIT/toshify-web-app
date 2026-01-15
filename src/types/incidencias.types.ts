@@ -99,6 +99,24 @@ export interface Penalidad {
   created_by?: string
   created_at: string
   updated_at: string
+  // Campos de fraccionamiento
+  fraccionado?: boolean
+  cantidad_cuotas?: number
+  semana_aplicacion?: number  // Semana en que se aplica (si no es fraccionado)
+  anio_aplicacion?: number    // Año en que se aplica
+}
+
+// Cuota de penalidad fraccionada
+export interface PenalidadCuota {
+  id: string
+  penalidad_id: string
+  numero_cuota: number
+  monto_cuota: number
+  semana: number
+  anio: number
+  aplicado: boolean
+  fecha_aplicacion?: string
+  created_at: string
 }
 
 export interface PenalidadCompleta extends Penalidad {
