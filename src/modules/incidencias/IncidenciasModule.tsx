@@ -9,6 +9,7 @@ import {
   Plus,
   Eye,
   Edit2,
+  Trash2,
   FileText,
   X,
   Shield,
@@ -83,11 +84,12 @@ function getAreaResponsablePorRol(roleName: string | undefined | null): string {
 
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
-  const { canCreateInMenu, canEditInMenu } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
 
   // Permisos específicos para el menú de incidencias
   const canCreate = canCreateInMenu('incidencias')
   const canEdit = canEditInMenu('incidencias')
+  const canDelete = canDeleteInMenu('incidencias')
 
   const [activeTab, setActiveTab] = useState<TabType>('logistica')
   const [loading, setLoading] = useState(true)
@@ -123,6 +125,16 @@ export function IncidenciasModule() {
   const [modalType, setModalType] = useState<'incidencia' | 'penalidad'>('incidencia')
   const [selectedIncidencia, setSelectedIncidencia] = useState<IncidenciaCompleta | null>(null)
   const [selectedPenalidad, setSelectedPenalidad] = useState<PenalidadCompleta | null>(null)
+  
+  // Modal de aplicación/fraccionamiento
+  const [showAplicarModal, setShowAplicarModal] = useState(false)
+  const [penalidadAplicar, setPenalidadAplicar] = useState<PenalidadCompleta | null>(null)
+  const [aplicarFraccionado, setAplicarFraccionado] = useState(false)
+  const [cantidadCuotas, setCantidadCuotas] = useState(2)
+  const [semanaInicio, setSemanaInicio] = useState<number>(0)
+  const [anioInicio, setAnioInicio] = useState<number>(new Date().getFullYear())
+  const [periodosDisponibles, setPeriodosDisponibles] = useState<Array<{semana: number, anio: number, label: string}>>([])
+  const [aplicandoCobro, setAplicandoCobro] = useState(false)
 
   // Helper para obtener fecha local en formato YYYY-MM-DD
   function getLocalDateString() {
@@ -509,10 +521,15 @@ export function IncidenciasModule() {
           <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarIncidencia(row.original)}>
             <Edit2 size={14} />
           </button>
+          {canDelete && (
+            <button className="dt-btn-action dt-btn-delete" title="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete])
 
   // Columnas específicas para incidencias de COBRO (incluye botón generar cobro/descuento)
   const incidenciasCobroColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => [
@@ -655,10 +672,15 @@ export function IncidenciasModule() {
           >
             <DollarSign size={14} />
           </button>
+          {canDelete && (
+            <button className="dt-btn-action dt-btn-delete" title="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete])
 
   // Columnas para tabla de penalidades
   const penalidadesColumns = useMemo<ColumnDef<PenalidadCompleta>[]>(() => [
@@ -757,10 +779,15 @@ export function IncidenciasModule() {
           <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarPenalidad(row.original)}>
             <Edit2 size={14} />
           </button>
+          {canDelete && (
+            <button className="dt-btn-action dt-btn-delete" title="Eliminar" onClick={() => handleEliminarPenalidad(row.original)}>
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       )
     }
-  ], [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId])
+  ], [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId, canDelete])
 
   function handleNuevaIncidencia() {
     const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')
@@ -865,6 +892,90 @@ export function IncidenciasModule() {
     setShowModal(true)
   }
 
+  async function handleEliminarIncidencia(incidencia: IncidenciaCompleta) {
+    if (!canDelete) {
+      Swal.fire('Sin permisos', 'No tienes permisos para eliminar incidencias', 'error')
+      return
+    }
+
+    const result = await Swal.fire({
+      title: '¿Eliminar incidencia?',
+      html: `
+        <p>Se eliminará la incidencia del <strong>${formatDate(incidencia.fecha)}</strong></p>
+        <p><small>Conductor: ${incidencia.conductor_display || 'N/A'}</small></p>
+        <p><small>Vehículo: ${incidencia.patente_display || 'N/A'}</small></p>
+        ${incidencia.total_penalidades > 0 ? '<p style="color: #dc2626;"><strong>También se eliminarán las penalidades asociadas.</strong></p>' : ''}
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (result.isConfirmed) {
+      try {
+        // Primero eliminar penalidades asociadas (si las hay)
+        if (incidencia.total_penalidades > 0) {
+          const { error: penError } = await (supabase.from('penalidades' as any) as any)
+            .delete()
+            .eq('incidencia_id', incidencia.id)
+          if (penError) throw penError
+        }
+
+        // Luego eliminar la incidencia
+        const { error } = await (supabase.from('incidencias' as any) as any)
+          .delete()
+          .eq('id', incidencia.id)
+        if (error) throw error
+
+        Swal.fire('Eliminado', 'La incidencia fue eliminada correctamente', 'success')
+        cargarDatos()
+      } catch (error: any) {
+        console.error('Error eliminando:', error)
+        Swal.fire('Error', error.message || 'No se pudo eliminar la incidencia', 'error')
+      }
+    }
+  }
+
+  async function handleEliminarPenalidad(penalidad: PenalidadCompleta) {
+    if (!canDelete) {
+      Swal.fire('Sin permisos', 'No tienes permisos para eliminar penalidades', 'error')
+      return
+    }
+
+    const result = await Swal.fire({
+      title: '¿Eliminar penalidad?',
+      html: `
+        <p>Se eliminará la penalidad de <strong>${formatMoney(penalidad.monto)}</strong></p>
+        <p><small>Conductor: ${penalidad.conductor_display || 'N/A'}</small></p>
+        <p><small>Fecha: ${formatDate(penalidad.fecha)}</small></p>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (result.isConfirmed) {
+      try {
+        const { error } = await (supabase.from('penalidades' as any) as any)
+          .delete()
+          .eq('id', penalidad.id)
+        if (error) throw error
+
+        Swal.fire('Eliminado', 'La penalidad fue eliminada correctamente', 'success')
+        cargarDatos()
+      } catch (error: any) {
+        console.error('Error eliminando:', error)
+        Swal.fire('Error', error.message || 'No se pudo eliminar la penalidad', 'error')
+      }
+    }
+  }
+
   // Calcular número de semana ISO 8601
   function getWeekNumber(dateStr: string): number {
     if (!dateStr) return 0
@@ -916,17 +1027,22 @@ export function IncidenciasModule() {
       const tipoCobroId = incidenciaForm.tipo_cobro_descuento_id
       const esLogisticaTipo = tipoCobroId?.startsWith('__')
       
-      // Desestructurar para excluir 'monto' que no existe en la tabla incidencias
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { monto: _monto, ...incidenciaFormSinMonto } = incidenciaForm
-      
-      const dataToSave = {
-        ...incidenciaFormSinMonto,
+      // Construir objeto solo con campos que existen en la tabla incidencias
+      const dataToSave: Record<string, unknown> = {
+        vehiculo_id: incidenciaForm.vehiculo_id || null,
+        conductor_id: incidenciaForm.conductor_id || null,
+        estado_id: incidenciaForm.estado_id,
         semana: semanaCalculada,
+        fecha: incidenciaForm.fecha,
+        turno: incidenciaForm.turno || null,
+        area: incidenciaForm.area || null,
+        estado_vehiculo: incidenciaForm.estado_vehiculo || null,
+        descripcion: incidenciaForm.descripcion || null,
+        accion_ejecutada: incidenciaForm.accion_ejecutada || null,
+        registrado_por: incidenciaForm.registrado_por || null,
+        auto_a_cargo: incidenciaForm.auto_a_cargo || false,
         created_by: user?.id,
-        tipo: esCobro ? 'cobro' : 'logistica',  // Asignar tipo según tab activo
-        // Si es logística, guardar en tipo_incidencia (legacy), si es cobro guardar en tipo_cobro_descuento_id
-        tipo_incidencia: esLogisticaTipo ? tipoCobroId?.replace('__', '').replace(/_/g, ' ') : undefined,
+        tipo: esCobro ? 'cobro' : 'logistica',
         tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null
       }
 
@@ -1007,9 +1123,23 @@ export function IncidenciasModule() {
     try {
       // Calcular semana basada en la fecha
       const semanaCalculada = getWeekNumber(penalidadForm.fecha)
-      const dataToSave = {
-        ...penalidadForm,
+      
+      // Construir objeto solo con campos que existen en la tabla penalidades
+      const dataToSave: Record<string, unknown> = {
+        incidencia_id: penalidadForm.incidencia_id || null,
+        vehiculo_id: penalidadForm.vehiculo_id || null,
+        conductor_id: penalidadForm.conductor_id || null,
+        tipo_penalidad_id: penalidadForm.tipo_penalidad_id || null,
+        tipo_cobro_descuento_id: penalidadForm.tipo_cobro_descuento_id || null,
         semana: semanaCalculada,
+        fecha: penalidadForm.fecha,
+        turno: penalidadForm.turno || null,
+        area_responsable: penalidadForm.area_responsable || null,
+        detalle: penalidadForm.detalle || null,
+        monto: penalidadForm.monto || null,
+        observaciones: penalidadForm.observaciones || null,
+        aplicado: penalidadForm.aplicado || false,
+        nota_administrativa: penalidadForm.nota_administrativa || null,
         created_by: user?.id
       }
 
@@ -1036,28 +1166,129 @@ export function IncidenciasModule() {
     }
   }
 
+  // Abrir modal de aplicación
   async function handleMarcarAplicado(penalidad: PenalidadCompleta) {
-    const result = await Swal.fire({
-      title: '¿Marcar como aplicado?',
-      text: `Penalidad de ${formatMoney(penalidad.monto)} para ${penalidad.conductor_display}`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#F59E0B',
-      confirmButtonText: 'Sí, aplicar',
-      cancelButtonText: 'Cancelar'
-    })
-
-    if (result.isConfirmed) {
-      try {
-        const { error } = await (supabase.from('penalidades' as any) as any)
-          .update({ aplicado: true, fecha_aplicacion: new Date().toISOString().split('T')[0], updated_by: profile?.full_name || 'Sistema' })
-          .eq('id', penalidad.id)
-        if (error) throw error
-        Swal.fire('Aplicado', 'La penalidad fue marcada como aplicada', 'success')
-        cargarDatos()
-      } catch (error: any) {
-        Swal.fire('Error', error.message, 'error')
+    setPenalidadAplicar(penalidad)
+    setAplicarFraccionado(false)
+    setCantidadCuotas(2)
+    
+    // Calcular semana actual
+    const hoy = new Date()
+    const semanaActual = getWeekNumber(hoy.toISOString().split('T')[0])
+    const anioActual = hoy.getFullYear()
+    
+    setSemanaInicio(semanaActual)
+    setAnioInicio(anioActual)
+    
+    // Generar períodos disponibles (próximas 24 semanas)
+    const periodos: Array<{semana: number, anio: number, label: string}> = []
+    let sem = semanaActual
+    let anio = anioActual
+    
+    for (let i = 0; i < 24; i++) {
+      periodos.push({
+        semana: sem,
+        anio: anio,
+        label: `Semana ${sem} - ${anio}`
+      })
+      sem++
+      if (sem > 52) {
+        sem = 1
+        anio++
       }
+    }
+    
+    setPeriodosDisponibles(periodos)
+    setShowAplicarModal(true)
+  }
+
+  // Ejecutar la aplicación del cobro
+  async function handleConfirmarAplicacion() {
+    if (!penalidadAplicar) return
+    
+    setAplicandoCobro(true)
+    try {
+      if (aplicarFraccionado) {
+        // Crear cuotas fraccionadas
+        const montoCuota = Math.ceil((penalidadAplicar.monto || 0) / cantidadCuotas)
+        const cuotas = []
+        
+        let sem = semanaInicio
+        let anio = anioInicio
+        
+        for (let i = 0; i < cantidadCuotas; i++) {
+          cuotas.push({
+            penalidad_id: penalidadAplicar.id,
+            numero_cuota: i + 1,
+            monto_cuota: i === cantidadCuotas - 1 
+              ? (penalidadAplicar.monto || 0) - (montoCuota * (cantidadCuotas - 1)) // Última cuota ajusta diferencia
+              : montoCuota,
+            semana: sem,
+            anio: anio,
+            aplicado: false
+          })
+          
+          sem++
+          if (sem > 52) {
+            sem = 1
+            anio++
+          }
+        }
+        
+        // Insertar cuotas
+        const { error: cuotasError } = await (supabase.from('penalidades_cuotas' as any) as any)
+          .insert(cuotas)
+        
+        if (cuotasError) throw cuotasError
+        
+        // Actualizar penalidad como fraccionada
+        const { error: updateError } = await (supabase.from('penalidades' as any) as any)
+          .update({
+            fraccionado: true,
+            cantidad_cuotas: cantidadCuotas,
+            aplicado: false, // No se marca como aplicado hasta que se cobren todas las cuotas
+            updated_by: profile?.full_name || 'Sistema'
+          })
+          .eq('id', penalidadAplicar.id)
+        
+        if (updateError) throw updateError
+        
+        Swal.fire({
+          icon: 'success',
+          title: 'Cobro Fraccionado',
+          html: `Se crearon <strong>${cantidadCuotas} cuotas</strong> de ${formatMoney(montoCuota)} c/u<br>
+                 Comenzando en Semana ${semanaInicio} - ${anioInicio}`
+        })
+      } else {
+        // Aplicar completo en la semana seleccionada
+        const { error } = await (supabase.from('penalidades' as any) as any)
+          .update({
+            aplicado: true,
+            fraccionado: false,
+            semana_aplicacion: semanaInicio,
+            anio_aplicacion: anioInicio,
+            fecha_aplicacion: new Date().toISOString().split('T')[0],
+            updated_by: profile?.full_name || 'Sistema'
+          })
+          .eq('id', penalidadAplicar.id)
+        
+        if (error) throw error
+        
+        Swal.fire({
+          icon: 'success',
+          title: 'Cobro Aplicado',
+          html: `Se aplicará en <strong>Semana ${semanaInicio} - ${anioInicio}</strong><br>
+                 Monto: ${formatMoney(penalidadAplicar.monto)}`
+        })
+      }
+      
+      setShowAplicarModal(false)
+      cargarDatos()
+    } catch (error: any) {
+      console.error('Error aplicando cobro:', error)
+      Swal.fire('Error', error.message || 'No se pudo aplicar el cobro', 'error')
+    } finally {
+      setAplicandoCobro(false)
     }
   }
 
@@ -1384,6 +1615,175 @@ export function IncidenciasModule() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Aplicación/Fraccionamiento */}
+      {showAplicarModal && penalidadAplicar && (
+        <div className="modal-overlay" onClick={() => setShowAplicarModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Aplicar Cobro/Descuento</h2>
+              <button className="modal-close" onClick={() => setShowAplicarModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Info del cobro */}
+              <div style={{ 
+                background: 'var(--bg-secondary)', 
+                padding: '16px', 
+                borderRadius: '8px', 
+                marginBottom: '20px' 
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Conductor:</span>
+                  <strong>{penalidadAplicar.conductor_display}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Vehículo:</span>
+                  <strong>{penalidadAplicar.patente_display || '-'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Monto Total:</span>
+                  <strong style={{ color: '#F59E0B', fontSize: '18px' }}>{formatMoney(penalidadAplicar.monto)}</strong>
+                </div>
+              </div>
+
+              {/* Opciones de aplicación */}
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
+                  ¿Cómo desea aplicar el cobro?
+                </label>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <label style={{ 
+                    flex: 1, 
+                    padding: '12px', 
+                    border: `2px solid ${!aplicarFraccionado ? '#F59E0B' : 'var(--border-color)'}`,
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    background: !aplicarFraccionado ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
+                  }}>
+                    <input
+                      type="radio"
+                      checked={!aplicarFraccionado}
+                      onChange={() => setAplicarFraccionado(false)}
+                      style={{ marginRight: '8px' }}
+                    />
+                    <strong>Completo</strong>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      Se cobra todo en una semana
+                    </div>
+                  </label>
+                  <label style={{ 
+                    flex: 1, 
+                    padding: '12px', 
+                    border: `2px solid ${aplicarFraccionado ? '#F59E0B' : 'var(--border-color)'}`,
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    background: aplicarFraccionado ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
+                  }}>
+                    <input
+                      type="radio"
+                      checked={aplicarFraccionado}
+                      onChange={() => setAplicarFraccionado(true)}
+                      style={{ marginRight: '8px' }}
+                    />
+                    <strong>Fraccionado</strong>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      Dividir en cuotas semanales
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Semana de inicio */}
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
+                  {aplicarFraccionado ? 'Semana de inicio:' : 'Aplicar en semana:'}
+                </label>
+                <select
+                  value={`${semanaInicio}-${anioInicio}`}
+                  onChange={(e) => {
+                    const [sem, anio] = e.target.value.split('-').map(Number)
+                    setSemanaInicio(sem)
+                    setAnioInicio(anio)
+                  }}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px', 
+                    borderRadius: '6px', 
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-primary)',
+                    color: 'var(--text-primary)'
+                  }}
+                >
+                  {periodosDisponibles.map(p => (
+                    <option key={`${p.semana}-${p.anio}`} value={`${p.semana}-${p.anio}`}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Cantidad de cuotas (solo si es fraccionado) */}
+              {aplicarFraccionado && (
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
+                    Cantidad de cuotas:
+                  </label>
+                  <input
+                    type="number"
+                    min="2"
+                    max="52"
+                    value={cantidadCuotas}
+                    onChange={(e) => setCantidadCuotas(Math.max(2, parseInt(e.target.value) || 2))}
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      borderRadius: '6px', 
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                  <div style={{ marginTop: '8px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                      <span>Monto por cuota:</span>
+                      <strong style={{ color: '#10B981' }}>
+                        {formatMoney(Math.ceil((penalidadAplicar.monto || 0) / cantidadCuotas))}
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      <span>Última semana:</span>
+                      <span>
+                        Semana {((semanaInicio + cantidadCuotas - 2) % 52) + 1} - {anioInicio + Math.floor((semanaInicio + cantidadCuotas - 2) / 52)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary" 
+                onClick={() => setShowAplicarModal(false)} 
+                disabled={aplicandoCobro}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleConfirmarAplicacion}
+                disabled={aplicandoCobro}
+                style={{ background: '#F59E0B' }}
+              >
+                {aplicandoCobro ? 'Aplicando...' : (aplicarFraccionado ? 'Crear Cuotas' : 'Aplicar Cobro')}
+              </button>
+            </div>
           </div>
         </div>
       )}
