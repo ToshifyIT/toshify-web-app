@@ -87,6 +87,17 @@ interface ProductoLote {
   producto?: Producto
 }
 
+interface ProductoLoteSalida {
+  id: string // ID único para el item
+  producto_id: string
+  producto?: Producto
+  vehiculo_id: string
+  vehiculo?: Vehiculo
+  cantidad: number
+  proveedor_id?: string
+  inventario_id?: string
+}
+
 // =====================================================
 // COMPONENTE PRINCIPAL
 // =====================================================
@@ -113,9 +124,10 @@ export function MovimientosModule() {
   const [busquedaProducto, setBusquedaProducto] = useState('')
   const [mostrarDropdownProductos, setMostrarDropdownProductos] = useState(false)
 
-  // Modo de entrada
+  // Modo de entrada/salida por lote
   const [modoLote, setModoLote] = useState(false)
   const [productosLote, setProductosLote] = useState<ProductoLote[]>([])
+  const [productosLoteSalida, setProductosLoteSalida] = useState<ProductoLoteSalida[]>([])
 
   // Form data común
   const [productoId, setProductoId] = useState('')
@@ -132,6 +144,7 @@ export function MovimientosModule() {
   // Form data - Salida
   const [motivoSalida, setMotivoSalida] = useState<MotivoSalida>('consumo_servicio')
   const [categoriaServicio, setCategoriaServicio] = useState<CategoriaServicio | ''>('')
+  const [modoLoteSalida, setModoLoteSalida] = useState(false)
 
   // Form data - Devolución
   const [estadoRetorno, setEstadoRetorno] = useState<EstadoRetorno>('operativa')
@@ -381,6 +394,8 @@ export function MovimientosModule() {
     setStockPorProveedor([])
     setProductosLote([])
     setModoLote(false)
+    setModoLoteSalida(false)
+    setProductosLoteSalida([])
     setProductosAsignadosVehiculo([])
     setEstadoInicial('en_transito') // Siempre en tránsito
     setNumeroPedido('')
@@ -475,6 +490,59 @@ export function MovimientosModule() {
       } catch (error: any) {
         console.error('Error procesando lote:', error)
         Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote' })
+      }
+      return
+    }
+
+    // ===== MODO LOTE (SALIDA) =====
+    if (modoLoteSalida && tipoMovimiento === 'salida') {
+      if (productosLoteSalida.length === 0) {
+        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes agregar al menos un producto al lote' })
+        return
+      }
+      if (!motivoSalida) {
+        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un motivo de salida' })
+        return
+      }
+      if (motivoSalida === 'consumo_servicio' && !categoriaServicio) {
+        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar una categoría de servicio' })
+        return
+      }
+
+      try {
+        const { data: userData } = await supabase.auth.getUser()
+
+        // Insertar cada item como un movimiento pendiente de aprobación
+        for (const item of productosLoteSalida) {
+          const movimientoData: any = {
+            producto_id: item.producto_id,
+            tipo_movimiento: 'salida',
+            cantidad: item.cantidad,
+            proveedor_id: null, // Se determinará al aprobar según stock disponible
+            vehiculo_destino_id: item.vehiculo_id || null,
+            usuario_id: userData.user?.id,
+            observaciones: observaciones || `Salida en lote - ${item.vehiculo?.patente || 'Sin vehículo'}`,
+            motivo_salida: motivoSalida,
+            estado_aprobacion: 'pendiente',
+            categoria_servicio: motivoSalida === 'consumo_servicio' ? categoriaServicio : null
+          }
+
+          const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
+          if (error) throw error
+        }
+
+        Swal.fire({
+          icon: 'success',
+          title: 'Lote enviado para aprobación',
+          text: `${productosLoteSalida.length} salidas registradas. Pendientes de aprobación por un encargado.`,
+          timer: 3000
+        })
+
+        resetForm()
+        loadData()
+      } catch (error: any) {
+        console.error('Error procesando lote de salidas:', error)
+        Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote de salidas' })
       }
       return
     }
@@ -909,6 +977,50 @@ export function MovimientosModule() {
           {/* ============= SECCIÓN SALIDA ============= */}
           {tipoMovimiento === 'salida' && (
             <>
+              {/* Toggle Modo Lote Salida */}
+              <div style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                    {modoLoteSalida ? '📦 Salida por Lote' : '📄 Salida Simple'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {modoLoteSalida
+                      ? 'Registra salidas de múltiples productos a diferentes vehículos'
+                      : 'Registra la salida de un producto a la vez'
+                    }
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setModoLoteSalida(!modoLoteSalida)
+                    setProductoId('')
+                    setBusquedaProducto('')
+                    setProductosLoteSalida([])
+                    setVehiculoId('')
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    background: modoLoteSalida ? 'var(--color-primary)' : 'var(--text-secondary)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 600
+                  }}
+                >
+                  {modoLoteSalida ? 'Cambiar a Simple' : 'Cambiar a Lote'}
+                </button>
+              </div>
+
               {/* Motivo de Salida */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -938,33 +1050,6 @@ export function MovimientosModule() {
                 </div>
               </div>
 
-              {/* Vehículo (opcional) */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  Vehículo/Patente (opcional)
-                </label>
-                <select
-                  value={vehiculoId}
-                  onChange={(e) => setVehiculoId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <option value="">Sin vehículo asociado</option>
-                  {vehiculos.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.patente} - {v.marca} {v.modelo}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               {/* Categoría de servicio (obligatorio si es consumo) */}
               {motivoSalida === 'consumo_servicio' && (
                 <div>
@@ -991,6 +1076,272 @@ export function MovimientosModule() {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* MODO SIMPLE: Vehículo (opcional) */}
+              {!modoLoteSalida && (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Vehículo/Patente (opcional)
+                  </label>
+                  <select
+                    value={vehiculoId}
+                    onChange={(e) => setVehiculoId(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--text-primary)'
+                    }}
+                  >
+                    <option value="">Sin vehículo asociado</option>
+                    {vehiculos.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.patente} - {v.marca} {v.modelo}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* MODO LOTE: Gestión de productos con vehículos */}
+              {modoLoteSalida && (
+                <div style={{
+                  background: 'var(--bg-secondary)',
+                  border: '2px dashed var(--border-primary)',
+                  borderRadius: '8px',
+                  padding: '16px'
+                }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>
+                    Productos a dar salida ({productosLoteSalida.length})
+                  </h3>
+
+                  {/* Agregar nuevo item */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '8px', marginBottom: '12px' }}>
+                    {/* Selector de producto */}
+                    <div style={{ position: 'relative' }} data-producto-dropdown>
+                      <input
+                        type="text"
+                        placeholder="Buscar producto..."
+                        value={busquedaProducto}
+                        onChange={(e) => {
+                          setBusquedaProducto(e.target.value)
+                          setMostrarDropdownProductos(true)
+                        }}
+                        onFocus={() => setMostrarDropdownProductos(true)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          border: '1px solid var(--border-primary)',
+                          borderRadius: '6px',
+                          fontSize: '13px',
+                          background: 'var(--input-bg)',
+                          color: 'var(--text-primary)'
+                        }}
+                      />
+                      {mostrarDropdownProductos && productosFiltrados.length > 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          maxHeight: '200px',
+                          overflowY: 'auto',
+                          background: 'var(--card-bg)',
+                          border: '1px solid var(--border-primary)',
+                          borderRadius: '6px',
+                          marginTop: '4px',
+                          boxShadow: 'var(--shadow-md)',
+                          zIndex: 1000
+                        }}>
+                          {productosFiltrados.map((p) => (
+                            <div
+                              key={p.id}
+                              onClick={() => {
+                                setProductoId(p.id)
+                                setBusquedaProducto(`${p.codigo} - ${p.nombre}`)
+                                setMostrarDropdownProductos(false)
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid var(--border-secondary)',
+                                fontSize: '13px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                background: 'var(--card-bg)',
+                                color: 'var(--text-primary)'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'var(--card-bg)'}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.codigo} - {p.nombre}</div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{p.tipo}</div>
+                              </div>
+                              <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '10px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                background: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)',
+                                color: (p.stock_disponible || 0) > 0 ? 'var(--badge-green-text)' : 'var(--badge-red-text)'
+                              }}>
+                                {p.stock_disponible || 0}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Selector de vehículo */}
+                    <select
+                      value={vehiculoId}
+                      onChange={(e) => setVehiculoId(e.target.value)}
+                      style={{
+                        padding: '8px 12px',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        background: 'var(--input-bg)',
+                        color: 'var(--text-primary)'
+                      }}
+                    >
+                      <option value="">Sin vehículo</option>
+                      {vehiculos.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.patente} - {v.marca} {v.modelo}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Cantidad */}
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Cant."
+                      value={cantidad}
+                      onChange={(e) => setCantidad(Number(e.target.value))}
+                      style={{
+                        width: '80px',
+                        padding: '8px 12px',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        background: 'var(--input-bg)',
+                        color: 'var(--text-primary)'
+                      }}
+                    />
+
+                    {/* Botón agregar */}
+                    <button
+                      onClick={() => {
+                        if (productoId && cantidad > 0) {
+                          const prod = productos.find(p => p.id === productoId)
+                          const veh = vehiculos.find(v => v.id === vehiculoId)
+                          if (prod) {
+                            // Verificar stock
+                            if ((prod.stock_disponible || 0) < cantidad) {
+                              Swal.fire({
+                                icon: 'warning',
+                                title: 'Stock insuficiente',
+                                text: `Stock disponible: ${prod.stock_disponible || 0}`
+                              })
+                              return
+                            }
+                            const nuevoItem: ProductoLoteSalida = {
+                              id: `${productoId}-${vehiculoId || 'sin'}-${Date.now()}`,
+                              producto_id: productoId,
+                              producto: prod,
+                              vehiculo_id: vehiculoId,
+                              vehiculo: veh,
+                              cantidad: cantidad
+                            }
+                            setProductosLoteSalida([...productosLoteSalida, nuevoItem])
+                            setProductoId('')
+                            setBusquedaProducto('')
+                            setVehiculoId('')
+                            setCantidad(1)
+                          }
+                        }
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        background: 'var(--color-primary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 600
+                      }}
+                    >
+                      + Agregar
+                    </button>
+                  </div>
+
+                  {/* Lista de items agregados */}
+                  {productosLoteSalida.length > 0 ? (
+                    <div style={{ display: 'grid', gap: '8px' }}>
+                      {productosLoteSalida.map((item) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            background: 'var(--card-bg)',
+                            padding: '12px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-primary)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>
+                              {item.producto?.codigo} - {item.producto?.nombre}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '12px', marginTop: '4px' }}>
+                              <span>{item.cantidad} {item.producto?.unidades_medida?.descripcion || 'und'}</span>
+                              <span style={{ 
+                                padding: '2px 8px', 
+                                background: item.vehiculo ? 'var(--badge-blue-bg)' : 'var(--badge-gray-bg)',
+                                color: item.vehiculo ? 'var(--badge-blue-text)' : 'var(--text-secondary)',
+                                borderRadius: '4px',
+                                fontSize: '11px'
+                              }}>
+                                {item.vehiculo ? `${item.vehiculo.patente}` : 'Sin vehículo'}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setProductosLoteSalida(productosLoteSalida.filter(i => i.id !== item.id))}
+                            style={{
+                              padding: '6px 12px',
+                              background: 'var(--badge-red-bg)',
+                              color: 'var(--color-danger)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 600
+                            }}
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
+                      No hay productos agregados. Busca un producto, selecciona el vehículo destino y agrega.
+                    </p>
+                  )}
                 </div>
               )}
             </>
@@ -1216,7 +1567,7 @@ export function MovimientosModule() {
           {/* ============= CAMPOS COMUNES ============= */}
 
           {/* Filtro por Tipo de Producto (solo para entrada y salida sin modo lote) */}
-          {(tipoMovimiento === 'entrada' || tipoMovimiento === 'salida') && (
+          {(tipoMovimiento === 'entrada' || (tipoMovimiento === 'salida' && !modoLoteSalida)) && (
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 Tipo de Producto
@@ -1248,8 +1599,8 @@ export function MovimientosModule() {
             </div>
           )}
 
-          {/* Buscador de Producto (modo simple, no devolución) */}
-          {!modoLote && tipoMovimiento !== 'devolucion' && (
+          {/* Buscador de Producto (modo simple, no devolución, no lote salida) */}
+          {!modoLote && !modoLoteSalida && tipoMovimiento !== 'devolucion' && (
             <div style={{ position: 'relative' }} data-producto-dropdown>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                 {tipoMovimiento === 'asignacion' ? 'Herramienta *' : 'Producto *'}
@@ -1551,8 +1902,8 @@ export function MovimientosModule() {
             </div>
           )}
 
-          {/* Proveedor para Salida/Uso (stock por proveedor) */}
-          {(tipoMovimiento === 'salida' || tipoMovimiento === 'asignacion') && productoId && (
+          {/* Proveedor para Salida/Uso (stock por proveedor) - solo modo simple */}
+          {((tipoMovimiento === 'salida' && !modoLoteSalida) || tipoMovimiento === 'asignacion') && productoId && (
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                 Proveedor *
@@ -1585,8 +1936,8 @@ export function MovimientosModule() {
             </div>
           )}
 
-          {/* Cantidad (modo simple, no devolución) */}
-          {!modoLote && tipoMovimiento !== 'devolucion' && (
+          {/* Cantidad (modo simple, no devolución, no lote salida) */}
+          {!modoLote && !modoLoteSalida && tipoMovimiento !== 'devolucion' && (
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                 Cantidad *
