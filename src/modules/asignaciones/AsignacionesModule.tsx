@@ -168,9 +168,10 @@ export function AsignacionesModule() {
       return fecha >= hoyStr && fecha <= finSemanaStr
     }).length
 
-    // Entregas completadas HOY (basado en fecha_inicio - cuando se activó/entregó)
+    // Entregas completadas HOY (entregas activadas/confirmadas hoy)
     const entregasCompletadasHoy = asignaciones.filter(a => {
-      if (a.estado !== 'finalizada' || !a.fecha_inicio) return false
+      // Incluir asignaciones activas O finalizadas que se activaron hoy
+      if ((a.estado !== 'activa' && a.estado !== 'finalizada') || !a.fecha_inicio) return false
       const fechaEntrega = a.fecha_inicio.split('T')[0]
       return fechaEntrega === hoyStr
     }).length
@@ -347,9 +348,9 @@ export function AsignacionesModule() {
         result = result.filter(a => a.estado === 'activa')
         break
       case 'completadas':
-        // Completadas HOY - debe coincidir con el stat entregasCompletadasHoy
+        // Completadas HOY - entregas activadas/confirmadas hoy (activas o finalizadas)
         result = result.filter(a => {
-          if (a.estado !== 'finalizada' || !a.fecha_inicio) return false
+          if ((a.estado !== 'activa' && a.estado !== 'finalizada') || !a.fecha_inicio) return false
           const fechaEntrega = a.fecha_inicio.split('T')[0]
           return fechaEntrega === hoyStr
         })
