@@ -324,6 +324,77 @@
   color: var(--badge-green-text, #065F46);
 }
 
+/* Badge de Documento */
+.prog-documento-badge {
+  display: inline-block;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.prog-documento-badge.contrato {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #065F46);
+}
+
+.prog-documento-badge.carta_oferta {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-documento-badge.anexo {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #5B21B6);
+}
+
+.prog-documento-badge.na {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-documento-badge.sin_definir {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #92400E);
+}
+
+/* Documentos compactos para TURNO (D/N) */
+.prog-documentos-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prog-documento-mini {
+  font-size: 9px;
+  font-weight: 500;
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.prog-documento-mini.contrato {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #065F46);
+}
+
+.prog-documento-mini.carta_oferta {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-documento-mini.anexo {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #5B21B6);
+}
+
+.prog-documento-mini.na,
+.prog-documento-mini.sin_definir {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
 /* Estado Select - Minimalista */
 .prog-estado-select {
   padding: 4px 8px;
@@ -1101,6 +1172,75 @@
 }
 
 .prog-inline-select.tipo-asignacion.devolucion_vehiculo {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #4B5563);
+}
+
+/* Layout para tipo asignación dual (TURNO) */
+.prog-tipo-asig-turno {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prog-tipo-asig-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prog-tipo-asig-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 14px;
+}
+
+/* Select mini para tipo asignación en TURNO */
+.prog-inline-select-mini {
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 9px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  min-width: 65px;
+  max-width: 80px;
+  transition: all 0.15s ease;
+}
+
+.prog-inline-select-mini:hover {
+  border-color: var(--border-primary);
+}
+
+.prog-inline-select-mini:focus {
+  outline: none;
+  border-color: #DC2626;
+}
+
+.prog-inline-select-mini.tipo-asignacion.entrega_auto {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select-mini.tipo-asignacion.asignacion_companero {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+.prog-inline-select-mini.tipo-asignacion.cambio_auto {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select-mini.tipo-asignacion.cambio_turno {
+  background: #FDF4FF;
+  color: #A21CAF;
+}
+
+.prog-inline-select-mini.tipo-asignacion.devolucion_vehiculo {
   background: var(--badge-gray-bg, #F3F4F6);
   color: var(--badge-gray-text, #4B5563);
 }

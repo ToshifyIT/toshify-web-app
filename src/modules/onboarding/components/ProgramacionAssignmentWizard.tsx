@@ -8,7 +8,7 @@ import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
-import type { TipoCandidato, TipoDocumento } from '../../../types/onboarding.types'
+import type { TipoCandidato, TipoDocumento, TipoAsignacion } from '../../../types/onboarding.types'
 
 // Labels para estados
 const ESTADO_LABELS: Record<string, string> = {
@@ -102,16 +102,19 @@ interface ProgramacionData {
   hora_cita: string
   // Campos para modo A CARGO (un solo set)
   tipo_candidato_cargo: TipoCandidato | ''
+  tipo_asignacion_cargo: TipoAsignacion | ''
   documento_cargo: TipoDocumento | ''
   zona_cargo: string
   distancia_cargo: number | ''
   // Campos para conductor DIURNO
   tipo_candidato_diurno: TipoCandidato | ''
+  tipo_asignacion_diurno: TipoAsignacion | ''
   documento_diurno: TipoDocumento | ''
   zona_diurno: string
   distancia_diurno: number | ''
   // Campos para conductor NOCTURNO
   tipo_candidato_nocturno: TipoCandidato | ''
+  tipo_asignacion_nocturno: TipoAsignacion | ''
   documento_nocturno: TipoDocumento | ''
   zona_nocturno: string
   distancia_nocturno: number | ''
@@ -171,16 +174,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         hora_cita: editData.hora_cita?.substring(0, 5) || '10:00',
         // A CARGO - campos
         tipo_candidato_cargo: (isCargo ? (editData.tipo_candidato || '') : '') as TipoCandidato,
+        tipo_asignacion_cargo: (isCargo ? (editData.tipo_asignacion || '') : '') as TipoAsignacion,
         documento_cargo: (isCargo ? (editData.tipo_documento || '') : '') as TipoDocumento,
         zona_cargo: isCargo ? (editData.zona || '') : '',
         distancia_cargo: isCargo ? (editData.distancia_minutos || '') : '',
         // DIURNO - campos
         tipo_candidato_diurno: (editData.tipo_candidato_diurno || '') as TipoCandidato,
+        tipo_asignacion_diurno: (editData.tipo_asignacion_diurno || editData.tipo_asignacion || '') as TipoAsignacion,
         documento_diurno: (editData.documento_diurno || '') as TipoDocumento,
         zona_diurno: editData.zona_diurno || '',
         distancia_diurno: editData.distancia_diurno || '',
         // NOCTURNO - campos
         tipo_candidato_nocturno: (editData.tipo_candidato_nocturno || '') as TipoCandidato,
+        tipo_asignacion_nocturno: (editData.tipo_asignacion_nocturno || editData.tipo_asignacion || '') as TipoAsignacion,
         documento_nocturno: (editData.documento_nocturno || '') as TipoDocumento,
         zona_nocturno: editData.zona_nocturno || '',
         distancia_nocturno: editData.distancia_nocturno || '',
@@ -207,16 +213,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     hora_cita: '10:00',
     // Campos A CARGO
     tipo_candidato_cargo: '',
+    tipo_asignacion_cargo: 'entrega_auto',
     documento_cargo: '',
     zona_cargo: '',
     distancia_cargo: '',
     // Campos DIURNO
     tipo_candidato_diurno: '',
+    tipo_asignacion_diurno: 'entrega_auto',
     documento_diurno: '',
     zona_diurno: '',
     distancia_diurno: '',
     // Campos NOCTURNO
     tipo_candidato_nocturno: '',
+    tipo_asignacion_nocturno: 'entrega_auto',
     documento_nocturno: '',
     zona_nocturno: '',
     distancia_nocturno: '',
@@ -717,6 +726,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.conductor_nombre = formData.conductor_nombre
         saveData.conductor_dni = formData.conductor_dni
         saveData.tipo_candidato = formData.tipo_candidato_cargo || null
+        saveData.tipo_asignacion = formData.tipo_asignacion_cargo || 'entrega_auto'
         saveData.tipo_documento = formData.documento_cargo
         saveData.zona = formData.zona_cargo
         saveData.distancia_minutos = formData.distancia_cargo || null
@@ -729,6 +739,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.conductor_nocturno_dni = null
         saveData.tipo_candidato_diurno = null
         saveData.tipo_candidato_nocturno = null
+        // tipo_asignacion_diurno y tipo_asignacion_nocturno no existen en BD aún
         saveData.documento_diurno = null
         saveData.documento_nocturno = null
         saveData.zona_diurno = null
@@ -741,22 +752,26 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.conductor_diurno_nombre = formData.conductor_diurno_nombre || null
         saveData.conductor_diurno_dni = formData.conductor_diurno_dni || null
         saveData.tipo_candidato_diurno = formData.tipo_candidato_diurno || null
+        // tipo_asignacion_diurno no existe en BD aún
         saveData.documento_diurno = formData.documento_diurno || null
         saveData.zona_diurno = formData.zona_diurno || null
         saveData.distancia_diurno = formData.distancia_diurno || null
-        
+
         saveData.conductor_nocturno_id = formData.conductor_nocturno_id || null
         saveData.conductor_nocturno_nombre = formData.conductor_nocturno_nombre || null
         saveData.conductor_nocturno_dni = formData.conductor_nocturno_dni || null
         saveData.tipo_candidato_nocturno = formData.tipo_candidato_nocturno || null
+        // tipo_asignacion_nocturno no existe en BD aún
         saveData.documento_nocturno = formData.documento_nocturno || null
         saveData.zona_nocturno = formData.zona_nocturno || null
         saveData.distancia_nocturno = formData.distancia_nocturno || null
-        
+
         // Zona general = primera zona disponible
         saveData.zona = formData.zona_diurno || formData.zona_nocturno
         // Tipo candidato general = primero disponible
         saveData.tipo_candidato = formData.tipo_candidato_diurno || formData.tipo_candidato_nocturno || null
+        // Tipo asignacion general = usar el primero seleccionado (columnas individuales no existen en BD)
+        saveData.tipo_asignacion = formData.tipo_asignacion_diurno || formData.tipo_asignacion_nocturno || 'entrega_auto'
         // Distancia general = primera disponible
         saveData.distancia_minutos = formData.distancia_diurno || formData.distancia_nocturno || null
         // Limpiar campos legacy
@@ -777,7 +792,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       } else {
         // CREAR
         saveData.estado = 'por_agendar'
-        saveData.tipo_asignacion = 'entrega_auto'
+        // tipo_asignacion ya se setea arriba según modalidad
         saveData.documento_listo = false
         saveData.grupo_whatsapp = false
         saveData.citado_ypf = false
@@ -2192,6 +2207,26 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         </div>
                         <div>
                           <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
+                            Tipo de Asignación *
+                          </label>
+                          <select
+                            value={formData.tipo_asignacion_cargo}
+                            onChange={(e) => setFormData({ ...formData, tipo_asignacion_cargo: e.target.value as TipoAsignacion })}
+                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
+                          >
+                            <option value="entrega_auto">Entrega de auto</option>
+                            <option value="asignacion_companero">Asignación compañero</option>
+                            <option value="cambio_auto">Cambio de auto</option>
+                            <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
+                            <option value="entrega_auto_cargo">Entrega auto a cargo</option>
+                            <option value="cambio_turno">Cambio de turno</option>
+                            <option value="devolucion_vehiculo">Devolución vehículo</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
                             Documento *
                           </label>
                           <select
@@ -2202,9 +2237,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="">Seleccionar...</option>
                             <option value="contrato">Contrato</option>
                             <option value="anexo">Anexo</option>
+                            <option value="carta_oferta">Carta Oferta</option>
                             <option value="na">N/A</option>
                           </select>
                         </div>
+                        <div></div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>
@@ -2265,6 +2302,26 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         </div>
                         <div>
                           <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
+                            Tipo de Asignación *
+                          </label>
+                          <select
+                            value={formData.tipo_asignacion_diurno}
+                            onChange={(e) => setFormData({ ...formData, tipo_asignacion_diurno: e.target.value as TipoAsignacion })}
+                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
+                          >
+                            <option value="entrega_auto">Entrega de auto</option>
+                            <option value="asignacion_companero">Asignación compañero</option>
+                            <option value="cambio_auto">Cambio de auto</option>
+                            <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
+                            <option value="entrega_auto_cargo">Entrega auto a cargo</option>
+                            <option value="cambio_turno">Cambio de turno</option>
+                            <option value="devolucion_vehiculo">Devolución vehículo</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
                             Documento *
                           </label>
                           <select
@@ -2275,9 +2332,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="">Seleccionar...</option>
                             <option value="contrato">Contrato</option>
                             <option value="anexo">Anexo</option>
+                            <option value="carta_oferta">Carta Oferta</option>
                             <option value="na">N/A</option>
                           </select>
                         </div>
+                        <div></div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>
@@ -2338,6 +2397,26 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         </div>
                         <div>
                           <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
+                            Tipo de Asignación *
+                          </label>
+                          <select
+                            value={formData.tipo_asignacion_nocturno}
+                            onChange={(e) => setFormData({ ...formData, tipo_asignacion_nocturno: e.target.value as TipoAsignacion })}
+                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
+                          >
+                            <option value="entrega_auto">Entrega de auto</option>
+                            <option value="asignacion_companero">Asignación compañero</option>
+                            <option value="cambio_auto">Cambio de auto</option>
+                            <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
+                            <option value="entrega_auto_cargo">Entrega auto a cargo</option>
+                            <option value="cambio_turno">Cambio de turno</option>
+                            <option value="devolucion_vehiculo">Devolución vehículo</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
                             Documento *
                           </label>
                           <select
@@ -2348,9 +2427,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="">Seleccionar...</option>
                             <option value="contrato">Contrato</option>
                             <option value="anexo">Anexo</option>
+                            <option value="carta_oferta">Carta Oferta</option>
                             <option value="na">N/A</option>
                           </select>
                         </div>
+                        <div></div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>

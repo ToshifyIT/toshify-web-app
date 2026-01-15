@@ -51,6 +51,7 @@ export interface ProgramacionOnboarding {
   conductor_diurno_nombre?: string
   conductor_diurno_dni?: string
   tipo_candidato_diurno?: TipoCandidato
+  tipo_asignacion_diurno?: TipoAsignacion
   documento_diurno?: TipoDocumento
   zona_diurno?: string
   distancia_diurno?: number
@@ -60,6 +61,7 @@ export interface ProgramacionOnboarding {
   conductor_nocturno_nombre?: string
   conductor_nocturno_dni?: string
   tipo_candidato_nocturno?: TipoCandidato
+  tipo_asignacion_nocturno?: TipoAsignacion
   documento_nocturno?: TipoDocumento
   zona_nocturno?: string
   distancia_nocturno?: number
@@ -155,6 +157,7 @@ export interface ProgramacionOnboardingFormData {
   conductor_diurno_nombre?: string
   conductor_diurno_dni?: string
   tipo_candidato_diurno?: TipoCandidato
+  tipo_asignacion_diurno?: TipoAsignacion
   documento_diurno?: TipoDocumento
   zona_diurno?: string
   distancia_diurno?: number
@@ -164,6 +167,7 @@ export interface ProgramacionOnboardingFormData {
   conductor_nocturno_nombre?: string
   conductor_nocturno_dni?: string
   tipo_candidato_nocturno?: TipoCandidato
+  tipo_asignacion_nocturno?: TipoAsignacion
   documento_nocturno?: TipoDocumento
   zona_nocturno?: string
   distancia_nocturno?: number
