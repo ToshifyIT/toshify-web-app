@@ -576,6 +576,20 @@ export function AsignacionesModule() {
         ? new Date(selectedAsignacion.fecha_programada).toISOString().split('T')[0]
         : null
 
+      // Detectar si hay conductores marcados como "companero" en las notas
+      // Formato: [COMPANERO:diurno:uuid] o [COMPANERO:nocturno:uuid]
+      const notas = selectedAsignacion.notas || ''
+      const companeroMatches = notas.match(/\[COMPANERO:(diurno|nocturno):([a-f0-9-]+)\]/gi) || []
+      const companeroIds = new Set<string>()
+      companeroMatches.forEach((match: string) => {
+        const parts = match.match(/\[COMPANERO:(diurno|nocturno):([a-f0-9-]+)\]/i)
+        if (parts && parts[2]) {
+          companeroIds.add(parts[2])
+        }
+      })
+      const tieneCompaneros = companeroIds.size > 0
+      console.log('🔍 Detectando companeros:', { notas, companeroMatches, companeroIds: Array.from(companeroIds), tieneCompaneros })
+
       await (supabase as any)
         .from('asignaciones_conductores')
         .update({ confirmado: true, fecha_confirmacion: ahora, fecha_inicio: ahora })
@@ -591,69 +605,140 @@ export function AsignacionesModule() {
       if (todosConfirmados) {
         const conductoresIds = (allConductores as any)?.map((c: any) => c.conductor_id) || []
 
-        const { data: asignacionesACerrar } = await supabase
-          .from('asignaciones')
-          .select('id, vehiculo_id')
-          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-          .eq('estado', 'activa')
-          .neq('id', selectedAsignacion.id)
+        // Si tiene companeros, lógica especial
+        if (tieneCompaneros) {
+          console.log('⚡ Ejecutando lógica de asignacion_companero')
 
-        if (asignacionesACerrar && asignacionesACerrar.length > 0) {
-          await supabase.from('asignaciones')
-            // @ts-ignore
-            .update({ estado: 'finalizada', fecha_fin: ahora, notas: '[AUTO-CERRADA]' })
-            .in('id', asignacionesACerrar.map((a: any) => a.id))
-        }
+          // Identificar conductores nuevos (los que NO son companero)
+          const conductoresNuevos = (allConductores as any)?.filter((c: any) => !companeroIds.has(c.conductor_id)) || []
+          console.log('👤 Conductores nuevos (no companero):', conductoresNuevos)
 
-        if (conductoresIds.length > 0) {
-          for (const conductorId of conductoresIds) {
-            await (supabase as any)
-              .from('asignaciones_conductores')
-              .update({ estado: 'cancelado', fecha_fin: ahora })
-              .eq('conductor_id', conductorId)
-              .eq('estado', 'asignado')
-              .neq('asignacion_id', selectedAsignacion.id)
-          }
-        }
-
-        await (supabase as any)
-          .from('asignaciones')
-          .update({ estado: 'activa', fecha_inicio: ahora, notas: confirmComentarios || selectedAsignacion.notas, updated_by: profile?.full_name || 'Sistema' })
-          .eq('id', selectedAsignacion.id)
-
-        // Actualizar estado del vehículo a EN_USO
-        const { data: estadoEnUso } = await supabase
-          .from('vehiculos_estados')
-          .select('id')
-          .eq('codigo', 'EN_USO')
-          .single()
-
-        if (estadoEnUso && selectedAsignacion.vehiculo_id) {
-          await (supabase
-            .from('vehiculos') as any)
-            .update({ estado_id: (estadoEnUso as any).id })
-            .eq('id', selectedAsignacion.vehiculo_id)
-        }
-
-        if (fechaProgramada) {
-          await supabase.from('vehiculos_turnos_ocupados').delete()
+          // Buscar la asignación activa del vehículo (donde están los companeros)
+          const { data: asignacionExistente } = await (supabase as any)
+            .from('asignaciones')
+            .select('id, fecha_inicio, notas')
             .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-            .eq('fecha', fechaProgramada)
+            .eq('estado', 'activa')
+            .neq('id', selectedAsignacion.id)
+            .single()
 
-          const turnosData = (allConductores as any)?.map((ac: any) => ({
-            vehiculo_id: selectedAsignacion.vehiculo_id,
-            fecha: fechaProgramada,
-            horario: ac.horario,
-            asignacion_conductor_id: ac.id,
-            estado: 'activo'
-          })) || []
+          if (asignacionExistente) {
+            console.log('📋 Asignación existente encontrada:', asignacionExistente.id)
 
-          if (turnosData.length > 0) {
-            await supabase.from('vehiculos_turnos_ocupados').insert(turnosData)
+            // Agregar los conductores NUEVOS a la asignación existente (sin cambiar fecha)
+            for (const conductorNuevo of conductoresNuevos) {
+              // Verificar si el conductor ya existe en esa asignación
+              const { data: yaExiste } = await (supabase as any)
+                .from('asignaciones_conductores')
+                .select('id')
+                .eq('asignacion_id', asignacionExistente.id)
+                .eq('conductor_id', conductorNuevo.conductor_id)
+                .single()
+
+              if (!yaExiste) {
+                console.log('➕ Agregando conductor', conductorNuevo.conductor_id, 'a asignación existente', asignacionExistente.id)
+                await (supabase as any)
+                  .from('asignaciones_conductores')
+                  .insert({
+                    asignacion_id: asignacionExistente.id,
+                    conductor_id: conductorNuevo.conductor_id,
+                    horario: conductorNuevo.horario,
+                    estado: 'activo',
+                    confirmado: true,
+                    fecha_confirmacion: ahora,
+                    fecha_inicio: ahora
+                  })
+              } else {
+                console.log('⚠️ Conductor ya existe en asignación existente, actualizando estado')
+                await (supabase as any)
+                  .from('asignaciones_conductores')
+                  .update({ estado: 'activo', confirmado: true, fecha_confirmacion: ahora })
+                  .eq('id', yaExiste.id)
+              }
+            }
           }
-        }
 
-        Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.', 'success')
+          // Finalizar esta asignación nueva (no activarla)
+          // Limpiar las notas de los tags de companero
+          const notasLimpias = notas.replace(/\[COMPANERO:(diurno|nocturno):[a-f0-9-]+\]\n?/gi, '').trim()
+          await (supabase as any)
+            .from('asignaciones')
+            .update({
+              estado: 'finalizada',
+              fecha_fin: ahora,
+              notas: `${notasLimpias}\n[COMPANERO-FINALIZADA] Conductores agregados a asignación existente`,
+              updated_by: profile?.full_name || 'Sistema'
+            })
+            .eq('id', selectedAsignacion.id)
+
+          Swal.fire('Confirmado', 'Los conductores nuevos fueron agregados a la asignación existente. Esta asignación ha sido finalizada.', 'success')
+
+        } else {
+          // Lógica normal (sin companeros)
+          const { data: asignacionesACerrar } = await supabase
+            .from('asignaciones')
+            .select('id, vehiculo_id')
+            .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+            .eq('estado', 'activa')
+            .neq('id', selectedAsignacion.id)
+
+          if (asignacionesACerrar && asignacionesACerrar.length > 0) {
+            await supabase.from('asignaciones')
+              // @ts-ignore
+              .update({ estado: 'finalizada', fecha_fin: ahora, notas: '[AUTO-CERRADA]' })
+              .in('id', asignacionesACerrar.map((a: any) => a.id))
+          }
+
+          if (conductoresIds.length > 0) {
+            for (const conductorId of conductoresIds) {
+              await (supabase as any)
+                .from('asignaciones_conductores')
+                .update({ estado: 'cancelado', fecha_fin: ahora })
+                .eq('conductor_id', conductorId)
+                .eq('estado', 'asignado')
+                .neq('asignacion_id', selectedAsignacion.id)
+            }
+          }
+
+          await (supabase as any)
+            .from('asignaciones')
+            .update({ estado: 'activa', fecha_inicio: ahora, notas: confirmComentarios || selectedAsignacion.notas, updated_by: profile?.full_name || 'Sistema' })
+            .eq('id', selectedAsignacion.id)
+
+          // Actualizar estado del vehículo a EN_USO
+          const { data: estadoEnUso } = await supabase
+            .from('vehiculos_estados')
+            .select('id')
+            .eq('codigo', 'EN_USO')
+            .single()
+
+          if (estadoEnUso && selectedAsignacion.vehiculo_id) {
+            await (supabase
+              .from('vehiculos') as any)
+              .update({ estado_id: (estadoEnUso as any).id })
+              .eq('id', selectedAsignacion.vehiculo_id)
+          }
+
+          if (fechaProgramada) {
+            await supabase.from('vehiculos_turnos_ocupados').delete()
+              .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+              .eq('fecha', fechaProgramada)
+
+            const turnosData = (allConductores as any)?.map((ac: any) => ({
+              vehiculo_id: selectedAsignacion.vehiculo_id,
+              fecha: fechaProgramada,
+              horario: ac.horario,
+              asignacion_conductor_id: ac.id,
+              estado: 'activo'
+            })) || []
+
+            if (turnosData.length > 0) {
+              await supabase.from('vehiculos_turnos_ocupados').insert(turnosData)
+            }
+          }
+
+          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.', 'success')
+        }
       } else {
         const pendientes = (allConductores as any)?.filter((c: any) => !c.confirmado).length || 0
         Swal.fire('Confirmación Parcial', `${conductoresToConfirm.length} confirmado(s). Faltan ${pendientes}.`, 'info')
@@ -1322,9 +1407,16 @@ export function AsignacionesModule() {
                         <p className="asig-conductor-card-name">
                           {ac.conductores.nombres} {ac.conductores.apellidos}
                         </p>
-                        <p className="asig-conductor-card-info">Licencia: {ac.conductores.numero_licencia}</p>
+                        <p className="asig-conductor-card-info">Licencia: {ac.conductores.numero_licencia || '-'}</p>
                         {ac.horario !== 'todo_dia' && (
                           <p className="asig-conductor-card-info">Turno: <strong>{ac.horario}</strong></p>
+                        )}
+                        {ac.documento && (
+                          <p className="asig-conductor-card-info">
+                            Documento: <strong style={{ color: ac.documento === 'CARTA_OFERTA' ? '#059669' : ac.documento === 'ANEXO' ? '#2563EB' : '#6B7280' }}>
+                              {ac.documento === 'CARTA_OFERTA' ? 'Carta Oferta' : ac.documento === 'ANEXO' ? 'Anexo' : ac.documento}
+                            </strong>
+                          </p>
                         )}
                         <p className="asig-conductor-status">
                           {ac.confirmado ? (

@@ -686,6 +686,19 @@ export function ProgramacionModule() {
     if (!result.isConfirmed) return
 
     try {
+      // Helper para mapear documento de programación a asignación
+      const mapDocumento = (doc: string | undefined) => {
+        if (doc === 'contrato') return 'CARTA_OFERTA'
+        if (doc === 'anexo') return 'ANEXO'
+        return 'N/A'
+      }
+
+      // NOTA: La lógica de "asignacion_companero" se maneja al CONFIRMAR la asignación,
+      // no aquí. Aquí creamos la asignación con TODOS los conductores visibles.
+      // Al confirmar (handleConfirmar), se agrega el conductor nuevo a la asignación existente
+      // y se finaliza esta asignación nueva.
+
+      // Crear nueva asignación normalmente (mostrando TODOS los conductores)
       // Generar codigo de asignacion
       const fecha = new Date()
       const codigo = `ASG-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(fecha.getDate()).padStart(2, '0')}-${String(fecha.getHours()).padStart(2, '0')}${String(fecha.getMinutes()).padStart(2, '0')}`
@@ -696,21 +709,33 @@ export function ProgramacionModule() {
       console.log('🔍 Modalidad programacion:', prog.modalidad, '→ Es TURNO:', esTurno)
 
       // Construir fecha_programada correctamente con la hora de la cita
-      // Crear la fecha en hora local de Argentina y convertir a ISO
       let fechaProgramada: string
       if (prog.fecha_cita) {
-        // Usar la hora de la cita tal como está guardada, o 10:00 si no hay
         const hora = prog.hora_cita && prog.hora_cita.trim() !== ''
           ? prog.hora_cita.substring(0, 5)
           : '10:00'
         const [hh, mm] = hora.split(':').map(Number)
-        // Crear fecha local con la hora correcta
         const fechaLocal = new Date(prog.fecha_cita + 'T12:00:00')
         fechaLocal.setHours(hh, mm, 0, 0)
         fechaProgramada = fechaLocal.toISOString()
         console.log('📅 Fecha programada construida:', { fecha: prog.fecha_cita, hora, fechaLocal: fechaLocal.toString(), iso: fechaProgramada })
       } else {
         fechaProgramada = new Date().toISOString()
+      }
+
+      // Construir notas con metadata de companeros para que al confirmar sepamos quién es quién
+      let notasBase = prog.observaciones || `Creado desde programacion. Tipo: ${TIPO_ASIGNACION_LABELS[prog.tipo_asignacion || ''] || prog.tipo_asignacion}`
+
+      // Agregar metadata de companeros al final
+      const companeroMeta: string[] = []
+      if (diurnoEsCompanero && prog.conductor_diurno_id) {
+        companeroMeta.push(`[COMPANERO:diurno:${prog.conductor_diurno_id}]`)
+      }
+      if (nocturnoEsCompanero && prog.conductor_nocturno_id) {
+        companeroMeta.push(`[COMPANERO:nocturno:${prog.conductor_nocturno_id}]`)
+      }
+      if (companeroMeta.length > 0) {
+        notasBase = `${notasBase}\n${companeroMeta.join('\n')}`
       }
 
       const { data: asignacion, error: asignacionError } = await (supabase
@@ -722,7 +747,7 @@ export function ProgramacionModule() {
           horario: esTurno ? 'TURNO' : 'CARGO',
           fecha_programada: fechaProgramada,
           estado: 'programado',
-          notas: prog.observaciones || `Creado desde programacion. Tipo: ${TIPO_ASIGNACION_LABELS[prog.tipo_asignacion || ''] || prog.tipo_asignacion}`,
+          notas: notasBase,
           created_by: user?.id || null,
           created_by_name: profile?.full_name || 'Sistema'
         })
@@ -742,21 +767,14 @@ export function ProgramacionModule() {
         conductor_nocturno_nombre: prog.conductor_nocturno_nombre
       })
 
-      // Helper para mapear documento de programación a asignación
-      const mapDocumento = (doc: string | undefined) => {
-        if (doc === 'contrato') return 'CARTA_OFERTA'
-        if (doc === 'anexo') return 'ANEXO'
-        return 'N/A'
-      }
-
       // Crear asignacion_conductor(es) segun modalidad
-      // IMPORTANTE: NO insertar conductores que tengan tipo_asignacion = 'asignacion_companero'
+      // NOTA: Insertamos TODOS los conductores (incluso los que son asignacion_companero)
+      // La lógica especial de companero se ejecuta al CONFIRMAR la asignación
       let conductoresInsertados = 0
 
-      // Primero intentar con conductores duales (modalidad TURNO)
-      // Solo insertar conductor diurno si NO es asignacion_companero
-      if (prog.conductor_diurno_id && !diurnoEsCompanero) {
-        console.log('✅ Insertando conductor diurno:', prog.conductor_diurno_id, 'doc:', prog.documento_diurno)
+      // Insertar conductor diurno
+      if (prog.conductor_diurno_id) {
+        console.log('✅ Insertando conductor diurno:', prog.conductor_diurno_id, 'doc:', prog.documento_diurno, 'esCompanero:', diurnoEsCompanero)
         const { error: diurnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -771,13 +789,11 @@ export function ProgramacionModule() {
           throw diurnoError
         }
         conductoresInsertados++
-      } else if (prog.conductor_diurno_id && diurnoEsCompanero) {
-        console.log('⏭️ Saltando conductor diurno (asignacion_companero):', prog.conductor_diurno_id)
       }
 
-      // Solo insertar conductor nocturno si NO es asignacion_companero
-      if (prog.conductor_nocturno_id && !nocturnoEsCompanero) {
-        console.log('✅ Insertando conductor nocturno:', prog.conductor_nocturno_id, 'doc:', prog.documento_nocturno)
+      // Insertar conductor nocturno
+      if (prog.conductor_nocturno_id) {
+        console.log('✅ Insertando conductor nocturno:', prog.conductor_nocturno_id, 'doc:', prog.documento_nocturno, 'esCompanero:', nocturnoEsCompanero)
         const { error: nocturnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -792,8 +808,6 @@ export function ProgramacionModule() {
           throw nocturnoError
         }
         conductoresInsertados++
-      } else if (prog.conductor_nocturno_id && nocturnoEsCompanero) {
-        console.log('⏭️ Saltando conductor nocturno (asignacion_companero):', prog.conductor_nocturno_id)
       }
 
       // Si no hay conductores duales, intentar con conductor legacy (A CARGO)
