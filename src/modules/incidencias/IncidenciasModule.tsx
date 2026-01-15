@@ -916,12 +916,15 @@ export function IncidenciasModule() {
       const tipoCobroId = incidenciaForm.tipo_cobro_descuento_id
       const esLogisticaTipo = tipoCobroId?.startsWith('__')
       
+      // Desestructurar para excluir 'monto' que no existe en la tabla incidencias
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { monto: _monto, ...incidenciaFormSinMonto } = incidenciaForm
+      
       const dataToSave = {
-        ...incidenciaForm,
+        ...incidenciaFormSinMonto,
         semana: semanaCalculada,
         created_by: user?.id,
         tipo: esCobro ? 'cobro' : 'logistica',  // Asignar tipo según tab activo
-        monto_penalidades: esCobro ? incidenciaForm.monto : null,  // Guardar monto en campo correcto
         // Si es logística, guardar en tipo_incidencia (legacy), si es cobro guardar en tipo_cobro_descuento_id
         tipo_incidencia: esLogisticaTipo ? tipoCobroId?.replace('__', '').replace(/_/g, ' ') : undefined,
         tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null
@@ -934,10 +937,44 @@ export function IncidenciasModule() {
         if (error) throw error
         Swal.fire('Guardado', 'Incidencia actualizada correctamente', 'success')
       } else {
-        const { error } = await (supabase.from('incidencias' as any) as any)
+        // Insertar incidencia y obtener el ID
+        const { data: incidenciaCreada, error } = await (supabase.from('incidencias' as any) as any)
           .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
+          .select('id')
+          .single()
         if (error) throw error
-        Swal.fire('Guardado', 'Incidencia registrada correctamente', 'success')
+        
+        // Si es incidencia de cobro con monto, crear penalidad asociada automáticamente
+        if (esCobro && incidenciaForm.monto && incidenciaForm.monto > 0 && incidenciaCreada?.id) {
+          const penalidadData = {
+            incidencia_id: incidenciaCreada.id,
+            vehiculo_id: incidenciaForm.vehiculo_id || null,
+            conductor_id: incidenciaForm.conductor_id || null,
+            tipo_cobro_descuento_id: tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
+            semana: semanaCalculada,
+            fecha: incidenciaForm.fecha,
+            turno: incidenciaForm.turno || null,
+            area_responsable: incidenciaForm.area?.toUpperCase().replace(/ /g, '_') || 'LOGISTICA',
+            detalle: 'Cobro por incidencia',
+            monto: incidenciaForm.monto,
+            observaciones: incidenciaForm.descripcion || '',
+            aplicado: false,
+            created_by: user?.id,
+            created_by_name: profile?.full_name || 'Sistema'
+          }
+          
+          const { error: penError } = await (supabase.from('penalidades' as any) as any)
+            .insert(penalidadData)
+          
+          if (penError) {
+            console.error('Error creando penalidad asociada:', penError)
+            // No fallar si la penalidad no se crea, la incidencia ya fue guardada
+          }
+          
+          Swal.fire('Guardado', 'Incidencia y cobro registrados correctamente', 'success')
+        } else {
+          Swal.fire('Guardado', 'Incidencia registrada correctamente', 'success')
+        }
       }
 
       setShowModal(false)
