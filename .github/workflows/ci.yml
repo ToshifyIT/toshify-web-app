@@ -7,6 +7,11 @@ on:
   push:
     branches: [development]
 
+# Cancelar runs anteriores del mismo branch cuando hay un nuevo push
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
