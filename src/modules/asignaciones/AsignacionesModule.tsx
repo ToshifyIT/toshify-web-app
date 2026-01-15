@@ -506,16 +506,28 @@ export function AsignacionesModule() {
         const asignacion = asignaciones.find(a => a.id === id)
 
         // 1. Limpiar referencia en programaciones_onboarding (si existe)
-        await (supabase as any)
+        // Esto permite re-enviar la programacion despues de eliminar la asignacion
+        const { data: progUpdate, error: progError } = await (supabase as any)
           .from('programaciones_onboarding')
-          .update({ asignacion_id: null })
+          .update({ asignacion_id: null, fecha_asignacion_creada: null })
           .eq('asignacion_id', id)
+          .select('id')
+
+        if (progError) {
+          console.error('Error limpiando referencia en programaciones:', progError)
+        } else {
+          console.log('✅ Referencia limpiada en programaciones:', progUpdate?.length || 0, 'registros actualizados')
+        }
 
         // 2. Eliminar conductores asociados
-        await (supabase as any)
+        const { error: conductoresError } = await (supabase as any)
           .from('asignaciones_conductores')
           .delete()
           .eq('asignacion_id', id)
+
+        if (conductoresError) {
+          console.error('Error eliminando conductores:', conductoresError)
+        }
 
         // 3. Eliminar la asignación
         const { error: asignacionError } = await (supabase as any)
@@ -537,7 +549,14 @@ export function AsignacionesModule() {
           }
         }
 
-        Swal.fire('Eliminado', 'La asignación ha sido eliminada. Puedes re-enviarla desde Programaciones.', 'success')
+        Swal.fire({
+          icon: 'success',
+          title: 'Eliminado',
+          html: `La asignación ha sido eliminada.<br><br>
+                 <strong>Si deseas re-enviar esta programación:</strong><br>
+                 Ve a <em>Programaciones</em> y recarga la página (F5), luego podrás enviarla nuevamente.`,
+          confirmButtonText: 'Entendido'
+        })
         loadAsignaciones()
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
