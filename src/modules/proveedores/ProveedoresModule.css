@@ -145,3 +145,18 @@
     font-size: 10px;
   }
 }
+
+/* =====================================================
+   BOTON REACTIVAR
+   ===================================================== */
+
+.dt-btn-reactivar {
+  color: #10B981 !important;
+  background: rgba(16, 185, 129, 0.1) !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+
+.dt-btn-reactivar:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: #10B981 !important;
+}
