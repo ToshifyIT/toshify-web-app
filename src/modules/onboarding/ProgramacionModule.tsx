@@ -2,10 +2,10 @@
 // Modulo de programacion de entregas de vehiculos
 
 import { useState, useEffect, useMemo } from 'react'
-import { 
+import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
-  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy
+  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -948,10 +948,20 @@ export function ProgramacionModule() {
         pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
         headerAction={(
-          <button className="btn-primary" onClick={handleCreate}>
-            <Plus size={16} />
-            Nueva Programación
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="btn-secondary"
+              onClick={() => loadProgramaciones()}
+              title="Recargar datos"
+              disabled={loading}
+            >
+              <RefreshCw size={16} className={loading ? 'spin' : ''} />
+            </button>
+            <button className="btn-primary" onClick={handleCreate}>
+              <Plus size={16} />
+              Nueva Programación
+            </button>
+          </div>
         )}
       />
 
