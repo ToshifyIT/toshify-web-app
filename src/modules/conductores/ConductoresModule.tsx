@@ -712,8 +712,8 @@ export function ConductoresModule() {
         .from("conductores")
         .insert([
           {
-            nombres: formData.nombres,
-            apellidos: formData.apellidos,
+            nombres: formData.nombres?.toUpperCase(),
+            apellidos: formData.apellidos?.toUpperCase(),
             numero_dni: formData.numero_dni || null,
             numero_cuit: formData.numero_cuit || null,
             cbu: formData.cbu || null,
@@ -1070,8 +1070,8 @@ export function ConductoresModule() {
     const { error: updateError } = await (supabase as any)
       .from("conductores")
       .update({
-        nombres: formData.nombres,
-        apellidos: formData.apellidos,
+        nombres: formData.nombres?.toUpperCase(),
+        apellidos: formData.apellidos?.toUpperCase(),
         numero_dni: formData.numero_dni || null,
         numero_cuit: formData.numero_cuit || null,
         cbu: formData.cbu || null,
