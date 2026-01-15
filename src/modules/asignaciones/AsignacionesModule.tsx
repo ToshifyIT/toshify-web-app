@@ -910,47 +910,55 @@ export function AsignacionesModule() {
       }
     },
     {
-      accessorKey: 'fecha_programada',
-      header: 'Fecha Entrega',
+      id: 'cita_programada',
+      header: 'Cita Programada',
+      accessorFn: (row) => {
+        if (!row.fecha_programada) return '-'
+        const fecha = new Date(row.fecha_programada)
+        return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+      },
       sortingFn: (rowA, rowB) => {
         const fechaA = rowA.original.fecha_programada ? new Date(rowA.original.fecha_programada).getTime() : 0
         const fechaB = rowB.original.fecha_programada ? new Date(rowB.original.fecha_programada).getTime() : 0
         return fechaA - fechaB
       },
-      cell: ({ row }) => (
-        <span>
-          {row.original.fecha_programada
-            ? new Date(row.original.fecha_programada).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })
-            : 'No definida'}
-        </span>
-      )
+      cell: ({ row }) => {
+        const fechaProg = row.original.fecha_programada
+        if (!fechaProg) return <span className="text-muted">-</span>
+        
+        const fecha = new Date(fechaProg)
+        const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+        const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+        
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', fontSize: '12px', lineHeight: '1.3' }}>
+            <span style={{ fontWeight: 500 }}>{fechaStr}</span>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{horaStr}</span>
+          </div>
+        )
+      }
     },
     {
-      id: 'hora_entrega',
-      header: 'Hora',
+      id: 'entrega_real',
+      header: 'Entrega Real',
       accessorFn: (row) => {
-        const estado = row.estado
-        const fechaMostrar = (estado === 'activa' || estado === 'finalizada')
-          ? row.fecha_inicio
-          : row.fecha_programada
-        return fechaMostrar
-          ? new Date(fechaMostrar).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-          : '-'
+        if (!row.fecha_inicio) return '-'
+        const fecha = new Date(row.fecha_inicio)
+        return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
       },
       cell: ({ row }) => {
-        const estado = row.original.estado
-        // Si está activa o finalizada, mostrar hora real de entrega (fecha_inicio)
-        // Si está programada, mostrar hora programada
-        const fechaMostrar = (estado === 'activa' || estado === 'finalizada')
-          ? row.original.fecha_inicio
-          : row.original.fecha_programada
-
+        const fechaInicio = row.original.fecha_inicio
+        if (!fechaInicio) return <span className="text-muted">-</span>
+        
+        const fecha = new Date(fechaInicio)
+        const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+        const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+        
         return (
-          <span title={estado === 'programado' ? 'Hora programada' : 'Hora de entrega real'}>
-            {fechaMostrar
-              ? new Date(fechaMostrar).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-              : '-'}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', fontSize: '12px', lineHeight: '1.3' }}>
+            <span style={{ fontWeight: 500, color: 'var(--color-success)' }}>{fechaStr}</span>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{horaStr}</span>
+          </div>
         )
       }
     },
