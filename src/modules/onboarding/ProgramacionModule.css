@@ -106,18 +106,22 @@
 .prog-vehiculo-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  max-width: 90px;
 }
 
 .prog-patente {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-primary);
 }
 
 .prog-modelo {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Celda de Conductor - Solo texto */
@@ -141,16 +145,17 @@
 .prog-conductores-compact {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 140px;
+  gap: 2px;
+  min-width: 100px;
+  max-width: 120px;
 }
 
 /* Conductor con turno asignado */
 .prog-conductor-turno {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 4px;
+  font-size: 11px;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -172,10 +177,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  font-size: 10px;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  font-size: 9px;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -206,18 +211,22 @@
   background: rgba(219, 234, 254, 0.3);
 }
 
-/* Celda de Fecha - Sin icono */
-.prog-fecha-cell {
+/* Celda de Fecha y Hora combinada */
+.prog-fecha-hora {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+}
+
+.prog-fecha {
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .prog-hora {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 /* =====================================================
@@ -233,8 +242,8 @@
 /* Badge de Modalidad - Igual que Asignaciones */
 .prog-modalidad-badge {
   display: inline-block;
-  font-size: 11px;
-  padding: 4px 10px;
+  font-size: 10px;
+  padding: 3px 6px;
   border-radius: 4px;
   font-weight: 600;
   text-transform: uppercase;
@@ -287,11 +296,12 @@
 /* Badge de Estado - Igual que Asignaciones */
 .prog-estado-badge {
   display: inline-block;
-  padding: 4px 10px;
+  padding: 3px 6px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: capitalize;
+  white-space: nowrap;
 }
 
 .prog-estado-badge.por_agendar {
@@ -873,4 +883,224 @@
 
 .spin {
   animation: spin 1s linear infinite;
+}
+
+/* =====================================================
+   COLUMNAS DE GESTIÓN DIARIA
+   ===================================================== */
+
+/* Botón de check inline */
+.prog-check-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.prog-check-btn:hover {
+  border-color: #DC2626;
+  color: #DC2626;
+}
+
+.prog-check-btn.checked {
+  background: #D1FAE5;
+  border-color: #059669;
+  color: #059669;
+}
+
+.prog-check-btn.checked:hover {
+  background: #A7F3D0;
+  border-color: #047857;
+}
+
+/* Select inline para confirmación y estado cabify */
+.prog-inline-select {
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  min-width: 70px;
+  transition: all 0.15s ease;
+}
+
+.prog-inline-select:hover {
+  border-color: var(--border-primary);
+}
+
+.prog-inline-select:focus {
+  outline: none;
+  border-color: #DC2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1);
+}
+
+/* Estados de confirmación */
+.prog-inline-select.confirmacion.sin_confirmar {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select.confirmacion.confirmo {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select.confirmacion.no_confirmo {
+  background: var(--badge-red-bg, #FEE2E2);
+  color: var(--badge-red-text, #DC2626);
+}
+
+.prog-inline-select.confirmacion.reprogramar {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #D97706);
+}
+
+/* Estados de Cabify */
+.prog-inline-select.cabify.pendiente {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select.cabify.listo_cabify {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select.cabify.asignar_auto {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select.cabify.crear_cuenta {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+/* Input inline para dirección */
+.prog-inline-input {
+  width: 100%;
+  min-width: 120px;
+  padding: 4px 8px;
+  border: 1px solid #DC2626;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.prog-inline-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+}
+
+/* Celda de dirección clickable */
+.prog-direccion-cell {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+  max-width: 100px;
+}
+
+.prog-direccion-cell:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.prog-direccion-cell span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prog-direccion-cell svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+/* Celda de especialista clickable */
+.prog-especialista-cell {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+  max-width: 90px;
+}
+
+.prog-especialista-cell:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.prog-especialista-cell span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prog-especialista-cell svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+/* Tipo de asignación */
+.prog-inline-select.tipo-asignacion {
+  min-width: 95px;
+  max-width: 110px;
+}
+
+.prog-inline-select.tipo-asignacion.entrega_auto {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select.tipo-asignacion.asignacion_companero {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+.prog-inline-select.tipo-asignacion.cambio_auto {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select.tipo-asignacion.asignacion_auto_cargo {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #92400E);
+}
+
+.prog-inline-select.tipo-asignacion.entrega_auto_cargo {
+  background: #ECFDF5;
+  color: #047857;
+}
+
+.prog-inline-select.tipo-asignacion.cambio_turno {
+  background: #FDF4FF;
+  color: #A21CAF;
+}
+
+.prog-inline-select.tipo-asignacion.devolucion_vehiculo {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #4B5563);
 }

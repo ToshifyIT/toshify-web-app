@@ -4,7 +4,14 @@
 export type EstadoKanban = 'por_agendar' | 'agendado' | 'en_curso' | 'completado' | 'cancelado'
 
 // Tipos de asignación
-export type TipoAsignacion = 'entrega_auto' | 'cambio_auto' | 'asignacion_companero'
+export type TipoAsignacion =
+  | 'entrega_auto'
+  | 'asignacion_companero'
+  | 'cambio_auto'
+  | 'asignacion_auto_cargo'
+  | 'entrega_auto_cargo'
+  | 'cambio_turno'
+  | 'devolucion_vehiculo'
 
 // Tipos de candidato
 export type TipoCandidato = 'nuevo' | 'antiguo' | 'reingreso'
@@ -220,8 +227,12 @@ export const KANBAN_COLUMNS: KanbanColumn[] = [
 // Labels para mostrar en UI
 export const TIPO_ASIGNACION_LABELS: Record<TipoAsignacion, string> = {
   entrega_auto: 'Entrega de auto',
+  asignacion_companero: 'Asignación de compañero',
   cambio_auto: 'Cambio de auto',
-  asignacion_companero: 'Asignación de compañero'
+  asignacion_auto_cargo: 'Asignación auto a cargo',
+  entrega_auto_cargo: 'Entrega auto a cargo',
+  cambio_turno: 'Cambio de turno',
+  devolucion_vehiculo: 'Devolución de Vehículo'
 }
 
 export const TIPO_CANDIDATO_LABELS: Record<TipoCandidato, string> = {
