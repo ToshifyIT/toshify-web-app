@@ -4,7 +4,14 @@
 export type EstadoKanban = 'por_agendar' | 'agendado' | 'en_curso' | 'completado' | 'cancelado'
 
 // Tipos de asignación
-export type TipoAsignacion = 'entrega_auto' | 'cambio_auto' | 'asignacion_companero'
+export type TipoAsignacion =
+  | 'entrega_auto'
+  | 'asignacion_companero'
+  | 'cambio_auto'
+  | 'asignacion_auto_cargo'
+  | 'entrega_auto_cargo'
+  | 'cambio_turno'
+  | 'devolucion_vehiculo'
 
 // Tipos de candidato
 export type TipoCandidato = 'nuevo' | 'antiguo' | 'reingreso'
@@ -44,6 +51,7 @@ export interface ProgramacionOnboarding {
   conductor_diurno_nombre?: string
   conductor_diurno_dni?: string
   tipo_candidato_diurno?: TipoCandidato
+  tipo_asignacion_diurno?: TipoAsignacion
   documento_diurno?: TipoDocumento
   zona_diurno?: string
   distancia_diurno?: number
@@ -53,6 +61,7 @@ export interface ProgramacionOnboarding {
   conductor_nocturno_nombre?: string
   conductor_nocturno_dni?: string
   tipo_candidato_nocturno?: TipoCandidato
+  tipo_asignacion_nocturno?: TipoAsignacion
   documento_nocturno?: TipoDocumento
   zona_nocturno?: string
   distancia_nocturno?: number
@@ -148,6 +157,7 @@ export interface ProgramacionOnboardingFormData {
   conductor_diurno_nombre?: string
   conductor_diurno_dni?: string
   tipo_candidato_diurno?: TipoCandidato
+  tipo_asignacion_diurno?: TipoAsignacion
   documento_diurno?: TipoDocumento
   zona_diurno?: string
   distancia_diurno?: number
@@ -157,6 +167,7 @@ export interface ProgramacionOnboardingFormData {
   conductor_nocturno_nombre?: string
   conductor_nocturno_dni?: string
   tipo_candidato_nocturno?: TipoCandidato
+  tipo_asignacion_nocturno?: TipoAsignacion
   documento_nocturno?: TipoDocumento
   zona_nocturno?: string
   distancia_nocturno?: number
@@ -220,8 +231,12 @@ export const KANBAN_COLUMNS: KanbanColumn[] = [
 // Labels para mostrar en UI
 export const TIPO_ASIGNACION_LABELS: Record<TipoAsignacion, string> = {
   entrega_auto: 'Entrega de auto',
+  asignacion_companero: 'Asignación de compañero',
   cambio_auto: 'Cambio de auto',
-  asignacion_companero: 'Asignación de compañero'
+  asignacion_auto_cargo: 'Asignación auto a cargo',
+  entrega_auto_cargo: 'Entrega auto a cargo',
+  cambio_turno: 'Cambio de turno',
+  devolucion_vehiculo: 'Devolución de Vehículo'
 }
 
 export const TIPO_CANDIDATO_LABELS: Record<TipoCandidato, string> = {

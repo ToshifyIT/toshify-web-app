@@ -168,7 +168,7 @@ function ModalidadChart({ estadisticas }: ModalidadChartProps) {
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value: number) => [`${value} conductores`, 'Cantidad']} />
+              <Tooltip formatter={(value) => [`${value} conductores`, 'Cantidad']} />
             </PieChart>
           </ResponsiveContainer>
         </div>

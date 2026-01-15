@@ -5,7 +5,8 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
-  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw
+  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw,
+  Check, X, MapPin
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -27,9 +28,13 @@ const ESTADO_LABELS: Record<string, string> = {
 }
 
 const TIPO_ASIGNACION_LABELS: Record<string, string> = {
-  entrega_auto: 'Entrega de Auto',
-  cambio_auto: 'Cambio de Auto',
-  asignacion_companero: 'Asignacion Companero'
+  entrega_auto: 'Entrega de auto',
+  asignacion_companero: 'Asignación compañero',
+  cambio_auto: 'Cambio de auto',
+  asignacion_auto_cargo: 'Asig. auto a cargo',
+  entrega_auto_cargo: 'Entrega auto a cargo',
+  cambio_turno: 'Cambio de turno',
+  devolucion_vehiculo: 'Devolución vehículo'
 }
 
 // Labels para mensajes de agenda
@@ -39,46 +44,83 @@ const TIPO_ASIGNACION_MSG: Record<string, string> = {
   asignacion_companero: 'Asignacion de companero'
 }
 
+
 // Funcion para generar mensaje de agenda
 function generarMensajeAgenda(prog: ProgramacionOnboardingCompleta): string {
-  const tipoMsg = TIPO_ASIGNACION_MSG[prog.tipo_asignacion || ''] || 'Asignacion'
-  const conductor = prog.conductor_display || prog.conductor_nombre || 'SIN NOMBRE'
   const patente = prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || 'N/A'
-  const zona = prog.zona || 'N/A'
-  const distancia = prog.distancia_minutos || 'N/A'
-  const documento = prog.tipo_documento === 'contrato' ? 'Contrato' : 
-                    prog.tipo_documento === 'anexo' ? 'Anexo' : 'N/A'
-  
-  // Formatear fecha
+  const tipoAsignacion = TIPO_ASIGNACION_MSG[prog.tipo_asignacion || ''] || prog.tipo_asignacion || ''
+  const zona = prog.zona || prog.zona_diurno || prog.zona_nocturno || 'N/A'
+  const distancia = prog.distancia_minutos || prog.distancia_diurno || prog.distancia_nocturno || 'N/A'
+  const documento = prog.tipo_documento === 'contrato' ? 'Contrato' : prog.tipo_documento === 'anexo' ? 'Anexo' : 'N/A'
+
+  // Formatear fecha con día de la semana
   let fechaStr = 'N/A'
   if (prog.fecha_cita) {
     const fecha = new Date(prog.fecha_cita + 'T12:00:00')
-    const dias = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
     const dia = dias[fecha.getDay()]
     fechaStr = `${dia} ${fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
   }
-  
+
   const hora = prog.hora_cita?.substring(0, 5) || 'N/A'
-  
-  // Turno de la fila (diurno/nocturno) o vacio si es A CARGO
-  const turnoEmoji = prog.turno === 'diurno' ? '🌞' : prog.turno === 'nocturno' ? '🌙' : ''
-  const turnoLabel = prog.turno === 'diurno' ? 'Diurno' : prog.turno === 'nocturno' ? 'Nocturno' : ''
-  
-  // Generar mensaje unico por fila
-  let mensaje = `– ${tipoMsg} a ${conductor.toUpperCase()}
-🗓️ Fecha: ${fechaStr}
-🕓 Hora: ${hora}
-🚗 Auto asignado: ${patente}`
 
-  // Agregar turno solo si tiene (modalidad TURNO)
-  if (turnoLabel) {
-    mensaje += `\n${turnoEmoji} Turno: ${turnoLabel}`
-  }
+  // Generar mensaje según modalidad
+  let mensaje = ''
 
-  mensaje += `
-📍 Ubicacion: ${zona}
+  if (prog.modalidad === 'TURNO') {
+    // Mensaje para modalidad TURNO (formato simple)
+    const conductorDiurno = prog.conductor_diurno_nombre || 'Sin asignar'
+    const conductorNocturno = prog.conductor_nocturno_nombre || 'Sin asignar'
+
+    mensaje = `– ${tipoAsignacion} a
+🌞 Diurno: ${conductorDiurno}
+🌙 Nocturno: ${conductorNocturno}
+📅 Fecha: ${fechaStr}
+⏰ Hora: ${hora}
+🚗 Auto asignado: ${patente}
+📍 Ubicacion: ${zona.toUpperCase()}
 👥 Distancia: ${distancia} minutos
 📄 Documento: ${documento}`
+  } else {
+    // Mensaje para modalidad A CARGO (formato completo con importantes)
+    const modelo = prog.vehiculo_entregar_modelo || prog.vehiculo_entregar_modelo_sistema || ''
+    const color = prog.vehiculo_entregar_color || ''
+
+    // Construir info del auto con modelo y color
+    let autoInfo = patente
+    if (modelo && color) {
+      autoInfo = `${patente}-${modelo.toUpperCase()}-${color.toUpperCase()}`
+    } else if (modelo) {
+      autoInfo = `${patente}-${modelo.toUpperCase()}`
+    }
+
+    // Formatear fecha con día capitalizado para A CARGO
+    let fechaStrCargo = 'N/A'
+    if (prog.fecha_cita) {
+      const fecha = new Date(prog.fecha_cita + 'T12:00:00')
+      const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+      const dia = dias[fecha.getDay()]
+      fechaStrCargo = `${dia} ${fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+    }
+
+    // Determinar turno
+    const turnoEmoji = prog.turno === 'diurno' ? '🌞' : prog.turno === 'nocturno' ? '🌙' : ''
+    const turnoLabel = prog.turno === 'diurno' ? 'Diurno' : prog.turno === 'nocturno' ? 'Nocturno' : ''
+
+    mensaje = `📅 Fecha: ${fechaStrCargo}
+⏰ Horario: ${hora} hs
+🚗 Auto Asignado: ${autoInfo}
+${turnoEmoji}${turnoEmoji ? ' ' : ''}Turno: ${turnoLabel}
+👥 Distancia de tu compañero: ${distancia} min
+⚠️ Importante:
+- Favor de traer el ${patente} limpio, con gnc completo y nafta por encima de la reserva.
+- La tolerancia máxima de espera es de 15 minutos ⏳
+*Confirmar asistencia por favor* 🤝
+⚠️ Importante:
+- Recuerde llevar dni y licencia.
+- La tolerancia máxima de espera es de 15 minutos ⏳
+*Confirmar asistencia por favor* 🤝`
+  }
 
   return mensaje
 }
@@ -183,6 +225,9 @@ export function ProgramacionModule() {
     return conductoresDisponibles.find(c => c.id === quickEditData.conductor_id)
   }, [conductoresDisponibles, quickEditData.conductor_id])
 
+  // Especialistas disponibles (para uso futuro)
+  const [_especialistas, _setEspecialistas] = useState<Array<{ id: string; nombre: string }>>([])
+
   // Modal cambiar estado
   const [showEstadoModal, setShowEstadoModal] = useState(false)
   const [estadoModalProg, setEstadoModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
@@ -199,6 +244,7 @@ export function ProgramacionModule() {
       const { data, error: queryError } = await supabase
         .from('v_programaciones_onboarding')
         .select('*')
+        .neq('estado', 'completado') // Excluir las completadas (ya enviadas)
         .order('created_at', { ascending: false })
 
       if (queryError) throw queryError
@@ -211,8 +257,27 @@ export function ProgramacionModule() {
     }
   }
 
+  // Cargar especialistas
+  const loadEspecialistas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, full_name')
+        .order('full_name')
+
+      if (error) throw error
+      _setEspecialistas((data || []).map((u: any) => ({
+        id: u.id,
+        nombre: u.full_name || 'Sin nombre'
+      })))
+    } catch (err) {
+      console.error('Error cargando especialistas:', err)
+    }
+  }
+
   useEffect(() => {
     loadProgramaciones()
+    loadEspecialistas()
   }, [])
 
   // Handlers
@@ -244,11 +309,13 @@ export function ProgramacionModule() {
       conductor_nombre: prog.conductor_nombre || prog.conductor_display || '',
       // Diurno
       tipo_candidato_diurno: prog.tipo_candidato_diurno,
+      tipo_asignacion_diurno: prog.tipo_asignacion_diurno || prog.tipo_asignacion || 'entrega_auto',
       documento_diurno: prog.documento_diurno,
       zona_diurno: prog.zona_diurno || '',
       distancia_diurno: prog.distancia_diurno,
       // Nocturno
       tipo_candidato_nocturno: prog.tipo_candidato_nocturno,
+      tipo_asignacion_nocturno: prog.tipo_asignacion_nocturno || prog.tipo_asignacion || 'entrega_auto',
       documento_nocturno: prog.documento_nocturno,
       zona_nocturno: prog.zona_nocturno || '',
       distancia_nocturno: prog.distancia_nocturno,
@@ -368,6 +435,9 @@ export function ProgramacionModule() {
         updateData.documento_nocturno = quickEditData.documento_nocturno
         updateData.zona_nocturno = quickEditData.zona_nocturno
         updateData.distancia_nocturno = quickEditData.distancia_nocturno || null
+
+        // Usar tipo_asignacion general (columnas individuales no existen aún en BD)
+        updateData.tipo_asignacion = quickEditData.tipo_asignacion_diurno || quickEditData.tipo_asignacion_nocturno || 'entrega_auto'
       } else {
         // A Cargo - campos legacy
         updateData.conductor_id = quickEditData.conductor_id || null
@@ -478,7 +548,7 @@ export function ProgramacionModule() {
   const handleCopiarAlPortapapeles = async () => {
     if (!mensajeModalProg) return
     const mensaje = generarMensajeAgenda(mensajeModalProg)
-    
+
     try {
       await navigator.clipboard.writeText(mensaje)
       setShowMensajeModal(false)
@@ -488,8 +558,92 @@ export function ProgramacionModule() {
     }
   }
 
+  // Actualizar campo individual inline
+  const handleUpdateField = async (id: string, field: string, value: any) => {
+    try {
+      const { error } = await (supabase
+        .from('programaciones_onboarding') as any)
+        .update({ [field]: value })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Actualizar estado local
+      setProgramaciones(prev => prev.map(p =>
+        p.id === id ? { ...p, [field]: value } : p
+      ))
+    } catch (err: any) {
+      console.error(`Error actualizando ${field}:`, err)
+      Swal.fire('Error', err.message || 'Error al actualizar', 'error')
+    }
+  }
+
   // Enviar a entrega - Crear asignacion
   const handleEnviarAEntrega = async (prog: ProgramacionOnboardingCompleta) => {
+    // Verificar qué conductores son "asignacion_companero" (no deben agregarse a la asignación)
+    const diurnoEsCompanero = prog.tipo_asignacion_diurno === 'asignacion_companero'
+    const nocturnoEsCompanero = prog.tipo_asignacion_nocturno === 'asignacion_companero'
+    const legacyEsCompanero = prog.tipo_asignacion === 'asignacion_companero'
+
+    // Para modalidad TURNO: verificar si AMBOS son compañero
+    // Para modalidad A CARGO: verificar si el único conductor es compañero
+    const todosEsCompanero = prog.modalidad === 'TURNO'
+      ? (diurnoEsCompanero && nocturnoEsCompanero)
+      : legacyEsCompanero
+
+    // Si TODOS los conductores son asignacion de compañero, NO crear asignación
+    if (todosEsCompanero) {
+      const result = await Swal.fire({
+        title: 'Confirmar Asignación de Compañero',
+        html: `
+          <div style="text-align: left; font-size: 14px;">
+            <p><strong>Conductor:</strong> ${prog.conductor_display || prog.conductor_nombre || '-'}</p>
+            <p><strong>Vehiculo:</strong> ${prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '-'}</p>
+            <p style="margin-top: 12px; color: #6B7280;">
+              <strong>Nota:</strong> Todos los conductores ya tienen asignación activa con su compañero.
+              Solo se marcará la programación como confirmada, sin crear una nueva asignación.
+            </p>
+          </div>
+        `,
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonColor: '#10B981',
+        confirmButtonText: 'Confirmar',
+        cancelButtonText: 'Cancelar'
+      })
+
+      if (!result.isConfirmed) return
+
+      try {
+        // Solo actualizar el estado de la programacion a completado
+        await (supabase.from('programaciones_onboarding') as any)
+          .update({
+            estado: 'completado',
+            fecha_asignacion_creada: new Date().toISOString()
+          })
+          .eq('id', prog.id)
+
+        // Actualizar localmente
+        setProgramaciones(prev => prev.map(p =>
+          p.id === prog.id
+            ? { ...p, estado: 'completado' as EstadoKanban }
+            : p
+        ))
+
+        Swal.fire({
+          icon: 'success',
+          title: 'Programación Confirmada',
+          text: 'Los conductores de compañero han sido confirmados sin afectar sus asignaciones actuales.',
+          confirmButtonText: 'Entendido'
+        })
+        return
+      } catch (err: any) {
+        console.error('Error confirmando asignacion de compañero:', err)
+        Swal.fire('Error', err.message || 'Error al confirmar', 'error')
+        return
+      }
+    }
+
     // Validar que tenga los datos minimos
     if (!prog.vehiculo_entregar_id && !prog.vehiculo_entregar_patente) {
       Swal.fire('Error', 'La programacion no tiene vehiculo asignado', 'error')
@@ -506,6 +660,9 @@ export function ProgramacionModule() {
       return
     }
 
+    // Formatear hora para mostrar
+    const horaDisplay = prog.hora_cita ? prog.hora_cita.substring(0, 5) : 'Sin definir'
+
     const result = await Swal.fire({
       title: 'Enviar a Entrega',
       html: `
@@ -515,6 +672,7 @@ export function ProgramacionModule() {
           <p><strong>Modalidad:</strong> ${prog.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
           ${prog.turno ? `<p><strong>Turno:</strong> ${prog.turno === 'diurno' ? 'Diurno' : 'Nocturno'}</p>` : ''}
           <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita).toLocaleDateString('es-AR') : 'Sin definir'}</p>
+          <p><strong>Hora:</strong> ${horaDisplay}</p>
         </div>
         <p style="margin-top: 16px; color: #6B7280;">Se creara una asignacion en estado <strong>Programado</strong></p>
       `,
@@ -537,6 +695,24 @@ export function ProgramacionModule() {
       const esTurno = prog.modalidad === 'TURNO'
       console.log('🔍 Modalidad programacion:', prog.modalidad, '→ Es TURNO:', esTurno)
 
+      // Construir fecha_programada correctamente con la hora de la cita
+      // Crear la fecha en hora local de Argentina y convertir a ISO
+      let fechaProgramada: string
+      if (prog.fecha_cita) {
+        // Usar la hora de la cita tal como está guardada, o 10:00 si no hay
+        const hora = prog.hora_cita && prog.hora_cita.trim() !== ''
+          ? prog.hora_cita.substring(0, 5)
+          : '10:00'
+        const [hh, mm] = hora.split(':').map(Number)
+        // Crear fecha local con la hora correcta
+        const fechaLocal = new Date(prog.fecha_cita + 'T12:00:00')
+        fechaLocal.setHours(hh, mm, 0, 0)
+        fechaProgramada = fechaLocal.toISOString()
+        console.log('📅 Fecha programada construida:', { fecha: prog.fecha_cita, hora, fechaLocal: fechaLocal.toString(), iso: fechaProgramada })
+      } else {
+        fechaProgramada = new Date().toISOString()
+      }
+
       const { data: asignacion, error: asignacionError } = await (supabase
         .from('asignaciones') as any)
         .insert({
@@ -544,7 +720,7 @@ export function ProgramacionModule() {
           vehiculo_id: prog.vehiculo_entregar_id,
           modalidad: esTurno ? 'turno' : 'a_cargo',
           horario: esTurno ? 'TURNO' : 'CARGO',
-          fecha_programada: prog.fecha_cita ? `${prog.fecha_cita}T${(prog.hora_cita || '10:00').substring(0, 5)}:00` : new Date().toISOString(),
+          fecha_programada: fechaProgramada,
           estado: 'programado',
           notas: prog.observaciones || `Creado desde programacion. Tipo: ${TIPO_ASIGNACION_LABELS[prog.tipo_asignacion || ''] || prog.tipo_asignacion}`,
           created_by: user?.id || null,
@@ -566,12 +742,21 @@ export function ProgramacionModule() {
         conductor_nocturno_nombre: prog.conductor_nocturno_nombre
       })
 
+      // Helper para mapear documento de programación a asignación
+      const mapDocumento = (doc: string | undefined) => {
+        if (doc === 'contrato') return 'CARTA_OFERTA'
+        if (doc === 'anexo') return 'ANEXO'
+        return 'N/A'
+      }
+
       // Crear asignacion_conductor(es) segun modalidad
+      // IMPORTANTE: NO insertar conductores que tengan tipo_asignacion = 'asignacion_companero'
       let conductoresInsertados = 0
 
       // Primero intentar con conductores duales (modalidad TURNO)
-      if (prog.conductor_diurno_id) {
-        console.log('✅ Insertando conductor diurno:', prog.conductor_diurno_id)
+      // Solo insertar conductor diurno si NO es asignacion_companero
+      if (prog.conductor_diurno_id && !diurnoEsCompanero) {
+        console.log('✅ Insertando conductor diurno:', prog.conductor_diurno_id, 'doc:', prog.documento_diurno)
         const { error: diurnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -579,18 +764,20 @@ export function ProgramacionModule() {
             conductor_id: prog.conductor_diurno_id,
             horario: 'diurno',
             estado: 'asignado',
-            documento: prog.documento_diurno === 'contrato' ? 'CARTA_OFERTA' :
-                       prog.documento_diurno === 'anexo' ? 'ANEXO' : null
+            documento: mapDocumento(prog.documento_diurno)
           })
         if (diurnoError) {
           console.error('❌ Error insertando conductor diurno:', diurnoError)
           throw diurnoError
         }
         conductoresInsertados++
+      } else if (prog.conductor_diurno_id && diurnoEsCompanero) {
+        console.log('⏭️ Saltando conductor diurno (asignacion_companero):', prog.conductor_diurno_id)
       }
 
-      if (prog.conductor_nocturno_id) {
-        console.log('✅ Insertando conductor nocturno:', prog.conductor_nocturno_id)
+      // Solo insertar conductor nocturno si NO es asignacion_companero
+      if (prog.conductor_nocturno_id && !nocturnoEsCompanero) {
+        console.log('✅ Insertando conductor nocturno:', prog.conductor_nocturno_id, 'doc:', prog.documento_nocturno)
         const { error: nocturnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -598,19 +785,21 @@ export function ProgramacionModule() {
             conductor_id: prog.conductor_nocturno_id,
             horario: 'nocturno',
             estado: 'asignado',
-            documento: prog.documento_nocturno === 'contrato' ? 'CARTA_OFERTA' :
-                       prog.documento_nocturno === 'anexo' ? 'ANEXO' : null
+            documento: mapDocumento(prog.documento_nocturno)
           })
         if (nocturnoError) {
           console.error('❌ Error insertando conductor nocturno:', nocturnoError)
           throw nocturnoError
         }
         conductoresInsertados++
+      } else if (prog.conductor_nocturno_id && nocturnoEsCompanero) {
+        console.log('⏭️ Saltando conductor nocturno (asignacion_companero):', prog.conductor_nocturno_id)
       }
 
       // Si no hay conductores duales, intentar con conductor legacy (A CARGO)
-      if (conductoresInsertados === 0 && prog.conductor_id) {
-        console.log('✅ Insertando conductor legacy:', prog.conductor_id)
+      // Solo si NO es asignacion_companero (aunque este caso ya se maneja arriba con todosEsCompanero)
+      if (conductoresInsertados === 0 && prog.conductor_id && !legacyEsCompanero) {
+        console.log('✅ Insertando conductor legacy:', prog.conductor_id, 'doc:', prog.tipo_documento)
         const { error: conductorError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -618,8 +807,7 @@ export function ProgramacionModule() {
             conductor_id: prog.conductor_id,
             horario: 'todo_dia',
             estado: 'asignado',
-            documento: prog.tipo_documento === 'contrato' ? 'CARTA_OFERTA' :
-                       prog.tipo_documento === 'anexo' ? 'ANEXO' : null
+            documento: mapDocumento(prog.tipo_documento)
           })
         if (conductorError) {
           console.error('❌ Error insertando conductor legacy:', conductorError)
@@ -630,20 +818,17 @@ export function ProgramacionModule() {
 
       console.log(`📊 Total conductores insertados: ${conductoresInsertados}`)
 
-      // Actualizar programacion con referencia a la asignacion
+      // Actualizar programacion con referencia a la asignacion y marcar como completado
       await (supabase.from('programaciones_onboarding') as any)
         .update({
           asignacion_id: asignacion.id,
-          fecha_asignacion_creada: new Date().toISOString()
+          fecha_asignacion_creada: new Date().toISOString(),
+          estado: 'completado' // Marcar como completado para que no se liste mas
         })
         .eq('id', prog.id)
 
-      // Actualizar localmente
-      setProgramaciones(prev => prev.map(p =>
-        p.id === prog.id
-          ? { ...p, asignacion_id: asignacion.id, asignacion_codigo: asignacion.codigo }
-          : p
-      ))
+      // Remover de la lista local (ya no debe aparecer)
+      setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
 
       Swal.fire({
         icon: 'success',
@@ -738,12 +923,77 @@ export function ProgramacionModule() {
     },
     {
       accessorKey: 'tipo_asignacion',
-      header: 'Tipo',
-      cell: ({ row }) => (
-        <span className="prog-tipo-badge">
-          {TIPO_ASIGNACION_LABELS[row.original.tipo_asignacion || ''] || row.original.tipo_asignacion || '-'}
-        </span>
-      )
+      header: 'Tipo Asig.',
+      cell: ({ row }) => {
+        const prog = row.original
+
+        // Para TURNO: mostrar 2 selects (diurno y nocturno)
+        if (prog.modalidad === 'TURNO') {
+          const tipoD = prog.tipo_asignacion_diurno || prog.tipo_asignacion || ''
+          const tipoN = prog.tipo_asignacion_nocturno || prog.tipo_asignacion || ''
+
+          return (
+            <div className="prog-tipo-asig-turno">
+              <div className="prog-tipo-asig-row">
+                <span className="prog-tipo-asig-label">D:</span>
+                <select
+                  className={`prog-inline-select-mini tipo-asignacion ${tipoD}`}
+                  value={tipoD}
+                  onChange={(e) => {
+                    // Guardar en tipo_asignacion_diurno si existe la columna, sino en tipo_asignacion
+                    handleUpdateField(prog.id, 'tipo_asignacion_diurno', e.target.value || null)
+                  }}
+                  title="Tipo asignación conductor diurno"
+                >
+                  <option value="">-</option>
+                  <option value="entrega_auto">Entrega auto</option>
+                  <option value="asignacion_companero">Asig. compañero</option>
+                  <option value="cambio_auto">Cambio auto</option>
+                  <option value="cambio_turno">Cambio turno</option>
+                  <option value="devolucion_vehiculo">Devolución</option>
+                </select>
+              </div>
+              <div className="prog-tipo-asig-row">
+                <span className="prog-tipo-asig-label">N:</span>
+                <select
+                  className={`prog-inline-select-mini tipo-asignacion ${tipoN}`}
+                  value={tipoN}
+                  onChange={(e) => {
+                    handleUpdateField(prog.id, 'tipo_asignacion_nocturno', e.target.value || null)
+                  }}
+                  title="Tipo asignación conductor nocturno"
+                >
+                  <option value="">-</option>
+                  <option value="entrega_auto">Entrega auto</option>
+                  <option value="asignacion_companero">Asig. compañero</option>
+                  <option value="cambio_auto">Cambio auto</option>
+                  <option value="cambio_turno">Cambio turno</option>
+                  <option value="devolucion_vehiculo">Devolución</option>
+                </select>
+              </div>
+            </div>
+          )
+        }
+
+        // Para A CARGO: un solo select
+        return (
+          <select
+            className={`prog-inline-select tipo-asignacion ${prog.tipo_asignacion || ''}`}
+            value={prog.tipo_asignacion || ''}
+            onChange={(e) => handleUpdateField(prog.id, 'tipo_asignacion', e.target.value || null)}
+            title="Tipo de asignación"
+          >
+            <option value="">Sin definir</option>
+            <option value="entrega_auto">Entrega de auto</option>
+            <option value="asignacion_companero">Asignación compañero</option>
+            <option value="cambio_auto">Cambio de auto</option>
+            <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
+            <option value="entrega_auto_cargo">Entrega auto a cargo</option>
+            <option value="cambio_turno">Cambio de turno</option>
+            <option value="devolucion_vehiculo">Devolución vehículo</option>
+          </select>
+        )
+      }
     },
     {
       accessorKey: 'modalidad',
@@ -756,25 +1006,20 @@ export function ProgramacionModule() {
     },
     {
       accessorKey: 'fecha_cita',
-      header: 'Fecha Cita',
-      cell: ({ row }) => (
-        <div className="prog-fecha-cell">
-          <span>
-            {row.original.fecha_cita 
-              ? new Date(row.original.fecha_cita).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
-              : '-'}
-          </span>
-        </div>
-      )
-    },
-    {
-      accessorKey: 'hora_cita',
-      header: 'Hora',
-      cell: ({ row }) => (
-        <span className="prog-hora">
-          {row.original.hora_cita ? row.original.hora_cita.substring(0, 5) : '-'}
-        </span>
-      )
+      header: 'Cita',
+      cell: ({ row }) => {
+        const fecha = row.original.fecha_cita
+        const hora = row.original.hora_cita?.substring(0, 5)
+        if (!fecha) return <span className="prog-hora">-</span>
+        const fechaObj = new Date(fecha + 'T12:00:00')
+        const fechaCorta = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+        return (
+          <div className="prog-fecha-hora">
+            <span className="prog-fecha">{fechaCorta}</span>
+            {hora && <span className="prog-hora">{hora}</span>}
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'estado',
@@ -785,7 +1030,211 @@ export function ProgramacionModule() {
         </span>
       )
     },
+    {
+      id: 'tipo_documento_display',
+      header: 'Documento',
+      cell: ({ row }) => {
+        const prog = row.original
+        // Para TURNO: mostrar documentos de diurno/nocturno separados
+        // Para CARGO: mostrar tipo_documento
+        const DOCUMENTO_LABELS: Record<string, string> = {
+          contrato: 'Contrato',
+          anexo: 'Anexo',
+          carta_oferta: 'Carta Oferta',
+          na: 'N/A',
+          '': 'Sin definir'
+        }
 
+        if (prog.modalidad === 'TURNO') {
+          const docDiurno = prog.documento_diurno || ''
+          const docNocturno = prog.documento_nocturno || ''
+          // Si ambos son iguales, mostrar uno solo
+          if (docDiurno === docNocturno && docDiurno) {
+            return (
+              <span className={`prog-documento-badge ${docDiurno}`}>
+                {DOCUMENTO_LABELS[docDiurno] || docDiurno}
+              </span>
+            )
+          }
+          // Si son diferentes, mostrar ambos
+          return (
+            <div className="prog-documentos-compact">
+              <span className={`prog-documento-mini ${docDiurno || 'sin_definir'}`}>
+                D: {DOCUMENTO_LABELS[docDiurno] || 'Sin def.'}
+              </span>
+              <span className={`prog-documento-mini ${docNocturno || 'sin_definir'}`}>
+                N: {DOCUMENTO_LABELS[docNocturno] || 'Sin def.'}
+              </span>
+            </div>
+          )
+        }
+
+        // Para CARGO: mostrar tipo_documento
+        const doc = prog.tipo_documento || ''
+        return (
+          <span className={`prog-documento-badge ${doc || 'sin_definir'}`}>
+            {DOCUMENTO_LABELS[doc] || doc || 'Sin definir'}
+          </span>
+        )
+      }
+    },
+    // Columnas de gestión diaria
+    {
+      accessorKey: 'documento_listo',
+      header: 'Doc ✓',
+      cell: ({ row }) => (
+        <button
+          className={`prog-check-btn ${row.original.documento_listo ? 'checked' : ''}`}
+          onClick={() => handleUpdateField(row.original.id, 'documento_listo', !row.original.documento_listo)}
+          title={row.original.documento_listo ? 'Documento listo' : 'Documento pendiente'}
+        >
+          {row.original.documento_listo ? <Check size={14} /> : <X size={14} />}
+        </button>
+      )
+    },
+    {
+      accessorKey: 'grupo_whatsapp',
+      header: 'Wpp',
+      cell: ({ row }) => (
+        <button
+          className={`prog-check-btn ${row.original.grupo_whatsapp ? 'checked' : ''}`}
+          onClick={() => handleUpdateField(row.original.id, 'grupo_whatsapp', !row.original.grupo_whatsapp)}
+          title={row.original.grupo_whatsapp ? 'En grupo WhatsApp' : 'Sin grupo WhatsApp'}
+        >
+          {row.original.grupo_whatsapp ? <Check size={14} /> : <X size={14} />}
+        </button>
+      )
+    },
+    {
+      accessorKey: 'citado_ypf',
+      header: 'Citado',
+      cell: ({ row }) => (
+        <button
+          className={`prog-check-btn ${row.original.citado_ypf ? 'checked' : ''}`}
+          onClick={() => handleUpdateField(row.original.id, 'citado_ypf', !row.original.citado_ypf)}
+          title={row.original.citado_ypf ? 'Citado YPF' : 'No citado'}
+        >
+          {row.original.citado_ypf ? <Check size={14} /> : <X size={14} />}
+        </button>
+      )
+    },
+    {
+      accessorKey: 'confirmacion_asistencia',
+      header: 'Confirmación',
+      cell: ({ row }) => (
+        <select
+          className={`prog-inline-select confirmacion ${row.original.confirmacion_asistencia || 'sin_confirmar'}`}
+          value={row.original.confirmacion_asistencia || 'sin_confirmar'}
+          onChange={(e) => handleUpdateField(row.original.id, 'confirmacion_asistencia', e.target.value)}
+          title="Confirmación de asistencia"
+        >
+          <option value="sin_confirmar">Sin confirmar</option>
+          <option value="confirmo">Confirmó</option>
+          <option value="no_confirmo">No confirmó</option>
+          <option value="reprogramar">Reprogramar</option>
+        </select>
+      )
+    },
+    {
+      accessorKey: 'estado_cabify',
+      header: 'Cabify',
+      cell: ({ row }) => (
+        <select
+          className={`prog-inline-select cabify ${row.original.estado_cabify || 'pendiente'}`}
+          value={row.original.estado_cabify || 'pendiente'}
+          onChange={(e) => handleUpdateField(row.original.id, 'estado_cabify', e.target.value)}
+          title="Estado Cabify"
+        >
+          <option value="pendiente">Pendiente</option>
+          <option value="listo_cabify">Listo Cabify</option>
+          <option value="asignar_auto">Asignar Auto</option>
+          <option value="crear_cuenta">Crear Cuenta</option>
+        </select>
+      )
+    },
+    {
+      accessorKey: 'direccion',
+      header: 'Dirección',
+      cell: ({ row }) => {
+        const [editing, setEditing] = useState(false)
+        const [value, setValue] = useState(row.original.direccion || '')
+
+        const handleSave = () => {
+          if (value !== row.original.direccion) {
+            handleUpdateField(row.original.id, 'direccion', value || null)
+          }
+          setEditing(false)
+        }
+
+        if (editing) {
+          return (
+            <input
+              type="text"
+              className="prog-inline-input"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              autoFocus
+              placeholder="Dirección..."
+            />
+          )
+        }
+
+        return (
+          <div
+            className="prog-direccion-cell"
+            onClick={() => setEditing(true)}
+            title={row.original.direccion || 'Click para agregar dirección'}
+          >
+            <MapPin size={12} />
+            <span>{row.original.direccion || '-'}</span>
+          </div>
+        )
+      }
+    },
+    {
+      accessorKey: 'especialista_nombre',
+      header: 'Especialista',
+      cell: ({ row }) => {
+        const [editing, setEditing] = useState(false)
+        const [value, setValue] = useState(row.original.especialista_nombre || '')
+
+        const handleSave = () => {
+          if (value !== row.original.especialista_nombre) {
+            handleUpdateField(row.original.id, 'especialista_nombre', value || null)
+          }
+          setEditing(false)
+        }
+
+        if (editing) {
+          return (
+            <input
+              type="text"
+              className="prog-inline-input"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              autoFocus
+              placeholder="Nombre..."
+              style={{ minWidth: '100px' }}
+            />
+          )
+        }
+
+        return (
+          <div
+            className="prog-especialista-cell"
+            onClick={() => setEditing(true)}
+            title={row.original.especialista_nombre || 'Click para agregar especialista'}
+          >
+            <User size={12} />
+            <span>{row.original.especialista_nombre || '-'}</span>
+          </div>
+        )
+      }
+    },
     {
       id: 'acciones',
       header: 'Acciones',
@@ -800,9 +1249,9 @@ export function ProgramacionModule() {
           </button>
           <button
             className="prog-btn prog-btn-send"
-            title={row.original.asignacion_id ? 'Ya enviado' : row.original.estado !== 'completado' ? 'Primero completar programacion' : 'Enviar a Entrega'}
+            title={row.original.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
             onClick={() => handleEnviarAEntrega(row.original)}
-            disabled={row.original.estado !== 'completado' || !!row.original.asignacion_id}
+            disabled={!!row.original.asignacion_id}
           >
             <Send size={16} />
           </button>
@@ -1128,6 +1577,20 @@ export function ProgramacionModule() {
                         </select>
                       </div>
                       <div>
+                        <label>Tipo Asignación *</label>
+                        <select
+                          value={quickEditData.tipo_asignacion_diurno || 'entrega_auto'}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_asignacion_diurno: e.target.value as any }))}
+                          className="prog-input"
+                        >
+                          <option value="entrega_auto">Entrega de auto</option>
+                          <option value="asignacion_companero">Asignación compañero</option>
+                          <option value="cambio_auto">Cambio de auto</option>
+                          <option value="cambio_turno">Cambio de turno</option>
+                          <option value="devolucion_vehiculo">Devolución vehículo</option>
+                        </select>
+                      </div>
+                      <div>
                         <label>Documento *</label>
                         <select
                           value={quickEditData.documento_diurno || ''}
@@ -1136,6 +1599,7 @@ export function ProgramacionModule() {
                         >
                           <option value="">Seleccionar...</option>
                           <option value="contrato">Contrato</option>
+                          <option value="carta_oferta">Carta Oferta</option>
                           <option value="anexo">Anexo</option>
                           <option value="na">N/A</option>
                         </select>
@@ -1223,6 +1687,20 @@ export function ProgramacionModule() {
                         </select>
                       </div>
                       <div>
+                        <label>Tipo Asignación *</label>
+                        <select
+                          value={quickEditData.tipo_asignacion_nocturno || 'entrega_auto'}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_asignacion_nocturno: e.target.value as any }))}
+                          className="prog-input"
+                        >
+                          <option value="entrega_auto">Entrega de auto</option>
+                          <option value="asignacion_companero">Asignación compañero</option>
+                          <option value="cambio_auto">Cambio de auto</option>
+                          <option value="cambio_turno">Cambio de turno</option>
+                          <option value="devolucion_vehiculo">Devolución vehículo</option>
+                        </select>
+                      </div>
+                      <div>
                         <label>Documento *</label>
                         <select
                           value={quickEditData.documento_nocturno || ''}
@@ -1231,6 +1709,7 @@ export function ProgramacionModule() {
                         >
                           <option value="">Seleccionar...</option>
                           <option value="contrato">Contrato</option>
+                          <option value="carta_oferta">Carta Oferta</option>
                           <option value="anexo">Anexo</option>
                           <option value="na">N/A</option>
                         </select>
@@ -1327,6 +1806,7 @@ export function ProgramacionModule() {
                       >
                         <option value="">Seleccionar...</option>
                         <option value="contrato">Contrato</option>
+                        <option value="carta_oferta">Carta Oferta</option>
                         <option value="anexo">Anexo</option>
                         <option value="na">N/A</option>
                       </select>
@@ -1515,8 +1995,8 @@ export function ProgramacionModule() {
                     onClick={() => {
                       handleEnviarAEntrega(previewProgramacion)
                     }}
-                    disabled={previewProgramacion.estado !== 'completado' || !!previewProgramacion.asignacion_id}
-                    title={previewProgramacion.asignacion_id ? 'Ya enviado' : previewProgramacion.estado !== 'completado' ? 'Primero completar' : ''}
+                    disabled={!!previewProgramacion.asignacion_id}
+                    title={previewProgramacion.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
                   >
                     <Send size={16} />
                     {previewProgramacion.asignacion_id ? 'Ya Enviado' : 'Enviar a Entrega'}
@@ -1582,9 +2062,15 @@ export function ProgramacionModule() {
             </div>
             <div className="prog-modal-body">
               <div className="prog-modal-info">
-                <p><strong>Conductor:</strong> {mensajeModalProg.conductor_display || mensajeModalProg.conductor_nombre}</p>
+                {mensajeModalProg.modalidad === 'TURNO' ? (
+                  <>
+                    <p><strong>Conductor Diurno:</strong> {mensajeModalProg.conductor_diurno_nombre || 'Sin asignar'}</p>
+                    <p><strong>Conductor Nocturno:</strong> {mensajeModalProg.conductor_nocturno_nombre || 'Sin asignar'}</p>
+                  </>
+                ) : (
+                  <p><strong>Conductor:</strong> {mensajeModalProg.conductor_display || mensajeModalProg.conductor_nombre || 'Sin asignar'}</p>
+                )}
                 <p><strong>Modalidad:</strong> {mensajeModalProg.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
-                {mensajeModalProg.turno && <p><strong>Turno:</strong> {mensajeModalProg.turno === 'diurno' ? 'Diurno' : 'Nocturno'}</p>}
               </div>
               <div className="prog-mensaje-preview">
                 <pre>{generarMensajeAgenda(mensajeModalProg)}</pre>

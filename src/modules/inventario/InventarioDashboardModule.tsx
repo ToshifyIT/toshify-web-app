@@ -135,22 +135,53 @@ export function InventarioDashboardModule() {
   )
   // Generar filtros externos para mostrar en la barra de filtros del DataTable
   const externalFilters = useMemo(() => {
-    if (filterEstadoStock === 'all') return []
+    const filters: Array<{ id: string; label: string; onClear: () => void }> = []
 
-    const labels: Record<string, string> = {
-      disponible: 'Disponible',
-      en_uso: 'En Uso',
-      en_transito: 'En Tránsito',
-      dañado: 'Dañado',
-      perdido: 'Perdido'
+    // Filtro de estado de stock
+    if (filterEstadoStock !== 'all') {
+      const labels: Record<string, string> = {
+        disponible: 'Disponible',
+        en_uso: 'En Uso',
+        en_transito: 'En Tránsito',
+        dañado: 'Dañado',
+        perdido: 'Perdido'
+      }
+      filters.push({
+        id: filterEstadoStock,
+        label: labels[filterEstadoStock] || filterEstadoStock,
+        onClear: () => setFilterEstadoStock('all')
+      })
     }
 
-    return [{
-      id: filterEstadoStock,
-      label: labels[filterEstadoStock] || filterEstadoStock,
-      onClear: () => setFilterEstadoStock('all')
-    }]
-  }, [filterEstadoStock])
+    // Filtro de código
+    if (codigoFilter.length > 0) {
+      filters.push({
+        id: 'codigo',
+        label: `Código: ${codigoFilter.length === 1 ? codigoFilter[0] : `${codigoFilter.length} sel.`}`,
+        onClear: () => setCodigoFilter([])
+      })
+    }
+
+    // Filtro de nombre/producto
+    if (nombreFilter.length > 0) {
+      filters.push({
+        id: 'nombre',
+        label: `Producto: ${nombreFilter.length === 1 ? nombreFilter[0] : `${nombreFilter.length} sel.`}`,
+        onClear: () => setNombreFilter([])
+      })
+    }
+
+    // Filtro de tipo
+    if (tipoFilter.length > 0) {
+      filters.push({
+        id: 'tipo',
+        label: `Tipo: ${tipoFilter.length === 1 ? tipoFilter[0] : `${tipoFilter.length} sel.`}`,
+        onClear: () => setTipoFilter([])
+      })
+    }
+
+    return filters
+  }, [filterEstadoStock, codigoFilter, nombreFilter, tipoFilter])
 
   // Final filtered data - STAT CARD PREVALECE sobre filtros de columna
   const filteredData = useMemo(() => {

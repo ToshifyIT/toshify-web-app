@@ -5,9 +5,9 @@ import {
   Shield,
   DollarSign,
   Settings,
-  Ticket,
-  Gauge,
-  Ban,
+  // Ticket, // Oculto - se maneja desde Incidencias
+  // Gauge, // Oculto temporalmente
+  // Ban, // Oculto temporalmente
   UserMinus,
   AlertTriangle,
   CreditCard
@@ -32,10 +32,10 @@ const TABS = [
   { id: 'periodos' as TabType, label: 'Períodos', icon: Calendar },
   { id: 'garantias' as TabType, label: 'Garantías', icon: Shield },
   { id: 'saldos' as TabType, label: 'Saldos', icon: DollarSign },
-  { id: 'tickets' as TabType, label: 'Tickets', icon: Ticket },
-  { id: 'excesos' as TabType, label: 'Excesos KM', icon: Gauge },
+  // { id: 'tickets' as TabType, label: 'Tickets', icon: Ticket }, // Oculto - se maneja desde Incidencias
+  // { id: 'excesos' as TabType, label: 'Excesos KM', icon: Gauge }, // Oculto temporalmente
   { id: 'multas' as TabType, label: 'Multas', icon: AlertTriangle },
-  { id: 'bloqueos' as TabType, label: 'Bloqueos', icon: Ban },
+  // { id: 'bloqueos' as TabType, label: 'Bloqueos', icon: Ban }, // Oculto temporalmente
   { id: 'liquidacion' as TabType, label: 'Liquidación', icon: UserMinus },
   { id: 'cobros_fraccionados' as TabType, label: 'Cobros Fraccionados', icon: CreditCard },
   { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings }
