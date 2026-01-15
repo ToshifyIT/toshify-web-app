@@ -933,7 +933,7 @@ export function AsignacionesModule() {
           ? row.fecha_inicio
           : row.fecha_programada
         return fechaMostrar
-          ? new Date(fechaMostrar).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+          ? new Date(fechaMostrar).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
           : '-'
       },
       cell: ({ row }) => {
@@ -947,7 +947,7 @@ export function AsignacionesModule() {
         return (
           <span title={estado === 'programado' ? 'Hora programada' : 'Hora de entrega real'}>
             {fechaMostrar
-              ? new Date(fechaMostrar).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+              ? new Date(fechaMostrar).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
               : '-'}
           </span>
         )
