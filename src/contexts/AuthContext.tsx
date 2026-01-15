@@ -1,7 +1,7 @@
 // src/contexts/AuthContext.tsx
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import { supabase, getBackupSession, clearAllAuthStorage } from '../lib/supabase'
 import type { UserWithRole } from '../types/database.types'
 
 interface AuthContextType {
@@ -19,6 +19,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Flag global para saber si el logout fue intencional
+let intentionalSignOut = false
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserWithRole | null>(null)
@@ -29,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Obtener sesión actual
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('📍 Sesión inicial:', session ? 'existe' : 'no existe')
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
@@ -41,18 +45,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Escuchar cambios de autenticación
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔐 Auth event:', event)
 
       if (event === 'SIGNED_IN' && session?.user) {
+        setSession(session)
+        setUser(session.user)
         loadProfile(session.user.id)
       } else if (event === 'SIGNED_OUT') {
+        // Si fue logout intencional, cerrar sin intentar recuperar
+        if (intentionalSignOut) {
+          console.log('👋 Logout intencional - cerrando sesión')
+          intentionalSignOut = false
+          setSession(null)
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
+          return
+        }
+
+        // Si NO fue intencional, intentar recuperar
+        console.log('🚨 SIGNED_OUT inesperado - intentando recuperar...')
+
+        // Intentar recuperar sesión
+        const { data: { session: recoveredSession } } = await supabase.auth.getSession()
+        if (recoveredSession) {
+          console.log('✅ Sesión recuperada de Supabase')
+          setSession(recoveredSession)
+          setUser(recoveredSession.user)
+          return
+        }
+
+        // Intentar desde backup
+        const backupSession = getBackupSession()
+        if (backupSession) {
+          console.log('🔄 Intentando recuperar desde backup...')
+          try {
+            const parsed = JSON.parse(backupSession)
+            if (parsed.access_token && parsed.refresh_token) {
+              const { data, error } = await supabase.auth.setSession({
+                access_token: parsed.access_token,
+                refresh_token: parsed.refresh_token
+              })
+              if (!error && data.session) {
+                console.log('✅ Sesión recuperada desde backup!')
+                setSession(data.session)
+                setUser(data.session.user)
+                return
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ Error parseando backup:', e)
+          }
+        }
+
+        console.log('❌ No se pudo recuperar la sesión')
+        setSession(null)
+        setUser(null)
         setProfile(null)
         setLoading(false)
       } else if (event === 'TOKEN_REFRESHED') {
-        // Token refrescado exitosamente, mantener sesión activa
         console.log('🔄 Token refrescado automáticamente')
+        if (session) {
+          setSession(session)
+          setUser(session.user)
+        }
+      } else if (session) {
+        // Cualquier otro evento con sesión válida, mantener datos
+        setSession(session)
+        setUser(session.user)
       }
     })
 
@@ -61,15 +122,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data: { session: currentSession } } = await supabase.auth.getSession()
         if (currentSession) {
+          // Verificar cuánto tiempo queda del token actual
+          const expiresAt = currentSession.expires_at
+          const now = Math.floor(Date.now() / 1000)
+          const timeLeft = expiresAt ? expiresAt - now : 0
+          console.log(`⏰ Token expira en ${Math.floor(timeLeft / 60)} minutos`)
+
           const { error } = await supabase.auth.refreshSession()
           if (error) {
-            console.warn('⚠️ Error refrescando sesión:', error.message)
+            console.error('❌ Error refrescando sesión:', error.message, error)
+            // Intentar recuperar desde backup
+            const backup = getBackupSession()
+            if (backup) {
+              console.log('🔄 Intentando recuperar desde backup...')
+              try {
+                const parsed = JSON.parse(backup)
+                if (parsed.refresh_token) {
+                  await supabase.auth.setSession({
+                    access_token: parsed.access_token,
+                    refresh_token: parsed.refresh_token
+                  })
+                }
+              } catch (e) {
+                console.warn('⚠️ No se pudo recuperar desde backup')
+              }
+            }
           } else {
             console.log('✅ Sesión refrescada correctamente')
           }
+        } else {
+          console.log('⚠️ No hay sesión activa para refrescar')
+          // Intentar recuperar desde backup
+          const backup = getBackupSession()
+          if (backup) {
+            console.log('🔄 Intentando recuperar desde backup localStorage...')
+            try {
+              const parsed = JSON.parse(backup)
+              if (parsed.refresh_token) {
+                const { data, error } = await supabase.auth.setSession({
+                  access_token: parsed.access_token,
+                  refresh_token: parsed.refresh_token
+                })
+                if (!error && data.session) {
+                  console.log('✅ Sesión recuperada desde backup!')
+                  setSession(data.session)
+                  setUser(data.session.user)
+                  loadProfile(data.session.user.id)
+                }
+              }
+            } catch (e) {
+              console.warn('⚠️ No se pudo recuperar desde backup:', e)
+            }
+          }
         }
       } catch (err) {
-        console.warn('⚠️ Error en refresh:', err)
+        console.error('❌ Error crítico en refresh:', err)
       }
     }
 
@@ -146,7 +253,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
+    // Marcar como logout intencional ANTES de llamar signOut
+    intentionalSignOut = true
     await supabase.auth.signOut()
+    // Limpiar todo el storage de autenticación
+    clearAllAuthStorage()
     setProfile(null)
     setMustChangePassword(false)
   }

@@ -11,7 +11,6 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { signIn, signInWithGoogle } = useAuth()
@@ -632,15 +631,7 @@ export function LoginPage() {
               </div>
             </div>
 
-            <div className="form-options">
-              <label className="remember-group">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
-                <span>Recordarme</span>
-              </label>
+            <div className="form-options" style={{ justifyContent: 'flex-end' }}>
               <a href="#" className="forgot-link" onClick={handleForgotPassword}>¿Olvidaste tu contraseña?</a>
             </div>
 

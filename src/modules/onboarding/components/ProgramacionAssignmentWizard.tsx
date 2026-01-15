@@ -258,10 +258,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         // Obtener programaciones pendientes
         const { data: programacionesData } = await supabase
           .from('programaciones_onboarding')
-          .select('vehiculo_entregar_id')
+          .select('vehiculo_entregar_id, id')
           .in('estado', ['por_agendar', 'agendado', 'en_curso'])
 
-        const vehiculosProgramados = new Set((programacionesData as any[] || []).map(p => p.vehiculo_entregar_id))
+        // En modo edición, excluir el vehículo de la programación actual de la lista de "programados"
+        const vehiculosProgramados = new Set(
+          (programacionesData as any[] || [])
+            .filter(p => !editData || p.id !== editData.id) // No excluir el vehículo de la programación que estamos editando
+            .map(p => p.vehiculo_entregar_id)
+        )
 
         // Filtrar vehiculos que NO esten en reparacion ni en mantenimiento
         const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO', 'TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO']
@@ -342,19 +347,27 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           }
         })
 
-        // Excluir vehiculos programados
+        // Excluir vehiculos programados (excepto el de la programación actual en modo edición)
         const vehiculosFinales = vehiculosConDisponibilidad.filter(
-          (v: any) => v.disponibilidad !== 'programado'
+          (v: any) => v.disponibilidad !== 'programado' || (editData && v.id === editData.vehiculo_entregar_id)
         )
 
-        setVehicles(vehiculosFinales)
+        // Si estamos editando, marcar el vehículo actual como disponible
+        const vehiculosConEditData = vehiculosFinales.map((v: any) => {
+          if (editData && v.id === editData.vehiculo_entregar_id && v.disponibilidad === 'programado') {
+            return { ...v, disponibilidad: 'disponible' }
+          }
+          return v
+        })
+
+        setVehicles(vehiculosConEditData)
       } catch (error) {
         console.error('Error loading vehicles:', error)
       }
     }
 
     loadVehicles()
-  }, [])
+  }, [editData?.id])
 
   // Cargar conductores disponibles
   useEffect(() => {
@@ -725,6 +738,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   // Filtrar vehiculos
   const filteredVehicles = vehicles
     .filter(v => {
+      // En modo edición, siempre incluir el vehículo actual
+      if (isEditMode && v.id === formData.vehiculo_id) {
+        return true
+      }
+
       const matchesSearch = v.patente.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
         v.marca.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
         v.modelo.toLowerCase().includes(vehicleSearch.toLowerCase())
@@ -739,6 +757,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       return matchesSearch && matchesAvailability
     })
     .sort((a, b) => {
+      // En modo edición, poner el vehículo actual primero
+      if (isEditMode && formData.vehiculo_id) {
+        if (a.id === formData.vehiculo_id) return -1
+        if (b.id === formData.vehiculo_id) return 1
+      }
       const prioridad: Record<string, number> = {
         'disponible': 0,
         'turno_diurno_libre': 1,
