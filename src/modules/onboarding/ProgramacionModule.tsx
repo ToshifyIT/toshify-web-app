@@ -500,15 +500,15 @@ export function ProgramacionModule() {
   // Abrir modal cambiar estado
   const handleCambiarEstado = (prog: ProgramacionOnboardingCompleta) => {
     setEstadoModalProg(prog)
-    setNuevoEstado(prog.estado)
+    setNuevoEstado(prog.estado_cabify || 'pendiente')
     setShowEstadoModal(true)
   }
 
-  // Guardar nuevo estado
+  // Guardar nuevo estado cabify
   const handleGuardarEstado = async () => {
     if (!estadoModalProg || !nuevoEstado) return
     
-    if (nuevoEstado === estadoModalProg.estado) {
+    if (nuevoEstado === (estadoModalProg.estado_cabify || 'pendiente')) {
       setShowEstadoModal(false)
       return
     }
@@ -516,20 +516,20 @@ export function ProgramacionModule() {
     try {
       const { error } = await (supabase
         .from('programaciones_onboarding') as any)
-        .update({ estado: nuevoEstado })
+        .update({ estado_cabify: nuevoEstado })
         .eq('id', estadoModalProg.id)
 
       if (error) throw error
 
       // Actualizar estado local
       setProgramaciones(prev => prev.map(p => 
-        p.id === estadoModalProg.id ? { ...p, estado: nuevoEstado as EstadoKanban } : p
+        p.id === estadoModalProg.id ? { ...p, estado_cabify: nuevoEstado as 'pendiente' | 'listo_cabify' | 'asignar_auto' | 'crear_cuenta' } : p
       ))
 
       setShowEstadoModal(false)
       Swal.fire({
         icon: 'success',
-        title: 'Estado actualizado',
+        title: 'Estado Cabify actualizado',
         timer: 1500,
         showConfirmButton: false
       })
@@ -706,7 +706,6 @@ export function ProgramacionModule() {
       // Crear asignacion
       // modalidad en programacion es 'TURNO' o 'CARGO', en asignacion es 'turno' o 'a_cargo'
       const esTurno = prog.modalidad === 'TURNO'
-      console.log('🔍 Modalidad programacion:', prog.modalidad, '→ Es TURNO:', esTurno)
 
       // Construir fecha_programada correctamente con la hora de la cita
       let fechaProgramada: string
@@ -718,7 +717,6 @@ export function ProgramacionModule() {
         const fechaLocal = new Date(prog.fecha_cita + 'T12:00:00')
         fechaLocal.setHours(hh, mm, 0, 0)
         fechaProgramada = fechaLocal.toISOString()
-        console.log('📅 Fecha programada construida:', { fecha: prog.fecha_cita, hora, fechaLocal: fechaLocal.toString(), iso: fechaProgramada })
       } else {
         fechaProgramada = new Date().toISOString()
       }
@@ -756,17 +754,6 @@ export function ProgramacionModule() {
 
       if (asignacionError) throw asignacionError
 
-      // Log para debug
-      console.log('📋 Programacion data:', {
-        modalidad: prog.modalidad,
-        conductor_id: prog.conductor_id,
-        conductor_nombre: prog.conductor_nombre,
-        conductor_diurno_id: prog.conductor_diurno_id,
-        conductor_diurno_nombre: prog.conductor_diurno_nombre,
-        conductor_nocturno_id: prog.conductor_nocturno_id,
-        conductor_nocturno_nombre: prog.conductor_nocturno_nombre
-      })
-
       // Crear asignacion_conductor(es) segun modalidad
       // NOTA: Insertamos TODOS los conductores (incluso los que son asignacion_companero)
       // La lógica especial de companero se ejecuta al CONFIRMAR la asignación
@@ -774,7 +761,6 @@ export function ProgramacionModule() {
 
       // Insertar conductor diurno
       if (prog.conductor_diurno_id) {
-        console.log('✅ Insertando conductor diurno:', prog.conductor_diurno_id, 'doc:', prog.documento_diurno, 'esCompanero:', diurnoEsCompanero)
         const { error: diurnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -793,7 +779,6 @@ export function ProgramacionModule() {
 
       // Insertar conductor nocturno
       if (prog.conductor_nocturno_id) {
-        console.log('✅ Insertando conductor nocturno:', prog.conductor_nocturno_id, 'doc:', prog.documento_nocturno, 'esCompanero:', nocturnoEsCompanero)
         const { error: nocturnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -813,7 +798,6 @@ export function ProgramacionModule() {
       // Si no hay conductores duales, intentar con conductor legacy (A CARGO)
       // Solo si NO es asignacion_companero (aunque este caso ya se maneja arriba con todosEsCompanero)
       if (conductoresInsertados === 0 && prog.conductor_id && !legacyEsCompanero) {
-        console.log('✅ Insertando conductor legacy:', prog.conductor_id, 'doc:', prog.tipo_documento)
         const { error: conductorError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -829,8 +813,6 @@ export function ProgramacionModule() {
         }
         conductoresInsertados++
       }
-
-      console.log(`📊 Total conductores insertados: ${conductoresInsertados}`)
 
       // Actualizar programacion con referencia a la asignacion y marcar como completado
       await (supabase.from('programaciones_onboarding') as any)
@@ -1984,12 +1966,12 @@ export function ProgramacionModule() {
         </div>
       )}
 
-      {/* Modal Cambiar Estado */}
+      {/* Modal Cambiar Estado Cabify */}
       {showEstadoModal && estadoModalProg && (
         <div className="prog-modal-overlay" onClick={() => setShowEstadoModal(false)}>
           <div className="prog-modal prog-modal-sm" onClick={e => e.stopPropagation()}>
             <div className="prog-modal-header">
-              <h2>Cambiar Estado</h2>
+              <h2>Cambiar Estado Cabify</h2>
               <button onClick={() => setShowEstadoModal(false)}>
                 <XCircle size={20} />
               </button>
@@ -1998,7 +1980,11 @@ export function ProgramacionModule() {
               <div className="prog-modal-info">
                 <p><strong>Conductor:</strong> {estadoModalProg.conductor_display || estadoModalProg.conductor_nombre || 'Sin conductor'}</p>
                 <p><strong>Vehiculo:</strong> {estadoModalProg.vehiculo_entregar_patente || '-'}</p>
-                <p><strong>Estado actual:</strong> <span className={`prog-estado-badge ${estadoModalProg.estado}`}>{ESTADO_LABELS[estadoModalProg.estado]}</span></p>
+                <p><strong>Estado actual:</strong> <span className={`prog-inline-select cabify ${estadoModalProg.estado_cabify || 'pendiente'}`} style={{ padding: '4px 8px', borderRadius: '4px' }}>{
+                  estadoModalProg.estado_cabify === 'listo_cabify' ? 'Listo Cabify' :
+                  estadoModalProg.estado_cabify === 'asignar_auto' ? 'Asignar Auto' :
+                  estadoModalProg.estado_cabify === 'crear_cuenta' ? 'Crear Cuenta' : 'Pendiente'
+                }</span></p>
               </div>
               <div className="form-group">
                 <label>Nuevo Estado</label>
@@ -2007,10 +1993,10 @@ export function ProgramacionModule() {
                   onChange={e => setNuevoEstado(e.target.value)}
                   className="form-select"
                 >
-                  <option value="por_agendar">Por Agendar</option>
-                  <option value="agendado">Agendado</option>
-                  <option value="en_curso">En Curso</option>
-                  <option value="completado">Completado</option>
+                  <option value="pendiente">Pendiente</option>
+                  <option value="listo_cabify">Listo Cabify</option>
+                  <option value="asignar_auto">Asignar Auto</option>
+                  <option value="crear_cuenta">Crear Cuenta</option>
                 </select>
               </div>
             </div>

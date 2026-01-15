@@ -515,14 +515,14 @@ export function IncidenciasModule() {
       header: 'Acciones',
       cell: ({ row }) => (
         <div className="dt-actions">
-          <button className="dt-btn-action dt-btn-view" title="Ver" onClick={() => handleVerIncidencia(row.original)}>
+          <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerIncidencia(row.original)}>
             <Eye size={14} />
           </button>
-          <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarIncidencia(row.original)}>
+          <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
             <Edit2 size={14} />
           </button>
           {canDelete && (
-            <button className="dt-btn-action dt-btn-delete" title="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
+            <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
               <Trash2 size={14} />
             </button>
           )}
@@ -659,21 +659,21 @@ export function IncidenciasModule() {
       header: 'Acciones',
       cell: ({ row }) => (
         <div className="dt-actions">
-          <button className="dt-btn-action dt-btn-view" title="Ver" onClick={() => handleVerIncidencia(row.original)}>
+          <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerIncidencia(row.original)}>
             <Eye size={14} />
           </button>
-          <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarIncidencia(row.original)}>
+          <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
             <Edit2 size={14} />
           </button>
           <button 
             className="dt-btn-action dt-btn-warning" 
-            title="Generar Cobro/Descuento" 
+            data-tooltip="Enviar a facturación"
             onClick={() => handleGenerarCobroDesdeIncidencia(row.original)}
           >
             <DollarSign size={14} />
           </button>
           {canDelete && (
-            <button className="dt-btn-action dt-btn-delete" title="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
+            <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
               <Trash2 size={14} />
             </button>
           )}
@@ -769,18 +769,18 @@ export function IncidenciasModule() {
       cell: ({ row }) => (
         <div className="dt-actions">
           {!row.original.aplicado && (
-            <button className="dt-btn-action dt-btn-view" title="Marcar como aplicado" onClick={() => handleMarcarAplicado(row.original)}>
+            <button className="dt-btn-action dt-btn-success" data-tooltip="Aplicar a facturación" onClick={() => handleMarcarAplicado(row.original)}>
               <CheckCircle size={14} />
             </button>
           )}
-          <button className="dt-btn-action dt-btn-view" title="Ver" onClick={() => handleVerPenalidad(row.original)}>
+          <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerPenalidad(row.original)}>
             <Eye size={14} />
           </button>
-          <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarPenalidad(row.original)}>
+          <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarPenalidad(row.original)}>
             <Edit2 size={14} />
           </button>
           {canDelete && (
-            <button className="dt-btn-action dt-btn-delete" title="Eliminar" onClick={() => handleEliminarPenalidad(row.original)}>
+            <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarPenalidad(row.original)}>
               <Trash2 size={14} />
             </button>
           )}
@@ -1208,7 +1208,10 @@ export function IncidenciasModule() {
     
     setAplicandoCobro(true)
     try {
-      if (aplicarFraccionado) {
+      // Si es "a favor", siempre aplicar completo (sin fraccionar)
+      const esAFavor = penalidadAplicar.tipo_es_a_favor === true
+      
+      if (aplicarFraccionado && !esAFavor) {
         // Crear cuotas fraccionadas
         const montoCuota = Math.ceil((penalidadAplicar.monto || 0) / cantidadCuotas)
         const cuotas = []
@@ -1276,9 +1279,9 @@ export function IncidenciasModule() {
         
         Swal.fire({
           icon: 'success',
-          title: 'Cobro Aplicado',
+          title: esAFavor ? 'Descuento Aplicado' : 'Cobro Aplicado',
           html: `Se aplicará en <strong>Semana ${semanaInicio} - ${anioInicio}</strong><br>
-                 Monto: ${formatMoney(penalidadAplicar.monto)}`
+                 Monto: ${formatMoney(penalidadAplicar.monto)}${esAFavor ? ' (a favor del conductor)' : ''}`
         })
       }
       
@@ -1652,52 +1655,70 @@ export function IncidenciasModule() {
                 </div>
               </div>
 
-              {/* Opciones de aplicación */}
-              <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
-                  ¿Cómo desea aplicar el cobro?
-                </label>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <label style={{ 
-                    flex: 1, 
-                    padding: '12px', 
-                    border: `2px solid ${!aplicarFraccionado ? '#F59E0B' : 'var(--border-color)'}`,
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    background: !aplicarFraccionado ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      checked={!aplicarFraccionado}
-                      onChange={() => setAplicarFraccionado(false)}
-                      style={{ marginRight: '8px' }}
-                    />
-                    <strong>Completo</strong>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      Se cobra todo en una semana
-                    </div>
+              {/* Opciones de aplicación - Solo mostrar si NO es "a favor" */}
+              {!penalidadAplicar.tipo_es_a_favor && (
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
+                    ¿Cómo desea aplicar el cobro?
                   </label>
-                  <label style={{ 
-                    flex: 1, 
-                    padding: '12px', 
-                    border: `2px solid ${aplicarFraccionado ? '#F59E0B' : 'var(--border-color)'}`,
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    background: aplicarFraccionado ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      checked={aplicarFraccionado}
-                      onChange={() => setAplicarFraccionado(true)}
-                      style={{ marginRight: '8px' }}
-                    />
-                    <strong>Fraccionado</strong>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      Dividir en cuotas semanales
-                    </div>
-                  </label>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <label style={{ 
+                      flex: 1, 
+                      padding: '12px', 
+                      border: `2px solid ${!aplicarFraccionado ? '#F59E0B' : 'var(--border-color)'}`,
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      background: !aplicarFraccionado ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
+                    }}>
+                      <input
+                        type="radio"
+                        checked={!aplicarFraccionado}
+                        onChange={() => setAplicarFraccionado(false)}
+                        style={{ marginRight: '8px' }}
+                      />
+                      <strong>Completo</strong>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        Se cobra todo en una semana
+                      </div>
+                    </label>
+                    <label style={{ 
+                      flex: 1, 
+                      padding: '12px', 
+                      border: `2px solid ${aplicarFraccionado ? '#F59E0B' : 'var(--border-color)'}`,
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      background: aplicarFraccionado ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
+                    }}>
+                      <input
+                        type="radio"
+                        checked={aplicarFraccionado}
+                        onChange={() => setAplicarFraccionado(true)}
+                        style={{ marginRight: '8px' }}
+                      />
+                      <strong>Fraccionado</strong>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        Dividir en cuotas semanales
+                      </div>
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
+              
+              {/* Mensaje para tickets a favor */}
+              {penalidadAplicar.tipo_es_a_favor && (
+                <div style={{ 
+                  padding: '12px', 
+                  background: 'rgba(16, 185, 129, 0.1)', 
+                  borderRadius: '8px', 
+                  marginBottom: '16px',
+                  border: '1px solid rgba(16, 185, 129, 0.3)'
+                }}>
+                  <strong style={{ color: '#10B981' }}>Ticket a Favor</strong>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Los tickets a favor se aplican completos (sin fraccionamiento)
+                  </div>
+                </div>
+              )}
 
               {/* Semana de inicio */}
               <div className="form-group" style={{ marginBottom: '16px' }}>
@@ -1781,7 +1802,11 @@ export function IncidenciasModule() {
                 disabled={aplicandoCobro}
                 style={{ background: '#F59E0B' }}
               >
-                {aplicandoCobro ? 'Aplicando...' : (aplicarFraccionado ? 'Crear Cuotas' : 'Aplicar Cobro')}
+                {aplicandoCobro ? 'Aplicando...' : (
+                  penalidadAplicar.tipo_es_a_favor 
+                    ? 'Aplicar Descuento' 
+                    : (aplicarFraccionado ? 'Crear Cuotas' : 'Aplicar Cobro')
+                )}
               </button>
             </div>
           </div>

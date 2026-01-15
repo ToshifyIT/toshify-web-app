@@ -244,19 +244,30 @@ export function ReporteFacturacionTab() {
       setPeriodo(periodoData as PeriodoFacturacion)
 
       // 2. Cargar facturaciones de conductores para este período
+      // JOIN con tabla conductores para obtener nombre actualizado
       const { data: facturacionesData, error: errFact } = await (supabase
         .from('facturacion_conductores') as any)
-        .select('*')
+        .select(`
+          *,
+          conductor:conductores!conductor_id(nombres, apellidos)
+        `)
         .eq('periodo_id', (periodoData as any).id)
-        .order('conductor_nombre')
 
       if (errFact) throw errFact
 
-      // Transformar nombres a MAYÚSCULAS al cargar
+      // Usar nombre de tabla conductores (en MAYÚSCULAS) en lugar del campo guardado
       const facturacionesTransformadas = (facturacionesData || []).map((f: any) => ({
         ...f,
-        conductor_nombre: (f.conductor_nombre || '').toUpperCase()
+        conductor_nombre: f.conductor 
+          ? `${(f.conductor.apellidos || '').toUpperCase()}, ${(f.conductor.nombres || '').toUpperCase()}`
+          : (f.conductor_nombre || '').toUpperCase()
       }))
+      
+      // Ordenar por nombre
+      facturacionesTransformadas.sort((a: any, b: any) => 
+        (a.conductor_nombre || '').localeCompare(b.conductor_nombre || '')
+      )
+      
       setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
 
       // 3. Cargar excesos de kilometraje para este período

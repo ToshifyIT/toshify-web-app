@@ -1275,7 +1275,7 @@ function SiniestroForm({
           </div>
         </div>
         <div className="form-row">
-          <div className="form-group" style={{ flex: 1 }}>
+          <div className="form-group">
             <label>Carpeta Drive</label>
             <input
               type="url"
@@ -1285,11 +1285,9 @@ function SiniestroForm({
               disabled={isFieldDisabled('other')}
             />
           </div>
-        </div>
-        <div className="form-row">
-          <div className="form-group full-width">
-            <label>Notificaciones</label>
-            <div className="checkbox-row">
+          <div className="form-group">
+            <label>&nbsp;</label>
+            <div className="checkbox-row" style={{ height: '42px', alignItems: 'center' }}>
               <label className="checkbox-card">
                 <input
                   type="checkbox"
