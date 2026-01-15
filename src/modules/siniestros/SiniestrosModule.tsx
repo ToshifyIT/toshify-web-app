@@ -1275,7 +1275,7 @@ function SiniestroForm({
           </div>
         </div>
         <div className="form-row">
-          <div className="form-group">
+          <div className="form-group" style={{ flex: 1 }}>
             <label>Carpeta Drive</label>
             <input
               type="url"
@@ -1285,26 +1285,28 @@ function SiniestroForm({
               disabled={isFieldDisabled('other')}
             />
           </div>
-          <div className="form-group">
-            <label>&nbsp;</label>
-            <div style={{ display: 'flex', gap: '16px' }}>
-              <label className="checkbox-option">
+        </div>
+        <div className="form-row">
+          <div className="form-group full-width">
+            <label>Notificaciones</label>
+            <div className="checkbox-row">
+              <label className="checkbox-card">
                 <input
                   type="checkbox"
                   checked={formData.enviado_abogada}
                   onChange={(e) => setFormData(prev => ({ ...prev, enviado_abogada: e.target.checked }))}
                   disabled={isFieldDisabled('other')}
                 />
-                <span>Enviado a abogada</span>
+                <span className="checkbox-card-label">Enviado a abogada</span>
               </label>
-              <label className="checkbox-option">
+              <label className="checkbox-card">
                 <input
                   type="checkbox"
                   checked={formData.enviado_alliance}
                   onChange={(e) => setFormData(prev => ({ ...prev, enviado_alliance: e.target.checked }))}
                   disabled={isFieldDisabled('other')}
                 />
-                <span>Enviado a Rentadora</span>
+                <span className="checkbox-card-label">Enviado a Rentadora</span>
               </label>
             </div>
           </div>
