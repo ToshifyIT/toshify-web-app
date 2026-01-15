@@ -5,8 +5,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
-  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw,
-  MapPin
+  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -1100,89 +1099,6 @@ export function ProgramacionModule() {
           <option value="crear_cuenta">Crear Cuenta</option>
         </select>
       )
-    },
-    {
-      accessorKey: 'direccion',
-      header: 'Dirección',
-      cell: ({ row }) => {
-        const [editing, setEditing] = useState(false)
-        const [value, setValue] = useState(row.original.direccion || '')
-
-        const handleSave = () => {
-          if (value !== row.original.direccion) {
-            handleUpdateField(row.original.id, 'direccion', value || null)
-          }
-          setEditing(false)
-        }
-
-        if (editing) {
-          return (
-            <input
-              type="text"
-              className="prog-inline-input"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onBlur={handleSave}
-              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              autoFocus
-              placeholder="Dirección..."
-            />
-          )
-        }
-
-        return (
-          <div
-            className="prog-direccion-cell"
-            onClick={() => setEditing(true)}
-            title={row.original.direccion || 'Click para agregar dirección'}
-          >
-            <MapPin size={12} />
-            <span>{row.original.direccion || '-'}</span>
-          </div>
-        )
-      }
-    },
-    {
-      accessorKey: 'especialista_nombre',
-      header: 'Especialista',
-      cell: ({ row }) => {
-        const [editing, setEditing] = useState(false)
-        const [value, setValue] = useState(row.original.especialista_nombre || '')
-
-        const handleSave = () => {
-          if (value !== row.original.especialista_nombre) {
-            handleUpdateField(row.original.id, 'especialista_nombre', value || null)
-          }
-          setEditing(false)
-        }
-
-        if (editing) {
-          return (
-            <input
-              type="text"
-              className="prog-inline-input"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onBlur={handleSave}
-              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              autoFocus
-              placeholder="Nombre..."
-              style={{ minWidth: '100px' }}
-            />
-          )
-        }
-
-        return (
-          <div
-            className="prog-especialista-cell"
-            onClick={() => setEditing(true)}
-            title={row.original.especialista_nombre || 'Click para agregar especialista'}
-          >
-            <User size={12} />
-            <span>{row.original.especialista_nombre || '-'}</span>
-          </div>
-        )
-      }
     },
     {
       id: 'acciones',
