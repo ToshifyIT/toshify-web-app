@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, clearAllAuthStorage } from '../lib/supabase'
 import Swal from 'sweetalert2'
 
 export function ResetPasswordPage() {
@@ -81,8 +81,10 @@ export function ResetPasswordPage() {
           confirmButtonColor: '#FF0033'
         })
 
-        // Cerrar sesión y redirigir al login
+        // Cerrar sesión de forma intencional y redirigir al login
+        // Nota: Usamos signOut directo pero limpiamos storage para evitar recuperación
         await supabase.auth.signOut()
+        clearAllAuthStorage()
         navigate('/login')
       }
     } catch {

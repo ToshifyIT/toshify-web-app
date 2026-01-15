@@ -800,9 +800,9 @@ export function ProgramacionModule() {
           </button>
           <button
             className="prog-btn prog-btn-send"
-            title={row.original.asignacion_id ? 'Ya enviado' : row.original.estado !== 'completado' ? 'Primero completar programacion' : 'Enviar a Entrega'}
+            title={row.original.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
             onClick={() => handleEnviarAEntrega(row.original)}
-            disabled={row.original.estado !== 'completado' || !!row.original.asignacion_id}
+            disabled={!!row.original.asignacion_id}
           >
             <Send size={16} />
           </button>
@@ -1515,8 +1515,8 @@ export function ProgramacionModule() {
                     onClick={() => {
                       handleEnviarAEntrega(previewProgramacion)
                     }}
-                    disabled={previewProgramacion.estado !== 'completado' || !!previewProgramacion.asignacion_id}
-                    title={previewProgramacion.asignacion_id ? 'Ya enviado' : previewProgramacion.estado !== 'completado' ? 'Primero completar' : ''}
+                    disabled={!!previewProgramacion.asignacion_id}
+                    title={previewProgramacion.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
                   >
                     <Send size={16} />
                     {previewProgramacion.asignacion_id ? 'Ya Enviado' : 'Enviar a Entrega'}
