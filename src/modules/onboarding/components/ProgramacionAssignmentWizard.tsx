@@ -2236,7 +2236,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="">Seleccionar...</option>
-                            <option value="contrato">Contrato</option>
                             <option value="anexo">Anexo</option>
                             <option value="carta_oferta">Carta Oferta</option>
                             <option value="na">N/A</option>
@@ -2331,7 +2330,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="">Seleccionar...</option>
-                            <option value="contrato">Contrato</option>
                             <option value="anexo">Anexo</option>
                             <option value="carta_oferta">Carta Oferta</option>
                             <option value="na">N/A</option>
@@ -2426,7 +2424,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="">Seleccionar...</option>
-                            <option value="contrato">Contrato</option>
                             <option value="anexo">Anexo</option>
                             <option value="carta_oferta">Carta Oferta</option>
                             <option value="na">N/A</option>
