@@ -244,6 +244,7 @@ export function ProgramacionModule() {
       const { data, error: queryError } = await supabase
         .from('v_programaciones_onboarding')
         .select('*')
+        .neq('estado', 'completado') // Excluir las completadas (ya enviadas)
         .order('created_at', { ascending: false })
 
       if (queryError) throw queryError
@@ -817,20 +818,17 @@ export function ProgramacionModule() {
 
       console.log(`📊 Total conductores insertados: ${conductoresInsertados}`)
 
-      // Actualizar programacion con referencia a la asignacion
+      // Actualizar programacion con referencia a la asignacion y marcar como completado
       await (supabase.from('programaciones_onboarding') as any)
         .update({
           asignacion_id: asignacion.id,
-          fecha_asignacion_creada: new Date().toISOString()
+          fecha_asignacion_creada: new Date().toISOString(),
+          estado: 'completado' // Marcar como completado para que no se liste mas
         })
         .eq('id', prog.id)
 
-      // Actualizar localmente
-      setProgramaciones(prev => prev.map(p =>
-        p.id === prog.id
-          ? { ...p, asignacion_id: asignacion.id, asignacion_codigo: asignacion.codigo }
-          : p
-      ))
+      // Remover de la lista local (ya no debe aparecer)
+      setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
 
       Swal.fire({
         icon: 'success',
