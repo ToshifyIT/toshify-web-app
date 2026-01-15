@@ -1018,15 +1018,6 @@ export function ProgramacionModule() {
       }
     },
     {
-      accessorKey: 'estado',
-      header: 'Estado',
-      cell: ({ row }) => (
-        <span className={`prog-estado-badge ${row.original.estado}`}>
-          {ESTADO_LABELS[row.original.estado] || row.original.estado}
-        </span>
-      )
-    },
-    {
       id: 'tipo_documento_display',
       header: 'Documento',
       cell: ({ row }) => {
