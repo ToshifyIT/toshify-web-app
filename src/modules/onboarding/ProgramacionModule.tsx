@@ -5,8 +5,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
-  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw,
-  MapPin
+  MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -137,8 +136,9 @@ export function ProgramacionModule() {
   const [error, setError] = useState<string | null>(null)
   
   // Filtro activo por stat card
-  type FilterType = 'all' | 'por_agendar' | 'agendados' | 'completados' | 'cond_nuevos' | 'cond_anexo'
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all')
+  // Stats cards ocultas temporalmente
+  // type FilterType = 'all' | 'por_agendar' | 'agendados' | 'completados' | 'cond_nuevos' | 'cond_anexo'
+  // const [activeFilter, setActiveFilter] = useState<FilterType>('all')
   
   // Modals
   const [showCreateWizard, setShowCreateWizard] = useState(false)
@@ -1102,89 +1102,6 @@ export function ProgramacionModule() {
       )
     },
     {
-      accessorKey: 'direccion',
-      header: 'Dirección',
-      cell: ({ row }) => {
-        const [editing, setEditing] = useState(false)
-        const [value, setValue] = useState(row.original.direccion || '')
-
-        const handleSave = () => {
-          if (value !== row.original.direccion) {
-            handleUpdateField(row.original.id, 'direccion', value || null)
-          }
-          setEditing(false)
-        }
-
-        if (editing) {
-          return (
-            <input
-              type="text"
-              className="prog-inline-input"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onBlur={handleSave}
-              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              autoFocus
-              placeholder="Dirección..."
-            />
-          )
-        }
-
-        return (
-          <div
-            className="prog-direccion-cell"
-            onClick={() => setEditing(true)}
-            title={row.original.direccion || 'Click para agregar dirección'}
-          >
-            <MapPin size={12} />
-            <span>{row.original.direccion || '-'}</span>
-          </div>
-        )
-      }
-    },
-    {
-      accessorKey: 'especialista_nombre',
-      header: 'Especialista',
-      cell: ({ row }) => {
-        const [editing, setEditing] = useState(false)
-        const [value, setValue] = useState(row.original.especialista_nombre || '')
-
-        const handleSave = () => {
-          if (value !== row.original.especialista_nombre) {
-            handleUpdateField(row.original.id, 'especialista_nombre', value || null)
-          }
-          setEditing(false)
-        }
-
-        if (editing) {
-          return (
-            <input
-              type="text"
-              className="prog-inline-input"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onBlur={handleSave}
-              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              autoFocus
-              placeholder="Nombre..."
-              style={{ minWidth: '100px' }}
-            />
-          )
-        }
-
-        return (
-          <div
-            className="prog-especialista-cell"
-            onClick={() => setEditing(true)}
-            title={row.original.especialista_nombre || 'Click para agregar especialista'}
-          >
-            <User size={12} />
-            <span>{row.original.especialista_nombre || '-'}</span>
-          </div>
-        )
-      }
-    },
-    {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
@@ -1239,45 +1156,12 @@ export function ProgramacionModule() {
     }
   ], [canCreate, canEdit, canDelete])
 
-  // Calcular estadisticas
-  const stats = useMemo(() => {
-    const porAgendar = programaciones.filter(p => p.estado === 'por_agendar').length
-    const agendados = programaciones.filter(p => p.estado === 'agendado').length
-    // Enviadas = solo las que fueron enviadas a entrega (tienen asignacion_id)
-    const enviadas = programaciones.filter(p => p.asignacion_id).length
-    const condNuevos = programaciones.filter(p => p.tipo_asignacion === 'entrega_auto' && !p.asignacion_id).length
-    const condAnexo = programaciones.filter(p => p.tipo_documento === 'anexo' && !p.asignacion_id).length
-
-    return { porAgendar, agendados, enviadas, condNuevos, condAnexo }
-  }, [programaciones])
-
-  // Filtrar datos segun stat card activo
-  const filteredData = useMemo(() => {
-    switch (activeFilter) {
-      case 'por_agendar':
-        return programaciones.filter(p => p.estado === 'por_agendar')
-      case 'agendados':
-        return programaciones.filter(p => p.estado === 'agendado')
-      case 'completados':
-        // Solo las enviadas a entrega
-        return programaciones.filter(p => p.asignacion_id)
-      case 'cond_nuevos':
-        return programaciones.filter(p => p.tipo_asignacion === 'entrega_auto' && !p.asignacion_id)
-      case 'cond_anexo':
-        return programaciones.filter(p => p.tipo_documento === 'anexo' && !p.asignacion_id)
-      default:
-        return programaciones
-    }
-  }, [programaciones, activeFilter])
-
-  // Handler para click en stat card
-  const handleStatClick = (filter: FilterType) => {
-    setActiveFilter(prev => prev === filter ? 'all' : filter)
-  }
+  // Stats cards ocultas temporalmente - mostrar todas las programaciones
+  const filteredData = programaciones
 
   return (
     <div className="prog-module">
-      {/* Stats Cards - Clickeables para filtrar */}
+      {/* Stats Cards - Ocultos temporalmente
       <div className="prog-stats">
         <div className="prog-stats-grid">
           <div 
@@ -1332,6 +1216,7 @@ export function ProgramacionModule() {
           </div>
         </div>
       </div>
+      */}
 
       {/* DataTable con boton de crear */}
       <DataTable
