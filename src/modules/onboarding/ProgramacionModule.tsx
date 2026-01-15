@@ -500,15 +500,15 @@ export function ProgramacionModule() {
   // Abrir modal cambiar estado
   const handleCambiarEstado = (prog: ProgramacionOnboardingCompleta) => {
     setEstadoModalProg(prog)
-    setNuevoEstado(prog.estado)
+    setNuevoEstado(prog.estado_cabify || 'pendiente')
     setShowEstadoModal(true)
   }
 
-  // Guardar nuevo estado
+  // Guardar nuevo estado cabify
   const handleGuardarEstado = async () => {
     if (!estadoModalProg || !nuevoEstado) return
     
-    if (nuevoEstado === estadoModalProg.estado) {
+    if (nuevoEstado === (estadoModalProg.estado_cabify || 'pendiente')) {
       setShowEstadoModal(false)
       return
     }
@@ -516,20 +516,20 @@ export function ProgramacionModule() {
     try {
       const { error } = await (supabase
         .from('programaciones_onboarding') as any)
-        .update({ estado: nuevoEstado })
+        .update({ estado_cabify: nuevoEstado })
         .eq('id', estadoModalProg.id)
 
       if (error) throw error
 
       // Actualizar estado local
       setProgramaciones(prev => prev.map(p => 
-        p.id === estadoModalProg.id ? { ...p, estado: nuevoEstado as EstadoKanban } : p
+        p.id === estadoModalProg.id ? { ...p, estado_cabify: nuevoEstado as 'pendiente' | 'listo_cabify' | 'asignar_auto' | 'crear_cuenta' } : p
       ))
 
       setShowEstadoModal(false)
       Swal.fire({
         icon: 'success',
-        title: 'Estado actualizado',
+        title: 'Estado Cabify actualizado',
         timer: 1500,
         showConfirmButton: false
       })
@@ -1984,12 +1984,12 @@ export function ProgramacionModule() {
         </div>
       )}
 
-      {/* Modal Cambiar Estado */}
+      {/* Modal Cambiar Estado Cabify */}
       {showEstadoModal && estadoModalProg && (
         <div className="prog-modal-overlay" onClick={() => setShowEstadoModal(false)}>
           <div className="prog-modal prog-modal-sm" onClick={e => e.stopPropagation()}>
             <div className="prog-modal-header">
-              <h2>Cambiar Estado</h2>
+              <h2>Cambiar Estado Cabify</h2>
               <button onClick={() => setShowEstadoModal(false)}>
                 <XCircle size={20} />
               </button>
@@ -1998,7 +1998,11 @@ export function ProgramacionModule() {
               <div className="prog-modal-info">
                 <p><strong>Conductor:</strong> {estadoModalProg.conductor_display || estadoModalProg.conductor_nombre || 'Sin conductor'}</p>
                 <p><strong>Vehiculo:</strong> {estadoModalProg.vehiculo_entregar_patente || '-'}</p>
-                <p><strong>Estado actual:</strong> <span className={`prog-estado-badge ${estadoModalProg.estado}`}>{ESTADO_LABELS[estadoModalProg.estado]}</span></p>
+                <p><strong>Estado actual:</strong> <span className={`prog-inline-select cabify ${estadoModalProg.estado_cabify || 'pendiente'}`} style={{ padding: '4px 8px', borderRadius: '4px' }}>{
+                  estadoModalProg.estado_cabify === 'listo_cabify' ? 'Listo Cabify' :
+                  estadoModalProg.estado_cabify === 'asignar_auto' ? 'Asignar Auto' :
+                  estadoModalProg.estado_cabify === 'crear_cuenta' ? 'Crear Cuenta' : 'Pendiente'
+                }</span></p>
               </div>
               <div className="form-group">
                 <label>Nuevo Estado</label>
@@ -2007,10 +2011,10 @@ export function ProgramacionModule() {
                   onChange={e => setNuevoEstado(e.target.value)}
                   className="form-select"
                 >
-                  <option value="por_agendar">Por Agendar</option>
-                  <option value="agendado">Agendado</option>
-                  <option value="en_curso">En Curso</option>
-                  <option value="completado">Completado</option>
+                  <option value="pendiente">Pendiente</option>
+                  <option value="listo_cabify">Listo Cabify</option>
+                  <option value="asignar_auto">Asignar Auto</option>
+                  <option value="crear_cuenta">Crear Cuenta</option>
                 </select>
               </div>
             </div>
