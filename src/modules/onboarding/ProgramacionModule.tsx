@@ -100,15 +100,94 @@ export function ProgramacionModule() {
   
   // Modals
   const [showCreateWizard, setShowCreateWizard] = useState(false)
-  const [showEditWizard, setShowEditWizard] = useState(false)
   const [editingProgramacion, setEditingProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
   const [previewProgramacion, setPreviewProgramacion] = useState<ProgramacionOnboardingCompleta | null>(null)
-  
+
+  // Modal edicion rapida
+  const [showQuickEdit, setShowQuickEdit] = useState(false)
+  const [quickEditData, setQuickEditData] = useState<Partial<ProgramacionOnboardingCompleta> & { vehiculo_id?: string }>({})
+  const [savingQuickEdit, setSavingQuickEdit] = useState(false)
+  const [vehiculosDisponibles, setVehiculosDisponibles] = useState<Array<{ id: string; patente: string; marca: string; modelo: string }>>([])
+  const [loadingVehiculos, setLoadingVehiculos] = useState(false)
+  const [vehiculoSearch, setVehiculoSearch] = useState('')
+  const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
+
+  // Conductores disponibles para edición
+  const [conductoresDisponibles, setConductoresDisponibles] = useState<Array<{ id: string; nombre: string; dni: string }>>([])
+  const [loadingConductores, setLoadingConductores] = useState(false)
+  const [conductorDiurnoSearch, setConductorDiurnoSearch] = useState('')
+  const [conductorNocturnoSearch, setConductorNocturnoSearch] = useState('')
+  const [conductorSearch, setConductorSearch] = useState('') // Para modalidad A CARGO
+  const [showConductorDiurnoDropdown, setShowConductorDiurnoDropdown] = useState(false)
+  const [showConductorNocturnoDropdown, setShowConductorNocturnoDropdown] = useState(false)
+  const [showConductorDropdown, setShowConductorDropdown] = useState(false)
+
+  // Vehiculos filtrados por busqueda
+  const filteredVehiculos = useMemo(() => {
+    if (!vehiculoSearch.trim()) return vehiculosDisponibles
+    const search = vehiculoSearch.toLowerCase()
+    return vehiculosDisponibles.filter(v =>
+      v.patente.toLowerCase().includes(search) ||
+      v.marca.toLowerCase().includes(search) ||
+      v.modelo.toLowerCase().includes(search)
+    )
+  }, [vehiculosDisponibles, vehiculoSearch])
+
+  // Vehiculo seleccionado actual
+  const selectedVehiculo = useMemo(() => {
+    return vehiculosDisponibles.find(v => v.id === quickEditData.vehiculo_id)
+  }, [vehiculosDisponibles, quickEditData.vehiculo_id])
+
+  // Conductores filtrados por búsqueda (diurno)
+  const filteredConductoresDiurno = useMemo(() => {
+    if (!conductorDiurnoSearch.trim()) return conductoresDisponibles
+    const search = conductorDiurnoSearch.toLowerCase()
+    return conductoresDisponibles.filter(c =>
+      c.nombre.toLowerCase().includes(search) ||
+      c.dni.toLowerCase().includes(search)
+    )
+  }, [conductoresDisponibles, conductorDiurnoSearch])
+
+  // Conductores filtrados por búsqueda (nocturno)
+  const filteredConductoresNocturno = useMemo(() => {
+    if (!conductorNocturnoSearch.trim()) return conductoresDisponibles
+    const search = conductorNocturnoSearch.toLowerCase()
+    return conductoresDisponibles.filter(c =>
+      c.nombre.toLowerCase().includes(search) ||
+      c.dni.toLowerCase().includes(search)
+    )
+  }, [conductoresDisponibles, conductorNocturnoSearch])
+
+  // Conductores filtrados por búsqueda (a cargo - legacy)
+  const filteredConductores = useMemo(() => {
+    if (!conductorSearch.trim()) return conductoresDisponibles
+    const search = conductorSearch.toLowerCase()
+    return conductoresDisponibles.filter(c =>
+      c.nombre.toLowerCase().includes(search) ||
+      c.dni.toLowerCase().includes(search)
+    )
+  }, [conductoresDisponibles, conductorSearch])
+
+  // Conductor seleccionado actual (diurno)
+  const selectedConductorDiurno = useMemo(() => {
+    return conductoresDisponibles.find(c => c.id === quickEditData.conductor_diurno_id)
+  }, [conductoresDisponibles, quickEditData.conductor_diurno_id])
+
+  // Conductor seleccionado actual (nocturno)
+  const selectedConductorNocturno = useMemo(() => {
+    return conductoresDisponibles.find(c => c.id === quickEditData.conductor_nocturno_id)
+  }, [conductoresDisponibles, quickEditData.conductor_nocturno_id])
+
+  // Conductor seleccionado actual (a cargo)
+  const selectedConductor = useMemo(() => {
+    return conductoresDisponibles.find(c => c.id === quickEditData.conductor_id)
+  }, [conductoresDisponibles, quickEditData.conductor_id])
+
   // Modal cambiar estado
   const [showEstadoModal, setShowEstadoModal] = useState(false)
   const [estadoModalProg, setEstadoModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
   const [nuevoEstado, setNuevoEstado] = useState('')
-  
+
   // Modal copiar mensaje
   const [showMensajeModal, setShowMensajeModal] = useState(false)
   const [mensajeModalProg, setMensajeModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
@@ -141,15 +220,190 @@ export function ProgramacionModule() {
     setShowCreateWizard(true)
   }
 
-  const handleEdit = (prog: ProgramacionOnboardingCompleta) => {
+  const handleEdit = async (prog: ProgramacionOnboardingCompleta) => {
     setEditingProgramacion(prog)
-    setShowEditWizard(true)
+    setVehiculoSearch('') // Reset busqueda
+    setShowVehiculoDropdown(false)
+    setConductorDiurnoSearch('')
+    setConductorNocturnoSearch('')
+    setConductorSearch('')
+    setShowConductorDiurnoDropdown(false)
+    setShowConductorNocturnoDropdown(false)
+    setShowConductorDropdown(false)
+    setQuickEditData({
+      vehiculo_id: prog.vehiculo_entregar_id || '',
+      vehiculo_entregar_patente: prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '',
+      fecha_cita: prog.fecha_cita || '',
+      hora_cita: prog.hora_cita?.substring(0, 5) || '10:00',
+      // Conductores (IDs)
+      conductor_diurno_id: prog.conductor_diurno_id || '',
+      conductor_diurno_nombre: prog.conductor_diurno_nombre || '',
+      conductor_nocturno_id: prog.conductor_nocturno_id || '',
+      conductor_nocturno_nombre: prog.conductor_nocturno_nombre || '',
+      conductor_id: prog.conductor_id || '',
+      conductor_nombre: prog.conductor_nombre || prog.conductor_display || '',
+      // Diurno
+      tipo_candidato_diurno: prog.tipo_candidato_diurno,
+      documento_diurno: prog.documento_diurno,
+      zona_diurno: prog.zona_diurno || '',
+      distancia_diurno: prog.distancia_diurno,
+      // Nocturno
+      tipo_candidato_nocturno: prog.tipo_candidato_nocturno,
+      documento_nocturno: prog.documento_nocturno,
+      zona_nocturno: prog.zona_nocturno || '',
+      distancia_nocturno: prog.distancia_nocturno,
+      // A Cargo (legacy)
+      tipo_candidato: prog.tipo_candidato,
+      tipo_documento: prog.tipo_documento,
+      zona: prog.zona,
+      distancia_minutos: prog.distancia_minutos,
+      // Otros
+      observaciones: prog.observaciones || ''
+    })
+    setShowQuickEdit(true)
+
+    // Cargar vehiculos y conductores en paralelo
+    setLoadingVehiculos(true)
+    setLoadingConductores(true)
+
+    try {
+      // Obtener vehiculos que no estan en reparacion/mantenimiento
+      const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO', 'TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO']
+      const { data: vehiculosData } = await supabase
+        .from('vehiculos')
+        .select('id, patente, marca, modelo, vehiculos_estados(codigo)')
+        .order('patente')
+
+      // Obtener vehiculos ya programados (excepto el actual)
+      const { data: programacionesData } = await supabase
+        .from('programaciones_onboarding')
+        .select('vehiculo_entregar_id')
+        .in('estado', ['por_agendar', 'agendado', 'en_curso'])
+        .neq('id', prog.id)
+
+      const vehiculosProgramados = new Set((programacionesData || []).map((p: any) => p.vehiculo_entregar_id))
+
+      const vehiculosFiltrados = (vehiculosData || []).filter((v: any) =>
+        !estadosNoDisponibles.includes(v.vehiculos_estados?.codigo) &&
+        (!vehiculosProgramados.has(v.id) || v.id === prog.vehiculo_entregar_id)
+      )
+
+      setVehiculosDisponibles(vehiculosFiltrados.map((v: any) => ({
+        id: v.id,
+        patente: v.patente,
+        marca: v.marca,
+        modelo: v.modelo
+      })))
+    } catch (err) {
+      console.error('Error cargando vehiculos:', err)
+    } finally {
+      setLoadingVehiculos(false)
+    }
+
+    // Cargar TODOS los conductores (sin filtro de programados para simplicidad)
+    try {
+      const { data: conductoresData, error: conductoresError } = await supabase
+        .from('conductores')
+        .select('id, nombres, apellidos, numero_dni')
+        .order('apellidos')
+        .limit(1000)
+
+      if (conductoresError) {
+        console.error('Error en query conductores:', conductoresError)
+      }
+
+      setConductoresDisponibles((conductoresData || []).map((c: any) => ({
+        id: c.id,
+        nombre: `${c.nombres || ''} ${c.apellidos || ''}`.trim(),
+        dni: c.numero_dni || ''
+      })))
+    } catch (err) {
+      console.error('Error cargando conductores:', err)
+    } finally {
+      setLoadingConductores(false)
+    }
   }
 
-  const handleDelete = async (id: string) => {
+  // Guardar edicion rapida
+  const handleSaveQuickEdit = async () => {
+    if (!editingProgramacion) return
+
+    setSavingQuickEdit(true)
+    try {
+      const isTurno = editingProgramacion.modalidad === 'TURNO'
+
+      // Buscar datos del vehiculo seleccionado
+      const vehiculoSeleccionado = vehiculosDisponibles.find(v => v.id === quickEditData.vehiculo_id)
+
+      // Buscar datos de conductores seleccionados
+      const conductorDiurnoSeleccionado = conductoresDisponibles.find(c => c.id === quickEditData.conductor_diurno_id)
+      const conductorNocturnoSeleccionado = conductoresDisponibles.find(c => c.id === quickEditData.conductor_nocturno_id)
+      const conductorSeleccionado = conductoresDisponibles.find(c => c.id === quickEditData.conductor_id)
+
+      const updateData: any = {
+        fecha_cita: quickEditData.fecha_cita,
+        hora_cita: quickEditData.hora_cita,
+        observaciones: quickEditData.observaciones,
+        // Vehiculo
+        vehiculo_entregar_id: quickEditData.vehiculo_id || null,
+        vehiculo_entregar_patente: vehiculoSeleccionado?.patente || quickEditData.vehiculo_entregar_patente || null,
+        vehiculo_entregar_modelo: vehiculoSeleccionado ? `${vehiculoSeleccionado.marca} ${vehiculoSeleccionado.modelo}` : null
+      }
+
+      if (isTurno) {
+        // Conductor diurno
+        updateData.conductor_diurno_id = quickEditData.conductor_diurno_id || null
+        updateData.conductor_diurno_nombre = conductorDiurnoSeleccionado?.nombre || quickEditData.conductor_diurno_nombre || null
+        updateData.conductor_diurno_dni = conductorDiurnoSeleccionado?.dni || null
+        updateData.tipo_candidato_diurno = quickEditData.tipo_candidato_diurno
+        updateData.documento_diurno = quickEditData.documento_diurno
+        updateData.zona_diurno = quickEditData.zona_diurno
+        updateData.distancia_diurno = quickEditData.distancia_diurno || null
+
+        // Conductor nocturno
+        updateData.conductor_nocturno_id = quickEditData.conductor_nocturno_id || null
+        updateData.conductor_nocturno_nombre = conductorNocturnoSeleccionado?.nombre || quickEditData.conductor_nocturno_nombre || null
+        updateData.conductor_nocturno_dni = conductorNocturnoSeleccionado?.dni || null
+        updateData.tipo_candidato_nocturno = quickEditData.tipo_candidato_nocturno
+        updateData.documento_nocturno = quickEditData.documento_nocturno
+        updateData.zona_nocturno = quickEditData.zona_nocturno
+        updateData.distancia_nocturno = quickEditData.distancia_nocturno || null
+      } else {
+        // A Cargo - campos legacy
+        updateData.conductor_id = quickEditData.conductor_id || null
+        updateData.conductor_nombre = conductorSeleccionado?.nombre || quickEditData.conductor_nombre || null
+        updateData.conductor_dni = conductorSeleccionado?.dni || null
+        updateData.tipo_candidato = quickEditData.tipo_candidato
+        updateData.tipo_documento = quickEditData.tipo_documento
+        updateData.zona = quickEditData.zona
+        updateData.distancia_minutos = quickEditData.distancia_minutos || null
+      }
+
+      const { error } = await (supabase
+        .from('programaciones_onboarding') as any)
+        .update(updateData)
+        .eq('id', editingProgramacion.id)
+
+      if (error) throw error
+
+      await loadProgramaciones()
+      setShowQuickEdit(false)
+      setEditingProgramacion(null)
+      Swal.fire('Guardado', 'Programacion actualizada correctamente', 'success')
+    } catch (err: any) {
+      console.error('Error actualizando:', err)
+      Swal.fire('Error', err.message || 'Error al guardar', 'error')
+    } finally {
+      setSavingQuickEdit(false)
+    }
+  }
+
+  const handleDelete = async (id: string, yaEnviada: boolean = false) => {
     const result = await Swal.fire({
-      title: 'Eliminar programacion?',
-      text: 'Esta accion no se puede deshacer',
+      title: yaEnviada ? 'Eliminar programacion enviada?' : 'Eliminar programacion?',
+      text: yaEnviada
+        ? 'ATENCION: Esta programacion ya fue enviada a Entrega. Solo se eliminara de esta lista, la asignacion en Entrega permanecera.'
+        : 'Esta accion no se puede deshacer',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#DC2626',
@@ -242,7 +496,12 @@ export function ProgramacionModule() {
       return
     }
 
-    if (!prog.conductor_id && !prog.conductor_nombre) {
+    // Validar conductor según modalidad
+    const tieneConductorLegacy = prog.conductor_id || prog.conductor_nombre
+    const tieneConductorDiurno = prog.conductor_diurno_id || prog.conductor_diurno_nombre
+    const tieneConductorNocturno = prog.conductor_nocturno_id || prog.conductor_nocturno_nombre
+
+    if (!tieneConductorLegacy && !tieneConductorDiurno && !tieneConductorNocturno) {
       Swal.fire('Error', 'La programacion no tiene conductor asignado', 'error')
       return
     }
@@ -274,13 +533,17 @@ export function ProgramacionModule() {
       const codigo = `ASG-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(fecha.getDate()).padStart(2, '0')}-${String(fecha.getHours()).padStart(2, '0')}${String(fecha.getMinutes()).padStart(2, '0')}`
 
       // Crear asignacion
+      // modalidad en programacion es 'TURNO' o 'CARGO', en asignacion es 'turno' o 'a_cargo'
+      const esTurno = prog.modalidad === 'TURNO'
+      console.log('🔍 Modalidad programacion:', prog.modalidad, '→ Es TURNO:', esTurno)
+
       const { data: asignacion, error: asignacionError } = await (supabase
         .from('asignaciones') as any)
         .insert({
           codigo,
           vehiculo_id: prog.vehiculo_entregar_id,
-          modalidad: prog.turno ? 'turno' : 'a_cargo',
-          horario: prog.turno ? 'TURNO' : 'CARGO',
+          modalidad: esTurno ? 'turno' : 'a_cargo',
+          horario: esTurno ? 'TURNO' : 'CARGO',
           fecha_programada: prog.fecha_cita ? `${prog.fecha_cita}T${(prog.hora_cita || '10:00').substring(0, 5)}:00` : new Date().toISOString(),
           estado: 'programado',
           notas: prog.observaciones || `Creado desde programacion. Tipo: ${TIPO_ASIGNACION_LABELS[prog.tipo_asignacion || ''] || prog.tipo_asignacion}`,
@@ -292,35 +555,93 @@ export function ProgramacionModule() {
 
       if (asignacionError) throw asignacionError
 
-      // Crear asignacion_conductor
-      if (prog.conductor_id) {
+      // Log para debug
+      console.log('📋 Programacion data:', {
+        modalidad: prog.modalidad,
+        conductor_id: prog.conductor_id,
+        conductor_nombre: prog.conductor_nombre,
+        conductor_diurno_id: prog.conductor_diurno_id,
+        conductor_diurno_nombre: prog.conductor_diurno_nombre,
+        conductor_nocturno_id: prog.conductor_nocturno_id,
+        conductor_nocturno_nombre: prog.conductor_nocturno_nombre
+      })
+
+      // Crear asignacion_conductor(es) segun modalidad
+      let conductoresInsertados = 0
+
+      // Primero intentar con conductores duales (modalidad TURNO)
+      if (prog.conductor_diurno_id) {
+        console.log('✅ Insertando conductor diurno:', prog.conductor_diurno_id)
+        const { error: diurnoError } = await (supabase
+          .from('asignaciones_conductores') as any)
+          .insert({
+            asignacion_id: asignacion.id,
+            conductor_id: prog.conductor_diurno_id,
+            horario: 'diurno',
+            estado: 'asignado',
+            documento: prog.documento_diurno === 'contrato' ? 'CARTA_OFERTA' :
+                       prog.documento_diurno === 'anexo' ? 'ANEXO' : null
+          })
+        if (diurnoError) {
+          console.error('❌ Error insertando conductor diurno:', diurnoError)
+          throw diurnoError
+        }
+        conductoresInsertados++
+      }
+
+      if (prog.conductor_nocturno_id) {
+        console.log('✅ Insertando conductor nocturno:', prog.conductor_nocturno_id)
+        const { error: nocturnoError } = await (supabase
+          .from('asignaciones_conductores') as any)
+          .insert({
+            asignacion_id: asignacion.id,
+            conductor_id: prog.conductor_nocturno_id,
+            horario: 'nocturno',
+            estado: 'asignado',
+            documento: prog.documento_nocturno === 'contrato' ? 'CARTA_OFERTA' :
+                       prog.documento_nocturno === 'anexo' ? 'ANEXO' : null
+          })
+        if (nocturnoError) {
+          console.error('❌ Error insertando conductor nocturno:', nocturnoError)
+          throw nocturnoError
+        }
+        conductoresInsertados++
+      }
+
+      // Si no hay conductores duales, intentar con conductor legacy (A CARGO)
+      if (conductoresInsertados === 0 && prog.conductor_id) {
+        console.log('✅ Insertando conductor legacy:', prog.conductor_id)
         const { error: conductorError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
             asignacion_id: asignacion.id,
             conductor_id: prog.conductor_id,
-            horario: prog.turno || 'todo_dia',
+            horario: 'todo_dia',
             estado: 'asignado',
-            documento: prog.tipo_documento === 'contrato' ? 'CARTA_OFERTA' : 
+            documento: prog.tipo_documento === 'contrato' ? 'CARTA_OFERTA' :
                        prog.tipo_documento === 'anexo' ? 'ANEXO' : null
           })
-
-        if (conductorError) throw conductorError
+        if (conductorError) {
+          console.error('❌ Error insertando conductor legacy:', conductorError)
+          throw conductorError
+        }
+        conductoresInsertados++
       }
+
+      console.log(`📊 Total conductores insertados: ${conductoresInsertados}`)
 
       // Actualizar programacion con referencia a la asignacion
       await (supabase.from('programaciones_onboarding') as any)
-        .update({ 
+        .update({
           asignacion_id: asignacion.id,
-          asignacion_codigo: asignacion.codigo,
-          estado: 'completado'
+          fecha_asignacion_creada: new Date().toISOString()
         })
         .eq('id', prog.id)
 
       // Actualizar localmente
-      setProgramaciones(prev => prev.map(p => 
-        p.id === prog.id 
-          ? { ...p, asignacion_id: asignacion.id, asignacion_codigo: asignacion.codigo, estado: 'completado' as EstadoKanban }
+      setProgramaciones(prev => prev.map(p =>
+        p.id === prog.id
+          ? { ...p, asignacion_id: asignacion.id, asignacion_codigo: asignacion.codigo }
           : p
       ))
 
@@ -479,9 +800,9 @@ export function ProgramacionModule() {
           </button>
           <button
             className="prog-btn prog-btn-send"
-            title="Enviar a Entrega"
+            title={row.original.asignacion_id ? 'Ya enviado' : row.original.estado !== 'completado' ? 'Primero completar programacion' : 'Enviar a Entrega'}
             onClick={() => handleEnviarAEntrega(row.original)}
-            disabled={!!row.original.asignacion_id}
+            disabled={row.original.estado !== 'completado' || !!row.original.asignacion_id}
           >
             <Send size={16} />
           </button>
@@ -510,9 +831,8 @@ export function ProgramacionModule() {
           </button>
           <button
             className="prog-btn prog-btn-delete"
-            title="Eliminar"
-            onClick={() => handleDelete(row.original.id)}
-            disabled={!!row.original.asignacion_id}
+            title={row.original.asignacion_id ? 'Eliminar (ya enviada a Entrega)' : 'Eliminar'}
+            onClick={() => handleDelete(row.original.id, !!row.original.asignacion_id)}
           >
             <Trash2 size={16} />
           </button>
@@ -646,20 +966,415 @@ export function ProgramacionModule() {
         />
       )}
 
-      {/* Wizard Modal para EDITAR (mismo wizard) */}
-      {showEditWizard && editingProgramacion && (
-        <ProgramacionAssignmentWizard
-          onClose={() => {
-            setShowEditWizard(false)
-            setEditingProgramacion(null)
-          }}
-          onSuccess={() => {
-            loadProgramaciones()
-            setShowEditWizard(false)
-            setEditingProgramacion(null)
-          }}
-          editData={editingProgramacion}
-        />
+      {/* Modal Edicion Rapida */}
+      {showQuickEdit && editingProgramacion && (
+        <div className="prog-modal-overlay" onClick={() => { setShowQuickEdit(false); setEditingProgramacion(null) }}>
+          <div className="prog-modal prog-modal-wide" onClick={e => e.stopPropagation()}>
+            <div className="prog-modal-header">
+              <h2>Editar Programacion</h2>
+              <button onClick={() => { setShowQuickEdit(false); setEditingProgramacion(null) }}>
+                <XCircle size={20} />
+              </button>
+            </div>
+            <div className="prog-modal-body">
+              {/* Vehiculo - Editable con busqueda */}
+              <div className="prog-modal-section">
+                <h3><Car size={16} /> Vehiculo</h3>
+                <div className="prog-searchable-select">
+                  <input
+                    type="text"
+                    value={selectedVehiculo ? `${selectedVehiculo.patente} - ${selectedVehiculo.marca} ${selectedVehiculo.modelo}` : vehiculoSearch}
+                    onChange={(e) => {
+                      setVehiculoSearch(e.target.value)
+                      setQuickEditData(prev => ({ ...prev, vehiculo_id: undefined }))
+                    }}
+                    onFocus={() => setShowVehiculoDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowVehiculoDropdown(false), 200)}
+                    placeholder={loadingVehiculos ? 'Cargando vehiculos...' : 'Buscar por patente, marca o modelo...'}
+                    className="prog-input"
+                    disabled={loadingVehiculos}
+                  />
+                  {showVehiculoDropdown && !loadingVehiculos && (
+                    <div className="prog-searchable-dropdown">
+                      {filteredVehiculos.length > 0 ? (
+                        filteredVehiculos.map(v => (
+                          <div
+                            key={v.id}
+                            className={`prog-searchable-option ${quickEditData.vehiculo_id === v.id ? 'selected' : ''}`}
+                            onClick={() => {
+                              setQuickEditData(prev => ({ ...prev, vehiculo_id: v.id }))
+                              setVehiculoSearch('')
+                              setShowVehiculoDropdown(false)
+                            }}
+                          >
+                            <strong>{v.patente}</strong> - {v.marca} {v.modelo}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="prog-searchable-no-results">
+                          {vehiculoSearch ? 'No se encontraron vehiculos' : 'Escribe para buscar...'}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modalidad (solo lectura) */}
+              <div className="prog-modal-section" style={{ background: '#F9FAFB', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#6B7280' }}>Modalidad</label>
+                    <p style={{ fontWeight: '600', margin: 0 }}>{editingProgramacion.modalidad || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fecha y Hora */}
+              <div className="prog-modal-section">
+                <h3><Calendar size={16} /> Cita</h3>
+                <div className="prog-modal-grid">
+                  <div>
+                    <label>Fecha *</label>
+                    <input
+                      type="date"
+                      value={quickEditData.fecha_cita || ''}
+                      onChange={e => setQuickEditData(prev => ({ ...prev, fecha_cita: e.target.value }))}
+                      className="prog-input"
+                    />
+                  </div>
+                  <div>
+                    <label>Hora *</label>
+                    <input
+                      type="time"
+                      value={quickEditData.hora_cita || ''}
+                      onChange={e => setQuickEditData(prev => ({ ...prev, hora_cita: e.target.value }))}
+                      className="prog-input"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Campos segun modalidad */}
+              {editingProgramacion.modalidad === 'TURNO' ? (
+                <>
+                  {/* Conductor Diurno */}
+                  <div className="prog-modal-section" style={{ background: '#FEF9C3', padding: '12px', borderRadius: '8px' }}>
+                    <h3 style={{ color: '#92400E', margin: '0 0 12px 0', fontSize: '14px' }}>🌞 Conductor Diurno</h3>
+                    {/* Selector de conductor diurno */}
+                    <div style={{ marginBottom: '12px' }}>
+                      <label>Conductor *</label>
+                      <div className="prog-searchable-select">
+                        <input
+                          type="text"
+                          value={selectedConductorDiurno ? selectedConductorDiurno.nombre : conductorDiurnoSearch}
+                          onChange={(e) => {
+                            setConductorDiurnoSearch(e.target.value)
+                            setQuickEditData(prev => ({ ...prev, conductor_diurno_id: undefined, conductor_diurno_nombre: '' }))
+                          }}
+                          onFocus={() => setShowConductorDiurnoDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowConductorDiurnoDropdown(false), 200)}
+                          placeholder={loadingConductores ? 'Cargando conductores...' : 'Buscar por nombre o DNI...'}
+                          className="prog-input"
+                          disabled={loadingConductores}
+                        />
+                        {showConductorDiurnoDropdown && !loadingConductores && (
+                          <div className="prog-searchable-dropdown">
+                            {filteredConductoresDiurno.length > 0 ? (
+                              filteredConductoresDiurno.slice(0, 50).map(c => (
+                                <div
+                                  key={c.id}
+                                  className={`prog-searchable-option ${quickEditData.conductor_diurno_id === c.id ? 'selected' : ''}`}
+                                  onClick={() => {
+                                    setQuickEditData(prev => ({ ...prev, conductor_diurno_id: c.id, conductor_diurno_nombre: c.nombre }))
+                                    setConductorDiurnoSearch('')
+                                    setShowConductorDiurnoDropdown(false)
+                                  }}
+                                >
+                                  <strong>{c.nombre}</strong> {c.dni && <span style={{ color: '#6B7280' }}>- DNI: {c.dni}</span>}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="prog-searchable-no-results">
+                                {conductorDiurnoSearch ? 'No se encontraron conductores' : 'Escribe para buscar...'}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="prog-modal-grid">
+                      <div>
+                        <label>Tipo Candidato *</label>
+                        <select
+                          value={quickEditData.tipo_candidato_diurno || ''}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_candidato_diurno: e.target.value as any }))}
+                          className="prog-input"
+                        >
+                          <option value="">Seleccionar...</option>
+                          <option value="nuevo">Nuevo</option>
+                          <option value="antiguo">Antiguo</option>
+                          <option value="reingreso">Reingreso</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label>Documento *</label>
+                        <select
+                          value={quickEditData.documento_diurno || ''}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, documento_diurno: e.target.value as any }))}
+                          className="prog-input"
+                        >
+                          <option value="">Seleccionar...</option>
+                          <option value="contrato">Contrato</option>
+                          <option value="anexo">Anexo</option>
+                          <option value="na">N/A</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label>Zona *</label>
+                        <input
+                          type="text"
+                          value={quickEditData.zona_diurno || ''}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, zona_diurno: e.target.value }))}
+                          className="prog-input"
+                          placeholder="Ej: Norte, Sur, CABA..."
+                        />
+                      </div>
+                      <div>
+                        <label>Distancia (min)</label>
+                        <input
+                          type="number"
+                          value={quickEditData.distancia_diurno || ''}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, distancia_diurno: e.target.value ? parseInt(e.target.value) : undefined }))}
+                          className="prog-input"
+                          placeholder="Minutos"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Conductor Nocturno */}
+                  <div className="prog-modal-section" style={{ background: '#DBEAFE', padding: '12px', borderRadius: '8px', marginTop: '12px' }}>
+                    <h3 style={{ color: '#1E40AF', margin: '0 0 12px 0', fontSize: '14px' }}>🌙 Conductor Nocturno</h3>
+                    {/* Selector de conductor nocturno */}
+                    <div style={{ marginBottom: '12px' }}>
+                      <label>Conductor *</label>
+                      <div className="prog-searchable-select">
+                        <input
+                          type="text"
+                          value={selectedConductorNocturno ? selectedConductorNocturno.nombre : conductorNocturnoSearch}
+                          onChange={(e) => {
+                            setConductorNocturnoSearch(e.target.value)
+                            setQuickEditData(prev => ({ ...prev, conductor_nocturno_id: undefined, conductor_nocturno_nombre: '' }))
+                          }}
+                          onFocus={() => setShowConductorNocturnoDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowConductorNocturnoDropdown(false), 200)}
+                          placeholder={loadingConductores ? 'Cargando conductores...' : 'Buscar por nombre o DNI...'}
+                          className="prog-input"
+                          disabled={loadingConductores}
+                        />
+                        {showConductorNocturnoDropdown && !loadingConductores && (
+                          <div className="prog-searchable-dropdown">
+                            {filteredConductoresNocturno.length > 0 ? (
+                              filteredConductoresNocturno.slice(0, 50).map(c => (
+                                <div
+                                  key={c.id}
+                                  className={`prog-searchable-option ${quickEditData.conductor_nocturno_id === c.id ? 'selected' : ''}`}
+                                  onClick={() => {
+                                    setQuickEditData(prev => ({ ...prev, conductor_nocturno_id: c.id, conductor_nocturno_nombre: c.nombre }))
+                                    setConductorNocturnoSearch('')
+                                    setShowConductorNocturnoDropdown(false)
+                                  }}
+                                >
+                                  <strong>{c.nombre}</strong> {c.dni && <span style={{ color: '#6B7280' }}>- DNI: {c.dni}</span>}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="prog-searchable-no-results">
+                                {conductorNocturnoSearch ? 'No se encontraron conductores' : 'Escribe para buscar...'}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="prog-modal-grid">
+                      <div>
+                        <label>Tipo Candidato *</label>
+                        <select
+                          value={quickEditData.tipo_candidato_nocturno || ''}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_candidato_nocturno: e.target.value as any }))}
+                          className="prog-input"
+                        >
+                          <option value="">Seleccionar...</option>
+                          <option value="nuevo">Nuevo</option>
+                          <option value="antiguo">Antiguo</option>
+                          <option value="reingreso">Reingreso</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label>Documento *</label>
+                        <select
+                          value={quickEditData.documento_nocturno || ''}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, documento_nocturno: e.target.value as any }))}
+                          className="prog-input"
+                        >
+                          <option value="">Seleccionar...</option>
+                          <option value="contrato">Contrato</option>
+                          <option value="anexo">Anexo</option>
+                          <option value="na">N/A</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label>Zona *</label>
+                        <input
+                          type="text"
+                          value={quickEditData.zona_nocturno || ''}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, zona_nocturno: e.target.value }))}
+                          className="prog-input"
+                          placeholder="Ej: Norte, Sur, CABA..."
+                        />
+                      </div>
+                      <div>
+                        <label>Distancia (min)</label>
+                        <input
+                          type="number"
+                          value={quickEditData.distancia_nocturno || ''}
+                          onChange={e => setQuickEditData(prev => ({ ...prev, distancia_nocturno: e.target.value ? parseInt(e.target.value) : undefined }))}
+                          className="prog-input"
+                          placeholder="Minutos"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                </>
+              ) : (
+                /* A Cargo - campos legacy */
+                <div className="prog-modal-section" style={{ background: '#F3F4F6', padding: '12px', borderRadius: '8px' }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '14px' }}><User size={16} /> Conductor</h3>
+                  {/* Selector de conductor */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <label>Conductor *</label>
+                    <div className="prog-searchable-select">
+                      <input
+                        type="text"
+                        value={selectedConductor ? selectedConductor.nombre : conductorSearch}
+                        onChange={(e) => {
+                          setConductorSearch(e.target.value)
+                          setQuickEditData(prev => ({ ...prev, conductor_id: undefined, conductor_nombre: '' }))
+                        }}
+                        onFocus={() => setShowConductorDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowConductorDropdown(false), 200)}
+                        placeholder={loadingConductores ? 'Cargando conductores...' : 'Buscar por nombre o DNI...'}
+                        className="prog-input"
+                        disabled={loadingConductores}
+                      />
+                      {showConductorDropdown && !loadingConductores && (
+                        <div className="prog-searchable-dropdown">
+                          {filteredConductores.length > 0 ? (
+                            filteredConductores.slice(0, 50).map(c => (
+                              <div
+                                key={c.id}
+                                className={`prog-searchable-option ${quickEditData.conductor_id === c.id ? 'selected' : ''}`}
+                                onClick={() => {
+                                  setQuickEditData(prev => ({ ...prev, conductor_id: c.id, conductor_nombre: c.nombre }))
+                                  setConductorSearch('')
+                                  setShowConductorDropdown(false)
+                                }}
+                              >
+                                <strong>{c.nombre}</strong> {c.dni && <span style={{ color: '#6B7280' }}>- DNI: {c.dni}</span>}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="prog-searchable-no-results">
+                              {conductorSearch ? 'No se encontraron conductores' : 'Escribe para buscar...'}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="prog-modal-grid">
+                    <div>
+                      <label>Tipo Candidato *</label>
+                      <select
+                        value={quickEditData.tipo_candidato || ''}
+                        onChange={e => setQuickEditData(prev => ({ ...prev, tipo_candidato: e.target.value as any }))}
+                        className="prog-input"
+                      >
+                        <option value="">Seleccionar...</option>
+                        <option value="nuevo">Nuevo</option>
+                        <option value="antiguo">Antiguo</option>
+                        <option value="reingreso">Reingreso</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Documento *</label>
+                      <select
+                        value={quickEditData.tipo_documento || ''}
+                        onChange={e => setQuickEditData(prev => ({ ...prev, tipo_documento: e.target.value as any }))}
+                        className="prog-input"
+                      >
+                        <option value="">Seleccionar...</option>
+                        <option value="contrato">Contrato</option>
+                        <option value="anexo">Anexo</option>
+                        <option value="na">N/A</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Zona *</label>
+                      <input
+                        type="text"
+                        value={quickEditData.zona || ''}
+                        onChange={e => setQuickEditData(prev => ({ ...prev, zona: e.target.value as any }))}
+                        className="prog-input"
+                        placeholder="Ej: Norte, Sur, CABA..."
+                      />
+                    </div>
+                    <div>
+                      <label>Distancia (min)</label>
+                      <input
+                        type="number"
+                        value={quickEditData.distancia_minutos || ''}
+                        onChange={e => setQuickEditData(prev => ({ ...prev, distancia_minutos: e.target.value ? parseInt(e.target.value) : undefined }))}
+                        className="prog-input"
+                        placeholder="Minutos"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Observaciones */}
+              <div className="prog-modal-section" style={{ marginTop: '12px' }}>
+                <h3><FileText size={16} /> Observaciones</h3>
+                <textarea
+                  value={quickEditData.observaciones || ''}
+                  onChange={e => setQuickEditData(prev => ({ ...prev, observaciones: e.target.value }))}
+                  className="prog-input"
+                  rows={3}
+                  placeholder="Notas adicionales..."
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+              </div>
+            </div>
+            <div className="prog-modal-footer">
+              <button
+                className="prog-btn prog-btn-secondary"
+                onClick={() => { setShowQuickEdit(false); setEditingProgramacion(null) }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="prog-btn prog-btn-primary"
+                onClick={handleSaveQuickEdit}
+                disabled={savingQuickEdit}
+              >
+                {savingQuickEdit ? 'Guardando...' : 'Guardar Cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Preview Modal */}
@@ -785,14 +1500,16 @@ export function ProgramacionModule() {
                     <Pencil size={16} />
                     Editar
                   </button>
-                  <button 
+                  <button
                     className="btn-primary"
                     onClick={() => {
                       handleEnviarAEntrega(previewProgramacion)
                     }}
+                    disabled={previewProgramacion.estado !== 'completado' || !!previewProgramacion.asignacion_id}
+                    title={previewProgramacion.asignacion_id ? 'Ya enviado' : previewProgramacion.estado !== 'completado' ? 'Primero completar' : ''}
                   >
                     <Send size={16} />
-                    Enviar a Entrega
+                    {previewProgramacion.asignacion_id ? 'Ya Enviado' : 'Enviar a Entrega'}
                   </button>
                 </>
               )}
