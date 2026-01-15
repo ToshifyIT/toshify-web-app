@@ -671,7 +671,7 @@ export function ProgramacionModule() {
           <p><strong>Conductor:</strong> ${prog.conductor_display || prog.conductor_nombre || '-'}</p>
           <p><strong>Modalidad:</strong> ${prog.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
           ${prog.turno ? `<p><strong>Turno:</strong> ${prog.turno === 'diurno' ? 'Diurno' : 'Nocturno'}</p>` : ''}
-          <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita).toLocaleDateString('es-AR') : 'Sin definir'}</p>
+          <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin definir'}</p>
           <p><strong>Hora:</strong> ${horaDisplay}</p>
         </div>
         <p style="margin-top: 16px; color: #6B7280;">Se creara una asignacion en estado <strong>Programado</strong></p>
@@ -1016,15 +1016,6 @@ export function ProgramacionModule() {
           </div>
         )
       }
-    },
-    {
-      accessorKey: 'estado',
-      header: 'Estado',
-      cell: ({ row }) => (
-        <span className={`prog-estado-badge ${row.original.estado}`}>
-          {ESTADO_LABELS[row.original.estado] || row.original.estado}
-        </span>
-      )
     },
     {
       id: 'tipo_documento_display',
