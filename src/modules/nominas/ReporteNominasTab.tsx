@@ -288,7 +288,7 @@ export function ReporteNominasTab() {
 
         return {
           conductor_id: conductor.id,
-          conductor_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+          conductor_nombre: `${(conductor.apellidos || '').toUpperCase()}, ${(conductor.nombres || '').toUpperCase()}`,
           conductor_dni: conductor.numero_dni || '',
           conductor_cuit: conductor.numero_cuit || null,
           vehiculo_patente: vehiculo?.patente || null,

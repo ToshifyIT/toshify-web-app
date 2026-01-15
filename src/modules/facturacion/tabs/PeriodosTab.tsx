@@ -415,7 +415,7 @@ export function PeriodosTab() {
           .insert({
             periodo_id: periodoId,
             conductor_id: conductor.id,
-            conductor_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+            conductor_nombre: `${(conductor.apellidos || '').toUpperCase()}, ${(conductor.nombres || '').toUpperCase()}`,
             conductor_dni: conductor.numero_dni,
             conductor_cuit: conductor.numero_cuit,
             vehiculo_id: vehiculo?.id,
