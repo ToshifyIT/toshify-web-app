@@ -706,7 +706,6 @@ export function ProgramacionModule() {
       // Crear asignacion
       // modalidad en programacion es 'TURNO' o 'CARGO', en asignacion es 'turno' o 'a_cargo'
       const esTurno = prog.modalidad === 'TURNO'
-      console.log('🔍 Modalidad programacion:', prog.modalidad, '→ Es TURNO:', esTurno)
 
       // Construir fecha_programada correctamente con la hora de la cita
       let fechaProgramada: string
@@ -718,7 +717,6 @@ export function ProgramacionModule() {
         const fechaLocal = new Date(prog.fecha_cita + 'T12:00:00')
         fechaLocal.setHours(hh, mm, 0, 0)
         fechaProgramada = fechaLocal.toISOString()
-        console.log('📅 Fecha programada construida:', { fecha: prog.fecha_cita, hora, fechaLocal: fechaLocal.toString(), iso: fechaProgramada })
       } else {
         fechaProgramada = new Date().toISOString()
       }
@@ -756,17 +754,6 @@ export function ProgramacionModule() {
 
       if (asignacionError) throw asignacionError
 
-      // Log para debug
-      console.log('📋 Programacion data:', {
-        modalidad: prog.modalidad,
-        conductor_id: prog.conductor_id,
-        conductor_nombre: prog.conductor_nombre,
-        conductor_diurno_id: prog.conductor_diurno_id,
-        conductor_diurno_nombre: prog.conductor_diurno_nombre,
-        conductor_nocturno_id: prog.conductor_nocturno_id,
-        conductor_nocturno_nombre: prog.conductor_nocturno_nombre
-      })
-
       // Crear asignacion_conductor(es) segun modalidad
       // NOTA: Insertamos TODOS los conductores (incluso los que son asignacion_companero)
       // La lógica especial de companero se ejecuta al CONFIRMAR la asignación
@@ -774,7 +761,6 @@ export function ProgramacionModule() {
 
       // Insertar conductor diurno
       if (prog.conductor_diurno_id) {
-        console.log('✅ Insertando conductor diurno:', prog.conductor_diurno_id, 'doc:', prog.documento_diurno, 'esCompanero:', diurnoEsCompanero)
         const { error: diurnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -793,7 +779,6 @@ export function ProgramacionModule() {
 
       // Insertar conductor nocturno
       if (prog.conductor_nocturno_id) {
-        console.log('✅ Insertando conductor nocturno:', prog.conductor_nocturno_id, 'doc:', prog.documento_nocturno, 'esCompanero:', nocturnoEsCompanero)
         const { error: nocturnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -813,7 +798,6 @@ export function ProgramacionModule() {
       // Si no hay conductores duales, intentar con conductor legacy (A CARGO)
       // Solo si NO es asignacion_companero (aunque este caso ya se maneja arriba con todosEsCompanero)
       if (conductoresInsertados === 0 && prog.conductor_id && !legacyEsCompanero) {
-        console.log('✅ Insertando conductor legacy:', prog.conductor_id, 'doc:', prog.tipo_documento)
         const { error: conductorError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -829,8 +813,6 @@ export function ProgramacionModule() {
         }
         conductoresInsertados++
       }
-
-      console.log(`📊 Total conductores insertados: ${conductoresInsertados}`)
 
       // Actualizar programacion con referencia a la asignacion y marcar como completado
       await (supabase.from('programaciones_onboarding') as any)
