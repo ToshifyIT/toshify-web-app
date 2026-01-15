@@ -19,7 +19,8 @@ import {
   XCircle,
   Users,
   Car,
-  Download
+  Download,
+  Filter
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -113,11 +114,34 @@ export function IncidenciasModule() {
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [areaFilter, setAreaFilter] = useState<string[]>([])
 
+  // Helper: ¿Hay filtros activos en incidencias?
+  const hayFiltrosIncidenciasActivos = patenteFilter.length > 0 || conductorFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || areaFilter.length > 0
+
+  // Limpiar todos los filtros de incidencias
+  function limpiarFiltrosIncidencias() {
+    setPatenteFilter([])
+    setConductorFilter([])
+    setEstadoFilter([])
+    setTurnoFilter([])
+    setAreaFilter([])
+  }
+
   // Filtros - Penalidades
   const [penPatenteFilter, setPenPatenteFilter] = useState<string[]>([])
   const [penConductorFilter, setPenConductorFilter] = useState<string[]>([])
   const [penTipoFilter, setPenTipoFilter] = useState<string[]>([])
   const [penAplicadoFilter, setPenAplicadoFilter] = useState<string[]>([])
+  
+  // Helper: ¿Hay filtros activos en penalidades?
+  const hayFiltrosPenalidadesActivos = penPatenteFilter.length > 0 || penConductorFilter.length > 0 || penTipoFilter.length > 0 || penAplicadoFilter.length > 0
+  
+  // Limpiar todos los filtros de penalidades
+  function limpiarFiltrosPenalidades() {
+    setPenPatenteFilter([])
+    setPenConductorFilter([])
+    setPenTipoFilter([])
+    setPenAplicadoFilter([])
+  }
 
   // Modal
   const [showModal, setShowModal] = useState(false)
@@ -768,9 +792,13 @@ export function IncidenciasModule() {
       header: 'Acciones',
       cell: ({ row }) => (
         <div className="dt-actions">
-          {!row.original.aplicado && (
+          {!row.original.aplicado ? (
             <button className="dt-btn-action dt-btn-success" data-tooltip="Aplicar a facturación" onClick={() => handleMarcarAplicado(row.original)}>
               <CheckCircle size={14} />
+            </button>
+          ) : (
+            <button className="dt-btn-action dt-btn-warning" data-tooltip="Desaplicar" onClick={() => handleDesaplicar(row.original)}>
+              <XCircle size={14} />
             </button>
           )}
           <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerPenalidad(row.original)}>
@@ -1040,7 +1068,6 @@ export function IncidenciasModule() {
         descripcion: incidenciaForm.descripcion || null,
         accion_ejecutada: incidenciaForm.accion_ejecutada || null,
         registrado_por: incidenciaForm.registrado_por || null,
-        auto_a_cargo: incidenciaForm.auto_a_cargo || false,
         created_by: user?.id,
         tipo: esCobro ? 'cobro' : 'logistica',
         tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null
@@ -1295,6 +1322,66 @@ export function IncidenciasModule() {
     }
   }
 
+  // Desaplicar un cobro/descuento (revertir la aplicación)
+  async function handleDesaplicar(penalidad: PenalidadCompleta) {
+    const result = await Swal.fire({
+      title: '¿Desaplicar cobro/descuento?',
+      html: `
+        <p>Se revertirá la aplicación de:</p>
+        <p><strong>${formatMoney(penalidad.monto)}</strong> - ${penalidad.conductor_display}</p>
+        ${penalidad.fraccionado ? '<p style="color: #dc2626;"><strong>También se eliminarán las cuotas fraccionadas.</strong></p>' : ''}
+        <p style="margin-top: 12px; color: var(--text-secondary); font-size: 13px;">El registro volverá a estado "pendiente"</p>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#f59e0b',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sí, desaplicar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (result.isConfirmed) {
+      try {
+        // Si está fraccionado, eliminar las cuotas primero
+        if (penalidad.fraccionado) {
+          const { error: cuotasError } = await (supabase.from('penalidades_cuotas' as any) as any)
+            .delete()
+            .eq('penalidad_id', penalidad.id)
+          
+          if (cuotasError) {
+            console.error('Error eliminando cuotas:', cuotasError)
+          }
+        }
+
+        // Revertir la penalidad a estado pendiente
+        const { error } = await (supabase.from('penalidades' as any) as any)
+          .update({
+            aplicado: false,
+            fraccionado: false,
+            cantidad_cuotas: null,
+            semana_aplicacion: null,
+            anio_aplicacion: null,
+            fecha_aplicacion: null,
+            updated_by: profile?.full_name || 'Sistema'
+          })
+          .eq('id', penalidad.id)
+
+        if (error) throw error
+
+        Swal.fire({
+          icon: 'success',
+          title: 'Desaplicado',
+          text: 'El cobro/descuento volvió a estado pendiente'
+        })
+        
+        cargarDatos()
+      } catch (error: any) {
+        console.error('Error desaplicando:', error)
+        Swal.fire('Error', error.message || 'No se pudo desaplicar', 'error')
+      }
+    }
+  }
+
   // Formatters
   function formatMoney(value: number | undefined | null) {
     if (!value) return '-'
@@ -1481,6 +1568,86 @@ export function IncidenciasModule() {
       {/* Incidencias Logística Tab */}
       {activeTab === 'logistica' && (
         <>
+          {/* Barra de filtros activos con estilo de chips */}
+          {hayFiltrosIncidenciasActivos && (
+            <div className="dt-active-filters">
+              <div className="dt-active-filters-label">
+                <Filter size={14} />
+                <span>Filtros activos</span>
+              </div>
+              <div className="dt-active-filters-list">
+                {patenteFilter.map(val => (
+                  <div key={`patente-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Patente:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPatenteFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {conductorFilter.map(val => (
+                  <div key={`conductor-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Conductor:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setConductorFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {turnoFilter.map(val => (
+                  <div key={`turno-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Turno:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setTurnoFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {areaFilter.map(val => (
+                  <div key={`area-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Área:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setAreaFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {estadoFilter.map(val => (
+                  <div key={`estado-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Estado:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setEstadoFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="dt-clear-all-filters" onClick={limpiarFiltrosIncidencias}>
+                Limpiar todo
+              </button>
+            </div>
+          )}
+
           {/* Tabla con DataTable */}
           <DataTable
             data={incidenciasLogisticas}
@@ -1499,6 +1666,86 @@ export function IncidenciasModule() {
       {/* Incidencias Cobro Tab */}
       {activeTab === 'cobro' && (
         <>
+          {/* Barra de filtros activos con estilo de chips */}
+          {hayFiltrosIncidenciasActivos && (
+            <div className="dt-active-filters">
+              <div className="dt-active-filters-label">
+                <Filter size={14} />
+                <span>Filtros activos</span>
+              </div>
+              <div className="dt-active-filters-list">
+                {patenteFilter.map(val => (
+                  <div key={`patente-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Patente:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPatenteFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {conductorFilter.map(val => (
+                  <div key={`conductor-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Conductor:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setConductorFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {turnoFilter.map(val => (
+                  <div key={`turno-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Turno:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setTurnoFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {areaFilter.map(val => (
+                  <div key={`area-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Área:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setAreaFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {estadoFilter.map(val => (
+                  <div key={`estado-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Estado:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setEstadoFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="dt-clear-all-filters" onClick={limpiarFiltrosIncidencias}>
+                Limpiar todo
+              </button>
+            </div>
+          )}
+
           {/* Tabla con DataTable - usa columnas específicas con botón Generar Cobro */}
           <DataTable
             data={incidenciasCobro}
@@ -1537,6 +1784,73 @@ export function IncidenciasModule() {
             </div>
           </div>
 
+          {/* Barra de filtros activos con estilo de chips */}
+          {hayFiltrosPenalidadesActivos && (
+            <div className="dt-active-filters">
+              <div className="dt-active-filters-label">
+                <Filter size={14} />
+                <span>Filtros activos</span>
+              </div>
+              <div className="dt-active-filters-list">
+                {penPatenteFilter.map(val => (
+                  <div key={`patente-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Patente:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenPatenteFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {penConductorFilter.map(val => (
+                  <div key={`conductor-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Conductor:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenConductorFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {penTipoFilter.map(val => (
+                  <div key={`tipo-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Tipo:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenTipoFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {penAplicadoFilter.map(val => (
+                  <div key={`aplicado-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Estado:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenAplicadoFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="dt-clear-all-filters" onClick={limpiarFiltrosPenalidades}>
+                Limpiar todo
+              </button>
+            </div>
+          )}
+
           {/* Tabla Penalidades con DataTable */}
           <DataTable
             data={penalidadesFiltradas}
@@ -1544,8 +1858,8 @@ export function IncidenciasModule() {
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<Shield size={48} />}
-            emptyTitle="Sin cobros/descuentos pendientes"
-            emptyDescription="Los cobros generados desde incidencias aparecerán aquí"
+            emptyTitle={hayFiltrosPenalidadesActivos ? "Sin resultados con los filtros actuales" : "Sin cobros/descuentos pendientes"}
+            emptyDescription={hayFiltrosPenalidadesActivos ? "Intenta limpiar los filtros para ver todos los registros" : "Los cobros generados desde incidencias aparecerán aquí"}
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
           />

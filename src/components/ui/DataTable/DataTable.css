@@ -439,11 +439,11 @@
   overflow-x: auto;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
-  /* Clip solo horizontalmente, permitir vertical overflow */
-  overflow-clip-margin: 0 content-box;
   padding-bottom: 4px; /* Espacio para evitar corte del scrollbar */
   /* Smooth horizontal scrolling on mobile */
   scrollbar-width: thin;
+  /* Asegurar que el scroll funcione correctamente */
+  max-width: 100%;
 }
 
 .dt-table-wrapper::-webkit-scrollbar {
@@ -462,7 +462,7 @@
 /* Table */
 .dt-table {
   width: 100%;
-  min-width: max-content; /* Solo crece si necesita, no fuerza ancho fijo */
+  min-width: 800px; /* Minimo para asegurar scroll horizontal en pantallas pequeñas/zoom */
   border-collapse: collapse;
   overflow: visible; /* Permite que los dropdowns de filtros se muestren */
   table-layout: auto; /* Permite que las columnas se ajusten */
