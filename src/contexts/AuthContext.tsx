@@ -56,18 +56,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
-    // Heartbeat: refrescar token cada 10 minutos para mantener sesión activa
-    const heartbeatInterval = setInterval(async () => {
-      const { data: { session: currentSession } } = await supabase.auth.getSession()
-      if (currentSession) {
-        // Forzar refresh del token para mantener sesión viva
-        await supabase.auth.refreshSession()
+    // Función para refrescar sesión de forma segura
+    const refreshSessionSafe = async () => {
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession()
+        if (currentSession) {
+          const { error } = await supabase.auth.refreshSession()
+          if (error) {
+            console.warn('⚠️ Error refrescando sesión:', error.message)
+          } else {
+            console.log('✅ Sesión refrescada correctamente')
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Error en refresh:', err)
       }
-    }, 10 * 60 * 1000) // Cada 10 minutos
+    }
+
+    // Heartbeat: refrescar token cada 2 minutos para mantener sesión activa
+    const heartbeatInterval = setInterval(refreshSessionSafe, 2 * 60 * 1000)
+
+    // Refrescar cuando la ventana recupera el foco (usuario vuelve a la pestaña)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👁️ Ventana activa - refrescando sesión...')
+        refreshSessionSafe()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Refrescar cuando hay actividad del usuario (cada 5 min máximo)
+    let lastActivity = Date.now()
+    const handleActivity = () => {
+      const now = Date.now()
+      if (now - lastActivity > 5 * 60 * 1000) { // Si pasaron más de 5 min desde última actividad
+        lastActivity = now
+        refreshSessionSafe()
+      }
+    }
+    window.addEventListener('click', handleActivity)
+    window.addEventListener('keydown', handleActivity)
 
     return () => {
       subscription.unsubscribe()
       clearInterval(heartbeatInterval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('click', handleActivity)
+      window.removeEventListener('keydown', handleActivity)
     }
   }, [])
 
