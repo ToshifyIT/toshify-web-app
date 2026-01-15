@@ -10,6 +10,14 @@ import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import type { TipoCandidato, TipoDocumento } from '../../../types/onboarding.types'
 
+// Labels para estados
+const ESTADO_LABELS: Record<string, string> = {
+  por_agendar: 'Por Agendar',
+  agendado: 'Agendado',
+  en_curso: 'En Curso',
+  completado: 'Completado'
+}
+
 interface Vehicle {
   id: string
   patente: string
@@ -617,6 +625,73 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         if (!formData.zona_nocturno) {
           Swal.fire('Error', 'Debes ingresar la zona para el conductor nocturno', 'error')
           return
+        }
+      }
+    }
+
+    // Validar duplicados solo al crear (no en edición)
+    if (!isEditMode) {
+      try {
+        // Estados activos (no cancelados ni completados)
+        const estadosActivos = ['por_agendar', 'agendado', 'en_curso']
+
+        // Verificar si el vehículo ya está programado
+        const { data: vehiculosProgramados } = await supabase
+          .from('programaciones_onboarding')
+          .select('id, vehiculo_entregar_patente, estado')
+          .eq('vehiculo_entregar_id', formData.vehiculo_id)
+          .in('estado', estadosActivos)
+          .limit(1) as { data: Array<{ id: string; vehiculo_entregar_patente: string; estado: string }> | null }
+
+        const vehiculoProgramado = vehiculosProgramados?.[0]
+        if (vehiculoProgramado) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Vehículo ya programado',
+            html: `El vehículo <strong>${formData.vehiculo_patente}</strong> ya tiene una programación activa (${ESTADO_LABELS[vehiculoProgramado.estado] || vehiculoProgramado.estado}).<br><br>Debe cancelar o completar esa programación primero.`,
+            confirmButtonColor: '#FF0033'
+          })
+          return
+        }
+
+        // Verificar conductores duplicados según modalidad
+        const conductoresToCheck: { id: string, nombre: string, tipo: string }[] = []
+
+        if (formData.modalidad === 'CARGO' && formData.conductor_id) {
+          conductoresToCheck.push({ id: formData.conductor_id, nombre: formData.conductor_nombre, tipo: 'A Cargo' })
+        } else {
+          if (formData.conductor_diurno_id) {
+            conductoresToCheck.push({ id: formData.conductor_diurno_id, nombre: formData.conductor_diurno_nombre, tipo: 'Diurno' })
+          }
+          if (formData.conductor_nocturno_id) {
+            conductoresToCheck.push({ id: formData.conductor_nocturno_id, nombre: formData.conductor_nocturno_nombre, tipo: 'Nocturno' })
+          }
+        }
+
+        for (const conductor of conductoresToCheck) {
+          // Buscar en todos los campos posibles de conductor
+          const { data: conductoresProgramados } = await supabase
+            .from('programaciones_onboarding')
+            .select('id, vehiculo_entregar_patente, estado')
+            .in('estado', estadosActivos)
+            .or(`conductor_id.eq.${conductor.id},conductor_diurno_id.eq.${conductor.id},conductor_nocturno_id.eq.${conductor.id}`)
+            .limit(1) as { data: Array<{ id: string; vehiculo_entregar_patente: string; estado: string }> | null }
+
+          const conductorProgramado = conductoresProgramados?.[0]
+          if (conductorProgramado) {
+            Swal.fire({
+              icon: 'warning',
+              title: 'Conductor ya programado',
+              html: `El conductor <strong>${conductor.nombre}</strong> (${conductor.tipo}) ya tiene una programación activa para el vehículo ${conductorProgramado.vehiculo_entregar_patente} (${ESTADO_LABELS[conductorProgramado.estado] || conductorProgramado.estado}).<br><br>Debe cancelar o completar esa programación primero.`,
+              confirmButtonColor: '#FF0033'
+            })
+            return
+          }
+        }
+      } catch (checkError: any) {
+        // Si es error de "no rows" es OK, significa que no hay duplicados
+        if (checkError.code !== 'PGRST116') {
+          console.error('Error verificando duplicados:', checkError)
         }
       }
     }

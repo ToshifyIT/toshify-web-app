@@ -5,7 +5,8 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
-  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw
+  ClipboardList, UserPlus, MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw,
+  Check, X, MapPin
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -27,9 +28,13 @@ const ESTADO_LABELS: Record<string, string> = {
 }
 
 const TIPO_ASIGNACION_LABELS: Record<string, string> = {
-  entrega_auto: 'Entrega de Auto',
-  cambio_auto: 'Cambio de Auto',
-  asignacion_companero: 'Asignacion Companero'
+  entrega_auto: 'Entrega de auto',
+  asignacion_companero: 'Asignación compañero',
+  cambio_auto: 'Cambio de auto',
+  asignacion_auto_cargo: 'Asig. auto a cargo',
+  entrega_auto_cargo: 'Entrega auto a cargo',
+  cambio_turno: 'Cambio de turno',
+  devolucion_vehiculo: 'Devolución vehículo'
 }
 
 // Labels para mensajes de agenda
@@ -39,46 +44,83 @@ const TIPO_ASIGNACION_MSG: Record<string, string> = {
   asignacion_companero: 'Asignacion de companero'
 }
 
+
 // Funcion para generar mensaje de agenda
 function generarMensajeAgenda(prog: ProgramacionOnboardingCompleta): string {
-  const tipoMsg = TIPO_ASIGNACION_MSG[prog.tipo_asignacion || ''] || 'Asignacion'
-  const conductor = prog.conductor_display || prog.conductor_nombre || 'SIN NOMBRE'
   const patente = prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || 'N/A'
-  const zona = prog.zona || 'N/A'
-  const distancia = prog.distancia_minutos || 'N/A'
-  const documento = prog.tipo_documento === 'contrato' ? 'Contrato' : 
-                    prog.tipo_documento === 'anexo' ? 'Anexo' : 'N/A'
-  
-  // Formatear fecha
+  const tipoAsignacion = TIPO_ASIGNACION_MSG[prog.tipo_asignacion || ''] || prog.tipo_asignacion || ''
+  const zona = prog.zona || prog.zona_diurno || prog.zona_nocturno || 'N/A'
+  const distancia = prog.distancia_minutos || prog.distancia_diurno || prog.distancia_nocturno || 'N/A'
+  const documento = prog.tipo_documento === 'contrato' ? 'Contrato' : prog.tipo_documento === 'anexo' ? 'Anexo' : 'N/A'
+
+  // Formatear fecha con día de la semana
   let fechaStr = 'N/A'
   if (prog.fecha_cita) {
     const fecha = new Date(prog.fecha_cita + 'T12:00:00')
-    const dias = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
     const dia = dias[fecha.getDay()]
     fechaStr = `${dia} ${fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
   }
-  
+
   const hora = prog.hora_cita?.substring(0, 5) || 'N/A'
-  
-  // Turno de la fila (diurno/nocturno) o vacio si es A CARGO
-  const turnoEmoji = prog.turno === 'diurno' ? '🌞' : prog.turno === 'nocturno' ? '🌙' : ''
-  const turnoLabel = prog.turno === 'diurno' ? 'Diurno' : prog.turno === 'nocturno' ? 'Nocturno' : ''
-  
-  // Generar mensaje unico por fila
-  let mensaje = `– ${tipoMsg} a ${conductor.toUpperCase()}
-🗓️ Fecha: ${fechaStr}
-🕓 Hora: ${hora}
-🚗 Auto asignado: ${patente}`
 
-  // Agregar turno solo si tiene (modalidad TURNO)
-  if (turnoLabel) {
-    mensaje += `\n${turnoEmoji} Turno: ${turnoLabel}`
-  }
+  // Generar mensaje según modalidad
+  let mensaje = ''
 
-  mensaje += `
-📍 Ubicacion: ${zona}
+  if (prog.modalidad === 'TURNO') {
+    // Mensaje para modalidad TURNO (formato simple)
+    const conductorDiurno = prog.conductor_diurno_nombre || 'Sin asignar'
+    const conductorNocturno = prog.conductor_nocturno_nombre || 'Sin asignar'
+
+    mensaje = `– ${tipoAsignacion} a
+🌞 Diurno: ${conductorDiurno}
+🌙 Nocturno: ${conductorNocturno}
+📅 Fecha: ${fechaStr}
+⏰ Hora: ${hora}
+🚗 Auto asignado: ${patente}
+📍 Ubicacion: ${zona.toUpperCase()}
 👥 Distancia: ${distancia} minutos
 📄 Documento: ${documento}`
+  } else {
+    // Mensaje para modalidad A CARGO (formato completo con importantes)
+    const modelo = prog.vehiculo_entregar_modelo || prog.vehiculo_entregar_modelo_sistema || ''
+    const color = prog.vehiculo_entregar_color || ''
+
+    // Construir info del auto con modelo y color
+    let autoInfo = patente
+    if (modelo && color) {
+      autoInfo = `${patente}-${modelo.toUpperCase()}-${color.toUpperCase()}`
+    } else if (modelo) {
+      autoInfo = `${patente}-${modelo.toUpperCase()}`
+    }
+
+    // Formatear fecha con día capitalizado para A CARGO
+    let fechaStrCargo = 'N/A'
+    if (prog.fecha_cita) {
+      const fecha = new Date(prog.fecha_cita + 'T12:00:00')
+      const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+      const dia = dias[fecha.getDay()]
+      fechaStrCargo = `${dia} ${fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+    }
+
+    // Determinar turno
+    const turnoEmoji = prog.turno === 'diurno' ? '🌞' : prog.turno === 'nocturno' ? '🌙' : ''
+    const turnoLabel = prog.turno === 'diurno' ? 'Diurno' : prog.turno === 'nocturno' ? 'Nocturno' : ''
+
+    mensaje = `📅 Fecha: ${fechaStrCargo}
+⏰ Horario: ${hora} hs
+🚗 Auto Asignado: ${autoInfo}
+${turnoEmoji}${turnoEmoji ? ' ' : ''}Turno: ${turnoLabel}
+👥 Distancia de tu compañero: ${distancia} min
+⚠️ Importante:
+- Favor de traer el ${patente} limpio, con gnc completo y nafta por encima de la reserva.
+- La tolerancia máxima de espera es de 15 minutos ⏳
+*Confirmar asistencia por favor* 🤝
+⚠️ Importante:
+- Recuerde llevar dni y licencia.
+- La tolerancia máxima de espera es de 15 minutos ⏳
+*Confirmar asistencia por favor* 🤝`
+  }
 
   return mensaje
 }
@@ -183,6 +225,9 @@ export function ProgramacionModule() {
     return conductoresDisponibles.find(c => c.id === quickEditData.conductor_id)
   }, [conductoresDisponibles, quickEditData.conductor_id])
 
+  // Especialistas disponibles (para uso futuro)
+  const [_especialistas, _setEspecialistas] = useState<Array<{ id: string; nombre: string }>>([])
+
   // Modal cambiar estado
   const [showEstadoModal, setShowEstadoModal] = useState(false)
   const [estadoModalProg, setEstadoModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
@@ -211,8 +256,27 @@ export function ProgramacionModule() {
     }
   }
 
+  // Cargar especialistas
+  const loadEspecialistas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, full_name')
+        .order('full_name')
+
+      if (error) throw error
+      _setEspecialistas((data || []).map((u: any) => ({
+        id: u.id,
+        nombre: u.full_name || 'Sin nombre'
+      })))
+    } catch (err) {
+      console.error('Error cargando especialistas:', err)
+    }
+  }
+
   useEffect(() => {
     loadProgramaciones()
+    loadEspecialistas()
   }, [])
 
   // Handlers
@@ -478,13 +542,33 @@ export function ProgramacionModule() {
   const handleCopiarAlPortapapeles = async () => {
     if (!mensajeModalProg) return
     const mensaje = generarMensajeAgenda(mensajeModalProg)
-    
+
     try {
       await navigator.clipboard.writeText(mensaje)
       setShowMensajeModal(false)
     } catch (err) {
       // Si falla el clipboard, el usuario puede copiar manualmente del preview
       console.error('Error copiando:', err)
+    }
+  }
+
+  // Actualizar campo individual inline
+  const handleUpdateField = async (id: string, field: string, value: any) => {
+    try {
+      const { error } = await (supabase
+        .from('programaciones_onboarding') as any)
+        .update({ [field]: value })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Actualizar estado local
+      setProgramaciones(prev => prev.map(p =>
+        p.id === id ? { ...p, [field]: value } : p
+      ))
+    } catch (err: any) {
+      console.error(`Error actualizando ${field}:`, err)
+      Swal.fire('Error', err.message || 'Error al actualizar', 'error')
     }
   }
 
@@ -740,9 +824,21 @@ export function ProgramacionModule() {
       accessorKey: 'tipo_asignacion',
       header: 'Tipo',
       cell: ({ row }) => (
-        <span className="prog-tipo-badge">
-          {TIPO_ASIGNACION_LABELS[row.original.tipo_asignacion || ''] || row.original.tipo_asignacion || '-'}
-        </span>
+        <select
+          className={`prog-inline-select tipo-asignacion ${row.original.tipo_asignacion || ''}`}
+          value={row.original.tipo_asignacion || ''}
+          onChange={(e) => handleUpdateField(row.original.id, 'tipo_asignacion', e.target.value || null)}
+          title="Tipo de asignación"
+        >
+          <option value="">Sin definir</option>
+          <option value="entrega_auto">Entrega de auto</option>
+          <option value="asignacion_companero">Asignación compañero</option>
+          <option value="cambio_auto">Cambio de auto</option>
+          <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
+          <option value="entrega_auto_cargo">Entrega auto a cargo</option>
+          <option value="cambio_turno">Cambio de turno</option>
+          <option value="devolucion_vehiculo">Devolución vehículo</option>
+        </select>
       )
     },
     {
@@ -756,25 +852,20 @@ export function ProgramacionModule() {
     },
     {
       accessorKey: 'fecha_cita',
-      header: 'Fecha Cita',
-      cell: ({ row }) => (
-        <div className="prog-fecha-cell">
-          <span>
-            {row.original.fecha_cita 
-              ? new Date(row.original.fecha_cita).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
-              : '-'}
-          </span>
-        </div>
-      )
-    },
-    {
-      accessorKey: 'hora_cita',
-      header: 'Hora',
-      cell: ({ row }) => (
-        <span className="prog-hora">
-          {row.original.hora_cita ? row.original.hora_cita.substring(0, 5) : '-'}
-        </span>
-      )
+      header: 'Cita',
+      cell: ({ row }) => {
+        const fecha = row.original.fecha_cita
+        const hora = row.original.hora_cita?.substring(0, 5)
+        if (!fecha) return <span className="prog-hora">-</span>
+        const fechaObj = new Date(fecha + 'T12:00:00')
+        const fechaCorta = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+        return (
+          <div className="prog-fecha-hora">
+            <span className="prog-fecha">{fechaCorta}</span>
+            {hora && <span className="prog-hora">{hora}</span>}
+          </div>
+        )
+      }
     },
     {
       accessorKey: 'estado',
@@ -785,7 +876,163 @@ export function ProgramacionModule() {
         </span>
       )
     },
+    // Columnas de gestión diaria
+    {
+      accessorKey: 'documento_listo',
+      header: 'Doc',
+      cell: ({ row }) => (
+        <button
+          className={`prog-check-btn ${row.original.documento_listo ? 'checked' : ''}`}
+          onClick={() => handleUpdateField(row.original.id, 'documento_listo', !row.original.documento_listo)}
+          title={row.original.documento_listo ? 'Documento listo' : 'Documento pendiente'}
+        >
+          {row.original.documento_listo ? <Check size={14} /> : <X size={14} />}
+        </button>
+      )
+    },
+    {
+      accessorKey: 'grupo_whatsapp',
+      header: 'Wpp',
+      cell: ({ row }) => (
+        <button
+          className={`prog-check-btn ${row.original.grupo_whatsapp ? 'checked' : ''}`}
+          onClick={() => handleUpdateField(row.original.id, 'grupo_whatsapp', !row.original.grupo_whatsapp)}
+          title={row.original.grupo_whatsapp ? 'En grupo WhatsApp' : 'Sin grupo WhatsApp'}
+        >
+          {row.original.grupo_whatsapp ? <Check size={14} /> : <X size={14} />}
+        </button>
+      )
+    },
+    {
+      accessorKey: 'citado_ypf',
+      header: 'Citado',
+      cell: ({ row }) => (
+        <button
+          className={`prog-check-btn ${row.original.citado_ypf ? 'checked' : ''}`}
+          onClick={() => handleUpdateField(row.original.id, 'citado_ypf', !row.original.citado_ypf)}
+          title={row.original.citado_ypf ? 'Citado YPF' : 'No citado'}
+        >
+          {row.original.citado_ypf ? <Check size={14} /> : <X size={14} />}
+        </button>
+      )
+    },
+    {
+      accessorKey: 'confirmacion_asistencia',
+      header: 'Confirmación',
+      cell: ({ row }) => (
+        <select
+          className={`prog-inline-select confirmacion ${row.original.confirmacion_asistencia || 'sin_confirmar'}`}
+          value={row.original.confirmacion_asistencia || 'sin_confirmar'}
+          onChange={(e) => handleUpdateField(row.original.id, 'confirmacion_asistencia', e.target.value)}
+          title="Confirmación de asistencia"
+        >
+          <option value="sin_confirmar">Sin confirmar</option>
+          <option value="confirmo">Confirmó</option>
+          <option value="no_confirmo">No confirmó</option>
+          <option value="reprogramar">Reprogramar</option>
+        </select>
+      )
+    },
+    {
+      accessorKey: 'estado_cabify',
+      header: 'Cabify',
+      cell: ({ row }) => (
+        <select
+          className={`prog-inline-select cabify ${row.original.estado_cabify || 'pendiente'}`}
+          value={row.original.estado_cabify || 'pendiente'}
+          onChange={(e) => handleUpdateField(row.original.id, 'estado_cabify', e.target.value)}
+          title="Estado Cabify"
+        >
+          <option value="pendiente">Pendiente</option>
+          <option value="listo_cabify">Listo Cabify</option>
+          <option value="asignar_auto">Asignar Auto</option>
+          <option value="crear_cuenta">Crear Cuenta</option>
+        </select>
+      )
+    },
+    {
+      accessorKey: 'direccion',
+      header: 'Dirección',
+      cell: ({ row }) => {
+        const [editing, setEditing] = useState(false)
+        const [value, setValue] = useState(row.original.direccion || '')
 
+        const handleSave = () => {
+          if (value !== row.original.direccion) {
+            handleUpdateField(row.original.id, 'direccion', value || null)
+          }
+          setEditing(false)
+        }
+
+        if (editing) {
+          return (
+            <input
+              type="text"
+              className="prog-inline-input"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              autoFocus
+              placeholder="Dirección..."
+            />
+          )
+        }
+
+        return (
+          <div
+            className="prog-direccion-cell"
+            onClick={() => setEditing(true)}
+            title={row.original.direccion || 'Click para agregar dirección'}
+          >
+            <MapPin size={12} />
+            <span>{row.original.direccion || '-'}</span>
+          </div>
+        )
+      }
+    },
+    {
+      accessorKey: 'especialista_nombre',
+      header: 'Especialista',
+      cell: ({ row }) => {
+        const [editing, setEditing] = useState(false)
+        const [value, setValue] = useState(row.original.especialista_nombre || '')
+
+        const handleSave = () => {
+          if (value !== row.original.especialista_nombre) {
+            handleUpdateField(row.original.id, 'especialista_nombre', value || null)
+          }
+          setEditing(false)
+        }
+
+        if (editing) {
+          return (
+            <input
+              type="text"
+              className="prog-inline-input"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              autoFocus
+              placeholder="Nombre..."
+              style={{ minWidth: '100px' }}
+            />
+          )
+        }
+
+        return (
+          <div
+            className="prog-especialista-cell"
+            onClick={() => setEditing(true)}
+            title={row.original.especialista_nombre || 'Click para agregar especialista'}
+          >
+            <User size={12} />
+            <span>{row.original.especialista_nombre || '-'}</span>
+          </div>
+        )
+      }
+    },
     {
       id: 'acciones',
       header: 'Acciones',
@@ -800,9 +1047,9 @@ export function ProgramacionModule() {
           </button>
           <button
             className="prog-btn prog-btn-send"
-            title={row.original.asignacion_id ? 'Ya enviado' : row.original.estado !== 'completado' ? 'Primero completar programacion' : 'Enviar a Entrega'}
+            title={row.original.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
             onClick={() => handleEnviarAEntrega(row.original)}
-            disabled={row.original.estado !== 'completado' || !!row.original.asignacion_id}
+            disabled={!!row.original.asignacion_id}
           >
             <Send size={16} />
           </button>
@@ -1515,8 +1762,8 @@ export function ProgramacionModule() {
                     onClick={() => {
                       handleEnviarAEntrega(previewProgramacion)
                     }}
-                    disabled={previewProgramacion.estado !== 'completado' || !!previewProgramacion.asignacion_id}
-                    title={previewProgramacion.asignacion_id ? 'Ya enviado' : previewProgramacion.estado !== 'completado' ? 'Primero completar' : ''}
+                    disabled={!!previewProgramacion.asignacion_id}
+                    title={previewProgramacion.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
                   >
                     <Send size={16} />
                     {previewProgramacion.asignacion_id ? 'Ya Enviado' : 'Enviar a Entrega'}
@@ -1582,9 +1829,15 @@ export function ProgramacionModule() {
             </div>
             <div className="prog-modal-body">
               <div className="prog-modal-info">
-                <p><strong>Conductor:</strong> {mensajeModalProg.conductor_display || mensajeModalProg.conductor_nombre}</p>
+                {mensajeModalProg.modalidad === 'TURNO' ? (
+                  <>
+                    <p><strong>Conductor Diurno:</strong> {mensajeModalProg.conductor_diurno_nombre || 'Sin asignar'}</p>
+                    <p><strong>Conductor Nocturno:</strong> {mensajeModalProg.conductor_nocturno_nombre || 'Sin asignar'}</p>
+                  </>
+                ) : (
+                  <p><strong>Conductor:</strong> {mensajeModalProg.conductor_display || mensajeModalProg.conductor_nombre || 'Sin asignar'}</p>
+                )}
                 <p><strong>Modalidad:</strong> {mensajeModalProg.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
-                {mensajeModalProg.turno && <p><strong>Turno:</strong> {mensajeModalProg.turno === 'diurno' ? 'Diurno' : 'Nocturno'}</p>}
               </div>
               <div className="prog-mensaje-preview">
                 <pre>{generarMensajeAgenda(mensajeModalProg)}</pre>
