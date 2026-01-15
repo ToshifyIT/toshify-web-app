@@ -3,14 +3,11 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files first (better cache)
 COPY package*.json ./
 
-# Install dependencies
+# Install ALL dependencies for build
 RUN npm ci
-
-# Copy source code
-COPY . .
 
 # Build arguments for environment variables
 ARG VITE_SUPABASE_URL
@@ -38,17 +35,19 @@ ENV VITE_CABIFY_GRAPHQL_URL=$VITE_CABIFY_GRAPHQL_URL
 ENV VITE_ALQUILER_A_CARGO=$VITE_ALQUILER_A_CARGO
 ENV VITE_ALQUILER_TURNO=$VITE_ALQUILER_TURNO
 
+# Copy source code AFTER npm ci (better cache utilization)
+COPY . .
+
 # Build the app
 RUN npm run build
 
-# Production stage
+# Production stage - minimal image
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files and install production dependencies only
-COPY package*.json ./
-RUN npm ci --omit=dev
+# Only install production dependencies needed for server
+RUN npm init -y && npm install express googleapis --omit=dev && rm -rf ~/.npm
 
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
@@ -60,4 +59,4 @@ COPY server.js ./
 EXPOSE 80
 
 # Start the server
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
