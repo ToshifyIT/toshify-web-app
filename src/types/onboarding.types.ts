@@ -43,15 +43,19 @@ export interface ProgramacionOnboarding {
   conductor_diurno_id?: string
   conductor_diurno_nombre?: string
   conductor_diurno_dni?: string
+  tipo_candidato_diurno?: TipoCandidato
   documento_diurno?: TipoDocumento
   zona_diurno?: string
-  
+  distancia_diurno?: number
+
   // Conductor Nocturno (nuevo - dual conductor)
   conductor_nocturno_id?: string
   conductor_nocturno_nombre?: string
   conductor_nocturno_dni?: string
+  tipo_candidato_nocturno?: TipoCandidato
   documento_nocturno?: TipoDocumento
   zona_nocturno?: string
+  distancia_nocturno?: number
   
   // Vehículo a entregar
   vehiculo_entregar_id?: string
@@ -143,15 +147,19 @@ export interface ProgramacionOnboardingFormData {
   conductor_diurno_id?: string
   conductor_diurno_nombre?: string
   conductor_diurno_dni?: string
+  tipo_candidato_diurno?: TipoCandidato
   documento_diurno?: TipoDocumento
   zona_diurno?: string
-  
+  distancia_diurno?: number
+
   // Conductor Nocturno (nuevo - dual conductor)
   conductor_nocturno_id?: string
   conductor_nocturno_nombre?: string
   conductor_nocturno_dni?: string
+  tipo_candidato_nocturno?: TipoCandidato
   documento_nocturno?: TipoDocumento
   zona_nocturno?: string
+  distancia_nocturno?: number
   
   // Vehículo a entregar
   vehiculo_entregar_id?: string

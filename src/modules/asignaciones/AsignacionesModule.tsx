@@ -222,14 +222,19 @@ export function AsignacionesModule() {
     }
   }, [vehiculosData, conductoresData, asignaciones])
 
-  // ✅ OPTIMIZADO: Carga TODO en paralelo
+  // ✅ OPTIMIZADO: Carga TODO en paralelo con límites
   const loadAllData = async () => {
     try {
       setLoading(true)
       setError(null)
 
+      // Calcular fecha límite (últimos 60 días para historial)
+      const fechaLimite = new Date()
+      fechaLimite.setDate(fechaLimite.getDate() - 60)
+      const fechaLimiteStr = fechaLimite.toISOString()
+
       const [asignacionesRes, vehiculosRes, conductoresRes] = await Promise.all([
-        // Asignaciones con relaciones - SOLO campos necesarios
+        // Asignaciones: activas/programadas + finalizadas recientes (máx 500)
         supabase
           .from('asignaciones')
           .select(`
@@ -240,15 +245,19 @@ export function AsignacionesModule() {
               conductores (nombres, apellidos, numero_licencia)
             )
           `)
-          .order('created_at', { ascending: false }),
-        // Vehículos con estado
+          .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
+          .order('created_at', { ascending: false })
+          .limit(500),
+        // Vehículos con estado - solo activos
         supabase
           .from('vehiculos')
-          .select('id, estado_id, vehiculos_estados(codigo)'),
-        // Conductores con estado
+          .select('id, estado_id, vehiculos_estados(codigo)')
+          .limit(1000),
+        // Conductores con estado - solo activos
         supabase
           .from('conductores')
           .select('id, conductores_estados(codigo)')
+          .limit(2000)
       ])
 
       if (asignacionesRes.error) throw asignacionesRes.error
@@ -283,6 +292,11 @@ export function AsignacionesModule() {
       setLoading(true)
       setError(null)
 
+      // Calcular fecha límite (últimos 60 días)
+      const fechaLimite = new Date()
+      fechaLimite.setDate(fechaLimite.getDate() - 60)
+      const fechaLimiteStr = fechaLimite.toISOString()
+
       const { data, error: queryError } = await supabase
         .from('asignaciones')
         .select(`
@@ -293,7 +307,9 @@ export function AsignacionesModule() {
             conductores (nombres, apellidos, numero_licencia)
           )
         `)
+        .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
         .order('created_at', { ascending: false })
+        .limit(500)
 
       if (queryError) throw queryError
 
@@ -474,13 +490,13 @@ export function AsignacionesModule() {
     if (isSubmitting || !canDelete) return
 
     const result = await Swal.fire({
-      title: '¿Finalizar asignación?',
-      text: 'La asignación se marcará como finalizada',
-      icon: 'question',
+      title: '¿Eliminar asignación?',
+      text: 'Esta acción eliminará la asignación permanentemente. Si fue creada desde Programaciones, podrás enviarla nuevamente.',
+      icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#10B981',
+      confirmButtonColor: '#DC2626',
       cancelButtonColor: '#6B7280',
-      confirmButtonText: 'Sí, finalizar',
+      confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar'
     })
 
@@ -488,20 +504,27 @@ export function AsignacionesModule() {
       setIsSubmitting(true)
       try {
         const asignacion = asignaciones.find(a => a.id === id)
-        const ahora = new Date().toISOString()
 
-        // Marcar como finalizada en vez de eliminar
+        // 1. Limpiar referencia en programaciones_onboarding (si existe)
+        await (supabase as any)
+          .from('programaciones_onboarding')
+          .update({ asignacion_id: null })
+          .eq('asignacion_id', id)
+
+        // 2. Eliminar conductores asociados
+        await (supabase as any)
+          .from('asignaciones_conductores')
+          .delete()
+          .eq('asignacion_id', id)
+
+        // 3. Eliminar la asignación
         const { error: asignacionError } = await (supabase as any)
           .from('asignaciones')
-          .update({
-            estado: 'finalizada',
-            fecha_fin: ahora,
-            updated_by: profile?.full_name || 'Sistema'
-          })
+          .delete()
           .eq('id', id)
         if (asignacionError) throw asignacionError
 
-        // Cambiar estado del vehículo a DISPONIBLE
+        // 4. Cambiar estado del vehículo a DISPONIBLE
         if (asignacion?.vehiculo_id) {
           const { data: estadoDisponible } = await supabase
             .from('vehiculos_estados')
@@ -514,10 +537,10 @@ export function AsignacionesModule() {
           }
         }
 
-        Swal.fire('Finalizado', 'La asignación ha sido marcada como finalizada', 'success')
+        Swal.fire('Eliminado', 'La asignación ha sido eliminada. Puedes re-enviarla desde Programaciones.', 'success')
         loadAsignaciones()
       } catch (err: any) {
-        Swal.fire('Error', err.message || 'Error al finalizar la asignación', 'error')
+        Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
       } finally {
         setIsSubmitting(false)
       }

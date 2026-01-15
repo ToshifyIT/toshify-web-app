@@ -723,3 +723,137 @@
   word-wrap: break-word;
   color: var(--text-primary);
 }
+
+/* =====================================================
+   MODAL EDICION RAPIDA
+   ===================================================== */
+
+.prog-modal-wide {
+  max-width: 600px;
+}
+
+.prog-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.prog-input:focus {
+  outline: none;
+  border-color: #DC2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.prog-input:disabled {
+  background: var(--bg-secondary);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.prog-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Botones del modal */
+.prog-btn-primary {
+  padding: 10px 20px;
+  background: #DC2626;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.prog-btn-primary:hover:not(:disabled) {
+  background: #B91C1C;
+}
+
+.prog-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.prog-btn-secondary {
+  padding: 10px 20px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.prog-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* =====================================================
+   SEARCHABLE SELECT PARA VEHICULOS
+   ===================================================== */
+
+.prog-searchable-select {
+  position: relative;
+}
+
+.prog-searchable-select input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.prog-searchable-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  margin-top: 4px;
+}
+
+.prog-searchable-option {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.prog-searchable-option:last-child {
+  border-bottom: none;
+}
+
+.prog-searchable-option:hover {
+  background: var(--bg-tertiary);
+}
+
+.prog-searchable-option strong {
+  color: #DC2626;
+}
+
+.prog-searchable-option.selected {
+  background: #FEF2F2;
+  border-left: 3px solid #DC2626;
+}
+
+.prog-searchable-no-results {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
