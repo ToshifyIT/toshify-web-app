@@ -252,7 +252,12 @@ export function ReporteFacturacionTab() {
 
       if (errFact) throw errFact
 
-      setFacturaciones((facturacionesData || []) as FacturacionConductor[])
+      // Transformar nombres a MAYÚSCULAS al cargar
+      const facturacionesTransformadas = (facturacionesData || []).map((f: any) => ({
+        ...f,
+        conductor_nombre: (f.conductor_nombre || '').toUpperCase()
+      }))
+      setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
 
       // 3. Cargar excesos de kilometraje para este período
       const { data: excesosData } = await (supabase
@@ -570,7 +575,7 @@ export function ReporteFacturacionTab() {
           id: `preview-${conductorId}`,
           periodo_id: 'preview',
           conductor_id: conductorId,
-          conductor_nombre: `${conductor.apellidos}, ${conductor.nombres}`,
+          conductor_nombre: `${(conductor.apellidos || '').toUpperCase()}, ${(conductor.nombres || '').toUpperCase()}`,
           conductor_dni: dniConductor,
           conductor_cuit: conductor.numero_cuit || null,
           vehiculo_id: vehiculo?.id || null,
@@ -2301,7 +2306,7 @@ export function ReporteFacturacionTab() {
       ),
       cell: ({ row }) => (
         <div>
-          <strong style={{ fontSize: '13px' }}>{row.original.conductor_nombre}</strong>
+          <strong style={{ fontSize: '13px', textTransform: 'uppercase' }}>{row.original.conductor_nombre}</strong>
         </div>
       ),
       enableSorting: true,
