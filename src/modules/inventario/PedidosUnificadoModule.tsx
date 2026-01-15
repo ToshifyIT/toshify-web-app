@@ -1540,27 +1540,40 @@ pageSize={100}
                                 </td>
                                 <td style={{ padding: '12px 10px', textAlign: 'center' }}>
                                   {item.cantidad_pendiente > 0 ? (
-                                    <button
-                                      onClick={() => confirmarRecepcion(item)}
-                                      disabled={processingItem === item.item_id}
-                                      style={{
+                                    canApprove ? (
+                                      <button
+                                        onClick={() => confirmarRecepcion(item)}
+                                        disabled={processingItem === item.item_id}
+                                        style={{
+                                          padding: '6px 12px',
+                                          background: 'var(--color-success)',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          cursor: processingItem === item.item_id ? 'not-allowed' : 'pointer',
+                                          fontSize: '12px',
+                                          fontWeight: 600,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          opacity: processingItem === item.item_id ? 0.6 : 1
+                                        }}
+                                      >
+                                        <CheckCircle size={14} />
+                                        Recibir
+                                      </button>
+                                    ) : (
+                                      <span style={{
                                         padding: '6px 12px',
-                                        background: 'var(--color-success)',
-                                        color: 'white',
-                                        border: 'none',
+                                        background: 'var(--badge-yellow-bg)',
+                                        color: 'var(--badge-yellow-text)',
                                         borderRadius: '6px',
-                                        cursor: processingItem === item.item_id ? 'not-allowed' : 'pointer',
                                         fontSize: '12px',
-                                        fontWeight: 600,
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px',
-                                        opacity: processingItem === item.item_id ? 0.6 : 1
-                                      }}
-                                    >
-                                      <CheckCircle size={14} />
-                                      Recibir
-                                    </button>
+                                        fontWeight: 600
+                                      }}>
+                                        Pendiente
+                                      </span>
+                                    )
                                   ) : (
                                     <span style={{
                                       padding: '6px 12px',
@@ -1707,22 +1720,26 @@ pageSize={100}
                             <Eye size={16} />
                             Detalles
                           </button>
-                          <button
-                            className="action-btn btn-rechazar"
-                            onClick={() => rechazarMovimiento(movimiento)}
-                            disabled={processing === movimiento.id}
-                          >
-                            <X size={16} />
-                            Rechazar
-                          </button>
-                          <button
-                            className="action-btn btn-aprobar"
-                            onClick={() => aprobarMovimiento(movimiento)}
-                            disabled={processing === movimiento.id}
-                          >
-                            <Check size={16} />
-                            Aprobar
-                          </button>
+                          {canApprove && (
+                            <>
+                              <button
+                                className="action-btn btn-rechazar"
+                                onClick={() => rechazarMovimiento(movimiento)}
+                                disabled={processing === movimiento.id}
+                              >
+                                <X size={16} />
+                                Rechazar
+                              </button>
+                              <button
+                                className="action-btn btn-aprobar"
+                                onClick={() => aprobarMovimiento(movimiento)}
+                                disabled={processing === movimiento.id}
+                              >
+                                <Check size={16} />
+                                Aprobar
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}
