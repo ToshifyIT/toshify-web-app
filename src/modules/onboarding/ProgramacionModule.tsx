@@ -1895,7 +1895,7 @@ export function ProgramacionModule() {
                 <div className="prog-modal-grid">
                   <div>
                     <label>Fecha</label>
-                    <p>{previewProgramacion.fecha_cita ? new Date(previewProgramacion.fecha_cita).toLocaleDateString('es-AR') : '-'}</p>
+                    <p>{previewProgramacion.fecha_cita ? new Date(previewProgramacion.fecha_cita + 'T12:00:00').toLocaleDateString('es-AR') : '-'}</p>
                   </div>
                   <div>
                     <label>Hora</label>

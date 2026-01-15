@@ -34,13 +34,11 @@ interface StockProducto {
   alerta_reposicion?: number
 }
 
-type FilterCategoria = 'all' | 'maquinaria' | 'herramientas' | 'repuestos' | 'insumos'
 type FilterEstadoStock = 'all' | 'disponible' | 'en_uso' | 'en_transito' | 'dañado' | 'perdido'
 
 export function InventarioDashboardModule() {
   const [stockProductos, setStockProductos] = useState<StockProducto[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<FilterCategoria>('all')
   const [filterEstadoStock, setFilterEstadoStock] = useState<FilterEstadoStock>('all')
 
   // Excel-style column filter states con Portal
@@ -112,13 +110,8 @@ export function InventarioDashboardModule() {
     insumos: productosConStock.filter(p => p.categoria_codigo === 'insumos').length,
   }
 
-  const categoryFilteredData = productosConStock.filter((item) => {
-    if (filter === 'herramientas') return item.categoria_codigo === 'herramientas' || item.es_retornable
-    if (filter === 'repuestos') return item.categoria_codigo === 'repuestos' || (!item.es_retornable && item.categoria_codigo !== 'insumos' && item.categoria_codigo !== 'maquinaria')
-    if (filter === 'maquinaria') return item.categoria_codigo === 'maquinaria'
-    if (filter === 'insumos') return item.categoria_codigo === 'insumos'
-    return true
-  })
+  // Mostrar siempre todos los productos (las tarjetas de categoría solo muestran conteo, no filtran)
+  const categoryFilteredData = productosConStock
 
   // Unique value lists for filters
   const uniqueCodigos = useMemo(() =>
@@ -368,57 +361,43 @@ export function InventarioDashboardModule() {
   return (
     <div className="inv-module">
       {/* Cards de Categorías Clickeables */}
+      {/* Tarjetas de categoría - Solo muestran conteo, no filtran */}
       <div className="inv-category-cards">
-        <button
-          onClick={() => setFilter('all')}
-          className={`inv-category-card ${filter === 'all' ? 'active' : ''}`}
-        >
+        <div className="inv-category-card">
           <Package size={20} className="inv-cat-icon" />
           <div className="inv-cat-info">
             <span className="inv-cat-count">{productosConStock.length}</span>
             <span className="inv-cat-label">Todos</span>
           </div>
-        </button>
-        <button
-          onClick={() => setFilter('maquinaria')}
-          className={`inv-category-card ${filter === 'maquinaria' ? 'active' : ''}`}
-        >
+        </div>
+        <div className="inv-category-card">
           <Settings size={20} className="inv-cat-icon" />
           <div className="inv-cat-info">
             <span className="inv-cat-count">{conteosPorCategoria.maquinaria}</span>
             <span className="inv-cat-label">Maquinaria</span>
           </div>
-        </button>
-        <button
-          onClick={() => setFilter('herramientas')}
-          className={`inv-category-card ${filter === 'herramientas' ? 'active' : ''}`}
-        >
+        </div>
+        <div className="inv-category-card">
           <Wrench size={20} className="inv-cat-icon" />
           <div className="inv-cat-info">
             <span className="inv-cat-count">{conteosPorCategoria.herramientas}</span>
             <span className="inv-cat-label">Herramientas</span>
           </div>
-        </button>
-        <button
-          onClick={() => setFilter('repuestos')}
-          className={`inv-category-card ${filter === 'repuestos' ? 'active' : ''}`}
-        >
+        </div>
+        <div className="inv-category-card">
           <Package size={20} className="inv-cat-icon" />
           <div className="inv-cat-info">
             <span className="inv-cat-count">{conteosPorCategoria.repuestos}</span>
             <span className="inv-cat-label">Repuestos</span>
           </div>
-        </button>
-        <button
-          onClick={() => setFilter('insumos')}
-          className={`inv-category-card ${filter === 'insumos' ? 'active' : ''}`}
-        >
+        </div>
+        <div className="inv-category-card">
           <Droplets size={20} className="inv-cat-icon" />
           <div className="inv-cat-info">
             <span className="inv-cat-count">{conteosPorCategoria.insumos}</span>
             <span className="inv-cat-label">Insumos</span>
           </div>
-        </button>
+        </div>
       </div>
 
       {/* Stats Cards - Estado de Stock (clickeables como filtros) */}
