@@ -636,14 +636,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         const estadosActivos = ['por_agendar', 'agendado', 'en_curso']
 
         // Verificar si el vehículo ya está programado
-        const { data: vehiculoProgramado } = await supabase
+        const { data: vehiculosProgramados } = await supabase
           .from('programaciones_onboarding')
           .select('id, vehiculo_entregar_patente, estado')
           .eq('vehiculo_entregar_id', formData.vehiculo_id)
           .in('estado', estadosActivos)
-          .limit(1)
-          .single()
+          .limit(1) as { data: Array<{ id: string; vehiculo_entregar_patente: string; estado: string }> | null }
 
+        const vehiculoProgramado = vehiculosProgramados?.[0]
         if (vehiculoProgramado) {
           Swal.fire({
             icon: 'warning',
@@ -670,14 +670,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         for (const conductor of conductoresToCheck) {
           // Buscar en todos los campos posibles de conductor
-          const { data: conductorProgramado } = await supabase
+          const { data: conductoresProgramados } = await supabase
             .from('programaciones_onboarding')
             .select('id, vehiculo_entregar_patente, estado')
             .in('estado', estadosActivos)
             .or(`conductor_id.eq.${conductor.id},conductor_diurno_id.eq.${conductor.id},conductor_nocturno_id.eq.${conductor.id}`)
-            .limit(1)
-            .single()
+            .limit(1) as { data: Array<{ id: string; vehiculo_entregar_patente: string; estado: string }> | null }
 
+          const conductorProgramado = conductoresProgramados?.[0]
           if (conductorProgramado) {
             Swal.fire({
               icon: 'warning',

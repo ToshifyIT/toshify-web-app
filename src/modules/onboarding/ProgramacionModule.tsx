@@ -15,7 +15,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 
 import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
-import type { ProgramacionOnboardingCompleta, EstadoKanban, ConfirmacionAsistencia, EstadoCabify } from '../../types/onboarding.types'
+import type { ProgramacionOnboardingCompleta, EstadoKanban } from '../../types/onboarding.types'
 import Swal from 'sweetalert2'
 import './ProgramacionModule.css'
 
@@ -44,21 +44,6 @@ const TIPO_ASIGNACION_MSG: Record<string, string> = {
   asignacion_companero: 'Asignacion de companero'
 }
 
-// Labels para confirmación asistencia
-const CONFIRMACION_LABELS: Record<string, string> = {
-  confirmo: 'Confirmó',
-  no_confirmo: 'No confirmó',
-  reprogramar: 'Reprogramar',
-  sin_confirmar: 'Sin confirmar'
-}
-
-// Labels para estado Cabify
-const ESTADO_CABIFY_LABELS: Record<string, string> = {
-  pendiente: 'Pendiente',
-  listo_cabify: 'Listo Cabify',
-  asignar_auto: 'Asignar Auto',
-  crear_cuenta: 'Crear Cuenta'
-}
 
 // Funcion para generar mensaje de agenda
 function generarMensajeAgenda(prog: ProgramacionOnboardingCompleta): string {
@@ -240,8 +225,8 @@ export function ProgramacionModule() {
     return conductoresDisponibles.find(c => c.id === quickEditData.conductor_id)
   }, [conductoresDisponibles, quickEditData.conductor_id])
 
-  // Especialistas disponibles
-  const [especialistas, setEspecialistas] = useState<Array<{ id: string; nombre: string }>>([])
+  // Especialistas disponibles (para uso futuro)
+  const [_especialistas, _setEspecialistas] = useState<Array<{ id: string; nombre: string }>>([])
 
   // Modal cambiar estado
   const [showEstadoModal, setShowEstadoModal] = useState(false)
@@ -280,7 +265,7 @@ export function ProgramacionModule() {
         .order('full_name')
 
       if (error) throw error
-      setEspecialistas((data || []).map((u: any) => ({
+      _setEspecialistas((data || []).map((u: any) => ({
         id: u.id,
         nombre: u.full_name || 'Sin nombre'
       })))
