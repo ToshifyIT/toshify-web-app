@@ -20,7 +20,8 @@ import {
   Users,
   Car,
   Download,
-  Filter
+  Filter,
+  Check
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -264,8 +265,8 @@ export function IncidenciasModule() {
         supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
         (supabase.from('v_incidencias_completas' as any) as any).select('*').order('fecha', { ascending: false }),
         (supabase.from('v_penalidades_completas' as any) as any).select('*').order('fecha', { ascending: false }),
-        // Obtener el campo 'tipo' de la tabla incidencias
-        (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id')
+        // Obtener campos adicionales de la tabla incidencias (tipo, monto)
+        (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id, monto')
       ])
 
       setEstados(estadosRes.data || [])
@@ -279,14 +280,15 @@ export function IncidenciasModule() {
         nombre_completo: `${c.nombres} ${c.apellidos}`
       })))
       
-      // Combinar datos de la vista con el campo 'tipo' de la tabla
-      const tipoMap = new Map<string, { tipo: string; tipo_cobro_descuento_id: string | null }>((incidenciasTipoRes.data || []).map((i: any) => [i.id, { tipo: i.tipo, tipo_cobro_descuento_id: i.tipo_cobro_descuento_id }]))
+      // Combinar datos de la vista con campos de la tabla (tipo, monto)
+      const extraDataMap = new Map<string, { tipo: string; tipo_cobro_descuento_id: string | null; monto: number | null }>((incidenciasTipoRes.data || []).map((i: any) => [i.id, { tipo: i.tipo, tipo_cobro_descuento_id: i.tipo_cobro_descuento_id, monto: i.monto }]))
       const incidenciasConTipo = (incidenciasRes.data || []).map((inc: any) => {
-        const tipoData = tipoMap.get(inc.id)
+        const extraData = extraDataMap.get(inc.id)
         return {
           ...inc,
-          tipo: tipoData?.tipo || 'cobro', // Default a 'cobro' si no tiene tipo
-          tipo_cobro_descuento_id: tipoData?.tipo_cobro_descuento_id || inc.tipo_cobro_descuento_id
+          tipo: extraData?.tipo || 'cobro',
+          tipo_cobro_descuento_id: extraData?.tipo_cobro_descuento_id || inc.tipo_cobro_descuento_id,
+          monto: extraData?.monto || inc.monto // Traer monto de la tabla
         }
       })
       setIncidencias(incidenciasConTipo)
@@ -598,10 +600,10 @@ export function IncidenciasModule() {
       cell: ({ row }) => row.original.conductor_display || '-'
     },
     {
-      accessorKey: 'monto_penalidades',
+      accessorKey: 'monto',
       header: 'Monto',
       cell: ({ row }) => {
-        const monto = row.original.monto_penalidades
+        const monto = row.original.monto || row.original.monto_penalidades
         if (!monto) return '-'
         return <span style={{ fontWeight: 600, color: '#F59E0B' }}>{formatMoney(monto)}</span>
       }
@@ -689,13 +691,25 @@ export function IncidenciasModule() {
           <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
             <Edit2 size={14} />
           </button>
-          <button 
-            className="dt-btn-action dt-btn-warning" 
-            data-tooltip="Enviar a facturación"
-            onClick={() => handleGenerarCobroDesdeIncidencia(row.original)}
-          >
-            <DollarSign size={14} />
-          </button>
+          {/* Solo mostrar botón si NO tiene penalidad asociada (total_penalidades === 0) */}
+          {(row.original.total_penalidades || 0) === 0 ? (
+            <button 
+              className="dt-btn-action dt-btn-warning" 
+              data-tooltip="Enviar a facturación"
+              onClick={() => handleEnviarAFacturacion(row.original)}
+            >
+              <DollarSign size={14} />
+            </button>
+          ) : (
+            <button 
+              className="dt-btn-action dt-btn-success" 
+              data-tooltip="Ya enviado a facturación"
+              disabled
+              style={{ opacity: 0.5, cursor: 'not-allowed' }}
+            >
+              <Check size={14} />
+            </button>
+          )}
           {canDelete && (
             <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
               <Trash2 size={14} />
@@ -833,31 +847,99 @@ export function IncidenciasModule() {
   }
 
   // Generar Cobro/Descuento (penalidad) desde una incidencia de cobro
-  function handleGenerarCobroDesdeIncidencia(incidencia: IncidenciaCompleta) {
-    const areaResponsable = getAreaResponsablePorRol(profile?.roles?.name)
+  // Enviar incidencia a facturación (crear penalidad asociada)
+  async function handleEnviarAFacturacion(incidencia: IncidenciaCompleta) {
+    // Verificar si ya existe una penalidad asociada a esta incidencia (consulta directa a BD)
+    const { data: penalidadesExistentes, error: checkError } = await (supabase
+      .from('penalidades' as any) as any)
+      .select('id, monto, fecha, aplicado')
+      .eq('incidencia_id', incidencia.id)
     
-    // Pre-llenar el formulario de penalidad con los datos de la incidencia
-    // Usar el tipo_cobro_descuento_id de la incidencia si existe
-    setPenalidadForm({
-      incidencia_id: incidencia.id,
-      vehiculo_id: incidencia.vehiculo_id,
-      conductor_id: incidencia.conductor_id,
-      tipo_cobro_descuento_id: incidencia.tipo_cobro_descuento_id, // Copiar el tipo desde la incidencia
-      fecha: incidencia.fecha || getLocalDateString(),
-      turno: incidencia.turno,
-      area_responsable: areaResponsable || 'LOGISTICA',
-      detalle: 'Cobro por incidencia',
-      monto: incidencia.monto_penalidades || 0,
-      observaciones: incidencia.descripcion || '',
-      aplicado: false,
-      conductor_nombre: incidencia.conductor_nombre,
-      vehiculo_patente: incidencia.vehiculo_patente
+    if (checkError) {
+      console.error('Error verificando penalidades:', checkError)
+      Swal.fire('Error', 'No se pudo verificar el estado del cobro', 'error')
+      return
+    }
+    
+    // Si ya existe penalidad, NO permitir crear otra
+    if (penalidadesExistentes && penalidadesExistentes.length > 0) {
+      const montoTotal = penalidadesExistentes.reduce((sum: number, p: any) => sum + (p.monto || 0), 0)
+      Swal.fire({
+        icon: 'info',
+        title: 'Ya enviado a facturación',
+        html: `Esta incidencia ya fue enviada a facturación.<br><br>Monto: <strong>$${montoTotal.toLocaleString('es-AR')}</strong><br><br>Revisa la pestaña <strong>Cobros/Descuentos</strong> para ver o aplicar el cobro.`,
+        confirmButtonText: 'Entendido'
+      })
+      return
+    }
+    
+    // Validar que tenga monto
+    if (!incidencia.monto || incidencia.monto <= 0) {
+      Swal.fire('Error', 'La incidencia no tiene monto definido para enviar a facturación. Edite la incidencia y agregue el monto.', 'warning')
+      return
+    }
+    
+    // Confirmar envío
+    const confirmResult = await Swal.fire({
+      icon: 'question',
+      title: 'Enviar a facturación',
+      html: `¿Confirmas enviar esta incidencia a facturación?<br><br>
+        <strong>Conductor:</strong> ${incidencia.conductor_display || 'N/A'}<br>
+        <strong>Vehículo:</strong> ${incidencia.patente_display || 'N/A'}<br>
+        <strong>Monto:</strong> $${incidencia.monto?.toLocaleString('es-AR') || 0}<br>
+        <strong>Descripción:</strong> ${incidencia.descripcion || 'Sin descripción'}`,
+      showCancelButton: true,
+      confirmButtonText: 'Enviar a facturación',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#10b981'
     })
     
-    setSelectedPenalidad(null)
-    setModalMode('create')
-    setModalType('penalidad')
-    setShowModal(true)
+    if (!confirmResult.isConfirmed) return
+    
+    // Crear la penalidad
+    try {
+      const areaResponsable = getAreaResponsablePorRol(profile?.roles?.name)
+      const semanaCalculada = getWeekNumber(incidencia.fecha || getLocalDateString())
+      
+      const penalidadData = {
+        incidencia_id: incidencia.id,
+        vehiculo_id: incidencia.vehiculo_id || null,
+        conductor_id: incidencia.conductor_id || null,
+        tipo_cobro_descuento_id: incidencia.tipo_cobro_descuento_id || null,
+        semana: semanaCalculada,
+        fecha: incidencia.fecha || getLocalDateString(),
+        turno: incidencia.turno || null,
+        area_responsable: areaResponsable || 'LOGISTICA',
+        detalle: 'Cobro por incidencia',
+        monto: incidencia.monto,
+        observaciones: incidencia.descripcion || '',
+        aplicado: false,
+        conductor_nombre: incidencia.conductor_display,
+        vehiculo_patente: incidencia.patente_display,
+        created_by: user?.id,
+        created_by_name: profile?.full_name || 'Sistema'
+      }
+      
+      const { error: insertError } = await (supabase.from('penalidades' as any) as any)
+        .insert(penalidadData)
+      
+      if (insertError) throw insertError
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'Enviado a facturación',
+        html: 'El cobro fue registrado correctamente.<br>Aparecerá en la pestaña <strong>Cobros/Descuentos</strong> como "Por Aplicar".',
+        timer: 3000,
+        showConfirmButton: false
+      })
+      
+      // Recargar datos para actualizar la vista
+      cargarDatos()
+      
+    } catch (error: any) {
+      console.error('Error creando penalidad:', error)
+      Swal.fire('Error', error.message || 'No se pudo enviar a facturación', 'error')
+    }
   }
 
   function handleVerIncidencia(incidencia: IncidenciaCompleta) {
@@ -883,7 +965,8 @@ export function IncidenciasModule() {
       registrado_por: incidencia.registrado_por,
       conductor_nombre: incidencia.conductor_nombre,
       vehiculo_patente: incidencia.vehiculo_patente,
-      tipo_cobro_descuento_id: incidencia.tipo_cobro_descuento_id // Incluir el tipo
+      tipo_cobro_descuento_id: incidencia.tipo_cobro_descuento_id,
+      monto: incidencia.monto // Cargar monto al editar
     })
     setModalMode('edit')
     setModalType('incidencia')
@@ -1070,7 +1153,8 @@ export function IncidenciasModule() {
         registrado_por: incidenciaForm.registrado_por || null,
         created_by: user?.id,
         tipo: esCobro ? 'cobro' : 'logistica',
-        tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null
+        tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
+        monto: esCobro ? (incidenciaForm.monto || 0) : null // Guardar monto solo para incidencias de cobro
       }
 
       if (modalMode === 'edit' && selectedIncidencia) {
@@ -1080,44 +1164,14 @@ export function IncidenciasModule() {
         if (error) throw error
         Swal.fire('Guardado', 'Incidencia actualizada correctamente', 'success')
       } else {
-        // Insertar incidencia y obtener el ID
-        const { data: incidenciaCreada, error } = await (supabase.from('incidencias' as any) as any)
+        // Insertar incidencia (NO crear penalidad automáticamente - se crea al "Enviar a facturación")
+        const { error } = await (supabase.from('incidencias' as any) as any)
           .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
-          .select('id')
-          .single()
         if (error) throw error
         
-        // Si es incidencia de cobro con monto, crear penalidad asociada automáticamente
-        if (esCobro && incidenciaForm.monto && incidenciaForm.monto > 0 && incidenciaCreada?.id) {
-          const penalidadData = {
-            incidencia_id: incidenciaCreada.id,
-            vehiculo_id: incidenciaForm.vehiculo_id || null,
-            conductor_id: incidenciaForm.conductor_id || null,
-            tipo_cobro_descuento_id: tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
-            semana: semanaCalculada,
-            fecha: incidenciaForm.fecha,
-            turno: incidenciaForm.turno || null,
-            area_responsable: incidenciaForm.area?.toUpperCase().replace(/ /g, '_') || 'LOGISTICA',
-            detalle: 'Cobro por incidencia',
-            monto: incidenciaForm.monto,
-            observaciones: incidenciaForm.descripcion || '',
-            aplicado: false,
-            created_by: user?.id,
-            created_by_name: profile?.full_name || 'Sistema'
-          }
-          
-          const { error: penError } = await (supabase.from('penalidades' as any) as any)
-            .insert(penalidadData)
-          
-          if (penError) {
-            console.error('Error creando penalidad asociada:', penError)
-            // No fallar si la penalidad no se crea, la incidencia ya fue guardada
-          }
-          
-          Swal.fire('Guardado', 'Incidencia y cobro registrados correctamente', 'success')
-        } else {
-          Swal.fire('Guardado', 'Incidencia registrada correctamente', 'success')
-        }
+        Swal.fire('Guardado', esCobro 
+          ? 'Incidencia de cobro registrada. Use el botón $ para enviar a facturación.' 
+          : 'Incidencia registrada correctamente', 'success')
       }
 
       setShowModal(false)
