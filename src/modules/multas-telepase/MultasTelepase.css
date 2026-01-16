@@ -1,0 +1,100 @@
+/* src/modules/multas-telepase/MultasTelepase.css */
+/* Estilos para los módulos de Multas y Telepase - Diseño igual a Conductores */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.multas-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   STATS - Estilo igual a Conductores
+   ===================================================== */
+
+.multas-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
+}
+
+.multas-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+/* Para Telepase que tiene 5 cards */
+.multas-stats-grid.five-cols {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.multas-stats .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.multas-stats .stat-card .stat-icon {
+  flex-shrink: 0;
+}
+
+.multas-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.multas-stats .stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.multas-stats .stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+/* Responsive Stats */
+@media (max-width: 1200px) {
+  .multas-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .multas-stats-grid.five-cols {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .multas-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .multas-stats-grid.five-cols {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .multas-stats-grid,
+  .multas-stats-grid.five-cols {
+    grid-template-columns: 1fr;
+  }
+  
+  .multas-stats .stat-value {
+    font-size: 14px;
+  }
+  
+  .multas-stats .stat-label {
+    font-size: 10px;
+  }
+}

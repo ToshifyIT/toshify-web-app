@@ -6,6 +6,7 @@ import { DataTable } from '../../components/ui/DataTable'
 import { Download, FileText, AlertCircle, CheckCircle, Eye, X, Car, Users, DollarSign } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
+import './MultasTelepase.css'
 
 interface TelepaseRegistro {
   id: string
@@ -213,7 +214,7 @@ export default function TelepaseHistoricoModule() {
         />
       ),
       cell: ({ row }) => (
-        <span className="dt-badge dt-badge-dark">{row.original.patente || '-'}</span>
+        <span className="patente-badge">{row.original.patente || '-'}</span>
       )
     },
     {
@@ -329,77 +330,60 @@ export default function TelepaseHistoricoModule() {
   }
 
   return (
-    <div className="module-container">
+    <div className="multas-module">
       {/* Stats Cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon">
-            <FileText size={20} />
+      <div className="multas-stats">
+        <div className="multas-stats-grid five-cols">
+          <div className="stat-card">
+            <FileText size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <div className="stat-content">
+              <span className="stat-value">{registrosFiltrados.length}</span>
+              <span className="stat-label">Total</span>
+            </div>
           </div>
-          <div className="stat-content">
-            <span className="stat-value">{registrosFiltrados.length}</span>
-            <span className="stat-label">TOTAL</span>
+          <div className="stat-card">
+            <Car size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <div className="stat-content">
+              <span className="stat-value">{patentesUnicasCount}</span>
+              <span className="stat-label">Vehiculos</span>
+            </div>
           </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">
-            <Car size={20} />
+          <div className="stat-card">
+            <Users size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <div className="stat-content">
+              <span className="stat-value">{conductoresUnicosCount}</span>
+              <span className="stat-label">Conductores</span>
+            </div>
           </div>
-          <div className="stat-content">
-            <span className="stat-value">{patentesUnicasCount}</span>
-            <span className="stat-label">VEHÍCULOS</span>
+          <div className="stat-card">
+            <DollarSign size={18} className="stat-icon" style={{ color: '#22C55E' }} />
+            <div className="stat-content">
+              <span className="stat-value">{formatMoney(totalTarifa)}</span>
+              <span className="stat-label">Total Tarifas</span>
+            </div>
           </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">
-            <Users size={20} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{conductoresUnicosCount}</span>
-            <span className="stat-label">CONDUCTORES</span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">
-            <DollarSign size={20} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{formatMoney(totalTarifa)}</span>
-            <span className="stat-label">TOTAL TARIFAS</span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: conObservaciones > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)' }}>
-            <AlertCircle size={20} style={{ color: conObservaciones > 0 ? '#F59E0B' : '#10B981' }} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{conObservaciones}</span>
-            <span className="stat-label">CON OBS.</span>
+          <div className="stat-card">
+            <AlertCircle size={18} className="stat-icon" style={{ color: conObservaciones > 0 ? '#F59E0B' : '#10B981' }} />
+            <div className="stat-content">
+              <span className="stat-value">{conObservaciones}</span>
+              <span className="stat-label">Con Obs.</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="module-toolbar">
-        <div className="toolbar-left">
-          {/* Espacio para búsqueda si se necesita */}
-        </div>
-        <div className="toolbar-right">
+      {/* DataTable */}
+      <DataTable
+        data={registrosFiltrados}
+        columns={columns}
+        searchPlaceholder="Buscar por patente, conductor..."
+        headerAction={
           <button className="btn-secondary" onClick={handleExportar}>
             <Download size={16} />
             Exportar
           </button>
-        </div>
-      </div>
-
-      {/* Tabla */}
-      <div className="table-container">
-        <DataTable
-          data={registrosFiltrados}
-          columns={columns}
-          searchPlaceholder="Buscar por patente, conductor..."
-        />
-      </div>
+        }
+      />
 
       {/* Modal Detalle */}
       {showModal && selectedRegistro && (
