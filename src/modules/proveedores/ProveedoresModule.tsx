@@ -803,260 +803,135 @@ export function ProveedoresModule() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}>
-          <div style={{
-            background: 'var(--card-bg)',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '90%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
-            overflow: 'auto',
-          }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Building2 size={24} />
-              Crear Proveedor
-            </h2>
+        <div className="prov-modal-overlay">
+          <div className="prov-modal-content">
+            <div className="prov-modal-header">
+              <h2><Building2 size={24} /> Crear Proveedor</h2>
+            </div>
 
-            <div style={{ display: 'grid', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Razón Social *
-                </label>
-                <input
-                  type="text"
-                  value={formData.razon_social}
-                  onChange={(e) => setFormData({ ...formData, razon_social: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
+            <div className="prov-modal-body">
+              <div className="prov-form-grid">
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Razon Social *</label>
+                  <input
+                    type="text"
+                    className="prov-form-input"
+                    value={formData.razon_social}
+                    onChange={(e) => setFormData({ ...formData, razon_social: e.target.value })}
+                  />
+                </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Tipo Documento *
-                  </label>
+                <div className="prov-form-row">
+                  <div className="prov-form-group">
+                    <label className="prov-form-label">Tipo Documento *</label>
+                    <select
+                      className="prov-form-select"
+                      value={formData.tipo_documento}
+                      onChange={(e) => setFormData({ ...formData, tipo_documento: e.target.value as any })}
+                    >
+                      <option value="RUC">RUC</option>
+                      <option value="DNI">DNI</option>
+                      <option value="CUIT">CUIT</option>
+                      <option value="CUIL">CUIL</option>
+                    </select>
+                  </div>
+
+                  <div className="prov-form-group">
+                    <label className="prov-form-label">Numero de Documento *</label>
+                    <input
+                      type="text"
+                      className="prov-form-input"
+                      value={formData.numero_documento}
+                      onChange={(e) => setFormData({ ...formData, numero_documento: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Categoria de Proveedor</label>
                   <select
-                    value={formData.tipo_documento}
-                    onChange={(e) => setFormData({ ...formData, tipo_documento: e.target.value as any })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                    className="prov-form-select"
+                    value={formData.categoria}
+                    onChange={(e) => setFormData({ ...formData, categoria: e.target.value as CategoriaProveedor | '' })}
                   >
-                    <option value="RUC">RUC</option>
-                    <option value="DNI">DNI</option>
-                    <option value="CUIT">CUIT</option>
-                    <option value="CUIL">CUIL</option>
+                    <option value="">Seleccionar categoria...</option>
+                    {CATEGORIAS_PROVEEDOR.map((cat) => (
+                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Número de Documento *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.numero_documento}
-                    onChange={(e) => setFormData({ ...formData, numero_documento: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
+                <div className="prov-form-row-2">
+                  <div className="prov-form-group">
+                    <label className="prov-form-label">Telefono</label>
+                    <input
+                      type="text"
+                      className="prov-form-input"
+                      value={formData.telefono}
+                      onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="prov-form-group">
+                    <label className="prov-form-label">Email</label>
+                    <input
+                      type="email"
+                      className="prov-form-input"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Categoría de Proveedor
-                </label>
-                <select
-                  value={formData.categoria}
-                  onChange={(e) => setFormData({ ...formData, categoria: e.target.value as CategoriaProveedor | '' })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  <option value="">Seleccionar categoría...</option>
-                  {CATEGORIAS_PROVEEDOR.map((cat) => (
-                    <option key={cat.value} value={cat.value}>{cat.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Teléfono
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.telefono}
-                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Direccion</label>
+                  <textarea
+                    className="prov-form-textarea"
+                    value={formData.direccion}
+                    onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                    rows={2}
                   />
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Informacion de Pago</label>
+                  <textarea
+                    className="prov-form-textarea"
+                    value={formData.informacion_pago}
+                    onChange={(e) => setFormData({ ...formData, informacion_pago: e.target.value })}
+                    rows={3}
+                    placeholder="Ej: CBU, alias, tarjeta, efectivo, transferencia, etc."
                   />
                 </div>
-              </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Dirección
-                </label>
-                <textarea
-                  value={formData.direccion}
-                  onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Información de Pago
-                </label>
-                <textarea
-                  value={formData.informacion_pago}
-                  onChange={(e) => setFormData({ ...formData, informacion_pago: e.target.value })}
-                  rows={3}
-                  placeholder="Ej: CBU, alias, tarjeta, efectivo, transferencia, etc."
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Observaciones
-                </label>
-                <textarea
-                  value={formData.observaciones}
-                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Observaciones</label>
+                  <textarea
+                    className="prov-form-textarea"
+                    value={formData.observaciones}
+                    onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+                    rows={2}
+                  />
+                </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+            <div className="prov-modal-footer">
               <button
+                className="prov-btn-primary"
+                onClick={handleCreate}
+                disabled={!formData.razon_social || !formData.numero_documento}
+              >
+                Crear Proveedor
+              </button>
+              <button
+                className="prov-btn-secondary"
                 onClick={() => {
                   setShowCreateModal(false)
                   resetForm()
                 }}
-                style={{
-                  padding: '10px 20px',
-                  background: 'var(--bg-tertiary)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
               >
                 Cancelar
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={!formData.razon_social || !formData.numero_documento}
-                style={{
-                  padding: '10px 20px',
-                  background: formData.razon_social && formData.numero_documento ? 'var(--color-primary)' : 'var(--border-primary)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: formData.razon_social && formData.numero_documento ? 'pointer' : 'not-allowed',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
-              >
-                Crear Proveedor
               </button>
             </div>
           </div>
@@ -1065,260 +940,135 @@ export function ProveedoresModule() {
 
       {/* Edit Modal */}
       {showEditModal && selectedProveedor && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}>
-          <div style={{
-            background: 'var(--card-bg)',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '90%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
-            overflow: 'auto',
-          }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Edit size={24} />
-              Editar Proveedor
-            </h2>
+        <div className="prov-modal-overlay">
+          <div className="prov-modal-content">
+            <div className="prov-modal-header">
+              <h2><Edit size={24} /> Editar Proveedor</h2>
+            </div>
 
-            <div style={{ display: 'grid', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Razón Social *
-                </label>
-                <input
-                  type="text"
-                  value={formData.razon_social}
-                  onChange={(e) => setFormData({ ...formData, razon_social: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
+            <div className="prov-modal-body">
+              <div className="prov-form-grid">
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Razon Social *</label>
+                  <input
+                    type="text"
+                    className="prov-form-input"
+                    value={formData.razon_social}
+                    onChange={(e) => setFormData({ ...formData, razon_social: e.target.value })}
+                  />
+                </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Tipo Documento *
-                  </label>
+                <div className="prov-form-row">
+                  <div className="prov-form-group">
+                    <label className="prov-form-label">Tipo Documento *</label>
+                    <select
+                      className="prov-form-select"
+                      value={formData.tipo_documento}
+                      onChange={(e) => setFormData({ ...formData, tipo_documento: e.target.value as any })}
+                    >
+                      <option value="RUC">RUC</option>
+                      <option value="DNI">DNI</option>
+                      <option value="CUIT">CUIT</option>
+                      <option value="CUIL">CUIL</option>
+                    </select>
+                  </div>
+
+                  <div className="prov-form-group">
+                    <label className="prov-form-label">Numero de Documento *</label>
+                    <input
+                      type="text"
+                      className="prov-form-input"
+                      value={formData.numero_documento}
+                      onChange={(e) => setFormData({ ...formData, numero_documento: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Categoria de Proveedor</label>
                   <select
-                    value={formData.tipo_documento}
-                    onChange={(e) => setFormData({ ...formData, tipo_documento: e.target.value as any })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                    className="prov-form-select"
+                    value={formData.categoria}
+                    onChange={(e) => setFormData({ ...formData, categoria: e.target.value as CategoriaProveedor | '' })}
                   >
-                    <option value="RUC">RUC</option>
-                    <option value="DNI">DNI</option>
-                    <option value="CUIT">CUIT</option>
-                    <option value="CUIL">CUIL</option>
+                    <option value="">Seleccionar categoria...</option>
+                    {CATEGORIAS_PROVEEDOR.map((cat) => (
+                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Número de Documento *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.numero_documento}
-                    onChange={(e) => setFormData({ ...formData, numero_documento: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
+                <div className="prov-form-row-2">
+                  <div className="prov-form-group">
+                    <label className="prov-form-label">Telefono</label>
+                    <input
+                      type="text"
+                      className="prov-form-input"
+                      value={formData.telefono}
+                      onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="prov-form-group">
+                    <label className="prov-form-label">Email</label>
+                    <input
+                      type="email"
+                      className="prov-form-input"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Categoría de Proveedor
-                </label>
-                <select
-                  value={formData.categoria}
-                  onChange={(e) => setFormData({ ...formData, categoria: e.target.value as CategoriaProveedor | '' })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  <option value="">Seleccionar categoría...</option>
-                  {CATEGORIAS_PROVEEDOR.map((cat) => (
-                    <option key={cat.value} value={cat.value}>{cat.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Teléfono
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.telefono}
-                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Direccion</label>
+                  <textarea
+                    className="prov-form-textarea"
+                    value={formData.direccion}
+                    onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                    rows={2}
                   />
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Informacion de Pago</label>
+                  <textarea
+                    className="prov-form-textarea"
+                    value={formData.informacion_pago}
+                    onChange={(e) => setFormData({ ...formData, informacion_pago: e.target.value })}
+                    rows={3}
+                    placeholder="Ej: CBU, alias, tarjeta, efectivo, transferencia, etc."
                   />
                 </div>
-              </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Dirección
-                </label>
-                <textarea
-                  value={formData.direccion}
-                  onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Información de Pago
-                </label>
-                <textarea
-                  value={formData.informacion_pago}
-                  onChange={(e) => setFormData({ ...formData, informacion_pago: e.target.value })}
-                  rows={3}
-                  placeholder="Ej: CBU, alias, tarjeta, efectivo, transferencia, etc."
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Observaciones
-                </label>
-                <textarea
-                  value={formData.observaciones}
-                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
+                <div className="prov-form-group">
+                  <label className="prov-form-label">Observaciones</label>
+                  <textarea
+                    className="prov-form-textarea"
+                    value={formData.observaciones}
+                    onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+                    rows={2}
+                  />
+                </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+            <div className="prov-modal-footer">
               <button
+                className="prov-btn-success"
+                onClick={handleEdit}
+                disabled={!formData.razon_social || !formData.numero_documento}
+              >
+                Actualizar Proveedor
+              </button>
+              <button
+                className="prov-btn-secondary"
                 onClick={() => {
                   setShowEditModal(false)
                   resetForm()
                 }}
-                style={{
-                  padding: '10px 20px',
-                  background: 'var(--bg-tertiary)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
               >
                 Cancelar
-              </button>
-              <button
-                onClick={handleEdit}
-                disabled={!formData.razon_social || !formData.numero_documento}
-                style={{
-                  padding: '10px 20px',
-                  background: formData.razon_social && formData.numero_documento ? 'var(--color-success)' : 'var(--border-primary)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: formData.razon_social && formData.numero_documento ? 'pointer' : 'not-allowed',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
-              >
-                Actualizar Proveedor
               </button>
             </div>
           </div>
@@ -1327,244 +1077,127 @@ export function ProveedoresModule() {
 
       {/* View Modal */}
       {showViewModal && selectedProveedor && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}>
-          <div style={{
-            background: 'var(--card-bg)',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '90%',
-            maxWidth: '700px',
-            maxHeight: '90vh',
-            overflow: 'auto',
-          }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Building2 size={24} />
-              Detalles del Proveedor
-            </h2>
+        <div className="prov-modal-overlay">
+          <div className="prov-modal-content wide">
+            <div className="prov-modal-header">
+              <h2><Building2 size={24} /> Detalles del Proveedor</h2>
+            </div>
 
-            <div style={{ display: 'grid', gap: '24px' }}>
-              {/* Información General */}
-              <div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  paddingBottom: '8px',
-                  borderBottom: '2px solid var(--color-primary)'
-                }}>
-                  <FileText size={20} style={{ color: 'var(--color-primary)' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
-                    Información General
-                  </h3>
+            <div className="prov-modal-body">
+              <div className="prov-view-sections">
+                {/* Informacion General */}
+                <div className="prov-view-section">
+                  <div className="prov-section-header">
+                    <FileText size={20} />
+                    <h3>Informacion General</h3>
+                  </div>
+
+                  <div className="prov-info-grid">
+                    <div className="prov-info-item full">
+                      <span className="prov-info-label">Razon Social</span>
+                      <span className="prov-info-value large">{selectedProveedor.razon_social}</span>
+                    </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Tipo de Documento</span>
+                      <span className="dt-badge dt-badge-blue">{selectedProveedor.tipo_documento}</span>
+                    </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Numero de Documento</span>
+                      <span className="prov-info-value">{selectedProveedor.numero_documento}</span>
+                    </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Categoria</span>
+                      {selectedProveedor.categoria ? (
+                        <span className="dt-badge dt-badge-purple">
+                          {CATEGORIAS_PROVEEDOR.find(c => c.value === selectedProveedor.categoria)?.label || selectedProveedor.categoria}
+                        </span>
+                      ) : (
+                        <span className="prov-info-value empty">-</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Razón Social</span>
-                    <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>{selectedProveedor.razon_social}</span>
+                {/* Contacto */}
+                <div className="prov-view-section">
+                  <div className="prov-section-header">
+                    <Phone size={20} />
+                    <h3>Informacion de Contacto</h3>
                   </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Tipo de Documento</span>
-                    <span
-                      style={{
-                        background: 'var(--badge-blue-bg)',
-                        color: 'var(--badge-blue-text)',
-                        padding: '4px 12px',
-                        borderRadius: '12px',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        display: 'inline-block'
-                      }}
-                    >
-                      {selectedProveedor.tipo_documento}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Número de Documento</span>
-                    <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-primary)' }}>{selectedProveedor.numero_documento}</span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Categoría</span>
-                    {selectedProveedor.categoria ? (
-                      <span
-                        style={{
-                          background: 'var(--badge-purple-bg, #f3e8ff)',
-                          color: 'var(--badge-purple-text, #7c3aed)',
-                          padding: '4px 12px',
-                          borderRadius: '12px',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          display: 'inline-block'
-                        }}
-                      >
-                        {CATEGORIAS_PROVEEDOR.find(c => c.value === selectedProveedor.categoria)?.label || selectedProveedor.categoria}
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>-</span>
+
+                  <div className="prov-info-grid">
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Telefono</span>
+                      <span className="prov-info-value">{selectedProveedor.telefono || '-'}</span>
+                    </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Email</span>
+                      <span className="prov-info-value">{selectedProveedor.email || '-'}</span>
+                    </div>
+                    {selectedProveedor.direccion && (
+                      <div className="prov-info-item full">
+                        <span className="prov-info-label">Direccion</span>
+                        <span className="prov-info-value">{selectedProveedor.direccion}</span>
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* Contacto */}
-              <div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  paddingBottom: '8px',
-                  borderBottom: '2px solid var(--color-primary)'
-                }}>
-                  <Phone size={20} style={{ color: 'var(--color-primary)' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
-                    Información de Contacto
-                  </h3>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Teléfono</span>
-                    <span style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {selectedProveedor.telefono || '-'}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Email</span>
-                    <span style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {selectedProveedor.email || '-'}
-                    </span>
-                  </div>
-                  {selectedProveedor.direccion && (
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Dirección</span>
-                      <span style={{ fontSize: '14px' }}>{selectedProveedor.direccion}</span>
+                {/* Informacion de Pago */}
+                {selectedProveedor.informacion_pago && (
+                  <div className="prov-view-section">
+                    <div className="prov-section-header">
+                      <CreditCard size={20} />
+                      <h3>Informacion de Pago</h3>
                     </div>
-                  )}
-                </div>
-              </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-value" style={{ whiteSpace: 'pre-wrap' }}>{selectedProveedor.informacion_pago}</span>
+                    </div>
+                  </div>
+                )}
 
-              {/* Información de Pago */}
-              {selectedProveedor.informacion_pago && (
-                <div>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    marginBottom: '16px',
-                    paddingBottom: '8px',
-                    borderBottom: '2px solid var(--color-primary)'
-                  }}>
-                    <CreditCard size={20} style={{ color: 'var(--color-primary)' }} />
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
-                      Información de Pago
-                    </h3>
+                {/* Observaciones */}
+                {selectedProveedor.observaciones && (
+                  <div className="prov-view-section">
+                    <div className="prov-section-header">
+                      <FileText size={20} />
+                      <h3>Observaciones</h3>
+                    </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-value" style={{ whiteSpace: 'pre-wrap' }}>{selectedProveedor.observaciones}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Metadatos */}
+                <div className="prov-view-section">
+                  <div className="prov-section-header">
+                    <Calendar size={20} />
+                    <h3>Informacion de Registro</h3>
                   </div>
 
-                  <div>
-                    <span style={{ fontSize: '14px', whiteSpace: 'pre-wrap' }}>{selectedProveedor.informacion_pago}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Observaciones */}
-              {selectedProveedor.observaciones && (
-                <div>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    marginBottom: '16px',
-                    paddingBottom: '8px',
-                    borderBottom: '2px solid var(--color-primary)'
-                  }}>
-                    <FileText size={20} style={{ color: 'var(--color-primary)' }} />
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
-                      Observaciones
-                    </h3>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '14px', whiteSpace: 'pre-wrap' }}>{selectedProveedor.observaciones}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Metadatos */}
-              <div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  paddingBottom: '8px',
-                  borderBottom: '2px solid var(--color-primary)'
-                }}>
-                  <Calendar size={20} style={{ color: 'var(--color-primary)' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
-                    Información de Registro
-                  </h3>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Estado</span>
-                    <span
-                      style={{
-                        background: selectedProveedor.activo ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)',
-                        color: selectedProveedor.activo ? 'var(--badge-green-text)' : 'var(--badge-red-text)',
-                        padding: '4px 12px',
-                        borderRadius: '12px',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        display: 'inline-block'
-                      }}
-                    >
-                      {selectedProveedor.activo ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Creado</span>
-                    <span style={{ fontSize: '14px' }}>
-                      {formatDateTimeAR(selectedProveedor.created_at)}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Actualizado</span>
-                    <span style={{ fontSize: '14px' }}>
-                      {formatDateTimeAR(selectedProveedor.updated_at)}
-                    </span>
+                  <div className="prov-info-grid">
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Estado</span>
+                      <span className={selectedProveedor.activo ? 'dt-badge dt-badge-green' : 'dt-badge dt-badge-red'}>
+                        {selectedProveedor.activo ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Creado</span>
+                      <span className="prov-info-value">{formatDateTimeAR(selectedProveedor.created_at)}</span>
+                    </div>
+                    <div className="prov-info-item">
+                      <span className="prov-info-label">Actualizado</span>
+                      <span className="prov-info-value">{formatDateTimeAR(selectedProveedor.updated_at)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowViewModal(false)}
-                style={{
-                  padding: '10px 20px',
-                  background: 'var(--color-primary)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
-              >
+            <div className="prov-modal-footer">
+              <button className="prov-btn-primary" onClick={() => setShowViewModal(false)}>
                 Cerrar
               </button>
             </div>

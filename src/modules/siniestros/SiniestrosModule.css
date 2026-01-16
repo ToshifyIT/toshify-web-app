@@ -568,35 +568,32 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 13px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
-  border: 1px solid;
 }
 
 .btn-secondary {
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  border-color: var(--border-primary);
+  background: #F3F4F6;
+  color: #374151;
+  border: 1px solid #E5E7EB;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: #E5E7EB;
 }
 
 .btn-primary {
   background: #DC2626;
   color: white;
-  border-color: #DC2626;
+  border: none;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: #B91C1C;
-  border-color: #B91C1C;
 }
 
 .btn-secondary:disabled,
@@ -642,23 +639,27 @@
 
 .modal-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-primary);
+  padding: 20px 20px 0;
   background: var(--bg-primary);
   flex-shrink: 0;
   border-radius: 12px 12px 0 0;
+  position: relative;
 }
 
 .modal-header h2 {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+  text-align: center;
 }
 
 .modal-close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
   width: 32px;
   height: 32px;
   display: flex;
@@ -685,10 +686,9 @@
 
 .modal-footer {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--border-primary);
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
   background: var(--bg-primary);
   flex-shrink: 0;
   border-radius: 0 0 12px 12px;
@@ -743,6 +743,8 @@
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .form-group label .required {
@@ -754,10 +756,11 @@
 .form-group textarea {
   padding: 10px 12px;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
-  font-size: 13px;
-  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--input-bg);
   color: var(--text-primary);
+  transition: all 0.15s;
 }
 
 .form-group input:focus,
@@ -765,6 +768,8 @@
 .form-group textarea:focus {
   outline: none;
   border-color: #DC2626;
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
 .form-group textarea {

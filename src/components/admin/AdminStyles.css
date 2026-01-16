@@ -261,9 +261,10 @@
 
 .rm-modal-title {
   margin-top: 0;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--text-primary);
+  text-align: center;
 }
 
 .rm-modal-title-danger {
@@ -274,6 +275,7 @@
   color: var(--text-secondary);
   font-size: 14px;
   margin-bottom: 24px;
+  text-align: center;
 }
 
 .rm-info-box {
@@ -292,7 +294,7 @@
 .rm-modal-actions {
   display: flex;
   gap: 12px;
-  justify-content: flex-end;
+  justify-content: center;
   margin-top: 24px;
 }
 

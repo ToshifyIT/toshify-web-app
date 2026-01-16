@@ -83,9 +83,9 @@
   --table-row-hover: #FAFAFA;
   --table-border: #F3F4F6;
 
-  --input-bg: #FFFFFF;
+  --input-bg: #F5F5F5;
   --input-border: #E5E7EB;
-  --input-focus-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+  --input-focus-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 
   --modal-bg: #FFFFFF;
   --card-bg: #FFFFFF;
@@ -109,6 +109,82 @@
   --badge-indigo-text: #3730A3;
   --badge-orange-bg: #FED7AA;
   --badge-orange-text: #9A3412;
+}
+
+/* ==========================================
+   SWEETALERT2 - ESTILOS GLOBALES
+   ========================================== */
+
+/* Título centrado sin borde */
+.swal2-title {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: var(--text-primary) !important;
+  padding: 16px 24px 0 !important;
+  margin: 0 !important;
+  border: none !important;
+}
+
+/* Contenedor del HTML */
+.swal2-html-container {
+  padding: 16px 24px !important;
+  margin: 0 !important;
+  text-align: left !important;
+}
+
+/* Botones */
+.swal2-actions {
+  padding: 16px 24px 20px !important;
+  margin: 0 !important;
+  gap: 12px !important;
+}
+
+/* Botón confirmar (Guardar) - ROJO */
+.swal2-confirm {
+  background: #DC2626 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 10px 20px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  order: 1 !important;
+}
+
+.swal2-confirm:hover {
+  background: #B91C1C !important;
+}
+
+.swal2-confirm:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2) !important;
+}
+
+/* Botón cancelar - GRIS CLARO */
+.swal2-cancel {
+  background: #F3F4F6 !important;
+  color: #374151 !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 8px !important;
+  padding: 10px 20px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  order: 2 !important;
+}
+
+.swal2-cancel:hover {
+  background: #E5E7EB !important;
+}
+
+.swal2-cancel:focus {
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Popup container */
+.swal2-popup {
+  border-radius: 12px !important;
+  padding: 0 !important;
 }
 
 /* ==========================================
@@ -315,10 +391,9 @@ body,
   color: var(--text-primary);
 }
 
-/* SweetAlert2 Dark Mode - Prioridad alta */
+/* SweetAlert2 Dark Mode */
 [data-theme="dark"] .swal2-popup {
   background-color: var(--card-bg) !important;
-  color: var(--text-primary) !important;
 }
 
 [data-theme="dark"] .swal2-title {
@@ -329,26 +404,19 @@ body,
   color: var(--text-secondary) !important;
 }
 
-[data-theme="dark"] .swal2-html-container p,
-[data-theme="dark"] .swal2-html-container strong {
+[data-theme="dark"] .swal2-cancel {
+  background: var(--bg-tertiary) !important;
   color: var(--text-primary) !important;
+  border-color: var(--border-primary) !important;
 }
 
-[data-theme="dark"] .swal2-input,
-[data-theme="dark"] .swal2-textarea,
-[data-theme="dark"] .swal2-select {
-  background-color: var(--input-bg) !important;
-  border-color: var(--input-border) !important;
-  color: var(--text-primary) !important;
+[data-theme="dark"] .swal2-cancel:hover {
+  background: var(--bg-secondary) !important;
 }
 
 [data-theme="dark"] .swal2-validation-message {
   background-color: var(--badge-red-bg) !important;
   color: var(--badge-red-text) !important;
-}
-
-[data-theme="dark"] .swal2-input-label {
-  color: var(--text-secondary) !important;
 }
 
 /* Modales */
