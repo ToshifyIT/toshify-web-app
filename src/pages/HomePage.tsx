@@ -35,6 +35,8 @@ import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
 import { AuditoriaPage } from './administracion/AuditoriaPage'
 import { ProfilePage } from './profile/ProfilePage'
+// Multas/Telepase
+import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
 // Onboarding
 import ProgramacionPage from './onboarding/ProgramacionPage'
 import { ProtectedRoute } from '../components/ProtectedRoute'
@@ -980,6 +982,13 @@ export function HomePage() {
               <Route path="/auditoria" element={
                 <ProtectedRoute submenuName="auditoria" action="view">
                   <AuditoriaPage />
+                </ProtectedRoute>
+              } />
+
+              {/* Multas/Telepase */}
+              <Route path="/telepase-historico" element={
+                <ProtectedRoute submenuName="telepase-historico" action="view">
+                  <TelepaseHistoricoPage />
                 </ProtectedRoute>
               } />
 
