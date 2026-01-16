@@ -684,28 +684,49 @@ export function AsignacionesModule() {
 
         } else {
           // Lógica normal (sin companeros)
-          const { data: asignacionesACerrar } = await supabase
+          // IMPORTANTE: Solo finalizar la participación del conductor en asignaciones anteriores,
+          // NO toda la asignación (para no afectar al compañero de turno)
+          
+          if (conductoresIds.length > 0) {
+            for (const conductorId of conductoresIds) {
+              // 1. Finalizar participación del conductor en otras asignaciones activas
+              await (supabase as any)
+                .from('asignaciones_conductores')
+                .update({ estado: 'completado', fecha_fin: ahora })
+                .eq('conductor_id', conductorId)
+                .in('estado', ['asignado', 'activo'])
+                .neq('asignacion_id', selectedAsignacion.id)
+            }
+          }
+
+          // 2. Verificar si alguna asignación quedó sin conductores activos y finalizarla
+          const { data: asignacionesSinConductores } = await (supabase as any)
             .from('asignaciones')
-            .select('id, vehiculo_id')
-            .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+            .select(`
+              id,
+              asignaciones_conductores(id, estado)
+            `)
             .eq('estado', 'activa')
             .neq('id', selectedAsignacion.id)
 
-          if (asignacionesACerrar && asignacionesACerrar.length > 0) {
-            await supabase.from('asignaciones')
-              // @ts-ignore
-              .update({ estado: 'finalizada', fecha_fin: ahora, notas: '[AUTO-CERRADA]' })
-              .in('id', asignacionesACerrar.map((a: any) => a.id))
-          }
-
-          if (conductoresIds.length > 0) {
-            for (const conductorId of conductoresIds) {
-              await (supabase as any)
-                .from('asignaciones_conductores')
-                .update({ estado: 'cancelado', fecha_fin: ahora })
-                .eq('conductor_id', conductorId)
-                .eq('estado', 'asignado')
-                .neq('asignacion_id', selectedAsignacion.id)
+          if (asignacionesSinConductores) {
+            for (const asig of asignacionesSinConductores as any[]) {
+              const conductoresActivos = asig.asignaciones_conductores?.filter(
+                (ac: any) => ac.estado === 'asignado' || ac.estado === 'activo'
+              ) || []
+              
+              if (conductoresActivos.length === 0) {
+                // Esta asignación ya no tiene conductores activos, finalizarla
+                await (supabase as any)
+                  .from('asignaciones')
+                  .update({ 
+                    estado: 'finalizada', 
+                    fecha_fin: ahora, 
+                    notas: '[AUTO-CERRADA] Sin conductores activos',
+                    updated_by: profile?.full_name || 'Sistema'
+                  })
+                  .eq('id', asig.id)
+              }
             }
           }
 

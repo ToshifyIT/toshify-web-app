@@ -436,6 +436,32 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       }
     }
 
+    // Validar que los conductores seleccionados no tengan asignaciones activas
+    const conductoresSeleccionados = formData.horario === 'CARGO' 
+      ? formData.conductores_ids 
+      : [formData.conductor_diurno_id, formData.conductor_nocturno_id].filter(Boolean)
+    
+    const conductoresConAsignacionActiva = conductores.filter(
+      c => conductoresSeleccionados.includes(c.id) && c.tieneAsignacionActiva
+    )
+
+    if (conductoresConAsignacionActiva.length > 0) {
+      const nombres = conductoresConAsignacionActiva.map(c => `${c.nombres} ${c.apellidos}`).join(', ')
+      const result = await Swal.fire({
+        title: 'Conductores con asignacion activa',
+        html: `Los siguientes conductores ya tienen una asignacion activa:<br><br><b>${nombres}</b><br><br>¿Deseas continuar de todas formas?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Si, continuar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#f59e0b'
+      })
+      
+      if (!result.isConfirmed) {
+        return
+      }
+    }
+
     setLoading(true)
 
     try {

@@ -564,26 +564,69 @@ export function SiniestrosModule() {
         })
         if (error) throw error
 
-        // Si hay que finalizar la asignacion
-        if (_finalizarAsignacion && _asignacionId) {
-          const { error: asigError } = await (supabase
-            .from('asignaciones') as any)
-            .update({
-              estado: 'finalizada',
-              fecha_fin: new Date().toISOString().split('T')[0],
-              motivo_finalizacion: 'Vehiculo siniestrado'
-            })
-            .eq('id', _asignacionId)
+        const ahora = new Date().toISOString()
 
-          if (asigError) {
-            console.error('Error finalizando asignacion:', asigError)
+        // Si se seleccionó un estado para el vehículo, actualizarlo
+        if (estado_vehiculo && formDataClean.vehiculo_id) {
+          const estadoSeleccionado = vehiculosEstados.find(e => e.codigo === estado_vehiculo)
+          if (estadoSeleccionado) {
+            await (supabase as any)
+              .from('vehiculos')
+              .update({ 
+                estado_id: estadoSeleccionado.id,
+                updated_by: profile?.full_name || 'Sistema'
+              })
+              .eq('id', formDataClean.vehiculo_id)
+          }
+
+          // Estados que finalizan asignaciones
+          const estadosFinalizanAsignacion = [
+            'SINIESTRADO',
+            'TALLER_CHAPA_PINTURA',
+            'CORPORATIVO', 
+            'PKG_OFF_BASE',
+            'PKG_OFF_FRANCIA',
+            'DESTRUCCION_TOTAL',
+            'ROBO',
+            'RETENIDO_COMISARIA'
+          ]
+
+          // Si el estado requiere finalizar asignaciones, buscar y finalizar TODAS las activas del vehículo
+          if (estadosFinalizanAsignacion.includes(estado_vehiculo)) {
+            const { data: asignacionesActivas } = await (supabase as any)
+              .from('asignaciones')
+              .select('id')
+              .eq('vehiculo_id', formDataClean.vehiculo_id)
+              .in('estado', ['activa', 'programado'])
+
+            if (asignacionesActivas && asignacionesActivas.length > 0) {
+              const asignacionIds = asignacionesActivas.map((a: any) => a.id)
+
+              // Finalizar conductores
+              await (supabase as any)
+                .from('asignaciones_conductores')
+                .update({ estado: 'completado', fecha_fin: ahora })
+                .in('asignacion_id', asignacionIds)
+                .in('estado', ['asignado', 'activo'])
+
+              // Finalizar asignaciones
+              await (supabase as any)
+                .from('asignaciones')
+                .update({
+                  estado: 'finalizada',
+                  fecha_fin: ahora,
+                  notas: `[AUTO-CERRADA] Siniestro - Vehículo cambió a estado: ${estado_vehiculo}`,
+                  updated_by: profile?.full_name || 'Sistema'
+                })
+                .in('id', asignacionIds)
+            }
           }
         }
 
         Swal.fire({
           icon: 'success',
           title: 'Siniestro registrado',
-          text: _finalizarAsignacion ? 'La asignacion fue finalizada automaticamente' : undefined,
+          text: estado_vehiculo ? 'El estado del vehículo y asignaciones fueron actualizados' : undefined,
           timer: 2000,
           showConfirmButton: false
         })
@@ -594,9 +637,69 @@ export function SiniestrosModule() {
         }).eq('id', selectedSiniestro.id)
         if (error) throw error
 
+        const ahora = new Date().toISOString()
+
+        // Si se seleccionó un estado para el vehículo, actualizarlo
+        if (estado_vehiculo && formDataClean.vehiculo_id) {
+          const estadoSeleccionado = vehiculosEstados.find(e => e.codigo === estado_vehiculo)
+          if (estadoSeleccionado) {
+            await (supabase as any)
+              .from('vehiculos')
+              .update({ 
+                estado_id: estadoSeleccionado.id,
+                updated_by: profile?.full_name || 'Sistema'
+              })
+              .eq('id', formDataClean.vehiculo_id)
+          }
+
+          // Estados que finalizan asignaciones
+          const estadosFinalizanAsignacion = [
+            'SINIESTRADO',
+            'TALLER_CHAPA_PINTURA',
+            'CORPORATIVO', 
+            'PKG_OFF_BASE',
+            'PKG_OFF_FRANCIA',
+            'DESTRUCCION_TOTAL',
+            'ROBO',
+            'RETENIDO_COMISARIA'
+          ]
+
+          // Si el estado requiere finalizar asignaciones
+          if (estadosFinalizanAsignacion.includes(estado_vehiculo)) {
+            const { data: asignacionesActivas } = await (supabase as any)
+              .from('asignaciones')
+              .select('id')
+              .eq('vehiculo_id', formDataClean.vehiculo_id)
+              .in('estado', ['activa', 'programado'])
+
+            if (asignacionesActivas && asignacionesActivas.length > 0) {
+              const asignacionIds = asignacionesActivas.map((a: any) => a.id)
+
+              // Finalizar conductores
+              await (supabase as any)
+                .from('asignaciones_conductores')
+                .update({ estado: 'completado', fecha_fin: ahora })
+                .in('asignacion_id', asignacionIds)
+                .in('estado', ['asignado', 'activo'])
+
+              // Finalizar asignaciones
+              await (supabase as any)
+                .from('asignaciones')
+                .update({
+                  estado: 'finalizada',
+                  fecha_fin: ahora,
+                  notas: `[AUTO-CERRADA] Siniestro - Vehículo cambió a estado: ${estado_vehiculo}`,
+                  updated_by: profile?.full_name || 'Sistema'
+                })
+                .in('id', asignacionIds)
+            }
+          }
+        }
+
         Swal.fire({
           icon: 'success',
           title: 'Siniestro actualizado',
+          text: estado_vehiculo ? 'El estado del vehículo y asignaciones fueron actualizados' : undefined,
           timer: 1500,
           showConfirmButton: false
         })
