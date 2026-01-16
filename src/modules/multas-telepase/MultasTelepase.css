@@ -98,3 +98,189 @@
     font-size: 10px;
   }
 }
+
+/* =====================================================
+   MODAL FORM STYLES - Igual a Facturacion
+   ===================================================== */
+
+.multas-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+}
+
+.multas-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.multas-form-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.multas-form-input,
+.multas-form-select,
+.multas-form-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--input-bg);
+  transition: all 0.15s;
+  box-sizing: border-box;
+}
+
+.multas-form-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.multas-form-input:focus,
+.multas-form-select:focus,
+.multas-form-textarea:focus {
+  outline: none;
+  border-color: #DC2626;
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.multas-form-input::placeholder,
+.multas-form-textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.multas-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* Modal View/Detail styles */
+.multas-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.multas-modal-container {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.multas-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.multas-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.multas-modal-close {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: color 0.15s;
+}
+
+.multas-modal-close:hover {
+  color: var(--text-primary);
+}
+
+.multas-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.multas-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.multas-btn-primary {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: #DC2626;
+  color: white;
+  transition: background 0.15s;
+}
+
+.multas-btn-primary:hover {
+  background: #B91C1C;
+}
+
+.multas-btn-secondary {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.multas-btn-secondary:hover {
+  background: var(--bg-secondary);
+}
+
+/* Detail table for view modals */
+.multas-detail-table {
+  width: 100%;
+  font-size: 14px;
+}
+
+.multas-detail-table tr {
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.multas-detail-table tr:last-child {
+  border-bottom: none;
+}
+
+.multas-detail-label {
+  padding: 10px 12px 10px 0;
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  width: 35%;
+}
+
+.multas-detail-value {
+  padding: 10px 0;
+  color: var(--text-primary);
+}
