@@ -9,7 +9,7 @@ import {
   // Gauge, // Oculto temporalmente
   // Ban, // Oculto temporalmente
   UserMinus,
-  AlertTriangle,
+  // AlertTriangle, // Multas movido a modulo Multas/Telepase
   CreditCard
 } from 'lucide-react'
 import { ReporteFacturacionTab } from './tabs/ReporteFacturacionTab'
@@ -21,11 +21,11 @@ import { ConceptosFacturacionTab } from './tabs/ConceptosFacturacionTab'
 import { ExcesosKmTab } from './tabs/ExcesosKmTab'
 import { BloqueosConductoresTab } from './tabs/BloqueosConductoresTab'
 import { LiquidacionConductoresTab } from './tabs/LiquidacionConductoresTab'
-import { MultasTab } from './tabs/MultasTab'
+// import { MultasTab } from './tabs/MultasTab' // Movido a modulo Multas/Telepase
 import { CobrosFraccionadosTab } from './tabs/CobrosFraccionadosTab'
 import './FacturacionModule.css'
 
-type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'multas' | 'bloqueos' | 'liquidacion' | 'conceptos' | 'cobros_fraccionados'
+type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'bloqueos' | 'liquidacion' | 'conceptos' | 'cobros_fraccionados'
 
 const TABS = [
   { id: 'reporte' as TabType, label: 'Reporte', icon: FileText },
@@ -34,9 +34,9 @@ const TABS = [
   { id: 'saldos' as TabType, label: 'Saldos', icon: DollarSign },
   // { id: 'tickets' as TabType, label: 'Tickets', icon: Ticket }, // Oculto - se maneja desde Incidencias
   // { id: 'excesos' as TabType, label: 'Excesos KM', icon: Gauge }, // Oculto temporalmente
-  { id: 'multas' as TabType, label: 'Multas', icon: AlertTriangle },
+  // { id: 'multas' as TabType, label: 'Multas', icon: AlertTriangle }, // Movido a modulo Multas/Telepase
   // { id: 'bloqueos' as TabType, label: 'Bloqueos', icon: Ban }, // Oculto temporalmente
-  { id: 'liquidacion' as TabType, label: 'Liquidación', icon: UserMinus },
+  { id: 'liquidacion' as TabType, label: 'Liquidacion', icon: UserMinus },
   { id: 'cobros_fraccionados' as TabType, label: 'Cobros Fraccionados', icon: CreditCard },
   { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings }
 ]
@@ -71,7 +71,7 @@ export function FacturacionModule() {
          {activeTab === 'saldos' && <SaldosAbonosTab />}
          {activeTab === 'tickets' && <TicketsFavorTab />}
          {activeTab === 'excesos' && <ExcesosKmTab />}
-         {activeTab === 'multas' && <MultasTab />}
+         {/* Multas movido a modulo Multas/Telepase */}
          {activeTab === 'bloqueos' && <BloqueosConductoresTab />}
          {activeTab === 'liquidacion' && <LiquidacionConductoresTab />}
          {activeTab === 'cobros_fraccionados' && <CobrosFraccionadosTab />}
