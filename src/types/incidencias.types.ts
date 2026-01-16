@@ -49,6 +49,7 @@ export interface Incidencia {
   conductor_nombre?: string
   vehiculo_patente?: string
   auto_a_cargo?: boolean
+  monto?: number // Monto del cobro (para incidencias tipo=cobro)
   created_by?: string
   created_at: string
   updated_at: string
