@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { DataTable } from '../../components/ui/DataTable'
-import { Download, FileText, AlertCircle, CheckCircle } from 'lucide-react'
+import { Download, FileText, AlertCircle, CheckCircle, Eye, X, Car, Users, DollarSign } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 
@@ -62,6 +62,8 @@ function getWeekNumber(dateStr: string): number {
 export default function TelepaseHistoricoModule() {
   const [loading, setLoading] = useState(true)
   const [registros, setRegistros] = useState<TelepaseRegistro[]>([])
+  const [selectedRegistro, setSelectedRegistro] = useState<TelepaseRegistro | null>(null)
+  const [showModal, setShowModal] = useState(false)
   
   // Filtros
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
@@ -139,6 +141,25 @@ export default function TelepaseHistoricoModule() {
     }, 0)
   }, [registrosFiltrados])
 
+  // Estadísticas adicionales
+  const patentesUnicasCount = useMemo(() => 
+    new Set(registrosFiltrados.map(r => r.patente).filter(Boolean)).size
+  , [registrosFiltrados])
+
+  const conductoresUnicosCount = useMemo(() => 
+    new Set(registrosFiltrados.map(r => r.conductor).filter(Boolean)).size
+  , [registrosFiltrados])
+
+  const conObservaciones = useMemo(() => 
+    registrosFiltrados.filter(r => r.observaciones && r.observaciones.trim() !== '').length
+  , [registrosFiltrados])
+
+  // Ver detalle
+  function handleVerDetalle(registro: TelepaseRegistro) {
+    setSelectedRegistro(registro)
+    setShowModal(true)
+  }
+
   // Columnas
   const columns = useMemo<ColumnDef<TelepaseRegistro>[]>(() => [
     {
@@ -148,7 +169,7 @@ export default function TelepaseHistoricoModule() {
     },
     {
       id: 'semana_facturacion',
-      header: 'Sem. Fact.',
+      header: 'Sem.',
       cell: ({ row }) => {
         if (!row.original.created_at) return '-'
         return getWeekNumber(row.original.created_at)
@@ -192,7 +213,7 @@ export default function TelepaseHistoricoModule() {
         />
       ),
       cell: ({ row }) => (
-        <span className="dt-badge dt-badge-gray">{row.original.patente || '-'}</span>
+        <span className="dt-badge dt-badge-dark">{row.original.patente || '-'}</span>
       )
     },
     {
@@ -201,7 +222,7 @@ export default function TelepaseHistoricoModule() {
       cell: ({ row }) => {
         const { categoria, estacion, via, dispositivo } = row.original
         const partes = [categoria, estacion, via, dispositivo].filter(Boolean)
-        return partes.length > 0 ? partes.join(' / ') : '-'
+        return <span style={{ fontSize: '12px' }}>{partes.length > 0 ? partes.join(' / ') : '-'}</span>
       }
     },
     {
@@ -237,7 +258,7 @@ export default function TelepaseHistoricoModule() {
       accessorKey: 'observaciones',
       header: () => (
         <ExcelColumnFilter
-          label="Observaciones"
+          label="Obs."
           options={observacionesOpciones}
           selectedValues={observacionesFilter}
           onSelectionChange={setObservacionesFilter}
@@ -251,15 +272,23 @@ export default function TelepaseHistoricoModule() {
         if (!obs || obs.trim() === '') {
           return <CheckCircle size={16} style={{ color: '#10B981' }} />
         }
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <AlertCircle size={16} style={{ color: '#F59E0B' }} />
-            <span style={{ fontSize: '12px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {obs}
-            </span>
-          </div>
-        )
+        return <span title={obs}><AlertCircle size={16} style={{ color: '#F59E0B' }} /></span>
       }
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      cell: ({ row }) => (
+        <div className="dt-actions">
+          <button 
+            className="dt-btn-action dt-btn-view" 
+            data-tooltip="Ver detalle"
+            onClick={() => handleVerDetalle(row.original)}
+          >
+            <Eye size={14} />
+          </button>
+        </div>
+      )
     }
   ], [patentesUnicas, patenteFilter, concesionariosUnicos, concesionarioFilter, conductoresUnicos, conductorFilter, observacionesOpciones, observacionesFilter, openFilterId])
 
@@ -301,39 +330,65 @@ export default function TelepaseHistoricoModule() {
 
   return (
     <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <div className="header-title">
-          <FileText size={24} />
-          <h1>Telepase Histórico</h1>
-        </div>
-        <div className="header-actions">
-          <button className="btn-secondary" onClick={handleExportar}>
-            <Download size={16} />
-            Exportar
-          </button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="stats-grid" style={{ marginBottom: '24px' }}>
+      {/* Stats Cards */}
+      <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'rgba(99, 102, 241, 0.1)' }}>
-            <FileText size={20} style={{ color: '#6366F1' }} />
+          <div className="stat-icon">
+            <FileText size={20} />
           </div>
           <div className="stat-content">
             <span className="stat-value">{registrosFiltrados.length}</span>
-            <span className="stat-label">REGISTROS</span>
+            <span className="stat-label">TOTAL</span>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
-            <span style={{ fontSize: '18px', fontWeight: 700, color: '#F59E0B' }}>$</span>
+          <div className="stat-icon">
+            <Car size={20} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{patentesUnicasCount}</span>
+            <span className="stat-label">VEHÍCULOS</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">
+            <Users size={20} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{conductoresUnicosCount}</span>
+            <span className="stat-label">CONDUCTORES</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">
+            <DollarSign size={20} />
           </div>
           <div className="stat-content">
             <span className="stat-value">{formatMoney(totalTarifa)}</span>
             <span className="stat-label">TOTAL TARIFAS</span>
           </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: conObservaciones > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)' }}>
+            <AlertCircle size={20} style={{ color: conObservaciones > 0 ? '#F59E0B' : '#10B981' }} />
+          </div>
+          <div className="stat-content">
+            <span className="stat-value">{conObservaciones}</span>
+            <span className="stat-label">CON OBS.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="module-toolbar">
+        <div className="toolbar-left">
+          {/* Espacio para búsqueda si se necesita */}
+        </div>
+        <div className="toolbar-right">
+          <button className="btn-secondary" onClick={handleExportar}>
+            <Download size={16} />
+            Exportar
+          </button>
         </div>
       </div>
 
@@ -345,6 +400,98 @@ export default function TelepaseHistoricoModule() {
           searchPlaceholder="Buscar por patente, conductor..."
         />
       </div>
+
+      {/* Modal Detalle */}
+      {showModal && selectedRegistro && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h2>Detalle de Peaje</h2>
+              <button className="modal-close" onClick={() => setShowModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="detail-group">
+                  <label>Fecha de Carga</label>
+                  <p>{formatDateTime(selectedRegistro.created_at)}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Semana Facturación</label>
+                  <p>{selectedRegistro.created_at ? getWeekNumber(selectedRegistro.created_at) : '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Fecha Peaje</label>
+                  <p>{selectedRegistro.fecha || '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Hora Peaje</label>
+                  <p>{selectedRegistro.hora || '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Concesionario</label>
+                  <p>{selectedRegistro.concesionario || '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Patente</label>
+                  <p><span className="dt-badge dt-badge-dark">{selectedRegistro.patente || '-'}</span></p>
+                </div>
+                <div className="detail-group">
+                  <label>Categoría</label>
+                  <p>{selectedRegistro.categoria || '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Estación</label>
+                  <p>{selectedRegistro.estacion || '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Vía</label>
+                  <p>{selectedRegistro.via || '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Dispositivo</label>
+                  <p>{selectedRegistro.dispositivo || '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Tarifa</label>
+                  <p style={{ fontWeight: 600, color: '#F59E0B', fontSize: '18px' }}>{formatMoney(selectedRegistro.tarifa)}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Documento Legal</label>
+                  <p>{selectedRegistro.documento_legal || '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>Conductor</label>
+                  <p>{selectedRegistro.conductor || '-'}</p>
+                </div>
+                <div className="detail-group">
+                  <label>iButton</label>
+                  <p>{selectedRegistro.ibutton || '-'}</p>
+                </div>
+              </div>
+              {selectedRegistro.observaciones && (
+                <div className="detail-group" style={{ marginTop: '16px' }}>
+                  <label>Observaciones</label>
+                  <p style={{ 
+                    padding: '12px', 
+                    background: 'rgba(245, 158, 11, 0.1)', 
+                    borderRadius: '6px',
+                    border: '1px solid rgba(245, 158, 11, 0.3)'
+                  }}>
+                    {selectedRegistro.observaciones}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowModal(false)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
