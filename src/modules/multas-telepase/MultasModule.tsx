@@ -54,6 +54,32 @@ function formatFecha(fecha: string | null): string {
   }
 }
 
+function formatDateTime(dateStr: string | null): string {
+  if (!dateStr) return '-'
+  try {
+    const date = new Date(dateStr)
+    return date.toLocaleString('es-AR', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch {
+    return dateStr
+  }
+}
+
+function getWeekNumber(dateStr: string): number {
+  const date = new Date(dateStr)
+  const thursday = new Date(date)
+  thursday.setDate(thursday.getDate() - ((thursday.getDay() + 6) % 7) + 3)
+  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
+  firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3)
+  const weekNumber = Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+  return weekNumber
+}
+
 export default function MultasModule() {
   const [loading, setLoading] = useState(true)
   const [multas, setMultas] = useState<Multa[]>([])
@@ -149,37 +175,37 @@ export default function MultasModule() {
     const { value: formValues } = await Swal.fire({
       title: 'Registrar Multa',
       html: `
-        <div style="text-align: left; padding: 0 8px;">
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Patente *</label>
-            <select id="swal-patente" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+        <div class="multas-modal-form">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Patente *</label>
+            <select id="swal-patente" class="multas-form-select">
               <option value="">Seleccione vehiculo...</option>
               ${patentesOptions}
             </select>
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Fecha Infraccion *</label>
-            <input id="swal-fecha" type="date" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Fecha Infraccion *</label>
+            <input id="swal-fecha" type="date" class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Importe (Gs.) *</label>
-            <input id="swal-importe" type="number" placeholder="Ej: 500000" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Importe (Gs.) *</label>
+            <input id="swal-importe" type="number" placeholder="Ej: 500000" class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Infraccion</label>
-            <input id="swal-infraccion" type="text" placeholder="Tipo de infraccion..." style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Infraccion</label>
+            <input id="swal-infraccion" type="text" placeholder="Tipo de infraccion..." class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Lugar</label>
-            <input id="swal-lugar" type="text" placeholder="Ubicacion..." style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Lugar</label>
+            <input id="swal-lugar" type="text" placeholder="Ubicacion..." class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Conductor Responsable</label>
-            <input id="swal-conductor" type="text" placeholder="Nombre del conductor..." style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Conductor Responsable</label>
+            <input id="swal-conductor" type="text" placeholder="Nombre del conductor..." class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Observaciones</label>
-            <textarea id="swal-detalle" rows="2" placeholder="Detalles adicionales..." style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box; resize: vertical;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'"></textarea>
+          <div class="multas-form-group">
+            <label class="multas-form-label">Observaciones</label>
+            <textarea id="swal-detalle" rows="2" placeholder="Detalles adicionales..." class="multas-form-textarea"></textarea>
           </div>
         </div>
       `,
@@ -242,37 +268,37 @@ export default function MultasModule() {
     const { value: formValues } = await Swal.fire({
       title: 'Editar Multa',
       html: `
-        <div style="text-align: left; padding: 0 8px;">
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Patente *</label>
-            <select id="swal-patente" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+        <div class="multas-modal-form">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Patente *</label>
+            <select id="swal-patente" class="multas-form-select">
               <option value="">Seleccione vehiculo...</option>
               ${patentesOptions}
             </select>
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Fecha Infraccion *</label>
-            <input id="swal-fecha" type="date" value="${fechaValue}" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Fecha Infraccion *</label>
+            <input id="swal-fecha" type="date" value="${fechaValue}" class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Importe (Gs.) *</label>
-            <input id="swal-importe" type="number" value="${parseImporte(multa.importe)}" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Importe (Gs.) *</label>
+            <input id="swal-importe" type="number" value="${parseImporte(multa.importe)}" class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Infraccion</label>
-            <input id="swal-infraccion" type="text" value="${multa.infraccion || ''}" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Infraccion</label>
+            <input id="swal-infraccion" type="text" value="${multa.infraccion || ''}" class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Lugar</label>
-            <input id="swal-lugar" type="text" value="${multa.lugar || ''}" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Lugar</label>
+            <input id="swal-lugar" type="text" value="${multa.lugar || ''}" class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Conductor Responsable</label>
-            <input id="swal-conductor" type="text" value="${multa.conductor_responsable || ''}" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">
+          <div class="multas-form-group">
+            <label class="multas-form-label">Conductor Responsable</label>
+            <input id="swal-conductor" type="text" value="${multa.conductor_responsable || ''}" class="multas-form-input">
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Observaciones</label>
-            <textarea id="swal-detalle" rows="2" style="width: 100%; padding: 10px 12px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 14px; box-sizing: border-box; resize: vertical;" onfocus="this.style.borderColor='#ef4444'" onblur="this.style.borderColor='#e5e5e5'">${multa.observaciones || multa.detalle || ''}</textarea>
+          <div class="multas-form-group">
+            <label class="multas-form-label">Observaciones</label>
+            <textarea id="swal-detalle" rows="2" class="multas-form-textarea">${multa.observaciones || multa.detalle || ''}</textarea>
           </div>
         </div>
       `,
@@ -354,6 +380,29 @@ export default function MultasModule() {
   // Columnas
   const columns = useMemo<ColumnDef<Multa>[]>(() => [
     {
+      accessorKey: 'created_at',
+      header: 'Fecha Carga',
+      cell: ({ row }) => formatDateTime(row.original.created_at)
+    },
+    {
+      id: 'semana',
+      header: 'Sem.',
+      cell: ({ row }) => {
+        if (!row.original.created_at) return '-'
+        return getWeekNumber(row.original.created_at)
+      }
+    },
+    {
+      accessorKey: 'fecha_infraccion',
+      header: 'Fecha Infraccion',
+      cell: ({ row }) => formatFecha(row.original.fecha_infraccion)
+    },
+    {
+      accessorKey: 'fecha_anotacion',
+      header: 'Fecha Anotacion',
+      cell: ({ row }) => formatFecha(row.original.fecha_anotacion)
+    },
+    {
       accessorKey: 'patente',
       header: () => (
         <ExcelColumnFilter
@@ -368,29 +417,6 @@ export default function MultasModule() {
       ),
       cell: ({ row }) => (
         <span className="patente-badge">{row.original.patente || '-'}</span>
-      )
-    },
-    {
-      accessorKey: 'fecha_infraccion',
-      header: 'Fecha',
-      cell: ({ row }) => formatFecha(row.original.fecha_infraccion)
-    },
-    {
-      accessorKey: 'importe',
-      header: 'Importe',
-      cell: ({ row }) => (
-        <span style={{ fontWeight: 600, color: '#DC2626' }}>
-          {formatMoney(row.original.importe)}
-        </span>
-      )
-    },
-    {
-      accessorKey: 'infraccion',
-      header: 'Infraccion',
-      cell: ({ row }) => (
-        <span style={{ fontSize: '13px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-          {row.original.infraccion || '-'}
-        </span>
       )
     },
     {
@@ -409,6 +435,15 @@ export default function MultasModule() {
       cell: ({ row }) => row.original.lugar || '-'
     },
     {
+      accessorKey: 'detalle',
+      header: 'Infraccion',
+      cell: ({ row }) => (
+        <span style={{ fontSize: '13px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+          {row.original.detalle || '-'}
+        </span>
+      )
+    },
+    {
       accessorKey: 'conductor_responsable',
       header: () => (
         <ExcelColumnFilter
@@ -424,23 +459,28 @@ export default function MultasModule() {
       cell: ({ row }) => row.original.conductor_responsable || '-'
     },
     {
+      accessorKey: 'ibutton',
+      header: 'iButton',
+      cell: ({ row }) => row.original.ibutton || '-'
+    },
+    {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
         <div className="dt-actions">
-          <button
-            className="dt-btn-action dt-btn-view"
-            data-tooltip="Ver detalle"
-            onClick={() => handleVerDetalle(row.original)}
-          >
-            <Eye size={14} />
-          </button>
           <button
             className="dt-btn-action dt-btn-edit"
             data-tooltip="Editar"
             onClick={() => editarMulta(row.original)}
           >
             <Edit2 size={14} />
+          </button>
+          <button
+            className="dt-btn-action dt-btn-view"
+            data-tooltip="Ver detalle"
+            onClick={() => handleVerDetalle(row.original)}
+          >
+            <Eye size={14} />
           </button>
           <button
             className="dt-btn-action dt-btn-delete"
@@ -524,6 +564,7 @@ export default function MultasModule() {
         data={multasFiltradas}
         columns={columns}
         searchPlaceholder="Buscar por patente, conductor, lugar..."
+        disableAutoFilters={true}
         headerAction={
           <div style={{ display: 'flex', gap: '8px' }}>
             <button className="btn-secondary" onClick={handleExportar}>
@@ -540,76 +581,80 @@ export default function MultasModule() {
 
       {/* Modal Detalle */}
       {showModal && selectedMulta && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '550px' }}>
-            <div className="modal-header">
-              <h2>Detalle de Multa</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>
+        <div className="multas-modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="multas-modal-container" onClick={e => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+            <div className="multas-modal-header">
+              <h2 className="multas-modal-title">Detalle de Multa</h2>
+              <button className="multas-modal-close" onClick={() => setShowModal(false)}>
                 <X size={18} />
               </button>
             </div>
-            <div className="modal-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="detail-group">
-                  <label>Patente</label>
-                  <p><span className="dt-badge dt-badge-dark">{selectedMulta.patente || '-'}</span></p>
-                </div>
-                <div className="detail-group">
-                  <label>Fecha Infraccion</label>
-                  <p>{formatFecha(selectedMulta.fecha_infraccion)}</p>
-                </div>
-                <div className="detail-group" style={{ gridColumn: 'span 2' }}>
-                  <label>Importe</label>
-                  <p style={{ fontWeight: 700, color: '#DC2626', fontSize: '20px' }}>
-                    {formatMoney(selectedMulta.importe)}
-                  </p>
-                </div>
-                <div className="detail-group">
-                  <label>Infraccion</label>
-                  <p>{selectedMulta.infraccion || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Lugar</label>
-                  <p>{selectedMulta.lugar || '-'}</p>
-                </div>
-                {selectedMulta.lugar_detalle && (
-                  <div className="detail-group" style={{ gridColumn: 'span 2' }}>
-                    <label>Lugar Detalle</label>
-                    <p>{selectedMulta.lugar_detalle}</p>
-                  </div>
-                )}
-                <div className="detail-group">
-                  <label>Conductor</label>
-                  <p>{selectedMulta.conductor_responsable || '-'}</p>
-                </div>
-                {selectedMulta.ibutton && (
-                  <div className="detail-group">
-                    <label>iButton</label>
-                    <p style={{ fontFamily: 'monospace', fontSize: '12px' }}>{selectedMulta.ibutton}</p>
-                  </div>
-                )}
-              </div>
-              {(selectedMulta.observaciones || selectedMulta.detalle) && (
-                <div className="detail-group" style={{ marginTop: '16px' }}>
-                  <label>Observaciones</label>
-                  <p style={{
-                    padding: '12px',
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(239, 68, 68, 0.2)'
-                  }}>
-                    {selectedMulta.observaciones || selectedMulta.detalle}
-                  </p>
-                </div>
-              )}
+            <div className="multas-modal-body">
+              <table className="multas-detail-table">
+                <tbody>
+                  <tr>
+                    <td className="multas-detail-label">Patente</td>
+                    <td className="multas-detail-value">
+                      <span className="patente-badge">{selectedMulta.patente || '-'}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Fecha Infraccion</td>
+                    <td className="multas-detail-value">{formatFecha(selectedMulta.fecha_infraccion)}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Importe</td>
+                    <td className="multas-detail-value" style={{ fontWeight: 700, color: '#DC2626', fontSize: '18px' }}>
+                      {formatMoney(selectedMulta.importe)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Infraccion</td>
+                    <td className="multas-detail-value">{selectedMulta.infraccion || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Lugar</td>
+                    <td className="multas-detail-value">{selectedMulta.lugar || '-'}</td>
+                  </tr>
+                  {selectedMulta.lugar_detalle && (
+                    <tr>
+                      <td className="multas-detail-label">Lugar Detalle</td>
+                      <td className="multas-detail-value">{selectedMulta.lugar_detalle}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td className="multas-detail-label">Conductor</td>
+                    <td className="multas-detail-value">{selectedMulta.conductor_responsable || '-'}</td>
+                  </tr>
+                  {selectedMulta.ibutton && (
+                    <tr>
+                      <td className="multas-detail-label">iButton</td>
+                      <td className="multas-detail-value" style={{ fontFamily: 'monospace', fontSize: '12px' }}>{selectedMulta.ibutton}</td>
+                    </tr>
+                  )}
+                  {(selectedMulta.observaciones || selectedMulta.detalle) && (
+                    <tr>
+                      <td className="multas-detail-label">Observaciones</td>
+                      <td className="multas-detail-value" style={{
+                        padding: '12px',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(239, 68, 68, 0.2)'
+                      }}>
+                        {selectedMulta.observaciones || selectedMulta.detalle}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowModal(false)}>
-                Cerrar
-              </button>
-              <button className="btn-primary" onClick={() => editarMulta(selectedMulta)}>
-                <Edit2 size={14} />
+            <div className="multas-modal-footer">
+              <button className="multas-btn-primary" onClick={() => editarMulta(selectedMulta)}>
+                <Edit2 size={14} style={{ marginRight: '6px' }} />
                 Editar
+              </button>
+              <button className="multas-btn-secondary" onClick={() => setShowModal(false)}>
+                Cerrar
               </button>
             </div>
           </div>

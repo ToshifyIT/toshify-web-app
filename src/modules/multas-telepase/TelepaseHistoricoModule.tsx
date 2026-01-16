@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { DataTable } from '../../components/ui/DataTable'
-import { Download, FileText, AlertCircle, CheckCircle, Eye, X, Car, Users, DollarSign } from 'lucide-react'
+import { Download, FileText, AlertCircle, CheckCircle, Eye, Edit2, X, Car, Users, DollarSign } from 'lucide-react'
+import Swal from 'sweetalert2'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import './MultasTelepase.css'
@@ -29,7 +30,15 @@ interface TelepaseRegistro {
 
 function formatMoney(value: string | number | null | undefined): string {
   if (!value) return '$ 0'
-  const num = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]/g, '')) : value
+  let num: number
+  if (typeof value === 'string') {
+    // Formato europeo: "3.622,54" -> convertir a número
+    // Quitar puntos de miles, reemplazar coma decimal por punto
+    const cleaned = value.replace(/\./g, '').replace(',', '.')
+    num = parseFloat(cleaned)
+  } else {
+    num = value
+  }
   if (isNaN(num)) return '$ 0'
   return `$ ${num.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
@@ -65,6 +74,8 @@ export default function TelepaseHistoricoModule() {
   const [registros, setRegistros] = useState<TelepaseRegistro[]>([])
   const [selectedRegistro, setSelectedRegistro] = useState<TelepaseRegistro | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingRegistro, setEditingRegistro] = useState<TelepaseRegistro | null>(null)
   
   // Filtros
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
@@ -86,7 +97,14 @@ export default function TelepaseHistoricoModule() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setRegistros(data || [])
+      
+      // Filtrar registros que contengan "Aproximado" en observaciones
+      const filteredData = ((data || []) as TelepaseRegistro[]).filter(r => {
+        const obs = r.observaciones?.toLowerCase() || ''
+        return !obs.includes('aproximado')
+      })
+      
+      setRegistros(filteredData)
     } catch (error) {
       console.error('Error cargando datos:', error)
     } finally {
@@ -137,7 +155,10 @@ export default function TelepaseHistoricoModule() {
   // Calcular totales
   const totalTarifa = useMemo(() => {
     return registrosFiltrados.reduce((sum, r) => {
-      const tarifa = parseFloat(r.tarifa?.replace(/[^0-9.-]/g, '') || '0')
+      if (!r.tarifa) return sum
+      // Formato europeo: "3.622,54" -> quitar puntos de miles, coma a punto decimal
+      const cleaned = r.tarifa.replace(/\./g, '').replace(',', '.')
+      const tarifa = parseFloat(cleaned)
       return sum + (isNaN(tarifa) ? 0 : tarifa)
     }, 0)
   }, [registrosFiltrados])
@@ -159,6 +180,43 @@ export default function TelepaseHistoricoModule() {
   function handleVerDetalle(registro: TelepaseRegistro) {
     setSelectedRegistro(registro)
     setShowModal(true)
+  }
+
+  // Editar registro
+  function handleEditar(registro: TelepaseRegistro) {
+    setEditingRegistro({ ...registro })
+    setShowEditModal(true)
+  }
+
+  async function handleGuardarEdicion() {
+    if (!editingRegistro) return
+
+    try {
+      const { error } = await (supabase
+        .from('telepase_historico') as any)
+        .update({
+          conductor: editingRegistro.conductor,
+          ibutton: editingRegistro.ibutton,
+          observaciones: editingRegistro.observaciones
+        })
+        .eq('id', editingRegistro.id)
+
+      if (error) throw error
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Actualizado',
+        timer: 1500,
+        showConfirmButton: false
+      })
+
+      setShowEditModal(false)
+      setEditingRegistro(null)
+      cargarDatos()
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Error al guardar'
+      Swal.fire('Error', msg, 'error')
+    }
   }
 
   // Columnas
@@ -282,6 +340,13 @@ export default function TelepaseHistoricoModule() {
       cell: ({ row }) => (
         <div className="dt-actions">
           <button 
+            className="dt-btn-action dt-btn-edit" 
+            data-tooltip="Editar"
+            onClick={() => handleEditar(row.original)}
+          >
+            <Edit2 size={14} />
+          </button>
+          <button 
             className="dt-btn-action dt-btn-view" 
             data-tooltip="Ver detalle"
             onClick={() => handleVerDetalle(row.original)}
@@ -377,6 +442,7 @@ export default function TelepaseHistoricoModule() {
         data={registrosFiltrados}
         columns={columns}
         searchPlaceholder="Buscar por patente, conductor..."
+        disableAutoFilters={true}
         headerAction={
           <button className="btn-secondary" onClick={handleExportar}>
             <Download size={16} />
@@ -387,90 +453,165 @@ export default function TelepaseHistoricoModule() {
 
       {/* Modal Detalle */}
       {showModal && selectedRegistro && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-            <div className="modal-header">
-              <h2>Detalle de Peaje</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>
+        <div className="multas-modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="multas-modal-container" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="multas-modal-header">
+              <h2 className="multas-modal-title">Detalle de Peaje</h2>
+              <button className="multas-modal-close" onClick={() => setShowModal(false)}>
                 <X size={18} />
               </button>
             </div>
-            <div className="modal-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="detail-group">
-                  <label>Fecha de Carga</label>
-                  <p>{formatDateTime(selectedRegistro.created_at)}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Semana Facturación</label>
-                  <p>{selectedRegistro.created_at ? getWeekNumber(selectedRegistro.created_at) : '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Fecha Peaje</label>
-                  <p>{selectedRegistro.fecha || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Hora Peaje</label>
-                  <p>{selectedRegistro.hora || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Concesionario</label>
-                  <p>{selectedRegistro.concesionario || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Patente</label>
-                  <p><span className="dt-badge dt-badge-dark">{selectedRegistro.patente || '-'}</span></p>
-                </div>
-                <div className="detail-group">
-                  <label>Categoría</label>
-                  <p>{selectedRegistro.categoria || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Estación</label>
-                  <p>{selectedRegistro.estacion || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Vía</label>
-                  <p>{selectedRegistro.via || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Dispositivo</label>
-                  <p>{selectedRegistro.dispositivo || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Tarifa</label>
-                  <p style={{ fontWeight: 600, color: '#F59E0B', fontSize: '18px' }}>{formatMoney(selectedRegistro.tarifa)}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Documento Legal</label>
-                  <p>{selectedRegistro.documento_legal || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>Conductor</label>
-                  <p>{selectedRegistro.conductor || '-'}</p>
-                </div>
-                <div className="detail-group">
-                  <label>iButton</label>
-                  <p>{selectedRegistro.ibutton || '-'}</p>
+            <div className="multas-modal-body">
+              <table className="multas-detail-table">
+                <tbody>
+                  <tr>
+                    <td className="multas-detail-label">Fecha de Carga</td>
+                    <td className="multas-detail-value">{formatDateTime(selectedRegistro.created_at)}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Semana</td>
+                    <td className="multas-detail-value">{selectedRegistro.created_at ? getWeekNumber(selectedRegistro.created_at) : '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Fecha Peaje</td>
+                    <td className="multas-detail-value">{selectedRegistro.fecha || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Hora Peaje</td>
+                    <td className="multas-detail-value">{selectedRegistro.hora || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Concesionario</td>
+                    <td className="multas-detail-value">{selectedRegistro.concesionario || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Patente</td>
+                    <td className="multas-detail-value">
+                      <span className="patente-badge">{selectedRegistro.patente || '-'}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Categoria</td>
+                    <td className="multas-detail-value">{selectedRegistro.categoria || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Estacion</td>
+                    <td className="multas-detail-value">{selectedRegistro.estacion || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Via</td>
+                    <td className="multas-detail-value">{selectedRegistro.via || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Dispositivo</td>
+                    <td className="multas-detail-value">{selectedRegistro.dispositivo || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Tarifa</td>
+                    <td className="multas-detail-value" style={{ fontWeight: 600, color: '#F59E0B', fontSize: '18px' }}>
+                      {formatMoney(selectedRegistro.tarifa)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Documento Legal</td>
+                    <td className="multas-detail-value">{selectedRegistro.documento_legal || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">Conductor</td>
+                    <td className="multas-detail-value">{selectedRegistro.conductor || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td className="multas-detail-label">iButton</td>
+                    <td className="multas-detail-value">{selectedRegistro.ibutton || '-'}</td>
+                  </tr>
+                  {selectedRegistro.observaciones && (
+                    <tr>
+                      <td className="multas-detail-label">Observaciones</td>
+                      <td className="multas-detail-value" style={{ 
+                        padding: '12px', 
+                        background: 'rgba(245, 158, 11, 0.1)', 
+                        borderRadius: '6px',
+                        border: '1px solid rgba(245, 158, 11, 0.3)'
+                      }}>
+                        {selectedRegistro.observaciones}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="multas-modal-footer">
+              <button className="multas-btn-secondary" onClick={() => setShowModal(false)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar */}
+      {showEditModal && editingRegistro && (
+        <div className="multas-modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="multas-modal-container" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="multas-modal-header">
+              <h2 className="multas-modal-title">Editar Registro</h2>
+              <button className="multas-modal-close" onClick={() => setShowEditModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="multas-modal-body">
+              {/* Info no editable */}
+              <div style={{ marginBottom: '20px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                  <div><strong>Patente:</strong> <span className="patente-badge" style={{ marginLeft: '4px' }}>{editingRegistro.patente}</span></div>
+                  <div><strong>Fecha:</strong> {editingRegistro.fecha} {editingRegistro.hora}</div>
+                  <div><strong>Tarifa:</strong> <span style={{ color: '#F59E0B', fontWeight: 600 }}>{formatMoney(editingRegistro.tarifa)}</span></div>
+                  <div><strong>Concesionario:</strong> {editingRegistro.concesionario}</div>
                 </div>
               </div>
-              {selectedRegistro.observaciones && (
-                <div className="detail-group" style={{ marginTop: '16px' }}>
-                  <label>Observaciones</label>
-                  <p style={{ 
-                    padding: '12px', 
-                    background: 'rgba(245, 158, 11, 0.1)', 
-                    borderRadius: '6px',
-                    border: '1px solid rgba(245, 158, 11, 0.3)'
-                  }}>
-                    {selectedRegistro.observaciones}
-                  </p>
+
+              {/* Campos editables */}
+              <div className="multas-modal-form">
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Conductor</label>
+                  <input
+                    type="text"
+                    className="multas-form-input"
+                    value={editingRegistro.conductor || ''}
+                    onChange={(e) => setEditingRegistro({ ...editingRegistro, conductor: e.target.value })}
+                    placeholder="Nombre del conductor..."
+                  />
                 </div>
-              )}
+
+                <div className="multas-form-group">
+                  <label className="multas-form-label">iButton</label>
+                  <input
+                    type="text"
+                    className="multas-form-input"
+                    value={editingRegistro.ibutton || ''}
+                    onChange={(e) => setEditingRegistro({ ...editingRegistro, ibutton: e.target.value })}
+                    placeholder="Codigo iButton..."
+                  />
+                </div>
+
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Observaciones</label>
+                  <textarea
+                    className="multas-form-textarea"
+                    value={editingRegistro.observaciones || ''}
+                    onChange={(e) => setEditingRegistro({ ...editingRegistro, observaciones: e.target.value })}
+                    rows={3}
+                    placeholder="Observaciones..."
+                  />
+                </div>
+              </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowModal(false)}>
-                Cerrar
+            <div className="multas-modal-footer">
+              <button className="multas-btn-primary" onClick={handleGuardarEdicion}>
+                Guardar
+              </button>
+              <button className="multas-btn-secondary" onClick={() => setShowEditModal(false)}>
+                Cancelar
               </button>
             </div>
           </div>
