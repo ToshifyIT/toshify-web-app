@@ -1993,78 +1993,80 @@ export function IncidenciasModule() {
       {/* Modal de Aplicación/Fraccionamiento */}
       {showAplicarModal && penalidadAplicar && (
         <div className="modal-overlay" onClick={() => setShowAplicarModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-            <div className="modal-header">
-              <h2>Aplicar Cobro/Descuento</h2>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Aplicar Cobro/Descuento</h2>
               <button className="modal-close" onClick={() => setShowAplicarModal(false)}>
                 <X size={18} />
               </button>
             </div>
 
-            <div className="modal-body">
-              {/* Info del cobro */}
+            <div className="modal-body" style={{ padding: '20px 24px' }}>
+              {/* Info del cobro - Estilo con fondo gris */}
               <div style={{ 
-                background: 'var(--bg-secondary)', 
-                padding: '16px', 
+                background: '#f5f5f5', 
+                padding: '16px 20px', 
                 borderRadius: '8px', 
-                marginBottom: '20px' 
+                marginBottom: '24px' 
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Conductor:</span>
-                  <strong>{penalidadAplicar.conductor_display}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ color: '#666', fontSize: '14px' }}>Conductor:</span>
+                  <strong style={{ fontSize: '14px' }}>{penalidadAplicar.conductor_display}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Vehículo:</span>
-                  <strong>{penalidadAplicar.patente_display || '-'}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ color: '#666', fontSize: '14px' }}>Vehículo:</span>
+                  <strong style={{ fontSize: '14px' }}>{penalidadAplicar.patente_display || '-'}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Monto Total:</span>
+                  <span style={{ color: '#666', fontSize: '14px' }}>Monto Total:</span>
                   <strong style={{ color: '#F59E0B', fontSize: '18px' }}>{formatMoney(penalidadAplicar.monto)}</strong>
                 </div>
               </div>
 
               {/* Opciones de aplicación - Solo mostrar si NO es "a favor" */}
               {!penalidadAplicar.tipo_es_a_favor && (
-                <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', marginBottom: '12px', fontWeight: 500, fontSize: '14px', color: '#333' }}>
                     ¿Cómo desea aplicar el cobro?
                   </label>
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <label style={{ 
                       flex: 1, 
-                      padding: '12px', 
-                      border: `2px solid ${!aplicarFraccionado ? '#F59E0B' : 'var(--border-color)'}`,
+                      padding: '14px', 
+                      border: `2px solid ${!aplicarFraccionado ? '#F59E0B' : '#e5e5e5'}`,
                       borderRadius: '8px',
                       cursor: 'pointer',
-                      background: !aplicarFraccionado ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
+                      background: !aplicarFraccionado ? 'rgba(245, 158, 11, 0.08)' : '#fff',
+                      textAlign: 'center'
                     }}>
                       <input
                         type="radio"
                         checked={!aplicarFraccionado}
                         onChange={() => setAplicarFraccionado(false)}
-                        style={{ marginRight: '8px' }}
+                        style={{ marginBottom: '6px' }}
                       />
-                      <strong>Completo</strong>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      <div style={{ fontWeight: 600, fontSize: '14px' }}>Completo</div>
+                      <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
                         Se cobra todo en una semana
                       </div>
                     </label>
                     <label style={{ 
                       flex: 1, 
-                      padding: '12px', 
-                      border: `2px solid ${aplicarFraccionado ? '#F59E0B' : 'var(--border-color)'}`,
+                      padding: '14px', 
+                      border: `2px solid ${aplicarFraccionado ? '#F59E0B' : '#e5e5e5'}`,
                       borderRadius: '8px',
                       cursor: 'pointer',
-                      background: aplicarFraccionado ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
+                      background: aplicarFraccionado ? 'rgba(245, 158, 11, 0.08)' : '#fff',
+                      textAlign: 'center'
                     }}>
                       <input
                         type="radio"
                         checked={aplicarFraccionado}
                         onChange={() => setAplicarFraccionado(true)}
-                        style={{ marginRight: '8px' }}
+                        style={{ marginBottom: '6px' }}
                       />
-                      <strong>Fraccionado</strong>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      <div style={{ fontWeight: 600, fontSize: '14px' }}>Fraccionado</div>
+                      <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
                         Dividir en cuotas semanales
                       </div>
                     </label>
@@ -2075,22 +2077,22 @@ export function IncidenciasModule() {
               {/* Mensaje para tickets a favor */}
               {penalidadAplicar.tipo_es_a_favor && (
                 <div style={{ 
-                  padding: '12px', 
+                  padding: '14px 16px', 
                   background: 'rgba(16, 185, 129, 0.1)', 
                   borderRadius: '8px', 
-                  marginBottom: '16px',
+                  marginBottom: '20px',
                   border: '1px solid rgba(16, 185, 129, 0.3)'
                 }}>
-                  <strong style={{ color: '#10B981' }}>Ticket a Favor</strong>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  <strong style={{ color: '#10B981', fontSize: '14px' }}>Ticket a Favor</strong>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
                     Los tickets a favor se aplican completos (sin fraccionamiento)
                   </div>
                 </div>
               )}
 
               {/* Semana de inicio */}
-              <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, fontSize: '14px', color: '#333' }}>
                   {aplicarFraccionado ? 'Semana de inicio:' : 'Aplicar en semana:'}
                 </label>
                 <select
@@ -2102,16 +2104,20 @@ export function IncidenciasModule() {
                   }}
                   style={{ 
                     width: '100%', 
-                    padding: '10px', 
+                    padding: '12px 14px', 
                     borderRadius: '6px', 
-                    border: '1px solid var(--border-color)',
-                    background: 'var(--bg-primary)',
-                    color: 'var(--text-primary)'
+                    border: '1px solid #e5e5e5',
+                    background: '#f5f5f5',
+                    color: '#333',
+                    fontSize: '14px',
+                    outline: 'none'
                   }}
+                  onFocus={(e) => e.target.style.border = '2px solid #ef4444'}
+                  onBlur={(e) => e.target.style.border = '1px solid #e5e5e5'}
                 >
                   {periodosDisponibles.map(p => (
                     <option key={`${p.semana}-${p.anio}`} value={`${p.semana}-${p.anio}`}>
-                      {p.label}
+                      Semana {p.semana} - {p.anio}
                     </option>
                   ))}
                 </select>
@@ -2119,8 +2125,8 @@ export function IncidenciasModule() {
 
               {/* Cantidad de cuotas (solo si es fraccionado) */}
               {aplicarFraccionado && (
-                <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, fontSize: '14px', color: '#333' }}>
                     Cantidad de cuotas:
                   </label>
                   <input
@@ -2131,44 +2137,73 @@ export function IncidenciasModule() {
                     onChange={(e) => setCantidadCuotas(Math.max(2, parseInt(e.target.value) || 2))}
                     style={{ 
                       width: '100%', 
-                      padding: '10px', 
+                      padding: '12px 14px', 
                       borderRadius: '6px', 
-                      border: '1px solid var(--border-color)',
-                      background: 'var(--bg-primary)',
-                      color: 'var(--text-primary)'
+                      border: '1px solid #e5e5e5',
+                      background: '#f5f5f5',
+                      color: '#333',
+                      fontSize: '14px',
+                      outline: 'none'
                     }}
+                    onFocus={(e) => e.target.style.border = '2px solid #ef4444'}
+                    onBlur={(e) => e.target.style.border = '1px solid #e5e5e5'}
                   />
-                  <div style={{ marginTop: '8px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '6px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                      <span>Monto por cuota:</span>
-                      <strong style={{ color: '#10B981' }}>
-                        {formatMoney(Math.ceil((penalidadAplicar.monto || 0) / cantidadCuotas))}
-                      </strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      <span>Última semana:</span>
-                      <span>
-                        Semana {((semanaInicio + cantidadCuotas - 2) % 52) + 1} - {anioInicio + Math.floor((semanaInicio + cantidadCuotas - 2) / 52)}
-                      </span>
+                  
+                  {/* Resumen de cuotas - DESTACADO */}
+                  <div style={{ 
+                    marginTop: '16px', 
+                    padding: '16px 20px', 
+                    background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', 
+                    borderRadius: '8px',
+                    border: '2px solid #F59E0B'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', color: '#92400E', fontWeight: 500 }}>Monto por cuota:</div>
+                        <div style={{ fontSize: '12px', color: '#B45309', marginTop: '2px' }}>Última semana:</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: '#D97706' }}>
+                          {formatMoney(Math.ceil((penalidadAplicar.monto || 0) / cantidadCuotas))}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#B45309' }}>
+                          Semana {((semanaInicio + cantidadCuotas - 2) % 52) + 1} - {anioInicio + Math.floor((semanaInicio + cantidadCuotas - 2) / 52)}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ borderTop: 'none', padding: '16px 24px 24px', gap: '12px' }}>
               <button 
-                className="btn-secondary" 
                 onClick={() => setShowAplicarModal(false)} 
                 disabled={aplicandoCobro}
+                style={{
+                  padding: '10px 24px',
+                  borderRadius: '6px',
+                  border: '1px solid #e5e5e5',
+                  background: '#fff',
+                  color: '#666',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
               >
                 Cancelar
               </button>
               <button
-                className="btn-primary"
                 onClick={handleConfirmarAplicacion}
                 disabled={aplicandoCobro}
-                style={{ background: '#F59E0B' }}
+                style={{
+                  padding: '10px 24px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
               >
                 {aplicandoCobro ? 'Aplicando...' : (
                   penalidadAplicar.tipo_es_a_favor 
