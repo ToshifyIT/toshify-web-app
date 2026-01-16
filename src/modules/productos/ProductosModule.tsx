@@ -922,607 +922,316 @@ export function ProductosModule() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}>
-          <div style={{
-            background: 'var(--card-bg)',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '90%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
-            overflow: 'auto',
-          }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Package size={24} />
-              Crear Producto
-            </h2>
+        <div className="prod-modal-overlay">
+          <div className="prod-modal-content">
+            <div className="prod-modal-header">
+              <h2><Package size={24} /> Crear Producto</h2>
+            </div>
 
-            <div style={{ display: 'grid', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Código *
-                </label>
-                <input
-                  type="text"
-                  value={formData.codigo}
-                  onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
+            <div className="prod-modal-body">
+              <div className="prod-form-grid">
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Codigo *</label>
+                  <input
+                    type="text"
+                    className="prod-form-input"
+                    value={formData.codigo}
+                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+                  />
+                </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Nombre *
-                </label>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Nombre *</label>
+                  <input
+                    type="text"
+                    className="prod-form-input"
+                    value={formData.nombre}
+                    onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                  />
+                </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Descripción
-                </label>
-                <textarea
-                  value={formData.descripcion}
-                  onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Descripcion</label>
+                  <textarea
+                    className="prod-form-textarea"
+                    value={formData.descripcion}
+                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                    rows={3}
+                  />
+                </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Unidad de Medida *
-                </label>
-                <select
-                  value={formData.unidad_medida_id}
-                  onChange={(e) => setFormData({ ...formData, unidad_medida_id: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  <option value="">Seleccionar...</option>
-                  {unidadesMedida.map((um) => (
-                    <option key={um.id} value={um.id}>
-                      {um.descripcion}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Estado se asigna automáticamente como "Stock disponible" al crear */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Categoría *
-                </label>
-                <select
-                  value={formData.categoria_id}
-                  onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  <option value="">Seleccionar...</option>
-                  {categorias.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Tipo *
-                  </label>
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Unidad de Medida *</label>
                   <select
-                    value={formData.tipo}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value as 'REPUESTOS' | 'HERRAMIENTAS' })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                    className="prod-form-select"
+                    value={formData.unidad_medida_id}
+                    onChange={(e) => setFormData({ ...formData, unidad_medida_id: e.target.value })}
                   >
-                    <option value="REPUESTOS">REPUESTOS</option>
-                    <option value="HERRAMIENTAS">HERRAMIENTAS</option>
+                    <option value="">Seleccionar...</option>
+                    {unidadesMedida.map((um) => (
+                      <option key={um.id} value={um.id}>{um.descripcion}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Marca
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.proveedor}
-                    onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
-                    placeholder="Ej: YPF, Shell, Bosch..."
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Stock Mínimo
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.stock_minimo}
-                    onChange={(e) => setFormData({ ...formData, stock_minimo: Number(e.target.value) || 0 })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Categoria *</label>
+                  <select
+                    className="prod-form-select"
+                    value={formData.categoria_id}
+                    onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {categorias.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                    ))}
+                  </select>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Alerta de Reposición
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.alerta_reposicion}
-                    onChange={(e) => setFormData({ ...formData, alerta_reposicion: Number(e.target.value) || 0 })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                <div className="prod-form-row">
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Tipo *</label>
+                    <select
+                      className="prod-form-select"
+                      value={formData.tipo}
+                      onChange={(e) => setFormData({ ...formData, tipo: e.target.value as 'REPUESTOS' | 'HERRAMIENTAS' })}
+                    >
+                      <option value="REPUESTOS">REPUESTOS</option>
+                      <option value="HERRAMIENTAS">HERRAMIENTAS</option>
+                    </select>
+                  </div>
+
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Marca</label>
+                    <input
+                      type="text"
+                      className="prod-form-input"
+                      value={formData.proveedor}
+                      onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                      placeholder="Ej: YPF, Shell, Bosch..."
+                    />
+                  </div>
+                </div>
+
+                <div className="prod-form-row">
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Stock Minimo</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="prod-form-input"
+                      value={formData.stock_minimo}
+                      onChange={(e) => setFormData({ ...formData, stock_minimo: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Alerta de Reposicion</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="prod-form-input"
+                      value={formData.alerta_reposicion}
+                      onChange={(e) => setFormData({ ...formData, alerta_reposicion: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+                </div>
+
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Observacion</label>
+                  <textarea
+                    className="prod-form-textarea"
+                    value={formData.observacion}
+                    onChange={(e) => setFormData({ ...formData, observacion: e.target.value })}
+                    rows={2}
                   />
                 </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Observación
-                </label>
-                <textarea
-                  value={formData.observacion}
-                  onChange={(e) => setFormData({ ...formData, observacion: e.target.value })}
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+            <div className="prod-modal-footer">
               <button
+                className="prod-btn-primary"
+                onClick={handleCreate}
+                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.categoria_id}
+              >
+                Crear Producto
+              </button>
+              <button
+                className="prod-btn-secondary"
                 onClick={() => {
                   setShowCreateModal(false)
                   resetForm()
                 }}
-                style={{
-                  padding: '10px 20px',
-                  background: 'var(--bg-tertiary)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
               >
                 Cancelar
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.categoria_id}
-                style={{
-                  padding: '10px 20px',
-                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.categoria_id ? 'var(--color-primary)' : 'var(--border-primary)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.categoria_id ? 'pointer' : 'not-allowed',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
-              >
-                Crear Producto
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Modal - Similar to Create Modal */}
+      {/* Edit Modal */}
       {showEditModal && selectedProducto && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}>
-          <div style={{
-            background: 'var(--card-bg)',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '90%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
-            overflow: 'auto',
-          }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Edit size={24} />
-              Editar Producto
-            </h2>
+        <div className="prod-modal-overlay">
+          <div className="prod-modal-content">
+            <div className="prod-modal-header">
+              <h2><Edit size={24} /> Editar Producto</h2>
+            </div>
 
-            <div style={{ display: 'grid', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Código *
-                </label>
-                <input
-                  type="text"
-                  value={formData.codigo}
-                  onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Nombre *
-                </label>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Descripción
-                </label>
-                <textarea
-                  value={formData.descripcion}
-                  onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Unidad de Medida *
-                </label>
-                <select
-                  value={formData.unidad_medida_id}
-                  onChange={(e) => setFormData({ ...formData, unidad_medida_id: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  <option value="">Seleccionar...</option>
-                  {unidadesMedida.map((um) => (
-                    <option key={um.id} value={um.id}>
-                      {um.descripcion}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Estado *
-                  </label>
-                  <select
-                    value={formData.estado_id}
-                    onChange={(e) => setFormData({ ...formData, estado_id: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {estados.map((est) => (
-                      <option key={est.id} value={est.id}>
-                        {est.descripcion}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Categoría *
-                  </label>
-                  <select
-                    value={formData.categoria_id}
-                    onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {categorias.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Tipo *
-                  </label>
-                  <select
-                    value={formData.tipo}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value as 'REPUESTOS' | 'HERRAMIENTAS' })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <option value="REPUESTOS">REPUESTOS</option>
-                    <option value="HERRAMIENTAS">HERRAMIENTAS</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Marca
-                  </label>
+            <div className="prod-modal-body">
+              <div className="prod-form-grid">
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Codigo *</label>
                   <input
                     type="text"
-                    value={formData.proveedor}
-                    onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
-                    placeholder="Ej: YPF, Shell, Bosch..."
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                    className="prod-form-input"
+                    value={formData.codigo}
+                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
                   />
                 </div>
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Stock Mínimo
-                  </label>
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Nombre *</label>
                   <input
-                    type="number"
-                    min="0"
-                    value={formData.stock_minimo}
-                    onChange={(e) => setFormData({ ...formData, stock_minimo: Number(e.target.value) || 0 })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                    type="text"
+                    className="prod-form-input"
+                    value={formData.nombre}
+                    onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                   />
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                    Alerta de Reposición
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.alerta_reposicion}
-                    onChange={(e) => setFormData({ ...formData, alerta_reposicion: Number(e.target.value) || 0 })}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--text-primary)',
-                    }}
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Descripcion</label>
+                  <textarea
+                    className="prod-form-textarea"
+                    value={formData.descripcion}
+                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                    rows={3}
                   />
                 </div>
-              </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: 600 }}>
-                  Observación
-                </label>
-                <textarea
-                  value={formData.observacion}
-                  onChange={(e) => setFormData({ ...formData, observacion: e.target.value })}
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Unidad de Medida *</label>
+                  <select
+                    className="prod-form-select"
+                    value={formData.unidad_medida_id}
+                    onChange={(e) => setFormData({ ...formData, unidad_medida_id: e.target.value })}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {unidadesMedida.map((um) => (
+                      <option key={um.id} value={um.id}>{um.descripcion}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="prod-form-row">
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Estado *</label>
+                    <select
+                      className="prod-form-select"
+                      value={formData.estado_id}
+                      onChange={(e) => setFormData({ ...formData, estado_id: e.target.value })}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {estados.map((est) => (
+                        <option key={est.id} value={est.id}>{est.descripcion}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Categoria *</label>
+                    <select
+                      className="prod-form-select"
+                      value={formData.categoria_id}
+                      onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {categorias.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="prod-form-row">
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Tipo *</label>
+                    <select
+                      className="prod-form-select"
+                      value={formData.tipo}
+                      onChange={(e) => setFormData({ ...formData, tipo: e.target.value as 'REPUESTOS' | 'HERRAMIENTAS' })}
+                    >
+                      <option value="REPUESTOS">REPUESTOS</option>
+                      <option value="HERRAMIENTAS">HERRAMIENTAS</option>
+                    </select>
+                  </div>
+
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Marca</label>
+                    <input
+                      type="text"
+                      className="prod-form-input"
+                      value={formData.proveedor}
+                      onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                      placeholder="Ej: YPF, Shell, Bosch..."
+                    />
+                  </div>
+                </div>
+
+                <div className="prod-form-row">
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Stock Minimo</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="prod-form-input"
+                      value={formData.stock_minimo}
+                      onChange={(e) => setFormData({ ...formData, stock_minimo: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="prod-form-group">
+                    <label className="prod-form-label">Alerta de Reposicion</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="prod-form-input"
+                      value={formData.alerta_reposicion}
+                      onChange={(e) => setFormData({ ...formData, alerta_reposicion: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+                </div>
+
+                <div className="prod-form-group">
+                  <label className="prod-form-label">Observacion</label>
+                  <textarea
+                    className="prod-form-textarea"
+                    value={formData.observacion}
+                    onChange={(e) => setFormData({ ...formData, observacion: e.target.value })}
+                    rows={2}
+                  />
+                </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+            <div className="prod-modal-footer">
               <button
+                className="prod-btn-success"
+                onClick={handleEdit}
+                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id || !formData.categoria_id}
+              >
+                Actualizar Producto
+              </button>
+              <button
+                className="prod-btn-secondary"
                 onClick={() => {
                   setShowEditModal(false)
                   resetForm()
                 }}
-                style={{
-                  padding: '10px 20px',
-                  background: 'var(--bg-tertiary)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
               >
                 Cancelar
-              </button>
-              <button
-                onClick={handleEdit}
-                disabled={!formData.codigo || !formData.nombre || !formData.unidad_medida_id || !formData.estado_id || !formData.categoria_id}
-                style={{
-                  padding: '10px 20px',
-                  background: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id && formData.categoria_id ? 'var(--color-success)' : 'var(--border-primary)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: formData.codigo && formData.nombre && formData.unidad_medida_id && formData.estado_id && formData.categoria_id ? 'pointer' : 'not-allowed',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
-              >
-                Actualizar Producto
               </button>
             </div>
           </div>
@@ -1531,367 +1240,161 @@ export function ProductosModule() {
 
       {/* View Modal */}
       {showViewModal && selectedProducto && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}>
-          <div style={{
-            background: 'var(--card-bg)',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '90%',
-            maxWidth: '700px',
-            maxHeight: '90vh',
-            overflow: 'auto',
-          }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Info size={24} />
-              Detalles del Producto
-            </h2>
+        <div className="prod-modal-overlay">
+          <div className="prod-modal-content wide">
+            <div className="prod-modal-header">
+              <h2><Info size={24} /> Detalles del Producto</h2>
+            </div>
 
-            <div style={{ display: 'grid', gap: '24px' }}>
-              {/* Información General */}
-              <div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  paddingBottom: '8px',
-                  borderBottom: '2px solid var(--color-primary)'
-                }}>
-                  <Package size={20} style={{ color: 'var(--color-primary)' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
-                    Información General
-                  </h3>
-                </div>
+            <div className="prod-modal-body">
+              <div className="prod-view-sections">
+                {/* Informacion General */}
+                <div className="prod-view-section">
+                  <div className="prod-section-header">
+                    <Package size={20} />
+                    <h3>Informacion General</h3>
+                  </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Código</span>
-                    <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)' }}>{selectedProducto.codigo}</span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Nombre</span>
-                    <span style={{ fontSize: '16px', fontWeight: 600 }}>{selectedProducto.nombre}</span>
-                  </div>
-                  {selectedProducto.descripcion && (
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Descripción</span>
-                      <span style={{ fontSize: '14px' }}>{selectedProducto.descripcion}</span>
+                  <div className="prod-info-grid">
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Codigo</span>
+                      <span className="prod-info-value large">{selectedProducto.codigo}</span>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Tipo de Producto */}
-              <div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  paddingBottom: '8px',
-                  borderBottom: '2px solid var(--color-primary)'
-                }}>
-                  <Tag size={20} style={{ color: 'var(--color-primary)' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
-                    Tipo de Producto
-                  </h3>
-                </div>
-
-                <div style={{ display: 'grid', gap: '16px' }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Clasificación</span>
-                    {selectedProducto.tipo === 'HERRAMIENTAS' ? (
-                      <span
-                        style={{
-                          background: '#DBEAFE',
-                          color: '#1E40AF',
-                          padding: '6px 16px',
-                          borderRadius: '12px',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          display: 'inline-block'
-                        }}
-                      >
-                        HERRAMIENTAS (Retornable)
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          background: '#FEF3C7',
-                          color: '#92400E',
-                          padding: '6px 16px',
-                          borderRadius: '12px',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          display: 'inline-block'
-                        }}
-                      >
-                        REPUESTOS (Consumible)
-                      </span>
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Nombre</span>
+                      <span className="prod-info-value">{selectedProducto.nombre}</span>
+                    </div>
+                    {selectedProducto.descripcion && (
+                      <div className="prod-info-item full">
+                        <span className="prod-info-label">Descripcion</span>
+                        <span className="prod-info-value">{selectedProducto.descripcion}</span>
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* Detalles Adicionales */}
-              <div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  paddingBottom: '8px',
-                  borderBottom: '2px solid var(--color-primary)'
-                }}>
-                  <Info size={20} style={{ color: 'var(--color-primary)' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
-                    Detalles Adicionales
-                  </h3>
+                {/* Tipo de Producto */}
+                <div className="prod-view-section">
+                  <div className="prod-section-header">
+                    <Tag size={20} />
+                    <h3>Tipo de Producto</h3>
+                  </div>
+
+                  <div className="prod-info-item">
+                    <span className="prod-info-label">Clasificacion</span>
+                    <span className={selectedProducto.tipo === 'HERRAMIENTAS' ? 'dt-badge dt-badge-blue' : 'dt-badge dt-badge-yellow'}>
+                      {selectedProducto.tipo === 'HERRAMIENTAS' ? 'HERRAMIENTAS (Retornable)' : 'REPUESTOS (Consumible)'}
+                    </span>
+                  </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Estado</span>
-                    <span style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {selectedProducto.productos_estados?.descripcion || 'N/A'}
-                    </span>
+                {/* Detalles Adicionales */}
+                <div className="prod-view-section">
+                  <div className="prod-section-header">
+                    <Info size={20} />
+                    <h3>Detalles Adicionales</h3>
                   </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Unidad de Medida</span>
-                    <span style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {selectedProducto.unidades_medida?.descripcion || 'N/A'}
-                    </span>
-                  </div>
-                  {selectedProducto.categorias && (
-                    <div>
-                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Categoría</span>
-                      <span
-                        style={{
-                          background: '#DBEAFE',
-                          color: '#1E40AF',
-                          padding: '4px 12px',
-                          borderRadius: '12px',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          display: 'inline-block'
-                        }}
-                      >
-                        {selectedProducto.categorias.nombre}
+
+                  <div className="prod-info-grid">
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Estado</span>
+                      <span className="prod-info-value">{selectedProducto.productos_estados?.descripcion || 'N/A'}</span>
+                    </div>
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Unidad de Medida</span>
+                      <span className="prod-info-value">{selectedProducto.unidades_medida?.descripcion || 'N/A'}</span>
+                    </div>
+                    {selectedProducto.categorias && (
+                      <div className="prod-info-item">
+                        <span className="prod-info-label">Categoria</span>
+                        <span className="dt-badge dt-badge-blue">{selectedProducto.categorias.nombre}</span>
+                      </div>
+                    )}
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Tipo</span>
+                      <span className={selectedProducto.tipo === 'HERRAMIENTAS' ? 'dt-badge dt-badge-blue' : 'dt-badge dt-badge-yellow'}>
+                        {selectedProducto.tipo}
                       </span>
                     </div>
-                  )}
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Tipo</span>
-                    <span
-                      style={{
-                        background: selectedProducto.tipo === 'HERRAMIENTAS' ? '#DBEAFE' : '#FEF3C7',
-                        color: selectedProducto.tipo === 'HERRAMIENTAS' ? '#1E40AF' : '#92400E',
-                        padding: '4px 12px',
-                        borderRadius: '12px',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        display: 'inline-block'
-                      }}
-                    >
-                      {selectedProducto.tipo}
-                    </span>
+                    {selectedProducto.proveedor && (
+                      <div className="prod-info-item">
+                        <span className="prod-info-label">Marca</span>
+                        <span className="prod-info-value">{selectedProducto.proveedor}</span>
+                      </div>
+                    )}
+                    {selectedProducto.observacion && (
+                      <div className="prod-info-item full">
+                        <span className="prod-info-label">Observacion</span>
+                        <span className="prod-info-value">{selectedProducto.observacion}</span>
+                      </div>
+                    )}
                   </div>
-                  {selectedProducto.proveedor && (
-                    <div>
-                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Marca</span>
-                      <span style={{ fontSize: '14px' }}>{selectedProducto.proveedor}</span>
-                    </div>
-                  )}
-                  {selectedProducto.observacion && (
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Observación</span>
-                      <span style={{ fontSize: '14px' }}>{selectedProducto.observacion}</span>
-                    </div>
-                  )}
-                </div>
 
-                {/* Stock por Proveedor */}
-                <div style={{ gridColumn: '1 / -1', marginTop: '16px' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-                    Stock por Proveedor
-                  </span>
-                  {loadingStock ? (
-                    <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                      Cargando stock...
-                    </div>
-                  ) : stockPorProveedor.length === 0 ? (
-                    <div style={{
-                      background: 'var(--bg-tertiary)',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      textAlign: 'center',
-                      color: 'var(--text-secondary)',
-                      fontSize: '13px'
-                    }}>
-                      No hay stock registrado para este producto
-                    </div>
-                  ) : (
-                    <div style={{
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '8px',
-                      overflow: 'hidden'
-                    }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  {/* Stock por Proveedor */}
+                  <div style={{ marginTop: '16px' }}>
+                    <span className="prod-info-label" style={{ marginBottom: '8px', display: 'block' }}>Stock por Proveedor</span>
+                    {loadingStock ? (
+                      <div className="prod-stock-empty">Cargando stock...</div>
+                    ) : stockPorProveedor.length === 0 ? (
+                      <div className="prod-stock-empty">No hay stock registrado para este producto</div>
+                    ) : (
+                      <table className="prod-stock-table">
                         <thead>
-                          <tr style={{ background: 'var(--table-header-bg)', borderBottom: '1px solid var(--border-primary)' }}>
-                            <th style={{
-                              padding: '10px 12px',
-                              textAlign: 'left',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              color: 'var(--text-secondary)',
-                              textTransform: 'uppercase'
-                            }}>
-                              Proveedor
-                            </th>
-                            <th style={{
-                              padding: '10px 12px',
-                              textAlign: 'center',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              color: 'var(--text-secondary)',
-                              textTransform: 'uppercase'
-                            }}>
-                              Estado
-                            </th>
-                            <th style={{
-                              padding: '10px 12px',
-                              textAlign: 'right',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              color: 'var(--text-secondary)',
-                              textTransform: 'uppercase'
-                            }}>
-                              Cantidad
-                            </th>
+                          <tr>
+                            <th>Proveedor</th>
+                            <th style={{ textAlign: 'center' }}>Estado</th>
+                            <th style={{ textAlign: 'right' }}>Cantidad</th>
                           </tr>
                         </thead>
                         <tbody>
                           {stockPorProveedor.map((stock, idx) => (
-                            <tr
-                              key={`${stock.proveedor_id}-${stock.estado}-${idx}`}
-                              style={{
-                                borderBottom: idx < stockPorProveedor.length - 1 ? '1px solid var(--border-primary)' : 'none',
-                                background: 'var(--card-bg)'
-                              }}
-                            >
-                              <td style={{ padding: '10px 12px', fontSize: '13px', color: 'var(--text-primary)' }}>
-                                {stock.proveedor_nombre}
-                              </td>
-                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                <span style={{
-                                  background: stock.estado === 'disponible' ? 'var(--badge-green-bg)' : '#FEF3C7',
-                                  color: stock.estado === 'disponible' ? '#065F46' : '#92400E',
-                                  padding: '3px 10px',
-                                  borderRadius: '10px',
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase'
-                                }}>
+                            <tr key={`${stock.proveedor_id}-${stock.estado}-${idx}`}>
+                              <td>{stock.proveedor_nombre}</td>
+                              <td style={{ textAlign: 'center' }}>
+                                <span className={stock.estado === 'disponible' ? 'dt-badge dt-badge-green' : 'dt-badge dt-badge-yellow'}>
                                   {stock.estado === 'disponible' ? 'Disponible' : 'En Uso'}
                                 </span>
                               </td>
-                              <td style={{
-                                padding: '10px 12px',
-                                textAlign: 'right',
-                                fontSize: '14px',
-                                fontWeight: 600,
-                                color: 'var(--text-primary)'
-                              }}>
+                              <td style={{ textAlign: 'right', fontWeight: 600 }}>
                                 {stock.cantidad} {selectedProducto.unidades_medida?.descripcion || ''}
                               </td>
                             </tr>
                           ))}
-                          <tr style={{ background: 'var(--table-header-bg)', borderTop: '2px solid var(--color-primary)' }}>
-                            <td colSpan={2} style={{
-                              padding: '10px 12px',
-                              fontSize: '13px',
-                              fontWeight: 700,
-                              color: 'var(--color-primary)',
-                              textAlign: 'right'
-                            }}>
-                              TOTAL:
-                            </td>
-                            <td style={{
-                              padding: '10px 12px',
-                              textAlign: 'right',
-                              fontSize: '15px',
-                              fontWeight: 700,
-                              color: 'var(--color-primary)'
-                            }}>
+                          <tr style={{ background: 'var(--bg-secondary)' }}>
+                            <td colSpan={2} style={{ textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>TOTAL:</td>
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>
                               {stockPorProveedor.reduce((sum, stock) => sum + stock.cantidad, 0)} {selectedProducto.unidades_medida?.descripcion || ''}
                             </td>
                           </tr>
                         </tbody>
                       </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Metadatos */}
-              <div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  paddingBottom: '8px',
-                  borderBottom: '2px solid var(--color-primary)'
-                }}>
-                  <Calendar size={20} style={{ color: 'var(--color-primary)' }} />
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', margin: 0 }}>
-                    Información de Registro
-                  </h3>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Creado</span>
-                    <span style={{ fontSize: '14px' }}>
-                      {new Date(selectedProducto.created_at).toLocaleString('es-CL')}
-                    </span>
+                    )}
                   </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Actualizado</span>
-                    <span style={{ fontSize: '14px' }}>
-                      {new Date(selectedProducto.updated_at).toLocaleString('es-CL')}
-                    </span>
+                </div>
+
+                {/* Metadatos */}
+                <div className="prod-view-section">
+                  <div className="prod-section-header">
+                    <Calendar size={20} />
+                    <h3>Informacion de Registro</h3>
+                  </div>
+
+                  <div className="prod-info-grid">
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Creado</span>
+                      <span className="prod-info-value">{new Date(selectedProducto.created_at).toLocaleString('es-CL')}</span>
+                    </div>
+                    <div className="prod-info-item">
+                      <span className="prod-info-label">Actualizado</span>
+                      <span className="prod-info-value">{new Date(selectedProducto.updated_at).toLocaleString('es-CL')}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowViewModal(false)}
-                style={{
-                  padding: '10px 20px',
-                  background: '#3B82F6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
-              >
+            <div className="prod-modal-footer">
+              <button className="prod-btn-primary" onClick={() => setShowViewModal(false)}>
                 Cerrar
               </button>
             </div>

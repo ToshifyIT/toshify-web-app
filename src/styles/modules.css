@@ -139,25 +139,30 @@
   flex-direction: column;
 }
 
+/* Modal Header - Título centrado, sin borde */
 .modal-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-primary);
+  padding: 20px 20px 0;
   background: var(--modal-bg);
   flex-shrink: 0;
   border-radius: 12px 12px 0 0;
+  position: relative;
 }
 
 .modal-header h2 {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+  text-align: center;
 }
 
 .modal-close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
   width: 32px;
   height: 32px;
   display: flex;
@@ -185,8 +190,9 @@
 .modal-title {
   margin: 0 0 16px 0;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
+  text-align: center;
 }
 
 .modal-title-danger {
@@ -209,33 +215,85 @@
 }
 
 .form-group {
-  margin-bottom: 10px;
+  margin-bottom: 16px;
+}
+
+/* Labels dentro de form-group */
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Inputs dentro de form-group */
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.15s;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #DC2626;
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.form-group input:disabled,
+.form-group select:disabled {
+  background: var(--bg-secondary);
+  cursor: not-allowed;
+  color: var(--text-tertiary);
+}
+
+.form-group textarea {
+  min-height: 80px;
+  resize: vertical;
 }
 
 .form-label {
   display: block;
-  margin-bottom: 4px;
-  font-weight: 600;
+  margin-bottom: 6px;
+  font-weight: 500;
   font-size: 12px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .form-input {
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--input-border);
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: 14px;
   font-family: inherit;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: all 0.15s;
   background: var(--input-bg);
   color: var(--text-primary);
+  box-sizing: border-box;
 }
 
 .form-input:focus {
   outline: none;
-  border-color: var(--border-focus);
-  box-shadow: var(--input-focus-shadow);
+  border-color: #DC2626;
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
 .form-input:disabled {
@@ -252,7 +310,12 @@
 .form-checkbox {
   margin-right: 6px;
   cursor: pointer;
-  accent-color: var(--color-primary);
+  accent-color: #DC2626;
+}
+
+/* Checkboxes globales con accent rojo */
+input[type="checkbox"] {
+  accent-color: #DC2626;
 }
 
 .form-checkbox-label {
@@ -326,16 +389,45 @@
   line-height: 1.5;
 }
 
-/* Modal Footer */
+/* Modal Footer - Botones centrados, sin borde */
 .modal-footer {
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  padding: 16px 20px;
-  border-top: 1px solid var(--border-primary);
+  gap: 12px;
+  justify-content: center;
+  padding: 20px;
   background: var(--modal-bg);
   flex-shrink: 0;
   border-radius: 0 0 12px 12px;
+}
+
+/* Botón primario ROJO */
+.modal-footer .btn-primary {
+  background: #DC2626 !important;
+  border: none !important;
+  color: white !important;
+  padding: 10px 20px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+.modal-footer .btn-primary:hover:not(:disabled) {
+  background: #B91C1C !important;
+}
+
+/* Botón secundario GRIS CLARO */
+.modal-footer .btn-secondary {
+  background: #F3F4F6 !important;
+  border: 1px solid #E5E7EB !important;
+  color: #374151 !important;
+  padding: 10px 20px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+.modal-footer .btn-secondary:hover:not(:disabled) {
+  background: #E5E7EB !important;
 }
 
 /* Custom Badges */

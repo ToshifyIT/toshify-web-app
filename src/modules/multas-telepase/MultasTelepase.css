@@ -189,18 +189,22 @@
 .multas-modal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-primary);
+  justify-content: center;
+  padding: 20px 20px 0;
+  position: relative;
 }
 
 .multas-modal-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
+  text-align: center;
 }
 
 .multas-modal-close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
   background: none;
   border: none;
   padding: 4px;
@@ -220,10 +224,9 @@
 
 .multas-modal-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--border-primary);
+  padding: 20px;
 }
 
 .multas-btn-primary {
@@ -247,15 +250,15 @@
   font-size: 14px;
   font-weight: 500;
   border-radius: 8px;
-  border: 1px solid var(--border-primary);
+  border: 1px solid #E5E7EB;
   cursor: pointer;
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  background: #F3F4F6;
+  color: #374151;
   transition: background 0.15s;
 }
 
 .multas-btn-secondary:hover {
-  background: var(--bg-secondary);
+  background: #E5E7EB;
 }
 
 /* Detail table for view modals */
