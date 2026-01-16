@@ -437,44 +437,58 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   // =====================================================
 
   // Funciones para menús - O(1) con Map (case-insensitive)
+  // Admin siempre tiene todos los permisos
   const canViewMenu = useCallback((menuName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
     return menusByName.get(menuName.toLowerCase())?.permissions.can_view ?? false
-  }, [menusByName])
+  }, [menusByName, userPermissions?.role?.name])
 
   const canCreateInMenu = useCallback((menuName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
     return menusByName.get(menuName.toLowerCase())?.permissions.can_create ?? false
-  }, [menusByName])
+  }, [menusByName, userPermissions?.role?.name])
 
   const canEditInMenu = useCallback((menuName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
     return menusByName.get(menuName.toLowerCase())?.permissions.can_edit ?? false
-  }, [menusByName])
+  }, [menusByName, userPermissions?.role?.name])
 
   const canDeleteInMenu = useCallback((menuName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
     return menusByName.get(menuName.toLowerCase())?.permissions.can_delete ?? false
-  }, [menusByName])
+  }, [menusByName, userPermissions?.role?.name])
 
   // Funciones para submenús - O(1) con Map (case-insensitive)
+  // Admin siempre tiene todos los permisos
   const canViewSubmenu = useCallback((submenuName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
     return submenusByName.get(submenuName.toLowerCase())?.permissions.can_view ?? false
-  }, [submenusByName])
+  }, [submenusByName, userPermissions?.role?.name])
 
   const canCreateInSubmenu = useCallback((submenuName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
     return submenusByName.get(submenuName.toLowerCase())?.permissions.can_create ?? false
-  }, [submenusByName])
+  }, [submenusByName, userPermissions?.role?.name])
 
   const canEditInSubmenu = useCallback((submenuName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
     return submenusByName.get(submenuName.toLowerCase())?.permissions.can_edit ?? false
-  }, [submenusByName])
+  }, [submenusByName, userPermissions?.role?.name])
 
   const canDeleteInSubmenu = useCallback((submenuName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
     return submenusByName.get(submenuName.toLowerCase())?.permissions.can_delete ?? false
-  }, [submenusByName])
+  }, [submenusByName, userPermissions?.role?.name])
 
   // Función general que busca en menús y submenús - O(1) con Maps (case-insensitive)
+  // Admin siempre tiene todos los permisos
   const canAccess = useCallback((
     menuOrSubmenuName: string,
     action: 'view' | 'create' | 'edit' | 'delete' = 'view'
   ): boolean => {
+    // Admin tiene acceso total
+    if (userPermissions?.role?.name === 'admin') return true
+    
     const permKey = `can_${action}` as const
     const nameLower = menuOrSubmenuName.toLowerCase()
 
@@ -487,7 +501,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     if (submenu) return submenu.permissions[permKey] ?? false
 
     return false
-  }, [menusByName, submenusByName])
+  }, [menusByName, submenusByName, userPermissions?.role?.name])
 
   const isAdmin = useCallback((): boolean => {
     return userPermissions?.role?.name === 'admin'
