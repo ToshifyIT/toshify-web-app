@@ -371,6 +371,76 @@ export function VehicleManagement() {
 
     setSaving(true)
     try {
+      // Estados que requieren finalizar asignaciones activas
+      const estadosFinalizanAsignacion = [
+        'TALLER_CHAPA_PINTURA',
+        'CORPORATIVO', 
+        'PKG_OFF_BASE',
+        'PKG_OFF_FRANCIA',
+        'DESTRUCCION_TOTAL'
+      ]
+
+      // Verificar si el nuevo estado requiere finalizar asignaciones
+      let nuevoEstadoCodigo = ''
+      if (formData.estado_id) {
+        const estadoSeleccionado = vehiculosEstados.find((e: VehiculoEstado) => e.id === formData.estado_id)
+        nuevoEstadoCodigo = estadoSeleccionado?.codigo || ''
+      }
+
+      const debeFinalizarAsignaciones = estadosFinalizanAsignacion.includes(nuevoEstadoCodigo)
+
+      // Si cambia a un estado que finaliza asignaciones, verificar si hay asignaciones activas
+      if (debeFinalizarAsignaciones) {
+        const { data: asignacionesActivas } = await (supabase as any)
+          .from('asignaciones')
+          .select('id, codigo')
+          .eq('vehiculo_id', selectedVehiculo.id)
+          .in('estado', ['activa', 'programado'])
+
+        if (asignacionesActivas && asignacionesActivas.length > 0) {
+          const result = await Swal.fire({
+            icon: 'warning',
+            title: 'Asignaciones activas',
+            html: `Este vehículo tiene <b>${asignacionesActivas.length}</b> asignación(es) activa(s) o programada(s).<br><br>Al cambiar el estado a <b>${nuevoEstadoCodigo.replace(/_/g, ' ')}</b>, se finalizarán automáticamente.<br><br>¿Deseas continuar?`,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, continuar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#E63946'
+          })
+
+          if (!result.isConfirmed) {
+            setSaving(false)
+            return
+          }
+
+          // Finalizar asignaciones activas
+          const ahora = new Date().toISOString()
+          
+          // 1. Finalizar conductores de las asignaciones
+          for (const asig of asignacionesActivas) {
+            await (supabase as any)
+              .from('asignaciones_conductores')
+              .update({ 
+                estado: 'completado', 
+                fecha_fin: ahora 
+              })
+              .eq('asignacion_id', asig.id)
+              .in('estado', ['asignado', 'activo'])
+          }
+
+          // 2. Finalizar las asignaciones
+          await (supabase as any)
+            .from('asignaciones')
+            .update({ 
+              estado: 'finalizada', 
+              fecha_fin: ahora,
+              notas: `[AUTO-CERRADA] Vehículo cambió a estado: ${nuevoEstadoCodigo}`,
+              updated_by: profile?.full_name || 'Sistema'
+            })
+            .in('id', asignacionesActivas.map((a: any) => a.id))
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('vehiculos')
         // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
@@ -406,7 +476,7 @@ export function VehicleManagement() {
       Swal.fire({
         icon: 'success',
         title: '¡Éxito!',
-        text: 'Vehículo actualizado exitosamente',
+        text: debeFinalizarAsignaciones ? 'Vehículo actualizado y asignaciones finalizadas' : 'Vehículo actualizado exitosamente',
         confirmButtonColor: '#E63946',
         timer: 2000
       })
