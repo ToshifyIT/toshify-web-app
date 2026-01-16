@@ -651,10 +651,12 @@ input[type="date"].asig-status-select {
 }
 
 .asig-modal-title {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
+  text-align: center;
+  width: 100%;
 }
 
 /* Lista de conductores en modal de confirmación */
@@ -1868,19 +1870,21 @@ input[type="date"].asig-status-select {
 .form-group textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   font-size: 14px;
-  background: var(--bg-primary);
+  background: var(--input-bg);
   color: var(--text-primary);
+  transition: all 0.15s;
 }
 
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: var(--primary-color, #F59E0B);
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+  border-color: #DC2626;
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
 .form-row {

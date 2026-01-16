@@ -83,9 +83,9 @@
   --table-row-hover: #FAFAFA;
   --table-border: #F3F4F6;
 
-  --input-bg: #FFFFFF;
+  --input-bg: #F5F5F5;
   --input-border: #E5E7EB;
-  --input-focus-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+  --input-focus-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 
   --modal-bg: #FFFFFF;
   --card-bg: #FFFFFF;
@@ -109,6 +109,206 @@
   --badge-indigo-text: #3730A3;
   --badge-orange-bg: #FED7AA;
   --badge-orange-text: #9A3412;
+}
+
+/* ==========================================
+   SWEETALERT2 - ESTILOS GLOBALES
+   Consistentes con los modales del sistema
+   ========================================== */
+
+/* Popup container */
+.swal2-popup {
+  border-radius: 12px !important;
+  padding: 0 !important;
+  background: var(--card-bg) !important;
+  max-width: 420px !important;
+}
+
+/* Icono */
+.swal2-icon {
+  margin: 24px auto 16px !important;
+  border-width: 3px !important;
+}
+
+.swal2-icon.swal2-warning {
+  border-color: #F59E0B !important;
+  color: #F59E0B !important;
+}
+
+.swal2-icon.swal2-error {
+  border-color: #DC2626 !important;
+  color: #DC2626 !important;
+}
+
+.swal2-icon.swal2-success {
+  border-color: #10B981 !important;
+  color: #10B981 !important;
+}
+
+.swal2-icon.swal2-success [class^='swal2-success-line'] {
+  background-color: #10B981 !important;
+}
+
+.swal2-icon.swal2-success .swal2-success-ring {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.swal2-icon.swal2-info {
+  border-color: #3B82F6 !important;
+  color: #3B82F6 !important;
+}
+
+.swal2-icon.swal2-question {
+  border-color: #6B7280 !important;
+  color: #6B7280 !important;
+}
+
+/* Titulo centrado */
+.swal2-title {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: var(--text-primary) !important;
+  padding: 0 24px 8px !important;
+  margin: 0 !important;
+  border: none !important;
+  text-align: center !important;
+}
+
+/* Contenedor del HTML */
+.swal2-html-container {
+  padding: 0 24px 16px !important;
+  margin: 0 !important;
+  text-align: center !important;
+  font-size: 14px !important;
+  color: var(--text-secondary) !important;
+  line-height: 1.5 !important;
+}
+
+/* Botones - centrados, primario izquierda, cancelar derecha */
+.swal2-actions {
+  padding: 0 24px 24px !important;
+  margin: 0 !important;
+  gap: 12px !important;
+  justify-content: center !important;
+  flex-direction: row !important;
+}
+
+/* Boton confirmar (Guardar/Si) - ROJO - a la izquierda */
+.swal2-confirm {
+  background: #DC2626 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 10px 24px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  order: 1 !important;
+  min-width: 100px !important;
+  transition: background 0.15s !important;
+}
+
+.swal2-confirm:hover {
+  background: #B91C1C !important;
+}
+
+.swal2-confirm:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2) !important;
+}
+
+/* Boton cancelar - GRIS CLARO - a la derecha */
+.swal2-cancel {
+  background: #F3F4F6 !important;
+  color: #374151 !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 8px !important;
+  padding: 10px 24px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  order: 2 !important;
+  min-width: 100px !important;
+  transition: background 0.15s !important;
+}
+
+.swal2-cancel:hover {
+  background: #E5E7EB !important;
+}
+
+.swal2-cancel:focus {
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Boton deny (tercer boton) - si se usa */
+.swal2-deny {
+  background: #F59E0B !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 10px 24px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  min-width: 100px !important;
+}
+
+.swal2-deny:hover {
+  background: #D97706 !important;
+}
+
+/* Close button (X) */
+.swal2-close {
+  color: var(--text-tertiary) !important;
+  font-size: 28px !important;
+  font-weight: 300 !important;
+  top: 12px !important;
+  right: 12px !important;
+}
+
+.swal2-close:hover {
+  color: var(--text-primary) !important;
+}
+
+/* Input en SweetAlert */
+.swal2-input,
+.swal2-textarea,
+.swal2-select {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--input-border) !important;
+  border-radius: 8px !important;
+  color: var(--text-primary) !important;
+  font-size: 14px !important;
+  padding: 10px 12px !important;
+  margin: 8px 24px !important;
+  width: calc(100% - 48px) !important;
+  box-sizing: border-box !important;
+}
+
+.swal2-input:focus,
+.swal2-textarea:focus,
+.swal2-select:focus {
+  border-color: #DC2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
+  outline: none !important;
+}
+
+/* Validation message */
+.swal2-validation-message {
+  background: var(--badge-red-bg) !important;
+  color: var(--badge-red-text) !important;
+  margin: 8px 24px !important;
+  padding: 10px !important;
+  border-radius: 8px !important;
+}
+
+/* Timer progress bar */
+.swal2-timer-progress-bar {
+  background: #DC2626 !important;
+}
+
+/* Loading state */
+.swal2-loading .swal2-confirm {
+  background: #DC2626 !important;
 }
 
 /* ==========================================
@@ -219,6 +419,45 @@
   --badge-orange-text: #FED7AA;
 }
 
+/* SweetAlert2 Dark Mode */
+[data-theme="dark"] .swal2-popup {
+  background: var(--card-bg) !important;
+}
+
+[data-theme="dark"] .swal2-title {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-html-container {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .swal2-cancel {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-primary) !important;
+}
+
+[data-theme="dark"] .swal2-cancel:hover {
+  background: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .swal2-input,
+[data-theme="dark"] .swal2-textarea,
+[data-theme="dark"] .swal2-select {
+  background: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .swal2-close {
+  color: var(--text-tertiary) !important;
+}
+
+[data-theme="dark"] .swal2-close:hover {
+  color: var(--text-primary) !important;
+}
+
 /* ==========================================
    TRANSITIONS
    ========================================== */
@@ -315,10 +554,9 @@ body,
   color: var(--text-primary);
 }
 
-/* SweetAlert2 Dark Mode - Prioridad alta */
+/* SweetAlert2 Dark Mode */
 [data-theme="dark"] .swal2-popup {
   background-color: var(--card-bg) !important;
-  color: var(--text-primary) !important;
 }
 
 [data-theme="dark"] .swal2-title {
@@ -329,26 +567,19 @@ body,
   color: var(--text-secondary) !important;
 }
 
-[data-theme="dark"] .swal2-html-container p,
-[data-theme="dark"] .swal2-html-container strong {
+[data-theme="dark"] .swal2-cancel {
+  background: var(--bg-tertiary) !important;
   color: var(--text-primary) !important;
+  border-color: var(--border-primary) !important;
 }
 
-[data-theme="dark"] .swal2-input,
-[data-theme="dark"] .swal2-textarea,
-[data-theme="dark"] .swal2-select {
-  background-color: var(--input-bg) !important;
-  border-color: var(--input-border) !important;
-  color: var(--text-primary) !important;
+[data-theme="dark"] .swal2-cancel:hover {
+  background: var(--bg-secondary) !important;
 }
 
 [data-theme="dark"] .swal2-validation-message {
   background-color: var(--badge-red-bg) !important;
   color: var(--badge-red-text) !important;
-}
-
-[data-theme="dark"] .swal2-input-label {
-  color: var(--text-secondary) !important;
 }
 
 /* Modales */

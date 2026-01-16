@@ -554,20 +554,24 @@
 
 .prog-modal-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-primary);
+  padding: 20px 20px 0;
+  position: relative;
 }
 
 .prog-modal-header h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
+  text-align: center;
 }
 
 .prog-modal-header button {
+  position: absolute;
+  right: 16px;
+  top: 16px;
   background: none;
   border: none;
   padding: 4px;
@@ -660,11 +664,10 @@
 
 .prog-modal-footer {
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--border-primary);
-  background: var(--bg-secondary);
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  background: var(--bg-primary);
 }
 
 /* =====================================================
@@ -865,10 +868,10 @@
 
 .prog-btn-secondary {
   padding: 10px 20px;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  background: #F3F4F6;
+  color: #374151;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -876,8 +879,7 @@
 }
 
 .prog-btn-secondary:hover:not(:disabled) {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  background: #E5E7EB;
 }
 
 /* =====================================================

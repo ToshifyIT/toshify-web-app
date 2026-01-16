@@ -64,15 +64,17 @@
 
 .um-modal-title {
   margin: 0 0 8px 0;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--text-primary);
+  text-align: center;
 }
 
 .um-modal-subtitle {
   color: var(--text-secondary);
   font-size: 14px;
   margin: 0 0 24px 0;
+  text-align: center;
 }
 
 /* Form */
@@ -82,21 +84,23 @@
 
 .um-form-label {
   display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-primary);
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .um-form-input {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--input-border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
   box-sizing: border-box;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: all 0.15s;
   background: var(--input-bg);
   color: var(--text-primary);
 }
@@ -107,8 +111,9 @@
 
 .um-form-input:focus {
   outline: none;
-  border-color: var(--border-focus);
-  box-shadow: var(--input-focus-shadow);
+  border-color: #DC2626;
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
 .um-form-input:disabled {
@@ -120,7 +125,7 @@
 .um-modal-actions {
   display: flex;
   gap: 12px;
-  justify-content: flex-end;
+  justify-content: center;
   margin-top: 24px;
 }
 
