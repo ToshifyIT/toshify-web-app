@@ -431,13 +431,27 @@ export function AsignacionesModule() {
     // Procesar todas las asignaciones filtradas
     const asignacionesProcesadas = filteredAsignaciones.map((asignacion): ExpandedAsignacion => {
       const conductores = asignacion.asignaciones_conductores || []
-      // Filtrar solo conductores activos (no completados/finalizados)
-      const conductoresActivos = conductores.filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado')
+      const esAsignacionFinalizada = asignacion.estado === 'finalizada' || asignacion.estado === 'completada'
+      
+      // Para asignaciones ACTIVAS: filtrar solo conductores activos (no completados/finalizados)
+      // Para asignaciones FINALIZADAS: mostrar los últimos conductores (histórico)
+      const conductoresParaMostrar = esAsignacionFinalizada
+        ? conductores // Mostrar todos los conductores (histórico)
+        : conductores.filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado')
 
       // Para modalidad TURNO: extraer conductor diurno y nocturno
       if (asignacion.horario === 'TURNO') {
-        const diurno = conductoresActivos.find(ac => ac.horario === 'diurno')
-        const nocturno = conductoresActivos.find(ac => ac.horario === 'nocturno')
+        // Para asignaciones finalizadas, buscar el último conductor de cada turno (el más reciente)
+        const conductoresDiurno = conductores.filter(ac => ac.horario === 'diurno')
+        const conductoresNocturno = conductores.filter(ac => ac.horario === 'nocturno')
+        
+        const diurno = esAsignacionFinalizada
+          ? conductoresDiurno[conductoresDiurno.length - 1] // El último agregado
+          : conductoresParaMostrar.find(ac => ac.horario === 'diurno')
+        
+        const nocturno = esAsignacionFinalizada
+          ? conductoresNocturno[conductoresNocturno.length - 1] // El último agregado
+          : conductoresParaMostrar.find(ac => ac.horario === 'nocturno')
 
         return {
           ...asignacion,
@@ -457,8 +471,10 @@ export function AsignacionesModule() {
         }
       }
 
-      // Para modalidad A CARGO: solo un conductor activo
-      const primerConductor = conductoresActivos[0]
+      // Para modalidad A CARGO: mostrar conductor
+      const primerConductor = esAsignacionFinalizada
+        ? conductores[conductores.length - 1] // El último agregado (histórico)
+        : conductoresParaMostrar[0]
       return {
         ...asignacion,
         conductoresTurno: null,
@@ -642,6 +658,18 @@ export function AsignacionesModule() {
           const conductoresNuevos = (allConductores as any)?.filter((c: any) => !companeroIds.has(c.conductor_id)) || []
           console.log('👤 Conductores nuevos (no companero):', conductoresNuevos)
 
+          // IMPORTANTE: Finalizar participaciones anteriores de los conductores NUEVOS
+          // (igual que en la lógica normal, para que dejen vacante su turno anterior)
+          for (const conductorNuevo of conductoresNuevos) {
+            console.log('🔄 Finalizando participaciones anteriores de conductor:', conductorNuevo.conductor_id)
+            await (supabase as any)
+              .from('asignaciones_conductores')
+              .update({ estado: 'completado', fecha_fin: ahora })
+              .eq('conductor_id', conductorNuevo.conductor_id)
+              .in('estado', ['asignado', 'activo'])
+              .neq('asignacion_id', selectedAsignacion.id)
+          }
+
           // Buscar la asignación activa del vehículo (donde están los companeros)
           const { data: asignacionExistente } = await (supabase as any)
             .from('asignaciones')
@@ -653,6 +681,135 @@ export function AsignacionesModule() {
 
           if (asignacionExistente) {
             console.log('📋 Asignación existente encontrada:', asignacionExistente.id)
+
+            // Obtener conductores actuales de la asignación existente
+            const { data: conductoresExistentes } = await (supabase as any)
+              .from('asignaciones_conductores')
+              .select('id, conductor_id, horario, estado, conductores(nombres, apellidos)')
+              .eq('asignacion_id', asignacionExistente.id)
+              .in('estado', ['asignado', 'activo'])
+
+            // Obtener patente del vehículo destino
+            const patenteDestino = selectedAsignacion.vehiculos?.patente || 'Sin patente'
+
+            // Obtener información de asignaciones actuales de los conductores nuevos
+            const conductoresNuevosIds = conductoresNuevos.map((cn: any) => cn.conductor_id)
+            const { data: asignacionesAnteriores } = await (supabase as any)
+              .from('asignaciones_conductores')
+              .select(`
+                id, conductor_id, horario, estado,
+                conductores(nombres, apellidos),
+                asignaciones(id, vehiculos(patente))
+              `)
+              .in('conductor_id', conductoresNuevosIds)
+              .in('estado', ['asignado', 'activo'])
+              .neq('asignacion_id', selectedAsignacion.id)
+
+            // Crear mapa de asignación anterior por conductor
+            const asignacionAnteriorMap = new Map<string, { patente: string; turno: string }>()
+            for (const asigAnt of (asignacionesAnteriores || [])) {
+              asignacionAnteriorMap.set(asigAnt.conductor_id, {
+                patente: asigAnt.asignaciones?.vehiculos?.patente || 'Sin patente',
+                turno: asigAnt.horario
+              })
+            }
+
+            // Verificar si hay conflictos de turno (otro conductor ya ocupa el turno)
+            const conflictos: Array<{
+              turno: string
+              conductorActual: { id: string; nombre: string; asignacionConductorId: string }
+              conductorNuevo: { id: string; nombre: string; horario: string; asignacionAnterior?: { patente: string; turno: string } }
+            }> = []
+
+            for (const conductorNuevo of conductoresNuevos) {
+              const conductorEnMismoTurno = (conductoresExistentes || []).find(
+                (ce: any) => ce.horario === conductorNuevo.horario && ce.conductor_id !== conductorNuevo.conductor_id
+              )
+              
+              // Obtener nombre del conductor nuevo
+              const { data: dataConductorNuevo } = await (supabase as any)
+                .from('conductores')
+                .select('nombres, apellidos')
+                .eq('id', conductorNuevo.conductor_id)
+                .single()
+              
+              const nombreConductorNuevo = dataConductorNuevo 
+                ? `${dataConductorNuevo.nombres} ${dataConductorNuevo.apellidos}`.trim()
+                : 'Conductor'
+
+              if (conductorEnMismoTurno) {
+                conflictos.push({
+                  turno: conductorNuevo.horario,
+                  conductorActual: {
+                    id: conductorEnMismoTurno.conductor_id,
+                    nombre: `${conductorEnMismoTurno.conductores?.nombres || ''} ${conductorEnMismoTurno.conductores?.apellidos || ''}`.trim(),
+                    asignacionConductorId: conductorEnMismoTurno.id
+                  },
+                  conductorNuevo: {
+                    id: conductorNuevo.conductor_id,
+                    nombre: nombreConductorNuevo,
+                    horario: conductorNuevo.horario,
+                    asignacionAnterior: asignacionAnteriorMap.get(conductorNuevo.conductor_id)
+                  }
+                })
+              }
+            }
+
+            // Si hay conflictos, preguntar al usuario con mensaje claro
+            if (conflictos.length > 0) {
+              // Construir mensaje HTML claro
+              let mensajeHtml = '<div style="text-align:left;font-size:14px;">'
+              
+              for (const conflicto of conflictos) {
+                const turnoLabel = conflicto.turno === 'diurno' ? 'DIURNO' : conflicto.turno === 'nocturno' ? 'NOCTURNO' : conflicto.turno.toUpperCase()
+                
+                mensajeHtml += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:12px;margin-bottom:12px;border-radius:4px;">`
+                
+                // Info del conductor que entra
+                if (conflicto.conductorNuevo.asignacionAnterior) {
+                  mensajeHtml += `<p style="margin:0 0 8px 0;"><strong>${conflicto.conductorNuevo.nombre}</strong></p>`
+                  mensajeHtml += `<p style="margin:0 0 4px 0;color:#666;">Actualmente en: <strong>${conflicto.conductorNuevo.asignacionAnterior.patente}</strong> - Turno ${conflicto.conductorNuevo.asignacionAnterior.turno.toUpperCase()}</p>`
+                  mensajeHtml += `<p style="margin:0 0 8px 0;color:#059669;">➜ Pasará a: <strong>${patenteDestino}</strong> - Turno ${turnoLabel}</p>`
+                } else {
+                  mensajeHtml += `<p style="margin:0 0 8px 0;"><strong>${conflicto.conductorNuevo.nombre}</strong> entrará a <strong>${patenteDestino}</strong> - Turno ${turnoLabel}</p>`
+                }
+                
+                // Info del conflicto
+                mensajeHtml += `<p style="margin:0;color:#DC2626;"><strong>⚠️ Ese turno está ocupado por ${conflicto.conductorActual.nombre}</strong></p>`
+                mensajeHtml += `<p style="margin:4px 0 0 0;color:#666;font-size:13px;">Si confirmas, ${conflicto.conductorActual.nombre} quedará sin asignación.</p>`
+                
+                mensajeHtml += `</div>`
+              }
+              
+              mensajeHtml += '</div>'
+
+              const confirmResult = await Swal.fire({
+                title: '¿Confirmar cambio de asignación?',
+                html: mensajeHtml,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, confirmar cambio',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#059669',
+                cancelButtonColor: '#6B7280',
+                width: '500px'
+              })
+
+              if (!confirmResult.isConfirmed) {
+                // Usuario canceló la operación
+                setIsSubmitting(false)
+                return
+              }
+
+              // Usuario confirmó: finalizar a los conductores actuales que serán reemplazados
+              for (const conflicto of conflictos) {
+                console.log('🔄 Reemplazando conductor:', conflicto.conductorActual.nombre)
+                await (supabase as any)
+                  .from('asignaciones_conductores')
+                  .update({ estado: 'completado', fecha_fin: ahora })
+                  .eq('id', conflicto.conductorActual.asignacionConductorId)
+              }
+            }
 
             // Agregar los conductores NUEVOS a la asignación existente (sin cambiar fecha)
             for (const conductorNuevo of conductoresNuevos) {
@@ -1013,7 +1170,7 @@ export function AsignacionesModule() {
       accessorFn: (row) => {
         if (!row.fecha_programada) return '-'
         const fecha = new Date(row.fecha_programada)
-        return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+        return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
       },
       sortingFn: (rowA, rowB) => {
         const fechaA = rowA.original.fecha_programada ? new Date(rowA.original.fecha_programada).getTime() : 0
@@ -1025,7 +1182,7 @@ export function AsignacionesModule() {
         if (!fechaProg) return <span className="text-muted">-</span>
         
         const fecha = new Date(fechaProg)
-        const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+        const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
         const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
         
         return (
@@ -1042,14 +1199,14 @@ export function AsignacionesModule() {
       accessorFn: (row) => {
         if (!row.fecha_inicio) return '-'
         const fecha = new Date(row.fecha_inicio)
-        return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+        return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
       },
       cell: ({ row }) => {
         const fechaInicio = row.original.fecha_inicio
         if (!fechaInicio) return <span className="text-muted">-</span>
         
         const fecha = new Date(fechaInicio)
-        const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+        const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
         const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
         
         return (

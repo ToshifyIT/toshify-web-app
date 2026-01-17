@@ -555,6 +555,9 @@
 
 .dt-table tbody tr {
   transition: background 0.15s;
+  /* Performance: Skip rendering off-screen rows */
+  content-visibility: auto;
+  contain-intrinsic-size: 0 48px;
 }
 
 .dt-table tbody tr:hover {

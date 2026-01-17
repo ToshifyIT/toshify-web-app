@@ -134,8 +134,8 @@ export function ExcelColumnFilter({
     }
 
     document.addEventListener('mousedown', handleClickOutside)
-    window.addEventListener('scroll', handleReposition, true)
-    window.addEventListener('resize', handleReposition)
+    window.addEventListener('scroll', handleReposition, { capture: true, passive: true })
+    window.addEventListener('resize', handleReposition, { passive: true })
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)

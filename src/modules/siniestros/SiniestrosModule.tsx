@@ -778,10 +778,13 @@ export function SiniestrosModule() {
 
   function formatDate(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('es-AR', {
+    // Extraer solo la parte de fecha (YYYY-MM-DD) y usar mediodía para evitar bugs de timezone
+    const datePart = dateStr.split('T')[0]
+    return new Date(`${datePart}T12:00:00`).toLocaleDateString('es-AR', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric'
+      year: 'numeric',
+      timeZone: 'America/Argentina/Buenos_Aires'
     })
   }
 
@@ -1525,10 +1528,13 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
 
   function formatDate(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('es-AR', {
+    // Extraer solo la parte de fecha (YYYY-MM-DD) y usar mediodía para evitar bugs de timezone
+    const datePart = dateStr.split('T')[0]
+    return new Date(`${datePart}T12:00:00`).toLocaleDateString('es-AR', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric'
+      year: 'numeric',
+      timeZone: 'America/Argentina/Buenos_Aires'
     })
   }
 
