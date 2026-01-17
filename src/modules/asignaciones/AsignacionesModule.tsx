@@ -1,6 +1,6 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { supabase } from '../../lib/supabase'
@@ -66,6 +66,10 @@ export function AsignacionesModule() {
   const { profile } = useAuth()
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
+  
+  // Solo admin, fullstack.senior y tech.spec pueden crear asignaciones manuales
+  const userRole = profile?.roles?.name || ''
+  const canCreateManualAssignment = userRole === 'admin' || userRole === 'fullstack.senior' || userRole === 'tech.spec'
 
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -80,6 +84,16 @@ export function AsignacionesModule() {
   const [viewAsignacion, setViewAsignacion] = useState<Asignacion | null>(null)
   const [conductoresToConfirm, setConductoresToConfirm] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  // Modal de regularización
+  const [showRegularizarModal, setShowRegularizarModal] = useState(false)
+  const [regularizarAsignacion, setRegularizarAsignacion] = useState<Asignacion | null>(null)
+  const [regularizarData, setRegularizarData] = useState<{
+    fecha_inicio: string
+    fecha_fin: string
+    notas: string
+  }>({ fecha_inicio: '', fecha_fin: '', notas: '' })
+  
   // Datos base para cálculo de stats (cargados en paralelo)
   const [vehiculosData, setVehiculosData] = useState<Array<{ id: string; estado_id: string; estadoCodigo?: string }>>([])
   const [conductoresData, setConductoresData] = useState<Array<{ id: string; estadoCodigo?: string }>>([])
@@ -837,6 +851,63 @@ export function AsignacionesModule() {
     }
   }
 
+  // Abrir modal de regularización
+  const handleOpenRegularizar = (asignacion: Asignacion) => {
+    setRegularizarAsignacion(asignacion)
+    setRegularizarData({
+      fecha_inicio: asignacion.fecha_inicio ? asignacion.fecha_inicio.split('T')[0] : '',
+      fecha_fin: asignacion.fecha_fin ? asignacion.fecha_fin.split('T')[0] : '',
+      notas: asignacion.notas || ''
+    })
+    setShowRegularizarModal(true)
+  }
+
+  // Guardar regularización
+  const handleSaveRegularizacion = async () => {
+    if (!regularizarAsignacion || isSubmitting) return
+
+    setIsSubmitting(true)
+    try {
+      const updateData: Record<string, unknown> = {
+        updated_by: profile?.full_name || 'Sistema'
+      }
+
+      // Solo actualizar campos que tienen valor
+      if (regularizarData.fecha_inicio) {
+        updateData.fecha_inicio = new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString()
+      }
+      if (regularizarData.fecha_fin) {
+        updateData.fecha_fin = new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString()
+      }
+      if (regularizarData.notas !== regularizarAsignacion.notas) {
+        updateData.notas = regularizarData.notas
+      }
+
+      const { error } = await (supabase as any)
+        .from('asignaciones')
+        .update(updateData)
+        .eq('id', regularizarAsignacion.id)
+
+      if (error) throw error
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Regularizado',
+        text: 'Los datos de la asignación han sido actualizados correctamente.',
+        timer: 2000,
+        showConfirmButton: false
+      })
+
+      setShowRegularizarModal(false)
+      setRegularizarAsignacion(null)
+      loadAsignaciones()
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'Error al regularizar la asignación', 'error')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const getStatusBadgeClass = (status: string) => {
     const classes: Record<string, string> = {
       programado: 'dt-badge dt-badge-yellow',
@@ -1080,6 +1151,16 @@ export function AsignacionesModule() {
           >
             <Eye size={16} />
           </button>
+          {/* Botón regularizar - solo para admin, fullstack.senior y tech.spec */}
+          {canCreateManualAssignment && (
+            <button
+              onClick={() => handleOpenRegularizar(row.original)}
+              className="dt-btn-action dt-btn-edit"
+              title="Regularizar datos"
+            >
+              <Pencil size={16} />
+            </button>
+          )}
           <button
             onClick={() => handleDelete(row.original.id)}
             className="dt-btn-action dt-btn-delete"
@@ -1091,7 +1172,7 @@ export function AsignacionesModule() {
         </div>
       )
     }
-  ], [canEdit, canDelete])
+  ], [canEdit, canDelete, canCreateManualAssignment])
 
   return (
     <div className="asig-module">
@@ -1170,7 +1251,7 @@ export function AsignacionesModule() {
         </div>
       </div>
 
-      {/* DataTable - sin boton de crear, se crea desde Programacion/Kanban */}
+      {/* DataTable */}
       <DataTable
         data={expandedAsignaciones}
         columns={columns}
@@ -1183,6 +1264,16 @@ export function AsignacionesModule() {
         pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
         externalFilters={externalFilters}
+        headerAction={canCreateManualAssignment ? (
+          <button
+            className="btn-primary"
+            onClick={() => setShowWizard(true)}
+            title="Crear asignación manual (solo para regularización)"
+          >
+            <Plus size={16} />
+            Nueva Asignación
+          </button>
+        ) : undefined}
       />
 
       {/* Wizard Modal */}
@@ -1572,6 +1663,83 @@ export function AsignacionesModule() {
                 }}
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Regularización */}
+      {showRegularizarModal && regularizarAsignacion && (
+        <div className="asig-modal-overlay">
+          <div className="asig-modal-content">
+            <h2 className="asig-modal-title">Regularizar Asignación</h2>
+            <p>Vehículo: <strong>{regularizarAsignacion.vehiculos?.patente}</strong></p>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+              Código: <strong>{regularizarAsignacion.codigo}</strong>
+            </p>
+
+            <div className="asig-detail-grid">
+              {/* Fecha de Inicio (Entrega Real) */}
+              <div className="form-group">
+                <label className="asig-detail-label">Fecha de Entrega Real (Activación)</label>
+                <input
+                  type="date"
+                  value={regularizarData.fecha_inicio}
+                  onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_inicio: e.target.value }))}
+                  className="asig-status-select"
+                  style={{ width: '100%' }}
+                />
+                <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                  Actual: {regularizarAsignacion.fecha_inicio ? new Date(regularizarAsignacion.fecha_inicio).toLocaleDateString('es-AR') : 'No definida'}
+                </p>
+              </div>
+
+              {/* Fecha Fin */}
+              <div className="form-group">
+                <label className="asig-detail-label">Fecha de Fin (si aplica)</label>
+                <input
+                  type="date"
+                  value={regularizarData.fecha_fin}
+                  onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_fin: e.target.value }))}
+                  className="asig-status-select"
+                  style={{ width: '100%' }}
+                />
+                <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                  Actual: {regularizarAsignacion.fecha_fin ? new Date(regularizarAsignacion.fecha_fin).toLocaleDateString('es-AR') : 'Sin definir'}
+                </p>
+              </div>
+
+              {/* Notas */}
+              <div className="form-group">
+                <label className="asig-detail-label">Notas / Observaciones</label>
+                <textarea
+                  value={regularizarData.notas}
+                  onChange={(e) => setRegularizarData(prev => ({ ...prev, notas: e.target.value }))}
+                  rows={3}
+                  placeholder="Agregar notas sobre la regularización..."
+                  className="asig-modal-textarea"
+                />
+              </div>
+            </div>
+
+            <div className="asig-modal-actions">
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setShowRegularizarModal(false)
+                  setRegularizarAsignacion(null)
+                }}
+                disabled={isSubmitting}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleSaveRegularizacion}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
               </button>
             </div>
           </div>
