@@ -419,19 +419,25 @@ export function AsignacionesModule() {
 
   // Procesar asignaciones - UNA fila por asignación (solo asignaciones reales)
   const expandedAsignaciones = useMemo<ExpandedAsignacion[]>(() => {
-    // Asignaciones activas con vacantes (TURNO con menos de 2 conductores) van primero
+    // Asignaciones activas con vacantes (TURNO con menos de 2 conductores ACTIVOS) van primero
     const asignacionesConVacante = filteredAsignaciones
       .filter(a => (a.estado === 'activa' || a.estado === 'activo') && a.horario === 'TURNO')
-      .filter(a => (a.asignaciones_conductores?.length || 0) < 2)
+      .filter(a => {
+        const conductoresActivos = (a.asignaciones_conductores || [])
+          .filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado')
+        return conductoresActivos.length < 2
+      })
 
     // Procesar todas las asignaciones filtradas
     const asignacionesProcesadas = filteredAsignaciones.map((asignacion): ExpandedAsignacion => {
       const conductores = asignacion.asignaciones_conductores || []
+      // Filtrar solo conductores activos (no completados/finalizados)
+      const conductoresActivos = conductores.filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado')
 
       // Para modalidad TURNO: extraer conductor diurno y nocturno
       if (asignacion.horario === 'TURNO') {
-        const diurno = conductores.find(ac => ac.horario === 'diurno')
-        const nocturno = conductores.find(ac => ac.horario === 'nocturno')
+        const diurno = conductoresActivos.find(ac => ac.horario === 'diurno')
+        const nocturno = conductoresActivos.find(ac => ac.horario === 'nocturno')
 
         return {
           ...asignacion,
@@ -451,8 +457,8 @@ export function AsignacionesModule() {
         }
       }
 
-      // Para modalidad A CARGO: solo un conductor
-      const primerConductor = conductores[0]
+      // Para modalidad A CARGO: solo un conductor activo
+      const primerConductor = conductoresActivos[0]
       return {
         ...asignacion,
         conductoresTurno: null,
