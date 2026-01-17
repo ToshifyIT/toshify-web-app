@@ -925,9 +925,9 @@ export function ConductoresModule() {
   };
 
   // Función para procesar la cancelación de asignaciones por baja
-  const processConductorBaja = async (_conductorId: string, conductorNombre: string) => {
+  const processConductorBaja = async (_conductorId: string, conductorNombre: string, motivoUsuario: string) => {
     const ahora = new Date().toISOString();
-    const motivoBaja = `[BAJA CONDUCTOR] Conductor dado de baja: ${conductorNombre}`;
+    const motivoBaja = `[BAJA CONDUCTOR] ${conductorNombre}: ${motivoUsuario}`;
 
     for (const asignacionConductor of affectedAssignments) {
       const asignacion = asignacionConductor.asignaciones;
@@ -1066,7 +1066,7 @@ export function ConductoresModule() {
   };
 
   // Función que ejecuta la actualización del conductor
-  const performConductorUpdate = async () => {
+  const performConductorUpdate = async (motivoBajaOverride?: string) => {
     const { error: updateError } = await (supabase as any)
       .from("conductores")
       .update({
@@ -1094,7 +1094,7 @@ export function ConductoresModule() {
         fecha_contratacion: formData.fecha_contratacion || null,
         fecha_reincorpoaracion: formData.fecha_reincorpoaracion || null,
         fecha_terminacion: formData.fecha_terminacion || null,
-        motivo_baja: formData.motivo_baja || null,
+        motivo_baja: motivoBajaOverride || formData.motivo_baja || null,
         estado_id: formData.estado_id || null,
         preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
         url_documentacion: formData.url_documentacion || null,
@@ -1127,7 +1127,7 @@ export function ConductoresModule() {
   };
 
   // Handler para confirmar baja con asignaciones
-  const handleConfirmBaja = async () => {
+  const handleConfirmBaja = async (motivoBaja: string) => {
     if (!selectedConductor) return;
 
     setPendingBajaUpdate(true);
@@ -1135,11 +1135,12 @@ export function ConductoresModule() {
       // 1. Procesar cancelaciones de asignaciones
       await processConductorBaja(
         selectedConductor.id,
-        `${selectedConductor.nombres} ${selectedConductor.apellidos}`
+        `${selectedConductor.nombres} ${selectedConductor.apellidos}`,
+        motivoBaja
       );
 
-      // 2. Ejecutar actualización del conductor
-      await performConductorUpdate();
+      // 2. Ejecutar actualización del conductor (incluyendo motivo)
+      await performConductorUpdate(motivoBaja);
 
       // 3. Cerrar modales y refrescar
       setShowBajaConfirmModal(false);
@@ -3258,10 +3259,12 @@ function ModalConfirmBaja({
 }: {
   conductor: ConductorWithRelations;
   affectedAssignments: any[];
-  onConfirm: () => void;
+  onConfirm: (motivo: string) => void;
   onCancel: () => void;
   processing: boolean;
 }) {
+  const [motivoBaja, setMotivoBaja] = useState('');
+  
   // Agrupar por tipo de asignación
   const turnoAssignments = affectedAssignments.filter(
     (a) => a.asignaciones?.horario === 'TURNO'
@@ -3363,6 +3366,35 @@ function ModalConfirmBaja({
             </div>
           )}
         </div>
+        
+        {/* Campo de motivo de baja */}
+        <div style={{ marginTop: '20px' }}>
+          <label style={{ 
+            display: 'block', 
+            marginBottom: '8px', 
+            fontWeight: 600,
+            color: 'var(--text-primary)'
+          }}>
+            Motivo de la baja <span style={{ color: '#DC2626' }}>*</span>
+          </label>
+          <textarea
+            value={motivoBaja}
+            onChange={(e) => setMotivoBaja(e.target.value)}
+            placeholder="Ingrese el motivo de la baja del conductor..."
+            style={{
+              width: '100%',
+              minHeight: '80px',
+              padding: '10px 12px',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              fontSize: '14px',
+              resize: 'vertical',
+              background: 'var(--bg-secondary)',
+              color: 'var(--text-primary)'
+            }}
+            disabled={processing}
+          />
+        </div>
         </div>
         <div className="modal-footer">
           <button
@@ -3374,8 +3406,8 @@ function ModalConfirmBaja({
           </button>
           <button
             className="btn-danger"
-            onClick={onConfirm}
-            disabled={processing}
+            onClick={() => onConfirm(motivoBaja)}
+            disabled={processing || !motivoBaja.trim()}
             style={{
               background: '#DC2626',
               color: 'white',
@@ -3383,8 +3415,8 @@ function ModalConfirmBaja({
               padding: '10px 20px',
               borderRadius: '6px',
               fontWeight: '600',
-              cursor: processing ? 'not-allowed' : 'pointer',
-              opacity: processing ? 0.7 : 1,
+              cursor: (processing || !motivoBaja.trim()) ? 'not-allowed' : 'pointer',
+              opacity: (processing || !motivoBaja.trim()) ? 0.7 : 1,
             }}
           >
             {processing ? 'Procesando...' : 'Confirmar Baja'}
