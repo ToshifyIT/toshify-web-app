@@ -1,25 +1,119 @@
 // src/pages/HomePage.tsx
-import { useState } from 'react'
-import { Menu } from 'lucide-react'
+import { useState, lazy, Suspense, Component } from 'react'
+import type { ReactNode, ErrorInfo } from 'react'
+import { Menu, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
 import { useTheme } from '../contexts/ThemeContext'
 import logoToshify from '../assets/logo-toshify.png'
+import { ProtectedRoute } from '../components/ProtectedRoute'
+import { ThemeToggle } from '../components/ui/ThemeToggle'
 
-// Importar páginas
+// Loading component for lazy-loaded pages
+const PageLoader = () => (
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '50vh',
+    gap: '12px',
+    color: 'var(--text-secondary)'
+  }}>
+    <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
+    <span>Cargando...</span>
+  </div>
+)
+
+// Error Boundary para manejar errores de carga de chunks
+interface LazyErrorBoundaryState {
+  hasError: boolean
+}
+
+class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoundaryState> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(): LazyErrorBoundaryState {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Error cargando página:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '50vh',
+          gap: '16px',
+          color: 'var(--text-secondary)',
+          textAlign: 'center',
+          padding: '20px'
+        }}>
+          <AlertCircle size={48} style={{ color: 'var(--color-error, #DC2626)' }} />
+          <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Error al cargar la página</h3>
+          <p style={{ margin: 0 }}>Hubo un problema de conexión. Intentá de nuevo.</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: 'var(--color-primary, #3B82F6)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 500
+            }}
+          >
+            <RefreshCw size={16} />
+            Reintentar
+          </button>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
+// Wrapper que combina Suspense + Error Boundary
+const LazyPage = ({ children }: { children: ReactNode }) => (
+  <LazyErrorBoundary>
+    <Suspense fallback={<PageLoader />}>
+      {children}
+    </Suspense>
+  </LazyErrorBoundary>
+)
+
+// Lazy-loaded pages (largest modules first for biggest impact)
+const ConductoresPage = lazy(() => import('./conductores/ConductoresPage').then(m => ({ default: m.ConductoresPage })))
+const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(m => ({ default: m.FacturacionPage })))
+const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
+const ProgramacionPage = lazy(() => import('./onboarding/ProgramacionPage'))
+const MovimientosPage = lazy(() => import('./inventario/MovimientosPage').then(m => ({ default: m.MovimientosPage })))
+const AsignacionesPage = lazy(() => import('./asignaciones/AsignacionesPage').then(m => ({ default: m.AsignacionesPage })))
+
+// Regular imports for smaller/frequently used pages
 import { UsuariosPage } from './usuarios/UsuariosPage'
 import { VehiculosPage } from './vehiculos/VehiculosPage'
-import { ConductoresPage } from './conductores/ConductoresPage'
 import { SiniestrosPage } from './siniestros/SiniestrosPage'
-import { IncidenciasPage } from './incidencias/IncidenciasPage'
 import { InformesPage } from './informes/InformesPage'
-import { AsignacionesPage } from './asignaciones/AsignacionesPage'
 import { AsignacionesActivasPage } from './asignaciones/AsignacionesActivasPage'
 import { ProductosPage } from './productos/ProductosPage'
 import { ProveedoresPage } from './proveedores/ProveedoresPage'
 import { InventarioDashboardPage } from './inventario/InventarioDashboardPage'
-import { MovimientosPage } from './inventario/MovimientosPage'
 import { AsignacionesActivasPage as AsignacionesActivasInventarioPage } from './inventario/AsignacionesActivasPage'
 import { HistorialMovimientosPage } from './inventario/HistorialMovimientosPage'
 import { PedidosPage } from './inventario/PedidosPage'
@@ -28,7 +122,6 @@ import { BitacoraPage } from './integraciones/uss/BitacoraPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
 import { RolesPage } from './administracion/RolesPage'
-import { FacturacionPage } from './facturacion/FacturacionPage'
 import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
 import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
@@ -38,10 +131,6 @@ import { ProfilePage } from './profile/ProfilePage'
 // Multas/Telepase
 import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
 import { MultasPage } from './multas-telepase/MultasPage'
-// Onboarding
-import ProgramacionPage from './onboarding/ProgramacionPage'
-import { ProtectedRoute } from '../components/ProtectedRoute'
-import { ThemeToggle } from '../components/ui/ThemeToggle'
 
 // Tipo para submenús con jerarquía
 interface SubmenuWithHierarchy {
@@ -849,7 +938,9 @@ export function HomePage() {
               } />
               <Route path="/conductores" element={
                 <ProtectedRoute menuName="conductores" action="view">
-                  <ConductoresPage />
+                  <LazyPage>
+                    <ConductoresPage />
+                  </LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/productos" element={
@@ -871,7 +962,9 @@ export function HomePage() {
               } />
               <Route path="/inventario/movimientos" element={
                 <ProtectedRoute submenuName="inventario-movimientos" action="view">
-                  <MovimientosPage />
+                  <LazyPage>
+                    <MovimientosPage />
+                  </LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/inventario/asignaciones-activas" element={
@@ -897,7 +990,9 @@ export function HomePage() {
               } />
               <Route path="/incidencias" element={
                 <ProtectedRoute menuName="incidencias" action="view">
-                  <IncidenciasPage />
+                  <LazyPage>
+                    <IncidenciasPage />
+                  </LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/informes" element={
@@ -907,19 +1002,25 @@ export function HomePage() {
               } />
               <Route path="/programacion" element={
                 <ProtectedRoute submenuName="programacion" action="view">
-                  <AsignacionesPage />
+                  <LazyPage>
+                    <AsignacionesPage />
+                  </LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/estado-de-flota" element={<AsignacionesActivasPage />} />
               <Route path="/asignaciones" element={
                 <ProtectedRoute submenuName="asignaciones" action="view">
-                  <AsignacionesPage />
+                  <LazyPage>
+                    <AsignacionesPage />
+                  </LazyPage>
                 </ProtectedRoute>
               } />
               {/* Onboarding - Programacion de Entregas */}
               <Route path="/onboarding/programacion" element={
                 <ProtectedRoute submenuName="programacion-entregas" action="view">
-                  <ProgramacionPage />
+                  <LazyPage>
+                    <ProgramacionPage />
+                  </LazyPage>
                 </ProtectedRoute>
               } />
 
@@ -950,7 +1051,9 @@ export function HomePage() {
               {/* Facturación */}
               <Route path="/facturacion" element={
                 <ProtectedRoute submenuName="facturacion" action="view">
-                  <FacturacionPage />
+                  <LazyPage>
+                    <FacturacionPage />
+                  </LazyPage>
                 </ProtectedRoute>
               } />
 

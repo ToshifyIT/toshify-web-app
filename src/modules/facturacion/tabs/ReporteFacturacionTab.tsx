@@ -138,6 +138,10 @@ export function ReporteFacturacionTab() {
   const [detalleItems, setDetalleItems] = useState<FacturacionDetalle[]>([])
   const [exportingPdf, setExportingPdf] = useState(false)
 
+  // Memoized filtered detalle items to avoid recalculation on each render
+  const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento), [detalleItems])
+  const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento), [detalleItems])
+
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
   const [exportingExcel, setExportingExcel] = useState(false)
@@ -3113,7 +3117,7 @@ export function ReporteFacturacionTab() {
                   <div className="fact-detalle-seccion">
                     <h4 className="fact-seccion-titulo cargos">Cargos (A Pagar)</h4>
                     <div className="fact-detalle-items">
-                      {detalleItems.filter(d => !d.es_descuento).map(item => (
+                      {detalleCargos.map(item => (
                         <div key={item.id} className="fact-item">
                           <span className="fact-item-desc">
                             {item.concepto_descripcion}
@@ -3148,11 +3152,11 @@ export function ReporteFacturacionTab() {
                   </div>
 
                   {/* Sección de Descuentos / Créditos */}
-                  {(detalleItems.some(d => d.es_descuento) || detalleFacturacion.saldo_anterior < 0) && (
+                  {(detalleDescuentos.length > 0 || detalleFacturacion.saldo_anterior < 0) && (
                     <div className="fact-detalle-seccion">
                       <h4 className="fact-seccion-titulo creditos">Descuentos / Créditos (A Favor)</h4>
                       <div className="fact-detalle-items">
-                        {detalleItems.filter(d => d.es_descuento).map(item => (
+                        {detalleDescuentos.map(item => (
                           <div key={item.id} className="fact-item">
                             <span className="fact-item-desc">{item.concepto_descripcion}</span>
                             <span className="fact-item-monto credito">-{formatCurrency(item.total)}</span>
