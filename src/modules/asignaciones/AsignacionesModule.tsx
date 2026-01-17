@@ -61,6 +61,13 @@ interface ExpandedAsignacion extends Asignacion {
   conductorCargo: { id: string; nombre: string; confirmado: boolean } | null
 }
 
+// Helper: Convierte fecha ISO UTC a string YYYY-MM-DD en zona horaria LOCAL
+// Esto es necesario porque las fechas se guardan en UTC pero queremos filtrar por día local
+function getLocalDateStr(isoString: string): string {
+  const date = new Date(isoString)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
 export function AsignacionesModule() {
   const { canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
@@ -106,6 +113,20 @@ export function AsignacionesModule() {
     const hoy = new Date()
     // Usar fecha local (no UTC) para comparaciones correctas en la zona horaria del usuario
     const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    
+    // Calcular lunes de la semana actual (para completadas/canceladas de la semana)
+    const diaSemana = hoy.getDay() // 0=domingo, 1=lunes, ..., 6=sabado
+    const diffToLunes = diaSemana === 0 ? -6 : 1 - diaSemana // Si es domingo, retroceder 6 días
+    const lunesSemana = new Date(hoy)
+    lunesSemana.setDate(hoy.getDate() + diffToLunes)
+    const lunesSemanaStr = `${lunesSemana.getFullYear()}-${String(lunesSemana.getMonth() + 1).padStart(2, '0')}-${String(lunesSemana.getDate()).padStart(2, '0')}`
+    
+    // Calcular domingo de la semana actual
+    const domingoSemana = new Date(lunesSemana)
+    domingoSemana.setDate(lunesSemana.getDate() + 6)
+    const domingoSemanaStr = `${domingoSemana.getFullYear()}-${String(domingoSemana.getMonth() + 1).padStart(2, '0')}-${String(domingoSemana.getDate()).padStart(2, '0')}`
+    
+    // Para entregas programadas (próximos 7 días)
     const finSemana = new Date(hoy)
     finSemana.setDate(finSemana.getDate() + 7)
     const finSemanaStr = `${finSemana.getFullYear()}-${String(finSemana.getMonth() + 1).padStart(2, '0')}-${String(finSemana.getDate()).padStart(2, '0')}`
@@ -182,39 +203,49 @@ export function AsignacionesModule() {
       return fecha >= hoyStr && fecha <= finSemanaStr
     }).length
 
-    // Entregas completadas HOY (entregas activadas/confirmadas hoy)
-    const entregasCompletadasHoy = asignaciones.filter(a => {
-      // Incluir asignaciones activas O finalizadas que se activaron hoy
+    // Entregas completadas ESTA SEMANA (lunes a domingo)
+    // Usamos getLocalDateStr para convertir UTC a fecha local y evitar problemas de timezone
+    const entregasCompletadasSemana = asignaciones.filter(a => {
+      // Incluir asignaciones activas O finalizadas que se activaron esta semana
       if ((a.estado !== 'activa' && a.estado !== 'finalizada') || !a.fecha_inicio) return false
-      const fechaEntrega = a.fecha_inicio.split('T')[0]
-      return fechaEntrega === hoyStr
+      const fechaEntregaLocal = getLocalDateStr(a.fecha_inicio)
+      return fechaEntregaLocal >= lunesSemanaStr && fechaEntregaLocal <= domingoSemanaStr
     }).length
 
-    // Canceladas HOY
-    const entregasCanceladasHoy = asignaciones.filter(a => {
+    // Canceladas ESTA SEMANA (lunes a domingo)
+    // Usamos getLocalDateStr para convertir UTC a fecha local
+    const entregasCanceladasSemana = asignaciones.filter(a => {
       if (a.estado !== 'cancelada') return false
       // Usar fecha_fin si existe, sino fecha de creación
       const fechaRef = a.fecha_fin || a.created_at
       if (!fechaRef) return false
-      const fechaCancelacion = fechaRef.split('T')[0]
-      return fechaCancelacion === hoyStr
+      const fechaCancelacionLocal = getLocalDateStr(fechaRef)
+      return fechaCancelacionLocal >= lunesSemanaStr && fechaCancelacionLocal <= domingoSemanaStr
     }).length
 
-    // Conductores por documento - asignaciones ACTIVAS y PROGRAMADAS
-    // Contamos asignaciones (no conductores únicos) para que coincida con el filtro de la tabla
-    let asignacionesCartaOferta = 0
-    let asignacionesAnexo = 0
+    // Conductores por documento - contamos CONDUCTORES ÚNICOS (no asignaciones)
+    const conductoresCartaOfertaSet = new Set<string>()
+    const conductoresAnexoSet = new Set<string>()
 
     for (const a of asignaciones) {
       // Solo contar asignaciones activas o programadas
       if (a.estado !== 'activa' && a.estado !== 'programado') continue
 
-      const tieneCartaOferta = (a.asignaciones_conductores || []).some(c => c.documento === 'CARTA_OFERTA')
-      const tieneAnexo = (a.asignaciones_conductores || []).some(c => c.documento === 'ANEXO')
-
-      if (tieneCartaOferta) asignacionesCartaOferta++
-      if (tieneAnexo) asignacionesAnexo++
+      for (const c of (a.asignaciones_conductores || [])) {
+        // Solo contar conductores activos (no completados/finalizados/cancelados)
+        if (c.estado === 'completado' || c.estado === 'finalizado' || c.estado === 'cancelado') continue
+        
+        if (c.documento === 'CARTA_OFERTA' && c.conductor_id) {
+          conductoresCartaOfertaSet.add(c.conductor_id)
+        }
+        if (c.documento === 'ANEXO' && c.conductor_id) {
+          conductoresAnexoSet.add(c.conductor_id)
+        }
+      }
     }
+
+    const asignacionesCartaOferta = conductoresCartaOfertaSet.size
+    const asignacionesAnexo = conductoresAnexoSet.size
 
     return {
       totalVehiculos,
@@ -230,10 +261,13 @@ export function AsignacionesModule() {
       entregasSemana,
       asignacionesActivas: asignacionesActivas.length,
       unidadesDisponibles,
-      entregasCompletadasHoy,
-      entregasCanceladasHoy,
+      entregasCompletadasSemana,
+      entregasCanceladasSemana,
       conductoresCartaOferta: asignacionesCartaOferta,
-      conductoresAnexo: asignacionesAnexo
+      conductoresAnexo: asignacionesAnexo,
+      // Datos de la semana para filtros
+      lunesSemanaStr,
+      domingoSemanaStr
     }
   }, [vehiculosData, conductoresData, asignaciones])
 
@@ -349,7 +383,10 @@ export function AsignacionesModule() {
   const filteredAsignaciones = useMemo(() => {
     let result = asignaciones
 
-    // Calcular fecha de hoy para filtros de completadas/canceladas
+    // Usar los rangos de semana calculados en calculatedStats
+    const { lunesSemanaStr, domingoSemanaStr } = calculatedStats
+    
+    // Calcular hoy para filtro de entregas programadas hoy
     const hoy = new Date()
     const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
 
@@ -362,21 +399,23 @@ export function AsignacionesModule() {
         result = result.filter(a => a.estado === 'activa')
         break
       case 'completadas':
-        // Completadas HOY - entregas activadas/confirmadas hoy (activas o finalizadas)
+        // Completadas ESTA SEMANA (lunes a domingo) - entregas activadas/confirmadas
+        // Usamos getLocalDateStr para convertir UTC a fecha local
         result = result.filter(a => {
           if ((a.estado !== 'activa' && a.estado !== 'finalizada') || !a.fecha_inicio) return false
-          const fechaEntrega = a.fecha_inicio.split('T')[0]
-          return fechaEntrega === hoyStr
+          const fechaEntregaLocal = getLocalDateStr(a.fecha_inicio)
+          return fechaEntregaLocal >= lunesSemanaStr && fechaEntregaLocal <= domingoSemanaStr
         })
         break
       case 'canceladas':
-        // Canceladas HOY - debe coincidir con el stat entregasCanceladasHoy
+        // Canceladas ESTA SEMANA (lunes a domingo) - coincide con stat
+        // Usamos getLocalDateStr para convertir UTC a fecha local
         result = result.filter(a => {
           if (a.estado !== 'cancelada') return false
           const fechaRef = a.fecha_fin || a.created_at
           if (!fechaRef) return false
-          const fechaCancelacion = fechaRef.split('T')[0]
-          return fechaCancelacion === hoyStr
+          const fechaCancelacionLocal = getLocalDateStr(fechaRef)
+          return fechaCancelacionLocal >= lunesSemanaStr && fechaCancelacionLocal <= domingoSemanaStr
         })
         break
       case 'cartaOferta':
@@ -424,7 +463,7 @@ export function AsignacionesModule() {
       .filter(a => (a.estado === 'activa' || a.estado === 'activo') && a.horario === 'TURNO')
       .filter(a => {
         const conductoresActivos = (a.asignaciones_conductores || [])
-          .filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado')
+          .filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
         return conductoresActivos.length < 2
       })
 
@@ -435,9 +474,10 @@ export function AsignacionesModule() {
       
       // Para asignaciones ACTIVAS: filtrar solo conductores activos (no completados/finalizados)
       // Para asignaciones FINALIZADAS: mostrar los últimos conductores (histórico)
+      // Para asignaciones ACTIVAS: filtrar conductores que ya no están (completado, finalizado, cancelado)
       const conductoresParaMostrar = esAsignacionFinalizada
         ? conductores // Mostrar todos los conductores (histórico)
-        : conductores.filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado')
+        : conductores.filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
 
       // Para modalidad TURNO: extraer conductor diurno y nocturno
       if (asignacion.horario === 'TURNO') {
@@ -518,8 +558,8 @@ export function AsignacionesModule() {
 
     const labels: Record<string, string> = {
       programadas: 'Programadas',
-      completadas: 'Completadas Hoy',
-      canceladas: 'Canceladas Hoy',
+      completadas: 'Completadas (Semana)',
+      canceladas: 'Canceladas (Semana)',
       cartaOferta: 'Carta Oferta (Activas/Prog.)',
       anexo: 'Anexo (Activas/Prog.)'
     }
@@ -1355,23 +1395,23 @@ export function AsignacionesModule() {
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'completadas' ? 'stat-card-active' : ''}`}
-            title="Entregas completadas (finalizadas)"
+            title="Entregas completadas esta semana (lunes a domingo)"
             onClick={() => handleStatCardClick('completadas')}
           >
             <CheckCircle size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{calculatedStats.entregasCompletadasHoy}</span>
+              <span className="stat-value">{calculatedStats.entregasCompletadasSemana}</span>
               <span className="stat-label">Completadas</span>
             </div>
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'canceladas' ? 'stat-card-active' : ''}`}
-            title="Entregas canceladas"
+            title="Entregas canceladas esta semana (lunes a domingo)"
             onClick={() => handleStatCardClick('canceladas')}
           >
             <Ban size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{calculatedStats.entregasCanceladasHoy}</span>
+              <span className="stat-value">{calculatedStats.entregasCanceladasSemana}</span>
               <span className="stat-label">Canceladas</span>
             </div>
           </div>
