@@ -10,6 +10,7 @@ import { UnauthorizedPage } from './pages/UnauthorizedPage'
 import PermissionsDebugPage from './pages/PermissionsDebugPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal'
+import { useDeviceType } from './hooks/useDeviceType'
 
 // Componente para detectar flujo de recovery y redirigir
 function RecoveryRedirect({ children }: { children: React.ReactNode }) {
@@ -50,14 +51,23 @@ function ForcePasswordChangeWrapper({ children }: { children: React.ReactNode })
   return <>{children}</>
 }
 
+// Componente que inicializa la detección de dispositivo y agrega clases al body
+function DeviceTypeInitializer({ children }: { children: React.ReactNode }) {
+  // El hook agrega automáticamente clases al body:
+  // device-mobile, device-tablet, device-desktop, device-touch, device-ios, device-android
+  useDeviceType();
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <RecoveryRedirect>
-        <AuthProvider>
-          <ForcePasswordChangeWrapper>
-            <PermissionsProvider>
-              <Routes>
+      <DeviceTypeInitializer>
+        <RecoveryRedirect>
+          <AuthProvider>
+            <ForcePasswordChangeWrapper>
+              <PermissionsProvider>
+                <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
@@ -86,6 +96,7 @@ function App() {
           </ForcePasswordChangeWrapper>
         </AuthProvider>
       </RecoveryRedirect>
+    </DeviceTypeInitializer>
     </BrowserRouter>
   )
 }

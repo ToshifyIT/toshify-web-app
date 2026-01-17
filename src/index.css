@@ -14,3 +14,250 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ============================================
+   RESPONSIVE DEVICE CLASSES
+   Clases agregadas por useDeviceType hook:
+   - device-mobile: Smartphones
+   - device-tablet: Tablets y iPads
+   - device-desktop: PCs y laptops
+   - device-touch: Dispositivos táctiles
+   - device-ios: Dispositivos Apple
+   - device-android: Dispositivos Android
+   ============================================ */
+
+/* --- MOBILE STYLES --- */
+body.device-mobile {
+  /* Ajustes base para móviles */
+  font-size: 14px;
+}
+
+body.device-mobile .page-container,
+body.device-mobile .module-container {
+  padding: 8px;
+}
+
+body.device-mobile .stat-card {
+  padding: 8px 10px;
+  min-width: auto;
+}
+
+body.device-mobile .stat-value {
+  font-size: 1.25rem;
+}
+
+body.device-mobile .stat-label {
+  font-size: 0.7rem;
+}
+
+body.device-mobile .stat-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Grids en móvil - una columna */
+body.device-mobile .stats-grid,
+body.device-mobile .asig-stats-grid {
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 6px;
+}
+
+/* Sidebar en móvil */
+body.device-mobile .sidebar {
+  position: fixed;
+  left: -280px;
+  transition: left 0.3s ease;
+  z-index: 1000;
+}
+
+body.device-mobile .sidebar.open {
+  left: 0;
+}
+
+body.device-mobile .main-content {
+  margin-left: 0;
+  width: 100%;
+}
+
+/* Header móvil */
+body.device-mobile .top-header {
+  padding: 8px 12px;
+}
+
+body.device-mobile .header-title {
+  font-size: 1rem;
+}
+
+/* Tablas en móvil - scroll horizontal */
+body.device-mobile .data-table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.device-mobile .data-table {
+  min-width: 800px;
+}
+
+/* Botones más grandes para touch */
+body.device-mobile button,
+body.device-mobile .btn {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Modales en móvil - full width */
+body.device-mobile .modal-content,
+body.device-mobile .swal2-popup {
+  width: 95vw !important;
+  max-width: 95vw !important;
+  margin: 10px auto;
+}
+
+/* Forms en móvil */
+body.device-mobile input,
+body.device-mobile select,
+body.device-mobile textarea {
+  font-size: 16px; /* Evita zoom en iOS */
+  min-height: 44px;
+}
+
+/* --- TABLET STYLES --- */
+body.device-tablet {
+  font-size: 15px;
+}
+
+body.device-tablet .page-container,
+body.device-tablet .module-container {
+  padding: 12px;
+}
+
+body.device-tablet .stats-grid,
+body.device-tablet .asig-stats-grid {
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 8px;
+}
+
+body.device-tablet .stat-card {
+  padding: 10px 12px;
+}
+
+/* Sidebar en tablet - colapsada por defecto */
+body.device-tablet .sidebar {
+  width: 60px;
+  overflow: hidden;
+}
+
+body.device-tablet .sidebar:hover,
+body.device-tablet .sidebar.expanded {
+  width: 240px;
+}
+
+body.device-tablet .sidebar .menu-text {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+body.device-tablet .sidebar:hover .menu-text,
+body.device-tablet .sidebar.expanded .menu-text {
+  opacity: 1;
+}
+
+/* Tablas en tablet */
+body.device-tablet .data-table-container {
+  overflow-x: auto;
+}
+
+/* Modales en tablet */
+body.device-tablet .modal-content {
+  width: 90vw;
+  max-width: 700px;
+}
+
+/* --- TOUCH DEVICE STYLES --- */
+body.device-touch {
+  /* Mejorar interacción táctil */
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.device-touch button,
+body.device-touch .btn,
+body.device-touch .clickable,
+body.device-touch .stat-card-clickable {
+  cursor: pointer;
+  /* Área táctil mínima */
+  min-height: 44px;
+}
+
+body.device-touch .action-btn {
+  padding: 10px 12px;
+}
+
+/* Scrollbars más anchos para touch */
+body.device-touch ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+body.device-touch ::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+}
+
+/* --- iOS SPECIFIC --- */
+body.device-ios {
+  /* Fix para el bounce en iOS */
+  overscroll-behavior: none;
+}
+
+body.device-ios input[type="date"],
+body.device-ios input[type="time"],
+body.device-ios input[type="datetime-local"] {
+  /* Fix para inputs de fecha en iOS */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* --- ANDROID SPECIFIC --- */
+body.device-android select {
+  /* Fix para selects en Android */
+  background-color: white;
+}
+
+/* --- DESKTOP STYLES (default, no changes needed) --- */
+body.device-desktop {
+  /* Estilos por defecto para desktop */
+}
+
+/* ============================================
+   UTILITY CLASSES FOR RESPONSIVE HIDING
+   ============================================ */
+   
+/* Ocultar en móvil */
+body.device-mobile .hide-mobile {
+  display: none !important;
+}
+
+/* Ocultar en tablet */
+body.device-tablet .hide-tablet {
+  display: none !important;
+}
+
+/* Ocultar en desktop */
+body.device-desktop .hide-desktop {
+  display: none !important;
+}
+
+/* Mostrar solo en móvil */
+.show-mobile-only {
+  display: none !important;
+}
+body.device-mobile .show-mobile-only {
+  display: block !important;
+}
+
+/* Mostrar solo en touch */
+.show-touch-only {
+  display: none !important;
+}
+body.device-touch .show-touch-only {
+  display: block !important;
+}
