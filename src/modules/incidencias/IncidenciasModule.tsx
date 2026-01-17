@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useCategorizedTipos } from '../../hooks/useCategorizedTipos'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
 import {
@@ -2255,6 +2256,9 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
   const selectedVehiculo = vehiculos.find(v => v.id === formData.vehiculo_id)
   const selectedConductor = conductores.find(c => c.id === formData.conductor_id)
 
+  // Tipos categorizados memoizados
+  const { tiposP006, tiposP004, tiposP007, tiposSinCategoria } = useCategorizedTipos(tiposCobroDescuento)
+
   // Buscar conductores asignados al vehículo seleccionado
   async function buscarConductoresAsignados(vehiculoId: string) {
     setLoadingConductores(true)
@@ -2499,31 +2503,31 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                 // Tipos que generan COBRO - agrupados por categoría
                 <>
                   {/* P006 - Exceso KM */}
-                  {tiposCobroDescuento.filter(t => t.categoria === 'P006').length > 0 && (
+                  {tiposP006.length > 0 && (
                     <optgroup label="P006 - Exceso KM">
-                      {tiposCobroDescuento.filter(t => t.categoria === 'P006').map(tipo => (
+                      {tiposP006.map(tipo => (
                         <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
                       ))}
                     </optgroup>
                   )}
                   {/* P004 - Tickets a Favor */}
-                  {tiposCobroDescuento.filter(t => t.categoria === 'P004').length > 0 && (
+                  {tiposP004.length > 0 && (
                     <optgroup label="P004 - Tickets a Favor">
-                      {tiposCobroDescuento.filter(t => t.categoria === 'P004').map(tipo => (
+                      {tiposP004.map(tipo => (
                         <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
                       ))}
                     </optgroup>
                   )}
                   {/* P007 - Multas/Penalidades */}
-                  {tiposCobroDescuento.filter(t => t.categoria === 'P007').length > 0 && (
+                  {tiposP007.length > 0 && (
                     <optgroup label="P007 - Multas/Penalidades">
-                      {tiposCobroDescuento.filter(t => t.categoria === 'P007').map(tipo => (
+                      {tiposP007.map(tipo => (
                         <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
                       ))}
                     </optgroup>
                   )}
                   {/* Sin categoría */}
-                  {tiposCobroDescuento.filter(t => !t.categoria).map(tipo => (
+                  {tiposSinCategoria.map(tipo => (
                     <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
                   ))}
                 </>
