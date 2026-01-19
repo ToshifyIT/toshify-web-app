@@ -239,13 +239,22 @@ export function AsignacionesModule() {
       return fechaCancelacionLocal >= lunesSemanaStr && fechaCancelacionLocal <= domingoSemanaStr
     }).length
 
-    // Conductores por documento - contamos CONDUCTORES ÚNICOS (no asignaciones)
+    // Conductores por documento ESTA SEMANA - contamos CONDUCTORES ÚNICOS (no asignaciones)
+    // Solo contamos asignaciones que se entregaron/activaron esta semana (lunes a domingo)
     const conductoresCartaOfertaSet = new Set<string>()
     const conductoresAnexoSet = new Set<string>()
 
     for (const a of asignaciones) {
       // Solo contar asignaciones activas o programadas
       if (a.estado !== 'activa' && a.estado !== 'programado') continue
+      
+      // Filtrar por semana: usar fecha_inicio (entrega real) o fecha_programada
+      const fechaRef = a.fecha_inicio || a.fecha_programada
+      if (fechaRef) {
+        const fechaLocal = getLocalDateStr(fechaRef)
+        // Si la asignación NO es de esta semana, saltar
+        if (fechaLocal < lunesSemanaStr || fechaLocal > domingoSemanaStr) continue
+      }
 
       for (const c of (a.asignaciones_conductores || [])) {
         // Solo contar conductores activos (no completados/finalizados/cancelados)
@@ -409,14 +418,18 @@ export function AsignacionesModule() {
     // Filtro por stat card activa
     switch (activeStatCard) {
       case 'programadas':
-        result = result.filter(a => a.estado === 'programado')
+        // Programadas ESTA SEMANA (lunes a domingo)
+        result = result.filter(a => {
+          if (a.estado !== 'programado' || !a.fecha_programada) return false
+          const fechaLocal = getLocalDateStr(a.fecha_programada)
+          return fechaLocal >= lunesSemanaStr && fechaLocal <= domingoSemanaStr
+        })
         break
       case 'activas':
         result = result.filter(a => a.estado === 'activa')
         break
       case 'completadas':
         // Completadas ESTA SEMANA (lunes a domingo) - entregas activadas/confirmadas
-        // Usamos getLocalDateStr para convertir UTC a fecha local
         result = result.filter(a => {
           if ((a.estado !== 'activa' && a.estado !== 'finalizada') || !a.fecha_inicio) return false
           const fechaEntregaLocal = getLocalDateStr(a.fecha_inicio)
@@ -424,8 +437,7 @@ export function AsignacionesModule() {
         })
         break
       case 'canceladas':
-        // Canceladas ESTA SEMANA (lunes a domingo) - coincide con stat
-        // Usamos getLocalDateStr para convertir UTC a fecha local
+        // Canceladas ESTA SEMANA (lunes a domingo)
         result = result.filter(a => {
           if (a.estado !== 'cancelada') return false
           const fechaRef = a.fecha_fin || a.created_at
@@ -435,21 +447,29 @@ export function AsignacionesModule() {
         })
         break
       case 'cartaOferta':
-        // Solo asignaciones ACTIVAS o PROGRAMADAS con Carta Oferta - coincide con stat
-        result = result.filter(a =>
-          (a.estado === 'activa' || a.estado === 'programado') &&
-          a.asignaciones_conductores?.some(c => c.documento === 'CARTA_OFERTA')
-        )
+        // Carta Oferta ESTA SEMANA (lunes a domingo)
+        result = result.filter(a => {
+          if (a.estado !== 'activa' && a.estado !== 'programado') return false
+          if (!a.asignaciones_conductores?.some(c => c.documento === 'CARTA_OFERTA')) return false
+          const fechaRef = a.fecha_inicio || a.fecha_programada
+          if (!fechaRef) return false
+          const fechaLocal = getLocalDateStr(fechaRef)
+          return fechaLocal >= lunesSemanaStr && fechaLocal <= domingoSemanaStr
+        })
         break
       case 'anexo':
-        // Solo asignaciones ACTIVAS o PROGRAMADAS con Anexo - coincide con stat
-        result = result.filter(a =>
-          (a.estado === 'activa' || a.estado === 'programado') &&
-          a.asignaciones_conductores?.some(c => c.documento === 'ANEXO')
-        )
+        // Anexo ESTA SEMANA (lunes a domingo)
+        result = result.filter(a => {
+          if (a.estado !== 'activa' && a.estado !== 'programado') return false
+          if (!a.asignaciones_conductores?.some(c => c.documento === 'ANEXO')) return false
+          const fechaRef = a.fecha_inicio || a.fecha_programada
+          if (!fechaRef) return false
+          const fechaLocal = getLocalDateStr(fechaRef)
+          return fechaLocal >= lunesSemanaStr && fechaLocal <= domingoSemanaStr
+        })
         break
       case 'entregasHoy':
-        // Entregas programadas para HOY - coincide con stat entregasHoy
+        // Entregas programadas para HOY
         result = result.filter(a => {
           if (a.estado !== 'programado' || !a.fecha_programada) return false
           const fecha = a.fecha_programada.split('T')[0]
@@ -557,10 +577,17 @@ export function AsignacionesModule() {
     })
   }, [filteredAsignaciones])
 
-  // Estadísticas para los stat cards (solo programadas del listado actual)
+  // Estadísticas para los stat cards (solo programadas de ESTA SEMANA)
   const programadasCount = useMemo(() => {
-    return asignaciones.filter(a => a.estado === 'programado').length
-  }, [asignaciones])
+    const { lunesSemanaStr, domingoSemanaStr } = calculatedStats
+    return asignaciones.filter(a => {
+      if (a.estado !== 'programado') return false
+      // Filtrar por fecha programada dentro de esta semana
+      if (!a.fecha_programada) return false
+      const fechaLocal = getLocalDateStr(a.fecha_programada)
+      return fechaLocal >= lunesSemanaStr && fechaLocal <= domingoSemanaStr
+    }).length
+  }, [asignaciones, calculatedStats])
 
   // Manejar click en stat cards para filtrar
   const handleStatCardClick = (cardType: string) => {
@@ -573,11 +600,11 @@ export function AsignacionesModule() {
     if (!activeStatCard) return []
 
     const labels: Record<string, string> = {
-      programadas: 'Programadas',
+      programadas: 'Programadas (Semana)',
       completadas: 'Completadas (Semana)',
       canceladas: 'Canceladas (Semana)',
-      cartaOferta: 'Carta Oferta (Activas/Prog.)',
-      anexo: 'Anexo (Activas/Prog.)'
+      cartaOferta: 'Cond. Nuevos (Semana)',
+      anexo: 'Cond. Anexo (Semana)'
     }
 
     return [{
