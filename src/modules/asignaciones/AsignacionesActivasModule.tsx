@@ -54,7 +54,6 @@ export function AsignacionesActivasModule() {
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
   const [vehiculosOperativos, setVehiculosOperativos] = useState(0) // PKG_ON_BASE + EN_USO
-  const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0) // Solo PKG_ON_BASE
   const [vehiculosEnUso, setVehiculosEnUso] = useState(0) // Solo EN_USO
   const [vehiculosPkgOnSinAsignacion, setVehiculosPkgOnSinAsignacion] = useState<any[]>([]) // PKG_ON_BASE sin asignación
   const [loading, setLoading] = useState(true)
@@ -168,7 +167,6 @@ export function AsignacionesActivasModule() {
 
         setTotalVehiculosFlota(totalFlota)
         setVehiculosOperativos(operativos)
-        setVehiculosPkgOn(pkgOn)
         setVehiculosEnUso(enUso)
         setVehiculosPkgOnSinAsignacion(pkgOnSinAsignacion)
       }
@@ -318,9 +316,9 @@ export function AsignacionesActivasModule() {
       porcentajeOcupacionGeneral,
       porcentajeOcupacionOperacional,
       porcentajeOperatividad,
-      autosDisponibles: vehiculosPkgOn // Todos los vehículos PKG_ON_BASE
+      autosDisponibles: vehiculosPkgOnSinAsignacion.length // Solo PKG_ON_BASE SIN asignación
     }
-  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOn, vehiculosEnUso])
+  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOnSinAsignacion, vehiculosEnUso])
 
   // Filtrar asignaciones según los filtros de columna y stat clickeada
   const filteredAsignaciones = useMemo(() => {
