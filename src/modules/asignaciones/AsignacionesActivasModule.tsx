@@ -680,27 +680,8 @@ export function AsignacionesActivasModule() {
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'vacantes' ? 'stat-card-active' : ''}`}
-            title="Click para ver detalle"
-            onClick={() => {
-              Swal.fire({
-                title: 'Turnos Disponibles',
-                html: `
-                  <div style="text-align: left; font-size: 14px; line-height: 1.8;">
-                    <p style="margin-bottom: 12px; color: #6B7280;">Total de turnos disponibles para asignar conductores:</p>
-                    <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; font-family: monospace;">
-                      <p style="margin: 0;"><strong>Vacantes Diurno:</strong> ${stats.vacantesD}</p>
-                      <p style="margin: 8px 0;"><strong>Vacantes Nocturno:</strong> ${stats.vacantesN}</p>
-                      <p style="margin: 8px 0;"><strong>Autos PKG_ON sin asignar:</strong> ${stats.autosDisponibles} (x2 turnos c/u = ${stats.autosDisponibles * 2})</p>
-                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
-                      <p style="margin: 0; font-size: 16px; color: #F59E0B;"><strong>Total: ${stats.vacantesD} + ${stats.vacantesN} + ${stats.autosDisponibles * 2} = ${stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}</strong></p>
-                    </div>
-                  </div>
-                `,
-                icon: 'info',
-                confirmButtonColor: '#F59E0B',
-                confirmButtonText: 'Entendido'
-              })
-            }}
+            title={`D: ${stats.vacantesD} | N: ${stats.vacantesN} | PKG_ON: ${stats.autosDisponibles} (x2) - Click para filtrar`}
+            onClick={() => handleStatCardClick('vacantes')}
           >
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
