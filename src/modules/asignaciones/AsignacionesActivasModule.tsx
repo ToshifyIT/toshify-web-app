@@ -285,14 +285,16 @@ export function AsignacionesActivasModule() {
     const cuposTotales = (turnoCount * 2) + cargoCount
     const cuposDisponibles = cuposTotales - cuposOcupados
 
+    // % Ocupación = Vehículos con asignación activa / Total Flota
     const porcentajeOcupacionGeneral = totalVehiculosFlota > 0
-      ? ((vehiculosEnUso / totalVehiculosFlota) * 100).toFixed(1)
+      ? ((vehiculosSet.size / totalVehiculosFlota) * 100).toFixed(1)
       : '0'
 
     const porcentajeOcupacionOperacional = vehiculosOperacionalesCount > 0
       ? ((vehiculosOcupadosOperacionales / vehiculosOperacionalesCount) * 100).toFixed(1)
       : '0'
 
+    // % Operatividad = Vehículos operativos (PKG_ON + EN_USO) / Total Flota
     const porcentajeOperatividad = totalVehiculosFlota > 0
       ? ((vehiculosOperativos / totalVehiculosFlota) * 100).toFixed(1)
       : '0'
