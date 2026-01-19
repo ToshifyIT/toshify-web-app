@@ -287,9 +287,13 @@ export function AsignacionesActivasModule() {
     const cuposTotales = (turnoCount * 2) + cargoCount
     const cuposDisponibles = cuposTotales - cuposOcupados
 
-    // % Ocupación = Vehículos con asignación activa / Total Flota
-    const porcentajeOcupacionGeneral = totalVehiculosFlota > 0
-      ? ((vehiculosSet.size / totalVehiculosFlota) * 100).toFixed(1)
+    // % Ocupación = (totalidad_turnos - turnos_disp) / totalidad_turnos
+    // totalidad_turnos = (vehículos activos + PKG_ON) * 2
+    // turnos_disp = vacantesD + vacantesN + (PKG_ON sin asignación * 2)
+    const totalidadTurnos = (vehiculosSet.size + vehiculosPkgOnSinAsignacion.length) * 2
+    const turnosDisp = vacantesD + vacantesN + (vehiculosPkgOnSinAsignacion.length * 2)
+    const porcentajeOcupacionGeneral = totalidadTurnos > 0
+      ? (((totalidadTurnos - turnosDisp) / totalidadTurnos) * 100).toFixed(1)
       : '0'
 
     const porcentajeOcupacionOperacional = vehiculosOperacionalesCount > 0
@@ -694,15 +698,21 @@ export function AsignacionesActivasModule() {
             title="Click para ver detalle del cálculo"
             onClick={() => {
               Swal.fire({
-                title: '% Ocupación',
+                title: '% Ocupacion',
                 html: `
                   <div style="text-align: left; font-size: 14px; line-height: 1.8;">
-                    <p style="margin-bottom: 12px; color: #6B7280;">Porcentaje de vehículos con asignación activa sobre el total de la flota:</p>
+                    <p style="margin-bottom: 12px; color: #6B7280;">Porcentaje de turnos ocupados sobre el total de turnos disponibles:</p>
                     <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; font-family: monospace;">
-                      <p style="margin: 0;"><strong>Vehículos con asignación activa:</strong> ${stats.vehiculos}</p>
-                      <p style="margin: 8px 0;"><strong>Total Flota:</strong> ${stats.totalFlota}</p>
+                      <p style="margin: 0;"><strong>Vehiculos con asignacion activa:</strong> ${stats.vehiculos}</p>
+                      <p style="margin: 8px 0;"><strong>PKG_ON sin asignacion:</strong> ${stats.autosDisponibles}</p>
+                      <p style="margin: 8px 0;"><strong>Totalidad Turnos:</strong> (${stats.vehiculos} + ${stats.autosDisponibles}) x 2 = ${(stats.vehiculos + stats.autosDisponibles) * 2}</p>
                       <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
-                      <p style="margin: 0; font-size: 16px; color: #059669;"><strong>= ${stats.vehiculos} / ${stats.totalFlota} = ${stats.porcentajeOcupacionGeneral}%</strong></p>
+                      <p style="margin: 0;"><strong>Vacantes D:</strong> ${stats.vacantesD}</p>
+                      <p style="margin: 8px 0;"><strong>Vacantes N:</strong> ${stats.vacantesN}</p>
+                      <p style="margin: 8px 0;"><strong>PKG_ON sin asignar (x2):</strong> ${stats.autosDisponibles * 2}</p>
+                      <p style="margin: 8px 0;"><strong>Turnos Disponibles:</strong> ${stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}</p>
+                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
+                      <p style="margin: 0; font-size: 16px; color: #059669;"><strong>= (${(stats.vehiculos + stats.autosDisponibles) * 2} - ${stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}) / ${(stats.vehiculos + stats.autosDisponibles) * 2} = ${stats.porcentajeOcupacionGeneral}%</strong></p>
                     </div>
                   </div>
                 `,
