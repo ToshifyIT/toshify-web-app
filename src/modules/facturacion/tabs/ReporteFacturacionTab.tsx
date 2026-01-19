@@ -66,6 +66,14 @@ interface FacturacionConductor {
   monto_excesos?: number      // P006 - Excesos de KM
   km_exceso?: number          // KM de exceso
   monto_penalidades?: number  // P007 - Penalidades
+  // Detalle de penalidades para el modal
+  penalidades_detalle?: Array<{
+    monto: number
+    detalle: string
+    tipo: 'completa' | 'cuota'
+    cuotaNum?: number
+    totalCuotas?: number
+  }>
 }
 
 interface FacturacionDetalle {
@@ -112,6 +120,8 @@ function getSemanaArgentina(date: Date) {
   return { inicio, fin }
 }
 
+
+
 export function ReporteFacturacionTab() {
   // Estados principales
   const [facturaciones, setFacturaciones] = useState<FacturacionConductor[]>([])
@@ -137,6 +147,8 @@ export function ReporteFacturacionTab() {
   const [detalleFacturacion, setDetalleFacturacion] = useState<FacturacionConductor | null>(null)
   const [detalleItems, setDetalleItems] = useState<FacturacionDetalle[]>([])
   const [exportingPdf, setExportingPdf] = useState(false)
+
+  
 
   // Memoized filtered detalle items to avoid recalculation on each render
   const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento), [detalleItems])
@@ -448,42 +460,94 @@ export function ReporteFacturacionTab() {
       // a) Penalidades aplicadas completas en esta semana
       const { data: penalidadesCompletas } = await (supabase
         .from('penalidades') as any)
-        .select('conductor_id, monto, detalle')
+        .select('conductor_id, monto, detalle, observaciones')
         .eq('aplicado', true)
         .eq('fraccionado', false)
         .eq('semana_aplicacion', semanaDelPeriodo)
         .eq('anio_aplicacion', anioDelPeriodo)
       
       // b) Cuotas fraccionadas de esta semana (no aplicadas aún)
+      // Buscar cuotas que coincidan con semana Y (anio correcto O anio null)
       const { data: cuotasSemana } = await (supabase
         .from('penalidades_cuotas') as any)
-        .select(`
-          monto_cuota,
-          penalidad:penalidades!penalidad_id(conductor_id)
-        `)
+        .select('id, penalidad_id, monto_cuota, numero_cuota, anio')
         .eq('semana', semanaDelPeriodo)
-        .eq('anio', anioDelPeriodo)
         .eq('aplicado', false)
+      
+      // Filtrar solo las cuotas del año correcto o sin año definido
+      const cuotasFiltradas = (cuotasSemana || []).filter((c: any) => 
+        !c.anio || c.anio === anioDelPeriodo
+      )
+
+      // Obtener los conductor_id de las penalidades asociadas a las cuotas
+      const penalidadIds = [...new Set((cuotasFiltradas || []).map((c: any) => c.penalidad_id).filter(Boolean))]
+      
+      let penalidadesPadre: any[] = []
+      if (penalidadIds.length > 0) {
+        const { data: penData } = await (supabase
+          .from('penalidades') as any)
+          .select('id, conductor_id, cantidad_cuotas, observaciones')
+          .in('id', penalidadIds)
+        penalidadesPadre = penData || []
+      }
+      
+      const penalidadConductorMap = new Map<string, string>(
+        penalidadesPadre.map((p: any) => [p.id, p.conductor_id])
+      )
+      
+      // Map para cantidad de cuotas de cada penalidad fraccionada
+      const penalidadCuotasMap = new Map<string, number>(
+        penalidadesPadre.map((p: any) => [p.id, p.cantidad_cuotas || 1])
+      )
 
       const penalidadesMap = new Map<string, number>()
+      // Map para guardar el detalle de penalidades por conductor
+      const detalleMap = new Map<string, Array<{
+        monto: number
+        detalle: string
+        tipo: 'completa' | 'cuota'
+        cuotaNum?: number
+        totalCuotas?: number
+      }>>()
       
       // Sumar penalidades completas
       ;(penalidadesCompletas || []).forEach((p: any) => {
         if (p.conductor_id) {
           const actual = penalidadesMap.get(p.conductor_id) || 0
           penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+          
+          // Guardar detalle
+          const detalles = detalleMap.get(p.conductor_id) || []
+          detalles.push({
+            monto: p.monto || 0,
+            detalle: p.detalle || p.observaciones || 'Cobro por incidencia',
+            tipo: 'completa'
+          })
+          detalleMap.set(p.conductor_id, detalles)
         }
       })
       
       // Sumar cuotas fraccionadas
-      ;(cuotasSemana || []).forEach((c: any) => {
-        const conductorId = c.penalidad?.conductor_id
+      ;(cuotasFiltradas || []).forEach((c: any) => {
+        const conductorId = penalidadConductorMap.get(c.penalidad_id)
         if (conductorId) {
           const actual = penalidadesMap.get(conductorId) || 0
           penalidadesMap.set(conductorId, actual + (c.monto_cuota || 0))
+          
+          // Guardar detalle de cuota
+          const penPadre = penalidadesPadre.find((p: any) => p.id === c.penalidad_id)
+          const detalles = detalleMap.get(conductorId) || []
+          detalles.push({
+            monto: c.monto_cuota || 0,
+            detalle: penPadre?.observaciones || 'Cobro fraccionado',
+            tipo: 'cuota',
+            cuotaNum: c.numero_cuota,
+            totalCuotas: penalidadCuotasMap.get(c.penalidad_id) || 1
+          })
+          detalleMap.set(conductorId, detalles)
         }
       })
-
+      
       // 6. Calcular facturación proyectada para cada conductor
       const facturacionesProyectadas: FacturacionConductor[] = []
 
@@ -618,7 +682,9 @@ export function ReporteFacturacionTab() {
           monto_peajes: montoPeajes,       // P005
           monto_excesos: montoExcesos,     // P006
           km_exceso: kmExceso,
-          monto_penalidades: montoPenalidades  // P007
+          monto_penalidades: montoPenalidades,  // P007
+          // Detalle de penalidades para el modal
+          penalidades_detalle: detalleMap.get(conductorId) || []
         })
       }
 
@@ -734,30 +800,81 @@ export function ReporteFacturacionTab() {
       // b) Cuotas fraccionadas de esta semana
       const { data: cuotasSemanaRecalc } = await (supabase
         .from('penalidades_cuotas') as any)
-        .select(`
-          monto_cuota,
-          penalidad:penalidades!penalidad_id(conductor_id)
-        `)
+        .select('id, penalidad_id, monto_cuota, numero_cuota, anio')
         .eq('semana', semanaDelPeriodoRecalc)
-        .eq('anio', anioDelPeriodoRecalc)
         .eq('aplicado', false)
+      
+      // Filtrar cuotas del año correcto o sin año
+      const cuotasFiltradasRecalc = (cuotasSemanaRecalc || []).filter((c: any) => 
+        !c.anio || c.anio === anioDelPeriodoRecalc
+      )
+
+      // Obtener los conductor_id de las penalidades asociadas
+      const penalidadIdsRecalc = [...new Set((cuotasFiltradasRecalc || []).map((c: any) => c.penalidad_id).filter(Boolean))]
+      
+      let penalidadesPadreRecalc: any[] = []
+      if (penalidadIdsRecalc.length > 0) {
+        const { data: penDataRecalc } = await (supabase
+          .from('penalidades') as any)
+          .select('id, conductor_id, cantidad_cuotas, observaciones')
+          .in('id', penalidadIdsRecalc)
+        penalidadesPadreRecalc = penDataRecalc || []
+      }
+      
+      const penalidadConductorMapRecalc = new Map<string, string>(
+        penalidadesPadreRecalc.map((p: any) => [p.id, p.conductor_id])
+      )
+      
+      // Para recalc también necesitamos cantidad_cuotas
+      const penalidadCuotasMapRecalc = new Map<string, number>(
+        penalidadesPadreRecalc.map((p: any) => [p.id, p.cantidad_cuotas || 1])
+      )
 
       const penalidadesMap = new Map<string, number>()
+      // Map para guardar el detalle de penalidades por conductor (para el modal)
+      const detalleMapRecalc = new Map<string, Array<{
+        monto: number
+        detalle: string
+        tipo: 'completa' | 'cuota'
+        cuotaNum?: number
+        totalCuotas?: number
+      }>>()
       
       // Sumar penalidades completas
       ;(penalidadesCompletas || []).forEach((p: any) => {
         if (p.conductor_id) {
           const actual = penalidadesMap.get(p.conductor_id) || 0
           penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+          
+          // Guardar detalle
+          const detalles = detalleMapRecalc.get(p.conductor_id) || []
+          detalles.push({
+            monto: p.monto || 0,
+            detalle: p.detalle || 'Cobro por incidencia',
+            tipo: 'completa'
+          })
+          detalleMapRecalc.set(p.conductor_id, detalles)
         }
       })
       
       // Sumar cuotas fraccionadas
-      ;(cuotasSemanaRecalc || []).forEach((c: any) => {
-        const conductorId = c.penalidad?.conductor_id
+      ;(cuotasFiltradasRecalc || []).forEach((c: any) => {
+        const conductorId = penalidadConductorMapRecalc.get(c.penalidad_id)
         if (conductorId) {
           const actual = penalidadesMap.get(conductorId) || 0
           penalidadesMap.set(conductorId, actual + (c.monto_cuota || 0))
+          
+          // Guardar detalle de cuota
+          const penPadre = penalidadesPadreRecalc.find((p: any) => p.id === c.penalidad_id)
+          const detalles = detalleMapRecalc.get(conductorId) || []
+          detalles.push({
+            monto: c.monto_cuota || 0,
+            detalle: penPadre?.observaciones || 'Cobro fraccionado',
+            tipo: 'cuota',
+            cuotaNum: c.numero_cuota,
+            totalCuotas: penalidadCuotasMapRecalc.get(c.penalidad_id) || 1
+          })
+          detalleMapRecalc.set(conductorId, detalles)
         }
       })
 
@@ -1116,12 +1233,14 @@ export function ReporteFacturacionTab() {
 
   // Ver detalle de facturación
   async function verDetalle(facturacion: FacturacionConductor) {
+    console.log('[verDetalle] INICIO - modoVistaPrevia:', modoVistaPrevia, 'facturacion.id:', facturacion.id)
     setLoadingDetalle(true)
     setShowDetalle(true)
     setDetalleFacturacion(facturacion)
 
     // En modo Vista Previa, generar detalles simulados desde los datos calculados
     if (modoVistaPrevia || facturacion.id.startsWith('preview-')) {
+      console.log('[verDetalle] Entrando en modo Vista Previa')
       const detallesSimulados: FacturacionDetalle[] = []
 
       // P001/P002 - Alquiler
@@ -1182,6 +1301,51 @@ export function ReporteFacturacionTab() {
         })
       }
 
+      // P007 - Multas/Penalidades - Consultar directamente de la BD
+      // Consultar TODAS las penalidades del conductor para esta semana
+      const { data: penalidades } = await supabase
+        .from('penalidades')
+        .select('id, monto, observaciones, fraccionado, cantidad_cuotas')
+        .eq('conductor_id', facturacion.conductor_id)
+        .eq('aplicado', true)
+      
+      // Agregar cada penalidad
+      ;(penalidades || []).forEach((p: any, idx: number) => {
+        if (!p.fraccionado) {
+          // Penalidad completa
+          detallesSimulados.push({
+            id: `det-pen-${facturacion.conductor_id}-${idx}`,
+            facturacion_id: facturacion.id,
+            concepto_codigo: 'P007',
+            concepto_descripcion: p.observaciones || 'Multa/Infracción',
+            cantidad: 1,
+            precio_unitario: p.monto,
+            subtotal: p.monto,
+            total: p.monto,
+            es_descuento: false,
+            referencia_id: p.id,
+            referencia_tipo: 'penalidad'
+          })
+        }
+      })
+      
+      // Si no hay penalidades pero hay monto, mostrar el total
+      if ((penalidades || []).length === 0 && facturacion.monto_penalidades && facturacion.monto_penalidades > 0) {
+        detallesSimulados.push({
+          id: `det-penalidades-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'P007',
+          concepto_descripcion: 'Multas/Infracciones',
+          cantidad: 1,
+          precio_unitario: facturacion.monto_penalidades,
+          subtotal: facturacion.monto_penalidades,
+          total: facturacion.monto_penalidades,
+          es_descuento: false,
+          referencia_id: null,
+          referencia_tipo: null
+        })
+      }
+
       // P004 - Tickets a Favor (descuentos)
       if (facturacion.subtotal_descuentos > 0) {
         detallesSimulados.push({
@@ -1216,7 +1380,36 @@ export function ReporteFacturacionTab() {
 
       if (error) throw error
 
-      setDetalleItems((detalles || []) as FacturacionDetalle[])
+      // Filtrar el item genérico de MULTAS/INFRACCIONES (P007) y reemplazar con detalle real
+      const detallesSinPenalidades = (detalles || []).filter((d: any) => d.concepto_codigo !== 'P007')
+      
+      // Consultar detalle de penalidades del conductor
+      const { data: penalidades } = await supabase
+        .from('penalidades')
+        .select('id, monto, observaciones, fraccionado, cantidad_cuotas')
+        .eq('conductor_id', facturacion.conductor_id)
+        .eq('aplicado', true)
+      
+      // Crear items de detalle para cada penalidad
+      const detallesPenalidades: FacturacionDetalle[] = (penalidades || [])
+        .filter((p: any) => !p.fraccionado)
+        .map((p: any, idx: number) => ({
+          id: `det-pen-${facturacion.conductor_id}-${idx}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'P007',
+          concepto_descripcion: p.observaciones || 'Multa/Infracción',
+          cantidad: 1,
+          precio_unitario: p.monto,
+          subtotal: p.monto,
+          total: p.monto,
+          es_descuento: false,
+          referencia_id: p.id,
+          referencia_tipo: 'penalidad'
+        }))
+      
+      // Combinar detalles
+      const todosDetalles = [...detallesSinPenalidades, ...detallesPenalidades] as FacturacionDetalle[]
+      setDetalleItems(todosDetalles)
     } catch (error) {
       console.error('Error cargando detalle:', error)
       Swal.fire('Error', 'No se pudo cargar el detalle', 'error')

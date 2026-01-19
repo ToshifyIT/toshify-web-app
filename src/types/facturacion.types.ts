@@ -166,6 +166,7 @@ export interface SaldoConductor {
   saldo_actual: number
   dias_mora: number | null
   monto_mora_acumulada: number | null
+  fecha_referencia: string | null  // Fecha desde la cual se considera el saldo (para cálculo de mora)
   ultima_actualizacion: string | null
   created_at: string
   updated_at: string
