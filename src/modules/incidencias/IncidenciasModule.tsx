@@ -22,7 +22,9 @@ import {
   Car,
   Download,
   Filter,
-  Check
+  Check,
+  Calendar,
+  ArrowRightLeft
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -162,6 +164,13 @@ export function IncidenciasModule() {
   const [periodosDisponibles, setPeriodosDisponibles] = useState<Array<{semana: number, anio: number, label: string}>>([])
   const [aplicandoCobro, setAplicandoCobro] = useState(false)
 
+  // Modal de reasignar semana
+  const [showReasignarModal, setShowReasignarModal] = useState(false)
+  const [penalidadReasignar, setPenalidadReasignar] = useState<PenalidadCompleta | null>(null)
+  const [nuevaSemana, setNuevaSemana] = useState<number>(0)
+  const [nuevoAnio, setNuevoAnio] = useState<number>(new Date().getFullYear())
+  const [reasignando, setReasignando] = useState(false)
+
   // Helper para obtener fecha local en formato YYYY-MM-DD
   function getLocalDateString() {
     const today = new Date()
@@ -293,7 +302,13 @@ export function IncidenciasModule() {
         }
       })
       setIncidencias(incidenciasConTipo)
-      setPenalidades(penalidadesRes.data || [])
+      const penData = penalidadesRes.data || []
+      console.log('=== DEBUG PENALIDADES ===')
+      console.log('Total penalidades cargadas:', penData.length)
+      console.log('Penalidades con aplicado=false:', penData.filter((p: any) => !p.aplicado).length)
+      console.log('Penalidades con aplicado=true:', penData.filter((p: any) => p.aplicado).length)
+      console.log('Primeras 5 penalidades:', penData.slice(0, 5).map((p: any) => ({ id: p.id, aplicado: p.aplicado, monto: p.monto, incidencia_id: p.incidencia_id })))
+      setPenalidades(penData)
 
       // Estado inicial del form
       if (estadosRes.data && estadosRes.data.length > 0) {
@@ -812,9 +827,14 @@ export function IncidenciasModule() {
               <CheckCircle size={14} />
             </button>
           ) : (
-            <button className="dt-btn-action dt-btn-warning" data-tooltip="Desaplicar" onClick={() => handleDesaplicar(row.original)}>
-              <XCircle size={14} />
-            </button>
+            <>
+              <button className="dt-btn-action dt-btn-info" data-tooltip="Reasignar semana" onClick={() => handleReasignarSemana(row.original)}>
+                <Calendar size={14} />
+              </button>
+              <button className="dt-btn-action dt-btn-warning" data-tooltip="Desaplicar" onClick={() => handleDesaplicar(row.original)}>
+                <XCircle size={14} />
+              </button>
+            </>
           )}
           <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerPenalidad(row.original)}>
             <Eye size={14} />
@@ -921,10 +941,19 @@ export function IncidenciasModule() {
         created_by_name: profile?.full_name || 'Sistema'
       }
       
-      const { error: insertError } = await (supabase.from('penalidades' as any) as any)
+      const { data: insertedData, error: insertError } = await (supabase.from('penalidades' as any) as any)
         .insert(penalidadData)
+        .select('*')
+        .single()
       
       if (insertError) throw insertError
+      
+      // Forzar aplicado = false después de insertar (por si hay un default/trigger en BD)
+      if (insertedData && insertedData.aplicado === true) {
+        await (supabase.from('penalidades' as any) as any)
+          .update({ aplicado: false, fecha_aplicacion: null, semana_aplicacion: null, anio_aplicacion: null })
+          .eq('id', insertedData.id)
+      }
       
       Swal.fire({
         icon: 'success',
@@ -1254,20 +1283,34 @@ export function IncidenciasModule() {
     setAplicarFraccionado(false)
     setCantidadCuotas(2)
     
-    // Calcular semana actual
+    // Calcular semana actual y semana anterior (para regularización)
     const hoy = new Date()
     const semanaActual = getWeekNumber(hoy.toISOString().split('T')[0])
     const anioActual = hoy.getFullYear()
     
-    setSemanaInicio(semanaActual)
-    setAnioInicio(anioActual)
+    // Por defecto usar semana anterior para regularización
+    let semanaAnterior = semanaActual - 1
+    let anioAnterior = anioActual
+    if (semanaAnterior < 1) {
+      semanaAnterior = 52
+      anioAnterior = anioActual - 1
+    }
     
-    // Generar períodos disponibles (próximas 24 semanas)
+    setSemanaInicio(semanaAnterior)
+    setAnioInicio(anioAnterior)
+    
+    // Generar períodos disponibles (4 semanas anteriores + semana actual + próximas 20 semanas)
     const periodos: Array<{semana: number, anio: number, label: string}> = []
-    let sem = semanaActual
-    let anio = anioActual
     
-    for (let i = 0; i < 24; i++) {
+    // Agregar 4 semanas anteriores
+    let sem = semanaActual - 4
+    let anio = anioActual
+    if (sem < 1) {
+      sem = 52 + sem
+      anio = anioActual - 1
+    }
+    
+    for (let i = 0; i < 25; i++) { // 4 anteriores + actual + 20 siguientes
       periodos.push({
         semana: sem,
         anio: anio,
@@ -1326,12 +1369,15 @@ export function IncidenciasModule() {
         
         if (cuotasError) throw cuotasError
         
-        // Actualizar penalidad como fraccionada
+        // Actualizar penalidad como fraccionada y aplicada
         const { error: updateError } = await (supabase.from('penalidades' as any) as any)
           .update({
             fraccionado: true,
             cantidad_cuotas: cantidadCuotas,
-            aplicado: false, // No se marca como aplicado hasta que se cobren todas las cuotas
+            aplicado: true, // Marcamos como aplicado porque ya se fraccionó
+            semana_aplicacion: semanaInicio,
+            anio_aplicacion: anioInicio,
+            fecha_aplicacion: new Date().toISOString().split('T')[0],
             updated_by: profile?.full_name || 'Sistema'
           })
           .eq('id', penalidadAplicar.id)
@@ -1434,6 +1480,149 @@ export function IncidenciasModule() {
         console.error('Error desaplicando:', error)
         Swal.fire('Error', error.message || 'No se pudo desaplicar', 'error')
       }
+    }
+  }
+
+  // Abrir modal de reasignar semana
+  function handleReasignarSemana(penalidad: PenalidadCompleta) {
+    setPenalidadReasignar(penalidad)
+    
+    // Setear la semana actual del cobro
+    setNuevaSemana(penalidad.semana_aplicacion || 1)
+    setNuevoAnio(penalidad.anio_aplicacion || new Date().getFullYear())
+    
+    // Generar períodos disponibles (8 semanas anteriores + 20 semanas futuras)
+    const semanaActual = getWeek(new Date())
+    const anioActual = new Date().getFullYear()
+    const periodos: Array<{semana: number, anio: number, label: string}> = []
+    
+    let sem = semanaActual - 8
+    let anio = anioActual
+    if (sem < 1) {
+      sem = 52 + sem
+      anio = anioActual - 1
+    }
+    
+    for (let i = 0; i < 30; i++) { // 8 anteriores + actual + 21 siguientes
+      periodos.push({
+        semana: sem,
+        anio: anio,
+        label: `Semana ${sem} - ${anio}`
+      })
+      sem++
+      if (sem > 52) {
+        sem = 1
+        anio++
+      }
+    }
+    
+    setPeriodosDisponibles(periodos)
+    setShowReasignarModal(true)
+  }
+
+  // Helper para obtener semana del año
+  function getWeek(date: Date): number {
+    const firstDayOfYear = new Date(date.getFullYear(), 0, 1)
+    const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000
+    return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7)
+  }
+
+  // Ejecutar reasignación de semana con recálculo en cascada
+  async function handleConfirmarReasignacion() {
+    if (!penalidadReasignar) return
+    
+    const semanaOrigen = penalidadReasignar.semana_aplicacion
+    const anioOrigen = penalidadReasignar.anio_aplicacion
+    
+    if (semanaOrigen === nuevaSemana && anioOrigen === nuevoAnio) {
+      Swal.fire('Sin cambios', 'La semana seleccionada es la misma que la actual', 'info')
+      return
+    }
+    
+    setReasignando(true)
+    try {
+      const monto = penalidadReasignar.monto || 0
+      const esAFavor = penalidadReasignar.tipo_es_a_favor === true
+      
+      // 1. Actualizar la penalidad con la nueva semana
+      const { error: updateError } = await (supabase.from('penalidades' as any) as any)
+        .update({
+          semana_aplicacion: nuevaSemana,
+          anio_aplicacion: nuevoAnio,
+          updated_by: profile?.full_name || 'Sistema'
+        })
+        .eq('id', penalidadReasignar.id)
+      
+      if (updateError) throw updateError
+      
+      // 2. Recalcular período origen (restar el monto)
+      if (semanaOrigen && anioOrigen) {
+        const { data: periodoOrigen } = await (supabase
+          .from('periodos_facturacion') as any)
+          .select('id, total_cargos, total_descuentos, total_neto')
+          .eq('semana', semanaOrigen)
+          .eq('anio', anioOrigen)
+          .single()
+        
+        if (periodoOrigen) {
+          const nuevosCargosOrigen = esAFavor 
+            ? periodoOrigen.total_cargos 
+            : (periodoOrigen.total_cargos || 0) - monto
+          const nuevosDescuentosOrigen = esAFavor 
+            ? (periodoOrigen.total_descuentos || 0) - monto 
+            : periodoOrigen.total_descuentos
+          
+          await (supabase.from('periodos_facturacion') as any)
+            .update({
+              total_cargos: Math.max(0, nuevosCargosOrigen),
+              total_descuentos: Math.max(0, nuevosDescuentosOrigen),
+              total_neto: Math.max(0, nuevosCargosOrigen) - Math.max(0, nuevosDescuentosOrigen),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', periodoOrigen.id)
+        }
+      }
+      
+      // 3. Recalcular período destino (sumar el monto)
+      const { data: periodoDestino } = await (supabase
+        .from('periodos_facturacion') as any)
+        .select('id, total_cargos, total_descuentos, total_neto')
+        .eq('semana', nuevaSemana)
+        .eq('anio', nuevoAnio)
+        .single()
+      
+      if (periodoDestino) {
+        const nuevosCargosDestino = esAFavor 
+          ? periodoDestino.total_cargos 
+          : (periodoDestino.total_cargos || 0) + monto
+        const nuevosDescuentosDestino = esAFavor 
+          ? (periodoDestino.total_descuentos || 0) + monto 
+          : periodoDestino.total_descuentos
+        
+        await (supabase.from('periodos_facturacion') as any)
+          .update({
+            total_cargos: nuevosCargosDestino,
+            total_descuentos: nuevosDescuentosDestino,
+            total_neto: nuevosCargosDestino - nuevosDescuentosDestino,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', periodoDestino.id)
+      }
+      
+      setShowReasignarModal(false)
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'Semana reasignada',
+        html: `El cobro se movió de <strong>Semana ${semanaOrigen}-${anioOrigen}</strong> a <strong>Semana ${nuevaSemana}-${nuevoAnio}</strong><br><br>Los totales de ambos períodos fueron recalculados.`
+      })
+      
+      cargarDatos()
+    } catch (error: any) {
+      console.error('Error reasignando semana:', error)
+      Swal.fire('Error', error.message || 'No se pudo reasignar la semana', 'error')
+    } finally {
+      setReasignando(false)
     }
   }
 
@@ -2211,6 +2400,136 @@ export function IncidenciasModule() {
                     ? 'Aplicar Descuento' 
                     : (aplicarFraccionado ? 'Crear Cuotas' : 'Aplicar Cobro')
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Reasignar Semana */}
+      {showReasignarModal && penalidadReasignar && (
+        <div className="modal-overlay" onClick={() => setShowReasignarModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div className="modal-header" style={{ borderBottom: 'none', padding: '20px 24px 0' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ArrowRightLeft size={20} style={{ color: '#3B82F6' }} />
+                Reasignar Semana
+              </h3>
+              <button className="modal-close" onClick={() => setShowReasignarModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="modal-body" style={{ padding: '20px 24px' }}>
+              {/* Info del cobro */}
+              <div style={{ 
+                padding: '16px', 
+                background: '#f8f9fa', 
+                borderRadius: '8px', 
+                marginBottom: '20px',
+                border: '1px solid #e9ecef'
+              }}>
+                <div style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>Conductor</div>
+                <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '12px' }}>
+                  {penalidadReasignar.conductor_display || 'Sin conductor'}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#666', marginBottom: '2px' }}>Monto</div>
+                    <div style={{ fontWeight: 600, fontSize: '16px', color: penalidadReasignar.tipo_es_a_favor ? '#10B981' : '#EF4444' }}>
+                      {penalidadReasignar.tipo_es_a_favor ? '-' : ''}{formatMoney(penalidadReasignar.monto)}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '13px', color: '#666', marginBottom: '2px' }}>Semana actual</div>
+                    <div style={{ fontWeight: 600, fontSize: '16px' }}>
+                      S{penalidadReasignar.semana_aplicacion} - {penalidadReasignar.anio_aplicacion}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Selector de nueva semana */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, fontSize: '14px', color: '#333' }}>
+                  Nueva semana de aplicación:
+                </label>
+                <select
+                  value={`${nuevaSemana}-${nuevoAnio}`}
+                  onChange={(e) => {
+                    const [sem, anio] = e.target.value.split('-').map(Number)
+                    setNuevaSemana(sem)
+                    setNuevoAnio(anio)
+                  }}
+                  style={{ 
+                    width: '100%', 
+                    padding: '12px 14px', 
+                    borderRadius: '6px', 
+                    border: '1px solid #e5e5e5',
+                    background: '#fff',
+                    color: '#333',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                >
+                  {periodosDisponibles.map(p => (
+                    <option 
+                      key={`${p.semana}-${p.anio}`} 
+                      value={`${p.semana}-${p.anio}`}
+                      style={{ 
+                        fontWeight: p.semana === penalidadReasignar.semana_aplicacion && p.anio === penalidadReasignar.anio_aplicacion ? 'bold' : 'normal'
+                      }}
+                    >
+                      {p.label} {p.semana === penalidadReasignar.semana_aplicacion && p.anio === penalidadReasignar.anio_aplicacion ? '(actual)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Aviso de recálculo */}
+              <div style={{ 
+                padding: '12px 14px', 
+                background: 'rgba(59, 130, 246, 0.1)', 
+                borderRadius: '6px',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                fontSize: '13px',
+                color: '#1E40AF'
+              }}>
+                <strong>Recálculo automático:</strong> Al confirmar, se actualizarán los totales de ambos períodos (origen y destino).
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ borderTop: 'none', padding: '16px 24px 24px', gap: '12px' }}>
+              <button 
+                onClick={() => setShowReasignarModal(false)} 
+                disabled={reasignando}
+                style={{
+                  padding: '10px 24px',
+                  borderRadius: '6px',
+                  border: '1px solid #e5e5e5',
+                  background: '#fff',
+                  color: '#666',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarReasignacion}
+                disabled={reasignando || (nuevaSemana === penalidadReasignar.semana_aplicacion && nuevoAnio === penalidadReasignar.anio_aplicacion)}
+                style={{
+                  padding: '10px 24px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: '#3B82F6',
+                  color: '#fff',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  opacity: (nuevaSemana === penalidadReasignar.semana_aplicacion && nuevoAnio === penalidadReasignar.anio_aplicacion) ? 0.5 : 1
+                }}
+              >
+                {reasignando ? 'Reasignando...' : 'Confirmar Reasignación'}
               </button>
             </div>
           </div>
