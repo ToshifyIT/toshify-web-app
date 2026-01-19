@@ -257,13 +257,39 @@ export function SaldosAbonosTab() {
             dropdown.querySelectorAll('.conductor-option').forEach(opt => {
               opt.addEventListener('mouseenter', () => (opt as HTMLElement).style.background = '#f5f5f5')
               opt.addEventListener('mouseleave', () => (opt as HTMLElement).style.background = 'white')
-              opt.addEventListener('click', () => {
+              opt.addEventListener('click', async () => {
                 const id = (opt as HTMLElement).dataset.id || ''
                 const c = conductoresParaModal.find(x => x.id === id)
                 if (c) {
                   searchInput.value = `${c.apellidos}, ${c.nombres}`
                   hiddenInput.value = id
                   dropdown.style.display = 'none'
+                  
+                  // Verificar si tiene fraccionamiento pendiente
+                  const radioFracc = document.getElementById('swal-fraccionado') as HTMLInputElement
+                  const labelFracc = document.getElementById('label-fraccionado') as HTMLElement
+                  const radioComp = document.getElementById('swal-completo') as HTMLInputElement
+                  
+                  const { data: pendientes } = await supabase
+                    .from('cobros_fraccionados')
+                    .select('id')
+                    .eq('conductor_id', id)
+                    .eq('aplicado', false)
+                    .limit(1)
+                  
+                  if (pendientes && pendientes.length > 0) {
+                    radioFracc.disabled = true
+                    labelFracc.style.opacity = '0.5'
+                    labelFracc.style.cursor = 'not-allowed'
+                    labelFracc.title = 'Ya tiene un fraccionamiento pendiente'
+                    radioComp.checked = true
+                    radioComp.dispatchEvent(new Event('change'))
+                  } else {
+                    radioFracc.disabled = false
+                    labelFracc.style.opacity = '1'
+                    labelFracc.style.cursor = 'pointer'
+                    labelFracc.title = ''
+                  }
                 }
               })
             })
