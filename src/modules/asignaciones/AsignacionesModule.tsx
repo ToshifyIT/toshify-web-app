@@ -1143,9 +1143,10 @@ export function AsignacionesModule() {
       if (regularizarData.fecha_inicio) {
         updateData.fecha_inicio = new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString()
       }
-      if (regularizarData.fecha_fin) {
-        updateData.fecha_fin = new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString()
-      }
+      // Fecha fin: si tiene valor lo guarda, si está vacío lo pone en null
+      updateData.fecha_fin = regularizarData.fecha_fin 
+        ? new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString() 
+        : null
       if (regularizarData.notas !== regularizarAsignacion.notas) {
         updateData.notas = regularizarData.notas
       }
