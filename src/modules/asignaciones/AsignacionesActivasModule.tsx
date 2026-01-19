@@ -334,7 +334,7 @@ export function AsignacionesActivasModule() {
     if (activeStatFilter) {
       switch (activeStatFilter) {
         case 'vacantes':
-          // Solo mostrar asignaciones con al menos 1 vacante
+          // Mostrar asignaciones TURNO con al menos 1 vacante
           result = result.filter(a => {
             if (a.horario === 'TURNO') {
               const conductores = a.asignaciones_conductores || []
@@ -345,19 +345,15 @@ export function AsignacionesActivasModule() {
             return false // CARGO no tiene vacantes en el mismo sentido
           })
           break
-        case 'autosDisponibles':
-          // Solo vehículos PKG_ON_BASE SIN conductores activos asignados
-          // No mostrar asignaciones con conductores - esos no están "disponibles"
-          result = []
-          break
         // Para totalFlota y vehiculosActivos no hay filtrado especial
         default:
           break
       }
     }
 
-    // Si el filtro es autosDisponibles, agregar vehículos PKG_ON_BASE sin asignación
-    if (activeStatFilter === 'autosDisponibles') {
+    // Si el filtro es vacantes, también agregar vehículos PKG_ON_BASE sin asignación
+    // (cada auto sin asignar = 2 turnos disponibles)
+    if (activeStatFilter === 'vacantes') {
       // Crear filas "fake" para vehículos sin asignación
       const vehiculosSinAsignacionRows = vehiculosPkgOnSinAsignacion.map(v => ({
         id: `sin-asignacion-${v.id}`,
@@ -366,7 +362,7 @@ export function AsignacionesActivasModule() {
         fecha_programada: null,
         fecha_inicio: '-',
         modalidad: '-',
-        horario: '-',
+        horario: 'TURNO', // Marcar como TURNO para mostrar que tiene 2 turnos disponibles
         estado: 'sin_asignacion',
         created_at: '',
         vehiculos: {
@@ -684,24 +680,32 @@ export function AsignacionesActivasModule() {
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'vacantes' ? 'stat-card-active' : ''}`}
-            title={`Diurno: ${stats.vacantesD} | Nocturno: ${stats.vacantesN} - Click para ver solo vacantes`}
-            onClick={() => handleStatCardClick('vacantes')}
+            title="Click para ver detalle"
+            onClick={() => {
+              Swal.fire({
+                title: 'Turnos Disponibles',
+                html: `
+                  <div style="text-align: left; font-size: 14px; line-height: 1.8;">
+                    <p style="margin-bottom: 12px; color: #6B7280;">Total de turnos disponibles para asignar conductores:</p>
+                    <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; font-family: monospace;">
+                      <p style="margin: 0;"><strong>Vacantes Diurno:</strong> ${stats.vacantesD}</p>
+                      <p style="margin: 8px 0;"><strong>Vacantes Nocturno:</strong> ${stats.vacantesN}</p>
+                      <p style="margin: 8px 0;"><strong>Autos PKG_ON sin asignar:</strong> ${stats.autosDisponibles} (x2 turnos c/u = ${stats.autosDisponibles * 2})</p>
+                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
+                      <p style="margin: 0; font-size: 16px; color: #F59E0B;"><strong>Total: ${stats.vacantesD} + ${stats.vacantesN} + ${stats.autosDisponibles * 2} = ${stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}</strong></p>
+                    </div>
+                  </div>
+                `,
+                icon: 'info',
+                confirmButtonColor: '#F59E0B',
+                confirmButtonText: 'Entendido'
+              })
+            }}
           >
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.vacantesD + stats.vacantesN}</span>
+              <span className="stat-value">{stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}</span>
               <span className="stat-label">Turnos Disponibles</span>
-            </div>
-          </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatFilter === 'autosDisponibles' ? 'stat-card-active' : ''}`}
-            title="Todos los vehículos con estado PKG_ON_BASE (disponibles en base)"
-            onClick={() => handleStatCardClick('autosDisponibles')}
-          >
-            <Car size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.autosDisponibles}</span>
-              <span className="stat-label">Autos Disponibles</span>
             </div>
           </div>
           <div 
@@ -778,10 +782,9 @@ export function AsignacionesActivasModule() {
           <div className="asig-filters-chips">
             {activeStatFilter && (
               <span className="asig-filter-chip">
-                {activeStatFilter === 'vacantes' ? 'Solo Vacantes' :
+                {activeStatFilter === 'vacantes' ? 'Turnos Disponibles' :
                  activeStatFilter === 'totalFlota' ? 'Total Flota' :
-                 activeStatFilter === 'vehiculosActivos' ? 'Vehículos Activos' :
-                 activeStatFilter === 'autosDisponibles' ? 'Autos Disponibles' : activeStatFilter}
+                 activeStatFilter === 'vehiculosActivos' ? 'Vehículos Activos' : activeStatFilter}
                 <button onClick={() => setActiveStatFilter(null)} className="asig-filter-chip-remove">
                   <X size={12} />
                 </button>
