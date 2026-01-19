@@ -340,11 +340,9 @@ export function AsignacionesActivasModule() {
           })
           break
         case 'autosDisponibles':
-          // Todos los vehículos PKG_ON_BASE (con o sin asignación)
-          result = result.filter(a => {
-            const estadoCodigo = (a.vehiculos as any)?.vehiculos_estados?.codigo?.toUpperCase()
-            return estadoCodigo === 'PKG_ON_BASE'
-          })
+          // Solo vehículos PKG_ON_BASE SIN conductores activos asignados
+          // No mostrar asignaciones con conductores - esos no están "disponibles"
+          result = []
           break
         // Para totalFlota y vehiculosActivos no hay filtrado especial
         default:

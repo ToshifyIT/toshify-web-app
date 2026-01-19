@@ -104,7 +104,8 @@ export function AsignacionesModule() {
     conductor_diurno_id: string
     conductor_nocturno_id: string
     conductor_cargo_id: string
-  }>({ fecha_inicio: '', fecha_fin: '', notas: '', vehiculo_id: '', horario: '', conductor_diurno_id: '', conductor_nocturno_id: '', conductor_cargo_id: '' })
+    estado: string
+  }>({ fecha_inicio: '', fecha_fin: '', notas: '', vehiculo_id: '', horario: '', conductor_diurno_id: '', conductor_nocturno_id: '', conductor_cargo_id: '', estado: '' })
   const [vehiculosDisponibles, setVehiculosDisponibles] = useState<any[]>([])
   const [conductoresDisponibles, setConductoresDisponibles] = useState<any[]>([])
   const [loadingRegularizar, setLoadingRegularizar] = useState(false)
@@ -1113,7 +1114,8 @@ export function AsignacionesModule() {
       horario: asignacion.horario || 'TURNO',
       conductor_diurno_id: diurno?.conductor_id || '',
       conductor_nocturno_id: nocturno?.conductor_id || '',
-      conductor_cargo_id: cargo?.conductor_id || ''
+      conductor_cargo_id: cargo?.conductor_id || '',
+      estado: asignacion.estado || 'programado'
     })
     
     // Reset search states
@@ -1141,9 +1143,10 @@ export function AsignacionesModule() {
       if (regularizarData.fecha_inicio) {
         updateData.fecha_inicio = new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString()
       }
-      if (regularizarData.fecha_fin) {
-        updateData.fecha_fin = new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString()
-      }
+      // Fecha fin: si tiene valor lo guarda, si está vacío lo pone en null
+      updateData.fecha_fin = regularizarData.fecha_fin 
+        ? new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString() 
+        : null
       if (regularizarData.notas !== regularizarAsignacion.notas) {
         updateData.notas = regularizarData.notas
       }
@@ -1152,6 +1155,9 @@ export function AsignacionesModule() {
       }
       if (regularizarData.horario && regularizarData.horario !== regularizarAsignacion.horario) {
         updateData.horario = regularizarData.horario
+      }
+      if (regularizarData.estado && regularizarData.estado !== regularizarAsignacion.estado) {
+        updateData.estado = regularizarData.estado
       }
 
       const { error } = await (supabase as any)
@@ -2010,8 +2016,8 @@ export function AsignacionesModule() {
                   </div>
                 </div>
 
-                {/* Modalidad - full width */}
-                <div className="asig-edit-row single">
+                {/* Modalidad y Estado - 2 columnas */}
+                <div className="asig-edit-row">
                   <div className="asig-edit-field">
                     <label>Modalidad</label>
                     <select
@@ -2020,6 +2026,18 @@ export function AsignacionesModule() {
                     >
                       <option value="TURNO">TURNO (Diurno/Nocturno)</option>
                       <option value="CARGO">A CARGO (Un solo conductor)</option>
+                    </select>
+                  </div>
+                  <div className="asig-edit-field">
+                    <label>Estado</label>
+                    <select
+                      value={regularizarData.estado}
+                      onChange={(e) => setRegularizarData(prev => ({ ...prev, estado: e.target.value }))}
+                    >
+                      <option value="programado">Programada</option>
+                      <option value="activa">Activa</option>
+                      <option value="finalizada">Finalizada</option>
+                      <option value="cancelada">Cancelada</option>
                     </select>
                   </div>
                 </div>
