@@ -1080,21 +1080,23 @@ export function AsignacionesModule() {
   const handleOpenRegularizar = async (asignacion: Asignacion) => {
     setRegularizarAsignacion(asignacion)
     setLoadingRegularizar(true)
+    setShowRegularizarModal(true)
     
-    // Cargar vehículos y conductores disponibles
-    const [vehiculosRes, conductoresRes] = await Promise.all([
+    // Cargar vehículos, conductores disponibles Y conductores de esta asignación
+    const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all([
       supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
-      supabase.from('conductores').select('id, nombres, apellidos').eq('activo', true).order('apellidos')
+      supabase.from('conductores').select('id, nombres, apellidos').eq('activo', true).order('apellidos'),
+      supabase.from('asignaciones_conductores').select('conductor_id, horario').eq('asignacion_id', asignacion.id)
     ])
     
     setVehiculosDisponibles(vehiculosRes.data || [])
     setConductoresDisponibles(conductoresRes.data || [])
     
     // Obtener conductores actuales de la asignación
-    const conductoresAsig = (asignacion as any).asignaciones_conductores || []
-    const diurno = conductoresAsig.find((c: any) => c.horario === 'diurno' || c.horario === 'DIURNO' || c.horario === 'D')
-    const nocturno = conductoresAsig.find((c: any) => c.horario === 'nocturno' || c.horario === 'NOCTURNO' || c.horario === 'N')
-    const cargo = conductoresAsig.find((c: any) => c.horario === 'CARGO' || c.horario === 'cargo' || c.horario === 'A CARGO')
+    const conductoresAsig = (asignacionConductoresRes.data || []) as any[]
+    const diurno = conductoresAsig.find(c => c.horario === 'diurno' || c.horario === 'DIURNO' || c.horario === 'D')
+    const nocturno = conductoresAsig.find(c => c.horario === 'nocturno' || c.horario === 'NOCTURNO' || c.horario === 'N')
+    const cargo = conductoresAsig.find(c => c.horario === 'CARGO' || c.horario === 'cargo' || c.horario === 'A CARGO')
     
     setRegularizarData({
       fecha_inicio: asignacion.fecha_inicio ? asignacion.fecha_inicio.split('T')[0] : '',
@@ -1108,7 +1110,6 @@ export function AsignacionesModule() {
     })
     
     setLoadingRegularizar(false)
-    setShowRegularizarModal(true)
   }
 
   // Guardar regularización
