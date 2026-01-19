@@ -700,7 +700,7 @@ export function AsignacionesActivasModule() {
               <span className="stat-label">Autos Disponibles</span>
             </div>
           </div>
-          <div className="stat-card" title={`${stats.cuposOcupados} cupos ocupados de ${stats.cuposTotales} totales`}>
+          <div className="stat-card" title={`Vehículos con asignación activa / Total Flota`}>
             <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
               <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionGeneral}%</span>
