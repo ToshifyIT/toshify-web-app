@@ -663,14 +663,24 @@ export function ProgramacionModule() {
     // Formatear hora para mostrar
     const horaDisplay = prog.hora_cita ? prog.hora_cita.substring(0, 5) : 'Sin definir'
 
+    // Construir display de conductores según modalidad
+    let conductorDisplay = '-'
+    if (prog.modalidad === 'TURNO') {
+      const conductores = []
+      if (prog.conductor_diurno_nombre) conductores.push(`D: ${prog.conductor_diurno_nombre}`)
+      if (prog.conductor_nocturno_nombre) conductores.push(`N: ${prog.conductor_nocturno_nombre}`)
+      conductorDisplay = conductores.length > 0 ? conductores.join('<br>') : '-'
+    } else {
+      conductorDisplay = prog.conductor_display || prog.conductor_nombre || '-'
+    }
+
     const result = await Swal.fire({
       title: 'Enviar a Entrega',
       html: `
         <div style="text-align: left; font-size: 14px;">
           <p><strong>Vehiculo:</strong> ${prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '-'}</p>
-          <p><strong>Conductor:</strong> ${prog.conductor_display || prog.conductor_nombre || '-'}</p>
+          <p><strong>Conductor${prog.modalidad === 'TURNO' ? 'es' : ''}:</strong><br>${conductorDisplay}</p>
           <p><strong>Modalidad:</strong> ${prog.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
-          ${prog.turno ? `<p><strong>Turno:</strong> ${prog.turno === 'diurno' ? 'Diurno' : 'Nocturno'}</p>` : ''}
           <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin definir'}</p>
           <p><strong>Hora:</strong> ${horaDisplay}</p>
         </div>
@@ -699,9 +709,9 @@ export function ProgramacionModule() {
       // y se finaliza esta asignación nueva.
 
       // Crear nueva asignación normalmente (mostrando TODOS los conductores)
-      // Generar codigo de asignacion
+      // Generar codigo de asignacion único (incluye segundos y ms para evitar duplicados)
       const fecha = new Date()
-      const codigo = `ASG-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(fecha.getDate()).padStart(2, '0')}-${String(fecha.getHours()).padStart(2, '0')}${String(fecha.getMinutes()).padStart(2, '0')}`
+      const codigo = `ASG-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(fecha.getDate()).padStart(2, '0')}-${String(fecha.getHours()).padStart(2, '0')}${String(fecha.getMinutes()).padStart(2, '0')}${String(fecha.getSeconds()).padStart(2, '0')}`
 
       // Crear asignacion
       // modalidad en programacion es 'TURNO' o 'CARGO', en asignacion es 'turno' o 'a_cargo'
