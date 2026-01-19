@@ -397,10 +397,15 @@ export function AsignacionesActivasModule() {
         }
       }
 
+      // Filtrar solo conductores activos (no completados/finalizados/cancelados)
+      // Esto es consistente con AsignacionesModule
+      const conductoresActivos = (asignacion.asignaciones_conductores || [])
+        .filter((ac: any) => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
+
       // Para TURNO, organizar conductores por turno
       if (asignacion.horario === 'TURNO') {
-        const diurno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'diurno')
-        const nocturno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'nocturno')
+        const diurno = conductoresActivos.find((ac: any) => ac.horario === 'diurno')
+        const nocturno = conductoresActivos.find((ac: any) => ac.horario === 'nocturno')
 
         return {
           ...asignacion,
@@ -420,8 +425,8 @@ export function AsignacionesActivasModule() {
         }
       }
 
-      // Para A CARGO, tomar el primer conductor
-      const conductor = asignacion.asignaciones_conductores?.[0]
+      // Para A CARGO, tomar el primer conductor activo
+      const conductor = conductoresActivos[0]
       return {
         ...asignacion,
         conductoresTurno: null,
