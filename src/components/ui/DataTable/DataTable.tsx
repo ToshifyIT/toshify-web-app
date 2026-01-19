@@ -607,14 +607,16 @@ export function DataTable<T>({
 
   // Función de filtro global que busca en TODOS los valores string del objeto
   // Optimizada: concatena todo en un string y busca
-  const globalFilterFn = useCallback((row: { original: T }, _columnId: string, filterValue: string) => {
-    if (!filterValue) return true
+  const globalFilterFn = useCallback((row: { original: T }, _columnId: string, filterValue: unknown) => {
+    // Si no hay valor de filtro, mostrar todas las filas
+    if (!filterValue || typeof filterValue !== 'string' || filterValue.trim() === '') return true
+    
     const searchLower = filterValue.toLowerCase().trim()
     const original = row.original as Record<string, unknown>
 
     // Recolectar todos los valores string en un solo texto (rápido, sin recursión profunda)
     const collectStrings = (obj: unknown, depth = 0): string => {
-      if (depth > 2) return '' // Limitar profundidad para performance
+      if (depth > 3) return '' // Limitar profundidad para performance
       if (obj === null || obj === undefined) return ''
       if (typeof obj === 'string') return obj + ' '
       if (typeof obj === 'number') return String(obj) + ' '
