@@ -886,11 +886,11 @@ export function ProgramacionModule() {
             <div className="prog-conductores-compact">
               <span className={conductor_diurno_nombre ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
                 <span className="prog-turno-label prog-label-diurno">D</span>
-                {conductor_diurno_nombre ? conductor_diurno_nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+                {conductor_diurno_nombre || 'Vacante'}
               </span>
               <span className={conductor_nocturno_nombre ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
                 <span className="prog-turno-label prog-label-nocturno">N</span>
-                {conductor_nocturno_nombre ? conductor_nocturno_nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+                {conductor_nocturno_nombre || 'Vacante'}
               </span>
             </div>
           )
@@ -904,11 +904,11 @@ export function ProgramacionModule() {
             <div className="prog-conductores-compact">
               <span className={isDiurno ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
                 <span className="prog-turno-label prog-label-diurno">D</span>
-                {isDiurno ? nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+                {isDiurno ? nombre : 'Vacante'}
               </span>
               <span className={!isDiurno ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
                 <span className="prog-turno-label prog-label-nocturno">N</span>
-                {!isDiurno ? nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+                {!isDiurno ? nombre : 'Vacante'}
               </span>
             </div>
           )
