@@ -54,6 +54,7 @@ export function AsignacionesActivasModule() {
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
   const [vehiculosOperativos, setVehiculosOperativos] = useState(0) // PKG_ON_BASE + EN_USO
+  const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0) // Solo PKG_ON_BASE
   const [vehiculosEnUso, setVehiculosEnUso] = useState(0) // Solo EN_USO
   const [vehiculosPkgOnSinAsignacion, setVehiculosPkgOnSinAsignacion] = useState<any[]>([]) // PKG_ON_BASE sin asignación
   const [loading, setLoading] = useState(true)
@@ -167,6 +168,7 @@ export function AsignacionesActivasModule() {
 
         setTotalVehiculosFlota(totalFlota)
         setVehiculosOperativos(operativos)
+        setVehiculosPkgOn(pkgOn)
         setVehiculosEnUso(enUso)
         setVehiculosPkgOnSinAsignacion(pkgOnSinAsignacion)
       }
@@ -285,9 +287,13 @@ export function AsignacionesActivasModule() {
     const cuposTotales = (turnoCount * 2) + cargoCount
     const cuposDisponibles = cuposTotales - cuposOcupados
 
-    // % Ocupación = Vehículos con asignación activa / Total Flota
-    const porcentajeOcupacionGeneral = totalVehiculosFlota > 0
-      ? ((vehiculosSet.size / totalVehiculosFlota) * 100).toFixed(1)
+    // % Ocupación = (totalidad_turnos - turnos_disp) / totalidad_turnos
+    // totalidad_turnos = (vehículos activos + PKG_ON) * 2
+    // turnos_disp = vacantesD + vacantesN + (PKG_ON sin asignación * 2)
+    const totalidadTurnos = (vehiculosSet.size + vehiculosPkgOnSinAsignacion.length) * 2
+    const turnosDisp = vacantesD + vacantesN + (vehiculosPkgOnSinAsignacion.length * 2)
+    const porcentajeOcupacionGeneral = totalidadTurnos > 0
+      ? (((totalidadTurnos - turnosDisp) / totalidadTurnos) * 100).toFixed(1)
       : '0'
 
     const porcentajeOcupacionOperacional = vehiculosOperacionalesCount > 0
@@ -318,9 +324,11 @@ export function AsignacionesActivasModule() {
       porcentajeOcupacionGeneral,
       porcentajeOcupacionOperacional,
       porcentajeOperatividad,
-      autosDisponibles: vehiculosPkgOnSinAsignacion.length // Solo PKG_ON_BASE SIN asignación
+      autosDisponibles: vehiculosPkgOnSinAsignacion.length, // Solo PKG_ON_BASE SIN asignación
+      pkgOnBase: vehiculosPkgOn,
+      enUso: vehiculosEnUso
     }
-  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOnSinAsignacion, vehiculosEnUso])
+  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOn, vehiculosPkgOnSinAsignacion, vehiculosEnUso])
 
   // Filtrar asignaciones según los filtros de columna y stat clickeada
   const filteredAsignaciones = useMemo(() => {
@@ -330,7 +338,7 @@ export function AsignacionesActivasModule() {
     if (activeStatFilter) {
       switch (activeStatFilter) {
         case 'vacantes':
-          // Solo mostrar asignaciones con al menos 1 vacante
+          // Mostrar asignaciones TURNO con al menos 1 vacante
           result = result.filter(a => {
             if (a.horario === 'TURNO') {
               const conductores = a.asignaciones_conductores || []
@@ -341,19 +349,15 @@ export function AsignacionesActivasModule() {
             return false // CARGO no tiene vacantes en el mismo sentido
           })
           break
-        case 'autosDisponibles':
-          // Solo vehículos PKG_ON_BASE SIN conductores activos asignados
-          // No mostrar asignaciones con conductores - esos no están "disponibles"
-          result = []
-          break
         // Para totalFlota y vehiculosActivos no hay filtrado especial
         default:
           break
       }
     }
 
-    // Si el filtro es autosDisponibles, agregar vehículos PKG_ON_BASE sin asignación
-    if (activeStatFilter === 'autosDisponibles') {
+    // Si el filtro es vacantes, también agregar vehículos PKG_ON_BASE sin asignación
+    // (cada auto sin asignar = 2 turnos disponibles)
+    if (activeStatFilter === 'vacantes') {
       // Crear filas "fake" para vehículos sin asignación
       const vehiculosSinAsignacionRows = vehiculosPkgOnSinAsignacion.map(v => ({
         id: `sin-asignacion-${v.id}`,
@@ -362,7 +366,7 @@ export function AsignacionesActivasModule() {
         fecha_programada: null,
         fecha_inicio: '-',
         modalidad: '-',
-        horario: '-',
+        horario: 'TURNO', // Marcar como TURNO para mostrar que tiene 2 turnos disponibles
         estado: 'sin_asignacion',
         created_at: '',
         vehiculos: {
@@ -680,34 +684,76 @@ export function AsignacionesActivasModule() {
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'vacantes' ? 'stat-card-active' : ''}`}
-            title={`Diurno: ${stats.vacantesD} | Nocturno: ${stats.vacantesN} - Click para ver solo vacantes`}
+            title={`D: ${stats.vacantesD} | N: ${stats.vacantesN} | PKG_ON: ${stats.autosDisponibles} (x2) - Click para filtrar`}
             onClick={() => handleStatCardClick('vacantes')}
           >
             <Clock size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.vacantesD + stats.vacantesN}</span>
+              <span className="stat-value">{stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}</span>
               <span className="stat-label">Turnos Disponibles</span>
             </div>
           </div>
-          <div
-            className={`stat-card stat-card-clickable ${activeStatFilter === 'autosDisponibles' ? 'stat-card-active' : ''}`}
-            title="Todos los vehículos con estado PKG_ON_BASE (disponibles en base)"
-            onClick={() => handleStatCardClick('autosDisponibles')}
+          <div 
+            className="stat-card stat-card-clickable" 
+            title="Click para ver detalle del cálculo"
+            onClick={() => {
+              Swal.fire({
+                title: '% Ocupacion',
+                html: `
+                  <div style="text-align: left; font-size: 14px; line-height: 1.8;">
+                    <p style="margin-bottom: 12px; color: #6B7280;">Porcentaje de turnos ocupados sobre el total de turnos disponibles:</p>
+                    <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; font-family: monospace;">
+                      <p style="margin: 0;"><strong>Vehiculos con asignacion activa:</strong> ${stats.vehiculos}</p>
+                      <p style="margin: 8px 0;"><strong>PKG_ON sin asignacion:</strong> ${stats.autosDisponibles}</p>
+                      <p style="margin: 8px 0;"><strong>Totalidad Turnos:</strong> (${stats.vehiculos} + ${stats.autosDisponibles}) x 2 = ${(stats.vehiculos + stats.autosDisponibles) * 2}</p>
+                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
+                      <p style="margin: 0;"><strong>Vacantes D:</strong> ${stats.vacantesD}</p>
+                      <p style="margin: 8px 0;"><strong>Vacantes N:</strong> ${stats.vacantesN}</p>
+                      <p style="margin: 8px 0;"><strong>PKG_ON sin asignar (x2):</strong> ${stats.autosDisponibles * 2}</p>
+                      <p style="margin: 8px 0;"><strong>Turnos Disponibles:</strong> ${stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}</p>
+                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
+                      <p style="margin: 0; font-size: 16px; color: #059669;"><strong>= (${(stats.vehiculos + stats.autosDisponibles) * 2} - ${stats.vacantesD + stats.vacantesN + (stats.autosDisponibles * 2)}) / ${(stats.vehiculos + stats.autosDisponibles) * 2} = ${stats.porcentajeOcupacionGeneral}%</strong></p>
+                    </div>
+                  </div>
+                `,
+                icon: 'info',
+                confirmButtonColor: '#059669',
+                confirmButtonText: 'Entendido'
+              })
+            }}
           >
-            <Car size={18} className="stat-icon" />
-            <div className="stat-content">
-              <span className="stat-value">{stats.autosDisponibles}</span>
-              <span className="stat-label">Autos Disponibles</span>
-            </div>
-          </div>
-          <div className="stat-card" title={`Vehículos con asignación activa / Total Flota`}>
             <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
               <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionGeneral}%</span>
               <span className="stat-label">% Ocupación</span>
             </div>
           </div>
-          <div className="stat-card" title={`(PKG ON + EN USO) / Total Flota`}>
+          <div 
+            className="stat-card stat-card-clickable" 
+            title="Click para ver detalle del cálculo"
+            onClick={() => {
+              Swal.fire({
+                title: '% Operatividad',
+                html: `
+                  <div style="text-align: left; font-size: 14px; line-height: 1.8;">
+                    <p style="margin-bottom: 12px; color: #6B7280;">Porcentaje de vehículos operativos sobre el total de la flota:</p>
+                    <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; font-family: monospace;">
+                      <p style="margin: 0;"><strong>PKG_ON_BASE:</strong> ${stats.pkgOnBase}</p>
+                      <p style="margin: 8px 0;"><strong>EN_USO:</strong> ${stats.enUso}</p>
+                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
+                      <p style="margin: 0;"><strong>Total Operativos:</strong> ${stats.pkgOnBase + stats.enUso}</p>
+                      <p style="margin: 8px 0;"><strong>Total Flota:</strong> ${stats.totalFlota}</p>
+                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
+                      <p style="margin: 0; font-size: 16px; color: #059669;"><strong>= (${stats.pkgOnBase} + ${stats.enUso}) / ${stats.totalFlota} = ${stats.porcentajeOperatividad}%</strong></p>
+                    </div>
+                  </div>
+                `,
+                icon: 'info',
+                confirmButtonColor: '#059669',
+                confirmButtonText: 'Entendido'
+              })
+            }}
+          >
             <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
               <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOperatividad}%</span>
@@ -727,10 +773,9 @@ export function AsignacionesActivasModule() {
           <div className="asig-filters-chips">
             {activeStatFilter && (
               <span className="asig-filter-chip">
-                {activeStatFilter === 'vacantes' ? 'Solo Vacantes' :
+                {activeStatFilter === 'vacantes' ? 'Turnos Disponibles' :
                  activeStatFilter === 'totalFlota' ? 'Total Flota' :
-                 activeStatFilter === 'vehiculosActivos' ? 'Vehículos Activos' :
-                 activeStatFilter === 'autosDisponibles' ? 'Autos Disponibles' : activeStatFilter}
+                 activeStatFilter === 'vehiculosActivos' ? 'Vehículos Activos' : activeStatFilter}
                 <button onClick={() => setActiveStatFilter(null)} className="asig-filter-chip-remove">
                   <X size={12} />
                 </button>
