@@ -397,10 +397,15 @@ export function AsignacionesActivasModule() {
         }
       }
 
+      // Filtrar solo conductores activos (no completados/finalizados/cancelados)
+      // Esto es consistente con AsignacionesModule
+      const conductoresActivos = (asignacion.asignaciones_conductores || [])
+        .filter((ac: any) => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
+
       // Para TURNO, organizar conductores por turno
       if (asignacion.horario === 'TURNO') {
-        const diurno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'diurno')
-        const nocturno = asignacion.asignaciones_conductores?.find((ac: any) => ac.horario === 'nocturno')
+        const diurno = conductoresActivos.find((ac: any) => ac.horario === 'diurno')
+        const nocturno = conductoresActivos.find((ac: any) => ac.horario === 'nocturno')
 
         return {
           ...asignacion,
@@ -420,8 +425,8 @@ export function AsignacionesActivasModule() {
         }
       }
 
-      // Para A CARGO, tomar el primer conductor
-      const conductor = asignacion.asignaciones_conductores?.[0]
+      // Para A CARGO, tomar el primer conductor activo
+      const conductor = conductoresActivos[0]
       return {
         ...asignacion,
         conductoresTurno: null,
@@ -496,11 +501,11 @@ export function AsignacionesActivasModule() {
             <div className="asig-conductores-compact">
               <span className={diurno ? 'asig-conductor-turno asig-turno-diurno' : 'asig-turno-vacante asig-turno-diurno'}>
                 <span className="asig-turno-label asig-label-diurno">D</span>
-                {diurno ? diurno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+                {diurno ? diurno.nombre : 'Vacante'}
               </span>
               <span className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}>
                 <span className="asig-turno-label asig-label-nocturno">N</span>
-                {nocturno ? nocturno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+                {nocturno ? nocturno.nombre : 'Vacante'}
               </span>
             </div>
           )
