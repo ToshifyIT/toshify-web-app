@@ -100,14 +100,7 @@ export function SaldosAbonosTab() {
       .select('id, nombres, apellidos')
       .order('apellidos')
 
-    const { data: saldosExistentes } = await supabase
-      .from('saldos_conductores')
-      .select('conductor_id')
-
-    const idsConSaldo = new Set((saldosExistentes || []).map((s: { conductor_id: string }) => s.conductor_id))
-    
     const conductoresParaModal = (todosLosConductores || [])
-      .filter((c: any) => !idsConSaldo.has(c.id))
       .map((c: any) => ({
         id: c.id,
         nombres: c.nombres || '',
@@ -119,7 +112,7 @@ export function SaldosAbonosTab() {
       Swal.fire({
         icon: 'info',
         title: 'Sin conductores disponibles',
-        text: 'Todos los conductores ya tienen un saldo registrado.',
+        text: 'No hay conductores registrados.',
         confirmButtonColor: '#6B7280'
       })
       return
