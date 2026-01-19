@@ -327,7 +327,7 @@ export function SaldosAbonosTab() {
         
         searchInput.focus()
       },
-      preConfirm: () => {
+      preConfirm: async () => {
         const conductorId = (document.getElementById('swal-conductor') as HTMLInputElement).value
         const saldo = (document.getElementById('swal-saldo') as HTMLInputElement).value
         const fecha = (document.getElementById('swal-fecha') as HTMLInputElement).value
@@ -352,6 +352,21 @@ export function SaldosAbonosTab() {
         if (fraccionado && cuotas < 2) {
           Swal.showValidationMessage('El fraccionamiento debe tener al menos 2 cuotas')
           return false
+        }
+
+        // Validar si ya tiene fraccionamiento pendiente
+        if (fraccionado) {
+          const { data: pendientes } = await supabase
+            .from('cobros_fraccionados')
+            .select('id')
+            .eq('conductor_id', conductorId)
+            .eq('aplicado', false)
+            .limit(1)
+          
+          if (pendientes && pendientes.length > 0) {
+            Swal.showValidationMessage('Este conductor ya tiene un cobro fraccionado pendiente. Debe completarlo antes de crear otro.')
+            return false
+          }
         }
 
         return { 
