@@ -32,7 +32,7 @@ export type ConfirmacionAsistencia = 'confirmo' | 'no_confirmo' | 'reprogramar' 
 export type EstadoCabify = 'pendiente' | 'listo_cabify' | 'asignar_auto' | 'crear_cuenta'
 
 // Tipo documento
-export type TipoDocumento = 'contrato' | 'anexo' | 'na'
+export type TipoDocumento = 'carta_oferta' | 'anexo' | 'na'
 
 // Interfaz principal de Programación Onboarding
 export interface ProgramacionOnboarding {
@@ -267,7 +267,7 @@ export const ESTADO_CABIFY_LABELS: Record<EstadoCabify, string> = {
 }
 
 export const DOCUMENTO_LABELS: Record<TipoDocumento, string> = {
-  contrato: 'Contrato',
+  carta_oferta: 'Carta Oferta',
   anexo: 'Anexo',
   na: 'N/A'
 }
