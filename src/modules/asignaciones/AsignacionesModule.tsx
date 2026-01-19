@@ -1085,7 +1085,7 @@ export function AsignacionesModule() {
     // Cargar vehículos, conductores disponibles Y conductores de esta asignación
     const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all([
       supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
-      supabase.from('conductores').select('id, nombres, apellidos').eq('activo', true).order('apellidos'),
+      supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
       supabase.from('asignaciones_conductores').select('conductor_id, horario').eq('asignacion_id', asignacion.id)
     ])
     
