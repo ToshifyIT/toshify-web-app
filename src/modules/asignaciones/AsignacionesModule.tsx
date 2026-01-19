@@ -2029,20 +2029,23 @@ export function AsignacionesModule() {
                   <>
                     <div className="form-group" style={{ position: 'relative' }}>
                       <label className="asig-detail-label">Conductor Diurno</label>
-                      <input
-                        type="text"
-                        value={searchDiurno}
-                        onChange={(e) => { setSearchDiurno(e.target.value); setShowDropdownDiurno(true) }}
-                        onFocus={() => setShowDropdownDiurno(true)}
-                        placeholder={regularizarData.conductor_diurno_id ? conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.nombres : 'Buscar conductor...'}
-                        className="asig-status-select"
-                        style={{ width: '100%' }}
-                      />
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="text"
+                          value={showDropdownDiurno ? searchDiurno : (regularizarData.conductor_diurno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.nombres) : '')}
+                          onChange={(e) => { setSearchDiurno(e.target.value); setShowDropdownDiurno(true) }}
+                          onFocus={() => { setShowDropdownDiurno(true); setSearchDiurno('') }}
+                          placeholder="Buscar conductor..."
+                          className="asig-status-select"
+                          style={{ width: '100%', paddingRight: '30px' }}
+                        />
+                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>▼</span>
+                      </div>
                       {showDropdownDiurno && (
-                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000 }}>
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
                           <div 
-                            style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
-                            onClick={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: '' })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
+                            style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+                            onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: '' })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
                           >Sin asignar (Vacante)</div>
                           {conductoresDisponibles
                             .filter(c => !searchDiurno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchDiurno.toLowerCase()))
@@ -2050,8 +2053,8 @@ export function AsignacionesModule() {
                             .map((c: any) => (
                               <div 
                                 key={c.id} 
-                                style={{ padding: '8px 12px', cursor: 'pointer', background: regularizarData.conductor_diurno_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
-                                onClick={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: c.id })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
+                                style={{ padding: '10px 12px', cursor: 'pointer', background: regularizarData.conductor_diurno_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
+                                onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: c.id })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
                               >{c.apellidos}, {c.nombres}</div>
                             ))}
                         </div>
@@ -2059,20 +2062,23 @@ export function AsignacionesModule() {
                     </div>
                     <div className="form-group" style={{ position: 'relative' }}>
                       <label className="asig-detail-label">Conductor Nocturno</label>
-                      <input
-                        type="text"
-                        value={searchNocturno}
-                        onChange={(e) => { setSearchNocturno(e.target.value); setShowDropdownNocturno(true) }}
-                        onFocus={() => setShowDropdownNocturno(true)}
-                        placeholder={regularizarData.conductor_nocturno_id ? conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.nombres : 'Buscar conductor...'}
-                        className="asig-status-select"
-                        style={{ width: '100%' }}
-                      />
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="text"
+                          value={showDropdownNocturno ? searchNocturno : (regularizarData.conductor_nocturno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.nombres) : '')}
+                          onChange={(e) => { setSearchNocturno(e.target.value); setShowDropdownNocturno(true) }}
+                          onFocus={() => { setShowDropdownNocturno(true); setSearchNocturno('') }}
+                          placeholder="Buscar conductor..."
+                          className="asig-status-select"
+                          style={{ width: '100%', paddingRight: '30px' }}
+                        />
+                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>▼</span>
+                      </div>
                       {showDropdownNocturno && (
-                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000 }}>
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
                           <div 
-                            style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
-                            onClick={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: '' })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
+                            style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+                            onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: '' })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
                           >Sin asignar (Vacante)</div>
                           {conductoresDisponibles
                             .filter(c => !searchNocturno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchNocturno.toLowerCase()))
@@ -2080,8 +2086,8 @@ export function AsignacionesModule() {
                             .map((c: any) => (
                               <div 
                                 key={c.id} 
-                                style={{ padding: '8px 12px', cursor: 'pointer', background: regularizarData.conductor_nocturno_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
-                                onClick={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: c.id })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
+                                style={{ padding: '10px 12px', cursor: 'pointer', background: regularizarData.conductor_nocturno_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
+                                onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: c.id })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
                               >{c.apellidos}, {c.nombres}</div>
                             ))}
                         </div>
@@ -2091,20 +2097,23 @@ export function AsignacionesModule() {
                 ) : (
                   <div className="form-group" style={{ position: 'relative' }}>
                     <label className="asig-detail-label">Conductor A Cargo</label>
-                    <input
-                      type="text"
-                      value={searchCargo}
-                      onChange={(e) => { setSearchCargo(e.target.value); setShowDropdownCargo(true) }}
-                      onFocus={() => setShowDropdownCargo(true)}
-                      placeholder={regularizarData.conductor_cargo_id ? conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.nombres : 'Buscar conductor...'}
-                      className="asig-status-select"
-                      style={{ width: '100%' }}
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        value={showDropdownCargo ? searchCargo : (regularizarData.conductor_cargo_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.nombres) : '')}
+                        onChange={(e) => { setSearchCargo(e.target.value); setShowDropdownCargo(true) }}
+                        onFocus={() => { setShowDropdownCargo(true); setSearchCargo('') }}
+                        placeholder="Buscar conductor..."
+                        className="asig-status-select"
+                        style={{ width: '100%', paddingRight: '30px' }}
+                      />
+                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>▼</span>
+                    </div>
                     {showDropdownCargo && (
-                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000 }}>
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
                         <div 
-                          style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
-                          onClick={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: '' })); setSearchCargo(''); setShowDropdownCargo(false) }}
+                          style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+                          onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: '' })); setSearchCargo(''); setShowDropdownCargo(false) }}
                         >Sin asignar</div>
                         {conductoresDisponibles
                           .filter(c => !searchCargo || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchCargo.toLowerCase()))
@@ -2112,8 +2121,8 @@ export function AsignacionesModule() {
                           .map((c: any) => (
                             <div 
                               key={c.id} 
-                              style={{ padding: '8px 12px', cursor: 'pointer', background: regularizarData.conductor_cargo_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
-                              onClick={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: c.id })); setSearchCargo(''); setShowDropdownCargo(false) }}
+                              style={{ padding: '10px 12px', cursor: 'pointer', background: regularizarData.conductor_cargo_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
+                              onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: c.id })); setSearchCargo(''); setShowDropdownCargo(false) }}
                             >{c.apellidos}, {c.nombres}</div>
                           ))}
                       </div>
