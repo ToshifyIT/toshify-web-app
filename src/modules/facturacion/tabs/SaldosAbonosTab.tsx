@@ -412,9 +412,6 @@ export function SaldosAbonosTab() {
         for (let i = 1; i <= formValues.cuotas; i++) {
           await (supabase.from('cobros_fraccionados') as any).insert({
             conductor_id: formValues.conductorId,
-            conductor_nombre: conductorNombre,
-            origen_tipo: 'SALDO_INICIAL',
-            origen_id: null,
             descripcion: `${formValues.concepto} - Cuota ${i}/${formValues.cuotas}`,
             monto_total: Math.abs(formValues.saldo),
             monto_cuota: montoCuota,
@@ -422,7 +419,7 @@ export function SaldosAbonosTab() {
             total_cuotas: formValues.cuotas,
             semana: semActual,
             anio: anioActual,
-            estado: 'pendiente'
+            aplicado: false
           })
 
           // Avanzar a siguiente semana
