@@ -371,23 +371,20 @@ export function VehicleManagement() {
 
     setSaving(true)
     try {
-      // Estados que requieren finalizar asignaciones activas
-      const estadosFinalizanAsignacion = [
-        'TALLER_CHAPA_PINTURA',
-        'CORPORATIVO', 
-        'PKG_OFF_BASE',
-        'PKG_OFF_FRANCIA',
-        'DESTRUCCION_TOTAL'
-      ]
+      // Estados que NO finalizan asignaciones (el vehículo sigue operativo con conductores)
+      const estadosOperativos = ['EN_USO']
 
       // Verificar si el nuevo estado requiere finalizar asignaciones
       let nuevoEstadoCodigo = ''
+      let estadoAnteriorCodigo = (selectedVehiculo as any).vehiculos_estados?.codigo || ''
+      
       if (formData.estado_id) {
         const estadoSeleccionado = vehiculosEstados.find((e: VehiculoEstado) => e.id === formData.estado_id)
         nuevoEstadoCodigo = estadoSeleccionado?.codigo || ''
       }
 
-      const debeFinalizarAsignaciones = estadosFinalizanAsignacion.includes(nuevoEstadoCodigo)
+      // Si cambia DE "EN_USO" A otro estado, debe finalizar asignaciones
+      const debeFinalizarAsignaciones = estadoAnteriorCodigo === 'EN_USO' && !estadosOperativos.includes(nuevoEstadoCodigo)
 
       // Si cambia a un estado que finaliza asignaciones, verificar si hay asignaciones activas
       if (debeFinalizarAsignaciones) {
@@ -398,20 +395,36 @@ export function VehicleManagement() {
           .in('estado', ['activa', 'programado'])
 
         if (asignacionesActivas && asignacionesActivas.length > 0) {
+          // Pedir motivo de finalización
           const result = await Swal.fire({
             icon: 'warning',
-            title: 'Asignaciones activas',
-            html: `Este vehículo tiene <b>${asignacionesActivas.length}</b> asignación(es) activa(s) o programada(s).<br><br>Al cambiar el estado a <b>${nuevoEstadoCodigo.replace(/_/g, ' ')}</b>, se finalizarán automáticamente.<br><br>¿Deseas continuar?`,
+            title: 'Vehículo con asignación activa',
+            html: `Este vehículo tiene <b>${asignacionesActivas.length}</b> asignación(es) activa(s).<br><br>
+                   Al cambiar el estado a <b>${ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}</b>, se finalizarán automáticamente.<br><br>
+                   <b>Ingrese el motivo de finalización:</b>`,
+            input: 'textarea',
+            inputPlaceholder: 'Ej: Vehículo ingresa a taller por revisión mecánica...',
+            inputAttributes: {
+              'aria-label': 'Motivo de finalización'
+            },
             showCancelButton: true,
-            confirmButtonText: 'Sí, continuar',
+            confirmButtonText: 'Finalizar y continuar',
             cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#E63946'
+            confirmButtonColor: '#E63946',
+            inputValidator: (value) => {
+              if (!value || value.trim().length < 5) {
+                return 'Debe ingresar un motivo (mínimo 5 caracteres)'
+              }
+              return null
+            }
           })
 
           if (!result.isConfirmed) {
             setSaving(false)
             return
           }
+
+          const motivo = result.value || 'Sin motivo especificado'
 
           // Finalizar asignaciones activas
           const ahora = new Date().toISOString()
@@ -434,7 +447,7 @@ export function VehicleManagement() {
             .update({ 
               estado: 'finalizada', 
               fecha_fin: ahora,
-              notas: `[AUTO-CERRADA] Vehículo cambió a estado: ${nuevoEstadoCodigo}`,
+              notas: `[FINALIZADA] Cambio de estado a ${ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivo}`,
               updated_by: profile?.full_name || 'Sistema'
             })
             .in('id', asignacionesActivas.map((a: any) => a.id))
