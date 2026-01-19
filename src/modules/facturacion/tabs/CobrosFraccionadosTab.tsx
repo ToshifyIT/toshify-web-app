@@ -1,14 +1,44 @@
 /**
  * Tab: Cobros Fraccionados en Facturación
  * Control de cuotas aplicadas, próximas a cobrar, y % de completado
+ * 
+ * Lee de penalidades + penalidades_cuotas (creadas desde Incidencias)
  */
 
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { cobrosService } from '../../../services/cobrosService'
+import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
-import type { CobroIncidenciaConRelaciones } from '../../../types/incidencias.types'
 import '../CobrosFraccionados.css'
+
+interface Cuota {
+  id: string
+  penalidad_id: string
+  numero_cuota: number
+  monto_cuota: number
+  semana: number
+  anio: number
+  aplicado: boolean
+  fecha_aplicacion: string | null
+}
+
+interface PenalidadFraccionada {
+  id: string
+  monto: number
+  fraccionado: boolean
+  cantidad_cuotas: number
+  conductor_id: string | null
+  conductor_nombre: string | null
+  vehiculo_patente: string | null
+  fecha: string
+  observaciones: string | null
+  cuotas: Cuota[]
+  conductor?: {
+    nombres: string
+    apellidos: string
+    nombre_completo: string
+  }
+}
 
 interface CobrosFraccionadosTabProps {
   periodoActual?: number
@@ -16,7 +46,7 @@ interface CobrosFraccionadosTabProps {
 
 export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabProps) {
   void periodoActual
-  const [cobros, setCobros] = useState<CobroIncidenciaConRelaciones[]>([])
+  const [cobros, setCobros] = useState<PenalidadFraccionada[]>([])
   const [loading, setLoading] = useState(true)
   const [expandidos, setExpandidos] = useState<Record<string, boolean>>({})
 
@@ -27,8 +57,45 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
   const cargarCobrosFraccionados = async () => {
     setLoading(true)
     try {
-      const datos = await cobrosService.obtenerCobrosFraccionados()
-      setCobros(datos)
+      // Obtener penalidades fraccionadas con sus cuotas
+      const { data: penalidades, error: penError } = await (supabase
+        .from('penalidades') as any)
+        .select(`
+          id,
+          monto,
+          fraccionado,
+          cantidad_cuotas,
+          conductor_id,
+          conductor_nombre,
+          vehiculo_patente,
+          fecha,
+          observaciones,
+          conductor:conductores(id, nombres, apellidos)
+        `)
+        .eq('fraccionado', true)
+        .order('fecha', { ascending: false })
+      
+      if (penError) throw penError
+
+      // Obtener todas las cuotas
+      const { data: cuotas, error: cuotasError } = await (supabase
+        .from('penalidades_cuotas') as any)
+        .select('*')
+        .order('numero_cuota', { ascending: true })
+      
+      if (cuotasError) throw cuotasError
+
+      // Mapear cuotas a cada penalidad
+      const cobrosConCuotas = (penalidades || []).map((pen: any) => ({
+        ...pen,
+        cuotas: (cuotas || []).filter((c: Cuota) => c.penalidad_id === pen.id),
+        conductor: pen.conductor ? {
+          ...pen.conductor,
+          nombre_completo: `${pen.conductor.nombres} ${pen.conductor.apellidos}`
+        } : null
+      }))
+
+      setCobros(cobrosConCuotas)
     } catch (error) {
       console.error('Error cargando cobros:', error)
       Swal.fire('Error', 'No se pudieron cargar los cobros fraccionados', 'error')
@@ -93,14 +160,16 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                 >
                   <div className="cobro-info">
                     <div className="cobro-titulo">
-                      <span className="id">{cobro.id}</span>
                       <span className="conductor">
-                        {cobro.conductor?.nombre_completo || 'Sin nombre'}
+                        {cobro.conductor?.nombre_completo || cobro.conductor_nombre || 'Sin nombre'}
+                      </span>
+                      <span className="patente" style={{ marginLeft: '10px', color: '#666' }}>
+                        {cobro.vehiculo_patente || ''}
                       </span>
                     </div>
                     <div className="cobro-detalles">
                       <span className="monto">
-                        ${cobro.monto_total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        ${(cobro.monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                       </span>
                       <span className="cuotas">
                         {cuotasAplicadas} de {totalCuotas} cuotas
@@ -123,13 +192,13 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                       <div>
                         <span className="label">Próxima Cuota:</span>
                         <span className="valor">
-                          Semana {proxima.semana} - ${proxima.monto_cuota.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                          Semana {proxima.semana}/{proxima.anio || '?'} - ${proxima.monto_cuota.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     ) : (
                       <div>
                         <span className="label">Estado:</span>
-                        <span className="valor completado">✓ Completado</span>
+                        <span className="valor completado">Completado</span>
                       </div>
                     )}
                   </div>
@@ -155,7 +224,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                         {(cobro.cuotas || []).map(cuota => (
                           <tr key={cuota.id} className={cuota.aplicado ? 'aplicada' : 'pendiente'}>
                             <td>#{cuota.numero_cuota}</td>
-                            <td>Semana {cuota.semana}</td>
+                            <td>Semana {cuota.semana} - {cuota.anio || '?'}</td>
                             <td>
                               ${cuota.monto_cuota.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                             </td>
@@ -168,7 +237,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                                 fontSize: '12px',
                                 fontWeight: 'bold'
                               }}>
-                                {cuota.aplicado ? '✓ Aplicada' : '⏳ Pendiente'}
+                                {cuota.aplicado ? 'Aplicada' : 'Pendiente'}
                               </span>
                             </td>
                             <td>

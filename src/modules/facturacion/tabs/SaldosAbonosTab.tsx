@@ -12,7 +12,8 @@ import {
   DollarSign,
   Clock,
   Filter,
-  Edit3
+  Edit3,
+  UserPlus
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -79,6 +80,382 @@ export function SaldosAbonosTab() {
       console.error('Error cargando saldos:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Helper para obtener número de semana
+  function getWeekNumber(dateStr: string): number {
+    const date = new Date(dateStr + 'T12:00:00')
+    const startOfYear = new Date(date.getFullYear(), 0, 1)
+    const days = Math.floor((date.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000))
+    return Math.ceil((days + startOfYear.getDay() + 1) / 7)
+  }
+
+  // Función para agregar saldo inicial a un conductor
+  async function agregarSaldoInicial() {
+    // Cargar conductores disponibles al momento de abrir el modal
+    const { data: todosLosConductores } = await supabase
+      .from('conductores')
+      .select('id, nombres, apellidos')
+      .order('apellidos')
+
+    const { data: saldosExistentes } = await supabase
+      .from('saldos_conductores')
+      .select('conductor_id')
+
+    const idsConSaldo = new Set((saldosExistentes || []).map((s: { conductor_id: string }) => s.conductor_id))
+    
+    const conductoresParaModal = (todosLosConductores || [])
+      .filter((c: any) => !idsConSaldo.has(c.id))
+      .map((c: any) => ({
+        id: c.id,
+        nombres: c.nombres || '',
+        apellidos: c.apellidos || '',
+        dni: ''
+      }))
+
+    if (conductoresParaModal.length === 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Sin conductores disponibles',
+        text: 'Todos los conductores ya tienen un saldo registrado.',
+        confirmButtonColor: '#6B7280'
+      })
+      return
+    }
+
+    // Fecha de hoy en formato YYYY-MM-DD
+    const hoy = new Date()
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    
+    // Calcular semana actual y anterior
+    const semanaActual = getWeekNumber(hoyStr)
+    const anioActual = hoy.getFullYear()
+    let semanaAnterior = semanaActual - 1
+    let anioAnterior = anioActual
+    if (semanaAnterior < 1) {
+      semanaAnterior = 52
+      anioAnterior = anioActual - 1
+    }
+
+    // Generar opciones de semanas (4 anteriores + actual + 20 siguientes)
+    let semanaOptions = ''
+    let sem = semanaActual - 4
+    let anio = anioActual
+    if (sem < 1) { sem = 52 + sem; anio = anioActual - 1 }
+    for (let i = 0; i < 25; i++) {
+      const selected = (sem === semanaAnterior && anio === anioAnterior) ? 'selected' : ''
+      semanaOptions += `<option value="${sem}-${anio}" ${selected}>Semana ${sem} - ${anio}</option>`
+      sem++
+      if (sem > 52) { sem = 1; anio++ }
+    }
+
+    const { value: formValues } = await Swal.fire({
+      title: `<span style="font-size: 16px; font-weight: 600;">Agregar Saldo Inicial</span>`,
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #FEF3C7; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; border-left: 3px solid #F59E0B;">
+            <div style="font-weight: 600; color: #92400E; font-size: 12px;">Importante</div>
+            <div style="color: #78350F; font-size: 11px; margin-top: 2px;">
+              La fecha de referencia se usa para calcular días de mora. Indica desde cuándo se considera este saldo.
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 12px; position: relative;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Conductor:</label>
+            <input id="swal-conductor-search" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Buscar conductor..." autocomplete="off">
+            <input type="hidden" id="swal-conductor" value="">
+            <div id="swal-conductor-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 9999;"></div>
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Saldo Inicial (Deuda):</label>
+            <input id="swal-saldo" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: 50000 (se registrará como deuda)">
+            <span style="font-size: 10px; color: #6B7280;">Ingrese el monto de la deuda (sin signo negativo)</span>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 8px; font-weight: 500;">¿Cómo desea aplicar el cobro?</label>
+            <div style="display: flex; gap: 10px;">
+              <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; border: 2px solid #e5e5e5; border-radius: 8px; cursor: pointer; transition: all 0.2s;" id="label-completo">
+                <input type="radio" name="tipo-cobro" value="completo" id="swal-completo" checked style="accent-color: #DC2626;">
+                <div>
+                  <div style="font-weight: 600; font-size: 13px;">Completo</div>
+                  <div style="font-size: 11px; color: #666;">Se cobra todo en una semana</div>
+                </div>
+              </label>
+              <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; border: 2px solid #e5e5e5; border-radius: 8px; cursor: pointer; transition: all 0.2s;" id="label-fraccionado">
+                <input type="radio" name="tipo-cobro" value="fraccionado" id="swal-fraccionado" style="accent-color: #DC2626;">
+                <div>
+                  <div style="font-weight: 600; font-size: 13px;">Fraccionado</div>
+                  <div style="font-size: 11px; color: #666;">Dividir en cuotas semanales</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div id="seccion-cuotas" style="display: none; margin-bottom: 12px; padding: 12px; background: #F3F4F6; border-radius: 8px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Cantidad de cuotas:</label>
+            <input id="swal-cuotas" type="number" min="2" max="52" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="4" placeholder="Ej: 4">
+            <div id="preview-cuotas" style="margin-top: 8px; font-size: 12px; color: #059669; font-weight: 500;"></div>
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Semana de inicio:</label>
+            <select id="swal-semana" class="swal2-select" style="font-size: 14px; margin: 0; width: 100%; padding: 8px;">
+              ${semanaOptions}
+            </select>
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Fecha de Referencia:</label>
+            <input id="swal-fecha" type="date" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${hoyStr}">
+            <span style="font-size: 10px; color: #6B7280;">Fecha desde la cual se considera este saldo para cálculo de mora</span>
+          </div>
+          
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Concepto (opcional):</label>
+            <input id="swal-concepto" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Regularización de saldo" value="Saldo inicial - Regularización">
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Agregar Saldo',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#16a34a',
+      cancelButtonColor: '#6B7280',
+      width: 480,
+      customClass: {
+        popup: 'swal-compact',
+        title: 'swal-title-compact',
+        htmlContainer: 'swal-html-compact'
+      },
+      didOpen: () => {
+        // Configurar búsqueda con dropdown custom
+        const searchInput = document.getElementById('swal-conductor-search') as HTMLInputElement
+        const hiddenInput = document.getElementById('swal-conductor') as HTMLInputElement
+        const dropdown = document.getElementById('swal-conductor-dropdown') as HTMLDivElement
+        
+        const renderDropdown = (filter: string) => {
+          const filterLower = filter.toLowerCase()
+          const filtered = conductoresParaModal.filter(c => {
+            const fullName = `${c.apellidos} ${c.nombres} ${c.dni || ''}`.toLowerCase()
+            return fullName.includes(filterLower)
+          }).slice(0, 50)
+          
+          if (filtered.length === 0) {
+            dropdown.innerHTML = '<div style="padding: 12px; color: #999; text-align: center;">No se encontraron resultados</div>'
+          } else {
+            dropdown.innerHTML = filtered.map(c => `
+              <div class="conductor-option" data-id="${c.id}" style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background 0.15s;">
+                <strong style="color: #DC2626;">${c.apellidos}, ${c.nombres}</strong>
+              </div>
+            `).join('')
+            
+            dropdown.querySelectorAll('.conductor-option').forEach(opt => {
+              opt.addEventListener('mouseenter', () => (opt as HTMLElement).style.background = '#f5f5f5')
+              opt.addEventListener('mouseleave', () => (opt as HTMLElement).style.background = 'white')
+              opt.addEventListener('click', () => {
+                const id = (opt as HTMLElement).dataset.id || ''
+                const c = conductoresParaModal.find(x => x.id === id)
+                if (c) {
+                  searchInput.value = `${c.apellidos}, ${c.nombres}`
+                  hiddenInput.value = id
+                  dropdown.style.display = 'none'
+                }
+              })
+            })
+          }
+          dropdown.style.display = 'block'
+        }
+        
+        searchInput.addEventListener('focus', () => renderDropdown(searchInput.value))
+        searchInput.addEventListener('input', () => renderDropdown(searchInput.value))
+        
+        // Cerrar dropdown al hacer click fuera
+        document.addEventListener('click', (e) => {
+          if (!searchInput.contains(e.target as Node) && !dropdown.contains(e.target as Node)) {
+            dropdown.style.display = 'none'
+          }
+        })
+        
+        // Configurar toggle completo/fraccionado
+        const radioCompleto = document.getElementById('swal-completo') as HTMLInputElement
+        const radioFraccionado = document.getElementById('swal-fraccionado') as HTMLInputElement
+        const labelCompleto = document.getElementById('label-completo') as HTMLElement
+        const labelFraccionado = document.getElementById('label-fraccionado') as HTMLElement
+        const seccionCuotas = document.getElementById('seccion-cuotas') as HTMLElement
+        const inputCuotas = document.getElementById('swal-cuotas') as HTMLInputElement
+        const inputSaldo = document.getElementById('swal-saldo') as HTMLInputElement
+        const previewCuotas = document.getElementById('preview-cuotas') as HTMLElement
+
+        const updatePreview = () => {
+          const monto = parseFloat(inputSaldo.value) || 0
+          const cuotas = parseInt(inputCuotas.value) || 1
+          if (monto > 0 && cuotas > 0) {
+            const montoCuota = Math.ceil(monto / cuotas)
+            previewCuotas.textContent = `${cuotas} cuotas de ${formatCurrency(montoCuota)}`
+          } else {
+            previewCuotas.textContent = ''
+          }
+        }
+
+        const updateStyles = () => {
+          if (radioCompleto.checked) {
+            labelCompleto.style.borderColor = '#DC2626'
+            labelCompleto.style.background = '#FEF2F2'
+            labelFraccionado.style.borderColor = '#e5e5e5'
+            labelFraccionado.style.background = 'white'
+            seccionCuotas.style.display = 'none'
+          } else {
+            labelFraccionado.style.borderColor = '#DC2626'
+            labelFraccionado.style.background = '#FEF2F2'
+            labelCompleto.style.borderColor = '#e5e5e5'
+            labelCompleto.style.background = 'white'
+            seccionCuotas.style.display = 'block'
+            updatePreview()
+          }
+        }
+
+        radioCompleto.addEventListener('change', updateStyles)
+        radioFraccionado.addEventListener('change', updateStyles)
+        inputCuotas.addEventListener('input', updatePreview)
+        inputSaldo.addEventListener('input', updatePreview)
+        updateStyles()
+        
+        searchInput.focus()
+      },
+      preConfirm: () => {
+        const conductorId = (document.getElementById('swal-conductor') as HTMLInputElement).value
+        const saldo = (document.getElementById('swal-saldo') as HTMLInputElement).value
+        const fecha = (document.getElementById('swal-fecha') as HTMLInputElement).value
+        const concepto = (document.getElementById('swal-concepto') as HTMLInputElement).value
+        const fraccionado = (document.getElementById('swal-fraccionado') as HTMLInputElement).checked
+        const cuotas = parseInt((document.getElementById('swal-cuotas') as HTMLInputElement).value) || 1
+        const semanaValue = (document.getElementById('swal-semana') as HTMLSelectElement).value
+        const [semana, anio] = semanaValue.split('-').map(Number)
+
+        if (!conductorId) {
+          Swal.showValidationMessage('Seleccione un conductor')
+          return false
+        }
+        if (!saldo || parseFloat(saldo) <= 0) {
+          Swal.showValidationMessage('Ingrese un monto de deuda válido (mayor a 0)')
+          return false
+        }
+        if (!fecha) {
+          Swal.showValidationMessage('Ingrese una fecha de referencia')
+          return false
+        }
+        if (fraccionado && cuotas < 2) {
+          Swal.showValidationMessage('El fraccionamiento debe tener al menos 2 cuotas')
+          return false
+        }
+
+        return { 
+          conductorId, 
+          saldo: -Math.abs(parseFloat(saldo)), // Siempre negativo (deuda)
+          fecha,
+          concepto: concepto || 'Saldo inicial - Regularización',
+          fraccionado,
+          cuotas: fraccionado ? cuotas : 1,
+          semanaInicio: semana,
+          anioInicio: anio
+        }
+      }
+    })
+
+    if (!formValues) return
+
+    try {
+      // Obtener datos del conductor
+      const conductor = conductoresParaModal.find(c => c.id === formValues.conductorId)
+      if (!conductor) throw new Error('Conductor no encontrado')
+
+      const conductorNombre = `${conductor.nombres} ${conductor.apellidos}`
+      const fechaReferencia = new Date(formValues.fecha + 'T12:00:00').toISOString()
+
+      // Insertar saldo inicial
+      const { error: errorSaldo } = await (supabase
+        .from('saldos_conductores') as any)
+        .insert({
+          conductor_id: formValues.conductorId,
+          conductor_nombre: conductorNombre,
+          conductor_dni: conductor.dni,
+          saldo_actual: formValues.saldo,
+          dias_mora: 0,
+          monto_mora_acumulada: 0,
+          fecha_referencia: fechaReferencia,
+          ultima_actualizacion: new Date().toISOString()
+        })
+
+      if (errorSaldo) throw errorSaldo
+
+      // Registrar en historial de abonos
+      await (supabase.from('abonos_conductores') as any).insert({
+        conductor_id: formValues.conductorId,
+        tipo: 'cargo',
+        monto: Math.abs(formValues.saldo),
+        concepto: formValues.concepto,
+        referencia: `Fecha ref: ${formValues.fecha}`,
+        fecha_abono: fechaReferencia
+      })
+
+      // Si es fraccionado, crear los cobros fraccionados
+      if (formValues.fraccionado && formValues.cuotas > 1) {
+        const montoCuota = Math.ceil(Math.abs(formValues.saldo) / formValues.cuotas)
+        let semActual = formValues.semanaInicio
+        let anioActual = formValues.anioInicio
+
+        for (let i = 1; i <= formValues.cuotas; i++) {
+          await (supabase.from('cobros_fraccionados') as any).insert({
+            conductor_id: formValues.conductorId,
+            conductor_nombre: conductorNombre,
+            origen_tipo: 'SALDO_INICIAL',
+            origen_id: null,
+            descripcion: `${formValues.concepto} - Cuota ${i}/${formValues.cuotas}`,
+            monto_total: Math.abs(formValues.saldo),
+            monto_cuota: montoCuota,
+            numero_cuota: i,
+            total_cuotas: formValues.cuotas,
+            semana: semActual,
+            anio: anioActual,
+            estado: 'pendiente'
+          })
+
+          // Avanzar a siguiente semana
+          semActual++
+          if (semActual > 52) {
+            semActual = 1
+            anioActual++
+          }
+        }
+      }
+
+      const mensajeFraccionado = formValues.fraccionado 
+        ? `<p><strong>Fraccionado:</strong> ${formValues.cuotas} cuotas de ${formatCurrency(Math.ceil(Math.abs(formValues.saldo) / formValues.cuotas))}</p>
+           <p><strong>Inicio:</strong> Semana ${formValues.semanaInicio} - ${formValues.anioInicio}</p>`
+        : ''
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Saldo Agregado',
+        html: `
+          <div style="text-align: left; font-size: 13px;">
+            <p><strong>Conductor:</strong> ${conductorNombre}</p>
+            <p><strong>Deuda:</strong> <span style="color: #dc2626; font-weight: 600;">${formatCurrency(formValues.saldo)}</span></p>
+            ${mensajeFraccionado}
+            <p><strong>Fecha referencia:</strong> ${formValues.fecha}</p>
+          </div>
+        `,
+        confirmButtonColor: '#16a34a'
+      })
+
+      // Recargar datos
+      cargarSaldos()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo agregar el saldo', 'error')
     }
   }
 
@@ -507,7 +884,7 @@ export function SaldosAbonosTab() {
 
   return (
     <>
-      {/* Header con filtro */}
+      {/* Header con filtro y botón agregar */}
       <div className="fact-header">
         <div className="fact-header-left">
           <span className="fact-label">Filtrar:</span>
@@ -517,6 +894,16 @@ export function SaldosAbonosTab() {
             <option value="deuda">Con deuda</option>
             <option value="mora">En mora</option>
           </select>
+        </div>
+        <div className="fact-header-right">
+          <button 
+            className="fact-btn fact-btn-primary"
+            onClick={agregarSaldoInicial}
+            title="Agregar saldo inicial a un conductor"
+          >
+            <UserPlus size={16} />
+            <span>Agregar Saldo</span>
+          </button>
         </div>
       </div>
 
