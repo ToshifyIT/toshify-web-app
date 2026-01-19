@@ -1929,6 +1929,14 @@ export function ConductoresModule() {
           </div>
         ),
         cell: ({ row }) => {
+          const estadoCodigo = (row.original as any).conductores_estados?.codigo?.toLowerCase() || '';
+          const isBaja = estadoCodigo === 'baja' || estadoCodigo.includes('baja');
+          
+          // Si está de baja, no mostrar asignación (aunque tenga datos viejos)
+          if (isBaja) {
+            return <span className="vehiculo-cell-na">-</span>;
+          }
+          
           const vehiculo = (row.original as any).vehiculo_asignado;
           if (vehiculo) {
             return (
@@ -1941,7 +1949,7 @@ export function ConductoresModule() {
             );
           }
           // Mostrar "Disponible" si está activo y no tiene asignación
-          const isActivo = (row.original as any).conductores_estados?.codigo?.toLowerCase() === 'activo';
+          const isActivo = estadoCodigo === 'activo';
           if (isActivo) {
             return <span className="dt-badge dt-badge-green">Disponible</span>;
           }
