@@ -987,8 +987,22 @@ export function AsignacionesModule() {
           Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.', 'success')
         }
       } else {
+        // Confirmación parcial: aún así poner vehículo en EN_USO
+        const { data: estadoEnUso } = await supabase
+          .from('vehiculos_estados')
+          .select('id')
+          .eq('codigo', 'EN_USO')
+          .single()
+
+        if (estadoEnUso && selectedAsignacion.vehiculo_id) {
+          await (supabase
+            .from('vehiculos') as any)
+            .update({ estado_id: (estadoEnUso as any).id })
+            .eq('id', selectedAsignacion.vehiculo_id)
+        }
+
         const pendientes = (allConductores as any)?.filter((c: any) => !c.confirmado).length || 0
-        Swal.fire('Confirmación Parcial', `${conductoresToConfirm.length} confirmado(s). Faltan ${pendientes}.`, 'info')
+        Swal.fire('Confirmación Parcial', `${conductoresToConfirm.length} confirmado(s). Faltan ${pendientes}. Vehículo marcado EN USO.`, 'info')
       }
 
       setShowConfirmModal(false)
