@@ -54,6 +54,7 @@ export function AsignacionesActivasModule() {
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
   const [vehiculosOperativos, setVehiculosOperativos] = useState(0) // PKG_ON_BASE + EN_USO
+  const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0) // Solo PKG_ON_BASE
   const [vehiculosEnUso, setVehiculosEnUso] = useState(0) // Solo EN_USO
   const [vehiculosPkgOnSinAsignacion, setVehiculosPkgOnSinAsignacion] = useState<any[]>([]) // PKG_ON_BASE sin asignación
   const [loading, setLoading] = useState(true)
@@ -167,6 +168,7 @@ export function AsignacionesActivasModule() {
 
         setTotalVehiculosFlota(totalFlota)
         setVehiculosOperativos(operativos)
+        setVehiculosPkgOn(pkgOn)
         setVehiculosEnUso(enUso)
         setVehiculosPkgOnSinAsignacion(pkgOnSinAsignacion)
       }
@@ -318,9 +320,11 @@ export function AsignacionesActivasModule() {
       porcentajeOcupacionGeneral,
       porcentajeOcupacionOperacional,
       porcentajeOperatividad,
-      autosDisponibles: vehiculosPkgOnSinAsignacion.length // Solo PKG_ON_BASE SIN asignación
+      autosDisponibles: vehiculosPkgOnSinAsignacion.length, // Solo PKG_ON_BASE SIN asignación
+      pkgOnBase: vehiculosPkgOn,
+      enUso: vehiculosEnUso
     }
-  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOnSinAsignacion, vehiculosEnUso])
+  }, [asignaciones, totalVehiculosFlota, vehiculosOperativos, vehiculosPkgOn, vehiculosPkgOnSinAsignacion, vehiculosEnUso])
 
   // Filtrar asignaciones según los filtros de columna y stat clickeada
   const filteredAsignaciones = useMemo(() => {
@@ -700,14 +704,61 @@ export function AsignacionesActivasModule() {
               <span className="stat-label">Autos Disponibles</span>
             </div>
           </div>
-          <div className="stat-card" title={`Vehículos con asignación activa / Total Flota`}>
+          <div 
+            className="stat-card stat-card-clickable" 
+            title="Click para ver detalle del cálculo"
+            onClick={() => {
+              Swal.fire({
+                title: '% Ocupación',
+                html: `
+                  <div style="text-align: left; font-size: 14px; line-height: 1.8;">
+                    <p style="margin-bottom: 12px; color: #6B7280;">Porcentaje de vehículos con asignación activa sobre el total de la flota:</p>
+                    <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; font-family: monospace;">
+                      <p style="margin: 0;"><strong>Vehículos con asignación activa:</strong> ${stats.vehiculos}</p>
+                      <p style="margin: 8px 0;"><strong>Total Flota:</strong> ${stats.totalFlota}</p>
+                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
+                      <p style="margin: 0; font-size: 16px; color: #059669;"><strong>= ${stats.vehiculos} / ${stats.totalFlota} = ${stats.porcentajeOcupacionGeneral}%</strong></p>
+                    </div>
+                  </div>
+                `,
+                icon: 'info',
+                confirmButtonColor: '#059669',
+                confirmButtonText: 'Entendido'
+              })
+            }}
+          >
             <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
               <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionGeneral}%</span>
               <span className="stat-label">% Ocupación</span>
             </div>
           </div>
-          <div className="stat-card" title={`(PKG ON + EN USO) / Total Flota`}>
+          <div 
+            className="stat-card stat-card-clickable" 
+            title="Click para ver detalle del cálculo"
+            onClick={() => {
+              Swal.fire({
+                title: '% Operatividad',
+                html: `
+                  <div style="text-align: left; font-size: 14px; line-height: 1.8;">
+                    <p style="margin-bottom: 12px; color: #6B7280;">Porcentaje de vehículos operativos sobre el total de la flota:</p>
+                    <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; font-family: monospace;">
+                      <p style="margin: 0;"><strong>PKG_ON_BASE:</strong> ${stats.pkgOnBase}</p>
+                      <p style="margin: 8px 0;"><strong>EN_USO:</strong> ${stats.enUso}</p>
+                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
+                      <p style="margin: 0;"><strong>Total Operativos:</strong> ${stats.pkgOnBase + stats.enUso}</p>
+                      <p style="margin: 8px 0;"><strong>Total Flota:</strong> ${stats.totalFlota}</p>
+                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
+                      <p style="margin: 0; font-size: 16px; color: #059669;"><strong>= (${stats.pkgOnBase} + ${stats.enUso}) / ${stats.totalFlota} = ${stats.porcentajeOperatividad}%</strong></p>
+                    </div>
+                  </div>
+                `,
+                icon: 'info',
+                confirmButtonColor: '#059669',
+                confirmButtonText: 'Entendido'
+              })
+            }}
+          >
             <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
               <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOperatividad}%</span>
