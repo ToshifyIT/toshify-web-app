@@ -742,6 +742,44 @@ input[type="date"].asig-status-select {
   border-color: var(--border-focus);
 }
 
+/* Autocomplete dropdown para selección de conductores */
+.asig-autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  margin-top: 4px;
+}
+
+.asig-autocomplete-option {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.15s;
+}
+
+.asig-autocomplete-option:last-child {
+  border-bottom: none;
+}
+
+.asig-autocomplete-option:hover {
+  background: var(--bg-secondary);
+}
+
+.asig-autocomplete-option.selected {
+  background: var(--bg-secondary);
+  font-weight: 500;
+}
+
 /* Acciones del modal */
 .asig-modal-actions {
   display: flex;

@@ -1984,24 +1984,23 @@ export function AsignacionesModule() {
       {/* Modal de Regularización */}
       {showRegularizarModal && regularizarAsignacion && (
         <div className="asig-modal-overlay">
-          <div className="asig-modal-content" style={{ maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+          <div className="asig-modal-content">
             <h2 className="asig-modal-title">Editar Asignación</h2>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px', textAlign: 'center' }}>
               Código: <strong>{regularizarAsignacion.codigo}</strong>
             </p>
 
             {loadingRegularizar ? (
               <div style={{ textAlign: 'center', padding: '40px' }}>Cargando...</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1 }}>
+              <div className="asig-detail-grid" style={{ gap: '16px' }}>
                 {/* Vehículo */}
-                <div className="form-group">
+                <div>
                   <label className="asig-detail-label">Vehículo</label>
                   <select
                     value={regularizarData.vehiculo_id}
                     onChange={(e) => setRegularizarData(prev => ({ ...prev, vehiculo_id: e.target.value }))}
                     className="asig-status-select"
-                    style={{ width: '100%' }}
                   >
                     <option value="">Seleccionar vehículo</option>
                     {vehiculosDisponibles.map((v: any) => (
@@ -2011,13 +2010,12 @@ export function AsignacionesModule() {
                 </div>
 
                 {/* Modalidad */}
-                <div className="form-group">
+                <div>
                   <label className="asig-detail-label">Modalidad</label>
                   <select
                     value={regularizarData.horario}
                     onChange={(e) => setRegularizarData(prev => ({ ...prev, horario: e.target.value }))}
                     className="asig-status-select"
-                    style={{ width: '100%' }}
                   >
                     <option value="TURNO">TURNO (Diurno/Nocturno)</option>
                     <option value="CARGO">A CARGO (Un solo conductor)</option>
@@ -2027,7 +2025,7 @@ export function AsignacionesModule() {
                 {/* Conductores según modalidad */}
                 {regularizarData.horario === 'TURNO' ? (
                   <>
-                    <div className="form-group" style={{ position: 'relative' }}>
+                    <div style={{ position: 'relative' }}>
                       <label className="asig-detail-label">Conductor Diurno</label>
                       <div style={{ position: 'relative' }}>
                         <input
@@ -2035,32 +2033,30 @@ export function AsignacionesModule() {
                           value={showDropdownDiurno ? searchDiurno : (regularizarData.conductor_diurno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.nombres) : '')}
                           onChange={(e) => { setSearchDiurno(e.target.value); setShowDropdownDiurno(true) }}
                           onFocus={() => { setShowDropdownDiurno(true); setSearchDiurno('') }}
+                          onBlur={() => setTimeout(() => setShowDropdownDiurno(false), 200)}
                           placeholder="Buscar conductor..."
                           className="asig-status-select"
-                          style={{ width: '100%', paddingRight: '30px' }}
                         />
-                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>▼</span>
                       </div>
                       {showDropdownDiurno && (
-                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-                          <div 
-                            style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
-                            onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: '' })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
-                          >Sin asignar (Vacante)</div>
+                        <div className="asig-autocomplete-dropdown">
+                          <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: '' })); setSearchDiurno(''); setShowDropdownDiurno(false) }}>
+                            Sin asignar (Vacante)
+                          </div>
                           {conductoresDisponibles
                             .filter(c => !searchDiurno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchDiurno.toLowerCase()))
                             .slice(0, 20)
                             .map((c: any) => (
                               <div 
                                 key={c.id} 
-                                style={{ padding: '10px 12px', cursor: 'pointer', background: regularizarData.conductor_diurno_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
+                                className={`asig-autocomplete-option ${regularizarData.conductor_diurno_id === c.id ? 'selected' : ''}`}
                                 onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: c.id })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
                               >{c.apellidos}, {c.nombres}</div>
                             ))}
                         </div>
                       )}
                     </div>
-                    <div className="form-group" style={{ position: 'relative' }}>
+                    <div style={{ position: 'relative' }}>
                       <label className="asig-detail-label">Conductor Nocturno</label>
                       <div style={{ position: 'relative' }}>
                         <input
@@ -2068,25 +2064,23 @@ export function AsignacionesModule() {
                           value={showDropdownNocturno ? searchNocturno : (regularizarData.conductor_nocturno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.nombres) : '')}
                           onChange={(e) => { setSearchNocturno(e.target.value); setShowDropdownNocturno(true) }}
                           onFocus={() => { setShowDropdownNocturno(true); setSearchNocturno('') }}
+                          onBlur={() => setTimeout(() => setShowDropdownNocturno(false), 200)}
                           placeholder="Buscar conductor..."
                           className="asig-status-select"
-                          style={{ width: '100%', paddingRight: '30px' }}
                         />
-                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>▼</span>
                       </div>
                       {showDropdownNocturno && (
-                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-                          <div 
-                            style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
-                            onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: '' })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
-                          >Sin asignar (Vacante)</div>
+                        <div className="asig-autocomplete-dropdown">
+                          <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: '' })); setSearchNocturno(''); setShowDropdownNocturno(false) }}>
+                            Sin asignar (Vacante)
+                          </div>
                           {conductoresDisponibles
                             .filter(c => !searchNocturno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchNocturno.toLowerCase()))
                             .slice(0, 20)
                             .map((c: any) => (
                               <div 
                                 key={c.id} 
-                                style={{ padding: '10px 12px', cursor: 'pointer', background: regularizarData.conductor_nocturno_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
+                                className={`asig-autocomplete-option ${regularizarData.conductor_nocturno_id === c.id ? 'selected' : ''}`}
                                 onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: c.id })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
                               >{c.apellidos}, {c.nombres}</div>
                             ))}
@@ -2095,33 +2089,29 @@ export function AsignacionesModule() {
                     </div>
                   </>
                 ) : (
-                  <div className="form-group" style={{ position: 'relative' }}>
+                  <div style={{ position: 'relative' }}>
                     <label className="asig-detail-label">Conductor A Cargo</label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="text"
-                        value={showDropdownCargo ? searchCargo : (regularizarData.conductor_cargo_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.nombres) : '')}
-                        onChange={(e) => { setSearchCargo(e.target.value); setShowDropdownCargo(true) }}
-                        onFocus={() => { setShowDropdownCargo(true); setSearchCargo('') }}
-                        placeholder="Buscar conductor..."
-                        className="asig-status-select"
-                        style={{ width: '100%', paddingRight: '30px' }}
-                      />
-                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>▼</span>
-                    </div>
+                    <input
+                      type="text"
+                      value={showDropdownCargo ? searchCargo : (regularizarData.conductor_cargo_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.nombres) : '')}
+                      onChange={(e) => { setSearchCargo(e.target.value); setShowDropdownCargo(true) }}
+                      onFocus={() => { setShowDropdownCargo(true); setSearchCargo('') }}
+                      onBlur={() => setTimeout(() => setShowDropdownCargo(false), 200)}
+                      placeholder="Buscar conductor..."
+                      className="asig-status-select"
+                    />
                     {showDropdownCargo && (
-                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-                        <div 
-                          style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
-                          onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: '' })); setSearchCargo(''); setShowDropdownCargo(false) }}
-                        >Sin asignar</div>
+                      <div className="asig-autocomplete-dropdown">
+                        <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: '' })); setSearchCargo(''); setShowDropdownCargo(false) }}>
+                          Sin asignar
+                        </div>
                         {conductoresDisponibles
                           .filter(c => !searchCargo || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchCargo.toLowerCase()))
                           .slice(0, 20)
                           .map((c: any) => (
                             <div 
                               key={c.id} 
-                              style={{ padding: '10px 12px', cursor: 'pointer', background: regularizarData.conductor_cargo_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
+                              className={`asig-autocomplete-option ${regularizarData.conductor_cargo_id === c.id ? 'selected' : ''}`}
                               onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: c.id })); setSearchCargo(''); setShowDropdownCargo(false) }}
                             >{c.apellidos}, {c.nombres}</div>
                           ))}
@@ -2131,27 +2121,23 @@ export function AsignacionesModule() {
                 )}
 
                 {/* Fechas */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="form-group">
-                    <label className="asig-detail-label">Fecha Entrega Real</label>
-                    <input
-                      type="date"
-                      value={regularizarData.fecha_inicio}
-                      onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_inicio: e.target.value }))}
-                      className="asig-status-select"
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="asig-detail-label">Fecha Fin</label>
-                    <input
-                      type="date"
-                      value={regularizarData.fecha_fin}
-                      onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_fin: e.target.value }))}
-                      className="asig-status-select"
-                      style={{ width: '100%' }}
-                    />
-                  </div>
+                <div>
+                  <label className="asig-detail-label">Fecha Entrega Real</label>
+                  <input
+                    type="date"
+                    value={regularizarData.fecha_inicio}
+                    onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_inicio: e.target.value }))}
+                    className="asig-status-select"
+                  />
+                </div>
+                <div>
+                  <label className="asig-detail-label">Fecha Fin</label>
+                  <input
+                    type="date"
+                    value={regularizarData.fecha_fin}
+                    onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_fin: e.target.value }))}
+                    className="asig-status-select"
+                  />
                 </div>
 
                 {/* Notas */}
