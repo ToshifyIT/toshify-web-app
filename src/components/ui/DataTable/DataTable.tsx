@@ -5,7 +5,7 @@
  * con filas expandibles, columna de acciones sticky y filtros automáticos por columna.
  */
 
-import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, startTransition, type ReactNode } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   useReactTable,
@@ -957,11 +957,7 @@ export function DataTable<T>({
                 placeholder={searchPlaceholder}
                 value={globalFilter}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  setGlobalFilter(value); // Actualización inmediata del input
-                  startTransition(() => {
-                    setDebouncedSearch(value); // Actualización diferida del filtrado
-                  });
+                  setGlobalFilter(e.target.value);
                 }}
               />
             </div>

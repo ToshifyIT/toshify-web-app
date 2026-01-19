@@ -99,7 +99,22 @@ export function AsignacionesModule() {
     fecha_inicio: string
     fecha_fin: string
     notas: string
-  }>({ fecha_inicio: '', fecha_fin: '', notas: '' })
+    vehiculo_id: string
+    horario: string
+    conductor_diurno_id: string
+    conductor_nocturno_id: string
+    conductor_cargo_id: string
+  }>({ fecha_inicio: '', fecha_fin: '', notas: '', vehiculo_id: '', horario: '', conductor_diurno_id: '', conductor_nocturno_id: '', conductor_cargo_id: '' })
+  const [vehiculosDisponibles, setVehiculosDisponibles] = useState<any[]>([])
+  const [conductoresDisponibles, setConductoresDisponibles] = useState<any[]>([])
+  const [loadingRegularizar, setLoadingRegularizar] = useState(false)
+  // Estados para búsqueda de conductores en modal editar
+  const [searchDiurno, setSearchDiurno] = useState('')
+  const [searchNocturno, setSearchNocturno] = useState('')
+  const [searchCargo, setSearchCargo] = useState('')
+  const [showDropdownDiurno, setShowDropdownDiurno] = useState(false)
+  const [showDropdownNocturno, setShowDropdownNocturno] = useState(false)
+  const [showDropdownCargo, setShowDropdownCargo] = useState(false)
   
   // Datos base para cálculo de stats (cargados en paralelo)
   const [vehiculosData, setVehiculosData] = useState<Array<{ id: string; estado_id: string; estadoCodigo?: string }>>([])
@@ -1069,14 +1084,47 @@ export function AsignacionesModule() {
   }
 
   // Abrir modal de regularización
-  const handleOpenRegularizar = (asignacion: Asignacion) => {
+  const handleOpenRegularizar = async (asignacion: Asignacion) => {
     setRegularizarAsignacion(asignacion)
+    setLoadingRegularizar(true)
+    setShowRegularizarModal(true)
+    
+    // Cargar vehículos, conductores disponibles Y conductores de esta asignación
+    const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all([
+      supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
+      supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
+      supabase.from('asignaciones_conductores').select('conductor_id, horario').eq('asignacion_id', asignacion.id)
+    ])
+    
+    setVehiculosDisponibles(vehiculosRes.data || [])
+    setConductoresDisponibles(conductoresRes.data || [])
+    
+    // Obtener conductores actuales de la asignación
+    const conductoresAsig = (asignacionConductoresRes.data || []) as any[]
+    const diurno = conductoresAsig.find(c => c.horario === 'diurno' || c.horario === 'DIURNO' || c.horario === 'D')
+    const nocturno = conductoresAsig.find(c => c.horario === 'nocturno' || c.horario === 'NOCTURNO' || c.horario === 'N')
+    const cargo = conductoresAsig.find(c => c.horario === 'CARGO' || c.horario === 'cargo' || c.horario === 'A CARGO')
+    
     setRegularizarData({
       fecha_inicio: asignacion.fecha_inicio ? asignacion.fecha_inicio.split('T')[0] : '',
       fecha_fin: asignacion.fecha_fin ? asignacion.fecha_fin.split('T')[0] : '',
-      notas: asignacion.notas || ''
+      notas: asignacion.notas || '',
+      vehiculo_id: asignacion.vehiculo_id || '',
+      horario: asignacion.horario || 'TURNO',
+      conductor_diurno_id: diurno?.conductor_id || '',
+      conductor_nocturno_id: nocturno?.conductor_id || '',
+      conductor_cargo_id: cargo?.conductor_id || ''
     })
-    setShowRegularizarModal(true)
+    
+    // Reset search states
+    setSearchDiurno('')
+    setSearchNocturno('')
+    setSearchCargo('')
+    setShowDropdownDiurno(false)
+    setShowDropdownNocturno(false)
+    setShowDropdownCargo(false)
+    
+    setLoadingRegularizar(false)
   }
 
   // Guardar regularización
@@ -1089,7 +1137,7 @@ export function AsignacionesModule() {
         updated_by: profile?.full_name || 'Sistema'
       }
 
-      // Solo actualizar campos que tienen valor
+      // Actualizar campos de la asignación
       if (regularizarData.fecha_inicio) {
         updateData.fecha_inicio = new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString()
       }
@@ -1099,6 +1147,12 @@ export function AsignacionesModule() {
       if (regularizarData.notas !== regularizarAsignacion.notas) {
         updateData.notas = regularizarData.notas
       }
+      if (regularizarData.vehiculo_id && regularizarData.vehiculo_id !== regularizarAsignacion.vehiculo_id) {
+        updateData.vehiculo_id = regularizarData.vehiculo_id
+      }
+      if (regularizarData.horario && regularizarData.horario !== regularizarAsignacion.horario) {
+        updateData.horario = regularizarData.horario
+      }
 
       const { error } = await (supabase as any)
         .from('asignaciones')
@@ -1106,6 +1160,47 @@ export function AsignacionesModule() {
         .eq('id', regularizarAsignacion.id)
 
       if (error) throw error
+
+      // Actualizar conductores si es TURNO
+      if (regularizarData.horario === 'TURNO') {
+        // Eliminar conductores existentes
+        await supabase.from('asignaciones_conductores').delete().eq('asignacion_id', regularizarAsignacion.id)
+        
+        // Insertar nuevos conductores
+        const nuevoConductores = []
+        if (regularizarData.conductor_diurno_id) {
+          nuevoConductores.push({
+            asignacion_id: regularizarAsignacion.id,
+            conductor_id: regularizarData.conductor_diurno_id,
+            horario: 'diurno',
+            estado: 'asignado'
+          })
+        }
+        if (regularizarData.conductor_nocturno_id) {
+          nuevoConductores.push({
+            asignacion_id: regularizarAsignacion.id,
+            conductor_id: regularizarData.conductor_nocturno_id,
+            horario: 'nocturno',
+            estado: 'asignado'
+          })
+        }
+        if (nuevoConductores.length > 0) {
+          await (supabase.from('asignaciones_conductores') as any).insert(nuevoConductores)
+        }
+      } else if (regularizarData.horario === 'CARGO') {
+        // Eliminar conductores existentes
+        await supabase.from('asignaciones_conductores').delete().eq('asignacion_id', regularizarAsignacion.id)
+        
+        // Insertar conductor a cargo
+        if (regularizarData.conductor_cargo_id) {
+          await (supabase.from('asignaciones_conductores') as any).insert({
+            asignacion_id: regularizarAsignacion.id,
+            conductor_id: regularizarData.conductor_cargo_id,
+            horario: 'CARGO',
+            estado: 'asignado'
+          })
+        }
+      }
 
       Swal.fire({
         icon: 'success',
@@ -1889,56 +1984,189 @@ export function AsignacionesModule() {
       {/* Modal de Regularización */}
       {showRegularizarModal && regularizarAsignacion && (
         <div className="asig-modal-overlay">
-          <div className="asig-modal-content">
-            <h2 className="asig-modal-title">Regularizar Asignación</h2>
-            <p>Vehículo: <strong>{regularizarAsignacion.vehiculos?.patente}</strong></p>
+          <div className="asig-modal-content" style={{ maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <h2 className="asig-modal-title">Editar Asignación</h2>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
               Código: <strong>{regularizarAsignacion.codigo}</strong>
             </p>
 
-            <div className="asig-detail-grid">
-              {/* Fecha de Inicio (Entrega Real) */}
-              <div className="form-group">
-                <label className="asig-detail-label">Fecha de Entrega Real (Activación)</label>
-                <input
-                  type="date"
-                  value={regularizarData.fecha_inicio}
-                  onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_inicio: e.target.value }))}
-                  className="asig-status-select"
-                  style={{ width: '100%' }}
-                />
-                <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                  Actual: {regularizarAsignacion.fecha_inicio ? new Date(regularizarAsignacion.fecha_inicio).toLocaleDateString('es-AR') : 'No definida'}
-                </p>
-              </div>
+            {loadingRegularizar ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>Cargando...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1 }}>
+                {/* Vehículo */}
+                <div className="form-group">
+                  <label className="asig-detail-label">Vehículo</label>
+                  <select
+                    value={regularizarData.vehiculo_id}
+                    onChange={(e) => setRegularizarData(prev => ({ ...prev, vehiculo_id: e.target.value }))}
+                    className="asig-status-select"
+                    style={{ width: '100%' }}
+                  >
+                    <option value="">Seleccionar vehículo</option>
+                    {vehiculosDisponibles.map((v: any) => (
+                      <option key={v.id} value={v.id}>{v.patente} - {v.marca} {v.modelo}</option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Fecha Fin */}
-              <div className="form-group">
-                <label className="asig-detail-label">Fecha de Fin (si aplica)</label>
-                <input
-                  type="date"
-                  value={regularizarData.fecha_fin}
-                  onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_fin: e.target.value }))}
-                  className="asig-status-select"
-                  style={{ width: '100%' }}
-                />
-                <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                  Actual: {regularizarAsignacion.fecha_fin ? new Date(regularizarAsignacion.fecha_fin).toLocaleDateString('es-AR') : 'Sin definir'}
-                </p>
-              </div>
+                {/* Modalidad */}
+                <div className="form-group">
+                  <label className="asig-detail-label">Modalidad</label>
+                  <select
+                    value={regularizarData.horario}
+                    onChange={(e) => setRegularizarData(prev => ({ ...prev, horario: e.target.value }))}
+                    className="asig-status-select"
+                    style={{ width: '100%' }}
+                  >
+                    <option value="TURNO">TURNO (Diurno/Nocturno)</option>
+                    <option value="CARGO">A CARGO (Un solo conductor)</option>
+                  </select>
+                </div>
 
-              {/* Notas */}
-              <div className="form-group">
-                <label className="asig-detail-label">Notas / Observaciones</label>
-                <textarea
-                  value={regularizarData.notas}
-                  onChange={(e) => setRegularizarData(prev => ({ ...prev, notas: e.target.value }))}
-                  rows={3}
-                  placeholder="Agregar notas sobre la regularización..."
-                  className="asig-modal-textarea"
-                />
+                {/* Conductores según modalidad */}
+                {regularizarData.horario === 'TURNO' ? (
+                  <>
+                    <div className="form-group" style={{ position: 'relative' }}>
+                      <label className="asig-detail-label">Conductor Diurno</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="text"
+                          value={showDropdownDiurno ? searchDiurno : (regularizarData.conductor_diurno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.nombres) : '')}
+                          onChange={(e) => { setSearchDiurno(e.target.value); setShowDropdownDiurno(true) }}
+                          onFocus={() => { setShowDropdownDiurno(true); setSearchDiurno('') }}
+                          placeholder="Buscar conductor..."
+                          className="asig-status-select"
+                          style={{ width: '100%', paddingRight: '30px' }}
+                        />
+                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>▼</span>
+                      </div>
+                      {showDropdownDiurno && (
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                          <div 
+                            style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+                            onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: '' })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
+                          >Sin asignar (Vacante)</div>
+                          {conductoresDisponibles
+                            .filter(c => !searchDiurno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchDiurno.toLowerCase()))
+                            .slice(0, 20)
+                            .map((c: any) => (
+                              <div 
+                                key={c.id} 
+                                style={{ padding: '10px 12px', cursor: 'pointer', background: regularizarData.conductor_diurno_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
+                                onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: c.id })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
+                              >{c.apellidos}, {c.nombres}</div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="form-group" style={{ position: 'relative' }}>
+                      <label className="asig-detail-label">Conductor Nocturno</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="text"
+                          value={showDropdownNocturno ? searchNocturno : (regularizarData.conductor_nocturno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.nombres) : '')}
+                          onChange={(e) => { setSearchNocturno(e.target.value); setShowDropdownNocturno(true) }}
+                          onFocus={() => { setShowDropdownNocturno(true); setSearchNocturno('') }}
+                          placeholder="Buscar conductor..."
+                          className="asig-status-select"
+                          style={{ width: '100%', paddingRight: '30px' }}
+                        />
+                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>▼</span>
+                      </div>
+                      {showDropdownNocturno && (
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                          <div 
+                            style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+                            onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: '' })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
+                          >Sin asignar (Vacante)</div>
+                          {conductoresDisponibles
+                            .filter(c => !searchNocturno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchNocturno.toLowerCase()))
+                            .slice(0, 20)
+                            .map((c: any) => (
+                              <div 
+                                key={c.id} 
+                                style={{ padding: '10px 12px', cursor: 'pointer', background: regularizarData.conductor_nocturno_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
+                                onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: c.id })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
+                              >{c.apellidos}, {c.nombres}</div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="form-group" style={{ position: 'relative' }}>
+                    <label className="asig-detail-label">Conductor A Cargo</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        value={showDropdownCargo ? searchCargo : (regularizarData.conductor_cargo_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.nombres) : '')}
+                        onChange={(e) => { setSearchCargo(e.target.value); setShowDropdownCargo(true) }}
+                        onFocus={() => { setShowDropdownCargo(true); setSearchCargo('') }}
+                        placeholder="Buscar conductor..."
+                        className="asig-status-select"
+                        style={{ width: '100%', paddingRight: '30px' }}
+                      />
+                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>▼</span>
+                    </div>
+                    {showDropdownCargo && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                        <div 
+                          style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+                          onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: '' })); setSearchCargo(''); setShowDropdownCargo(false) }}
+                        >Sin asignar</div>
+                        {conductoresDisponibles
+                          .filter(c => !searchCargo || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchCargo.toLowerCase()))
+                          .slice(0, 20)
+                          .map((c: any) => (
+                            <div 
+                              key={c.id} 
+                              style={{ padding: '10px 12px', cursor: 'pointer', background: regularizarData.conductor_cargo_id === c.id ? 'var(--bg-secondary)' : 'transparent' }}
+                              onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: c.id })); setSearchCargo(''); setShowDropdownCargo(false) }}
+                            >{c.apellidos}, {c.nombres}</div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Fechas */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group">
+                    <label className="asig-detail-label">Fecha Entrega Real</label>
+                    <input
+                      type="date"
+                      value={regularizarData.fecha_inicio}
+                      onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_inicio: e.target.value }))}
+                      className="asig-status-select"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="asig-detail-label">Fecha Fin</label>
+                    <input
+                      type="date"
+                      value={regularizarData.fecha_fin}
+                      onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_fin: e.target.value }))}
+                      className="asig-status-select"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Notas */}
+                <div className="form-group">
+                  <label className="asig-detail-label">Notas / Observaciones</label>
+                  <textarea
+                    value={regularizarData.notas}
+                    onChange={(e) => setRegularizarData(prev => ({ ...prev, notas: e.target.value }))}
+                    rows={3}
+                    placeholder="Agregar notas..."
+                    className="asig-modal-textarea"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="asig-modal-actions">
               <button
@@ -1954,7 +2182,7 @@ export function AsignacionesModule() {
               <button
                 className="btn-primary"
                 onClick={handleSaveRegularizacion}
-                disabled={isSubmitting}
+                disabled={isSubmitting || loadingRegularizar}
               >
                 {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
               </button>
