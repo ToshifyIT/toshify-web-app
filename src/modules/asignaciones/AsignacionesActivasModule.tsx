@@ -496,11 +496,11 @@ export function AsignacionesActivasModule() {
             <div className="asig-conductores-compact">
               <span className={diurno ? 'asig-conductor-turno asig-turno-diurno' : 'asig-turno-vacante asig-turno-diurno'}>
                 <span className="asig-turno-label asig-label-diurno">D</span>
-                {diurno ? diurno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+                {diurno ? diurno.nombre : 'Vacante'}
               </span>
               <span className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}>
                 <span className="asig-turno-label asig-label-nocturno">N</span>
-                {nocturno ? nocturno.nombre.split(' ').slice(0, 2).join(' ') : 'Vacante'}
+                {nocturno ? nocturno.nombre : 'Vacante'}
               </span>
             </div>
           )

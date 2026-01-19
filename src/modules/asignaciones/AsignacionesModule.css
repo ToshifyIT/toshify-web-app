@@ -780,6 +780,80 @@ input[type="date"].asig-status-select {
   font-weight: 500;
 }
 
+/* =====================================================
+   MODAL EDITAR ASIGNACIÓN - Estilos mejorados
+   ===================================================== */
+
+.asig-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.asig-edit-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.asig-edit-row.single {
+  grid-template-columns: 1fr;
+}
+
+.asig-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.asig-edit-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.asig-edit-field input,
+.asig-edit-field select,
+.asig-edit-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.asig-edit-field input:focus,
+.asig-edit-field select:focus,
+.asig-edit-field textarea:focus {
+  outline: none;
+  border-color: #DC2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.asig-edit-field input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.asig-edit-field textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* Input de conductor con dropdown */
+.asig-edit-field .asig-conductor-input-wrapper {
+  position: relative;
+}
+
+.asig-edit-field .asig-autocomplete-dropdown {
+  top: calc(100% + 4px);
+}
+
 /* Acciones del modal */
 .asig-modal-actions {
   display: flex;
