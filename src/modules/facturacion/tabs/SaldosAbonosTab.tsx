@@ -13,7 +13,8 @@ import {
   Clock,
   Filter,
   Edit3,
-  UserPlus
+  UserPlus,
+  Trash2
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -564,6 +565,54 @@ export function SaldosAbonosTab() {
     }
   }
 
+  async function eliminarSaldo(saldo: SaldoConductor) {
+    const result = await Swal.fire({
+      title: 'Eliminar Saldo',
+      html: `
+        <p>¿Estás seguro de eliminar el saldo de <strong>${saldo.conductor_nombre}</strong>?</p>
+        <p style="color: #DC2626; font-weight: 600; margin-top: 10px;">Saldo actual: ${formatCurrency(saldo.saldo_actual)}</p>
+        <p style="font-size: 12px; color: #666; margin-top: 10px;">Esta acción eliminará el registro y sus cobros fraccionados asociados.</p>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280'
+    })
+
+    if (!result.isConfirmed) return
+
+    try {
+      // Eliminar cobros fraccionados asociados
+      await supabase
+        .from('cobros_fraccionados')
+        .delete()
+        .eq('conductor_id', saldo.conductor_id)
+
+      // Eliminar el saldo
+      const { error } = await supabase
+        .from('saldos_conductores')
+        .delete()
+        .eq('id', saldo.id)
+
+      if (error) throw error
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Eliminado',
+        text: 'El saldo ha sido eliminado correctamente',
+        timer: 1500,
+        showConfirmButton: false
+      })
+
+      cargarSaldos()
+    } catch (error) {
+      console.error('Error eliminando saldo:', error)
+      Swal.fire('Error', 'No se pudo eliminar el saldo', 'error')
+    }
+  }
+
   async function editarSaldo(saldo: SaldoConductor) {
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Saldo</span>`,
@@ -850,6 +899,9 @@ export function SaldosAbonosTab() {
           </button>
           <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarAbono(row.original)} data-tooltip="Registrar movimiento">
             <Plus size={14} />
+          </button>
+          <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarSaldo(row.original)} data-tooltip="Eliminar">
+            <Trash2 size={14} />
           </button>
         </div>
       )

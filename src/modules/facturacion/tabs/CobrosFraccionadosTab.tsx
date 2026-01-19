@@ -57,7 +57,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
   const cargarCobrosFraccionados = async () => {
     setLoading(true)
     try {
-      // Obtener penalidades fraccionadas con sus cuotas
+      // 1. Obtener penalidades fraccionadas con sus cuotas
       const { data: penalidades, error: penError } = await (supabase
         .from('penalidades') as any)
         .select(`
@@ -77,7 +77,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
       
       if (penError) throw penError
 
-      // Obtener todas las cuotas
+      // Obtener todas las cuotas de penalidades
       const { data: cuotas, error: cuotasError } = await (supabase
         .from('penalidades_cuotas') as any)
         .select('*')
@@ -95,7 +95,75 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
         } : null
       }))
 
-      setCobros(cobrosConCuotas)
+      // 2. Obtener cobros fraccionados de saldos iniciales
+      const { data: cobrosSaldos, error: saldosError } = await supabase
+        .from('cobros_fraccionados')
+        .select(`
+          id,
+          conductor_id,
+          monto_total,
+          monto_cuota,
+          numero_cuota,
+          semana,
+          anio,
+          descripcion,
+          aplicado,
+          fecha_aplicacion,
+          total_cuotas,
+          created_at,
+          conductor:conductores(id, nombres, apellidos)
+        `)
+        .order('created_at', { ascending: false })
+      
+      if (saldosError) throw saldosError
+
+      // Agrupar cobros_fraccionados por conductor
+      const cobrosPorConductor = new Map<string, any[]>()
+      ;(cobrosSaldos || []).forEach((c: any) => {
+        const key = c.conductor_id
+        if (!cobrosPorConductor.has(key)) {
+          cobrosPorConductor.set(key, [])
+        }
+        cobrosPorConductor.get(key)!.push(c)
+      })
+
+      // Convertir a formato similar a penalidades
+      const cobrosDesdesSaldos: PenalidadFraccionada[] = []
+      cobrosPorConductor.forEach((cuotasSaldo, conductorId) => {
+        if (cuotasSaldo.length === 0) return
+        const primerCuota = cuotasSaldo[0]
+        const conductor = primerCuota.conductor
+        
+        cobrosDesdesSaldos.push({
+          id: `saldo-${conductorId}`,
+          monto: primerCuota.monto_total,
+          fraccionado: true,
+          cantidad_cuotas: primerCuota.total_cuotas,
+          conductor_id: conductorId,
+          conductor_nombre: conductor ? `${conductor.apellidos}, ${conductor.nombres}` : 'N/A',
+          vehiculo_patente: null,
+          fecha: primerCuota.created_at,
+          observaciones: primerCuota.descripcion || 'Saldo inicial fraccionado',
+          cuotas: cuotasSaldo.map((c: any) => ({
+            id: c.id,
+            penalidad_id: `saldo-${conductorId}`,
+            numero_cuota: c.numero_cuota,
+            monto_cuota: c.monto_cuota,
+            semana: c.semana,
+            anio: c.anio,
+            aplicado: c.aplicado,
+            fecha_aplicacion: c.fecha_aplicacion
+          })),
+          conductor: conductor ? {
+            nombres: conductor.nombres,
+            apellidos: conductor.apellidos,
+            nombre_completo: `${conductor.nombres} ${conductor.apellidos}`
+          } : undefined
+        })
+      })
+
+      // Combinar ambos tipos de cobros
+      setCobros([...cobrosConCuotas, ...cobrosDesdesSaldos])
     } catch (error) {
       console.error('Error cargando cobros:', error)
       Swal.fire('Error', 'No se pudieron cargar los cobros fraccionados', 'error')
