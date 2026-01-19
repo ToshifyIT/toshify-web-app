@@ -1969,7 +1969,7 @@ export function AsignacionesModule() {
       {/* Modal de Regularización */}
       {showRegularizarModal && regularizarAsignacion && (
         <div className="asig-modal-overlay">
-          <div className="asig-modal-content" style={{ maxWidth: '600px' }}>
+          <div className="asig-modal-content" style={{ maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
             <h2 className="asig-modal-title">Editar Asignación</h2>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
               Código: <strong>{regularizarAsignacion.codigo}</strong>
@@ -1978,7 +1978,7 @@ export function AsignacionesModule() {
             {loadingRegularizar ? (
               <div style={{ textAlign: 'center', padding: '40px' }}>Cargando...</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1 }}>
                 {/* Vehículo */}
                 <div className="form-group">
                   <label className="asig-detail-label">Vehículo</label>
