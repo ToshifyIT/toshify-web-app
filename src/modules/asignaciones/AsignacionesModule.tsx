@@ -105,7 +105,10 @@ export function AsignacionesModule() {
     conductor_nocturno_id: string
     conductor_cargo_id: string
     estado: string
-  }>({ fecha_inicio: '', fecha_fin: '', notas: '', vehiculo_id: '', horario: '', conductor_diurno_id: '', conductor_nocturno_id: '', conductor_cargo_id: '', estado: '' })
+    documento_diurno: string
+    documento_nocturno: string
+    documento_cargo: string
+  }>({ fecha_inicio: '', fecha_fin: '', notas: '', vehiculo_id: '', horario: '', conductor_diurno_id: '', conductor_nocturno_id: '', conductor_cargo_id: '', estado: '', documento_diurno: '', documento_nocturno: '', documento_cargo: '' })
   const [vehiculosDisponibles, setVehiculosDisponibles] = useState<any[]>([])
   const [conductoresDisponibles, setConductoresDisponibles] = useState<any[]>([])
   const [loadingRegularizar, setLoadingRegularizar] = useState(false)
@@ -1142,7 +1145,10 @@ export function AsignacionesModule() {
       conductor_diurno_id: diurno?.conductor_id || '',
       conductor_nocturno_id: nocturno?.conductor_id || '',
       conductor_cargo_id: cargo?.conductor_id || '',
-      estado: asignacion.estado || 'programado'
+      estado: asignacion.estado || 'programado',
+      documento_diurno: diurno?.documento || '',
+      documento_nocturno: nocturno?.documento || '',
+      documento_cargo: cargo?.documento || ''
     })
     
     // Reset search states
@@ -1206,7 +1212,8 @@ export function AsignacionesModule() {
             asignacion_id: regularizarAsignacion.id,
             conductor_id: regularizarData.conductor_diurno_id,
             horario: 'diurno',
-            estado: 'asignado'
+            estado: 'asignado',
+            documento: regularizarData.documento_diurno || 'N/A'
           })
         }
         if (regularizarData.conductor_nocturno_id) {
@@ -1214,7 +1221,8 @@ export function AsignacionesModule() {
             asignacion_id: regularizarAsignacion.id,
             conductor_id: regularizarData.conductor_nocturno_id,
             horario: 'nocturno',
-            estado: 'asignado'
+            estado: 'asignado',
+            documento: regularizarData.documento_nocturno || 'N/A'
           })
         }
         if (nuevoConductores.length > 0) {
@@ -1230,7 +1238,8 @@ export function AsignacionesModule() {
             asignacion_id: regularizarAsignacion.id,
             conductor_id: regularizarData.conductor_cargo_id,
             horario: 'CARGO',
-            estado: 'asignado'
+            estado: 'asignado',
+            documento: regularizarData.documento_cargo || 'N/A'
           })
         }
       }
@@ -2071,71 +2080,101 @@ export function AsignacionesModule() {
 
                 {/* Conductores según modalidad */}
                 {regularizarData.horario === 'TURNO' ? (
-                  <div className="asig-edit-row">
-                    <div className="asig-edit-field">
-                      <label>Conductor Diurno</label>
-                      <div className="asig-conductor-input-wrapper">
-                        <input
-                          type="text"
-                          value={showDropdownDiurno ? searchDiurno : (regularizarData.conductor_diurno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.nombres) : '')}
-                          onChange={(e) => { setSearchDiurno(e.target.value); setShowDropdownDiurno(true) }}
-                          onFocus={() => { setShowDropdownDiurno(true); setSearchDiurno('') }}
-                          onBlur={() => setTimeout(() => setShowDropdownDiurno(false), 200)}
-                          placeholder="Buscar conductor..."
-                        />
-                        {showDropdownDiurno && (
-                          <div className="asig-autocomplete-dropdown">
-                            <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: '' })); setSearchDiurno(''); setShowDropdownDiurno(false) }}>
-                              Sin asignar (Vacante)
+                  <>
+                    {/* Conductor Diurno */}
+                    <div className="asig-edit-row">
+                      <div className="asig-edit-field" style={{ flex: 2 }}>
+                        <label>Conductor Diurno</label>
+                        <div className="asig-conductor-input-wrapper">
+                          <input
+                            type="text"
+                            value={showDropdownDiurno ? searchDiurno : (regularizarData.conductor_diurno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.nombres) : '')}
+                            onChange={(e) => { setSearchDiurno(e.target.value); setShowDropdownDiurno(true) }}
+                            onFocus={() => { setShowDropdownDiurno(true); setSearchDiurno('') }}
+                            onBlur={() => setTimeout(() => setShowDropdownDiurno(false), 200)}
+                            placeholder="Buscar conductor..."
+                          />
+                          {showDropdownDiurno && (
+                            <div className="asig-autocomplete-dropdown">
+                              <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: '' })); setSearchDiurno(''); setShowDropdownDiurno(false) }}>
+                                Sin asignar (Vacante)
+                              </div>
+                              {conductoresDisponibles
+                                .filter(c => !searchDiurno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchDiurno.toLowerCase()))
+                                .slice(0, 20)
+                                .map((c: any) => (
+                                  <div 
+                                    key={c.id} 
+                                    className={`asig-autocomplete-option ${regularizarData.conductor_diurno_id === c.id ? 'selected' : ''}`}
+                                    onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: c.id })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
+                                  >{c.apellidos}, {c.nombres}</div>
+                                ))}
                             </div>
-                            {conductoresDisponibles
-                              .filter(c => !searchDiurno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchDiurno.toLowerCase()))
-                              .slice(0, 20)
-                              .map((c: any) => (
-                                <div 
-                                  key={c.id} 
-                                  className={`asig-autocomplete-option ${regularizarData.conductor_diurno_id === c.id ? 'selected' : ''}`}
-                                  onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: c.id })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
-                                >{c.apellidos}, {c.nombres}</div>
-                              ))}
-                          </div>
-                        )}
+                          )}
+                        </div>
+                      </div>
+                      <div className="asig-edit-field" style={{ flex: 1 }}>
+                        <label>Documento Diurno</label>
+                        <select
+                          value={regularizarData.documento_diurno}
+                          onChange={(e) => setRegularizarData(prev => ({ ...prev, documento_diurno: e.target.value }))}
+                        >
+                          <option value="">Sin definir</option>
+                          <option value="CARTA_OFERTA">Carta Oferta</option>
+                          <option value="ANEXO">Anexo</option>
+                          <option value="N/A">N/A</option>
+                        </select>
                       </div>
                     </div>
-                    <div className="asig-edit-field">
-                      <label>Conductor Nocturno</label>
-                      <div className="asig-conductor-input-wrapper">
-                        <input
-                          type="text"
-                          value={showDropdownNocturno ? searchNocturno : (regularizarData.conductor_nocturno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.nombres) : '')}
-                          onChange={(e) => { setSearchNocturno(e.target.value); setShowDropdownNocturno(true) }}
-                          onFocus={() => { setShowDropdownNocturno(true); setSearchNocturno('') }}
-                          onBlur={() => setTimeout(() => setShowDropdownNocturno(false), 200)}
-                          placeholder="Buscar conductor..."
-                        />
-                        {showDropdownNocturno && (
-                          <div className="asig-autocomplete-dropdown">
-                            <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: '' })); setSearchNocturno(''); setShowDropdownNocturno(false) }}>
-                              Sin asignar (Vacante)
+                    {/* Conductor Nocturno */}
+                    <div className="asig-edit-row">
+                      <div className="asig-edit-field" style={{ flex: 2 }}>
+                        <label>Conductor Nocturno</label>
+                        <div className="asig-conductor-input-wrapper">
+                          <input
+                            type="text"
+                            value={showDropdownNocturno ? searchNocturno : (regularizarData.conductor_nocturno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.nombres) : '')}
+                            onChange={(e) => { setSearchNocturno(e.target.value); setShowDropdownNocturno(true) }}
+                            onFocus={() => { setShowDropdownNocturno(true); setSearchNocturno('') }}
+                            onBlur={() => setTimeout(() => setShowDropdownNocturno(false), 200)}
+                            placeholder="Buscar conductor..."
+                          />
+                          {showDropdownNocturno && (
+                            <div className="asig-autocomplete-dropdown">
+                              <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: '' })); setSearchNocturno(''); setShowDropdownNocturno(false) }}>
+                                Sin asignar (Vacante)
+                              </div>
+                              {conductoresDisponibles
+                                .filter(c => !searchNocturno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchNocturno.toLowerCase()))
+                                .slice(0, 20)
+                                .map((c: any) => (
+                                  <div 
+                                    key={c.id} 
+                                    className={`asig-autocomplete-option ${regularizarData.conductor_nocturno_id === c.id ? 'selected' : ''}`}
+                                    onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: c.id })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
+                                  >{c.apellidos}, {c.nombres}</div>
+                                ))}
                             </div>
-                            {conductoresDisponibles
-                              .filter(c => !searchNocturno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchNocturno.toLowerCase()))
-                              .slice(0, 20)
-                              .map((c: any) => (
-                                <div 
-                                  key={c.id} 
-                                  className={`asig-autocomplete-option ${regularizarData.conductor_nocturno_id === c.id ? 'selected' : ''}`}
-                                  onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: c.id })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
-                                >{c.apellidos}, {c.nombres}</div>
-                              ))}
-                          </div>
-                        )}
+                          )}
+                        </div>
+                      </div>
+                      <div className="asig-edit-field" style={{ flex: 1 }}>
+                        <label>Documento Nocturno</label>
+                        <select
+                          value={regularizarData.documento_nocturno}
+                          onChange={(e) => setRegularizarData(prev => ({ ...prev, documento_nocturno: e.target.value }))}
+                        >
+                          <option value="">Sin definir</option>
+                          <option value="CARTA_OFERTA">Carta Oferta</option>
+                          <option value="ANEXO">Anexo</option>
+                          <option value="N/A">N/A</option>
+                        </select>
                       </div>
                     </div>
-                  </div>
+                  </>
                 ) : (
-                  <div className="asig-edit-row single">
-                    <div className="asig-edit-field">
+                  <div className="asig-edit-row">
+                    <div className="asig-edit-field" style={{ flex: 2 }}>
                       <label>Conductor A Cargo</label>
                       <div className="asig-conductor-input-wrapper">
                         <input
@@ -2164,6 +2203,18 @@ export function AsignacionesModule() {
                           </div>
                         )}
                       </div>
+                    </div>
+                    <div className="asig-edit-field" style={{ flex: 1 }}>
+                      <label>Documento</label>
+                      <select
+                        value={regularizarData.documento_cargo}
+                        onChange={(e) => setRegularizarData(prev => ({ ...prev, documento_cargo: e.target.value }))}
+                      >
+                        <option value="">Sin definir</option>
+                        <option value="CARTA_OFERTA">Carta Oferta</option>
+                        <option value="ANEXO">Anexo</option>
+                        <option value="N/A">N/A</option>
+                      </select>
                     </div>
                   </div>
                 )}

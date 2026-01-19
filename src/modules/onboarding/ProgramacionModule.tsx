@@ -50,7 +50,7 @@ function generarMensajeAgenda(prog: ProgramacionOnboardingCompleta): string {
   const tipoAsignacion = TIPO_ASIGNACION_MSG[prog.tipo_asignacion || ''] || prog.tipo_asignacion || ''
   const zona = prog.zona || prog.zona_diurno || prog.zona_nocturno || 'N/A'
   const distancia = prog.distancia_minutos || prog.distancia_diurno || prog.distancia_nocturno || 'N/A'
-  const documento = prog.tipo_documento === 'contrato' ? 'Contrato' : prog.tipo_documento === 'anexo' ? 'Anexo' : 'N/A'
+  const documento = prog.tipo_documento === 'carta_oferta' ? 'Carta Oferta' : prog.tipo_documento === 'anexo' ? 'Anexo' : 'N/A'
 
   // Formatear fecha con día de la semana
   let fechaStr = 'N/A'
@@ -688,7 +688,7 @@ export function ProgramacionModule() {
     try {
       // Helper para mapear documento de programación a asignación
       const mapDocumento = (doc: string | undefined) => {
-        if (doc === 'contrato') return 'CARTA_OFERTA'
+        if (doc === 'carta_oferta') return 'CARTA_OFERTA'
         if (doc === 'anexo') return 'ANEXO'
         return 'N/A'
       }
