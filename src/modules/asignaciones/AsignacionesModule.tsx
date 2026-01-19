@@ -99,7 +99,15 @@ export function AsignacionesModule() {
     fecha_inicio: string
     fecha_fin: string
     notas: string
-  }>({ fecha_inicio: '', fecha_fin: '', notas: '' })
+    vehiculo_id: string
+    horario: string
+    conductor_diurno_id: string
+    conductor_nocturno_id: string
+    conductor_cargo_id: string
+  }>({ fecha_inicio: '', fecha_fin: '', notas: '', vehiculo_id: '', horario: '', conductor_diurno_id: '', conductor_nocturno_id: '', conductor_cargo_id: '' })
+  const [vehiculosDisponibles, setVehiculosDisponibles] = useState<any[]>([])
+  const [conductoresDisponibles, setConductoresDisponibles] = useState<any[]>([])
+  const [loadingRegularizar, setLoadingRegularizar] = useState(false)
   
   // Datos base para cálculo de stats (cargados en paralelo)
   const [vehiculosData, setVehiculosData] = useState<Array<{ id: string; estado_id: string; estadoCodigo?: string }>>([])
@@ -1069,13 +1077,37 @@ export function AsignacionesModule() {
   }
 
   // Abrir modal de regularización
-  const handleOpenRegularizar = (asignacion: Asignacion) => {
+  const handleOpenRegularizar = async (asignacion: Asignacion) => {
     setRegularizarAsignacion(asignacion)
+    setLoadingRegularizar(true)
+    
+    // Cargar vehículos y conductores disponibles
+    const [vehiculosRes, conductoresRes] = await Promise.all([
+      supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
+      supabase.from('conductores').select('id, nombres, apellidos').eq('activo', true).order('apellidos')
+    ])
+    
+    setVehiculosDisponibles(vehiculosRes.data || [])
+    setConductoresDisponibles(conductoresRes.data || [])
+    
+    // Obtener conductores actuales de la asignación
+    const conductoresAsig = (asignacion as any).asignaciones_conductores || []
+    const diurno = conductoresAsig.find((c: any) => c.horario === 'diurno' || c.horario === 'DIURNO' || c.horario === 'D')
+    const nocturno = conductoresAsig.find((c: any) => c.horario === 'nocturno' || c.horario === 'NOCTURNO' || c.horario === 'N')
+    const cargo = conductoresAsig.find((c: any) => c.horario === 'CARGO' || c.horario === 'cargo' || c.horario === 'A CARGO')
+    
     setRegularizarData({
       fecha_inicio: asignacion.fecha_inicio ? asignacion.fecha_inicio.split('T')[0] : '',
       fecha_fin: asignacion.fecha_fin ? asignacion.fecha_fin.split('T')[0] : '',
-      notas: asignacion.notas || ''
+      notas: asignacion.notas || '',
+      vehiculo_id: asignacion.vehiculo_id || '',
+      horario: asignacion.horario || 'TURNO',
+      conductor_diurno_id: diurno?.conductor_id || '',
+      conductor_nocturno_id: nocturno?.conductor_id || '',
+      conductor_cargo_id: cargo?.conductor_id || ''
     })
+    
+    setLoadingRegularizar(false)
     setShowRegularizarModal(true)
   }
 
@@ -1089,7 +1121,7 @@ export function AsignacionesModule() {
         updated_by: profile?.full_name || 'Sistema'
       }
 
-      // Solo actualizar campos que tienen valor
+      // Actualizar campos de la asignación
       if (regularizarData.fecha_inicio) {
         updateData.fecha_inicio = new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString()
       }
@@ -1099,6 +1131,12 @@ export function AsignacionesModule() {
       if (regularizarData.notas !== regularizarAsignacion.notas) {
         updateData.notas = regularizarData.notas
       }
+      if (regularizarData.vehiculo_id && regularizarData.vehiculo_id !== regularizarAsignacion.vehiculo_id) {
+        updateData.vehiculo_id = regularizarData.vehiculo_id
+      }
+      if (regularizarData.horario && regularizarData.horario !== regularizarAsignacion.horario) {
+        updateData.horario = regularizarData.horario
+      }
 
       const { error } = await (supabase as any)
         .from('asignaciones')
@@ -1106,6 +1144,47 @@ export function AsignacionesModule() {
         .eq('id', regularizarAsignacion.id)
 
       if (error) throw error
+
+      // Actualizar conductores si es TURNO
+      if (regularizarData.horario === 'TURNO') {
+        // Eliminar conductores existentes
+        await supabase.from('asignaciones_conductores').delete().eq('asignacion_id', regularizarAsignacion.id)
+        
+        // Insertar nuevos conductores
+        const nuevoConductores = []
+        if (regularizarData.conductor_diurno_id) {
+          nuevoConductores.push({
+            asignacion_id: regularizarAsignacion.id,
+            conductor_id: regularizarData.conductor_diurno_id,
+            horario: 'diurno',
+            estado: 'asignado'
+          })
+        }
+        if (regularizarData.conductor_nocturno_id) {
+          nuevoConductores.push({
+            asignacion_id: regularizarAsignacion.id,
+            conductor_id: regularizarData.conductor_nocturno_id,
+            horario: 'nocturno',
+            estado: 'asignado'
+          })
+        }
+        if (nuevoConductores.length > 0) {
+          await (supabase.from('asignaciones_conductores') as any).insert(nuevoConductores)
+        }
+      } else if (regularizarData.horario === 'CARGO') {
+        // Eliminar conductores existentes
+        await supabase.from('asignaciones_conductores').delete().eq('asignacion_id', regularizarAsignacion.id)
+        
+        // Insertar conductor a cargo
+        if (regularizarData.conductor_cargo_id) {
+          await (supabase.from('asignaciones_conductores') as any).insert({
+            asignacion_id: regularizarAsignacion.id,
+            conductor_id: regularizarData.conductor_cargo_id,
+            horario: 'CARGO',
+            estado: 'asignado'
+          })
+        }
+      }
 
       Swal.fire({
         icon: 'success',
@@ -1889,56 +1968,132 @@ export function AsignacionesModule() {
       {/* Modal de Regularización */}
       {showRegularizarModal && regularizarAsignacion && (
         <div className="asig-modal-overlay">
-          <div className="asig-modal-content">
-            <h2 className="asig-modal-title">Regularizar Asignación</h2>
-            <p>Vehículo: <strong>{regularizarAsignacion.vehiculos?.patente}</strong></p>
+          <div className="asig-modal-content" style={{ maxWidth: '600px' }}>
+            <h2 className="asig-modal-title">Editar Asignación</h2>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
               Código: <strong>{regularizarAsignacion.codigo}</strong>
             </p>
 
-            <div className="asig-detail-grid">
-              {/* Fecha de Inicio (Entrega Real) */}
-              <div className="form-group">
-                <label className="asig-detail-label">Fecha de Entrega Real (Activación)</label>
-                <input
-                  type="date"
-                  value={regularizarData.fecha_inicio}
-                  onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_inicio: e.target.value }))}
-                  className="asig-status-select"
-                  style={{ width: '100%' }}
-                />
-                <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                  Actual: {regularizarAsignacion.fecha_inicio ? new Date(regularizarAsignacion.fecha_inicio).toLocaleDateString('es-AR') : 'No definida'}
-                </p>
-              </div>
+            {loadingRegularizar ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>Cargando...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Vehículo */}
+                <div className="form-group">
+                  <label className="asig-detail-label">Vehículo</label>
+                  <select
+                    value={regularizarData.vehiculo_id}
+                    onChange={(e) => setRegularizarData(prev => ({ ...prev, vehiculo_id: e.target.value }))}
+                    className="asig-status-select"
+                    style={{ width: '100%' }}
+                  >
+                    <option value="">Seleccionar vehículo</option>
+                    {vehiculosDisponibles.map((v: any) => (
+                      <option key={v.id} value={v.id}>{v.patente} - {v.marca} {v.modelo}</option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Fecha Fin */}
-              <div className="form-group">
-                <label className="asig-detail-label">Fecha de Fin (si aplica)</label>
-                <input
-                  type="date"
-                  value={regularizarData.fecha_fin}
-                  onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_fin: e.target.value }))}
-                  className="asig-status-select"
-                  style={{ width: '100%' }}
-                />
-                <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                  Actual: {regularizarAsignacion.fecha_fin ? new Date(regularizarAsignacion.fecha_fin).toLocaleDateString('es-AR') : 'Sin definir'}
-                </p>
-              </div>
+                {/* Modalidad */}
+                <div className="form-group">
+                  <label className="asig-detail-label">Modalidad</label>
+                  <select
+                    value={regularizarData.horario}
+                    onChange={(e) => setRegularizarData(prev => ({ ...prev, horario: e.target.value }))}
+                    className="asig-status-select"
+                    style={{ width: '100%' }}
+                  >
+                    <option value="TURNO">TURNO (Diurno/Nocturno)</option>
+                    <option value="CARGO">A CARGO (Un solo conductor)</option>
+                  </select>
+                </div>
 
-              {/* Notas */}
-              <div className="form-group">
-                <label className="asig-detail-label">Notas / Observaciones</label>
-                <textarea
-                  value={regularizarData.notas}
-                  onChange={(e) => setRegularizarData(prev => ({ ...prev, notas: e.target.value }))}
-                  rows={3}
-                  placeholder="Agregar notas sobre la regularización..."
-                  className="asig-modal-textarea"
-                />
+                {/* Conductores según modalidad */}
+                {regularizarData.horario === 'TURNO' ? (
+                  <>
+                    <div className="form-group">
+                      <label className="asig-detail-label">Conductor Diurno</label>
+                      <select
+                        value={regularizarData.conductor_diurno_id}
+                        onChange={(e) => setRegularizarData(prev => ({ ...prev, conductor_diurno_id: e.target.value }))}
+                        className="asig-status-select"
+                        style={{ width: '100%' }}
+                      >
+                        <option value="">Sin asignar (Vacante)</option>
+                        {conductoresDisponibles.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.apellidos}, {c.nombres}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="asig-detail-label">Conductor Nocturno</label>
+                      <select
+                        value={regularizarData.conductor_nocturno_id}
+                        onChange={(e) => setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: e.target.value }))}
+                        className="asig-status-select"
+                        style={{ width: '100%' }}
+                      >
+                        <option value="">Sin asignar (Vacante)</option>
+                        {conductoresDisponibles.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.apellidos}, {c.nombres}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="form-group">
+                    <label className="asig-detail-label">Conductor A Cargo</label>
+                    <select
+                      value={regularizarData.conductor_cargo_id}
+                      onChange={(e) => setRegularizarData(prev => ({ ...prev, conductor_cargo_id: e.target.value }))}
+                      className="asig-status-select"
+                      style={{ width: '100%' }}
+                    >
+                      <option value="">Sin asignar</option>
+                      {conductoresDisponibles.map((c: any) => (
+                        <option key={c.id} value={c.id}>{c.apellidos}, {c.nombres}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Fechas */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group">
+                    <label className="asig-detail-label">Fecha Entrega Real</label>
+                    <input
+                      type="date"
+                      value={regularizarData.fecha_inicio}
+                      onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_inicio: e.target.value }))}
+                      className="asig-status-select"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="asig-detail-label">Fecha Fin</label>
+                    <input
+                      type="date"
+                      value={regularizarData.fecha_fin}
+                      onChange={(e) => setRegularizarData(prev => ({ ...prev, fecha_fin: e.target.value }))}
+                      className="asig-status-select"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Notas */}
+                <div className="form-group">
+                  <label className="asig-detail-label">Notas / Observaciones</label>
+                  <textarea
+                    value={regularizarData.notas}
+                    onChange={(e) => setRegularizarData(prev => ({ ...prev, notas: e.target.value }))}
+                    rows={3}
+                    placeholder="Agregar notas..."
+                    className="asig-modal-textarea"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="asig-modal-actions">
               <button
@@ -1954,7 +2109,7 @@ export function AsignacionesModule() {
               <button
                 className="btn-primary"
                 onClick={handleSaveRegularizacion}
-                disabled={isSubmitting}
+                disabled={isSubmitting || loadingRegularizar}
               >
                 {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
               </button>
