@@ -155,22 +155,16 @@ export function GarantiasTab() {
 
   async function agregarGarantia() {
     // Cargar todos los conductores
-    const { data: conductores, error: errorConductores } = await supabase
+    const { data: conductores } = await supabase
       .from('conductores')
       .select('id, nombres, apellidos')
       .order('apellidos')
-
-    console.log('Conductores encontrados:', conductores?.length, conductores, errorConductores)
-    console.log('Garantías existentes:', garantias.length, garantias.map(g => g.conductor_id))
 
     const conductoresDisponibles = ((conductores || []) as ConductorBasico[]).filter((c) => 
       !garantias.some(g => g.conductor_id === c.id)
     )
 
-    console.log('Conductores disponibles:', conductoresDisponibles.length)
-
     if (conductoresDisponibles.length === 0) {
-      // Si no hay conductores, mostrar mensaje más específico
       if (!conductores || conductores.length === 0) {
         Swal.fire('Info', 'No se encontraron conductores en el sistema', 'info')
       } else {
@@ -179,34 +173,29 @@ export function GarantiasTab() {
       return
     }
 
-    const conductorOptions = conductoresDisponibles
-      .map((c) => `<option value="${c.id}">${c.apellidos}, ${c.nombres}</option>`)
-      .join('')
-
     const { value: formValues } = await Swal.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Agregar Garantía</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Conductor:</label>
-            <select id="swal-conductor" class="swal2-select" style="width: 100%; font-size: 14px;">
-              <option value="">Seleccione...</option>
-              ${conductorOptions}
-            </select>
+          <div style="margin-bottom: 12px; position: relative;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Conductor:</label>
+            <input id="swal-conductor-search" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Buscar conductor..." autocomplete="off">
+            <input type="hidden" id="swal-conductor" value="">
+            <div id="swal-conductor-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 9999;"></div>
           </div>
           <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Tipo de Alquiler:</label>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Tipo de Alquiler:</label>
             <select id="swal-tipo" class="swal2-select" style="width: 100%; font-size: 14px;">
               <option value="CARGO">A CARGO</option>
               <option value="TURNO">TURNO</option>
             </select>
           </div>
           <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto Total Garantía:</label>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Monto Total Garantía:</label>
             <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${FACTURACION_CONFIG.GARANTIA_TOTAL_CARGO}">
           </div>
           <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Cuotas Totales:</label>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Cuotas Totales:</label>
             <input id="swal-cuotas" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${FACTURACION_CONFIG.GARANTIA_CUOTAS_CARGO}">
           </div>
         </div>
@@ -216,9 +205,65 @@ export function GarantiasTab() {
       confirmButtonText: 'Agregar',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#DC2626',
-      width: 380,
+      width: 400,
+      didOpen: () => {
+        // Configurar búsqueda con dropdown custom
+        const searchInput = document.getElementById('swal-conductor-search') as HTMLInputElement
+        const hiddenInput = document.getElementById('swal-conductor') as HTMLInputElement
+        const dropdown = document.getElementById('swal-conductor-dropdown') as HTMLDivElement
+        
+        const renderDropdown = (filter: string) => {
+          const filterLower = filter.toLowerCase()
+          const filtered = conductoresDisponibles.filter(c => {
+            const fullName = `${c.apellidos} ${c.nombres}`.toLowerCase()
+            return fullName.includes(filterLower)
+          }).slice(0, 50)
+          
+          if (filtered.length === 0) {
+            dropdown.innerHTML = '<div style="padding: 12px; color: #999; text-align: center;">No se encontraron resultados</div>'
+          } else {
+            dropdown.innerHTML = filtered.map(c => `
+              <div class="conductor-option" data-id="${c.id}" style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background 0.15s;">
+                <strong style="color: #DC2626;">${c.apellidos}, ${c.nombres}</strong>
+              </div>
+            `).join('')
+            
+            dropdown.querySelectorAll('.conductor-option').forEach(opt => {
+              opt.addEventListener('mouseenter', () => (opt as HTMLElement).style.background = '#f5f5f5')
+              opt.addEventListener('mouseleave', () => (opt as HTMLElement).style.background = 'white')
+              opt.addEventListener('click', () => {
+                const id = (opt as HTMLElement).dataset.id || ''
+                const c = conductoresDisponibles.find(x => x.id === id)
+                if (c) {
+                  searchInput.value = `${c.apellidos}, ${c.nombres}`
+                  hiddenInput.value = id
+                  dropdown.style.display = 'none'
+                }
+              })
+            })
+          }
+        }
+        
+        searchInput.addEventListener('focus', () => {
+          renderDropdown(searchInput.value)
+          dropdown.style.display = 'block'
+        })
+        
+        searchInput.addEventListener('input', () => {
+          renderDropdown(searchInput.value)
+          dropdown.style.display = 'block'
+          hiddenInput.value = '' // Reset selection when typing
+        })
+        
+        // Cerrar dropdown al hacer click fuera
+        document.addEventListener('click', (e) => {
+          if (!searchInput.contains(e.target as Node) && !dropdown.contains(e.target as Node)) {
+            dropdown.style.display = 'none'
+          }
+        })
+      },
       preConfirm: () => {
-        const conductorId = (document.getElementById('swal-conductor') as HTMLSelectElement).value
+        const conductorId = (document.getElementById('swal-conductor') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
         const monto = parseFloat((document.getElementById('swal-monto') as HTMLInputElement).value)
         const cuotas = parseInt((document.getElementById('swal-cuotas') as HTMLInputElement).value)
