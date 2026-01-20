@@ -154,11 +154,10 @@ export function GarantiasTab() {
   // ========== FUNCIONES PARA GARANTÍAS ==========
 
   async function agregarGarantia() {
-    // Cargar conductores que no tienen garantía (excluir dados de baja)
+    // Cargar todos los conductores (sin filtro de estado)
     const { data: conductores, error: errorConductores } = await supabase
       .from('conductores')
       .select('id, nombres, apellidos, estado')
-      .not('estado', 'in', '("baja","Baja","BAJA","inactivo","Inactivo","INACTIVO")')
       .order('apellidos')
 
     console.log('Conductores encontrados:', conductores?.length, conductores, errorConductores)
