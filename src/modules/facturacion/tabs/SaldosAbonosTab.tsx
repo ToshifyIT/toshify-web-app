@@ -14,17 +14,54 @@ import {
   Filter,
   Edit3,
   UserPlus,
-  Trash2
+  Trash2,
+  Layers
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import type { SaldoConductor } from '../../../types/facturacion.types'
+
+interface ConductorBasico {
+  id: string
+  nombres: string
+  apellidos: string
+}
+
+interface CobroFraccionadoRow {
+  id: string
+  conductor_id: string
+  monto_cuota: number
+  numero_cuota: number
+  total_cuotas: number
+  semana: number
+  anio: number
+  aplicado: boolean
+  conductor: { nombres: string; apellidos: string } | null
+}
+
+interface AbonoRow {
+  id: string
+  fecha_abono: string
+  tipo: string
+  monto: number
+  concepto: string
+  referencia: string | null
+}
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 
 export function SaldosAbonosTab() {
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtroSaldo, setFiltroSaldo] = useState<string>('todos')
+  const [filtroSaldo, setFiltroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
+  const [cobrosFraccionados, setCobrosFraccionados] = useState<{
+    conductor_id: string
+    conductor_nombre: string
+    monto_cuota: number
+    numero_cuota: number
+    total_cuotas: number
+    semana: number
+    anio: number
+  }[]>([])
 
   // Estados para filtros Excel
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
@@ -70,13 +107,57 @@ export function SaldosAbonosTab() {
   async function cargarSaldos() {
     setLoading(true)
     try {
+      // Cargar saldos con estado del conductor
       const { data, error } = await supabase
         .from('saldos_conductores')
-        .select('*')
+        .select(`
+          *,
+          conductor:conductores(
+            estado:conductores_estados(codigo)
+          )
+        `)
         .order('conductor_nombre')
 
       if (error) throw error
-      setSaldos(data || [])
+      
+      // Mapear para incluir el estado del conductor
+      const saldosConEstado = (data || []).map((s: {
+        conductor?: { estado?: { codigo: string } | null } | null
+      } & SaldoConductor) => ({
+        ...s,
+        conductor_estado: s.conductor?.estado?.codigo || null
+      }))
+      setSaldos(saldosConEstado)
+
+      // Cargar cobros fraccionados pendientes (solo de saldos iniciales)
+      const { data: fraccionados, error: errorFrac } = await supabase
+        .from('cobros_fraccionados')
+        .select(`
+          id,
+          conductor_id,
+          monto_cuota,
+          numero_cuota,
+          total_cuotas,
+          semana,
+          anio,
+          aplicado,
+          conductor:conductores(nombres, apellidos)
+        `)
+        .eq('aplicado', false)
+        .order('semana')
+
+      if (errorFrac) throw errorFrac
+      
+      const fraccionadosConNombre = ((fraccionados || []) as CobroFraccionadoRow[]).map((f) => ({
+        conductor_id: f.conductor_id,
+        conductor_nombre: f.conductor ? `${f.conductor.apellidos}, ${f.conductor.nombres}` : 'N/A',
+        monto_cuota: f.monto_cuota,
+        numero_cuota: f.numero_cuota,
+        total_cuotas: f.total_cuotas,
+        semana: f.semana,
+        anio: f.anio
+      }))
+      setCobrosFraccionados(fraccionadosConNombre)
     } catch (error) {
       console.error('Error cargando saldos:', error)
     } finally {
@@ -100,8 +181,8 @@ export function SaldosAbonosTab() {
       .select('id, nombres, apellidos')
       .order('apellidos')
 
-    const conductoresParaModal = (todosLosConductores || [])
-      .map((c: any) => ({
+    const conductoresParaModal = ((todosLosConductores || []) as ConductorBasico[])
+      .map((c) => ({
         id: c.id,
         nombres: c.nombres || '',
         apellidos: c.apellidos || '',
@@ -412,9 +493,8 @@ export function SaldosAbonosTab() {
       const fechaReferencia = new Date(formValues.fecha + 'T12:00:00').toISOString()
 
       // Insertar saldo inicial
-      const { error: errorSaldo } = await (supabase
-        .from('saldos_conductores') as any)
-        .insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any).insert({
           conductor_id: formValues.conductorId,
           conductor_nombre: conductorNombre,
           conductor_dni: conductor.dni,
@@ -428,6 +508,7 @@ export function SaldosAbonosTab() {
       if (errorSaldo) throw errorSaldo
 
       // Registrar en historial de abonos
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.from('abonos_conductores') as any).insert({
         conductor_id: formValues.conductorId,
         tipo: 'cargo',
@@ -444,6 +525,7 @@ export function SaldosAbonosTab() {
         let anioActual = formValues.anioInicio
 
         for (let i = 1; i <= formValues.cuotas; i++) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase.from('cobros_fraccionados') as any).insert({
             conductor_id: formValues.conductorId,
             descripcion: `${formValues.concepto} - Cuota ${i}/${formValues.cuotas}`,
@@ -486,6 +568,7 @@ export function SaldosAbonosTab() {
 
       // Recargar datos
       cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo agregar el saldo', 'error')
     }
@@ -561,9 +644,8 @@ export function SaldosAbonosTab() {
     try {
       const montoFinal = formValues.tipo === 'abono' ? formValues.monto : -formValues.monto
 
-      const { error: errorAbono } = await (supabase
-        .from('abonos_conductores') as any)
-        .insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
           conductor_id: saldo.conductor_id,
           tipo: formValues.tipo,
           monto: formValues.monto,
@@ -575,8 +657,8 @@ export function SaldosAbonosTab() {
       if (errorAbono) throw errorAbono
 
       const nuevoSaldo = saldo.saldo_actual + montoFinal
-      const { error: errorUpdate } = await (supabase
-        .from('saldos_conductores') as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
         .update({ saldo_actual: nuevoSaldo, ultima_actualizacion: new Date().toISOString() })
         .eq('id', saldo.id)
 
@@ -591,6 +673,7 @@ export function SaldosAbonosTab() {
       })
 
       cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar', 'error')
     }
@@ -704,8 +787,8 @@ export function SaldosAbonosTab() {
     if (!formValues) return
 
     try {
-      const { error } = await (supabase
-        .from('saldos_conductores') as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: formValues.saldoActual,
           dias_mora: formValues.diasMora,
@@ -725,6 +808,7 @@ export function SaldosAbonosTab() {
       })
 
       cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
     }
@@ -742,7 +826,7 @@ export function SaldosAbonosTab() {
       if (error) throw error
 
       const historialHtml = abonos && abonos.length > 0
-        ? (abonos as any[]).map((a: any) => `
+        ? (abonos as AbonoRow[]).map((a) => `
             <tr>
               <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${formatDate(a.fecha_abono)}</td>
               <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; text-align: right;">
@@ -844,6 +928,31 @@ export function SaldosAbonosTab() {
       )
     },
     {
+      id: 'conductor_estado',
+      header: 'Estado Cond.',
+      cell: ({ row }) => {
+        const estado = row.original.conductor_estado
+        if (!estado) return <span className="text-gray-400">-</span>
+        
+        const esActivo = estado.toUpperCase() === 'ACTIVO'
+        const esBaja = estado.toUpperCase() === 'BAJA' || estado.toUpperCase() === 'INACTIVO'
+        
+        return (
+          <span 
+            className="fact-badge" 
+            style={{
+              backgroundColor: esActivo ? '#DCFCE7' : esBaja ? '#FEE2E2' : '#FEF3C7',
+              color: esActivo ? '#166534' : esBaja ? '#991B1B' : '#92400E',
+              fontSize: '11px',
+              padding: '3px 8px'
+            }}
+          >
+            {estado}
+          </span>
+        )
+      }
+    },
+    {
       accessorKey: 'saldo_actual',
       header: 'Saldo Actual',
       cell: ({ row }) => {
@@ -939,12 +1048,18 @@ export function SaldosAbonosTab() {
     }
   ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter])
 
+  // IDs de conductores con cobros fraccionados pendientes
+  const conductoresConFraccionado = useMemo(() => {
+    return new Set(cobrosFraccionados.map(c => c.conductor_id))
+  }, [cobrosFraccionados])
+
   const saldosFiltrados = useMemo(() => {
     return saldos.filter(s => {
-      // Filtro legacy de header
+      // Filtros de stats
       if (filtroSaldo === 'favor' && s.saldo_actual <= 0) return false
       if (filtroSaldo === 'deuda' && s.saldo_actual >= 0) return false
       if (filtroSaldo === 'mora' && (s.dias_mora || 0) === 0) return false
+      if (filtroSaldo === 'fraccionado' && !conductoresConFraccionado.has(s.conductor_id)) return false
       // Filtros Excel
       if (conductorFilter.length > 0 && !conductorFilter.includes(s.conductor_nombre || '')) return false
       if (estadoFilter.length > 0) {
@@ -953,17 +1068,31 @@ export function SaldosAbonosTab() {
       }
       return true
     })
-  }, [saldos, filtroSaldo, conductorFilter, estadoFilter])
+  }, [saldos, filtroSaldo, conductorFilter, estadoFilter, conductoresConFraccionado])
 
   const stats = useMemo(() => {
     const total = saldos.length
-    const conFavor = saldos.filter(s => s.saldo_actual > 0).length
-    const conDeuda = saldos.filter(s => s.saldo_actual < 0).length
-    const enMora = saldos.filter(s => (s.dias_mora || 0) > 0).length
-    const totalFavor = saldos.filter(s => s.saldo_actual > 0).reduce((sum, s) => sum + s.saldo_actual, 0)
-    const totalDeuda = saldos.filter(s => s.saldo_actual < 0).reduce((sum, s) => sum + Math.abs(s.saldo_actual), 0)
-    return { total, conFavor, conDeuda, enMora, totalFavor, totalDeuda }
-  }, [saldos])
+    const conductoresFavor = saldos.filter(s => s.saldo_actual > 0)
+    const conductoresDeuda = saldos.filter(s => s.saldo_actual < 0)
+    const conductoresMora = saldos.filter(s => (s.dias_mora || 0) > 0)
+    const conFavor = conductoresFavor.length
+    const conDeuda = conductoresDeuda.length
+    const enMora = conductoresMora.length
+    const totalFavor = conductoresFavor.reduce((sum, s) => sum + s.saldo_actual, 0)
+    const totalDeuda = conductoresDeuda.reduce((sum, s) => sum + Math.abs(s.saldo_actual), 0)
+    
+    // Stats de fraccionados
+    const totalFraccionado = cobrosFraccionados.reduce((sum, c) => sum + c.monto_cuota, 0)
+    const cuotasPendientes = cobrosFraccionados.length
+    
+    return { 
+      total, conFavor, conDeuda, enMora, totalFavor, totalDeuda,
+      conductoresFavor, conductoresDeuda, conductoresMora,
+      totalFraccionado, cuotasPendientes
+    }
+  }, [saldos, cobrosFraccionados])
+
+
 
   return (
     <>
@@ -971,11 +1100,12 @@ export function SaldosAbonosTab() {
       <div className="fact-header">
         <div className="fact-header-left">
           <span className="fact-label">Filtrar:</span>
-          <select className="fact-select" value={filtroSaldo} onChange={(e) => setFiltroSaldo(e.target.value)}>
+          <select className="fact-select" value={filtroSaldo} onChange={(e) => setFiltroSaldo(e.target.value as typeof filtroSaldo)}>
             <option value="todos">Todos</option>
             <option value="favor">Con saldo a favor</option>
             <option value="deuda">Con deuda</option>
             <option value="mora">En mora</option>
+            <option value="fraccionado">Fraccionado</option>
           </select>
         </div>
         <div className="fact-header-right">
@@ -990,49 +1120,91 @@ export function SaldosAbonosTab() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats - Clickeables como filtros */}
       <div className="fact-stats">
         <div className="fact-stats-grid">
-          <div className="fact-stat-card">
+          <div 
+            className={`fact-stat-card ${filtroSaldo === 'todos' ? 'fact-stat-card-active' : ''}`}
+            onClick={() => setFiltroSaldo('todos')}
+            style={{ cursor: 'pointer' }}
+            title="Ver todos"
+          >
             <Users size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{stats.total}</span>
               <span className="fact-stat-label">Conductores</span>
             </div>
           </div>
-          <div className="fact-stat-card">
+          <div 
+            className={`fact-stat-card ${filtroSaldo === 'favor' ? 'fact-stat-card-active' : ''}`}
+            onClick={() => setFiltroSaldo('favor')}
+            style={{ cursor: 'pointer' }}
+            title="Filtrar por saldo a favor"
+          >
             <TrendingUp size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{stats.conFavor}</span>
               <span className="fact-stat-label">Con Saldo a Favor</span>
             </div>
           </div>
-          <div className="fact-stat-card">
+          <div 
+            className={`fact-stat-card ${filtroSaldo === 'deuda' ? 'fact-stat-card-active' : ''}`}
+            onClick={() => setFiltroSaldo('deuda')}
+            style={{ cursor: 'pointer' }}
+            title="Filtrar por deuda"
+          >
             <TrendingDown size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{stats.conDeuda}</span>
               <span className="fact-stat-label">Con Deuda</span>
             </div>
           </div>
-          <div className="fact-stat-card">
+          <div 
+            className={`fact-stat-card ${filtroSaldo === 'mora' ? 'fact-stat-card-active' : ''}`}
+            onClick={() => setFiltroSaldo('mora')}
+            style={{ cursor: 'pointer' }}
+            title="Filtrar por mora"
+          >
             <Clock size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{stats.enMora}</span>
               <span className="fact-stat-label">En Mora</span>
             </div>
           </div>
-          <div className="fact-stat-card">
+          <div 
+            className={`fact-stat-card ${filtroSaldo === 'favor' ? 'fact-stat-card-active' : ''}`}
+            onClick={() => setFiltroSaldo('favor')}
+            style={{ cursor: 'pointer' }}
+            title="Filtrar por saldo a favor"
+          >
             <DollarSign size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{formatCurrency(stats.totalFavor)}</span>
               <span className="fact-stat-label">Total a Favor</span>
             </div>
           </div>
-          <div className="fact-stat-card">
+          <div 
+            className={`fact-stat-card ${filtroSaldo === 'deuda' ? 'fact-stat-card-active' : ''}`}
+            onClick={() => setFiltroSaldo('deuda')}
+            style={{ cursor: 'pointer' }}
+            title="Filtrar por deuda"
+          >
             <AlertTriangle size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{formatCurrency(stats.totalDeuda)}</span>
               <span className="fact-stat-label">Total Deuda</span>
+            </div>
+          </div>
+          <div 
+            className={`fact-stat-card ${filtroSaldo === 'fraccionado' ? 'fact-stat-card-active' : ''}`}
+            onClick={() => setFiltroSaldo('fraccionado')}
+            style={{ cursor: 'pointer', borderLeft: '3px solid #8B5CF6' }}
+            title="Filtrar por fraccionado"
+          >
+            <Layers size={18} className="fact-stat-icon" style={{ color: '#8B5CF6' }} />
+            <div className="fact-stat-content">
+              <span className="fact-stat-value" style={{ color: '#8B5CF6' }}>{formatCurrency(stats.totalFraccionado)}</span>
+              <span className="fact-stat-label">Fraccionado ({stats.cuotasPendientes} cuotas)</span>
             </div>
           </div>
         </div>
