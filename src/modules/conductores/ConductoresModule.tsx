@@ -439,6 +439,20 @@ export function ConductoresModule() {
             relaciones.vehiculo_asignado = asignacionesMap.get(conductor.id);
           }
 
+          // Agregar metadatos para búsqueda global
+          const estadoCodigo = relaciones.conductores_estados?.codigo?.toLowerCase();
+          const tieneAsignacion = !!relaciones.vehiculo_asignado;
+          let searchMetadata = "";
+          
+          if (estadoCodigo === 'activo' && !tieneAsignacion) {
+            searchMetadata += "Disponible ";
+          }
+          if (tieneAsignacion) {
+            searchMetadata += "Asignado ";
+          }
+          
+          relaciones.search_metadata = searchMetadata;
+
           return relaciones;
         });
 
@@ -1430,9 +1444,16 @@ export function ConductoresModule() {
     }
 
     if (estadoFilter.length > 0) {
-      result = result.filter(c =>
-        estadoFilter.includes(c.conductores_estados?.codigo || '')
-      );
+      result = result.filter(c => {
+        const codigo = c.conductores_estados?.codigo || '';
+        // Handle custom DISPONIBLE filter
+        if (estadoFilter.includes('DISPONIBLE')) {
+          const esActivo = codigo.toLowerCase() === 'activo';
+          const tieneAsignacion = !!(c as any).vehiculo_asignado;
+          if (esActivo && !tieneAsignacion) return true;
+        }
+        return estadoFilter.includes(codigo);
+      });
     }
 
     if (turnoFilter.length > 0) {
@@ -1519,13 +1540,26 @@ export function ConductoresModule() {
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
     const estados = new Map<string, string>();
+    let hasDisponible = false;
+
     conductores.forEach(c => {
       if (c.conductores_estados?.codigo) {
         // Usar el helper para display consistente en el filtro
         estados.set(c.conductores_estados.codigo, getEstadoConductorDisplay(c.conductores_estados));
       }
+      // Check if is available
+      if (c.conductores_estados?.codigo?.toLowerCase() === 'activo' && !(c as any).vehiculo_asignado) {
+        hasDisponible = true;
+      }
     });
-    return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+
+    const result = Array.from(estados.entries());
+    
+    if (hasDisponible) {
+      result.push(['DISPONIBLE', 'Disponible']);
+    }
+
+    return result.sort((a, b) => a[1].localeCompare(b[1]));
   }, [conductores]);
 
   // Obtener lista única de categorías de licencia para el filtro

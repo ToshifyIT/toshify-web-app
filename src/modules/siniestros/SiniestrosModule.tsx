@@ -23,7 +23,7 @@ import {
   Download
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { type ColumnDef } from '@tanstack/react-table'
+import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import type {
   SiniestroCompleto,
@@ -222,6 +222,45 @@ export function SiniestrosModule() {
   , [siniestros])
 
 
+  // Filtro global personalizado para buscar términos en todos los campos relevantes
+  const customGlobalFilter = useMemo<FilterFn<SiniestroCompleto>>(() => {
+    return (row, _columnId, filterValue) => {
+      if (!filterValue || typeof filterValue !== 'string') return true
+      
+      const searchLower = filterValue.toLowerCase().trim()
+      const data = row.original
+
+      // Construir un string con todos los datos relevantes para la búsqueda
+      // Incluimos campos clave donde el usuario podría buscar "robo", "choque", etc.
+      const searchableText = [
+        data.categoria_nombre,
+        data.estado_nombre,
+        data.vehiculo_patente,
+        data.conductor_display,
+        data.responsable,
+        data.descripcion_danos,
+        data.relato,
+        data.ubicacion,
+        data.tercero_nombre,
+        data.tercero_vehiculo,
+        data.tercero_seguro,
+        data.nro_siniestro_seguro
+      ].filter(Boolean).join(' ').toLowerCase()
+
+      // Buscar término completo
+      if (searchableText.includes(searchLower)) return true
+      
+      // Buscar por palabras individuales
+      const words = searchLower.split(/\s+/).filter(w => w.length > 0)
+      if (words.length > 1) {
+        return words.every(word => searchableText.includes(word))
+      }
+      
+      return false
+    }
+  }, [])
+
+
   // Filtrar siniestros según tab y filtros tipo Excel
   const siniestrosFiltrados = useMemo(() => {
     let filtered = [...siniestros]
@@ -244,6 +283,8 @@ export function SiniestrosModule() {
     if (estadoFilter.length > 0) {
       filtered = filtered.filter(s => estadoFilter.includes(s.estado_nombre || ''))
     }
+    
+    //Prueba de cambio
 
     return filtered
   }, [siniestros, patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter])
@@ -935,6 +976,7 @@ export function SiniestrosModule() {
         emptyIcon={<Shield size={40} />}
         emptyTitle="No hay siniestros para mostrar"
         emptyDescription="Los siniestros aparecerán aquí cuando se registren."
+        globalFilterFn={customGlobalFilter}
       />
 
       {/* Modal */}
