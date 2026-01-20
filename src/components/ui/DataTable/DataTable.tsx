@@ -71,6 +71,8 @@ export interface DataTableProps<T> {
   onClearAllFilters?: () => void;
   /** Función de filtrado global personalizada */
   globalFilterFn?: FilterFn<T>;
+  /** Habilita el redimensionamiento de columnas @default false */
+  enableColumnResizing?: boolean;
 }
 
 export function DataTable<T>({
@@ -95,6 +97,7 @@ export function DataTable<T>({
   externalFilters = [],
   onClearAllFilters,
   globalFilterFn: customGlobalFilterFn,
+  enableColumnResizing = true,
 }: DataTableProps<T>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -664,6 +667,8 @@ export function DataTable<T>({
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
+    enableColumnResizing,
+    columnResizeMode: "onChange",
     initialState: {
       pagination: {
         pageSize,
@@ -1035,7 +1040,14 @@ export function DataTable<T>({
       {/* Table */}
       <div className="dt-container">
         <div className="dt-table-wrapper" ref={tableWrapperRef}>
-          <table className="dt-table dt-table-responsive">
+          <table 
+            className="dt-table dt-table-responsive" 
+            style={{ 
+              width: enableColumnResizing ? table.getTotalSize() : '100%',
+              minWidth: '100%',
+              tableLayout: enableColumnResizing ? 'fixed' : 'auto' 
+            }}
+          >
             <thead>
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
@@ -1045,13 +1057,17 @@ export function DataTable<T>({
                     return (
                       <th
                         key={header.id}
+                        colSpan={header.colSpan}
                         onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
                         className={`
                           ${header.column.getCanSort() ? "dt-sortable" : ""}
                           ${isActionsColumn ? "dt-sticky-col" : ""}
                           ${isExpandColumn ? "dt-expand-col" : ""}
                         `}
-                        style={isExpandColumn ? { width: '40px' } : undefined}
+                        style={{
+                          width: enableColumnResizing ? header.getSize() : undefined,
+                          ...(isExpandColumn ? { width: '40px' } : undefined)
+                        }}
                       >
                         <div
                           className={`dt-header-content ${
@@ -1071,6 +1087,15 @@ export function DataTable<T>({
                             </span>
                           )}
                         </div>
+                        {header.column.getCanResize() && (
+                          <div
+                            onMouseDown={header.getResizeHandler()}
+                            onTouchStart={header.getResizeHandler()}
+                            className={`dt-resizer ${
+                              header.column.getIsResizing() ? "isResizing" : ""
+                            }`}
+                          />
+                        )}
                       </th>
                     );
                   })}

@@ -12,7 +12,7 @@ import {
   Settings,
   Droplets
 } from 'lucide-react'
-import { type ColumnDef } from '@tanstack/react-table'
+import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import './InventarioDashboard.css'
 
@@ -176,6 +176,40 @@ export function InventarioDashboardModule() {
     return filters
   }, [filterEstadoStock, codigoFilter, nombreFilter, tipoFilter])
 
+  // Filtro global personalizado para buscar términos en todos los campos relevantes
+  const customGlobalFilter = useMemo<FilterFn<StockProducto>>(() => {
+    return (row, _columnId, filterValue) => {
+      if (!filterValue || typeof filterValue !== 'string') return true
+      
+      const searchLower = filterValue.toLowerCase().trim()
+      const data = row.original
+
+      // Construir un string con todos los datos relevantes para la búsqueda
+      const searchableText = [
+        data.codigo,
+        data.nombre,
+        data.unidad_medida,
+        data.categoria,
+        // Incluir "Herramienta" o "Repuesto" basado en es_retornable
+        data.es_retornable ? 'Herramienta' : 'Repuesto',
+        // También incluimos los valores numéricos por si acaso
+        String(data.stock_total),
+        String(data.disponible)
+      ].filter(Boolean).join(' ').toLowerCase()
+
+      // Buscar término completo
+      if (searchableText.includes(searchLower)) return true
+      
+      // Buscar por palabras individuales
+      const words = searchLower.split(/\s+/).filter(w => w.length > 0)
+      if (words.length > 1) {
+        return words.every(word => searchableText.includes(word))
+      }
+      
+      return false
+    }
+  }, [])
+
   // Final filtered data - STAT CARD PREVALECE sobre filtros de columna
   const filteredData = useMemo(() => {
     let data = categoryFilteredData
@@ -233,6 +267,7 @@ export function InventarioDashboardModule() {
     () => [
       {
         accessorKey: 'codigo',
+        size: 120,
         header: () => (
           <ExcelColumnFilter
             label="Codigo"
@@ -251,6 +286,7 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'nombre',
+        size: 300,
         header: () => (
           <ExcelColumnFilter
             label="Producto"
@@ -269,6 +305,7 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'unidad_medida',
+        size: 80,
         header: 'Unidad',
         cell: ({ getValue }) => (
           <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{getValue() as string}</span>
@@ -277,6 +314,7 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'es_retornable',
+        size: 130,
         header: () => (
           <ExcelColumnFilter
             label="Tipo"
@@ -300,6 +338,7 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'stock_total',
+        size: 80,
         header: 'Total',
         cell: ({ getValue }) => (
           <span className="inv-total">{getValue() as number}</span>
@@ -308,6 +347,7 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'disponible',
+        size: 100,
         header: 'Disponible',
         cell: ({ row, getValue }) => {
           const disponible = getValue() as number
@@ -324,6 +364,7 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'en_uso',
+        size: 80,
         header: 'En Uso',
         cell: ({ getValue }) => (
           <span className="inv-en-uso">{getValue() as number}</span>
@@ -332,6 +373,7 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'en_transito',
+        size: 100,
         header: 'En Tránsito',
         cell: ({ getValue }) => (
           <span className="inv-en-transito">{getValue() as number}</span>
@@ -340,6 +382,7 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'dañado',
+        size: 80,
         header: 'Dañado',
         cell: ({ getValue }) => (
           <span className="inv-dañado">{getValue() as number}</span>
@@ -348,6 +391,7 @@ export function InventarioDashboardModule() {
       },
       {
         accessorKey: 'perdido',
+        size: 80,
         header: 'Perdido',
         cell: ({ getValue }) => (
           <span className="inv-perdido">{getValue() as number}</span>
@@ -488,6 +532,7 @@ pageSize={100}
           // Limpiar stat card de estado
           setFilterEstadoStock('all')
         }}
+        globalFilterFn={customGlobalFilter}
       />
     </div>
   )
