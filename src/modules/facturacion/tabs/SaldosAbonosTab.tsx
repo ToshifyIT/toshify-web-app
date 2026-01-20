@@ -14,17 +14,65 @@ import {
   Filter,
   Edit3,
   UserPlus,
-  Trash2
+  Trash2,
+  Layers,
+  Receipt,
+  ArrowUpCircle,
+  ArrowDownCircle
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import type { SaldoConductor } from '../../../types/facturacion.types'
+
+interface ConductorBasico {
+  id: string
+  nombres: string
+  apellidos: string
+}
+
+interface CobroFraccionadoRow {
+  id: string
+  conductor_id: string
+  monto_cuota: number
+  numero_cuota: number
+  total_cuotas: number
+  semana: number
+  anio: number
+  aplicado: boolean
+  conductor: { nombres: string; apellidos: string } | null
+}
+
+interface AbonoRow {
+  id: string
+  conductor_id: string
+  fecha_abono: string
+  tipo: string
+  monto: number
+  concepto: string
+  referencia: string | null
+  semana: number | null
+  anio: number | null
+  conductor_nombre?: string
+}
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 
 export function SaldosAbonosTab() {
+  // Sub-tab activo
+  const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
+  
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
+  const [todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtroSaldo, setFiltroSaldo] = useState<string>('todos')
+  const [filtroSaldo, setFiltroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
+  const [cobrosFraccionados, setCobrosFraccionados] = useState<{
+    conductor_id: string
+    conductor_nombre: string
+    monto_cuota: number
+    numero_cuota: number
+    total_cuotas: number
+    semana: number
+    anio: number
+  }[]>([])
 
   // Estados para filtros Excel
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
@@ -70,13 +118,79 @@ export function SaldosAbonosTab() {
   async function cargarSaldos() {
     setLoading(true)
     try {
+      // Cargar saldos con estado del conductor
       const { data, error } = await supabase
         .from('saldos_conductores')
-        .select('*')
+        .select(`
+          *,
+          conductor:conductores(
+            estado:conductores_estados(codigo)
+          )
+        `)
         .order('conductor_nombre')
 
       if (error) throw error
-      setSaldos(data || [])
+      
+      // Mapear para incluir el estado del conductor
+      const saldosConEstado = (data || []).map((s: {
+        conductor?: { estado?: { codigo: string } | null } | null
+      } & SaldoConductor) => ({
+        ...s,
+        conductor_estado: s.conductor?.estado?.codigo || null
+      }))
+      setSaldos(saldosConEstado)
+
+      // Cargar cobros fraccionados pendientes (solo de saldos iniciales)
+      const { data: fraccionados, error: errorFrac } = await supabase
+        .from('cobros_fraccionados')
+        .select(`
+          id,
+          conductor_id,
+          monto_cuota,
+          numero_cuota,
+          total_cuotas,
+          semana,
+          anio,
+          aplicado,
+          conductor:conductores(nombres, apellidos)
+        `)
+        .eq('aplicado', false)
+        .order('semana')
+
+      if (errorFrac) throw errorFrac
+      
+      const fraccionadosConNombre = ((fraccionados || []) as CobroFraccionadoRow[]).map((f) => ({
+        conductor_id: f.conductor_id,
+        conductor_nombre: f.conductor ? `${f.conductor.apellidos}, ${f.conductor.nombres}` : 'N/A',
+        monto_cuota: f.monto_cuota,
+        numero_cuota: f.numero_cuota,
+        total_cuotas: f.total_cuotas,
+        semana: f.semana,
+        anio: f.anio
+      }))
+      setCobrosFraccionados(fraccionadosConNombre)
+
+      // Cargar todos los abonos para el sub-tab "Abonos"
+      const { data: abonos, error: errorAbonos } = await supabase
+        .from('abonos_conductores')
+        .select('*')
+        .order('fecha_abono', { ascending: false })
+        .limit(500)
+
+      if (errorAbonos) {
+        console.error('Error cargando abonos:', errorAbonos)
+      } else {
+        console.log('Abonos cargados:', abonos?.length || 0, abonos)
+      }
+
+      // Obtener nombres de conductores desde saldos ya cargados
+      const conductorNombres = new Map(saldosConEstado.map((s: SaldoConductor) => [s.conductor_id, s.conductor_nombre]))
+
+      const abonosConNombre = ((abonos || []) as AbonoRow[]).map((a) => ({
+        ...a,
+        conductor_nombre: conductorNombres.get(a.conductor_id) || 'N/A'
+      }))
+      setTodosLosAbonos(abonosConNombre)
     } catch (error) {
       console.error('Error cargando saldos:', error)
     } finally {
@@ -100,8 +214,8 @@ export function SaldosAbonosTab() {
       .select('id, nombres, apellidos')
       .order('apellidos')
 
-    const conductoresParaModal = (todosLosConductores || [])
-      .map((c: any) => ({
+    const conductoresParaModal = ((todosLosConductores || []) as ConductorBasico[])
+      .map((c) => ({
         id: c.id,
         nombres: c.nombres || '',
         apellidos: c.apellidos || '',
@@ -412,9 +526,8 @@ export function SaldosAbonosTab() {
       const fechaReferencia = new Date(formValues.fecha + 'T12:00:00').toISOString()
 
       // Insertar saldo inicial
-      const { error: errorSaldo } = await (supabase
-        .from('saldos_conductores') as any)
-        .insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any).insert({
           conductor_id: formValues.conductorId,
           conductor_nombre: conductorNombre,
           conductor_dni: conductor.dni,
@@ -428,6 +541,7 @@ export function SaldosAbonosTab() {
       if (errorSaldo) throw errorSaldo
 
       // Registrar en historial de abonos
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.from('abonos_conductores') as any).insert({
         conductor_id: formValues.conductorId,
         tipo: 'cargo',
@@ -444,6 +558,7 @@ export function SaldosAbonosTab() {
         let anioActual = formValues.anioInicio
 
         for (let i = 1; i <= formValues.cuotas; i++) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase.from('cobros_fraccionados') as any).insert({
             conductor_id: formValues.conductorId,
             descripcion: `${formValues.concepto} - Cuota ${i}/${formValues.cuotas}`,
@@ -486,6 +601,7 @@ export function SaldosAbonosTab() {
 
       // Recargar datos
       cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo agregar el saldo', 'error')
     }
@@ -493,6 +609,25 @@ export function SaldosAbonosTab() {
 
   async function registrarAbono(saldo: SaldoConductor) {
     const saldoColor = saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'
+
+    // Calcular semana actual
+    const hoy = new Date()
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    const semanaActual = getWeekNumber(hoyStr)
+    const anioActual = hoy.getFullYear()
+
+    // Generar opciones de semanas (4 anteriores + actual + 4 siguientes)
+    let semanaOptions = ''
+    let sem = semanaActual - 4
+    let anio = anioActual
+    if (sem < 1) { sem = 52 + sem; anio = anioActual - 1 }
+    for (let i = 0; i < 9; i++) {
+      const selected = (sem === semanaActual && anio === anioActual) ? 'selected' : ''
+      const label = sem === semanaActual && anio === anioActual ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
+      semanaOptions += `<option value="${sem}-${anio}" ${selected}>${label}</option>`
+      sem++
+      if (sem > 52) { sem = 1; anio++ }
+    }
 
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Registrar Movimiento</span>`,
@@ -510,6 +645,13 @@ export function SaldosAbonosTab() {
               <option value="abono">Abono (a favor del conductor)</option>
               <option value="cargo">Cargo (deuda del conductor)</option>
             </select>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Semana:</label>
+            <select id="swal-semana" class="swal2-select" style="font-size: 14px; margin: 0; width: 100%; padding: 8px;">
+              ${semanaOptions}
+            </select>
+            <span style="font-size: 10px; color: #6B7280;">Semana a la que corresponde este movimiento</span>
           </div>
           <div style="margin-bottom: 10px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto:</label>
@@ -531,7 +673,7 @@ export function SaldosAbonosTab() {
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#DC2626',
       cancelButtonColor: '#6B7280',
-      width: 360,
+      width: 380,
       customClass: {
         popup: 'swal-compact',
         title: 'swal-title-compact',
@@ -539,6 +681,8 @@ export function SaldosAbonosTab() {
       },
       preConfirm: () => {
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
+        const semanaValue = (document.getElementById('swal-semana') as HTMLSelectElement).value
+        const [semana, anioSel] = semanaValue.split('-').map(Number)
         const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
         const concepto = (document.getElementById('swal-concepto') as HTMLInputElement).value
         const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
@@ -552,7 +696,14 @@ export function SaldosAbonosTab() {
           return false
         }
 
-        return { tipo, monto: parseFloat(monto), concepto, referencia: referencia || null }
+        return { 
+          tipo, 
+          monto: parseFloat(monto), 
+          concepto, 
+          referencia: referencia || null,
+          semana,
+          anio: anioSel
+        }
       }
     })
 
@@ -561,22 +712,23 @@ export function SaldosAbonosTab() {
     try {
       const montoFinal = formValues.tipo === 'abono' ? formValues.monto : -formValues.monto
 
-      const { error: errorAbono } = await (supabase
-        .from('abonos_conductores') as any)
-        .insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
           conductor_id: saldo.conductor_id,
           tipo: formValues.tipo,
           monto: formValues.monto,
           concepto: formValues.concepto,
           referencia: formValues.referencia,
+          semana: formValues.semana,
+          anio: formValues.anio,
           fecha_abono: new Date().toISOString()
         })
 
       if (errorAbono) throw errorAbono
 
       const nuevoSaldo = saldo.saldo_actual + montoFinal
-      const { error: errorUpdate } = await (supabase
-        .from('saldos_conductores') as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
         .update({ saldo_actual: nuevoSaldo, ultima_actualizacion: new Date().toISOString() })
         .eq('id', saldo.id)
 
@@ -591,6 +743,7 @@ export function SaldosAbonosTab() {
       })
 
       cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar', 'error')
     }
@@ -704,8 +857,8 @@ export function SaldosAbonosTab() {
     if (!formValues) return
 
     try {
-      const { error } = await (supabase
-        .from('saldos_conductores') as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: formValues.saldoActual,
           dias_mora: formValues.diasMora,
@@ -725,6 +878,7 @@ export function SaldosAbonosTab() {
       })
 
       cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
     }
@@ -742,9 +896,12 @@ export function SaldosAbonosTab() {
       if (error) throw error
 
       const historialHtml = abonos && abonos.length > 0
-        ? (abonos as any[]).map((a: any) => `
+        ? (abonos as AbonoRow[]).map((a) => `
             <tr>
               <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB;">${formatDate(a.fecha_abono)}</td>
+              <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; text-align: center; color: #6B7280; font-size: 11px;">
+                ${a.semana && a.anio ? `S${a.semana}/${a.anio}` : '-'}
+              </td>
               <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; text-align: right;">
                 <span style="color: ${a.tipo === 'abono' ? '#16a34a' : '#dc2626'}; font-weight: 600;">${a.tipo === 'abono' ? '+' : '-'}${formatCurrency(a.monto)}</span>
               </td>
@@ -752,7 +909,7 @@ export function SaldosAbonosTab() {
               <td style="padding: 6px 8px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">${a.referencia || '-'}</td>
             </tr>
           `).join('')
-        : '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #9CA3AF;">Sin movimientos</td></tr>'
+        : '<tr><td colspan="5" style="padding: 16px; text-align: center; color: #9CA3AF;">Sin movimientos</td></tr>'
 
       const saldoColor = saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'
       const saldoLabel = saldo.saldo_actual >= 0 ? 'A Favor' : 'Deuda'
@@ -774,6 +931,7 @@ export function SaldosAbonosTab() {
                 <thead>
                   <tr style="background: #F9FAFB;">
                     <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Fecha</th>
+                    <th style="padding: 6px 8px; text-align: center; font-weight: 600;">Sem.</th>
                     <th style="padding: 6px 8px; text-align: right; font-weight: 600;">Monto</th>
                     <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Concepto</th>
                     <th style="padding: 6px 8px; text-align: left; font-weight: 600;">Ref.</th>
@@ -795,6 +953,123 @@ export function SaldosAbonosTab() {
       })
     } catch (error) {
       console.error('Error cargando historial:', error)
+    }
+  }
+
+  // Función para editar un movimiento (abono/cargo)
+  async function editarMovimiento(movimiento: AbonoRow) {
+    // Calcular semana actual
+    const hoy = new Date()
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    const semanaActual = getWeekNumber(hoyStr)
+    const anioActual = hoy.getFullYear()
+
+    // Generar opciones de semanas (8 anteriores + actual + 4 siguientes)
+    let semanaOptions = ''
+    let sem = semanaActual - 8
+    let anio = anioActual
+    if (sem < 1) { sem = 52 + sem; anio = anioActual - 1 }
+    for (let i = 0; i < 13; i++) {
+      const isSelected = movimiento.semana === sem && movimiento.anio === anio
+      const label = sem === semanaActual && anio === anioActual ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
+      semanaOptions += `<option value="${sem}-${anio}" ${isSelected ? 'selected' : ''}>${label}</option>`
+      sem++
+      if (sem > 52) { sem = 1; anio++ }
+    }
+
+    const { value: formValues } = await Swal.fire({
+      title: `<span style="font-size: 16px; font-weight: 600;">Editar Movimiento</span>`,
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">${movimiento.conductor_nombre || 'N/A'}</div>
+            <div style="color: ${movimiento.tipo === 'abono' ? '#16a34a' : '#dc2626'}; font-size: 12px; margin-top: 4px;">
+              ${movimiento.tipo === 'abono' ? 'Abono' : 'Cargo'}: <strong>${formatCurrency(movimiento.monto)}</strong>
+            </div>
+            <div style="color: #6B7280; font-size: 11px; margin-top: 2px;">${movimiento.concepto}</div>
+          </div>
+          
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Semana:</label>
+            <select id="swal-semana" class="swal2-select" style="font-size: 14px; margin: 0; width: 100%; padding: 8px;">
+              <option value="">Sin asignar</option>
+              ${semanaOptions}
+            </select>
+          </div>
+          
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Concepto:</label>
+            <input id="swal-concepto" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${movimiento.concepto || ''}">
+          </div>
+          
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Referencia:</label>
+            <input id="swal-referencia" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${movimiento.referencia || ''}" placeholder="Opcional">
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280',
+      width: 400,
+      customClass: {
+        popup: 'swal-compact',
+        title: 'swal-title-compact',
+        htmlContainer: 'swal-html-compact'
+      },
+      preConfirm: () => {
+        const semanaValue = (document.getElementById('swal-semana') as HTMLSelectElement).value
+        const concepto = (document.getElementById('swal-concepto') as HTMLInputElement).value
+        const referencia = (document.getElementById('swal-referencia') as HTMLInputElement).value
+
+        if (!concepto.trim()) {
+          Swal.showValidationMessage('El concepto es requerido')
+          return false
+        }
+
+        let semana: number | null = null
+        let anioSel: number | null = null
+        if (semanaValue) {
+          const parts = semanaValue.split('-').map(Number)
+          semana = parts[0]
+          anioSel = parts[1]
+        }
+
+        return { semana, anio: anioSel, concepto, referencia: referencia || null }
+      }
+    })
+
+    if (!formValues) return
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('abonos_conductores') as any)
+        .update({
+          semana: formValues.semana,
+          anio: formValues.anio,
+          concepto: formValues.concepto,
+          referencia: formValues.referencia
+        })
+        .eq('id', movimiento.id)
+
+      if (error) throw error
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Actualizado',
+        text: 'El movimiento ha sido actualizado',
+        timer: 1500,
+        showConfirmButton: false
+      })
+
+      // Recargar datos
+      cargarSaldos()
+    } catch (error) {
+      console.error('Error actualizando movimiento:', error)
+      Swal.fire('Error', 'No se pudo actualizar el movimiento', 'error')
     }
   }
 
@@ -842,6 +1117,31 @@ export function SaldosAbonosTab() {
           <div className="text-xs text-gray-500">{row.original.conductor_cuit || row.original.conductor_dni}</div>
         </div>
       )
+    },
+    {
+      id: 'conductor_estado',
+      header: 'Estado Cond.',
+      cell: ({ row }) => {
+        const estado = row.original.conductor_estado
+        if (!estado) return <span className="text-gray-400">-</span>
+        
+        const esActivo = estado.toUpperCase() === 'ACTIVO'
+        const esBaja = estado.toUpperCase() === 'BAJA' || estado.toUpperCase() === 'INACTIVO'
+        
+        return (
+          <span 
+            className="fact-badge" 
+            style={{
+              backgroundColor: esActivo ? '#DCFCE7' : esBaja ? '#FEE2E2' : '#FEF3C7',
+              color: esActivo ? '#166534' : esBaja ? '#991B1B' : '#92400E',
+              fontSize: '11px',
+              padding: '3px 8px'
+            }}
+          >
+            {estado}
+          </span>
+        )
+      }
     },
     {
       accessorKey: 'saldo_actual',
@@ -939,12 +1239,18 @@ export function SaldosAbonosTab() {
     }
   ], [conductorFilter, conductorSearch, conductoresFiltrados, estadoFilter, openColumnFilter])
 
+  // IDs de conductores con cobros fraccionados pendientes
+  const conductoresConFraccionado = useMemo(() => {
+    return new Set(cobrosFraccionados.map(c => c.conductor_id))
+  }, [cobrosFraccionados])
+
   const saldosFiltrados = useMemo(() => {
     return saldos.filter(s => {
-      // Filtro legacy de header
+      // Filtros de stats
       if (filtroSaldo === 'favor' && s.saldo_actual <= 0) return false
       if (filtroSaldo === 'deuda' && s.saldo_actual >= 0) return false
       if (filtroSaldo === 'mora' && (s.dias_mora || 0) === 0) return false
+      if (filtroSaldo === 'fraccionado' && !conductoresConFraccionado.has(s.conductor_id)) return false
       // Filtros Excel
       if (conductorFilter.length > 0 && !conductorFilter.includes(s.conductor_nombre || '')) return false
       if (estadoFilter.length > 0) {
@@ -953,103 +1259,398 @@ export function SaldosAbonosTab() {
       }
       return true
     })
-  }, [saldos, filtroSaldo, conductorFilter, estadoFilter])
+  }, [saldos, filtroSaldo, conductorFilter, estadoFilter, conductoresConFraccionado])
 
   const stats = useMemo(() => {
     const total = saldos.length
-    const conFavor = saldos.filter(s => s.saldo_actual > 0).length
-    const conDeuda = saldos.filter(s => s.saldo_actual < 0).length
-    const enMora = saldos.filter(s => (s.dias_mora || 0) > 0).length
-    const totalFavor = saldos.filter(s => s.saldo_actual > 0).reduce((sum, s) => sum + s.saldo_actual, 0)
-    const totalDeuda = saldos.filter(s => s.saldo_actual < 0).reduce((sum, s) => sum + Math.abs(s.saldo_actual), 0)
-    return { total, conFavor, conDeuda, enMora, totalFavor, totalDeuda }
-  }, [saldos])
+    const conductoresFavor = saldos.filter(s => s.saldo_actual > 0)
+    const conductoresDeuda = saldos.filter(s => s.saldo_actual < 0)
+    const conductoresMora = saldos.filter(s => (s.dias_mora || 0) > 0)
+    const conFavor = conductoresFavor.length
+    const conDeuda = conductoresDeuda.length
+    const enMora = conductoresMora.length
+    const totalFavor = conductoresFavor.reduce((sum, s) => sum + s.saldo_actual, 0)
+    const totalDeuda = conductoresDeuda.reduce((sum, s) => sum + Math.abs(s.saldo_actual), 0)
+    
+    // Stats de fraccionados
+    const totalFraccionado = cobrosFraccionados.reduce((sum, c) => sum + c.monto_cuota, 0)
+    const cuotasPendientes = cobrosFraccionados.length
+    
+    return { 
+      total, conFavor, conDeuda, enMora, totalFavor, totalDeuda,
+      conductoresFavor, conductoresDeuda, conductoresMora,
+      totalFraccionado, cuotasPendientes
+    }
+  }, [saldos, cobrosFraccionados])
+
+  // Columnas para la tabla de Abonos
+  const columnsAbonos = useMemo<ColumnDef<AbonoRow>[]>(() => [
+    {
+      accessorKey: 'fecha_abono',
+      header: 'Fecha',
+      cell: ({ row }) => (
+        <span className="text-gray-700 text-sm">{formatDate(row.original.fecha_abono)}</span>
+      )
+    },
+    {
+      id: 'semana',
+      header: 'Semana',
+      cell: ({ row }) => {
+        const { semana, anio } = row.original
+        if (!semana || !anio) return <span className="text-gray-400">-</span>
+        return <span className="text-gray-600 text-sm">S{semana}/{anio}</span>
+      }
+    },
+    {
+      accessorKey: 'conductor_nombre',
+      header: 'Conductor',
+      cell: ({ row }) => (
+        <div className="font-medium">{row.original.conductor_nombre || 'N/A'}</div>
+      )
+    },
+    {
+      accessorKey: 'tipo',
+      header: 'Tipo',
+      cell: ({ row }) => {
+        const tipo = row.original.tipo
+        const esAbono = tipo === 'abono'
+        return (
+          <div className="flex items-center gap-1.5">
+            {esAbono ? (
+              <ArrowUpCircle size={14} className="text-green-600" />
+            ) : (
+              <ArrowDownCircle size={14} className="text-red-600" />
+            )}
+            <span 
+              className="fact-badge" 
+              style={{
+                backgroundColor: esAbono ? '#DCFCE7' : '#FEE2E2',
+                color: esAbono ? '#166534' : '#991B1B',
+                fontSize: '11px',
+                padding: '3px 8px'
+              }}
+            >
+              {esAbono ? 'Abono' : 'Cargo'}
+            </span>
+          </div>
+        )
+      }
+    },
+    {
+      accessorKey: 'monto',
+      header: 'Monto',
+      cell: ({ row }) => {
+        const esAbono = row.original.tipo === 'abono'
+        return (
+          <span 
+            className={`fact-precio ${esAbono ? '' : 'fact-precio-negative'}`} 
+            style={{ fontWeight: 600 }}
+          >
+            {esAbono ? '+' : '-'}{formatCurrency(row.original.monto)}
+          </span>
+        )
+      }
+    },
+    {
+      accessorKey: 'concepto',
+      header: 'Concepto',
+      cell: ({ row }) => (
+        <span className="text-gray-700 text-sm">{row.original.concepto}</span>
+      )
+    },
+    {
+      accessorKey: 'referencia',
+      header: 'Referencia',
+      cell: ({ row }) => (
+        <span className="text-gray-500 text-sm">{row.original.referencia || '-'}</span>
+      )
+    },
+    {
+      id: 'acciones',
+      header: '',
+      cell: ({ row }) => (
+        <div className="fact-table-actions">
+          <button 
+            className="fact-table-btn fact-table-btn-edit" 
+            onClick={() => editarMovimiento(row.original)} 
+            data-tooltip="Editar movimiento"
+          >
+            <Edit3 size={14} />
+          </button>
+        </div>
+      )
+    }
+  ], [])
+
+  // Stats para sub-tab Abonos
+  const statsAbonos = useMemo(() => {
+    const totalAbonos = todosLosAbonos.filter(a => a.tipo === 'abono')
+    const totalCargos = todosLosAbonos.filter(a => a.tipo === 'cargo')
+    return {
+      cantidadAbonos: totalAbonos.length,
+      cantidadCargos: totalCargos.length,
+      montoAbonos: totalAbonos.reduce((sum, a) => sum + a.monto, 0),
+      montoCargos: totalCargos.reduce((sum, a) => sum + a.monto, 0)
+    }
+  }, [todosLosAbonos])
 
   return (
     <>
-      {/* Header con filtro y botón agregar */}
-      <div className="fact-header">
-        <div className="fact-header-left">
-          <span className="fact-label">Filtrar:</span>
-          <select className="fact-select" value={filtroSaldo} onChange={(e) => setFiltroSaldo(e.target.value)}>
-            <option value="todos">Todos</option>
-            <option value="favor">Con saldo a favor</option>
-            <option value="deuda">Con deuda</option>
-            <option value="mora">En mora</option>
-          </select>
-        </div>
-        <div className="fact-header-right">
-          <button 
-            className="fact-btn fact-btn-primary"
-            onClick={agregarSaldoInicial}
-            title="Agregar saldo inicial a un conductor"
-          >
-            <UserPlus size={16} />
-            <span>Agregar Saldo</span>
-          </button>
-        </div>
+      {/* Sub-tabs de navegación */}
+      <div className="fact-subtabs" style={{ 
+        display: 'flex', 
+        gap: '4px', 
+        marginBottom: '16px',
+        borderBottom: '1px solid #E5E7EB',
+        paddingBottom: '0'
+      }}>
+        <button
+          className={`fact-subtab ${activeSubTab === 'saldos' ? 'fact-subtab-active' : ''}`}
+          onClick={() => setActiveSubTab('saldos')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '10px 16px',
+            border: 'none',
+            background: activeSubTab === 'saldos' ? '#DC2626' : 'transparent',
+            color: activeSubTab === 'saldos' ? 'white' : '#6B7280',
+            borderRadius: '6px 6px 0 0',
+            cursor: 'pointer',
+            fontWeight: 500,
+            fontSize: '13px',
+            transition: 'all 0.15s'
+          }}
+        >
+          <Wallet size={16} />
+          Saldos
+          <span style={{
+            background: activeSubTab === 'saldos' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
+            padding: '2px 6px',
+            borderRadius: '10px',
+            fontSize: '11px'
+          }}>
+            {stats.total}
+          </span>
+        </button>
+        <button
+          className={`fact-subtab ${activeSubTab === 'abonos' ? 'fact-subtab-active' : ''}`}
+          onClick={() => setActiveSubTab('abonos')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '10px 16px',
+            border: 'none',
+            background: activeSubTab === 'abonos' ? '#DC2626' : 'transparent',
+            color: activeSubTab === 'abonos' ? 'white' : '#6B7280',
+            borderRadius: '6px 6px 0 0',
+            cursor: 'pointer',
+            fontWeight: 500,
+            fontSize: '13px',
+            transition: 'all 0.15s'
+          }}
+        >
+          <Receipt size={16} />
+          Movimientos
+          <span style={{
+            background: activeSubTab === 'abonos' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
+            padding: '2px 6px',
+            borderRadius: '10px',
+            fontSize: '11px'
+          }}>
+            {todosLosAbonos.length}
+          </span>
+        </button>
       </div>
 
-      {/* Stats */}
-      <div className="fact-stats">
-        <div className="fact-stats-grid">
-          <div className="fact-stat-card">
-            <Users size={18} className="fact-stat-icon" />
-            <div className="fact-stat-content">
-              <span className="fact-stat-value">{stats.total}</span>
-              <span className="fact-stat-label">Conductores</span>
+      {/* ===== SUB-TAB: SALDOS ===== */}
+      {activeSubTab === 'saldos' && (
+        <>
+          {/* Header con filtro y botón agregar */}
+          <div className="fact-header">
+            <div className="fact-header-left">
+              <span className="fact-label">Filtrar:</span>
+              <select className="fact-select" value={filtroSaldo} onChange={(e) => setFiltroSaldo(e.target.value as typeof filtroSaldo)}>
+                <option value="todos">Todos</option>
+                <option value="favor">Con saldo a favor</option>
+                <option value="deuda">Con deuda</option>
+                <option value="mora">En mora</option>
+                <option value="fraccionado">Fraccionado</option>
+              </select>
+            </div>
+            <div className="fact-header-right">
+              <button 
+                className="fact-btn fact-btn-primary"
+                onClick={agregarSaldoInicial}
+                title="Agregar saldo inicial a un conductor"
+              >
+                <UserPlus size={16} />
+                <span>Agregar Saldo</span>
+              </button>
             </div>
           </div>
-          <div className="fact-stat-card">
-            <TrendingUp size={18} className="fact-stat-icon" />
-            <div className="fact-stat-content">
-              <span className="fact-stat-value">{stats.conFavor}</span>
-              <span className="fact-stat-label">Con Saldo a Favor</span>
-            </div>
-          </div>
-          <div className="fact-stat-card">
-            <TrendingDown size={18} className="fact-stat-icon" />
-            <div className="fact-stat-content">
-              <span className="fact-stat-value">{stats.conDeuda}</span>
-              <span className="fact-stat-label">Con Deuda</span>
-            </div>
-          </div>
-          <div className="fact-stat-card">
-            <Clock size={18} className="fact-stat-icon" />
-            <div className="fact-stat-content">
-              <span className="fact-stat-value">{stats.enMora}</span>
-              <span className="fact-stat-label">En Mora</span>
-            </div>
-          </div>
-          <div className="fact-stat-card">
-            <DollarSign size={18} className="fact-stat-icon" />
-            <div className="fact-stat-content">
-              <span className="fact-stat-value">{formatCurrency(stats.totalFavor)}</span>
-              <span className="fact-stat-label">Total a Favor</span>
-            </div>
-          </div>
-          <div className="fact-stat-card">
-            <AlertTriangle size={18} className="fact-stat-icon" />
-            <div className="fact-stat-content">
-              <span className="fact-stat-value">{formatCurrency(stats.totalDeuda)}</span>
-              <span className="fact-stat-label">Total Deuda</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Tabla */}
-      <DataTable
-        data={saldosFiltrados}
-        columns={columns}
-        loading={loading}
-        searchPlaceholder="Buscar conductor..."
-        emptyIcon={<Wallet size={48} />}
-        emptyTitle="Sin saldos"
-        emptyDescription="No hay saldos registrados"
-        pageSize={100}
-        pageSizeOptions={[10, 20, 50, 100]}
-      />
+          {/* Stats - Clickeables como filtros */}
+          <div className="fact-stats">
+            <div className="fact-stats-grid">
+              <div 
+                className={`fact-stat-card ${filtroSaldo === 'todos' ? 'fact-stat-card-active' : ''}`}
+                onClick={() => setFiltroSaldo('todos')}
+                style={{ cursor: 'pointer' }}
+                title="Ver todos"
+              >
+                <Users size={18} className="fact-stat-icon" />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value">{stats.total}</span>
+                  <span className="fact-stat-label">Conductores</span>
+                </div>
+              </div>
+              <div 
+                className={`fact-stat-card ${filtroSaldo === 'favor' ? 'fact-stat-card-active' : ''}`}
+                onClick={() => setFiltroSaldo('favor')}
+                style={{ cursor: 'pointer' }}
+                title="Filtrar por saldo a favor"
+              >
+                <TrendingUp size={18} className="fact-stat-icon" />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value">{stats.conFavor}</span>
+                  <span className="fact-stat-label">Con Saldo a Favor</span>
+                </div>
+              </div>
+              <div 
+                className={`fact-stat-card ${filtroSaldo === 'deuda' ? 'fact-stat-card-active' : ''}`}
+                onClick={() => setFiltroSaldo('deuda')}
+                style={{ cursor: 'pointer' }}
+                title="Filtrar por deuda"
+              >
+                <TrendingDown size={18} className="fact-stat-icon" />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value">{stats.conDeuda}</span>
+                  <span className="fact-stat-label">Con Deuda</span>
+                </div>
+              </div>
+              <div 
+                className={`fact-stat-card ${filtroSaldo === 'mora' ? 'fact-stat-card-active' : ''}`}
+                onClick={() => setFiltroSaldo('mora')}
+                style={{ cursor: 'pointer' }}
+                title="Filtrar por mora"
+              >
+                <Clock size={18} className="fact-stat-icon" />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value">{stats.enMora}</span>
+                  <span className="fact-stat-label">En Mora</span>
+                </div>
+              </div>
+              <div 
+                className={`fact-stat-card ${filtroSaldo === 'favor' ? 'fact-stat-card-active' : ''}`}
+                onClick={() => setFiltroSaldo('favor')}
+                style={{ cursor: 'pointer' }}
+                title="Filtrar por saldo a favor"
+              >
+                <DollarSign size={18} className="fact-stat-icon" />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value">{formatCurrency(stats.totalFavor)}</span>
+                  <span className="fact-stat-label">Total a Favor</span>
+                </div>
+              </div>
+              <div 
+                className={`fact-stat-card ${filtroSaldo === 'deuda' ? 'fact-stat-card-active' : ''}`}
+                onClick={() => setFiltroSaldo('deuda')}
+                style={{ cursor: 'pointer' }}
+                title="Filtrar por deuda"
+              >
+                <AlertTriangle size={18} className="fact-stat-icon" />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value">{formatCurrency(stats.totalDeuda)}</span>
+                  <span className="fact-stat-label">Total Deuda</span>
+                </div>
+              </div>
+              <div 
+                className={`fact-stat-card ${filtroSaldo === 'fraccionado' ? 'fact-stat-card-active' : ''}`}
+                onClick={() => setFiltroSaldo('fraccionado')}
+                style={{ cursor: 'pointer', borderLeft: '3px solid #8B5CF6' }}
+                title="Filtrar por fraccionado"
+              >
+                <Layers size={18} className="fact-stat-icon" style={{ color: '#8B5CF6' }} />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value" style={{ color: '#8B5CF6' }}>{formatCurrency(stats.totalFraccionado)}</span>
+                  <span className="fact-stat-label">Fraccionado ({stats.cuotasPendientes} cuotas)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla de Saldos */}
+          <DataTable
+            data={saldosFiltrados}
+            columns={columns}
+            loading={loading}
+            searchPlaceholder="Buscar conductor..."
+            emptyIcon={<Wallet size={48} />}
+            emptyTitle="Sin saldos"
+            emptyDescription="No hay saldos registrados"
+            pageSize={100}
+            pageSizeOptions={[10, 20, 50, 100]}
+          />
+        </>
+      )}
+
+      {/* ===== SUB-TAB: MOVIMIENTOS/ABONOS ===== */}
+      {activeSubTab === 'abonos' && (
+        <>
+          {/* Stats de Movimientos */}
+          <div className="fact-stats" style={{ marginBottom: '16px' }}>
+            <div className="fact-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              <div className="fact-stat-card">
+                <Receipt size={18} className="fact-stat-icon" />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value">{todosLosAbonos.length}</span>
+                  <span className="fact-stat-label">Total Movimientos</span>
+                </div>
+              </div>
+              <div className="fact-stat-card" style={{ borderLeft: '3px solid #16a34a' }}>
+                <ArrowUpCircle size={18} className="fact-stat-icon" style={{ color: '#16a34a' }} />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value" style={{ color: '#16a34a' }}>{statsAbonos.cantidadAbonos}</span>
+                  <span className="fact-stat-label">Abonos</span>
+                </div>
+              </div>
+              <div className="fact-stat-card" style={{ borderLeft: '3px solid #dc2626' }}>
+                <ArrowDownCircle size={18} className="fact-stat-icon" style={{ color: '#dc2626' }} />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value" style={{ color: '#dc2626' }}>{statsAbonos.cantidadCargos}</span>
+                  <span className="fact-stat-label">Cargos</span>
+                </div>
+              </div>
+              <div className="fact-stat-card">
+                <DollarSign size={18} className="fact-stat-icon" />
+                <div className="fact-stat-content">
+                  <span className="fact-stat-value">
+                    <span style={{ color: '#16a34a' }}>+{formatCurrency(statsAbonos.montoAbonos)}</span>
+                    {' / '}
+                    <span style={{ color: '#dc2626' }}>-{formatCurrency(statsAbonos.montoCargos)}</span>
+                  </span>
+                  <span className="fact-stat-label">Abonos / Cargos</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla de Movimientos */}
+          <DataTable
+            data={todosLosAbonos}
+            columns={columnsAbonos}
+            loading={loading}
+            searchPlaceholder="Buscar por conductor, concepto..."
+            emptyIcon={<Receipt size={48} />}
+            emptyTitle="Sin movimientos"
+            emptyDescription="No hay abonos ni cargos registrados"
+            pageSize={50}
+            pageSizeOptions={[20, 50, 100, 200]}
+          />
+        </>
+      )}
     </>
   )
 }
