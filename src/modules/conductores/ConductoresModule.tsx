@@ -2819,6 +2819,43 @@ function ModalEditar({
           </div>
         </div>
 
+        {/* Campos adicionales si el estado es Baja */}
+        {estadosConductor.find((e: any) => e.id === formData.estado_id)?.descripcion?.toLowerCase().includes('baja') && (
+          <>
+            <div className="form-row" style={{ marginTop: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Fecha de Terminación *</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.fecha_terminacion || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, fecha_terminacion: e.target.value })
+                  }
+                  disabled={saving}
+                  style={{ borderColor: '#DC2626' }}
+                />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">Motivo de Baja *</label>
+                <textarea
+                  className="form-input"
+                  value={formData.motivo_baja || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, motivo_baja: e.target.value })
+                  }
+                  disabled={saving}
+                  placeholder="Describa el motivo de la baja..."
+                  rows={3}
+                  style={{ borderColor: '#DC2626', resize: 'vertical' }}
+                />
+              </div>
+            </div>
+          </>
+        )}
+
         <div className="form-section-title" style={{ marginTop: '20px' }}>Documentación e iButton</div>
         <div className="form-row">
           <div className="form-group">
@@ -3201,25 +3238,54 @@ function ModalDetalles({
         </div>
 
         <div className="section-title">Estado</div>
-        <div>
-          {(() => {
-            const badgeStyle = getEstadoConductorBadgeStyle(selectedConductor.conductores_estados);
-            return (
-              <span
-                className="badge"
-                style={{
-                  backgroundColor: badgeStyle.bg,
-                  color: badgeStyle.color,
-                  padding: "4px 12px",
-                  borderRadius: "12px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                }}
-              >
-                {getEstadoConductorDisplay(selectedConductor.conductores_estados)}
-              </span>
-            );
-          })()}
+        <div className="details-grid">
+          <div>
+            <label className="detail-label">ESTADO ACTUAL</label>
+            <div className="detail-value">
+              {(() => {
+                const badgeStyle = getEstadoConductorBadgeStyle(selectedConductor.conductores_estados);
+                return (
+                  <span
+                    className="badge"
+                    style={{
+                      backgroundColor: badgeStyle.bg,
+                      color: badgeStyle.color,
+                      padding: "4px 12px",
+                      borderRadius: "12px",
+                      fontSize: "12px",
+                      fontWeight: "600",
+                    }}
+                  >
+                    {getEstadoConductorDisplay(selectedConductor.conductores_estados)}
+                  </span>
+                );
+              })()}
+            </div>
+          </div>
+          {selectedConductor.conductores_estados?.codigo?.toLowerCase().includes('baja') && (
+            <>
+              <div>
+                <label className="detail-label">FECHA DE TERMINACIÓN</label>
+                <div className="detail-value">
+                  {selectedConductor.fecha_terminacion
+                    ? new Date(selectedConductor.fecha_terminacion).toLocaleDateString("es-AR")
+                    : "N/A"}
+                </div>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label className="detail-label">MOTIVO DE BAJA</label>
+                <div className="detail-value" style={{ 
+                  background: '#FEF2F2', 
+                  padding: '8px 12px', 
+                  borderRadius: '6px',
+                  color: '#991B1B',
+                  fontSize: '13px'
+                }}>
+                  {selectedConductor.motivo_baja || "Sin especificar"}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Historial de Vehículos Asignados */}
