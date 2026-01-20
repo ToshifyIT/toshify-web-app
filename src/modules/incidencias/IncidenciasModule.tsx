@@ -27,7 +27,7 @@ import {
   ArrowRightLeft
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { type ColumnDef } from '@tanstack/react-table'
+import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import type {
   IncidenciaCompleta,
@@ -410,6 +410,51 @@ export function IncidenciasModule() {
 
   // Incidencias filtradas según tab activo
   const incidenciasFiltradas = activeTab === 'logistica' ? incidenciasLogisticas : incidenciasCobro
+
+  // Custom Global Filter para Incidencias
+  // Permite filtrar estrictamente por estado "Pendiente" cuando se busca esa palabra exacta
+  const customGlobalFilter = useMemo<FilterFn<IncidenciaCompleta>>(() => {
+    return (row, _columnId, filterValue) => {
+      if (!filterValue || typeof filterValue !== 'string') return true
+      
+      const searchLower = filterValue.toLowerCase().trim()
+      
+      // LOGICA ESPECIFICA: Si busca "pendiente", filtrar SOLO por estado Pendiente
+      if (searchLower === 'pendiente') {
+        const estado = row.original.estado_nombre?.toLowerCase() || ''
+        return estado === 'pendiente'
+      }
+
+      // Comportamiento default para otros términos
+      const original = row.original as unknown as Record<string, unknown>
+
+      const collectStrings = (obj: unknown, depth = 0): string => {
+        if (depth > 3) return ''
+        if (obj === null || obj === undefined) return ''
+        if (typeof obj === 'string') return obj + ' '
+        if (typeof obj === 'number') return String(obj) + ' '
+        if (Array.isArray(obj)) return obj.map(item => collectStrings(item, depth + 1)).join(' ')
+        if (typeof obj === 'object') {
+          return Object.values(obj as Record<string, unknown>)
+            .map(val => collectStrings(val, depth + 1))
+            .join(' ')
+        }
+        return ''
+      }
+
+      const allText = collectStrings(original).toLowerCase()
+      
+      // Buscar término completo o palabras
+      if (allText.includes(searchLower)) return true
+      
+      const words = searchLower.split(/\s+/).filter(w => w.length > 0)
+      if (words.length > 1) {
+        return words.every(word => allText.includes(word))
+      }
+      
+      return false
+    }
+  }, [])
 
   // Filtrar penalidades con filtros tipo Excel
   const penalidadesFiltradas = useMemo(() => {
@@ -1896,6 +1941,7 @@ export function IncidenciasModule() {
           <DataTable
             data={incidenciasLogisticas}
             columns={incidenciasColumns}
+            globalFilterFn={customGlobalFilter}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<Shield size={48} />}
@@ -1994,6 +2040,7 @@ export function IncidenciasModule() {
           <DataTable
             data={incidenciasCobro}
             columns={incidenciasCobroColumns}
+            globalFilterFn={customGlobalFilter}
             loading={loading}
             searchPlaceholder="Buscar por patente, conductor..."
             emptyIcon={<DollarSign size={48} />}
