@@ -3268,7 +3268,7 @@ function ModalDetalles({
                 <label className="detail-label">FECHA DE TERMINACIÓN</label>
                 <div className="detail-value">
                   {selectedConductor.fecha_terminacion
-                    ? new Date(selectedConductor.fecha_terminacion).toLocaleDateString("es-AR")
+                    ? new Date(selectedConductor.fecha_terminacion + 'T12:00:00').toLocaleDateString("es-AR")
                     : "N/A"}
                 </div>
               </div>
