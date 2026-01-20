@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/incidencias/IncidenciasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
@@ -43,7 +44,7 @@ import type {
 import './IncidenciasModule.css'
 import { PenalidadForm } from '../../components/shared/PenalidadForm'
 
-type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar'
+type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar' | 'aplicadas'
 
 // Helper para mapear rol de usuario a área (para incidencias)
 function getAreaPorRol(roleName: string | undefined | null): string {
@@ -107,6 +108,8 @@ export function IncidenciasModule() {
   const [tiposCobroDescuento, setTiposCobroDescuento] = useState<TipoCobroDescuento[]>([])
   const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
+  // Mapa de penalidades fraccionadas: penalidad_id -> { total_cuotas, cuotas_pendientes }
+  const [fraccionamientoMap, setFraccionamientoMap] = useState<Map<string, { total_cuotas: number; cuotas_pendientes: number }>>(new Map())
 
   // Filtros por columna tipo Excel con Portal
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -310,6 +313,22 @@ export function IncidenciasModule() {
       console.log('Primeras 5 penalidades:', penData.slice(0, 5).map((p: any) => ({ id: p.id, aplicado: p.aplicado, monto: p.monto, incidencia_id: p.incidencia_id })))
       setPenalidades(penData)
 
+      // Cargar cuotas fraccionadas para saber qué penalidades tienen fraccionamiento
+      const { data: cuotasData } = await (supabase.from('penalidades_cuotas' as any) as any)
+        .select('penalidad_id, aplicado')
+      
+      if (cuotasData && cuotasData.length > 0) {
+        // Agrupar por penalidad_id
+        const fracMap = new Map<string, { total_cuotas: number; cuotas_pendientes: number }>()
+        for (const cuota of cuotasData) {
+          const existing = fracMap.get(cuota.penalidad_id) || { total_cuotas: 0, cuotas_pendientes: 0 }
+          existing.total_cuotas++
+          if (!cuota.aplicado) existing.cuotas_pendientes++
+          fracMap.set(cuota.penalidad_id, existing)
+        }
+        setFraccionamientoMap(fracMap)
+      }
+
       // Estado inicial del form
       if (estadosRes.data && estadosRes.data.length > 0) {
         const estadoPendiente = estadosRes.data.find((e: any) => e.codigo === 'PENDIENTE')
@@ -462,6 +481,8 @@ export function IncidenciasModule() {
 
     if (activeTab === 'por_aplicar') {
       filtered = filtered.filter(p => !p.aplicado)
+    } else if (activeTab === 'aplicadas') {
+      filtered = filtered.filter(p => p.aplicado)
     }
 
     if (penPatenteFilter.length > 0) {
@@ -863,6 +884,31 @@ export function IncidenciasModule() {
       )
     },
     {
+      id: 'fraccionado',
+      header: 'Fracc.',
+      cell: ({ row }) => {
+        const fracInfo = fraccionamientoMap.get(row.original.id)
+        if (!fracInfo) {
+          return <span className="text-gray-400">-</span>
+        }
+        const pendientes = fracInfo.cuotas_pendientes
+        const total = fracInfo.total_cuotas
+        return (
+          <span 
+            className="dt-badge" 
+            style={{ 
+              backgroundColor: pendientes > 0 ? '#FEF3C7' : '#DCFCE7', 
+              color: pendientes > 0 ? '#92400E' : '#166534',
+              fontSize: '11px'
+            }}
+            title={pendientes > 0 ? `${pendientes} cuotas pendientes de ${total}` : 'Todas las cuotas aplicadas'}
+          >
+            {pendientes > 0 ? `${pendientes}/${total} pend.` : `${total} cuotas`}
+          </span>
+        )
+      }
+    },
+    {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
@@ -895,7 +941,7 @@ export function IncidenciasModule() {
         </div>
       )
     }
-  ], [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId, canDelete])
+  ], [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId, canDelete, fraccionamientoMap])
 
   function handleNuevaIncidencia() {
     const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')
@@ -1768,6 +1814,7 @@ export function IncidenciasModule() {
 
   // Contadores para tabs
   const countPorAplicar = penalidades.filter(p => !p.aplicado).length
+  const countAplicadas = penalidades.filter(p => p.aplicado).length
 
   return (
     <div className="incidencias-module">
@@ -1830,17 +1877,26 @@ export function IncidenciasModule() {
               </span>
             )}
           </button>
+          {/* Tab Aplicadas - muestra penalidades ya aplicadas */}
+          <button
+            className={`incidencias-tab ${activeTab === 'aplicadas' ? 'active' : ''}`}
+            onClick={() => setActiveTab('aplicadas')}
+          >
+            <CheckCircle size={16} />
+            Aplicadas
+            <span className="tab-badge">{countAplicadas}</span>
+          </button>
         </div>
         <div className="tabs-actions">
           <button
             className="btn-secondary"
-            onClick={activeTab === 'por_aplicar' ? handleExportarPenalidades : handleExportarIncidencias}
+            onClick={activeTab === 'por_aplicar' || activeTab === 'aplicadas' ? handleExportarPenalidades : handleExportarIncidencias}
             title="Exportar a Excel"
           >
             <Download size={16} />
             Exportar
           </button>
-          {activeTab !== 'por_aplicar' && (
+          {activeTab !== 'por_aplicar' && activeTab !== 'aplicadas' && (
             <button
               className="btn-primary"
               onClick={handleNuevaIncidencia}
@@ -2151,6 +2207,98 @@ export function IncidenciasModule() {
             emptyIcon={<Shield size={48} />}
             emptyTitle={hayFiltrosPenalidadesActivos ? "Sin resultados con los filtros actuales" : "Sin cobros/descuentos pendientes"}
             emptyDescription={hayFiltrosPenalidadesActivos ? "Intenta limpiar los filtros para ver todos los registros" : "Los cobros generados desde incidencias aparecerán aquí"}
+            pageSize={100}
+            pageSizeOptions={[10, 20, 50, 100]}
+          />
+        </>
+      )}
+
+      {/* Aplicadas Tab - Cobros/Descuentos ya aplicados */}
+      {activeTab === 'aplicadas' && (
+        <>
+          {/* Stats - aplicados */}
+          <div className="incidencias-stats">
+            <div className="stats-grid">
+              <div className="stat-card">
+                <CheckCircle size={20} className="stat-icon" style={{ color: '#16a34a' }} />
+                <div className="stat-content">
+                  <span className="stat-value">{penalidadesFiltradas.length}</span>
+                  <span className="stat-label">Aplicadas</span>
+                </div>
+              </div>
+              <div className="stat-card">
+                <DollarSign size={20} className="stat-icon" style={{ color: '#16a34a' }} />
+                <div className="stat-content">
+                  <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
+                  <span className="stat-label">$ Aplicado</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Barra de filtros activos con estilo de chips */}
+          {hayFiltrosPenalidadesActivos && (
+            <div className="dt-active-filters">
+              <div className="dt-active-filters-label">
+                <Filter size={14} />
+                <span>Filtros activos</span>
+              </div>
+              <div className="dt-active-filters-list">
+                {penPatenteFilter.map(val => (
+                  <div key={`patente-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Patente:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenPatenteFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {penConductorFilter.map(val => (
+                  <div key={`conductor-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Conductor:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenConductorFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {penTipoFilter.map(val => (
+                  <div key={`tipo-${val}`} className="dt-active-filter-chip">
+                    <span className="dt-chip-label">Tipo:</span>
+                    <span className="dt-chip-value">{val}</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => setPenTipoFilter(prev => prev.filter(v => v !== val))}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="dt-clear-all-filters" onClick={limpiarFiltrosPenalidades}>
+                Limpiar todo
+              </button>
+            </div>
+          )}
+
+          {/* Tabla Penalidades Aplicadas con DataTable */}
+          <DataTable
+            data={penalidadesFiltradas}
+            columns={penalidadesColumns}
+            loading={loading}
+            searchPlaceholder="Buscar por patente, conductor..."
+            emptyIcon={<CheckCircle size={48} />}
+            emptyTitle={hayFiltrosPenalidadesActivos ? "Sin resultados con los filtros actuales" : "Sin cobros aplicados"}
+            emptyDescription={hayFiltrosPenalidadesActivos ? "Intenta limpiar los filtros para ver todos los registros" : "Los cobros que se apliquen aparecerán aquí"}
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
           />
