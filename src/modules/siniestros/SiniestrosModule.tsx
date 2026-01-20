@@ -283,6 +283,8 @@ export function SiniestrosModule() {
     if (estadoFilter.length > 0) {
       filtered = filtered.filter(s => estadoFilter.includes(s.estado_nombre || ''))
     }
+    
+    //Prueba de cambio
 
     return filtered
   }, [siniestros, patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter])
