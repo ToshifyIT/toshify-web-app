@@ -173,6 +173,22 @@ export function GarantiasTab() {
       return
     }
 
+    // Generar opciones de semana
+    const hoy = new Date()
+    const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
+    const anioActual = hoy.getFullYear()
+    
+    let semanaOptions = ''
+    let sem = semanaActual
+    let anio = anioActual
+    for (let i = 0; i < 8; i++) {
+      const selected = i === 0 ? 'selected' : ''
+      const label = i === 0 ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
+      semanaOptions += `<option value="${sem}-${anio}" ${selected}>${label}</option>`
+      sem++
+      if (sem > 52) { sem = 1; anio++ }
+    }
+
     const { value: formValues } = await Swal.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Agregar Garantía</span>',
       html: `
@@ -183,20 +199,30 @@ export function GarantiasTab() {
             <input type="hidden" id="swal-conductor" value="">
             <div id="swal-conductor-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 9999;"></div>
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Tipo de Alquiler:</label>
-            <select id="swal-tipo" class="swal2-select" style="width: 100%; font-size: 14px;">
-              <option value="CARGO">A CARGO</option>
-              <option value="TURNO">TURNO</option>
-            </select>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Tipo de Alquiler:</label>
+              <select id="swal-tipo" class="swal2-select" style="width: 100%; font-size: 14px; padding: 8px;">
+                <option value="CARGO">A CARGO</option>
+                <option value="TURNO">TURNO</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Semana Inicio:</label>
+              <select id="swal-semana" class="swal2-select" style="width: 100%; font-size: 14px; padding: 8px;">
+                ${semanaOptions}
+              </select>
+            </div>
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Monto Total Garantía:</label>
-            <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${FACTURACION_CONFIG.GARANTIA_TOTAL_CARGO}">
-          </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Cuotas Totales:</label>
-            <input id="swal-cuotas" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${FACTURACION_CONFIG.GARANTIA_CUOTAS_CARGO}">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Monto Total:</label>
+              <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${FACTURACION_CONFIG.GARANTIA_TOTAL_CARGO}">
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Cuotas:</label>
+              <input id="swal-cuotas" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${FACTURACION_CONFIG.GARANTIA_CUOTAS_CARGO}">
+            </div>
           </div>
         </div>
       `,
@@ -265,6 +291,7 @@ export function GarantiasTab() {
       preConfirm: () => {
         const conductorId = (document.getElementById('swal-conductor') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
+        const semanaValue = (document.getElementById('swal-semana') as HTMLSelectElement).value
         const monto = parseFloat((document.getElementById('swal-monto') as HTMLInputElement).value)
         const cuotas = parseInt((document.getElementById('swal-cuotas') as HTMLInputElement).value)
 
@@ -281,13 +308,16 @@ export function GarantiasTab() {
           return false
         }
 
+        const [semanaInicio, anioInicio] = semanaValue.split('-').map(Number)
         const conductor = conductoresDisponibles.find((c) => c.id === conductorId)
         return { 
           conductorId, 
           conductorNombre: conductor ? `${conductor.apellidos}, ${conductor.nombres}` : '',
           tipo,
           monto,
-          cuotas
+          cuotas,
+          semanaInicio,
+          anioInicio
         }
       }
     })
@@ -303,7 +333,9 @@ export function GarantiasTab() {
         monto_pagado: 0,
         cuotas_totales: formValues.cuotas,
         cuotas_pagadas: 0,
-        estado: 'pendiente'
+        estado: 'pendiente',
+        semana_inicio: formValues.semanaInicio,
+        anio_inicio: formValues.anioInicio
       })
 
       if (error) throw error
