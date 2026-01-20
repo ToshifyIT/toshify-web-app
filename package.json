@@ -27,7 +27,8 @@
     "sync:wialon:bitacora:once": "npx tsx scripts/sync-wialon-bitacora-realtime.ts --once",
     "deploy:cron": "bash scripts/deploy-cron-jobs.sh",
     "scheduler": "npx tsx scripts/scheduler-daemon.ts",
-    "scheduler:pm2": "pm2 start scripts/scheduler-daemon.ts --name toshify-scheduler --interpreter npx --interpreter-args tsx"
+    "scheduler:pm2": "pm2 start scripts/scheduler-daemon.ts --name toshify-scheduler --interpreter npx --interpreter-args tsx",
+    "prepare": "husky"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",
@@ -48,6 +49,15 @@
     "sweetalert2": "^11.26.3",
     "zod": "^4.1.13"
   },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "bash -c 'npx tsc --noEmit'"
+    ],
+    "*.{js,jsx}": [
+      "eslint --fix"
+    ]
+  },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@tailwindcss/postcss": "^4.1.16",
@@ -63,6 +73,8 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "pg": "^8.16.3",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.16",
