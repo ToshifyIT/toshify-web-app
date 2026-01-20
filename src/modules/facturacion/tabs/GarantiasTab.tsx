@@ -990,23 +990,71 @@ export function GarantiasTab() {
 
   return (
     <>
-      {/* Sub-tabs */}
-      <div className="fact-subtabs">
+      {/* Sub-tabs de navegación */}
+      <div className="fact-subtabs" style={{ 
+        display: 'flex', 
+        gap: '4px', 
+        marginBottom: '16px',
+        borderBottom: '1px solid #E5E7EB',
+        paddingBottom: '0'
+      }}>
         <button
-          className={`fact-subtab ${activeSubTab === 'garantias' ? 'active' : ''}`}
+          className={`fact-subtab ${activeSubTab === 'garantias' ? 'fact-subtab-active' : ''}`}
           onClick={() => setActiveSubTab('garantias')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '10px 16px',
+            border: 'none',
+            background: activeSubTab === 'garantias' ? '#DC2626' : 'transparent',
+            color: activeSubTab === 'garantias' ? 'white' : '#6B7280',
+            borderRadius: '6px 6px 0 0',
+            cursor: 'pointer',
+            fontWeight: 500,
+            fontSize: '13px',
+            transition: 'all 0.15s'
+          }}
         >
           <Shield size={16} />
           Garantías
-          <span className="fact-subtab-count">{garantias.length}</span>
+          <span style={{
+            background: activeSubTab === 'garantias' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
+            padding: '2px 6px',
+            borderRadius: '10px',
+            fontSize: '11px'
+          }}>
+            {garantias.length}
+          </span>
         </button>
         <button
-          className={`fact-subtab ${activeSubTab === 'movimientos' ? 'active' : ''}`}
+          className={`fact-subtab ${activeSubTab === 'movimientos' ? 'fact-subtab-active' : ''}`}
           onClick={() => setActiveSubTab('movimientos')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '10px 16px',
+            border: 'none',
+            background: activeSubTab === 'movimientos' ? '#DC2626' : 'transparent',
+            color: activeSubTab === 'movimientos' ? 'white' : '#6B7280',
+            borderRadius: '6px 6px 0 0',
+            cursor: 'pointer',
+            fontWeight: 500,
+            fontSize: '13px',
+            transition: 'all 0.15s'
+          }}
         >
           <Receipt size={16} />
           Movimientos
-          <span className="fact-subtab-count">{todosLosPagos.length}</span>
+          <span style={{
+            background: activeSubTab === 'movimientos' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
+            padding: '2px 6px',
+            borderRadius: '10px',
+            fontSize: '11px'
+          }}>
+            {todosLosPagos.length}
+          </span>
         </button>
       </div>
 
