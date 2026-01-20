@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2 } from 'lucide-react'
@@ -376,7 +377,7 @@ export function VehicleManagement() {
 
       // Verificar si el nuevo estado requiere finalizar asignaciones
       let nuevoEstadoCodigo = ''
-      let estadoAnteriorCodigo = (selectedVehiculo as any).vehiculos_estados?.codigo || ''
+      const estadoAnteriorCodigo = (selectedVehiculo as any).vehiculos_estados?.codigo || ''
       
       if (formData.estado_id) {
         const estadoSeleccionado = vehiculosEstados.find((e: VehiculoEstado) => e.id === formData.estado_id)

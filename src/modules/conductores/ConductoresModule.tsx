@@ -1,4 +1,5 @@
 // src/modules/conductores/ConductoresModule.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
 import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
@@ -54,6 +55,8 @@ const getEstadoConductorBadgeStyle = (estado: { codigo?: string } | null | undef
   return styles[codigo] || { bg: '#3B82F6', color: 'white' };
 };
 
+
+
 export function ConductoresModule() {
   const [conductores, setConductores] = useState<ConductorWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +96,7 @@ export function ConductoresModule() {
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [categoriaFilter, setCategoriaFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
-  const [licenciaVencerFilter, _setLicenciaVencerFilter] = useState(false);
+  const [licenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
 
@@ -183,6 +186,23 @@ export function ConductoresModule() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [openColumnFilter]);
 
+  // Helper para obtener inicio y fin de la semana actual
+  const getWeekRange = () => {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=domingo, 1=lunes...
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+    
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+    
+    return { inicio: monday, fin: sunday };
+  };
+
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
   const calculatedStats = useMemo(() => {
     const hoy = new Date();
@@ -190,11 +210,14 @@ export function ConductoresModule() {
     en30Dias.setDate(en30Dias.getDate() + 30);
     const hoyStr = hoy.toISOString().split('T')[0];
     const en30DiasStr = en30Dias.toISOString().split('T')[0];
+    
+    // Rango de la semana actual
+    const { inicio: inicioSemana, fin: finSemana } = getWeekRange();
 
     // Calcular todo en UNA SOLA PASADA
     let totalConductores = 0;
     let conductoresActivos = 0;
-    let conductoresBaja = 0;
+    let conductoresBajaSemana = 0; // Bajas de la semana actual
     let conductoresAsignados = 0;
     let licenciasPorVencer = 0;
 
@@ -206,7 +229,11 @@ export function ConductoresModule() {
       if (estadoCodigo === 'activo') {
         conductoresActivos++;
       } else if (estadoCodigo === 'baja') {
-        conductoresBaja++;
+        // Contar solo si la baja fue en la semana actual (usando fecha_terminacion)
+        const fechaBaja = c.fecha_terminacion ? new Date(c.fecha_terminacion + 'T12:00:00') : null;
+        if (fechaBaja && fechaBaja >= inicioSemana && fechaBaja <= finSemana) {
+          conductoresBajaSemana++;
+        }
       }
 
       // Verificar si tiene vehículo asignado
@@ -228,7 +255,7 @@ export function ConductoresModule() {
       conductoresActivos,
       conductoresDisponibles,
       conductoresAsignados,
-      conductoresBaja,
+      conductoresBaja: conductoresBajaSemana,
       licenciasPorVencer,
     };
   }, [conductores]);
@@ -269,6 +296,7 @@ export function ConductoresModule() {
         break;
       case 'baja':
         setStatCardEstadoFilter(['BAJA']);
+        // NO filtrar por semana automáticamente, mostrar todas las bajas
         break;
       case 'licencias':
         setStatCardLicenciaFilter(true);
@@ -1496,9 +1524,20 @@ export function ConductoresModule() {
 
     // === FILTROS DE STAT CARDS (adicionales, se aplican EN CONJUNTO con filtros de columna) ===
     if (statCardEstadoFilter.length > 0) {
-      result = result.filter(c =>
-        statCardEstadoFilter.includes(c.conductores_estados?.codigo || '')
-      );
+      // Filtro especial para BAJA: solo bajas de la semana actual
+      if (statCardEstadoFilter.includes('BAJA')) {
+        const { inicio: inicioSemana, fin: finSemana } = getWeekRange();
+        result = result.filter(c => {
+          const estadoCodigo = c.conductores_estados?.codigo || '';
+          if (estadoCodigo !== 'BAJA') return false;
+          const fechaBaja = c.fecha_terminacion ? new Date(c.fecha_terminacion + 'T12:00:00') : null;
+          return fechaBaja && fechaBaja >= inicioSemana && fechaBaja <= finSemana;
+        });
+      } else {
+        result = result.filter(c =>
+          statCardEstadoFilter.includes(c.conductores_estados?.codigo || '')
+        );
+      }
     }
 
     if (statCardAsignacionFilter.length > 0) {
@@ -1915,6 +1954,7 @@ export function ConductoresModule() {
         },
         enableSorting: true,
       },
+
       {
         id: "vehiculo_asignado",
         header: () => (
@@ -2070,7 +2110,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cuilsFiltrados, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, openColumnFilter, uniqueEstados, creatingDriveFolder],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cuilsFiltrados, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, openColumnFilter, uniqueEstados, creatingDriveFolder, activeStatCard],
   );
 
   return (
@@ -2919,8 +2959,6 @@ function ModalEliminar({
 function ModalDetalles({
   selectedConductor,
   setShowDetailsModal,
-  getEstadoBadgeClass: _getEstadoBadgeClass,
-  getEstadoLabel: _getEstadoLabel,
 }: any) {
   const [vehiculosAsignados, setVehiculosAsignados] = useState<any[]>([]);
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);

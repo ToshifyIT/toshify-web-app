@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy package files first (better cache)
 COPY package*.json ./
 
-# Install ALL dependencies for build
-RUN npm ci
+# Install ALL dependencies for build (ignore scripts to skip husky in Docker)
+RUN npm ci --ignore-scripts
 
 # Build arguments for environment variables
 ARG VITE_SUPABASE_URL
@@ -48,7 +48,7 @@ WORKDIR /app
 
 # Copy package files and install production dependencies only
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
