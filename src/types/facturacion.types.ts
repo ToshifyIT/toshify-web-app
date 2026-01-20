@@ -170,6 +170,8 @@ export interface SaldoConductor {
   ultima_actualizacion: string | null
   created_at: string
   updated_at: string
+  // Estado del conductor (desde join)
+  conductor_estado?: string | null
 }
 
 export interface AbonoConductor {
@@ -179,6 +181,8 @@ export interface AbonoConductor {
   monto: number
   concepto: string
   referencia: string | null
+  semana: number | null
+  anio: number | null
   fecha_abono: string
   created_by: string | null
   created_by_name: string | null

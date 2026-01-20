@@ -22,6 +22,41 @@ interface Cuota {
   fecha_aplicacion: string | null
 }
 
+interface ConductorRelation {
+  id: string
+  nombres: string
+  apellidos: string
+}
+
+interface CobroSaldoRow {
+  id: string
+  conductor_id: string
+  monto_total: number
+  monto_cuota: number
+  numero_cuota: number
+  semana: number
+  anio: number
+  descripcion: string | null
+  aplicado: boolean
+  fecha_aplicacion: string | null
+  total_cuotas: number
+  created_at: string
+  conductor: ConductorRelation | null
+}
+
+interface PenalidadRow {
+  id: string
+  monto: number
+  fraccionado: boolean
+  cantidad_cuotas: number
+  conductor_id: string | null
+  conductor_nombre: string | null
+  vehiculo_patente: string | null
+  fecha: string
+  observaciones: string | null
+  conductor: ConductorRelation | null
+}
+
 interface PenalidadFraccionada {
   id: string
   monto: number
@@ -33,6 +68,8 @@ interface PenalidadFraccionada {
   fecha: string
   observaciones: string | null
   cuotas: Cuota[]
+  semana_inicio: number | null
+  anio_inicio: number | null
   conductor?: {
     nombres: string
     apellidos: string
@@ -58,8 +95,8 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
     setLoading(true)
     try {
       // 1. Obtener penalidades fraccionadas con sus cuotas
-      const { data: penalidades, error: penError } = await (supabase
-        .from('penalidades') as any)
+      const { data: penalidades, error: penError } = await supabase
+        .from('penalidades')
         .select(`
           id,
           monto,
@@ -78,22 +115,30 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
       if (penError) throw penError
 
       // Obtener todas las cuotas de penalidades
-      const { data: cuotas, error: cuotasError } = await (supabase
-        .from('penalidades_cuotas') as any)
+      const { data: cuotas, error: cuotasError } = await supabase
+        .from('penalidades_cuotas')
         .select('*')
         .order('numero_cuota', { ascending: true })
       
       if (cuotasError) throw cuotasError
 
       // Mapear cuotas a cada penalidad
-      const cobrosConCuotas = (penalidades || []).map((pen: any) => ({
-        ...pen,
-        cuotas: (cuotas || []).filter((c: Cuota) => c.penalidad_id === pen.id),
-        conductor: pen.conductor ? {
-          ...pen.conductor,
-          nombre_completo: `${pen.conductor.nombres} ${pen.conductor.apellidos}`
-        } : null
-      }))
+      const cobrosConCuotas: PenalidadFraccionada[] = ((penalidades || []) as unknown as PenalidadRow[]).map((pen) => {
+        const cuotasPen = ((cuotas || []) as Cuota[]).filter((c) => c.penalidad_id === pen.id)
+        // Obtener semana/año de inicio desde la primera cuota
+        const primeraCuota = cuotasPen.length > 0 ? cuotasPen[0] : null
+        return {
+          ...pen,
+          cuotas: cuotasPen,
+          semana_inicio: primeraCuota?.semana || null,
+          anio_inicio: primeraCuota?.anio || null,
+          conductor: pen.conductor ? {
+            nombres: pen.conductor.nombres,
+            apellidos: pen.conductor.apellidos,
+            nombre_completo: `${pen.conductor.nombres} ${pen.conductor.apellidos}`
+          } : undefined
+        }
+      })
 
       // 2. Obtener cobros fraccionados de saldos iniciales
       const { data: cobrosSaldos, error: saldosError } = await supabase
@@ -118,8 +163,8 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
       if (saldosError) throw saldosError
 
       // Agrupar cobros_fraccionados por conductor
-      const cobrosPorConductor = new Map<string, any[]>()
-      ;(cobrosSaldos || []).forEach((c: any) => {
+      const cobrosPorConductor = new Map<string, CobroSaldoRow[]>()
+      ;((cobrosSaldos || []) as unknown as CobroSaldoRow[]).forEach((c) => {
         const key = c.conductor_id
         if (!cobrosPorConductor.has(key)) {
           cobrosPorConductor.set(key, [])
@@ -134,6 +179,10 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
         const primerCuota = cuotasSaldo[0]
         const conductor = primerCuota.conductor
         
+        // Obtener semana/año de inicio desde la primera cuota
+        const primeraCuotaSaldo = cuotasSaldo.reduce<CobroSaldoRow | null>((min, c) => 
+          !min || c.numero_cuota < min.numero_cuota ? c : min, null)
+        
         cobrosDesdesSaldos.push({
           id: `saldo-${conductorId}`,
           monto: primerCuota.monto_total,
@@ -144,7 +193,9 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           vehiculo_patente: null,
           fecha: primerCuota.created_at,
           observaciones: primerCuota.descripcion || 'Saldo inicial fraccionado',
-          cuotas: cuotasSaldo.map((c: any) => ({
+          semana_inicio: primeraCuotaSaldo?.semana || null,
+          anio_inicio: primeraCuotaSaldo?.anio || null,
+          cuotas: cuotasSaldo.map((c) => ({
             id: c.id,
             penalidad_id: `saldo-${conductorId}`,
             numero_cuota: c.numero_cuota,
@@ -179,13 +230,13 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
     }))
   }
 
-  const calcularProgreso = (cuotas: any[] | undefined) => {
+  const calcularProgreso = (cuotas: Cuota[] | undefined) => {
     if (!cuotas || cuotas.length === 0) return 0
     const aplicadas = cuotas.filter(c => c.aplicado).length
     return Math.round((aplicadas / cuotas.length) * 100)
   }
 
-  const obtenerProximaCuota = (cuotas: any[] | undefined) => {
+  const obtenerProximaCuota = (cuotas: Cuota[] | undefined) => {
     if (!cuotas) return null
     return cuotas.find(c => !c.aplicado)
   }
@@ -253,6 +304,16 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                       />
                     </div>
                     <span className="porcentaje">{progreso}%</span>
+                  </div>
+
+                  <div className="desde-semana" style={{ minWidth: '120px', textAlign: 'center' }}>
+                    <span className="label" style={{ display: 'block', fontSize: '11px', color: '#666' }}>Desde Semana</span>
+                    <span className="valor" style={{ fontWeight: 'bold', color: '#1976d2' }}>
+                      {cobro.semana_inicio && cobro.anio_inicio 
+                        ? `${cobro.semana_inicio}/${cobro.anio_inicio}`
+                        : '-'
+                      }
+                    </span>
                   </div>
 
                   <div className="proxima-cuota">
