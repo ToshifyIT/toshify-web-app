@@ -19,6 +19,7 @@ import {
   type SortingState,
   type Table,
   type ExpandedState,
+  type FilterFn,
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronRight, Check, Filter, Calendar } from "lucide-react";
 import "./DataTable.css";
@@ -68,6 +69,8 @@ export interface DataTableProps<T> {
   externalFilters?: Array<{ id: string; label: string; onClear: () => void }>;
   /** Callback para limpiar todos los filtros (internos y externos) */
   onClearAllFilters?: () => void;
+  /** Función de filtrado global personalizada */
+  globalFilterFn?: FilterFn<T>;
 }
 
 export function DataTable<T>({
@@ -91,6 +94,7 @@ export function DataTable<T>({
   disableAutoFilters = false,
   externalFilters = [],
   onClearAllFilters,
+  globalFilterFn: customGlobalFilterFn,
 }: DataTableProps<T>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -607,7 +611,7 @@ export function DataTable<T>({
 
   // Función de filtro global que busca en TODOS los valores string del objeto
   // Optimizada: concatena todo en un string y busca
-  const globalFilterFn = useCallback((row: { original: T }, _columnId: string, filterValue: unknown) => {
+  const defaultGlobalFilterFn = useCallback((row: { original: T }, _columnId: string, filterValue: unknown) => {
     // Si no hay valor de filtro, mostrar todas las filas
     if (!filterValue || typeof filterValue !== 'string' || filterValue.trim() === '') return true
     
@@ -654,7 +658,7 @@ export function DataTable<T>({
     onSortingChange: setSorting,
     onGlobalFilterChange: setDebouncedSearch,
     onExpandedChange: setExpanded,
-    globalFilterFn,
+    globalFilterFn: customGlobalFilterFn || defaultGlobalFilterFn,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
