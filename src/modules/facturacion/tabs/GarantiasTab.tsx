@@ -154,11 +154,11 @@ export function GarantiasTab() {
   // ========== FUNCIONES PARA GARANTÍAS ==========
 
   async function agregarGarantia() {
-    // Cargar conductores activos que no tienen garantía
+    // Cargar conductores que no tienen garantía (excluir dados de baja)
     const { data: conductores, error: errorConductores } = await supabase
       .from('conductores')
       .select('id, nombres, apellidos, estado')
-      .in('estado', ['activo', 'Activo', 'ACTIVO'])
+      .not('estado', 'in', '("baja","Baja","BAJA","inactivo","Inactivo","INACTIVO")')
       .order('apellidos')
 
     console.log('Conductores encontrados:', conductores?.length, conductores, errorConductores)
@@ -173,9 +173,9 @@ export function GarantiasTab() {
     if (conductoresDisponibles.length === 0) {
       // Si no hay conductores, mostrar mensaje más específico
       if (!conductores || conductores.length === 0) {
-        Swal.fire('Info', 'No se encontraron conductores activos en el sistema', 'info')
+        Swal.fire('Info', 'No se encontraron conductores en el sistema', 'info')
       } else {
-        Swal.fire('Info', 'Todos los conductores activos ya tienen garantía registrada', 'info')
+        Swal.fire('Info', 'Todos los conductores ya tienen garantía registrada', 'info')
       }
       return
     }
