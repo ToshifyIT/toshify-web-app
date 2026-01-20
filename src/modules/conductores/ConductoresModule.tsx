@@ -186,8 +186,8 @@ export function ConductoresModule() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [openColumnFilter]);
 
-  // Helper para obtener inicio y fin de la semana actual
-  const getWeekRange = () => {
+  // Helper para obtener inicio y fin de la semana actual + semana anterior (para bajas)
+  const getWeekRange = (includeLastWeek = false) => {
     const now = new Date();
     const dayOfWeek = now.getDay(); // 0=domingo, 1=lunes...
     const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -200,7 +200,10 @@ export function ConductoresModule() {
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
     
-    return { inicio: monday, fin: sunday };
+    // Si incluye semana anterior, retroceder 7 días el inicio
+    const inicio = includeLastWeek ? new Date(monday.getTime() - 7 * 24 * 60 * 60 * 1000) : monday;
+    
+    return { inicio, fin: sunday };
   };
 
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
@@ -211,8 +214,8 @@ export function ConductoresModule() {
     const hoyStr = hoy.toISOString().split('T')[0];
     const en30DiasStr = en30Dias.toISOString().split('T')[0];
     
-    // Rango de la semana actual
-    const { inicio: inicioSemana, fin: finSemana } = getWeekRange();
+    // Rango de la semana actual + semana anterior (para bajas)
+    const { inicio: inicioSemana, fin: finSemana } = getWeekRange(true);
 
     // Calcular todo en UNA SOLA PASADA
     let totalConductores = 0;
@@ -229,10 +232,12 @@ export function ConductoresModule() {
       if (estadoCodigo === 'activo') {
         conductoresActivos++;
       } else if (estadoCodigo === 'baja') {
-        // Contar solo si la baja fue en la semana actual (usando fecha_terminacion)
-        const fechaBaja = c.fecha_terminacion ? new Date(c.fecha_terminacion + 'T12:00:00') : null;
-        if (fechaBaja && fechaBaja >= inicioSemana && fechaBaja <= finSemana) {
-          conductoresBajaSemana++;
+        // Contar solo si tiene fecha_terminacion en la semana actual
+        if (c.fecha_terminacion) {
+          const fechaBaja = new Date(c.fecha_terminacion + 'T12:00:00');
+          if (fechaBaja >= inicioSemana && fechaBaja <= finSemana) {
+            conductoresBajaSemana++;
+          }
         }
       }
 
@@ -402,8 +407,11 @@ export function ConductoresModule() {
             licencia_vencimiento,
             telefono_contacto,
             fecha_contratacion,
+            fecha_terminacion,
+            motivo_baja,
             estado_id,
             created_at,
+            updated_at,
             drive_folder_url,
             conductores_estados (id, codigo, descripcion),
             conductores_licencias_categorias (
@@ -1524,14 +1532,16 @@ export function ConductoresModule() {
 
     // === FILTROS DE STAT CARDS (adicionales, se aplican EN CONJUNTO con filtros de columna) ===
     if (statCardEstadoFilter.length > 0) {
-      // Filtro especial para BAJA: solo bajas de la semana actual
+      // Filtro especial para BAJA: solo bajas con fecha_terminacion en semana actual o anterior
       if (statCardEstadoFilter.includes('BAJA')) {
-        const { inicio: inicioSemana, fin: finSemana } = getWeekRange();
+        const { inicio: inicioSemana, fin: finSemana } = getWeekRange(true);
         result = result.filter(c => {
-          const estadoCodigo = c.conductores_estados?.codigo || '';
+          const estadoCodigo = c.conductores_estados?.codigo?.toUpperCase() || '';
           if (estadoCodigo !== 'BAJA') return false;
-          const fechaBaja = c.fecha_terminacion ? new Date(c.fecha_terminacion + 'T12:00:00') : null;
-          return fechaBaja && fechaBaja >= inicioSemana && fechaBaja <= finSemana;
+          // Solo contar si tiene fecha_terminacion
+          if (!c.fecha_terminacion) return false;
+          const fechaBaja = new Date(c.fecha_terminacion + 'T12:00:00');
+          return fechaBaja >= inicioSemana && fechaBaja <= finSemana;
         });
       } else {
         result = result.filter(c =>
@@ -3268,7 +3278,7 @@ function ModalDetalles({
                 <label className="detail-label">FECHA DE TERMINACIÓN</label>
                 <div className="detail-value">
                   {selectedConductor.fecha_terminacion
-                    ? new Date(selectedConductor.fecha_terminacion).toLocaleDateString("es-AR")
+                    ? new Date(selectedConductor.fecha_terminacion + 'T12:00:00').toLocaleDateString("es-AR")
                     : "N/A"}
                 </div>
               </div>
