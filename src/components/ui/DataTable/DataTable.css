@@ -758,6 +758,16 @@
   background: rgba(59, 130, 246, 0.1);
 }
 
+.dt-btn-action.dt-btn-danger {
+  color: var(--color-danger, #ef4444);
+}
+
+.dt-btn-action.dt-btn-danger:hover:not(:disabled) {
+  border-color: var(--color-danger, #ef4444);
+  color: #fff;
+  background: var(--color-danger, #ef4444);
+}
+
 /* Badge */
 .dt-badge {
   display: inline-block;

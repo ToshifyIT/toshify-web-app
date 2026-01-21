@@ -24,9 +24,12 @@ import {
   Car,
   Download,
   Filter,
-  Check,
   Calendar,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Send,
+  Square,
+  CheckSquare,
+  Ban
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
@@ -44,8 +47,10 @@ import type {
 } from '../../types/incidencias.types'
 import './IncidenciasModule.css'
 import { PenalidadForm } from '../../components/shared/PenalidadForm'
+import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
+import type { DateRange } from '../../components/ui/DateRangeSelector'
 
-type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar' | 'aplicadas'
+type TabType = 'logistica' | 'cobro' | 'penalidades' | 'por_aplicar' | 'aplicadas' | 'rechazados'
 
 // Helper para mapear rol de usuario a área (para incidencias)
 function getAreaPorRol(roleName: string | undefined | null): string {
@@ -122,9 +127,17 @@ export function IncidenciasModule() {
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [areaFilter, setAreaFilter] = useState<string[]>([])
+  
+  // Filtro especial: Solo pendientes de enviar a facturación
+  const [soloPendientesEnviar, setSoloPendientesEnviar] = useState(false)
+  
+  // Filtros de rango de fecha
+  const [dateRangeLogistica, setDateRangeLogistica] = useState<DateRange | null>(null)
+  const [dateRangeCobro, setDateRangeCobro] = useState<DateRange | null>(null)
+  const [dateRangePenalidades, setDateRangePenalidades] = useState<DateRange | null>(null)
 
   // Helper: ¿Hay filtros activos en incidencias?
-  const hayFiltrosIncidenciasActivos = patenteFilter.length > 0 || conductorFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || areaFilter.length > 0
+  const hayFiltrosIncidenciasActivos = patenteFilter.length > 0 || conductorFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || areaFilter.length > 0 || soloPendientesEnviar
 
   // Limpiar todos los filtros de incidencias
   function limpiarFiltrosIncidencias() {
@@ -133,6 +146,7 @@ export function IncidenciasModule() {
     setEstadoFilter([])
     setTurnoFilter([])
     setAreaFilter([])
+    setSoloPendientesEnviar(false)
   }
 
   // Filtros - Penalidades
@@ -152,6 +166,11 @@ export function IncidenciasModule() {
     setPenAplicadoFilter([])
   }
 
+  // Selección masiva para envío a facturación
+  const [modoSeleccionMasiva, setModoSeleccionMasiva] = useState(false)
+  const [incidenciasSeleccionadas, setIncidenciasSeleccionadas] = useState<Set<string>>(new Set())
+  const [enviandoMasivo, setEnviandoMasivo] = useState(false)
+
   // Modal
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create')
@@ -168,6 +187,16 @@ export function IncidenciasModule() {
   const [anioInicio, setAnioInicio] = useState<number>(new Date().getFullYear())
   const [periodosDisponibles, setPeriodosDisponibles] = useState<Array<{semana: number, anio: number, label: string}>>([])
   const [aplicandoCobro, setAplicandoCobro] = useState(false)
+  
+  // Modal de rechazo
+  const [showRechazoModal, setShowRechazoModal] = useState(false)
+  const [penalidadRechazar, setPenalidadRechazar] = useState<PenalidadCompleta | null>(null)
+  const [motivoRechazo, setMotivoRechazo] = useState('')
+  const [rechazando, setRechazando] = useState(false)
+  
+  // Historial de rechazos para el detalle
+  const [historialRechazos, setHistorialRechazos] = useState<Array<{id: string; motivo: string; rechazado_por_nombre: string; created_at: string}>>([])
+  const [loadingHistorial, setLoadingHistorial] = useState(false)
 
   // Modal de reasignar semana
   const [showReasignarModal, setShowReasignarModal] = useState(false)
@@ -308,7 +337,9 @@ export function IncidenciasModule() {
         conductoresRes,
         incidenciasRes,
         penalidadesRes,
-        incidenciasTipoRes
+        incidenciasTipoRes,
+        penalidadesTableRes,
+        rechazosRes
       ] = await Promise.all([
         (supabase.from('incidencias_estados' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('*').eq('is_active', true).order('orden'),
@@ -318,7 +349,11 @@ export function IncidenciasModule() {
         (supabase.from('v_incidencias_completas' as any) as any).select('*').order('fecha', { ascending: false }),
         (supabase.from('v_penalidades_completas' as any) as any).select('*').order('fecha', { ascending: false }),
         // Obtener campos adicionales de la tabla incidencias (tipo, monto)
-        (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id, monto')
+        (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id, monto'),
+        // Obtener campos frescos de la tabla penalidades (aplicado, rechazado, incidencia_id)
+        (supabase.from('penalidades' as any) as any).select('id, incidencia_id, aplicado, rechazado, fecha_rechazo, motivo_rechazo'),
+        // Obtener historial de rechazos
+        (supabase.from('penalidades_rechazos' as any) as any).select('penalidad_id, motivo, rechazado_por, created_at').order('created_at', { ascending: false })
       ])
 
       setEstados(estadosRes.data || [])
@@ -344,12 +379,42 @@ export function IncidenciasModule() {
         }
       })
       setIncidencias(incidenciasConTipo)
-      const penData = penalidadesRes.data || []
-      console.log('=== DEBUG PENALIDADES ===')
-      console.log('Total penalidades cargadas:', penData.length)
-      console.log('Penalidades con aplicado=false:', penData.filter((p: any) => !p.aplicado).length)
-      console.log('Penalidades con aplicado=true:', penData.filter((p: any) => p.aplicado).length)
-      console.log('Primeras 5 penalidades:', penData.slice(0, 5).map((p: any) => ({ id: p.id, aplicado: p.aplicado, monto: p.monto, incidencia_id: p.incidencia_id })))
+      
+      // Combinar datos de la vista con datos frescos de la tabla penalidades
+      const penalidadTableDataMap = new Map<string, { incidencia_id: string | null; aplicado: boolean; rechazado: boolean; fecha_rechazo: string | null; motivo_rechazo: string | null }>()
+      for (const p of (penalidadesTableRes.data || [])) {
+        penalidadTableDataMap.set(p.id, { 
+          incidencia_id: p.incidencia_id || null,
+          aplicado: p.aplicado ?? false,
+          rechazado: p.rechazado ?? false, 
+          fecha_rechazo: p.fecha_rechazo, 
+          motivo_rechazo: p.motivo_rechazo 
+        })
+      }
+      
+      // Mapa de rechazos desde penalidades_rechazos (último rechazo por penalidad)
+      const rechazosMap = new Map<string, { motivo: string; fecha: string }>()
+      for (const r of (rechazosRes.data || [])) {
+        if (!rechazosMap.has(r.penalidad_id)) {
+          rechazosMap.set(r.penalidad_id, { motivo: r.motivo, fecha: r.created_at })
+        }
+      }
+      
+      const penData = (penalidadesRes.data || []).map((p: any) => {
+        const tableData = penalidadTableDataMap.get(p.id)
+        const rechazoHistorial = rechazosMap.get(p.id)
+        // Una penalidad está rechazada SOLO si tiene rechazado=true en la tabla
+        // El historial de rechazos es solo para mostrar el historial, no determina el estado actual
+        const estaRechazado = tableData?.rechazado ?? false
+        return {
+          ...p,
+          incidencia_id: tableData?.incidencia_id ?? p.incidencia_id ?? null,
+          aplicado: tableData?.aplicado ?? p.aplicado ?? false,
+          rechazado: estaRechazado,
+          fecha_rechazo: tableData?.fecha_rechazo || (estaRechazado ? rechazoHistorial?.fecha : null) || null,
+          motivo_rechazo: tableData?.motivo_rechazo || (estaRechazado ? rechazoHistorial?.motivo : null) || null
+        }
+      })
       setPenalidades(penData)
 
       // Cargar cuotas fraccionadas para saber qué penalidades tienen fraccionamiento
@@ -423,6 +488,14 @@ export function IncidenciasModule() {
   // Filtrar incidencias LOGÍSTICAS (sin tipo o tipo='logistica')
   const incidenciasLogisticas = useMemo(() => {
     let filtered = incidencias.filter(i => !i.tipo || i.tipo === 'logistica')
+    
+    // Filtro de fecha
+    if (dateRangeLogistica && dateRangeLogistica.type !== 'all') {
+      filtered = filtered.filter(i => {
+        if (!i.fecha) return false
+        return i.fecha >= dateRangeLogistica.startDate && i.fecha <= dateRangeLogistica.endDate
+      })
+    }
 
     if (patenteFilter.length > 0) {
       filtered = filtered.filter(i => patenteFilter.includes(i.patente_display || ''))
@@ -441,11 +514,28 @@ export function IncidenciasModule() {
     }
 
     return filtered
-  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter])
+  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, dateRangeLogistica])
 
   // Filtrar incidencias de COBRO (tipo='cobro')
   const incidenciasCobro = useMemo(() => {
     let filtered = incidencias.filter(i => i.tipo === 'cobro')
+    
+    // Filtro de fecha
+    if (dateRangeCobro && dateRangeCobro.type !== 'all') {
+      filtered = filtered.filter(i => {
+        if (!i.fecha) return false
+        return i.fecha >= dateRangeCobro.startDate && i.fecha <= dateRangeCobro.endDate
+      })
+    }
+    
+    // Filtro de pendientes de enviar a facturación
+    if (soloPendientesEnviar) {
+      filtered = filtered.filter(i => {
+        const penalidad = penalidades.find(p => p.incidencia_id === i.id)
+        // Puede enviarse si no tiene penalidad O si fue rechazada
+        return !penalidad || penalidad.rechazado === true
+      })
+    }
 
     if (patenteFilter.length > 0) {
       filtered = filtered.filter(i => patenteFilter.includes(i.patente_display || ''))
@@ -464,7 +554,129 @@ export function IncidenciasModule() {
     }
 
     return filtered
-  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter])
+  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, dateRangeCobro, soloPendientesEnviar, penalidades])
+
+  // Incidencias que pueden enviarse a facturación (no tienen penalidad o fue rechazada, y tienen monto)
+  const incidenciasEnviables = useMemo(() => {
+    return incidenciasCobro.filter(i => {
+      const penalidad = penalidades.find(p => p.incidencia_id === i.id)
+      const puedeEnviar = !penalidad || penalidad.rechazado === true
+      const tieneMonto = (i.monto || 0) > 0
+      return puedeEnviar && tieneMonto
+    })
+  }, [incidenciasCobro, penalidades])
+
+  // Handlers para selección masiva
+  const handleToggleSeleccion = (id: string) => {
+    setIncidenciasSeleccionadas(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return newSet
+    })
+  }
+
+  const handleSeleccionarTodas = () => {
+    setIncidenciasSeleccionadas(new Set(incidenciasEnviables.map(i => i.id)))
+  }
+
+  const handleDeseleccionarTodas = () => {
+    setIncidenciasSeleccionadas(new Set())
+  }
+
+  // Enviar seleccionadas a facturación
+  async function handleEnviarMasivo() {
+    if (incidenciasSeleccionadas.size === 0) return
+    
+    const seleccionadas = incidenciasCobro.filter(i => incidenciasSeleccionadas.has(i.id))
+    
+    const confirmResult = await Swal.fire({
+      icon: 'question',
+      title: 'Enviar a facturación',
+      html: `¿Confirmas enviar <strong>${seleccionadas.length}</strong> incidencias a facturación?<br><br>
+        <strong>Monto total:</strong> $${seleccionadas.reduce((sum, i) => sum + (i.monto || 0), 0).toLocaleString('es-AR')}`,
+      showCancelButton: true,
+      confirmButtonText: 'Enviar todas',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#10b981'
+    })
+    
+    if (!confirmResult.isConfirmed) return
+    
+    setEnviandoMasivo(true)
+    let enviados = 0
+    let errores = 0
+    
+    for (const incidencia of seleccionadas) {
+      try {
+        // Verificar si ya tiene penalidad (para reenvío)
+        const penalidadExistente = penalidades.find(p => p.incidencia_id === incidencia.id)
+        
+        if (penalidadExistente?.rechazado) {
+          // Reenvío - actualizar penalidad existente
+          const { error } = await (supabase.from('penalidades' as any) as any)
+            .update({
+              monto: incidencia.monto,
+              rechazado: false,
+              fecha_rechazo: null,
+              motivo_rechazo: null,
+              aplicado: false,
+              fecha_aplicacion: null
+            })
+            .eq('id', penalidadExistente.id)
+          if (error) throw error
+        } else {
+          // Nueva penalidad
+          const semana = getWeekNumber(incidencia.fecha || new Date().toISOString().split('T')[0])
+          const { error } = await (supabase.from('penalidades' as any) as any)
+            .insert({
+              incidencia_id: incidencia.id,
+              vehiculo_id: incidencia.vehiculo_id || null,
+              conductor_id: incidencia.conductor_id || null,
+              tipo_cobro_descuento_id: incidencia.tipo_cobro_descuento_id || null,
+              semana,
+              fecha: incidencia.fecha,
+              turno: incidencia.turno || null,
+              area_responsable: 'LOGISTICA',
+              detalle: 'Cobro por incidencia',
+              monto: incidencia.monto,
+              observaciones: incidencia.descripcion || '',
+              aplicado: false,
+              conductor_nombre: incidencia.conductor_display,
+              vehiculo_patente: incidencia.patente_display,
+              created_by: user?.id,
+              created_by_name: profile?.full_name || 'Sistema'
+            })
+          if (error) throw error
+        }
+        enviados++
+      } catch (error) {
+        console.error('Error enviando incidencia:', incidencia.id, error)
+        errores++
+      }
+    }
+    
+    setEnviandoMasivo(false)
+    setModoSeleccionMasiva(false)
+    setIncidenciasSeleccionadas(new Set())
+    
+    if (errores > 0) {
+      Swal.fire('Resultado', `Enviadas: ${enviados}, Errores: ${errores}`, 'warning')
+    } else {
+      Swal.fire({
+        icon: 'success',
+        title: 'Enviadas a facturación',
+        text: `${enviados} incidencias enviadas correctamente`,
+        timer: 2000,
+        showConfirmButton: false
+      })
+    }
+    
+    cargarDatos()
+  }
 
   // Incidencias filtradas según tab activo
   const incidenciasFiltradas = activeTab === 'logistica' ? incidenciasLogisticas : incidenciasCobro
@@ -519,9 +731,11 @@ export function IncidenciasModule() {
     let filtered = [...penalidades]
 
     if (activeTab === 'por_aplicar') {
-      filtered = filtered.filter(p => !p.aplicado)
+      filtered = filtered.filter(p => !p.aplicado && !p.rechazado)
     } else if (activeTab === 'aplicadas') {
-      filtered = filtered.filter(p => p.aplicado)
+      filtered = filtered.filter(p => p.aplicado && !p.rechazado)
+    } else if (activeTab === 'rechazados') {
+      filtered = filtered.filter(p => p.rechazado)
     }
 
     if (penPatenteFilter.length > 0) {
@@ -679,8 +893,33 @@ export function IncidenciasModule() {
   ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete])
 
   // Columnas específicas para incidencias de COBRO (incluye botón generar cobro/descuento)
-  const incidenciasCobroColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => [
-    {
+  const incidenciasCobroColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => {
+    const cols: ColumnDef<IncidenciaCompleta>[] = []
+    
+    // Columna de checkbox solo en modo selección masiva
+    if (modoSeleccionMasiva) {
+      cols.push({
+        id: 'seleccion',
+        header: '',
+        size: 40,
+        cell: ({ row }) => {
+          const puedeEnviar = incidenciasEnviables.some(i => i.id === row.original.id)
+          if (!puedeEnviar) return <span style={{ opacity: 0.3 }}><Square size={16} /></span>
+          
+          const seleccionada = incidenciasSeleccionadas.has(row.original.id)
+          return (
+            <button
+              onClick={() => handleToggleSeleccion(row.original.id)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+            >
+              {seleccionada ? <CheckSquare size={18} color="#10b981" /> : <Square size={18} color="#9ca3af" />}
+            </button>
+          )
+        }
+      })
+    }
+    
+    cols.push({
       accessorKey: 'fecha',
       header: 'Fecha',
       cell: ({ row }) => formatDate(row.original.fecha)
@@ -804,42 +1043,34 @@ export function IncidenciasModule() {
     {
       id: 'acciones',
       header: 'Acciones',
-      cell: ({ row }) => (
-        <div className="dt-actions">
-          <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerIncidencia(row.original)}>
-            <Eye size={14} />
-          </button>
-          <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
-            <Edit2 size={14} />
-          </button>
-          {/* Solo mostrar botón si NO tiene penalidad asociada (total_penalidades === 0) */}
-          {(row.original.total_penalidades || 0) === 0 ? (
+      cell: ({ row }) => {
+        return (
+          <div className="dt-actions">
+            <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerIncidencia(row.original)}>
+              <Eye size={14} />
+            </button>
+            <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
+              <Edit2 size={14} />
+            </button>
             <button 
-              className="dt-btn-action dt-btn-warning" 
+              className="dt-btn-action dt-btn-warning"
               data-tooltip="Enviar a facturación"
               onClick={() => handleEnviarAFacturacion(row.original)}
             >
               <DollarSign size={14} />
             </button>
-          ) : (
-            <button 
-              className="dt-btn-action dt-btn-success" 
-              data-tooltip="Ya enviado a facturación"
-              disabled
-              style={{ opacity: 0.5, cursor: 'not-allowed' }}
-            >
-              <Check size={14} />
-            </button>
-          )}
-          {canDelete && (
-            <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      )
-    }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete])
+            {canDelete && (
+              <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        )
+      }
+    })
+    
+    return cols
+  }, [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, modoSeleccionMasiva, incidenciasSeleccionadas, incidenciasEnviables, penalidades])
 
   // Columnas para tabla de penalidades
   const penalidadesColumns = useMemo<ColumnDef<PenalidadCompleta>[]>(() => [
@@ -950,35 +1181,63 @@ export function IncidenciasModule() {
     {
       id: 'acciones',
       header: 'Acciones',
-      cell: ({ row }) => (
-        <div className="dt-actions">
-          {!row.original.aplicado ? (
-            <button className="dt-btn-action dt-btn-success" data-tooltip="Aplicar a facturación" onClick={() => handleMarcarAplicado(row.original)}>
-              <CheckCircle size={14} />
-            </button>
-          ) : (
-            <>
-              <button className="dt-btn-action dt-btn-info" data-tooltip="Reasignar semana" onClick={() => handleReasignarSemana(row.original)}>
-                <Calendar size={14} />
+      cell: ({ row }) => {
+        const esRechazado = row.original.rechazado
+        const esAplicado = row.original.aplicado
+        
+        return (
+          <div className="dt-actions">
+            {/* Botón aplicar solo en Por Aplicar (no aplicado, no rechazado) */}
+            {!esAplicado && !esRechazado && (
+              <button className="dt-btn-action dt-btn-success" data-tooltip="Aplicar a facturación" onClick={() => handleMarcarAplicado(row.original)}>
+                <CheckCircle size={14} />
               </button>
-              <button className="dt-btn-action dt-btn-warning" data-tooltip="Desaplicar" onClick={() => handleDesaplicar(row.original)}>
-                <XCircle size={14} />
+            )}
+            {/* Botón rechazar solo en Por Aplicar */}
+            {!esAplicado && !esRechazado && (
+              <button 
+                className="dt-btn-action dt-btn-danger" 
+                data-tooltip="Rechazar" 
+                onClick={() => {
+                  setPenalidadRechazar(row.original)
+                  setMotivoRechazo('')
+                  setShowRechazoModal(true)
+                }}
+              >
+                <Ban size={14} />
               </button>
-            </>
-          )}
-          <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerPenalidad(row.original)}>
-            <Eye size={14} />
-          </button>
-          <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarPenalidad(row.original)}>
-            <Edit2 size={14} />
-          </button>
-          {canDelete && (
-            <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarPenalidad(row.original)}>
-              <Trash2 size={14} />
+            )}
+            {/* Botones de aplicadas */}
+            {esAplicado && !esRechazado && (
+              <>
+                <button className="dt-btn-action dt-btn-info" data-tooltip="Reasignar semana" onClick={() => handleReasignarSemana(row.original)}>
+                  <Calendar size={14} />
+                </button>
+                <button className="dt-btn-action dt-btn-warning" data-tooltip="Desaplicar" onClick={() => handleDesaplicar(row.original)}>
+                  <XCircle size={14} />
+                </button>
+              </>
+            )}
+            {/* Ver detalle siempre visible */}
+            <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerPenalidad(row.original)}>
+              <Eye size={14} />
             </button>
-          )}
-        </div>
-      )
+            {/* Editar y eliminar no en rechazados */}
+            {!esRechazado && (
+              <>
+                <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarPenalidad(row.original)}>
+                  <Edit2 size={14} />
+                </button>
+                {canDelete && (
+                  <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarPenalidad(row.original)}>
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )
+      }
     }
   ], [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId, canDelete, fraccionamientoMap])
 
@@ -1003,17 +1262,20 @@ export function IncidenciasModule() {
     // Verificar si ya existe una penalidad asociada a esta incidencia (consulta directa a BD)
     const { data: penalidadesExistentes, error: checkError } = await (supabase
       .from('penalidades' as any) as any)
-      .select('id, monto, fecha, aplicado')
+      .select('id, monto, fecha, aplicado, rechazado')
       .eq('incidencia_id', incidencia.id)
     
     if (checkError) {
-      console.error('Error verificando penalidades:', checkError)
       Swal.fire('Error', 'No se pudo verificar el estado del cobro', 'error')
       return
     }
     
-    // Si ya existe penalidad, NO permitir crear otra
-    if (penalidadesExistentes && penalidadesExistentes.length > 0) {
+    // Verificar si existe penalidad rechazada (para reenvío)
+    const penalidadRechazada = penalidadesExistentes?.find((p: any) => p.rechazado === true)
+    
+    // Si ya existe penalidad NO rechazada, NO permitir crear otra
+    // Solo bloquear si hay penalidades y NINGUNA está rechazada
+    if (penalidadesExistentes && penalidadesExistentes.length > 0 && !penalidadRechazada) {
       const montoTotal = penalidadesExistentes.reduce((sum: number, p: any) => sum + (p.monto || 0), 0)
       Swal.fire({
         icon: 'info',
@@ -1030,7 +1292,53 @@ export function IncidenciasModule() {
       return
     }
     
-    // Confirmar envío
+    // Si es reenvío (penalidad rechazada), actualizar en lugar de crear
+    if (penalidadRechazada) {
+      const confirmReenvio = await Swal.fire({
+        icon: 'warning',
+        title: 'Reenviar a facturación',
+        html: `Esta incidencia fue rechazada anteriormente.<br><br>
+          <strong>Conductor:</strong> ${incidencia.conductor_display || 'N/A'}<br>
+          <strong>Monto:</strong> $${incidencia.monto?.toLocaleString('es-AR') || 0}<br><br>
+          ¿Confirmas reenviar a facturación?`,
+        showCancelButton: true,
+        confirmButtonText: 'Reenviar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc2626'
+      })
+      
+      if (!confirmReenvio.isConfirmed) return
+      
+      try {
+        const { error } = await (supabase.from('penalidades' as any) as any)
+          .update({
+            monto: incidencia.monto,
+            rechazado: false,
+            fecha_rechazo: null,
+            motivo_rechazo: null,
+            aplicado: false,
+            fecha_aplicacion: null
+          })
+          .eq('id', penalidadRechazada.id)
+        
+        if (error) throw error
+        
+        Swal.fire({
+          icon: 'success',
+          title: 'Reenviado',
+          text: 'La incidencia fue reenviada a facturación',
+          timer: 2000,
+          showConfirmButton: false
+        })
+        cargarDatos()
+        return
+      } catch (error: any) {
+        Swal.fire('Error', error.message || 'No se pudo reenviar', 'error')
+        return
+      }
+    }
+    
+    // Confirmar envío (nuevo)
     const confirmResult = await Swal.fire({
       icon: 'question',
       title: 'Enviar a facturación',
@@ -1133,11 +1441,23 @@ export function IncidenciasModule() {
     setShowModal(true)
   }
 
-  function handleVerPenalidad(penalidad: PenalidadCompleta) {
+  async function handleVerPenalidad(penalidad: PenalidadCompleta) {
+    // Limpiar historial anterior y mostrar loading
+    setHistorialRechazos([])
+    setLoadingHistorial(true)
     setSelectedPenalidad(penalidad)
     setModalMode('view')
     setModalType('penalidad')
     setShowModal(true)
+    
+    // Cargar historial de rechazos
+    const { data } = await (supabase.from('penalidades_rechazos' as any) as any)
+      .select('id, motivo, rechazado_por_nombre, created_at')
+      .eq('penalidad_id', penalidad.id)
+      .order('created_at', { ascending: false })
+    
+    setHistorialRechazos(data || [])
+    setLoadingHistorial(false)
   }
 
   function handleEditarPenalidad(penalidad: PenalidadCompleta) {
@@ -1244,6 +1564,59 @@ export function IncidenciasModule() {
         console.error('Error eliminando:', error)
         Swal.fire('Error', error.message || 'No se pudo eliminar la penalidad', 'error')
       }
+    }
+  }
+
+  // Rechazar penalidad - guarda en historial y marca para reenvío
+  async function handleRechazarPenalidad() {
+    if (!penalidadRechazar || !motivoRechazo.trim()) {
+      Swal.fire('Error', 'Debes ingresar un motivo de rechazo', 'error')
+      return
+    }
+    
+    setRechazando(true)
+    try {
+      // 1. Guardar en historial de rechazos
+      const { error: errorHistorial } = await (supabase.from('penalidades_rechazos' as any) as any)
+        .insert({
+          penalidad_id: penalidadRechazar.id,
+          motivo: motivoRechazo.trim(),
+          rechazado_por: user?.id,
+          rechazado_por_nombre: profile?.full_name || 'Sistema',
+          monto_al_rechazo: penalidadRechazar.monto,
+          detalle_al_rechazo: penalidadRechazar.detalle || ''
+        })
+      
+      if (errorHistorial) throw errorHistorial
+      
+      // 2. Marcar penalidad como rechazada (para que vuelva a incidencia cobro)
+      const { error: errorPenalidad } = await (supabase.from('penalidades' as any) as any)
+        .update({
+          rechazado: true,
+          fecha_rechazo: new Date().toISOString(),
+          motivo_rechazo: motivoRechazo.trim()
+        })
+        .eq('id', penalidadRechazar.id)
+      
+      if (errorPenalidad) throw errorPenalidad
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'Rechazado',
+        text: 'La penalidad fue rechazada y volverá a Incidencia (Cobro) para revisión',
+        timer: 2500,
+        showConfirmButton: false
+      })
+      
+      setShowRechazoModal(false)
+      setPenalidadRechazar(null)
+      setMotivoRechazo('')
+      cargarDatos()
+    } catch (error: any) {
+      console.error('Error rechazando:', error)
+      Swal.fire('Error', error.message || 'No se pudo rechazar', 'error')
+    } finally {
+      setRechazando(false)
     }
   }
 
@@ -1852,8 +2225,9 @@ export function IncidenciasModule() {
   }
 
   // Contadores para tabs
-  const countPorAplicar = penalidades.filter(p => !p.aplicado).length
-  const countAplicadas = penalidades.filter(p => p.aplicado).length
+  const countPorAplicar = penalidades.filter(p => !p.aplicado && !p.rechazado).length
+  const countAplicadas = penalidades.filter(p => p.aplicado && !p.rechazado).length
+  const countRechazados = penalidades.filter(p => p.rechazado).length
 
   return (
     <div className="incidencias-module">
@@ -1925,8 +2299,48 @@ export function IncidenciasModule() {
             Aplicadas
             <span className="tab-badge">{countAplicadas}</span>
           </button>
+          {/* Tab Rechazados */}
+          <button
+            className={`incidencias-tab ${activeTab === 'rechazados' ? 'active' : ''}`}
+            onClick={() => setActiveTab('rechazados')}
+          >
+            <XCircle size={16} />
+            Rechazados
+            {countRechazados > 0 && (
+              <span className="tab-badge pending">{countRechazados}</span>
+            )}
+          </button>
         </div>
         <div className="tabs-actions">
+          {/* Selector de fecha para tab Logística */}
+          {activeTab === 'logistica' && (
+            <DateRangeSelector
+              selectedRange={dateRangeLogistica}
+              onRangeChange={setDateRangeLogistica}
+              showAllOption={true}
+              placeholder="Filtrar por fecha"
+            />
+          )}
+          {/* Filtros especiales para tab Cobro */}
+          {activeTab === 'cobro' && (
+            <>
+              <DateRangeSelector
+                selectedRange={dateRangeCobro}
+                onRangeChange={setDateRangeCobro}
+                showAllOption={true}
+                placeholder="Filtrar por fecha"
+              />
+            </>
+          )}
+          {/* Selector de fecha para tabs de Penalidades */}
+          {(activeTab === 'por_aplicar' || activeTab === 'aplicadas' || activeTab === 'rechazados') && (
+            <DateRangeSelector
+              selectedRange={dateRangePenalidades}
+              onRangeChange={setDateRangePenalidades}
+              showAllOption={true}
+              placeholder="Filtrar por fecha"
+            />
+          )}
           <button
             className="btn-secondary"
             onClick={activeTab === 'por_aplicar' || activeTab === 'aplicadas' ? handleExportarPenalidades : handleExportarIncidencias}
@@ -2051,6 +2465,46 @@ export function IncidenciasModule() {
       {/* Incidencias Cobro Tab */}
       {activeTab === 'cobro' && (
         <>
+          {/* Barra de acciones de envío masivo */}
+          <div className="incidencias-bulk-bar">
+            <button
+              className={`btn-filter ${soloPendientesEnviar ? 'active' : ''}`}
+              onClick={() => {
+                setSoloPendientesEnviar(!soloPendientesEnviar)
+                if (!soloPendientesEnviar) {
+                  setModoSeleccionMasiva(false)
+                  setIncidenciasSeleccionadas(new Set())
+                }
+              }}
+            >
+              <Clock size={16} />
+              Pend. Facturación
+              {incidenciasEnviables.length > 0 && (
+                <span className="badge">{incidenciasEnviables.length}</span>
+              )}
+            </button>
+            
+            {soloPendientesEnviar && !modoSeleccionMasiva && incidenciasEnviables.length > 0 && (
+              <button className="btn-primary" onClick={() => setModoSeleccionMasiva(true)}>
+                <Send size={16} />
+                Seleccionar para envío
+              </button>
+            )}
+            
+            {modoSeleccionMasiva && (
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setModoSeleccionMasiva(false)
+                  setIncidenciasSeleccionadas(new Set())
+                }}
+              >
+                <X size={16} />
+                Cancelar
+              </button>
+            )}
+          </div>
+
           {/* Barra de filtros activos con estilo de chips */}
           {hayFiltrosIncidenciasActivos && (
             <div className="dt-active-filters">
@@ -2124,6 +2578,22 @@ export function IncidenciasModule() {
                     </button>
                   </div>
                 ))}
+                {soloPendientesEnviar && (
+                  <div className="dt-active-filter-chip" style={{ background: 'rgba(245, 158, 11, 0.1)', borderColor: '#f59e0b' }}>
+                    <span className="dt-chip-label" style={{ color: '#f59e0b' }}>Pendiente Facturación</span>
+                    <button
+                      className="dt-chip-remove"
+                      onClick={() => {
+                        setSoloPendientesEnviar(false)
+                        setModoSeleccionMasiva(false)
+                        setIncidenciasSeleccionadas(new Set())
+                      }}
+                      title="Quitar filtro"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
               </div>
               <button className="dt-clear-all-filters" onClick={limpiarFiltrosIncidencias}>
                 Limpiar todo
@@ -2131,9 +2601,42 @@ export function IncidenciasModule() {
             </div>
           )}
 
+          {/* Barra de selección masiva */}
+          {modoSeleccionMasiva && (
+            <div className="incidencias-selection-bar">
+              <button
+                className="btn-select-all"
+                onClick={() => {
+                  if (incidenciasSeleccionadas.size === incidenciasEnviables.length) {
+                    handleDeseleccionarTodas()
+                  } else {
+                    handleSeleccionarTodas()
+                  }
+                }}
+              >
+                {incidenciasSeleccionadas.size === incidenciasEnviables.length && incidenciasEnviables.length > 0 ? (
+                  <><CheckSquare size={16} color="#10b981" /> Deseleccionar todas</>
+                ) : (
+                  <><Square size={16} /> Seleccionar todas ({incidenciasEnviables.length})</>
+                )}
+              </button>
+              
+              <span className="selection-count">
+                <strong>{incidenciasSeleccionadas.size}</strong> de {incidenciasEnviables.length} seleccionadas
+              </span>
+              
+              {incidenciasSeleccionadas.size > 0 && (
+                <button className="btn-send" onClick={handleEnviarMasivo} disabled={enviandoMasivo}>
+                  <Send size={16} />
+                  {enviandoMasivo ? 'Enviando...' : `Enviar ${incidenciasSeleccionadas.size} a facturación`}
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Tabla con DataTable - usa columnas específicas con botón Generar Cobro */}
           <DataTable
-            data={incidenciasCobro}
+            data={soloPendientesEnviar ? incidenciasEnviables : incidenciasCobro}
             columns={incidenciasCobroColumns}
             globalFilterFn={customGlobalFilter}
             loading={loading}
@@ -2344,6 +2847,42 @@ export function IncidenciasModule() {
         </>
       )}
 
+      {/* Rechazados Tab */}
+      {activeTab === 'rechazados' && (
+        <>
+          <div className="incidencias-stats">
+            <div className="stats-grid">
+              <div className="stat-card">
+                <XCircle size={20} className="stat-icon" />
+                <div className="stat-content">
+                  <span className="stat-value">{penalidadesFiltradas.length}</span>
+                  <span className="stat-label">Rechazados</span>
+                </div>
+              </div>
+              <div className="stat-card">
+                <DollarSign size={20} className="stat-icon" />
+                <div className="stat-content">
+                  <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
+                  <span className="stat-label">$ Rechazado</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DataTable
+            data={penalidadesFiltradas}
+            columns={penalidadesColumns}
+            loading={loading}
+            searchPlaceholder="Buscar por patente, conductor..."
+            emptyIcon={<XCircle size={48} />}
+            emptyTitle="Sin rechazos"
+            emptyDescription="Los cobros rechazados aparecerán aquí"
+            pageSize={100}
+            pageSizeOptions={[10, 20, 50, 100]}
+          />
+        </>
+      )}
+
       {/* Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
@@ -2352,7 +2891,8 @@ export function IncidenciasModule() {
               <h2>
                 {modalMode === 'create' ? (modalType === 'incidencia' ? 'Nueva Incidencia' : 'Nueva Penalidad') :
                  modalMode === 'edit' ? (modalType === 'incidencia' ? 'Editar Incidencia' : 'Editar Penalidad') :
-                 (modalType === 'incidencia' ? 'Detalle de Incidencia' : 'Detalle de Penalidad')}
+                 (modalType === 'incidencia' ? 'Detalle de Incidencia' : 
+                   (selectedPenalidad?.rechazado ? 'Cobro Rechazado' : 'Detalle de Penalidad'))}
               </h2>
               <button className="modal-close" onClick={() => setShowModal(false)}>
                 <X size={18} />
@@ -2369,7 +2909,9 @@ export function IncidenciasModule() {
                 ) : modalType === 'penalidad' && selectedPenalidad ? (
                   <PenalidadDetailView
                     penalidad={selectedPenalidad}
-                    onEdit={() => handleEditarPenalidad(selectedPenalidad)}
+                    onEdit={selectedPenalidad.rechazado ? undefined : () => handleEditarPenalidad(selectedPenalidad)}
+                    historialRechazos={historialRechazos}
+                    loadingHistorial={loadingHistorial}
                   />
                 ) : null
               ) : modalType === 'incidencia' ? (
@@ -2410,6 +2952,54 @@ export function IncidenciasModule() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Rechazo */}
+      {showRechazoModal && penalidadRechazar && (
+        <div className="modal-overlay" onClick={() => setShowRechazoModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h2>Rechazar Penalidad</h2>
+              <button className="modal-close" onClick={() => setShowRechazoModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+                <div style={{ marginBottom: '8px' }}>
+                  <strong>{penalidadRechazar.conductor_display}</strong>
+                </div>
+                <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                  Monto: <span style={{ color: '#F59E0B', fontWeight: 600 }}>${penalidadRechazar.monto?.toLocaleString('es-AR')}</span>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Motivo del rechazo *</label>
+                <textarea
+                  className="form-textarea"
+                  rows={3}
+                  placeholder="Ingresa el motivo del rechazo..."
+                  value={motivoRechazo}
+                  onChange={e => setMotivoRechazo(e.target.value)}
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowRechazoModal(false)}>
+                Cancelar
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={handleRechazarPenalidad}
+                disabled={rechazando || !motivoRechazo.trim()}
+                style={{ background: '#dc2626' }}
+              >
+                {rechazando ? 'Rechazando...' : 'Rechazar'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -3361,19 +3951,31 @@ function IncidenciaDetailView({ incidencia, onEdit }: IncidenciaDetailViewProps)
 
 interface PenalidadDetailViewProps {
   penalidad: PenalidadCompleta
-  onEdit: () => void
+  onEdit?: () => void
+  historialRechazos?: Array<{id: string; motivo: string; rechazado_por_nombre: string; created_at: string}>
+  loadingHistorial?: boolean
 }
 
-function PenalidadDetailView({ penalidad, onEdit }: PenalidadDetailViewProps) {
+function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadingHistorial = false }: PenalidadDetailViewProps) {
   function formatDate(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
     return new Date(dateStr).toLocaleDateString('es-AR')
+  }
+  
+  function formatDateTime(dateStr: string | undefined | null) {
+    if (!dateStr) return '-'
+    return new Date(dateStr).toLocaleString('es-AR', { 
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    })
   }
 
   function formatMoney(value: number | undefined | null) {
     if (!value) return '-'
     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value)
   }
+  
+  const esRechazado = penalidad.rechazado
 
   return (
     <div className="incidencia-detail">
@@ -3381,14 +3983,16 @@ function PenalidadDetailView({ penalidad, onEdit }: PenalidadDetailViewProps) {
         <div>
           <p className="detail-id">ID: {penalidad.id.slice(0, 8)}...</p>
           <h3 className="detail-title">{penalidad.conductor_display || 'Sin conductor'}</h3>
-          <span className={`aplicado-badge ${penalidad.aplicado ? 'aplicado-si' : 'aplicado-no'}`}>
-            {penalidad.aplicado ? 'Aplicado' : 'Pendiente'}
+          <span className={`aplicado-badge ${esRechazado ? 'aplicado-rechazado' : penalidad.aplicado ? 'aplicado-si' : 'aplicado-no'}`}>
+            {esRechazado ? 'Rechazado' : penalidad.aplicado ? 'Aplicado' : 'Pendiente'}
           </span>
         </div>
-        <button className="btn-secondary" onClick={onEdit}>
-          <Edit2 size={14} />
-          Editar
-        </button>
+        {!esRechazado && onEdit && (
+          <button className="btn-secondary" onClick={onEdit}>
+            <Edit2 size={14} />
+            Editar
+          </button>
+        )}
       </div>
 
       <div className="detail-cards">
@@ -3427,7 +4031,7 @@ function PenalidadDetailView({ penalidad, onEdit }: PenalidadDetailViewProps) {
             <span className="detail-item-value">{penalidad.patente_display || '-'}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-item-label">Tipo</span>
+            <span className="detail-item-label">Turno</span>
             <span className="detail-item-value">{penalidad.turno || '-'}</span>
           </div>
           <div className="detail-item">
@@ -3448,6 +4052,32 @@ function PenalidadDetailView({ penalidad, onEdit }: PenalidadDetailViewProps) {
         <div className="detail-description">
           <div className="detail-description-title">Nota Administrativa</div>
           <p>{penalidad.nota_administrativa}</p>
+        </div>
+      )}
+      
+      {/* Historial de rechazos */}
+      {(loadingHistorial || historialRechazos.length > 0) && (
+        <div className="detail-description" style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+          <div className="detail-description-title" style={{ color: '#dc2626' }}>Historial de Rechazos</div>
+          {loadingHistorial ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+              Cargando historial...
+            </div>
+          ) : historialRechazos.map((rechazo, idx) => (
+            <div key={rechazo.id} style={{ 
+              padding: '12px', 
+              background: 'white', 
+              borderRadius: '6px', 
+              marginBottom: idx < historialRechazos.length - 1 ? '8px' : 0 
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontWeight: 600, color: '#dc2626' }}>Rechazo #{historialRechazos.length - idx}</span>
+                <span style={{ fontSize: '12px', color: '#666' }}>{formatDateTime(rechazo.created_at)}</span>
+              </div>
+              <p style={{ margin: '0 0 4px 0', color: '#333' }}>{rechazo.motivo}</p>
+              <span style={{ fontSize: '12px', color: '#888' }}>Por: {rechazo.rechazado_por_nombre || 'Sistema'}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
