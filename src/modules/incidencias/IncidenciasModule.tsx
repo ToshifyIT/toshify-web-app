@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/incidencias/IncidenciasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -91,6 +92,7 @@ function getAreaResponsablePorRol(roleName: string | undefined | null): string {
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Permisos específicos para el menú de incidencias
   const canCreate = canCreateInMenu('incidencias')
@@ -257,6 +259,43 @@ export function IncidenciasModule() {
       }
     }
   }, [profile])
+
+  // Manejar parámetro de URL para abrir incidencia específica (ej: desde Siniestros)
+  useEffect(() => {
+    const incidenciaId = searchParams.get('id')
+    const penalidadId = searchParams.get('penalidad_id')
+    
+    if (incidenciaId && incidencias.length > 0) {
+      const incidencia = incidencias.find(i => i.id === incidenciaId)
+      if (incidencia) {
+        // Determinar el tab correcto basado en el tipo
+        if (incidencia.tipo === 'cobro') {
+          setActiveTab('cobro')
+        } else {
+          setActiveTab('logistica')
+        }
+        // Abrir modal de vista
+        setSelectedIncidencia(incidencia)
+        setModalType('incidencia')
+        setModalMode('view')
+        setShowModal(true)
+        // Limpiar parámetro de URL
+        setSearchParams({})
+      }
+    }
+    
+    if (penalidadId && penalidades.length > 0) {
+      const penalidad = penalidades.find(p => p.id === penalidadId)
+      if (penalidad) {
+        setActiveTab('penalidades')
+        setSelectedPenalidad(penalidad)
+        setModalType('penalidad')
+        setModalMode('view')
+        setShowModal(true)
+        setSearchParams({})
+      }
+    }
+  }, [searchParams, incidencias, penalidades, setSearchParams])
 
   async function cargarDatos() {
     setLoading(true)
