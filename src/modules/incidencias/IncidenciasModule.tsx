@@ -1044,6 +1044,14 @@ export function IncidenciasModule() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => {
+        // Buscar penalidad asociada - total_penalidades > 0 significa que tiene penalidad
+        const tienePenalidad = (row.original.total_penalidades || 0) > 0
+        // Si tiene penalidad, verificar si está rechazada
+        const penalidadAsociada = tienePenalidad ? penalidades.find(p => p.incidencia_id === row.original.id) : null
+        const estaRechazada = penalidadAsociada?.rechazado === true
+        // Puede enviar: no tiene penalidad O está rechazada
+        const puedeEnviar = !tienePenalidad || estaRechazada
+        
         return (
           <div className="dt-actions">
             <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerIncidencia(row.original)}>
@@ -1052,13 +1060,23 @@ export function IncidenciasModule() {
             <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
               <Edit2 size={14} />
             </button>
-            <button 
-              className="dt-btn-action dt-btn-warning"
-              data-tooltip="Enviar a facturación"
-              onClick={() => handleEnviarAFacturacion(row.original)}
-            >
-              <DollarSign size={14} />
-            </button>
+            {puedeEnviar ? (
+              <button 
+                className={`dt-btn-action ${estaRechazada ? 'dt-btn-danger' : 'dt-btn-warning'}`}
+                data-tooltip={estaRechazada ? 'Reenviar a facturación' : 'Enviar a facturación'}
+                onClick={() => handleEnviarAFacturacion(row.original)}
+              >
+                <DollarSign size={14} />
+              </button>
+            ) : (
+              <button 
+                className="dt-btn-action dt-btn-success" 
+                data-tooltip="Ya enviado a facturación"
+                style={{ opacity: 0.5, cursor: 'default' }}
+              >
+                <CheckCircle size={14} />
+              </button>
+            )}
             {canDelete && (
               <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
                 <Trash2 size={14} />
