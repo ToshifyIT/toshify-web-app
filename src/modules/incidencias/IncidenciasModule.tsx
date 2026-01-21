@@ -2159,11 +2159,9 @@ export function IncidenciasModule() {
 
   function formatDate(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    })
+    // Parsear como fecha local para evitar problemas de timezone
+    const [year, month, day] = dateStr.split('T')[0].split('-')
+    return `${day}/${month}/${year}`
   }
 
   function handleExportarIncidencias() {
@@ -3883,7 +3881,8 @@ interface IncidenciaDetailViewProps {
 function IncidenciaDetailView({ incidencia, onEdit }: IncidenciaDetailViewProps) {
   function formatDate(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('es-AR')
+    const [year, month, day] = dateStr.split('T')[0].split('-')
+    return `${day}/${month}/${year}`
   }
 
   return (
@@ -3977,7 +3976,8 @@ interface PenalidadDetailViewProps {
 function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadingHistorial = false }: PenalidadDetailViewProps) {
   function formatDate(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('es-AR')
+    const [year, month, day] = dateStr.split('T')[0].split('-')
+    return `${day}/${month}/${year}`
   }
   
   function formatDateTime(dateStr: string | undefined | null) {
