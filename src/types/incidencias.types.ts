@@ -105,6 +105,10 @@ export interface Penalidad {
   cantidad_cuotas?: number
   semana_aplicacion?: number  // Semana en que se aplica (si no es fraccionado)
   anio_aplicacion?: number    // Año en que se aplica
+  // Campos de rechazo
+  rechazado?: boolean
+  fecha_rechazo?: string
+  motivo_rechazo?: string
 }
 
 // Cuota de penalidad fraccionada

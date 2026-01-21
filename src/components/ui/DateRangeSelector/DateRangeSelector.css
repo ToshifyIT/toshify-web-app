@@ -1,0 +1,274 @@
+/* src/components/ui/DateRangeSelector/DateRangeSelector.css */
+
+.date-range-selector {
+  position: relative;
+  display: inline-block;
+}
+
+.date-range-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.date-range-btn:hover:not(:disabled) {
+  border-color: var(--border-hover, #d1d5db);
+  background: var(--bg-tertiary, #f3f4f6);
+}
+
+.date-range-btn.has-selection {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+  color: #ef4444;
+}
+
+.date-range-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.date-range-btn svg.rotate {
+  transform: rotate(180deg);
+}
+
+.date-range-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 1000;
+  background: var(--bg-primary, white);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  min-width: 300px;
+}
+
+/* Tabs Día/Semana */
+.date-range-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 4px;
+  background: var(--bg-tertiary, #f3f4f6);
+  border-radius: 8px;
+}
+
+.date-range-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-range-tab:hover {
+  color: var(--text-primary);
+}
+
+.date-range-tab.active {
+  background: var(--bg-primary, white);
+  color: #ef4444;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Header navegación */
+.date-range-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px;
+  margin-bottom: 8px;
+}
+
+.date-range-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-range-nav:hover {
+  background: var(--bg-tertiary, #f3f4f6);
+  color: var(--text-primary);
+}
+
+.date-range-month {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Días header */
+.date-range-days-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.date-range-day-name {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary, #9ca3af);
+  padding: 4px;
+  text-transform: uppercase;
+}
+
+/* Grid de días */
+.date-range-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.date-range-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.date-range-day:hover:not(.selected):not(.day-selected) {
+  background: var(--bg-tertiary, #f3f4f6);
+}
+
+.date-range-day.other-month {
+  color: var(--text-tertiary, #9ca3af);
+}
+
+.date-range-day.today {
+  font-weight: 700;
+  color: #ef4444;
+}
+
+.date-range-day.today::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+/* Selección de semana */
+.date-range-day.selected {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+
+.date-range-day.selected.range-start {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  background: #ef4444;
+  color: white;
+}
+
+.date-range-day.selected.range-end {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  background: #ef4444;
+  color: white;
+}
+
+.date-range-day.selected.row-start {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.date-range-day.selected.row-end {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+/* Selección de día individual */
+.date-range-day.day-selected {
+  background: #ef4444;
+  color: white;
+  border-radius: 8px;
+}
+
+/* Shortcuts */
+.date-range-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.date-range-shortcut {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-range-shortcut:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.date-range-shortcut.active {
+  background: rgba(239, 68, 68, 0.12);
+  font-weight: 600;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .date-range-dropdown {
+    background: var(--bg-primary, #1f2937);
+    border-color: var(--border-primary, #374151);
+  }
+
+  .date-range-tabs {
+    background: var(--bg-tertiary, #374151);
+  }
+
+  .date-range-tab.active {
+    background: var(--bg-secondary, #1f2937);
+  }
+
+  .date-range-day:hover:not(.selected):not(.day-selected) {
+    background: var(--bg-tertiary, #374151);
+  }
+}
