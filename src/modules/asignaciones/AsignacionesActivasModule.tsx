@@ -1,4 +1,5 @@
 // src/modules/asignaciones/AsignacionesActivasModule.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
 import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, TrendingUp, X, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -861,7 +862,7 @@ export function AsignacionesActivasModule() {
                   <span className="detail-value">
                     <Calendar size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
                     {selectedAsignacion.fecha_programada
-                      ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR')
+                      ? new Date(selectedAsignacion.fecha_programada).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
                       : 'No definida'}
                   </span>
                 </div>
