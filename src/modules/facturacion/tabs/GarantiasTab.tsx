@@ -178,30 +178,12 @@ export function GarantiasTab() {
     const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
     const anioActual = hoy.getFullYear()
     
-    // Generar semanas: 12 semanas hacia atrás + actual + 8 hacia adelante
-    const semanasAtras: Array<{sem: number; anio: number}> = []
-    let semTemp = semanaActual
-    let anioTemp = anioActual
-    for (let i = 0; i < 12; i++) {
-      semTemp--
-      if (semTemp < 1) { semTemp = 52; anioTemp-- }
-      semanasAtras.unshift({ sem: semTemp, anio: anioTemp })
-    }
-    
-    let semanaOptions = ''
-    // Semanas anteriores
-    for (const s of semanasAtras) {
-      semanaOptions += `<option value="${s.sem}-${s.anio}">Semana ${s.sem} - ${s.anio}</option>`
-    }
-    // Semana actual + futuras
-    let sem = semanaActual
-    let anio = anioActual
-    for (let i = 0; i < 8; i++) {
-      const selected = i === 0 ? 'selected' : ''
-      const label = i === 0 ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
-      semanaOptions += `<option value="${sem}-${anio}" ${selected}>${label}</option>`
-      sem++
-      if (sem > 52) { sem = 1; anio++ }
+    // Generar opciones de año y semana por separado
+    const anioOptions = `<option value="2025">2025</option><option value="${anioActual}" selected>${anioActual}</option>`
+    let semanaOptionsHtml = ''
+    for (let s = 1; s <= 52; s++) {
+      const selected = s === semanaActual ? 'selected' : ''
+      semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
 
     const { value: formValues } = await Swal.fire({
@@ -214,18 +196,24 @@ export function GarantiasTab() {
             <input type="hidden" id="swal-conductor" value="">
             <div id="swal-conductor-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 9999;"></div>
           </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Tipo de Alquiler:</label>
+            <select id="swal-tipo" class="swal2-select" style="width: 100%; font-size: 14px; padding: 8px;">
+              <option value="CARGO">A CARGO</option>
+              <option value="TURNO">TURNO</option>
+            </select>
+          </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
             <div>
-              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Tipo de Alquiler:</label>
-              <select id="swal-tipo" class="swal2-select" style="width: 100%; font-size: 14px; padding: 8px;">
-                <option value="CARGO">A CARGO</option>
-                <option value="TURNO">TURNO</option>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Semana:</label>
+              <select id="swal-semana" class="swal2-select" style="width: 100%; font-size: 14px; padding: 8px;">
+                ${semanaOptionsHtml}
               </select>
             </div>
             <div>
-              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Semana Inicio:</label>
-              <select id="swal-semana" class="swal2-select" style="width: 100%; font-size: 14px; padding: 8px;">
-                ${semanaOptions}
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Año:</label>
+              <select id="swal-anio" class="swal2-select" style="width: 100%; font-size: 14px; padding: 8px;">
+                ${anioOptions}
               </select>
             </div>
           </div>
@@ -306,7 +294,8 @@ export function GarantiasTab() {
       preConfirm: () => {
         const conductorId = (document.getElementById('swal-conductor') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
-        const semanaValue = (document.getElementById('swal-semana') as HTMLSelectElement).value
+        const semanaInicio = parseInt((document.getElementById('swal-semana') as HTMLSelectElement).value)
+        const anioInicio = parseInt((document.getElementById('swal-anio') as HTMLSelectElement).value)
         const monto = parseFloat((document.getElementById('swal-monto') as HTMLInputElement).value)
         const cuotas = parseInt((document.getElementById('swal-cuotas') as HTMLInputElement).value)
 
@@ -323,7 +312,6 @@ export function GarantiasTab() {
           return false
         }
 
-        const [semanaInicio, anioInicio] = semanaValue.split('-').map(Number)
         const conductor = conductoresDisponibles.find((c) => c.id === conductorId)
         return { 
           conductorId, 
@@ -509,30 +497,12 @@ export function GarantiasTab() {
     const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
     const anioActual = hoy.getFullYear()
     
-    // Generar semanas: 12 semanas hacia atrás + actual + 8 hacia adelante
-    const semanasAtras: Array<{sem: number; anio: number}> = []
-    let semTemp = semanaActual
-    let anioTemp = anioActual
-    for (let i = 0; i < 12; i++) {
-      semTemp--
-      if (semTemp < 1) { semTemp = 52; anioTemp-- }
-      semanasAtras.unshift({ sem: semTemp, anio: anioTemp })
-    }
-    
-    let semanaOptions = ''
-    // Semanas anteriores
-    for (const s of semanasAtras) {
-      semanaOptions += `<option value="${s.sem}-${s.anio}">Semana ${s.sem} - ${s.anio}</option>`
-    }
-    // Semana actual + futuras
-    let sem = semanaActual
-    let anio = anioActual
-    for (let i = 0; i < 8; i++) {
-      const selected = i === 0 ? 'selected' : ''
-      const label = i === 0 ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
-      semanaOptions += `<option value="${sem}-${anio}" ${selected}>${label}</option>`
-      sem++
-      if (sem > 52) { sem = 1; anio++ }
+    // Generar opciones de año y semana por separado
+    const anioOptions = `<option value="2025">2025</option><option value="${anioActual}" selected>${anioActual}</option>`
+    let semanaOptionsHtml = ''
+    for (let s = 1; s <= 52; s++) {
+      const selected = s === semanaActual ? 'selected' : ''
+      semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
 
     const { value: formValues } = await Swal.fire({
@@ -548,11 +518,19 @@ export function GarantiasTab() {
               Pendiente: <strong>${formatCurrency(pendiente)}</strong>
             </div>
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Semana:</label>
-            <select id="swal-semana" class="swal2-select" style="width: 100%; font-size: 14px;">
-              ${semanaOptions}
-            </select>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Semana:</label>
+              <select id="swal-semana" class="swal2-select" style="width: 100%; font-size: 14px;">
+                ${semanaOptionsHtml}
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Año:</label>
+              <select id="swal-anio" class="swal2-select" style="width: 100%; font-size: 14px;">
+                ${anioOptions}
+              </select>
+            </div>
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a pagar:</label>
@@ -571,15 +549,15 @@ export function GarantiasTab() {
       confirmButtonColor: '#DC2626',
       width: 340,
       preConfirm: () => {
-        const semanaValue = (document.getElementById('swal-semana') as HTMLSelectElement).value
+        const semana = parseInt((document.getElementById('swal-semana') as HTMLSelectElement).value)
+        const anio = parseInt((document.getElementById('swal-anio') as HTMLSelectElement).value)
         const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
         const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
         if (!monto || parseFloat(monto) <= 0) {
           Swal.showValidationMessage('Ingrese un monto válido')
           return false
         }
-        const [semana, anioSel] = semanaValue.split('-').map(Number)
-        return { monto: parseFloat(monto), referencia, semana, anio: anioSel }
+        return { monto: parseFloat(monto), referencia, semana, anio }
       }
     })
 
@@ -696,35 +674,14 @@ export function GarantiasTab() {
 
   async function editarMovimiento(pago: PagoGarantiaRow) {
     // Generar opciones de semana
-    const hoy = new Date()
-    const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
-    const anioActual = hoy.getFullYear()
+    const anioActual = new Date().getFullYear()
     
-    // Generar semanas: 12 semanas hacia atrás + actual + 8 hacia adelante
-    const semanasAtras: Array<{sem: number; anio: number}> = []
-    let semTemp = semanaActual
-    let anioTemp = anioActual
-    for (let i = 0; i < 12; i++) {
-      semTemp--
-      if (semTemp < 1) { semTemp = 52; anioTemp-- }
-      semanasAtras.unshift({ sem: semTemp, anio: anioTemp })
-    }
-    
-    let semanaOptions = '<option value="">Sin asignar</option>'
-    // Semanas anteriores
-    for (const s of semanasAtras) {
-      const isSelected = pago.semana === s.sem && pago.anio === s.anio
-      semanaOptions += `<option value="${s.sem}-${s.anio}" ${isSelected ? 'selected' : ''}>Semana ${s.sem} - ${s.anio}</option>`
-    }
-    // Semana actual + futuras
-    let sem = semanaActual
-    let anio = anioActual
-    for (let i = 0; i < 8; i++) {
-      const isSelected = pago.semana === sem && pago.anio === anio
-      const label = i === 0 ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
-      semanaOptions += `<option value="${sem}-${anio}" ${isSelected ? 'selected' : ''}>${label}</option>`
-      sem++
-      if (sem > 52) { sem = 1; anio++ }
+    // Generar opciones de año y semana por separado
+    const anioOptions = `<option value="">-</option><option value="2025" ${pago.anio === 2025 ? 'selected' : ''}>2025</option><option value="${anioActual}" ${pago.anio === anioActual ? 'selected' : ''}>${anioActual}</option>`
+    let semanaOptionsHtml = '<option value="">-</option>'
+    for (let s = 1; s <= 52; s++) {
+      const selected = s === pago.semana ? 'selected' : ''
+      semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
 
     const { value: formValues } = await Swal.fire({
@@ -737,11 +694,19 @@ export function GarantiasTab() {
               Monto: <strong>${formatCurrency(pago.monto)}</strong>
             </div>
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Semana:</label>
-            <select id="swal-semana" class="swal2-select" style="width: 100%; font-size: 14px;">
-              ${semanaOptions}
-            </select>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Semana:</label>
+              <select id="swal-semana" class="swal2-select" style="width: 100%; font-size: 14px;">
+                ${semanaOptionsHtml}
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Año:</label>
+              <select id="swal-anio" class="swal2-select" style="width: 100%; font-size: 14px;">
+                ${anioOptions}
+              </select>
+            </div>
           </div>
           <div>
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia:</label>
@@ -753,18 +718,14 @@ export function GarantiasTab() {
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#DC2626',
-      width: 340,
+      width: 360,
       preConfirm: () => {
         const semanaValue = (document.getElementById('swal-semana') as HTMLSelectElement).value
+        const anioValue = (document.getElementById('swal-anio') as HTMLSelectElement).value
         const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
         
-        let semana: number | null = null
-        let anioSel: number | null = null
-        if (semanaValue) {
-          const parts = semanaValue.split('-').map(Number)
-          semana = parts[0]
-          anioSel = parts[1]
-        }
+        const semana = semanaValue ? parseInt(semanaValue) : null
+        const anioSel = anioValue ? parseInt(anioValue) : null
         return { semana, anio: anioSel, referencia: referencia || null }
       }
     })
