@@ -1,4 +1,5 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
 import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -1648,7 +1649,7 @@ export function AsignacionesModule() {
             <h2 className="asig-modal-title">Confirmar Programación</h2>
             <p>Vehículo: <strong>{selectedAsignacion.vehiculos?.patente}</strong></p>
             <p style={{ fontSize: '14px', color: '#6B7280', marginBottom: '16px' }}>
-              Fecha de entrega: <strong>{selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR') : 'N/A'}</strong>
+              Fecha de entrega: <strong>{selectedAsignacion.fecha_programada ? new Date(selectedAsignacion.fecha_programada).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : 'N/A'}</strong>
             </p>
 
             <div style={{ marginBottom: '20px' }}>
@@ -1983,7 +1984,7 @@ export function AsignacionesModule() {
                 <div>
                   <label className="asig-detail-label">Fecha Entrega</label>
                   <p className="asig-detail-value" style={{ fontSize: '14px' }}>
-                    {viewAsignacion.fecha_programada ? new Date(viewAsignacion.fecha_programada).toLocaleDateString('es-ES') : 'No definida'}
+                    {viewAsignacion.fecha_programada ? new Date(viewAsignacion.fecha_programada).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : 'No definida'}
                   </p>
                 </div>
                 <div>
