@@ -722,11 +722,13 @@ export function ProgramacionModule() {
       // Construir fecha_programada correctamente con la hora de la cita en timezone Argentina (UTC-3)
       let fechaProgramada: string
       if (prog.fecha_cita) {
+        // Extraer solo la fecha (YYYY-MM-DD) en caso de que venga con timezone
+        const soloFecha = prog.fecha_cita.split('T')[0]
         const hora = prog.hora_cita && prog.hora_cita.trim() !== ''
           ? prog.hora_cita.substring(0, 5)
           : '10:00'
         // Forzar timezone Argentina (UTC-3) para que la hora sea siempre la de Argentina
-        fechaProgramada = new Date(`${prog.fecha_cita}T${hora}:00-03:00`).toISOString()
+        fechaProgramada = new Date(`${soloFecha}T${hora}:00-03:00`).toISOString()
       } else {
         fechaProgramada = new Date().toISOString()
       }
