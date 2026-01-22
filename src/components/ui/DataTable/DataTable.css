@@ -84,6 +84,39 @@
   min-width: 200px;
 }
 
+.dt-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+  width: 16px;
+  height: 16px;
+}
+
+.dt-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 40px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.dt-search-input:focus {
+  outline: none;
+  background: var(--bg-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px var(--color-primary-light);
+}
+
+.dt-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
 .dt-header-action {
   flex-shrink: 0;
 }
@@ -99,152 +132,71 @@
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 6px;
-  background: var(--bg-primary);
   color: var(--text-secondary);
   font-size: 13px;
-  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
+  transition: all 0.15s;
 }
 
 .dt-column-toggle-btn:hover {
-  background: var(--bg-secondary);
-  border-color: var(--color-primary);
+  background: var(--bg-tertiary);
   color: var(--text-primary);
+  border-color: var(--border-hover);
 }
 
-.dt-column-toggle-btn.has-hidden {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.dt-column-toggle-btn svg.rotated {
-  transform: rotate(180deg);
-}
-
-.dt-column-toggle-text {
-  display: inline;
-}
-
-@media (max-width: 600px) {
-  .dt-column-toggle-text {
-    display: none;
-  }
-}
-
-.dt-column-hidden-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  background: var(--color-primary);
-  color: white;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 9px;
-}
-
-/* Column Menu Dropdown */
 .dt-column-menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: 100%;
   right: 0;
-  min-width: 220px;
-  max-height: 320px;
+  margin-top: 4px;
+  width: 280px;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  max-height: 400px;
   overflow: hidden;
-  animation: dt-menu-fadeIn 0.15s ease-out;
-}
-
-[data-theme="dark"] .dt-column-menu {
-  background: var(--bg-secondary);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-@keyframes dt-menu-fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .dt-column-menu-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
+  padding: 12px;
   border-bottom: 1px solid var(--border-primary);
-  font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.dt-column-show-all {
-  padding: 4px 8px;
-  border: none;
-  background: transparent;
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-
-.dt-column-show-all:hover {
-  background: var(--color-primary-light, rgba(230, 57, 70, 0.1));
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
 }
 
 .dt-column-menu-list {
-  max-height: 260px;
+  flex: 1;
   overflow-y: auto;
-  padding: 6px;
-}
-
-.dt-column-menu-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.dt-column-menu-list::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-}
-
-.dt-column-menu-list::-webkit-scrollbar-thumb {
-  background: var(--border-primary);
-  border-radius: 3px;
+  padding: 8px 0;
 }
 
 .dt-column-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 4px;
-  font-size: 13px;
-  color: var(--text-primary);
+  padding: 8px 12px;
   cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
   transition: background 0.15s;
 }
 
 .dt-column-menu-item:hover {
   background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .dt-column-menu-item.locked {
-  opacity: 0.6;
+  opacity: 0.7;
   cursor: not-allowed;
 }
 
@@ -348,35 +300,24 @@
   background: var(--bg-secondary) !important;
 }
 
-.dt-expanded-row td {
-  padding: 0 !important;
-  background: var(--bg-secondary);
-}
-
 .dt-expanded-content {
-  padding: 12px 16px 12px 56px;
-  border-top: 1px dashed var(--border-primary);
-  background: var(--bg-tertiary);
-}
-
-.dt-expanded-grid {
+  padding: 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
 }
 
 .dt-expanded-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .dt-expanded-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-tertiary);
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.025em;
+  color: var(--text-tertiary);
+  font-weight: 600;
 }
 
 .dt-expanded-value {
@@ -384,66 +325,16 @@
   color: var(--text-primary);
 }
 
-/* Dark mode adjustments */
-[data-theme="dark"] .dt-expanded-content {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-[data-theme="dark"] .dt-row-expanded {
-  background: rgba(255, 255, 255, 0.02) !important;
-}
-
-.dt-search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-tertiary);
-  pointer-events: none;
-}
-
-.dt-search-input {
+/* Custom Scrollbar for table wrapper */
+.dt-table-wrapper {
   width: 100%;
-  padding: 8px 14px 8px 38px;
-  font-size: 13px;
-  border: 1px solid var(--input-border);
-  border-radius: 6px;
-  background: var(--input-bg);
-  color: var(--text-primary);
-  transition: border-color 0.2s, box-shadow 0.2s;
-  font-family: inherit;
-}
-
-.dt-search-input:focus {
-  outline: none;
-  border-color: var(--border-focus);
-  box-shadow: var(--input-focus-shadow);
-}
-
-.dt-search-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-/* Table Container */
-.dt-container {
-  background: var(--bg-primary);
+  overflow-x: auto;
   border: 1px solid var(--border-primary);
   border-radius: 8px;
-  overflow: visible; /* Permite que los dropdowns de filtros se muestren */
-  box-shadow: var(--shadow-sm);
-  position: relative;
-}
-
-/* Table Wrapper for horizontal scroll */
-.dt-table-wrapper {
-  overflow-x: auto;
-  overflow-y: visible;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px; /* Espacio para evitar corte del scrollbar */
-  /* Smooth horizontal scrolling on mobile */
+  background: var(--bg-primary);
+  /* Scrollbar styling */
   scrollbar-width: thin;
-  /* Asegurar que el scroll funcione correctamente */
-  max-width: 100%;
+  scrollbar-color: var(--border-primary) var(--bg-secondary);
 }
 
 .dt-table-wrapper::-webkit-scrollbar {
@@ -547,6 +438,9 @@
   color: var(--text-primary);
   font-size: 13px;
   vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dt-table td:last-child {
@@ -646,125 +540,84 @@
 /* Action Buttons */
 .dt-actions {
   display: flex;
-  gap: 3px;
+  gap: 6px;
   justify-content: center;
 }
 
-.dt-btn-action {
-  padding: 5px 8px;
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  background: var(--bg-primary);
-  cursor: pointer;
-  transition: all 0.15s;
-  display: inline-flex;
+.dt-action-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 6px;
+  transition: all 0.15s;
+  cursor: pointer;
+  background: white;
+  border: 1px solid var(--border-primary);
   color: var(--text-secondary);
-  position: relative;
 }
 
-/* Tooltip para botones de acción - posición a la izquierda */
-.dt-btn-action[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: 50%;
-  right: calc(100% + 8px);
-  transform: translateY(-50%);
-  padding: 5px 10px;
-  background: #1F2937;
-  color: white;
+.dt-action-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+/* Specific Action Styles */
+.dt-btn-folder {
+  background: #DCFCE7; /* green-100 */
+  border-color: #BBF7D0; /* green-200 */
+  color: #16A34A; /* green-600 */
+}
+
+.dt-btn-folder:hover {
+  background: #BBF7D0; /* green-200 */
+  border-color: #86EFAC; /* green-300 */
+  color: #15803D; /* green-700 */
+}
+
+.dt-btn-view:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.dt-btn-edit:hover {
+  color: #F59E0B; /* amber-500 */
+  border-color: #F59E0B;
+}
+
+.dt-btn-delete:hover {
+  color: #EF4444; /* red-500 */
+  border-color: #EF4444;
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .dt-btn-folder {
+  background: rgba(22, 163, 74, 0.2);
+  border-color: rgba(22, 163, 74, 0.4);
+  color: #4ADE80;
+}
+
+[data-theme="dark"] .dt-btn-folder:hover {
+  background: rgba(22, 163, 74, 0.3);
+  border-color: rgba(22, 163, 74, 0.5);
+}
+
+[data-theme="dark"] .dt-action-btn {
+  background: var(--bg-secondary);
+  border-color: var(--border-primary);
+}
+
+/* Badges */
+.dt-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
   font-size: 11px;
   font-weight: 500;
-  white-space: nowrap;
-  border-radius: 4px;
-  opacity: 0;
-  visibility: hidden;
-  transition: all 0.15s ease;
-  z-index: 9999;
-  pointer-events: none;
-}
-
-.dt-btn-action[data-tooltip]::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: calc(100% + 3px);
-  transform: translateY(-50%);
-  border: 5px solid transparent;
-  border-left-color: #1F2937;
-  opacity: 0;
-  visibility: hidden;
-  transition: all 0.15s ease;
-  z-index: 9999;
-}
-
-.dt-btn-action[data-tooltip]:hover::after,
-.dt-btn-action[data-tooltip]:hover::before {
-  opacity: 1;
-  visibility: visible;
-}
-
-.dt-btn-action:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.dt-btn-action.dt-btn-view:hover:not(:disabled) {
-  border-color: var(--color-purple);
-  color: var(--color-purple);
-  background: var(--badge-purple-bg);
-}
-
-.dt-btn-action.dt-btn-edit:hover:not(:disabled) {
-  border-color: var(--color-info);
-  color: var(--color-info);
-  background: var(--badge-blue-bg);
-}
-
-.dt-btn-action.dt-btn-delete:hover:not(:disabled) {
-  border-color: var(--color-danger);
-  color: var(--color-danger);
-  background: var(--badge-red-bg);
-}
-
-.dt-btn-action.dt-btn-warning {
-  color: var(--color-warning, #f59e0b);
-}
-
-.dt-btn-action.dt-btn-warning:hover:not(:disabled) {
-  border-color: var(--color-warning, #f59e0b);
-  color: var(--color-warning, #f59e0b);
-  background: var(--badge-yellow-bg, rgba(245, 158, 11, 0.1));
-}
-
-.dt-btn-action.dt-btn-success {
-  color: var(--color-success, #22c55e);
-}
-
-.dt-btn-action.dt-btn-success:hover:not(:disabled) {
-  border-color: var(--color-success, #22c55e);
-  color: var(--color-success, #22c55e);
-  background: var(--badge-green-bg, rgba(34, 197, 94, 0.1));
-}
-
-.dt-btn-action.dt-btn-info {
-  color: var(--color-info, #3b82f6);
-}
-
-.dt-btn-action.dt-btn-info:hover:not(:disabled) {
-  border-color: var(--color-info, #3b82f6);
-  color: var(--color-info, #3b82f6);
-  background: rgba(59, 130, 246, 0.1);
-}
-
-/* Badge */
-.dt-badge {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  line-height: 1.4;
   white-space: nowrap;
 }
 
@@ -778,14 +631,14 @@
   color: var(--badge-blue-text);
 }
 
-.dt-badge-yellow {
-  background: var(--badge-yellow-bg);
-  color: var(--badge-yellow-text);
-}
-
 .dt-badge-red {
   background: var(--badge-red-bg);
   color: var(--badge-red-text);
+}
+
+.dt-badge-yellow {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
 }
 
 .dt-badge-gray {
@@ -793,9 +646,19 @@
   color: var(--badge-gray-text);
 }
 
+.dt-badge-purple {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8B5CF6;
+}
+
+[data-theme="dark"] .dt-badge-purple {
+  background: rgba(139, 92, 246, 0.15);
+  color: #A78BFA;
+}
+
 .dt-badge-orange {
-  background: #FFF7ED;
-  color: #C2410C;
+  background: rgba(249, 115, 22, 0.15);
+  color: #EA580C;
 }
 
 [data-theme="dark"] .dt-badge-orange {
@@ -998,31 +861,242 @@
 }
 
 .dt-column-filter-clear:hover {
-  background: var(--badge-red-bg);
+  background: var(--bg-tertiary);
 }
 
-/* Resizer styles */
+/* Active Filters Bar */
+.dt-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  margin: 0 0 16px 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dt-active-filters-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dt-active-filters-label svg {
+  color: #EF4444;
+}
+
+.dt-active-filters-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+}
+
+.dt-active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 4px 0 10px;
+  background: #EF4444; /* Red color matching the request */
+  border: none;
+  border-radius: 13px;
+  font-size: 12px;
+  color: white;
+  max-width: 300px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.dt-chip-value {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 4px;
+  font-weight: 500;
+}
+
+.dt-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  margin-left: 2px;
+  transition: all 0.15s;
+}
+
+.dt-chip-remove:hover {
+  background: rgba(255, 255, 255, 0.4);
+  color: white;
+}
+
+.dt-clear-all-filters {
+  margin-left: auto;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.dt-clear-all-filters:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-primary);
+}
+
+/* Excel Style Filter List - Added for scroll functionality */
+.dt-excel-filter {
+  min-width: 200px;
+}
+
+.dt-excel-filter-list {
+  max-height: 250px;
+  overflow-y: auto;
+  margin-top: 8px;
+  padding-right: 4px; /* Space for scrollbar */
+}
+
+/* Custom scrollbar for the list */
+.dt-excel-filter-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dt-excel-filter-list::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+
+.dt-excel-filter-list::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
+}
+
+.dt-excel-filter-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* Column Resizer */
 .dt-resizer {
   position: absolute;
-  right: 0;
   top: 0;
+  right: -5px;
+  width: 10px;
   height: 100%;
-  width: 5px;
-  background: rgba(0, 0, 0, 0.1);
   cursor: col-resize;
   user-select: none;
   touch-action: none;
   z-index: 10;
-  opacity: 0; /* Hidden by default, show on hover */
-  transition: opacity 0.2s, background-color 0.2s;
+  display: flex;
+  justify-content: center;
 }
 
-.dt-resizer:hover,
-.dt-resizer.isResizing {
+.dt-resizer::after {
+  content: "";
+  width: 4px;
+  height: 100%;
+  background-color: var(--text-secondary);
+  opacity: 0.4;
+  border-radius: 2px;
+  transition: opacity 0.15s;
+}
+
+.dt-resizer:hover::after,
+.dt-resizer.isResizing::after {
   opacity: 1;
-  background: var(--color-primary);
 }
 
-.dt-table th:hover .dt-resizer {
-  opacity: 0.5;
+/* Date Filter Styles */
+.dt-filter-date {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  min-width: 240px;
+}
+
+.dt-filter-date label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.dt-date-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.dt-date-input {
+  width: 100%;
+  padding: 8px 36px 8px 12px; /* Extra padding right for the icon */
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: all 0.2s;
+  height: 36px; /* Fixed height for consistency */
+}
+
+.dt-date-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
+}
+
+.dt-date-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color 0.2s;
+  z-index: 2; /* Ensure it's above the input */
+}
+
+.dt-date-icon:hover {
+  color: var(--color-primary);
+}
+
+.dt-filter-clear {
+  margin-top: 4px;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  align-self: flex-end;
+}
+
+.dt-filter-clear:hover {
+  color: var(--color-primary);
 }

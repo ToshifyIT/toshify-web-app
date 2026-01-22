@@ -96,7 +96,11 @@ export function ConductoresModule() {
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [categoriaFilter, setCategoriaFilter] = useState<string[]>([]);
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([]);
-  const [licenciaVencerFilter] = useState(false);
+  const [vencimientoFilter, setVencimientoFilter] = useState<string[]>([]);
+  const [vencimientoSearch, setVencimientoSearch] = useState('');
+  const [telefonoFilter, setTelefonoFilter] = useState<string[]>([]);
+  const [telefonoSearch, setTelefonoSearch] = useState('');
+  const [licenciaVencerFilter, _setLicenciaVencerFilter] = useState(false);
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null);
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null);
 
@@ -334,21 +338,21 @@ export function ConductoresModule() {
     if (nombreFilter.length > 0) {
       filters.push({
         id: 'nombre',
-        label: `Nombre: ${nombreFilter.length === 1 ? nombreFilter[0] : `${nombreFilter.length} seleccionados`}`,
+        label: nombreFilter.length === 1 ? `Nombre: ${nombreFilter[0]}` : `Nombre: ${nombreFilter.length} seleccionados`,
         onClear: () => setNombreFilter([])
       });
     }
     if (dniFilter.length > 0) {
       filters.push({
         id: 'dni',
-        label: `DNI: ${dniFilter.length === 1 ? dniFilter[0] : `${dniFilter.length} seleccionados`}`,
+        label: dniFilter.length === 1 ? `DNI: ${dniFilter[0]}` : `DNI: ${dniFilter.length} seleccionados`,
         onClear: () => setDniFilter([])
       });
     }
     if (cbuFilter.length > 0) {
       filters.push({
         id: 'cuil',
-        label: `CUIL: ${cbuFilter.length === 1 ? cbuFilter[0] : `${cbuFilter.length} seleccionados`}`,
+        label: cbuFilter.length === 1 ? `CUIL: ${cbuFilter[0]}` : `CUIL: ${cbuFilter.length} seleccionados`,
         onClear: () => setCbuFilter([])
       });
     }
@@ -362,13 +366,29 @@ export function ConductoresModule() {
     if (estadoFilter.length > 0) {
       filters.push({
         id: 'estado',
-        label: `Estado: ${estadoFilter.length === 1 ? estadoFilter[0] : `${estadoFilter.length} seleccionados`}`,
+        label: estadoFilter.length === 1 ? `Estado: ${estadoFilter[0]}` : `Estado: ${estadoFilter.length} seleccionados`,
         onClear: () => setEstadoFilter([])
       });
     }
 
+    if (vencimientoFilter.length > 0) {
+      filters.push({
+        id: 'vencimiento',
+        label: vencimientoFilter.length === 1 ? `Vencimiento: ${vencimientoFilter[0]}` : `Vencimiento: ${vencimientoFilter.length} seleccionados`,
+        onClear: () => setVencimientoFilter([])
+      });
+    }
+
+    if (telefonoFilter.length > 0) {
+      filters.push({
+        id: 'telefono',
+        label: telefonoFilter.length === 1 ? `Teléfono: ${telefonoFilter[0]}` : `Teléfono: ${telefonoFilter.length} seleccionados`,
+        onClear: () => setTelefonoFilter([])
+      });
+    }
+
     return filters;
-  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter]);
+  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, vencimientoFilter, telefonoFilter]);
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo (conductores + catálogos)
   const loadAllData = async () => {
@@ -1387,6 +1407,20 @@ export function ConductoresModule() {
     return [...new Set(cuils)].sort();
   }, [conductores]);
 
+  const vencimientosUnicos = useMemo(() => {
+    const vencimientos = conductores.map(c => {
+      if (!c.licencia_vencimiento) return null;
+      // No incluir vencimientos de conductores de baja si se desea (opcional, por ahora incluimos todos los visibles)
+      return new Date(c.licencia_vencimiento).toLocaleDateString("es-AR");
+    }).filter(Boolean) as string[];
+    return [...new Set(vencimientos)].sort();
+  }, [conductores]);
+
+  const telefonosUnicos = useMemo(() => {
+    const telefonos = conductores.map(c => c.telefono_contacto).filter(Boolean) as string[];
+    return [...new Set(telefonos)].sort();
+  }, [conductores]);
+
   const turnosUnicos = ['DIURNO', 'NOCTURNO', 'SIN_PREFERENCIA', 'A_CARGO'];
   const turnoLabels: Record<string, string> = {
     'DIURNO': 'Diurno',
@@ -1410,6 +1444,16 @@ export function ConductoresModule() {
     if (!cbuSearch) return cuilsUnicos;
     return cuilsUnicos.filter(c => c.toLowerCase().includes(cbuSearch.toLowerCase()));
   }, [cuilsUnicos, cbuSearch]);
+
+  const vencimientosFiltrados = useMemo(() => {
+    if (!vencimientoSearch) return vencimientosUnicos;
+    return vencimientosUnicos.filter(v => v.toLowerCase().includes(vencimientoSearch.toLowerCase()));
+  }, [vencimientosUnicos, vencimientoSearch]);
+
+  const telefonosFiltrados = useMemo(() => {
+    if (!telefonoSearch) return telefonosUnicos;
+    return telefonosUnicos.filter(t => t.toLowerCase().includes(telefonoSearch.toLowerCase()));
+  }, [telefonosUnicos, telefonoSearch]);
 
   // Toggle functions para multiselect
   const toggleNombreFilter = (nombre: string) => {
@@ -1445,6 +1489,18 @@ export function ConductoresModule() {
   const toggleAsignacionFilter = (asignacion: string) => {
     setAsignacionFilter(prev =>
       prev.includes(asignacion) ? prev.filter(a => a !== asignacion) : [...prev, asignacion]
+    );
+  };
+
+  const toggleVencimientoFilter = (vencimiento: string) => {
+    setVencimientoFilter(prev =>
+      prev.includes(vencimiento) ? prev.filter(v => v !== vencimiento) : [...prev, vencimiento]
+    );
+  };
+
+  const toggleTelefonoFilter = (telefono: string) => {
+    setTelefonoFilter(prev =>
+      prev.includes(telefono) ? prev.filter(t => t !== telefono) : [...prev, telefono]
     );
   };
 
@@ -1506,6 +1562,20 @@ export function ConductoresModule() {
         if (asignacionFilter.includes('disponible') && !tieneAsignacion && esActivo) return true;
         return false;
       });
+    }
+
+    if (vencimientoFilter.length > 0) {
+      result = result.filter(c => {
+        if (!c.licencia_vencimiento) return false;
+        const formattedDate = new Date(c.licencia_vencimiento).toLocaleDateString("es-AR");
+        return vencimientoFilter.includes(formattedDate);
+      });
+    }
+
+    if (telefonoFilter.length > 0) {
+      result = result.filter(c =>
+        telefonoFilter.includes(c.telefono_contacto || '')
+      );
     }
 
     if (licenciaVencerFilter) {
@@ -1574,7 +1644,7 @@ export function ConductoresModule() {
       const prioridadB = estadoB === 'activo' ? 0 : estadoB === 'baja' ? 1 : 2;
       return prioridadA - prioridadB;
     });
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, vencimientoFilter, telefonoFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -1622,55 +1692,15 @@ export function ConductoresModule() {
       {
         accessorKey: "nombres",
         header: () => (
-          <div className="dt-column-filter">
-            <span>Nombre {nombreFilter.length > 0 && `(${nombreFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${nombreFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'nombre' ? null : 'nombre');
-              }}
-              title="Filtrar por nombre"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'nombre' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={nombreSearch}
-                  onChange={(e) => setNombreSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {nombresFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    nombresFiltrados.slice(0, 50).map(nombre => (
-                      <label key={nombre} className={`dt-column-filter-checkbox ${nombreFilter.includes(nombre) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={nombreFilter.includes(nombre)}
-                          onChange={() => toggleNombreFilter(nombre)}
-                        />
-                        <span>{nombre}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {nombreFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setNombreFilter([]); setNombreSearch(''); }}
-                  >
-                    Limpiar ({nombreFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Nombre"
+            options={nombresUnicos}
+            selectedValues={nombreFilter}
+            onSelectionChange={setNombreFilter}
+            filterId="nombre"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ row }) => (
           <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
@@ -1680,55 +1710,15 @@ export function ConductoresModule() {
       {
         accessorKey: "numero_dni",
         header: () => (
-          <div className="dt-column-filter">
-            <span>DNI {dniFilter.length > 0 && `(${dniFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${dniFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'dni' ? null : 'dni');
-              }}
-              title="Filtrar por DNI"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'dni' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={dniSearch}
-                  onChange={(e) => setDniSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {dnisFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    dnisFiltrados.slice(0, 50).map(dni => (
-                      <label key={dni} className={`dt-column-filter-checkbox ${dniFilter.includes(dni) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={dniFilter.includes(dni)}
-                          onChange={() => toggleDniFilter(dni)}
-                        />
-                        <span>{dni}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {dniFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setDniFilter([]); setDniSearch(''); }}
-                  >
-                    Limpiar ({dniFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="DNI"
+            options={dnisUnicos}
+            selectedValues={dniFilter}
+            onSelectionChange={setDniFilter}
+            filterId="dni"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
@@ -1736,55 +1726,15 @@ export function ConductoresModule() {
       {
         accessorKey: "numero_cuit",
         header: () => (
-          <div className="dt-column-filter">
-            <span>CUIL {cbuFilter.length > 0 && `(${cbuFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${cbuFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'cbu' ? null : 'cbu');
-              }}
-              title="Filtrar por CUIL"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'cbu' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={cbuSearch}
-                  onChange={(e) => setCbuSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {cuilsFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    cuilsFiltrados.slice(0, 50).map(cuil => (
-                      <label key={cuil} className={`dt-column-filter-checkbox ${cbuFilter.includes(cuil) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={cbuFilter.includes(cuil)}
-                          onChange={() => toggleCbuFilter(cuil)}
-                        />
-                        <span>{cuil}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {cbuFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setCbuFilter([]); setCbuSearch(''); }}
-                  >
-                    Limpiar ({cbuFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="CUIL"
+            options={cuilsUnicos}
+            selectedValues={cbuFilter}
+            onSelectionChange={setCbuFilter}
+            filterId="cuil"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ row }) => row.original.numero_cuit || "-",
         enableSorting: true,
@@ -1792,43 +1742,15 @@ export function ConductoresModule() {
       {
         accessorKey: "preferencia_turno",
         header: () => (
-          <div className="dt-column-filter">
-            <span>Turno {turnoFilter.length > 0 && `(${turnoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${turnoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'turno' ? null : 'turno');
-              }}
-              title="Filtrar por turno"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'turno' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  {turnosUnicos.map(turno => (
-                    <label key={turno} className={`dt-column-filter-checkbox ${turnoFilter.includes(turno) ? 'selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={turnoFilter.includes(turno)}
-                        onChange={() => toggleTurnoFilter(turno)}
-                      />
-                      <span>{turnoLabels[turno] || turno}</span>
-                    </label>
-                  ))}
-                </div>
-                {turnoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => setTurnoFilter([])}
-                  >
-                    Limpiar ({turnoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Turno"
+            options={turnosUnicos.map(t => ({ value: t, label: turnoLabels[t] || t }))}
+            selectedValues={turnoFilter}
+            onSelectionChange={setTurnoFilter}
+            filterId="turno"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ getValue }) => {
           const turno = getValue() as string;
@@ -1880,7 +1802,17 @@ export function ConductoresModule() {
       },
       {
         accessorKey: "licencia_vencimiento",
-        header: "Vencimiento",
+        header: () => (
+          <ExcelColumnFilter
+            label="Vencimiento"
+            options={vencimientosUnicos}
+            selectedValues={vencimientoFilter}
+            onSelectionChange={setVencimientoFilter}
+            filterId="vencimiento"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
+        ),
         cell: ({ row, getValue }) => {
           // No mostrar vencimiento para conductores de baja
           const estadoCodigo = row.original.conductores_estados?.codigo?.toLowerCase();
@@ -1893,50 +1825,32 @@ export function ConductoresModule() {
       },
       {
         accessorKey: "telefono_contacto",
-        header: "Teléfono",
+        header: () => (
+          <ExcelColumnFilter
+            label="Teléfono"
+            options={telefonosUnicos}
+            selectedValues={telefonoFilter}
+            onSelectionChange={setTelefonoFilter}
+            filterId="telefono"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
+        ),
         cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
       },
       {
         accessorKey: "conductores_estados.codigo",
         header: () => (
-          <div className="dt-column-filter">
-            <span>Estado {estadoFilter.length > 0 && `(${estadoFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${estadoFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'estado' ? null : 'estado');
-              }}
-              title="Filtrar por estado"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'estado' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  {uniqueEstados.map(([codigo, descripcion]) => (
-                    <label key={codigo} className={`dt-column-filter-checkbox ${estadoFilter.includes(codigo) ? 'selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={estadoFilter.includes(codigo)}
-                        onChange={() => toggleEstadoFilter(codigo)}
-                      />
-                      <span>{descripcion}</span>
-                    </label>
-                  ))}
-                </div>
-                {estadoFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => setEstadoFilter([])}
-                  >
-                    Limpiar ({estadoFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Estado"
+            options={uniqueEstados.map(([value, label]) => ({ value, label }))}
+            selectedValues={estadoFilter}
+            onSelectionChange={setEstadoFilter}
+            filterId="estado"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ row }) => {
           const estado = row.original.conductores_estados;
@@ -1958,49 +1872,18 @@ export function ConductoresModule() {
       {
         id: "vehiculo_asignado",
         header: () => (
-          <div className="dt-column-filter">
-            <span>Asignación {asignacionFilter.length > 0 && `(${asignacionFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${asignacionFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'asignacion' ? null : 'asignacion');
-              }}
-              title="Filtrar por asignación"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'asignacion' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <div className="dt-excel-filter-list">
-                  <label className={`dt-column-filter-checkbox ${asignacionFilter.includes('asignado') ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={asignacionFilter.includes('asignado')}
-                      onChange={() => toggleAsignacionFilter('asignado')}
-                    />
-                    <span>Asignados</span>
-                  </label>
-                  <label className={`dt-column-filter-checkbox ${asignacionFilter.includes('disponible') ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={asignacionFilter.includes('disponible')}
-                      onChange={() => toggleAsignacionFilter('disponible')}
-                    />
-                    <span>Disponibles</span>
-                  </label>
-                </div>
-                {asignacionFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => setAsignacionFilter([])}
-                  >
-                    Limpiar ({asignacionFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ExcelColumnFilter
+            label="Asignación"
+            options={[
+                { value: 'asignado', label: 'Asignados' },
+                { value: 'disponible', label: 'Disponibles' }
+            ]}
+            selectedValues={asignacionFilter}
+            onSelectionChange={setAsignacionFilter}
+            filterId="asignacion"
+            openFilterId={openColumnFilter}
+            onOpenChange={setOpenColumnFilter}
+          />
         ),
         cell: ({ row }) => {
           const estadoCodigo = (row.original as any).conductores_estados?.codigo?.toLowerCase() || '';
@@ -2110,7 +1993,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cuilsFiltrados, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, openColumnFilter, uniqueEstados, creatingDriveFolder, activeStatCard],
+    [conductores, nombreFilter, dniFilter, cbuFilter, turnoFilter, categoriaFilter, vencimientoFilter, telefonoFilter, estadoFilter, asignacionFilter, openColumnFilter, nombresUnicos, dnisUnicos, cuilsUnicos, turnosUnicos, uniqueCategorias, vencimientosUnicos, telefonosUnicos, uniqueEstados, creatingDriveFolder, canUpdate, canDelete, activeStatCard]
   );
 
   return (

@@ -12,7 +12,7 @@ interface ExcelColumnFilterProps {
   /** Nombre de la columna para mostrar en el header */
   label: string
   /** Array de valores únicos para mostrar en el filtro */
-  options: string[]
+  options: (string | { value: string; label: string })[]
   /** Array de valores seleccionados actualmente */
   selectedValues: string[]
   /** Callback cuando cambia la selección */
@@ -56,7 +56,10 @@ export function ExcelColumnFilter({
 
   // Filtrar opciones por búsqueda
   const filteredOptions = searchTerm
-    ? options.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
+    ? options.filter(opt => {
+        const text = typeof opt === 'string' ? opt : opt.label
+        return text.toLowerCase().includes(searchTerm.toLowerCase())
+      })
     : options
 
   // Calcular posición del dropdown cuando se abre
@@ -208,19 +211,23 @@ export function ExcelColumnFilter({
             {filteredOptions.length === 0 ? (
               <div className="dt-excel-filter-empty">Sin resultados</div>
             ) : (
-              filteredOptions.slice(0, 50).map(option => (
-                <label
-                  key={option}
-                  className={`dt-column-filter-checkbox ${selectedValues.includes(option) ? 'selected' : ''}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedValues.includes(option)}
-                    onChange={() => toggleValue(option)}
-                  />
-                  <span>{option}</span>
-                </label>
-              ))
+              filteredOptions.slice(0, 500).map(option => {
+                const value = typeof option === 'string' ? option : option.value
+                const label = typeof option === 'string' ? option : option.label
+                return (
+                  <label
+                    key={value}
+                    className={`dt-column-filter-checkbox ${selectedValues.includes(value) ? 'selected' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedValues.includes(value)}
+                      onChange={() => toggleValue(value)}
+                    />
+                    <span>{label}</span>
+                  </label>
+                )
+              })
             )}
           </div>
           {hasSelection && (

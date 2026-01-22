@@ -22,11 +22,39 @@ import {
   type FilterFn,
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronRight, Check, Filter, Calendar } from "lucide-react";
+import { ExcelColumnFilter } from './ExcelColumnFilter';
+import { DateRangeColumnFilter } from './filters/DateRangeColumnFilter';
+import { NumericRangeColumnFilter } from './filters/NumericRangeColumnFilter';
 import "./DataTable.css";
 
 // Tipo para filtros de columna
 type ColumnFilters = Record<string, string[]>;
 type DateFilters = Record<string, { from?: string; to?: string }>;
+type NumericFilters = Record<string, { min: string | null; max: string | null }>;
+
+// Helper to parse date from various formats (dd/mm/yyyy, yyyy-mm-dd, ISO)
+const parseDate = (dateStr: string): Date | null => {
+  if (!dateStr) return null;
+  const str = String(dateStr).trim();
+  
+  // Try dd/mm/yyyy
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+    const [day, month, year] = str.split('/').map(Number);
+    return new Date(year, month - 1, day);
+  }
+  
+  // Try yyyy-mm-dd (treat as local date to avoid timezone issues)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [year, month, day] = str.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+  
+  // Try ISO or other formats
+  const date = new Date(str);
+  if (!isNaN(date.getTime())) return date;
+  
+  return null;
+};
 
 export interface DataTableProps<T> {
   /** Array de datos a mostrar en la tabla */
@@ -109,15 +137,26 @@ export function DataTable<T>({
   // Column filter state
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const [dateFilters, setDateFilters] = useState<DateFilters>({});
+  const [numericFilters, setNumericFilters] = useState<NumericFilters>({});
   const [openFilterId, setOpenFilterId] = useState<string | null>(null);
 
   // Helper: Check if column is date type based on accessor key or data
   const isDateColumn = useCallback((colId: string): boolean => {
     const lowerColId = colId.toLowerCase();
-    // Excluir columnas de hora (tienen "hora" en el nombre pero no son fechas)
-    if (lowerColId.includes('hora')) return false;
     const dateKeywords = ['fecha', 'date', 'created', 'updated', 'vencimiento', 'inicio', 'fin'];
-    return dateKeywords.some(keyword => lowerColId.includes(keyword));
+    const hasDateKeyword = dateKeywords.some(keyword => lowerColId.includes(keyword));
+    
+    // Excluir columnas que son SOLO hora (tienen "hora" pero no palabras clave de fecha)
+    if (lowerColId.includes('hora') && !hasDateKeyword) return false;
+    
+    return hasDateKeyword;
+  }, []);
+
+  // Helper: Check if column is numeric type based on accessor key or data
+  const isNumericColumn = useCallback((colId: string): boolean => {
+    const lowerColId = colId.toLowerCase();
+    const numericKeywords = ['importe', 'monto', 'precio', 'total', 'saldo', 'cantidad', 'km', 'litros'];
+    return numericKeywords.some(keyword => lowerColId.includes(keyword));
   }, []);
 
   // Build a map of colId -> accessorFn for columns that use accessorFn
@@ -159,6 +198,7 @@ export function DataTable<T>({
     if (resetFiltersKey !== undefined) {
       setColumnFilters({});
       setDateFilters({});
+      setNumericFilters({});
       setOpenFilterId(null);
     }
   }, [resetFiltersKey]);
@@ -190,27 +230,53 @@ export function DataTable<T>({
           const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
           if (!value) return false;
 
-          const dateStr = String(value);
-          let dateValue: Date | null = null;
-          if (dateStr.includes('/')) {
-            const parts = dateStr.split('/');
-            if (parts.length === 3) {
-              dateValue = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-            }
-          } else {
-            dateValue = new Date(dateStr);
-          }
-
-          if (!dateValue || isNaN(dateValue.getTime())) return false;
+          const dateValue = parseDate(String(value));
+          if (!dateValue) return false;
 
           if (range.from) {
-            const fromDate = new Date(range.from);
-            if (dateValue < fromDate) return false;
+            const fromDate = parseDate(range.from);
+            if (fromDate && dateValue < fromDate) return false;
           }
           if (range.to) {
-            const toDate = new Date(range.to);
-            toDate.setHours(23, 59, 59, 999);
-            if (dateValue > toDate) return false;
+            const toDate = parseDate(range.to);
+            if (toDate) {
+              toDate.setHours(23, 59, 59, 999);
+              if (dateValue > toDate) return false;
+            }
+          }
+          return true;
+        });
+      }
+    });
+
+    // Apply numeric filters except the excluded column
+    Object.entries(numericFilters).forEach(([colId, range]) => {
+      if (colId !== excludeColId && (range.min || range.max)) {
+        result = result.filter((row) => {
+          const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
+          if (value === null || value === undefined) return false;
+          
+          let numValue: number;
+          if (typeof value === 'number') {
+            numValue = value;
+          } else {
+             const str = String(value);
+             // Remove currency symbols, thousand separators (.), and handle decimal (,)
+             const cleanStr = str.replace(/[^0-9.,-]/g, '');
+             // Assuming es-PY format: 1.000.000,00 -> 1000000.00
+             const normalized = cleanStr.replace(/\./g, '').replace(',', '.');
+             numValue = parseFloat(normalized);
+          }
+          
+          if (isNaN(numValue)) return false;
+
+          if (range.min) {
+            const min = parseFloat(range.min);
+            if (!isNaN(min) && numValue < min) return false;
+          }
+          if (range.max) {
+            const max = parseFloat(range.max);
+            if (!isNaN(max) && numValue > max) return false;
           }
           return true;
         });
@@ -218,7 +284,7 @@ export function DataTable<T>({
     });
 
     return result;
-  }, [data, columnFilters, dateFilters, getNestedValueForFilter]);
+  }, [data, columnFilters, dateFilters, numericFilters, getNestedValueForFilter]);
 
   // Get unique values for a column from data filtered by OTHER columns (Excel behavior)
   const getUniqueValues = useCallback((colId: string): string[] => {
@@ -270,29 +336,51 @@ export function DataTable<T>({
           const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
           if (!value) return false;
 
-          const dateStr = String(value);
-          // Try to parse the date - handle multiple formats
-          let dateValue: Date | null = null;
-          if (dateStr.includes('/')) {
-            // Format: DD/MM/YYYY
-            const parts = dateStr.split('/');
-            if (parts.length === 3) {
-              dateValue = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-            }
-          } else {
-            dateValue = new Date(dateStr);
-          }
-
-          if (!dateValue || isNaN(dateValue.getTime())) return false;
+          const dateValue = parseDate(String(value));
+          if (!dateValue) return false;
 
           if (range.from) {
-            const fromDate = new Date(range.from);
-            if (dateValue < fromDate) return false;
+            const fromDate = parseDate(range.from);
+            if (fromDate && dateValue < fromDate) return false;
           }
           if (range.to) {
-            const toDate = new Date(range.to);
-            toDate.setHours(23, 59, 59, 999);
-            if (dateValue > toDate) return false;
+            const toDate = parseDate(range.to);
+            if (toDate) {
+              toDate.setHours(23, 59, 59, 999);
+              if (dateValue > toDate) return false;
+            }
+          }
+          return true;
+        });
+      }
+    });
+
+    // Apply numeric filters
+    Object.entries(numericFilters).forEach(([colId, range]) => {
+      if (range.min || range.max) {
+        result = result.filter((row) => {
+          const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
+          if (value === null || value === undefined) return false;
+          
+          let numValue: number;
+          if (typeof value === 'number') {
+            numValue = value;
+          } else {
+             const str = String(value);
+             const cleanStr = str.replace(/[^0-9.,-]/g, '');
+             const normalized = cleanStr.replace(/\./g, '').replace(',', '.');
+             numValue = parseFloat(normalized);
+          }
+          
+          if (isNaN(numValue)) return false;
+
+          if (range.min) {
+            const min = parseFloat(range.min);
+            if (!isNaN(min) && numValue < min) return false;
+          }
+          if (range.max) {
+            const max = parseFloat(range.max);
+            if (!isNaN(max) && numValue > max) return false;
           }
           return true;
         });
@@ -300,7 +388,7 @@ export function DataTable<T>({
     });
 
     return result;
-  }, [data, columnFilters, dateFilters, getNestedValueForFilter]);
+  }, [data, columnFilters, dateFilters, numericFilters, getNestedValueForFilter]);
 
   // Close filter on Escape
   useEffect(() => {
@@ -381,169 +469,88 @@ export function DataTable<T>({
 
   // Filter Header Component - renders inline in header
   const FilterHeader = useCallback(({ colId, label }: { colId: string; label: string }) => {
-    const buttonRef = useRef<HTMLButtonElement>(null);
-    const dropdownRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ top: 0, left: 0 });
-    const [searchTerm, setSearchTerm] = useState('');
-
     const isDate = isDateColumn(colId);
-    const isOpen = openFilterId === colId;
-    const hasFilter = isDate
-      ? !!(dateFilters[colId]?.from || dateFilters[colId]?.to)
-      : (columnFilters[colId]?.length || 0) > 0;
+    const isNumeric = isNumericColumn(colId);
 
-    const uniqueValues = useMemo(() => isDate ? [] : getUniqueValues(colId), [colId, isDate]);
-    const filteredOptions = searchTerm
-      ? uniqueValues.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
-      : uniqueValues;
+    if (isDate) {
+      return (
+        <DateRangeColumnFilter
+          label={label}
+          value={{
+            from: dateFilters[colId]?.from || null,
+            to: dateFilters[colId]?.to || null
+          }}
+          onChange={(value) => {
+             if (!value.from && !value.to) {
+               const newFilters = { ...dateFilters };
+               delete newFilters[colId];
+               setDateFilters(newFilters);
+             } else {
+               setDateFilters({
+                 ...dateFilters,
+                 [colId]: { from: value.from || undefined, to: value.to || undefined }
+               });
+             }
+          }}
+          filterId={colId}
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      );
+    }
 
-    // Calculate position when opening
-    useLayoutEffect(() => {
-      if (!isOpen || !buttonRef.current) return;
-      const rect = buttonRef.current.getBoundingClientRect();
-      let left = rect.left;
-      let top = rect.bottom + 4;
+    if (isNumeric) {
+      return (
+        <NumericRangeColumnFilter
+          label={label}
+          value={{
+            min: numericFilters[colId]?.min || null,
+            max: numericFilters[colId]?.max || null
+          }}
+          onChange={(value) => {
+             if (!value.min && !value.max) {
+               const newFilters = { ...numericFilters };
+               delete newFilters[colId];
+               setNumericFilters(newFilters);
+             } else {
+               setNumericFilters({
+                 ...numericFilters,
+                 [colId]: value
+               });
+             }
+          }}
+          filterId={colId}
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+          prefix={colId.toLowerCase().includes('importe') || colId.toLowerCase().includes('monto') || colId.toLowerCase().includes('saldo') || colId.toLowerCase().includes('precio') ? 'Gs' : undefined}
+        />
+      );
+    }
 
-      // Adjust if goes off screen
-      if (left + 220 > window.innerWidth) {
-        left = window.innerWidth - 230;
-      }
-      if (top + 300 > window.innerHeight) {
-        top = rect.top - 304;
-      }
-      setPosition({ top, left });
-    }, [isOpen]);
-
-    // Clear search when closing
-    useEffect(() => {
-      if (!isOpen) setSearchTerm('');
-    }, [isOpen]);
-
-    // Close on outside click
-    useEffect(() => {
-      if (!isOpen) return;
-      const handleClick = (e: MouseEvent) => {
-        if (
-          dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
-          buttonRef.current && !buttonRef.current.contains(e.target as Node)
-        ) {
-          setOpenFilterId(null);
-        }
-      };
-      document.addEventListener('mousedown', handleClick);
-      return () => document.removeEventListener('mousedown', handleClick);
-    }, [isOpen]);
-
-    const handleToggle = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      setOpenFilterId(isOpen ? null : colId);
-    };
-
-    const handleSelectValue = (value: string) => {
-      const current = columnFilters[colId] || [];
-      if (current.includes(value)) {
-        setColumnFilters({ ...columnFilters, [colId]: current.filter(v => v !== value) });
-      } else {
-        setColumnFilters({ ...columnFilters, [colId]: [...current, value] });
-      }
-    };
-
-    const handleDateChange = (field: 'from' | 'to', value: string) => {
-      setDateFilters({
-        ...dateFilters,
-        [colId]: { ...dateFilters[colId], [field]: value }
-      });
-    };
-
-    const clearFilter = () => {
-      if (isDate) {
-        const newDateFilters = { ...dateFilters };
-        delete newDateFilters[colId];
-        setDateFilters(newDateFilters);
-      } else {
-        const newFilters = { ...columnFilters };
-        delete newFilters[colId];
-        setColumnFilters(newFilters);
-      }
-    };
-
+    // Default to Excel-style text filter
     return (
-      <div className="dt-filter-header">
-        <span className="dt-filter-label">{label}</span>
-        <button
-          ref={buttonRef}
-          type="button"
-          className={`dt-filter-btn ${hasFilter ? 'active' : ''}`}
-          onClick={handleToggle}
-          title={`Filtrar por ${label}`}
-        >
-          {isDate ? <Calendar size={12} /> : <Filter size={12} />}
-        </button>
-        {isOpen && createPortal(
-          <div
-            ref={dropdownRef}
-            className="dt-filter-dropdown"
-            style={{ position: 'fixed', top: position.top, left: position.left }}
-            onClick={e => e.stopPropagation()}
-          >
-            {isDate ? (
-              <div className="dt-filter-date">
-                <label>
-                  <span>Desde:</span>
-                  <input
-                    type="date"
-                    value={dateFilters[colId]?.from || ''}
-                    onChange={e => handleDateChange('from', e.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>Hasta:</span>
-                  <input
-                    type="date"
-                    value={dateFilters[colId]?.to || ''}
-                    onChange={e => handleDateChange('to', e.target.value)}
-                  />
-                </label>
-              </div>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="dt-filter-search"
-                  autoFocus
-                />
-                <div className="dt-filter-options">
-                  {filteredOptions.length === 0 ? (
-                    <div className="dt-filter-empty">Sin resultados</div>
-                  ) : (
-                    filteredOptions.slice(0, 50).map(option => (
-                      <label key={option} className="dt-filter-option">
-                        <input
-                          type="checkbox"
-                          checked={(columnFilters[colId] || []).includes(option)}
-                          onChange={() => handleSelectValue(option)}
-                        />
-                        <span>{option}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
-            {hasFilter && (
-              <button type="button" className="dt-filter-clear" onClick={clearFilter}>
-                Limpiar filtro
-              </button>
-            )}
-          </div>,
-          document.body
-        )}
-      </div>
+      <ExcelColumnFilter
+        label={label}
+        options={getUniqueValues(colId)}
+        selectedValues={columnFilters[colId] || []}
+        onSelectionChange={(values) => {
+          if (values.length === 0) {
+            const newFilters = { ...columnFilters };
+            delete newFilters[colId];
+            setColumnFilters(newFilters);
+          } else {
+            setColumnFilters({
+              ...columnFilters,
+              [colId]: values
+            });
+          }
+        }}
+        filterId={colId}
+        openFilterId={openFilterId}
+        onOpenChange={setOpenFilterId}
+      />
     );
-  }, [openFilterId, columnFilters, dateFilters, isDateColumn, getUniqueValues]);
+  }, [columnFilters, dateFilters, numericFilters, openFilterId, getUniqueValues, isDateColumn, isNumericColumn]);
 
   // Wrap columns with auto-filters (if enabled)
   const columnsWithFilters = useMemo(() => {
@@ -601,6 +608,9 @@ export function DataTable<T>({
         </button>
       ),
       size: 40,
+      minSize: 40,
+      maxSize: 40,
+      enableResizing: false,
       enableSorting: false,
     };
 
@@ -669,6 +679,10 @@ export function DataTable<T>({
     getExpandedRowModel: getExpandedRowModel(),
     enableColumnResizing,
     columnResizeMode: "onChange",
+    defaultColumn: {
+      minSize: 60,
+      maxSize: 800,
+    },
     initialState: {
       pagination: {
         pageSize,
@@ -825,32 +839,19 @@ export function DataTable<T>({
   const activeFiltersInfo = useMemo(() => {
     const filters: Array<{ colId: string; label: string; type: 'column' | 'date'; values?: string[]; dateRange?: { from?: string; to?: string } }> = [];
 
-    // Column filters
     Object.entries(columnFilters).forEach(([colId, values]) => {
       if (values.length > 0) {
-        // Get column label
-        const col = columns.find(c => {
-          const def = c as { accessorKey?: string; id?: string };
-          return def.accessorKey === colId || def.id === colId;
-        });
-        const colDef = col as { header?: string | unknown };
-        let label = typeof colDef?.header === 'string' ? colDef.header : colId;
-        label = label.charAt(0).toUpperCase() + label.slice(1).replace(/_/g, ' ');
-        filters.push({ colId, label, type: 'column', values });
+        const col = columns.find(c => (c as any).accessorKey === colId || c.id === colId);
+        const label = col ? (typeof col.header === 'string' ? col.header : colId) : colId;
+        filters.push({ colId, label: String(label), type: 'column', values });
       }
     });
 
-    // Date filters
     Object.entries(dateFilters).forEach(([colId, range]) => {
       if (range.from || range.to) {
-        const col = columns.find(c => {
-          const def = c as { accessorKey?: string; id?: string };
-          return def.accessorKey === colId || def.id === colId;
-        });
-        const colDef = col as { header?: string | unknown };
-        let label = typeof colDef?.header === 'string' ? colDef.header : colId;
-        label = label.charAt(0).toUpperCase() + label.slice(1).replace(/_/g, ' ');
-        filters.push({ colId, label, type: 'date', dateRange: range });
+        const col = columns.find(c => (c as any).accessorKey === colId || c.id === colId);
+        const label = col ? (typeof col.header === 'string' ? col.header : colId) : colId;
+        filters.push({ colId, label: String(label), type: 'date', dateRange: range });
       }
     });
 
