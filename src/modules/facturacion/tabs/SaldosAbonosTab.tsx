@@ -525,20 +525,40 @@ export function SaldosAbonosTab() {
       const conductorNombre = `${conductor.nombres} ${conductor.apellidos}`
       const fechaReferencia = new Date(formValues.fecha + 'T12:00:00').toISOString()
 
-      // Insertar o actualizar saldo inicial (upsert por si ya existe)
+      // Verificar si ya existe saldo para este conductor
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any).upsert({
-          conductor_id: formValues.conductorId,
-          conductor_nombre: conductorNombre,
-          conductor_dni: conductor.dni,
-          saldo_actual: formValues.saldo,
-          dias_mora: 0,
-          monto_mora_acumulada: 0,
-          fecha_referencia: fechaReferencia,
-          ultima_actualizacion: new Date().toISOString()
-        }, { onConflict: 'conductor_id' })
+      const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+        .select('id, saldo_actual')
+        .eq('conductor_id', formValues.conductorId)
+        .single()
 
-      if (errorSaldo) throw errorSaldo
+      if (saldoExistente) {
+        // Actualizar saldo existente (sumar al saldo actual)
+        const nuevoSaldo = (saldoExistente.saldo_actual || 0) + formValues.saldo
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
+          .update({
+            saldo_actual: nuevoSaldo,
+            ultima_actualizacion: new Date().toISOString()
+          })
+          .eq('id', saldoExistente.id)
+        if (errorUpdate) throw errorUpdate
+      } else {
+        // Crear nuevo registro
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: errorInsert } = await (supabase.from('saldos_conductores') as any)
+          .insert({
+            conductor_id: formValues.conductorId,
+            conductor_nombre: conductorNombre,
+            conductor_dni: conductor.dni,
+            saldo_actual: formValues.saldo,
+            dias_mora: 0,
+            monto_mora_acumulada: 0,
+            fecha_referencia: fechaReferencia,
+            ultima_actualizacion: new Date().toISOString()
+          })
+        if (errorInsert) throw errorInsert
+      }
 
       // Registrar en historial de abonos
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
