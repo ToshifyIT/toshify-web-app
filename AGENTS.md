@@ -2,6 +2,8 @@
 
 Essential information for agentic coding assistants working in this repository.
 
+> **IMPORTANTE**: Antes de hacer cualquier cosa, leer el archivo `instructions/REGLAS.md` que contiene reglas obligatorias y lecciones aprendidas.
+
 ## Build, Lint, and Test Commands
 
 ### Development
