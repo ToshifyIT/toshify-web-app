@@ -1,5 +1,6 @@
 // src/modules/onboarding/ProgramacionModule.tsx
 // Modulo de programacion de entregas de vehiculos
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useEffect, useMemo } from 'react'
 import {
@@ -226,6 +227,7 @@ export function ProgramacionModule() {
   }, [conductoresDisponibles, quickEditData.conductor_id])
 
   // Especialistas disponibles (para uso futuro)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_especialistas, _setEspecialistas] = useState<Array<{ id: string; nombre: string }>>([])
 
   // Modal cambiar estado
@@ -717,16 +719,14 @@ export function ProgramacionModule() {
       // modalidad en programacion es 'TURNO' o 'CARGO', en asignacion es 'turno' o 'a_cargo'
       const esTurno = prog.modalidad === 'TURNO'
 
-      // Construir fecha_programada correctamente con la hora de la cita
+      // Construir fecha_programada correctamente con la hora de la cita en timezone Argentina (UTC-3)
       let fechaProgramada: string
       if (prog.fecha_cita) {
         const hora = prog.hora_cita && prog.hora_cita.trim() !== ''
           ? prog.hora_cita.substring(0, 5)
           : '10:00'
-        const [hh, mm] = hora.split(':').map(Number)
-        const fechaLocal = new Date(prog.fecha_cita + 'T12:00:00')
-        fechaLocal.setHours(hh, mm, 0, 0)
-        fechaProgramada = fechaLocal.toISOString()
+        // Forzar timezone Argentina (UTC-3) para que la hora sea siempre la de Argentina
+        fechaProgramada = new Date(`${prog.fecha_cita}T${hora}:00-03:00`).toISOString()
       } else {
         fechaProgramada = new Date().toISOString()
       }

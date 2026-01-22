@@ -1,4 +1,5 @@
 // src/components/AssignmentWizard.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react'
 import { X, Calendar, User, ChevronRight, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -485,8 +486,10 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       }
 
       // 3. Crear la asignación principal con estado PROGRAMADO
-      // Combinar fecha y hora programada
-      const fechaHoraProgramada = new Date(`${formData.fecha_programada}T${formData.hora_programada}:00`)
+      // Combinar fecha y hora programada en timezone Argentina (UTC-3)
+      // Formato: YYYY-MM-DDTHH:MM:00-03:00 para forzar timezone Argentina
+      const fechaHoraProgramadaStr = `${formData.fecha_programada}T${formData.hora_programada}:00-03:00`
+      const fechaHoraProgramada = new Date(fechaHoraProgramadaStr)
 
       const { data: asignacion, error: asignacionError } = await supabase
         .from('asignaciones')
