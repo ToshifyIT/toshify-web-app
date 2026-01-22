@@ -178,7 +178,22 @@ export function GarantiasTab() {
     const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
     const anioActual = hoy.getFullYear()
     
+    // Generar semanas: 12 semanas hacia atrás + actual + 8 hacia adelante
+    const semanasAtras: Array<{sem: number; anio: number}> = []
+    let semTemp = semanaActual
+    let anioTemp = anioActual
+    for (let i = 0; i < 12; i++) {
+      semTemp--
+      if (semTemp < 1) { semTemp = 52; anioTemp-- }
+      semanasAtras.unshift({ sem: semTemp, anio: anioTemp })
+    }
+    
     let semanaOptions = ''
+    // Semanas anteriores
+    for (const s of semanasAtras) {
+      semanaOptions += `<option value="${s.sem}-${s.anio}">Semana ${s.sem} - ${s.anio}</option>`
+    }
+    // Semana actual + futuras
     let sem = semanaActual
     let anio = anioActual
     for (let i = 0; i < 8; i++) {
@@ -494,13 +509,27 @@ export function GarantiasTab() {
     const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
     const anioActual = hoy.getFullYear()
     
+    // Generar semanas: 12 semanas hacia atrás + actual + 8 hacia adelante
+    const semanasAtras: Array<{sem: number; anio: number}> = []
+    let semTemp = semanaActual
+    let anioTemp = anioActual
+    for (let i = 0; i < 12; i++) {
+      semTemp--
+      if (semTemp < 1) { semTemp = 52; anioTemp-- }
+      semanasAtras.unshift({ sem: semTemp, anio: anioTemp })
+    }
+    
     let semanaOptions = ''
+    // Semanas anteriores
+    for (const s of semanasAtras) {
+      semanaOptions += `<option value="${s.sem}-${s.anio}">Semana ${s.sem} - ${s.anio}</option>`
+    }
+    // Semana actual + futuras
     let sem = semanaActual
     let anio = anioActual
-    if (sem < 1) { sem = 52 + sem; anio = anioActual - 1 }
     for (let i = 0; i < 8; i++) {
       const selected = i === 0 ? 'selected' : ''
-      const label = sem === semanaActual && anio === anioActual ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
+      const label = i === 0 ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
       semanaOptions += `<option value="${sem}-${anio}" ${selected}>${label}</option>`
       sem++
       if (sem > 52) { sem = 1; anio++ }
@@ -671,13 +700,28 @@ export function GarantiasTab() {
     const semanaActual = Math.ceil((hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
     const anioActual = hoy.getFullYear()
     
-    let semanaOptions = '<option value="">Sin asignar</option>'
-    let sem = semanaActual - 4
-    let anio = anioActual
-    if (sem < 1) { sem = 52 + sem; anio = anioActual - 1 }
+    // Generar semanas: 12 semanas hacia atrás + actual + 8 hacia adelante
+    const semanasAtras: Array<{sem: number; anio: number}> = []
+    let semTemp = semanaActual
+    let anioTemp = anioActual
     for (let i = 0; i < 12; i++) {
+      semTemp--
+      if (semTemp < 1) { semTemp = 52; anioTemp-- }
+      semanasAtras.unshift({ sem: semTemp, anio: anioTemp })
+    }
+    
+    let semanaOptions = '<option value="">Sin asignar</option>'
+    // Semanas anteriores
+    for (const s of semanasAtras) {
+      const isSelected = pago.semana === s.sem && pago.anio === s.anio
+      semanaOptions += `<option value="${s.sem}-${s.anio}" ${isSelected ? 'selected' : ''}>Semana ${s.sem} - ${s.anio}</option>`
+    }
+    // Semana actual + futuras
+    let sem = semanaActual
+    let anio = anioActual
+    for (let i = 0; i < 8; i++) {
       const isSelected = pago.semana === sem && pago.anio === anio
-      const label = sem === semanaActual && anio === anioActual ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
+      const label = i === 0 ? `Semana ${sem} - ${anio} (actual)` : `Semana ${sem} - ${anio}`
       semanaOptions += `<option value="${sem}-${anio}" ${isSelected ? 'selected' : ''}>${label}</option>`
       sem++
       if (sem > 52) { sem = 1; anio++ }
