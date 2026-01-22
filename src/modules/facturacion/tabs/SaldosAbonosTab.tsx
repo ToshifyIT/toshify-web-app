@@ -525,9 +525,9 @@ export function SaldosAbonosTab() {
       const conductorNombre = `${conductor.nombres} ${conductor.apellidos}`
       const fechaReferencia = new Date(formValues.fecha + 'T12:00:00').toISOString()
 
-      // Insertar saldo inicial
+      // Insertar o actualizar saldo inicial (upsert por si ya existe)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any).insert({
+      const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any).upsert({
           conductor_id: formValues.conductorId,
           conductor_nombre: conductorNombre,
           conductor_dni: conductor.dni,
@@ -536,7 +536,7 @@ export function SaldosAbonosTab() {
           monto_mora_acumulada: 0,
           fecha_referencia: fechaReferencia,
           ultima_actualizacion: new Date().toISOString()
-        })
+        }, { onConflict: 'conductor_id' })
 
       if (errorSaldo) throw errorSaldo
 

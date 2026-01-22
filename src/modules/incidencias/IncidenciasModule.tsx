@@ -593,6 +593,17 @@ export function IncidenciasModule() {
     
     const seleccionadas = incidenciasCobro.filter(i => incidenciasSeleccionadas.has(i.id))
     
+    // Validar que todas tengan conductor
+    const sinConductor = seleccionadas.filter(i => !i.conductor_id && !i.conductor_display)
+    if (sinConductor.length > 0) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Incidencias sin conductor',
+        html: `Hay <strong>${sinConductor.length}</strong> incidencia(s) sin conductor asignado.<br><br>Edite las incidencias y asigne un conductor antes de enviar a facturación.`
+      })
+      return
+    }
+    
     const confirmResult = await Swal.fire({
       icon: 'question',
       title: 'Enviar a facturación',
@@ -1310,6 +1321,12 @@ export function IncidenciasModule() {
       return
     }
     
+    // Validar que tenga conductor
+    if (!incidencia.conductor_id && !incidencia.conductor_display) {
+      Swal.fire('Error', 'La incidencia no tiene conductor asignado. Edite la incidencia y asigne un conductor antes de enviar a facturación.', 'warning')
+      return
+    }
+    
     // Si es reenvío (penalidad rechazada), actualizar en lugar de crear
     if (penalidadRechazada) {
       const confirmReenvio = await Swal.fire({
@@ -1800,6 +1817,16 @@ export function IncidenciasModule() {
 
   // Abrir modal de aplicación
   async function handleMarcarAplicado(penalidad: PenalidadCompleta) {
+    // Validar que tenga conductor asignado
+    if (!penalidad.conductor_id && !penalidad.conductor_nombre) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Sin conductor',
+        text: 'Esta penalidad no tiene conductor asignado. Edítela primero para asignar un conductor.'
+      })
+      return
+    }
+    
     setPenalidadAplicar(penalidad)
     setAplicarFraccionado(false)
     setCantidadCuotas(2)
