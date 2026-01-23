@@ -7,6 +7,7 @@ import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
 import Swal from "sweetalert2";
+import { getWeek, getYear } from "date-fns";
 import type {
   ConductorWithRelations,
   EstadoCivil,
@@ -22,6 +23,24 @@ import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilt
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
 import { createConductorDriveFolder } from "../../services/driveService";
+
+// Función para actualizar estado en tabla de control de facturación
+async function actualizarEstadoControlFacturacion(
+  conductorDni: string,
+  estado: 'Activo' | 'De baja' | 'Deuda',
+  fecha: Date = new Date()
+) {
+  const semana = getWeek(fecha, { weekStartsOn: 1 })
+  const anio = getYear(fecha)
+  
+  // Actualizar estado en la tabla de control para la semana actual
+  await (supabase as any)
+    .from('conductores_semana_facturacion')
+    .update({ estado })
+    .eq('numero_dni', conductorDni)
+    .eq('semana', semana)
+    .eq('anio', anio)
+}
 
 // Helper para normalizar la visualización de estados de conductor
 // Mantiene consistencia en el frontend independientemente de cómo se guarde en BD
@@ -1192,7 +1211,12 @@ export function ConductoresModule() {
       // 2. Ejecutar actualización del conductor (incluyendo motivo)
       await performConductorUpdate(motivoBaja);
 
-      // 3. Cerrar modales y refrescar
+      // 3. Actualizar tabla de control de facturación con estado 'De baja'
+      if (selectedConductor.numero_dni) {
+        await actualizarEstadoControlFacturacion(selectedConductor.numero_dni, 'De baja');
+      }
+
+      // 4. Cerrar modales y refrescar
       setShowBajaConfirmModal(false);
       setAffectedAssignments([]);
       setShowEditModal(false);
