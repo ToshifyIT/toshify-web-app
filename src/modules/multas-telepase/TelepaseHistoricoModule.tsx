@@ -345,7 +345,7 @@ export default function TelepaseHistoricoModule() {
       id: 'fecha_hora',
       accessorFn: (row) => `${row.fecha || ''} ${row.hora || ''}`,
       enableSorting: true,
-      header: ({ column }) => (
+      header: () => (
         <ExcelDateRangeFilter
           label="FECHA CARGA"
           startDate={fechaDesde}
