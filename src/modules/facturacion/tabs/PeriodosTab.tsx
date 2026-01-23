@@ -20,47 +20,23 @@ import {
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import { formatCurrency } from '../../../types/facturacion.types'
-import { format, startOfWeek, endOfWeek, subWeeks, getWeek, getYear, parseISO, differenceInDays, isAfter, isBefore } from 'date-fns'
+import { format, startOfWeek, endOfWeek, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-// Calcula días trabajados dentro de un período considerando fecha_inicio y fecha_fin de asignación
-function calcularDiasTrabajados(
-  fechaInicioAsig: string | null,
-  fechaFinAsig: string | null,
-  fechaInicioPeriodo: string,
-  fechaFinPeriodo: string
-): { diasTrabajados: number; fechaEfectivaInicio: Date; fechaEfectivaFin: Date } {
-  const periodoInicio = parseISO(fechaInicioPeriodo)
-  const periodoFin = parseISO(fechaFinPeriodo)
-
-  // Fecha efectiva de inicio: la mayor entre inicio asignación e inicio período
-  let fechaEfectivaInicio: Date
-  if (fechaInicioAsig) {
-    const asigInicio = parseISO(fechaInicioAsig)
-    fechaEfectivaInicio = isAfter(asigInicio, periodoInicio) ? asigInicio : periodoInicio
-  } else {
-    fechaEfectivaInicio = periodoInicio
-  }
-
-  // Fecha efectiva de fin: la menor entre fin asignación (si existe) y fin período
-  // REGLA: El día de renuncia SÍ se cobra
-  let fechaEfectivaFin: Date
-  if (fechaFinAsig) {
-    const asigFin = parseISO(fechaFinAsig)
-    fechaEfectivaFin = isBefore(asigFin, periodoFin) ? asigFin : periodoFin
-  } else {
-    fechaEfectivaFin = periodoFin
-  }
-
-  // Si las fechas no tienen sentido (inicio después de fin), retorna 0
-  if (isAfter(fechaEfectivaInicio, fechaEfectivaFin)) {
-    return { diasTrabajados: 0, fechaEfectivaInicio, fechaEfectivaFin }
-  }
-
-  // +1 porque el día de inicio y el de fin cuentan ambos
-  const diasTrabajados = differenceInDays(fechaEfectivaFin, fechaEfectivaInicio) + 1
-
-  return { diasTrabajados: Math.min(diasTrabajados, 7), fechaEfectivaInicio, fechaEfectivaFin }
+// Tipo para conductor procesado con sus días por modalidad
+interface ConductorProcesado {
+  conductor_id: string
+  conductor_nombre: string
+  conductor_dni: string | null
+  conductor_cuit: string | null
+  vehiculo_id: string | null
+  vehiculo_patente: string | null
+  // Días por modalidad (para prorrateo cuando hay cambios)
+  dias_turno: number
+  dias_cargo: number
+  total_dias: number
+  // Primera modalidad (para determinar orden de facturación)
+  modalidad_inicial: 'TURNO' | 'CARGO'
 }
 
 // Tipo para semana con datos de facturación
@@ -110,10 +86,10 @@ export function PeriodosTab() {
   async function cargarSemanas() {
     setLoading(true)
     try {
-      // Generar las últimas 12 semanas
-      const semanasBase = generarSemanasDelAnio(12)
+      // Generar las próximas semanas sin generar (para poder crearlas)
+      const semanasBase = generarSemanasDelAnio(4) // Solo las últimas 4 semanas para nuevas
 
-      // Cargar períodos existentes de la BD
+      // Cargar TODOS los períodos existentes de la BD
       const { data: periodos, error } = await supabase
         .from('periodos_facturacion')
         .select('*')
@@ -122,11 +98,22 @@ export function PeriodosTab() {
 
       if (error) throw error
 
-      // Mapear semanas con datos de BD
-      const semanasConDatos: SemanaFacturacion[] = semanasBase.map(s => {
-        const periodoExistente = ((periodos || []) as any[]).find((p: any) => p.semana === s.semana && p.anio === s.anio)
+      // Crear mapa de períodos existentes por semana-año
+      const periodosMap = new Map<string, any>()
+      for (const p of ((periodos || []) as any[])) {
+        periodosMap.set(`${p.semana}-${p.anio}`, p)
+      }
 
-        return {
+      // Combinar: períodos existentes + semanas recientes sin generar
+      const semanasConDatos: SemanaFacturacion[] = []
+      const semanasAgregadas = new Set<string>()
+
+      // Primero agregar semanas base (recientes) para permitir generar nuevas
+      for (const s of semanasBase) {
+        const key = `${s.semana}-${s.anio}`
+        const periodoExistente = periodosMap.get(key)
+
+        semanasConDatos.push({
           semana: s.semana,
           anio: s.anio,
           fecha_inicio: format(s.inicio, 'yyyy-MM-dd'),
@@ -138,12 +125,38 @@ export function PeriodosTab() {
           total_descuentos: periodoExistente?.total_descuentos || 0,
           total_neto: periodoExistente?.total_neto || 0,
           fecha_cierre: periodoExistente?.fecha_cierre || null
+        })
+        semanasAgregadas.add(key)
+      }
+
+      // Luego agregar todos los períodos existentes que no estén ya
+      for (const p of ((periodos || []) as any[])) {
+        const key = `${p.semana}-${p.anio}`
+        if (!semanasAgregadas.has(key)) {
+          semanasConDatos.push({
+            semana: p.semana,
+            anio: p.anio,
+            fecha_inicio: p.fecha_inicio,
+            fecha_fin: p.fecha_fin,
+            periodo_id: p.id,
+            estado: p.estado,
+            total_conductores: p.total_conductores || 0,
+            total_cargos: p.total_cargos || 0,
+            total_descuentos: p.total_descuentos || 0,
+            total_neto: p.total_neto || 0,
+            fecha_cierre: p.fecha_cierre || null
+          })
         }
+      }
+
+      // Ordenar por año desc, semana desc
+      semanasConDatos.sort((a, b) => {
+        if (a.anio !== b.anio) return b.anio - a.anio
+        return b.semana - a.semana
       })
 
       setSemanas(semanasConDatos)
     } catch (error) {
-      console.error('Error cargando semanas:', error)
       Swal.fire('Error', 'No se pudieron cargar las semanas', 'error')
     } finally {
       setLoading(false)
@@ -166,7 +179,7 @@ export function PeriodosTab() {
           <div style="display: flex; flex-direction: column; gap: 6px;">
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
               <span style="width: 6px; height: 6px; background: #DC2626; border-radius: 50%; flex-shrink: 0;"></span>
-              Procesará todos los conductores activos
+              Procesará todos los conductores con asignación activa
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
               <span style="width: 6px; height: 6px; background: #DC2626; border-radius: 50%; flex-shrink: 0;"></span>
@@ -243,54 +256,97 @@ export function PeriodosTab() {
           .eq('id', periodoId)
       }
 
-      // 2. Obtener conductores con asignaciones (activas o que terminaron dentro del período)
-      // Incluye: activas, o las que tienen fecha_fin dentro del período (renuncias)
-      const { data: asignaciones, error: errAsig } = await supabase
-        .from('asignaciones')
-        .select(`
-          id,
-          codigo,
-          horario,
-          modalidad,
-          conductor_id,
-          vehiculo_id,
-          fecha_inicio,
-          fecha_fin,
-          estado,
-          conductores:conductor_id(id, nombres, apellidos, numero_dni, numero_cuit),
-          vehiculos:vehiculo_id(id, patente)
-        `)
-        .or(`estado.eq.activa,and(fecha_fin.gte.${semana.fecha_inicio},fecha_fin.lte.${semana.fecha_fin})`)
+      // 2. NUEVO: Obtener conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
+      const semanaNum = getWeek(parseISO(semana.fecha_inicio), { weekStartsOn: 1 })
+      const anioNum = getYear(parseISO(semana.fecha_inicio))
+      
+      const { data: conductoresControl, error: errControl } = await (supabase
+        .from('conductores_semana_facturacion') as any)
+        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
+        .eq('semana', semanaNum)
+        .eq('anio', anioNum)
 
-      if (errAsig) throw errAsig
+      if (errControl) throw errControl
 
-      if (!asignaciones || asignaciones.length === 0) {
+      if (!conductoresControl || conductoresControl.length === 0) {
         await (supabase
           .from('periodos_facturacion') as any)
           .update({ estado: 'abierto', total_conductores: 0 })
           .eq('id', periodoId)
 
-        Swal.fire('Aviso', 'No hay conductores activos para facturar', 'warning')
+        Swal.fire('Aviso', 'No hay conductores en la tabla de control para esta semana', 'warning')
         cargarSemanas()
         return
       }
 
-      // 3. Obtener conceptos (precios)
+      // 3. Obtener datos de conductores desde tabla conductores
+      const dnisControl = conductoresControl.map((c: any) => c.numero_dni)
+      
+      const { data: conductoresData } = await supabase
+        .from('conductores')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit')
+        .in('numero_dni', dnisControl)
+
+      // Crear mapa de conductores por DNI
+      const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
+
+      // 4. Procesar conductores desde tabla de control
+      const conductoresProcesados: ConductorProcesado[] = []
+
+      for (const control of conductoresControl) {
+        const conductorData = conductoresMap.get(control.numero_dni)
+        
+        if (!conductorData) {
+          // Conductor no existe en la tabla conductores, saltar
+          continue
+        }
+
+        // Usar datos de la tabla de control
+        const modalidad = control.modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
+        const diasTurno = modalidad === 'TURNO' ? 7 : 0
+        const diasCargo = modalidad === 'CARGO' ? 7 : 0
+
+        conductoresProcesados.push({
+          conductor_id: conductorData.id,
+          conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
+          conductor_dni: conductorData.numero_dni,
+          conductor_cuit: conductorData.numero_cuit,
+          vehiculo_id: null, // Se obtiene de la patente
+          vehiculo_patente: control.patente || null,
+          dias_turno: diasTurno,
+          dias_cargo: diasCargo,
+          total_dias: 7, // Semana completa desde control
+          modalidad_inicial: modalidad as 'TURNO' | 'CARGO'
+        })
+      }
+
+      // Obtener IDs de conductores para consultas posteriores
+      const conductorIds = conductoresProcesados.map(c => c.conductor_id)
+
+      if (conductoresProcesados.length === 0) {
+        await (supabase
+          .from('periodos_facturacion') as any)
+          .update({ estado: 'abierto', total_conductores: 0 })
+          .eq('id', periodoId)
+
+        Swal.fire('Aviso', 'No hay conductores con días trabajados para facturar', 'warning')
+        cargarSemanas()
+        return
+      }
+
+      // 6. Obtener conceptos (precios)
       const { data: conceptos } = await supabase
         .from('conceptos_nomina')
         .select('*')
         .eq('activo', true)
 
-      const precioTurno = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 245000
+      // P001 = CARGO (todo_dia), P002 = TURNO (diurno/nocturno)
       const precioCargo = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 360000
-      const cuotaGarantia = 50000
+      const precioTurno = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 245000
+      const cuotaGarantia = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 50000
 
-      // 4. Obtener datos adicionales (penalidades, tickets, etc.)
-      const conductorIds = (asignaciones as any[])
-        .map((a: any) => a.conductores?.id)
-        .filter((id): id is string => !!id)
-
-      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes] = await Promise.all([
+      // 7. Obtener datos adicionales (penalidades, tickets, etc.)
+      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes] = await Promise.all([
         supabase
           .from('penalidades')
           .select('*')
@@ -307,41 +363,55 @@ export function PeriodosTab() {
           .from('saldos_conductores')
           .select('*')
           .in('conductor_id', conductorIds),
-        // Obtener excesos de kilometraje pendientes para este período
-        periodoId ? supabase
+        // Excesos de kilometraje pendientes
+        supabase
           .from('excesos_kilometraje')
           .select('*')
           .in('conductor_id', conductorIds)
-          .eq('periodo_id', periodoId)
-          .eq('aplicado', false) : Promise.resolve({ data: [] }),
-        // Obtener peajes de Cabify para el período (P005)
+          .eq('aplicado', false),
+        // Peajes de Cabify para el período (P005)
         supabase
           .from('cabify_historico')
           .select('dni, peajes')
           .gte('fecha_inicio', semana.fecha_inicio + 'T00:00:00')
-          .lte('fecha_inicio', semana.fecha_fin + 'T23:59:59')
+          .lte('fecha_inicio', semana.fecha_fin + 'T23:59:59'),
+        // Garantías de conductores
+        supabase
+          .from('garantias_conductores')
+          .select('*')
+          .in('conductor_id', conductorIds)
       ])
 
       const penalidades = penalidadesRes.data || []
       const tickets = ticketsRes.data || []
       const saldos = saldosRes.data || []
       const excesos = excesosRes.data || []
+      const garantias = garantiasRes.data || []
 
-      // Agregar peajes por DNI (de Cabify)
+      // Mapear peajes por DNI
       const peajesMap = new Map<string, number>()
       ;((cabifyRes.data || []) as any[]).forEach((record: any) => {
         if (record.dni && record.peajes) {
-          const actual = peajesMap.get(record.dni) || 0
-          peajesMap.set(record.dni, actual + (parseFloat(String(record.peajes)) || 0))
+          const actual = peajesMap.get(String(record.dni)) || 0
+          peajesMap.set(String(record.dni), actual + (parseFloat(String(record.peajes)) || 0))
         }
       })
 
-      // 5. Eliminar facturación anterior de este período (si existe)
+      // 8. Eliminar facturación anterior de este período (si existe)
       if (semana.periodo_id) {
-        await supabase
-          .from('facturacion_detalle')
-          .delete()
-          .eq('facturacion_id', semana.periodo_id)
+        // Primero obtener los IDs de facturacion_conductores para eliminar detalle
+        const { data: factExistentes } = await supabase
+          .from('facturacion_conductores')
+          .select('id')
+          .eq('periodo_id', semana.periodo_id)
+
+        if (factExistentes && factExistentes.length > 0) {
+          const factIds = factExistentes.map((f: any) => f.id)
+          await supabase
+            .from('facturacion_detalle')
+            .delete()
+            .in('facturacion_id', factIds)
+        }
 
         await supabase
           .from('facturacion_conductores')
@@ -349,83 +419,99 @@ export function PeriodosTab() {
           .eq('periodo_id', semana.periodo_id)
       }
 
-      // 6. Procesar cada conductor
-      let totalCargos = 0
-      let totalDescuentos = 0
+      // 9. Procesar cada conductor
+      let totalCargosGlobal = 0
+      let totalDescuentosGlobal = 0
+      let conductoresProcesadosCount = 0
 
-      for (const asig of (asignaciones as any[])) {
-        const conductor = asig.conductores
-        const vehiculo = asig.vehiculos
+      for (const conductor of conductoresProcesados) {
+        // Calcular alquiler basado en modalidad y precios de conceptos_nomina
+        let alquilerTotal = 0
+        const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
 
-        if (!conductor) continue
+        // Si tiene días en TURNO
+        if (conductor.dias_turno > 0) {
+          const montoTurno = Math.round((precioTurno / 7) * conductor.dias_turno)
+          alquilerTotal += montoTurno
+          detallesAlquiler.push({
+            codigo: 'P002',
+            descripcion: conductor.dias_turno < 7 ? `Alquiler Turno (${conductor.dias_turno}/7 días)` : 'Alquiler Turno',
+            dias: conductor.dias_turno,
+            monto: montoTurno
+          })
+        }
 
-        // Calcular días trabajados en el período (prorrateo)
-        const { diasTrabajados } = calcularDiasTrabajados(
-          asig.fecha_inicio,
-          asig.fecha_fin,
-          semana.fecha_inicio,
-          semana.fecha_fin
-        )
+        // Si tiene días en CARGO
+        if (conductor.dias_cargo > 0) {
+          const montoCargo = Math.round((precioCargo / 7) * conductor.dias_cargo)
+          alquilerTotal += montoCargo
+          detallesAlquiler.push({
+            codigo: 'P001',
+            descripcion: conductor.dias_cargo < 7 ? `Alquiler a Cargo (${conductor.dias_cargo}/7 días)` : 'Alquiler a Cargo',
+            dias: conductor.dias_cargo,
+            monto: montoCargo
+          })
+        }
 
-        // Si no trabajó ningún día en este período, saltar
-        if (diasTrabajados === 0) continue
-
-        const factorProporcional = diasTrabajados / 7
-        const tipoAlquiler = asig.horario === 'CARGO' ? 'CARGO' : 'TURNO'
-        const precioSemanalCompleto = tipoAlquiler === 'CARGO' ? precioCargo : precioTurno
-
-        // Aplicar prorrateo al alquiler
-        const precioSemanal = Math.round(precioSemanalCompleto * factorProporcional)
-        // Garantía también se prorratea
+        // Garantía prorrateada según días totales
+        const factorProporcional = conductor.total_dias / 7
         const cuotaGarantiaProporcional = Math.round(cuotaGarantia * factorProporcional)
 
+        // Obtener número de cuota de garantía
+        const garantiaConductor = (garantias as any[]).find((g: any) => g.conductor_id === conductor.conductor_id)
+        const cuotaActual = (garantiaConductor?.cuotas_pagadas || 0) + 1
+        const totalCuotas = garantiaConductor?.total_cuotas || 16
+
         // Penalidades del conductor
-        const pensConductor = (penalidades as any[]).filter((p: any) => p.conductor_id === conductor.id)
+        const pensConductor = (penalidades as any[]).filter((p: any) => p.conductor_id === conductor.conductor_id)
         const totalPenalidades = pensConductor.reduce((sum: number, p: any) => sum + (p.monto || 0), 0)
 
         // Tickets del conductor (descuentos)
-        const ticketsConductor = (tickets as any[]).filter((t: any) => t.conductor_id === conductor.id)
+        const ticketsConductor = (tickets as any[]).filter((t: any) => t.conductor_id === conductor.conductor_id)
         const totalTickets = ticketsConductor.reduce((sum: number, t: any) => sum + (t.monto || 0), 0)
 
         // Excesos de kilometraje del conductor (P006)
-        const excesosConductor = (excesos as any[]).filter((e: any) => e.conductor_id === conductor.id)
+        const excesosConductor = (excesos as any[]).filter((e: any) => e.conductor_id === conductor.conductor_id)
         const totalExcesos = excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
         // Peajes del conductor desde Cabify (P005)
-        const totalPeajes = peajesMap.get(conductor.numero_dni) || 0
+        const totalPeajes = conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni)) || 0) : 0
 
         // Saldo anterior
-        const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.id)
+        const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
         const saldoAnterior = saldoConductor?.saldo_actual || 0
         const diasMora = saldoAnterior > 0 ? Math.min(saldoConductor?.dias_mora || 0, 7) : 0
-        const montoMora = saldoAnterior > 0 ? saldoAnterior * 0.01 * diasMora : 0
+        const montoMora = saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0
 
-        // Totales (incluye excesos de km y peajes de Cabify) - usa garantía prorrateada
-        const subtotalCargos = precioSemanal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora
+        // Totales
+        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora
         const subtotalDescuentos = totalTickets
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
 
-        totalCargos += subtotalCargos
-        totalDescuentos += subtotalDescuentos
+        totalCargosGlobal += subtotalCargos
+        totalDescuentosGlobal += subtotalDescuentos
+
+        // Determinar tipo alquiler principal (el que tiene más días o el inicial)
+        const tipoAlquilerPrincipal = conductor.dias_cargo >= conductor.dias_turno ? 'CARGO' : 'TURNO'
 
         // Insertar facturación del conductor
         const { data: factConductor, error: errFact } = await (supabase
           .from('facturacion_conductores') as any)
           .insert({
             periodo_id: periodoId,
-            conductor_id: conductor.id,
-            conductor_nombre: `${(conductor.apellidos || '').toUpperCase()}, ${(conductor.nombres || '').toUpperCase()}`,
-            conductor_dni: conductor.numero_dni,
-            conductor_cuit: conductor.numero_cuit,
-            vehiculo_id: vehiculo?.id,
-            vehiculo_patente: vehiculo?.patente,
-            tipo_alquiler: tipoAlquiler,
+            conductor_id: conductor.conductor_id,
+            conductor_nombre: conductor.conductor_nombre,
+            conductor_dni: conductor.conductor_dni,
+            conductor_cuit: conductor.conductor_cuit,
+            vehiculo_id: conductor.vehiculo_id,
+            vehiculo_patente: conductor.vehiculo_patente,
+            tipo_alquiler: tipoAlquilerPrincipal,
             turnos_base: 7,
-            turnos_cobrados: diasTrabajados, // Días realmente trabajados
-            factor_proporcional: factorProporcional, // Factor de prorrateo (ej: 5/7 = 0.714)
-            subtotal_alquiler: precioSemanal, // Ya prorrateado
-            subtotal_garantia: cuotaGarantiaProporcional, // Ya prorrateada
+            turnos_cobrados: conductor.total_dias,
+            factor_proporcional: factorProporcional,
+            subtotal_alquiler: alquilerTotal,
+            subtotal_garantia: cuotaGarantiaProporcional,
             subtotal_cargos: subtotalCargos,
             subtotal_descuentos: subtotalDescuentos,
             subtotal_neto: subtotalNeto,
@@ -443,33 +529,34 @@ export function PeriodosTab() {
           continue
         }
 
-        // Insertar detalle de alquiler (con prorrateo)
-        const descripcionAlquiler = diasTrabajados < 7
-          ? `${tipoAlquiler === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler a Turno'} (${diasTrabajados}/7 días)`
-          : tipoAlquiler === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler a Turno'
+        conductoresProcesadosCount++
+        const facturacionId = (factConductor as any).id
+
+        // Insertar detalles de alquiler (puede haber 1 o 2 si cambió de modalidad)
+        for (const detalle of detallesAlquiler) {
+          await (supabase.from('facturacion_detalle') as any).insert({
+            facturacion_id: facturacionId,
+            concepto_codigo: detalle.codigo,
+            concepto_descripcion: detalle.descripcion,
+            cantidad: detalle.dias,
+            precio_unitario: detalle.codigo === 'P001' ? precioCargo / 7 : precioTurno / 7,
+            subtotal: detalle.monto,
+            total: detalle.monto,
+            es_descuento: false
+          })
+        }
+
+        // Insertar detalle de garantía
+        const descripcionGarantia = conductor.total_dias < 7
+          ? `Cuota de Garantía ${cuotaActual} de ${totalCuotas} (${conductor.total_dias}/7 días)`
+          : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
 
         await (supabase.from('facturacion_detalle') as any).insert({
-          facturacion_id: (factConductor as any).id,
-          concepto_codigo: tipoAlquiler === 'CARGO' ? 'P001' : 'P002',
-          concepto_descripcion: descripcionAlquiler,
-          cantidad: diasTrabajados, // Días realmente trabajados
-          precio_unitario: precioSemanalCompleto / 7, // Precio diario sin prorratear
-          subtotal: precioSemanal, // Ya prorrateado
-          total: precioSemanal,
-          es_descuento: false
-        })
-
-        // Insertar detalle de garantía (con prorrateo)
-        const descripcionGarantia = diasTrabajados < 7
-          ? `Cuota de Garantía (${diasTrabajados}/7 días)`
-          : 'Cuota de Garantía'
-
-        await (supabase.from('facturacion_detalle') as any).insert({
-          facturacion_id: (factConductor as any).id,
+          facturacion_id: facturacionId,
           concepto_codigo: 'P003',
           concepto_descripcion: descripcionGarantia,
-          cantidad: diasTrabajados, // Días realmente trabajados
-          precio_unitario: cuotaGarantia / 7, // Precio diario
+          cantidad: conductor.total_dias,
+          precio_unitario: cuotaGarantia / 7,
           subtotal: cuotaGarantiaProporcional,
           total: cuotaGarantiaProporcional,
           es_descuento: false
@@ -478,7 +565,7 @@ export function PeriodosTab() {
         // Insertar penalidades como detalle
         for (const pen of pensConductor) {
           await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: (factConductor as any).id,
+            facturacion_id: facturacionId,
             concepto_codigo: 'P007',
             concepto_descripcion: `Penalidad: ${(pen as any).detalle || 'Sin detalle'}`,
             cantidad: 1,
@@ -500,7 +587,7 @@ export function PeriodosTab() {
         // Insertar tickets como detalle (descuentos)
         for (const ticket of ticketsConductor) {
           await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: (factConductor as any).id,
+            facturacion_id: facturacionId,
             concepto_codigo: 'P004',
             concepto_descripcion: `Ticket: ${(ticket as any).descripcion || (ticket as any).tipo}`,
             cantidad: 1,
@@ -522,15 +609,15 @@ export function PeriodosTab() {
         // Insertar excesos de kilometraje como detalle (P006)
         for (const exceso of excesosConductor) {
           await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: (factConductor as any).id,
+            facturacion_id: facturacionId,
             concepto_codigo: 'P006',
-            concepto_descripcion: `Exceso KM: ${(exceso as any).km_exceso} km (${(exceso as any).rango})`,
+            concepto_descripcion: `Exceso KM: ${(exceso as any).km_exceso || 0} km`,
             cantidad: 1,
-            precio_unitario: (exceso as any).monto_base,
+            precio_unitario: (exceso as any).monto_base || 0,
             iva_porcentaje: (exceso as any).iva_porcentaje || 21,
-            iva_monto: (exceso as any).iva_monto,
-            subtotal: (exceso as any).monto_base,
-            total: (exceso as any).monto_total,
+            iva_monto: (exceso as any).iva_monto || 0,
+            subtotal: (exceso as any).monto_base || 0,
+            total: (exceso as any).monto_total || 0,
             es_descuento: false,
             referencia_id: (exceso as any).id,
             referencia_tipo: 'exceso_km'
@@ -546,9 +633,9 @@ export function PeriodosTab() {
         // Insertar peajes de Cabify como detalle (P005)
         if (totalPeajes > 0) {
           await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: (factConductor as any).id,
+            facturacion_id: facturacionId,
             concepto_codigo: 'P005',
-            concepto_descripcion: 'Telepeajes (Cabify)',
+            concepto_descripcion: `Telepeajes (${format(parseISO(semana.fecha_inicio), 'dd/MM', { locale: es })} al ${format(parseISO(semana.fecha_fin), 'dd/MM/yyyy', { locale: es })})`,
             cantidad: 1,
             precio_unitario: totalPeajes,
             subtotal: totalPeajes,
@@ -561,11 +648,11 @@ export function PeriodosTab() {
         // Insertar mora si existe
         if (montoMora > 0) {
           await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: (factConductor as any).id,
+            facturacion_id: facturacionId,
             concepto_codigo: 'P009',
             concepto_descripcion: `Mora (${diasMora} días al 1%)`,
             cantidad: diasMora,
-            precio_unitario: saldoAnterior * 0.01,
+            precio_unitario: Math.round(saldoAnterior * 0.01),
             subtotal: montoMora,
             total: montoMora,
             es_descuento: false
@@ -573,15 +660,15 @@ export function PeriodosTab() {
         }
       }
 
-      // 7. Actualizar totales del período
+      // 10. Actualizar totales del período
       await (supabase
         .from('periodos_facturacion') as any)
         .update({
           estado: 'abierto',
-          total_conductores: asignaciones.length,
-          total_cargos: totalCargos,
-          total_descuentos: totalDescuentos,
-          total_neto: totalCargos - totalDescuentos
+          total_conductores: conductoresProcesadosCount,
+          total_cargos: totalCargosGlobal,
+          total_descuentos: totalDescuentosGlobal,
+          total_neto: totalCargosGlobal - totalDescuentosGlobal
         })
         .eq('id', periodoId)
 
@@ -590,8 +677,8 @@ export function PeriodosTab() {
         title: 'Facturación Generada',
         html: `
           <p>Semana ${semana.semana} - ${semana.anio}</p>
-          <p><strong>${asignaciones.length}</strong> conductores procesados</p>
-          <p>Total: <strong>${formatCurrency(totalCargos - totalDescuentos)}</strong></p>
+          <p><strong>${conductoresProcesadosCount}</strong> conductores procesados</p>
+          <p>Total: <strong>${formatCurrency(totalCargosGlobal - totalDescuentosGlobal)}</strong></p>
         `,
         timer: 3000,
         showConfirmButton: false
@@ -974,8 +1061,8 @@ export function PeriodosTab() {
         emptyIcon={<FileText size={48} />}
         emptyTitle="Sin semanas"
         emptyDescription="No hay semanas para mostrar"
-        pageSize={12}
-        pageSizeOptions={[12, 24, 52]}
+        pageSize={52}
+        pageSizeOptions={[12, 24, 52, 100]}
       />
     </>
   )

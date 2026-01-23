@@ -177,6 +177,27 @@ export function ReporteFacturacionTab() {
   // Recalcular período abierto
   const [recalculando, setRecalculando] = useState(false)
 
+  // Al montar: buscar última semana generada y navegar a ella
+  useEffect(() => {
+    async function irAUltimaSemanaGenerada() {
+      const { data: ultimoPeriodo } = await (supabase
+        .from('periodos_facturacion') as any)
+        .select('fecha_inicio, fecha_fin')
+        .in('estado', ['abierto', 'cerrado'])
+        .order('anio', { ascending: false })
+        .order('semana', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (ultimoPeriodo) {
+        const inicio = parseISO(ultimoPeriodo.fecha_inicio)
+        const fin = parseISO(ultimoPeriodo.fecha_fin)
+        setSemanaActual({ inicio, fin })
+      }
+    }
+    irAUltimaSemanaGenerada()
+  }, [])
+
   // Cargar facturaciones cuando cambia la semana
   useEffect(() => {
     // Resetear modo vista previa al cambiar de semana
@@ -271,12 +292,12 @@ export function ReporteFacturacionTab() {
 
       if (errFact) throw errFact
 
-      // Usar nombre de tabla conductores (en MAYÚSCULAS) en lugar del campo guardado
+      // Usar nombre de tabla conductores en formato "Nombres Apellidos"
       const facturacionesTransformadas = (facturacionesData || []).map((f: any) => ({
         ...f,
         conductor_nombre: f.conductor 
-          ? `${(f.conductor.apellidos || '').toUpperCase()}, ${(f.conductor.nombres || '').toUpperCase()}`
-          : (f.conductor_nombre || '').toUpperCase()
+          ? `${f.conductor.nombres || ''} ${f.conductor.apellidos || ''}`.trim()
+          : f.conductor_nombre || ''
       }))
       
       // Ordenar por nombre
