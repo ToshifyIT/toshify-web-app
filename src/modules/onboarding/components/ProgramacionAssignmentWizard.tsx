@@ -833,6 +833,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   // Filtrar vehiculos
+  // eslint-disable-next-line no-console
+  console.log('DEBUG vehicles en state:', vehicles.length, vehicles.slice(0, 5).map(v => ({ p: v.patente, d: v.disponibilidad })))
   const filteredVehicles = vehicles
     .filter(v => {
       // En modo edición, siempre incluir el vehículo actual
