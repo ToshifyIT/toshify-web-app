@@ -340,13 +340,19 @@ export function PeriodosTab() {
         .select('*')
         .eq('activo', true)
 
-      // P001 = CARGO (todo_dia), P002 = TURNO (diurno/nocturno)
-      const precioCargo = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 360000
-      const precioTurno = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 245000
-      const cuotaGarantia = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 50000
+      // P001 = TURNO, P002 = CARGO - precios en BD son DIARIOS (precio_final)
+      // Convertir a semanal multiplicando por 7
+      const precioTurnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 35000
+      const precioCargoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 51428.57
+      const cuotaGarantiaDiaria = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 7142.86
+      
+      // Precios semanales (7 días)
+      const precioTurno = precioTurnoDiario * 7  // ~$245,000
+      const precioCargo = precioCargoDiario * 7  // ~$360,000
+      const cuotaGarantia = cuotaGarantiaDiaria * 7  // ~$50,000
 
       // 7. Obtener datos adicionales (penalidades, tickets, etc.)
-      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes] = await Promise.all([
+      const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes] = await Promise.all([
         supabase
           .from('penalidades')
           .select('*')
@@ -379,7 +385,15 @@ export function PeriodosTab() {
         supabase
           .from('garantias_conductores')
           .select('*')
+          .in('conductor_id', conductorIds),
+        // Cobros fraccionados (P010) para esta semana
+        supabase
+          .from('cobros_fraccionados')
+          .select('*')
           .in('conductor_id', conductorIds)
+          .eq('semana', semana.semana)
+          .eq('anio', semana.anio)
+          .eq('aplicado', false)
       ])
 
       const penalidades = penalidadesRes.data || []
@@ -387,6 +401,7 @@ export function PeriodosTab() {
       const saldos = saldosRes.data || []
       const excesos = excesosRes.data || []
       const garantias = garantiasRes.data || []
+      const cobros = cobrosRes.data || []
 
       // Mapear peajes por DNI
       const peajesMap = new Map<string, number>()
@@ -477,6 +492,10 @@ export function PeriodosTab() {
         // Peajes del conductor desde Cabify (P005)
         const totalPeajes = conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni)) || 0) : 0
 
+        // Cobros fraccionados del conductor (P010)
+        const cobrosConductor = (cobros as any[]).filter((c: any) => c.conductor_id === conductor.conductor_id)
+        const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + (c.monto_cuota || 0), 0)
+
         // Saldo anterior
         const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
         const saldoAnterior = saldoConductor?.saldo_actual || 0
@@ -484,7 +503,7 @@ export function PeriodosTab() {
         const montoMora = saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0
 
         // Totales
-        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora
+        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + totalCobros
         const subtotalDescuentos = totalTickets
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
@@ -657,6 +676,31 @@ export function PeriodosTab() {
             total: montoMora,
             es_descuento: false
           })
+        }
+
+        // Insertar cobros fraccionados como detalle (P010)
+        for (const cobro of cobrosConductor) {
+          const descripcionCobro = (cobro as any).descripcion || 
+            `Cuota ${(cobro as any).numero_cuota} de ${(cobro as any).total_cuotas}`
+          
+          await (supabase.from('facturacion_detalle') as any).insert({
+            facturacion_id: facturacionId,
+            concepto_codigo: 'P010',
+            concepto_descripcion: descripcionCobro,
+            cantidad: 1,
+            precio_unitario: (cobro as any).monto_cuota,
+            subtotal: (cobro as any).monto_cuota,
+            total: (cobro as any).monto_cuota,
+            es_descuento: false,
+            referencia_id: (cobro as any).id,
+            referencia_tipo: 'cobro_fraccionado'
+          })
+
+          // Marcar cobro como aplicado
+          await (supabase
+            .from('cobros_fraccionados') as any)
+            .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
+            .eq('id', (cobro as any).id)
         }
       }
 
