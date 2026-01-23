@@ -72,6 +72,8 @@ export interface FacturacionPreviewRow {
   // Para edición
   facturacionId?: string
   detalleId?: string
+  // Indicador de saldos pendientes
+  tieneSaldosPendientes?: boolean
 }
 
 interface FacturacionPreviewTableProps {
@@ -534,8 +536,12 @@ export function FacturacionPreviewTable({
           <tbody>
             {filteredData.map((row, idx) => {
               const realIdx = data.findIndex(d => d.numero === row.numero && d.conductorId === row.conductorId && d.codigoProducto === row.codigoProducto)
+              const rowClasses = [
+                row.tieneError ? 'row-error' : '',
+                row.tieneSaldosPendientes ? 'row-saldos-pendientes' : ''
+              ].filter(Boolean).join(' ')
               return (
-                <tr key={`${row.numero}-${row.codigoProducto}-${idx}`} className={row.tieneError ? 'row-error' : ''}>
+                <tr key={`${row.numero}-${row.codigoProducto}-${idx}`} className={rowClasses}>
                   <td>{row.numero}</td>
                   <td>{format(row.fechaEmision, 'dd/MM')}</td>
                   <td>{format(row.fechaVencimiento, 'dd/MM')}</td>
@@ -646,6 +652,8 @@ export function FacturacionPreviewTable({
         .fact-preview-table td { padding: 4px 6px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); white-space: nowrap; }
         .fact-preview-table tr:hover { background: var(--bg-secondary); }
         .fact-preview-table tr.row-error { background: var(--badge-red-bg); }
+        .fact-preview-table tr.row-saldos-pendientes { background: #fef3c7; }
+        .fact-preview-table tr.row-saldos-pendientes:hover { background: #fde68a; }
         .col-mono { font-family: monospace; font-size: 10px; }
         .col-money { text-align: right; font-family: monospace; }
         .col-total { font-weight: 600; color: var(--badge-blue-text); }
