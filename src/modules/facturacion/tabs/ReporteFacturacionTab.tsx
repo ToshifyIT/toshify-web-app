@@ -31,6 +31,7 @@ import { formatCurrency, formatDate, FACTURACION_CONFIG, calcularMora } from '..
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, differenceInDays, isAfter, isBefore } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
+import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente } from '../components/FacturacionPreviewTable'
 
 // Tipos para datos de facturación generada
 interface FacturacionConductor {
@@ -177,6 +178,15 @@ export function ReporteFacturacionTab() {
   // Recalcular período abierto
   const [recalculando, setRecalculando] = useState(false)
 
+  // Exportar SiFactura
+  const [exportingSiFactura, setExportingSiFactura] = useState(false)
+  
+  // SiFactura Preview mode
+  const [showSiFacturaPreview, setShowSiFacturaPreview] = useState(false)
+  const [siFacturaPreviewData, setSiFacturaPreviewData] = useState<FacturacionPreviewRow[]>([])
+  const [loadingSiFacturaPreview, setLoadingSiFacturaPreview] = useState(false)
+  const [conceptosPendientes, setConceptosPendientes] = useState<ConceptoPendiente[]>([])
+
   // Al montar: buscar última semana generada y navegar a ella
   useEffect(() => {
     async function irAUltimaSemanaGenerada() {
@@ -279,6 +289,7 @@ export function ReporteFacturacionTab() {
       }
 
       setPeriodo(periodoData as PeriodoFacturacion)
+      setModoVistaPrevia(false) // Hay período generado, no mostrar vista previa
 
       // 2. Cargar facturaciones de conductores para este período
       // JOIN con tabla conductores para obtener nombre actualizado
@@ -293,12 +304,40 @@ export function ReporteFacturacionTab() {
       if (errFact) throw errFact
 
       // Usar nombre de tabla conductores en formato "Nombres Apellidos"
-      const facturacionesTransformadas = (facturacionesData || []).map((f: any) => ({
+      let facturacionesTransformadas = (facturacionesData || []).map((f: any) => ({
         ...f,
         conductor_nombre: f.conductor 
           ? `${f.conductor.nombres || ''} ${f.conductor.apellidos || ''}`.trim()
           : f.conductor_nombre || ''
       }))
+
+      // 2.5 Cargar ganancias de Cabify para el período
+      const { data: cabifyData } = await supabase
+        .from('cabify_historico')
+        .select('dni, ganancia_total')
+        .gte('fecha_inicio', (periodoData as any).fecha_inicio + 'T00:00:00')
+        .lte('fecha_inicio', (periodoData as any).fecha_fin + 'T23:59:59')
+
+      // Agrupar ganancias por DNI
+      const gananciasPorDni = new Map<string, number>()
+      ;(cabifyData || []).forEach((c: any) => {
+        if (c.dni) {
+          const dniStr = String(c.dni)
+          const actual = gananciasPorDni.get(dniStr) || 0
+          gananciasPorDni.set(dniStr, actual + (parseFloat(c.ganancia_total) || 0))
+        }
+      })
+
+      // Agregar ganancia_cabify a cada facturación
+      facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
+        const ganancia = f.conductor_dni ? (gananciasPorDni.get(String(f.conductor_dni)) || 0) : 0
+        const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
+        return {
+          ...f,
+          ganancia_cabify: ganancia,
+          cubre_cuota: ganancia >= cuotaFija
+        }
+      })
       
       // Ordenar por nombre
       facturacionesTransformadas.sort((a: any, b: any) => 
@@ -1750,6 +1789,699 @@ export function ReporteFacturacionTab() {
     }
   }
 
+  // Preparar preview de SiFactura (30 columnas) - muestra antes de exportar
+  async function prepararSiFacturaPreview() {
+    if (!periodo) return
+
+    setLoadingSiFacturaPreview(true)
+    try {
+      // Cargar detalles de facturación para este período
+      const { data: detalles } = await supabase
+        .from('facturacion_detalle')
+        .select(`
+          *,
+          facturacion_conductores!inner(
+            id, conductor_id, conductor_nombre, conductor_dni, conductor_cuit,
+            vehiculo_patente, tipo_alquiler, periodo_id, turnos_cobrados
+          )
+        `)
+
+      // Filtrar por período actual
+      const detallesFiltrados = (detalles || []).filter(
+        (d: any) => d.facturacion_conductores?.periodo_id === periodo.id
+      )
+      const detallesTyped = detallesFiltrados as any[]
+      
+      // Cargar emails de conductores
+      const dnis = [...new Set(facturacionesFiltradas.map(f => f.conductor_dni).filter(Boolean))]
+      const { data: conductoresData } = await supabase
+        .from('conductores')
+        .select('numero_dni, email')
+        .in('numero_dni', dnis)
+      
+      const emailMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c.email]))
+
+      // Obtener IDs de detalles ya insertados (para comparar)
+      const detallesReferencias = new Set(
+        detallesTyped
+          .filter((d: any) => d.referencia_id)
+          .map((d: any) => d.referencia_id)
+      )
+
+      // Cargar conceptos pendientes (no aplicados y no en facturacion_detalle)
+      const conductorIds = facturacionesFiltradas.map(f => f.conductor_id).filter(Boolean)
+      const pendientes: ConceptoPendiente[] = []
+
+      // 1. Tickets pendientes
+      const { data: ticketsPendientes } = await (supabase
+        .from('tickets_favor') as any)
+        .select('*, conductor:conductores(nombres, apellidos)')
+        .in('conductor_id', conductorIds)
+        .eq('estado', 'aprobado')
+        .is('periodo_aplicado_id', null)
+
+      for (const t of (ticketsPendientes || []) as any[]) {
+        if (!detallesReferencias.has(t.id)) {
+          pendientes.push({
+            id: t.id,
+            tipo: 'ticket',
+            conductorId: t.conductor_id,
+            conductorNombre: t.conductor?.nombres && t.conductor?.apellidos 
+              ? `${t.conductor.nombres} ${t.conductor.apellidos}` 
+              : t.conductor_nombre || 'Sin nombre',
+            monto: t.monto,
+            descripcion: t.descripcion || t.tipo,
+            tabla: 'tickets_favor'
+          })
+        }
+      }
+
+      // 2. Penalidades pendientes
+      const { data: penalidadesPendientes } = await (supabase
+        .from('penalidades') as any)
+        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento(nombre)')
+        .in('conductor_id', conductorIds)
+        .eq('aplicado', false)
+        .eq('rechazado', false)
+
+      for (const p of (penalidadesPendientes || []) as any[]) {
+        if (!detallesReferencias.has(p.id)) {
+          pendientes.push({
+            id: p.id,
+            tipo: 'penalidad',
+            conductorId: p.conductor_id,
+            conductorNombre: p.conductor?.nombres && p.conductor?.apellidos 
+              ? `${p.conductor.nombres} ${p.conductor.apellidos}` 
+              : p.conductor_nombre || 'Sin nombre',
+            monto: p.monto || 0,
+            descripcion: p.detalle || p.tipos_cobro_descuento?.nombre || 'Penalidad',
+            tabla: 'penalidades'
+          })
+        }
+      }
+
+      // 3. Cobros fraccionados pendientes de esta semana
+      const { data: cobrosPendientes } = await (supabase
+        .from('cobros_fraccionados') as any)
+        .select('*, conductor:conductores(nombres, apellidos)')
+        .in('conductor_id', conductorIds)
+        .eq('semana', periodo.semana)
+        .eq('anio', periodo.anio)
+        .eq('aplicado', false)
+
+      for (const c of (cobrosPendientes || []) as any[]) {
+        if (!detallesReferencias.has(c.id)) {
+          pendientes.push({
+            id: c.id,
+            tipo: 'cobro_fraccionado',
+            conductorId: c.conductor_id,
+            conductorNombre: c.conductor?.nombres && c.conductor?.apellidos 
+              ? `${c.conductor.nombres} ${c.conductor.apellidos}` 
+              : 'Sin nombre',
+            monto: c.monto_cuota,
+            descripcion: c.descripcion || `Cuota ${c.numero_cuota} de ${c.total_cuotas}`,
+            tabla: 'cobros_fraccionados'
+          })
+        }
+      }
+
+      setConceptosPendientes(pendientes)
+
+      // Fechas del período
+      const fechaEmision = parseISO(periodo.fecha_fin)
+      const fechaVencimiento = addWeeks(parseISO(periodo.fecha_fin), 1)
+      const periodoDesc = `${format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')} al ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`
+
+      // Función para crear fila SiFactura (para preview)
+      const crearFilaPreview = (
+        numero: number,
+        fact: FacturacionConductor,
+        total: number,
+        codigoProducto: string,
+        descripcionAdicional: string,
+        facturacionId?: string,
+        detalleId?: string
+      ): FacturacionPreviewRow => {
+        // Determinar tipo de factura según CUIT
+        const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
+        const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
+        const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
+        const email = emailMap.get(fact.conductor_dni) || ''
+        
+        // NUMERO CUIL = DNI, NUMERO DNI = CUIT
+        const numeroCuil = fact.conductor_dni || ''
+        const numeroDni = fact.conductor_cuit || ''
+        
+        // Determinar IVA según concepto
+        // Con IVA 21%: P001, P002, P009
+        // Exentos: P003, P004, P005, P007, P010
+        const conceptosConIva = ['P001', 'P002', 'P009']
+        const tieneIva = conceptosConIva.includes(codigoProducto)
+        
+        let netoGravado = 0
+        let ivaAmount = 0
+        let exento = 0
+        let ivaPorcentaje = 'IVA_EXENTO'
+        
+        if (tieneIva) {
+          netoGravado = Math.round((total / 1.21) * 100) / 100
+          ivaAmount = Math.round((total - netoGravado) * 100) / 100
+          ivaPorcentaje = 'IVA_21'
+        } else {
+          exento = total
+        }
+
+        // Validaciones
+        let tieneError = false
+        let errorMsg = ''
+        if (!numeroCuil && !numeroDni) {
+          tieneError = true
+          errorMsg = 'Sin DNI ni CUIT'
+        }
+
+        return {
+          numero,
+          fechaEmision,
+          fechaVencimiento,
+          puntoVenta: 5,
+          tipoFactura,
+          tipoDocumento: 'CUIL',
+          numeroCuil,
+          numeroDni,
+          total,
+          cobrado: 0,
+          condicionIva,
+          condicionVenta: 'CTA_CTE',
+          razonSocial: fact.conductor_nombre,
+          domicilio: '',
+          codigoProducto,
+          descripcionAdicional,
+          email,
+          nota: '',
+          moneda: 'PES',
+          tipoCambio: 1,
+          netoGravado,
+          ivaAmount,
+          exento,
+          totalRepetido: total,
+          ivaPorcentaje,
+          generarAsiento: 'SI',
+          cuentaDebito: 4500007,
+          cuentaCredito: 0,
+          referencia: 'ND',
+          check: '',
+          conductorId: fact.conductor_id,
+          tieneError,
+          errorMsg,
+          facturacionId,
+          detalleId
+        }
+      }
+
+      // Generar filas para preview
+      const filasPreview: FacturacionPreviewRow[] = []
+      let numeroFactura = 1
+
+      // Procesar cada facturación
+      for (const fact of facturacionesFiltradas) {
+        const detallesConductor = detallesTyped.filter(
+          (d: any) => d.facturacion_conductores?.id === fact.id
+        )
+
+        if (detallesConductor.length > 0) {
+          for (const det of detallesConductor) {
+            if (det.total <= 0) continue
+
+            let descripcionAdicional = ''
+            if (det.concepto_codigo === 'P001' || det.concepto_codigo === 'P002') {
+              descripcionAdicional = String(fact.turnos_cobrados || 7)
+            } else if (det.concepto_codigo === 'P003') {
+              descripcionAdicional = fact.cuota_garantia_numero || '1 de 16'
+            } else if (det.concepto_codigo === 'P005') {
+              descripcionAdicional = periodoDesc
+            } else if (det.concepto_descripcion) {
+              descripcionAdicional = det.concepto_descripcion
+            }
+
+            filasPreview.push(crearFilaPreview(
+              numeroFactura++,
+              fact,
+              det.total,
+              det.concepto_codigo,
+              descripcionAdicional,
+              fact.id,
+              det.id
+            ))
+          }
+        } else {
+          // Sin detalles, crear filas basadas en subtotales (sin IDs de detalle)
+          if (fact.subtotal_alquiler > 0) {
+            const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
+            filasPreview.push(crearFilaPreview(
+              numeroFactura++,
+              fact,
+              fact.subtotal_alquiler,
+              codigoAlquiler,
+              String(fact.turnos_cobrados || 7),
+              fact.id
+            ))
+          }
+
+          if (fact.subtotal_garantia > 0) {
+            filasPreview.push(crearFilaPreview(
+              numeroFactura++,
+              fact,
+              fact.subtotal_garantia,
+              'P003',
+              fact.cuota_garantia_numero || '1 de 16',
+              fact.id
+            ))
+          }
+        }
+      }
+
+      if (filasPreview.length === 0) {
+        Swal.fire('Sin datos', 'No hay conceptos para exportar a SiFactura', 'warning')
+        return
+      }
+
+      setSiFacturaPreviewData(filasPreview)
+      setShowSiFacturaPreview(true)
+
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo cargar el preview de SiFactura', 'error')
+    } finally {
+      setLoadingSiFacturaPreview(false)
+    }
+  }
+
+  // Exportar a Excel Facturación (desde el preview)
+  async function exportarSiFacturaExcel() {
+    if (siFacturaPreviewData.length === 0) return
+
+    setExportingSiFactura(true)
+    try {
+      const wb = XLSX.utils.book_new()
+
+      // Headers exactos de SiFactura
+      const headers = [
+        'N°',
+        'FECHA EMISION. Debe ser con formato dd/mm/aaaa',
+        'FECHA VENCIMIENTO. Debe ser con formato dd/mm/aaaa',
+        'PUNTO DE VENTA',
+        "TIPO FACTURA. Ver valores permiido en la solapa 'Tablas de ayuda'",
+        "TIPO DOCUMENTO. Ver valores permiido en la solapa 'Tablas de ayuda'",
+        'NUMERO CUIL ',
+        'NUMERO DNI ',
+        'TOTAL. Importe total de su comprobante',
+        'COBRADO. Importe total cobrado para este comprobante, valor entre 0 y TOTAL, en caso de ser mayor el sistema lo seteará en el valor igual al TOTAL',
+        "CONDICION IVA. Ver valores permitido en la solapa 'Tablas de ayuda'",
+        "CONDICION DE VENTA. Ver valores permiido en la solapa 'Tablas de ayuda'",
+        'RAZON SOCIAL. Indicar la razón social del receptor del comprobante, si éste existe detro de Sifactura,  se tomará dicha razón social para el comprobante generado, sino el software creará un nuevo cliente con el tipo de documento, número y razón social aquí indicada.',
+        'DOMICILIO',
+        "CODIGO PRODUCTO. Este código debe existir en la sección de Base de datos->Producto (el tipo de sección del producto debe ser VENTAS)",
+        'DESCRIPCION ADICIONAL. Esta descripción se concatenará al final de la descripción del producto previamente creado dentro de Sifactura',
+        'EMAIL. Correo electrónico al que se enviará el comprobante de venta',
+        'NOTA. Puede o no existir, si este campo s completa, se imprimirá al pie del comprobante y se verá en la impresión',
+        'MONEDA',
+        'TIPO DE CAMBIO. Debe ser igual a 1 para la moneda PES',
+        'NETO GRAVADO. Si el tipo decomprobante enviado es RECIBO y/o FACTURA C este valor debe ser cero',
+        'Imp IVA al 21%',
+        'EXENTO. Si el tipo decomprobante enviado es RECIBO y/o FACTURA C este valor debe ser cero',
+        'TOTAL ',
+        'IVA PORCENTAJE. Debe utilizar el valor IVA_EXENTO si el tipo de factura es RECIBO_C, RECIBO_X y/o FACTURA_X',
+        "Generar asiento contable. Ver valores permiido en la solapa 'Tablas de ayuda'",
+        'Contabilidad. ID del plan de cuenta de la cuenta debito (de la sección Contabilidad->Plan de Cuenta) sin puntos, solo números',
+        'Contabilidad. ID del plan de cuenta de la cuenta crédito (de la sección Contabilidad->Plan de Cuenta) sin puntos, solo números',
+        'REFERENCIA. En caso de ND o NC puede indicar el comprobante referenciado',
+        'CHECK '
+      ]
+
+      // Convertir preview data a formato array para Excel
+      const filasExport = siFacturaPreviewData.map(row => [
+        row.numero,
+        row.fechaEmision,
+        row.fechaVencimiento,
+        row.puntoVenta,
+        row.tipoFactura,
+        row.tipoDocumento,
+        row.numeroCuil,
+        row.numeroDni,
+        row.total,
+        row.cobrado,
+        row.condicionIva,
+        row.condicionVenta,
+        row.razonSocial,
+        row.domicilio,
+        row.codigoProducto,
+        row.descripcionAdicional,
+        row.email,
+        row.nota,
+        row.moneda,
+        row.tipoCambio,
+        row.netoGravado,
+        row.ivaAmount,
+        row.exento,
+        row.totalRepetido,
+        row.ivaPorcentaje,
+        row.generarAsiento,
+        row.cuentaDebito,
+        row.cuentaCredito,
+        row.referencia,
+        row.check
+      ])
+
+      const wsData = [headers, ...filasExport]
+      const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+      // Ajustar anchos de columna
+      ws['!cols'] = [
+        { wch: 5 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 12 },
+        { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 10 },
+        { wch: 20 }, { wch: 12 }, { wch: 30 }, { wch: 15 }, { wch: 8 },
+        { wch: 40 }, { wch: 25 }, { wch: 15 }, { wch: 6 }, { wch: 8 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+        { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 8 }
+      ]
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Encabezado ')
+
+      // Usar período si existe, sino semanaActual
+      const semanaNum = periodo ? periodo.semana : getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+      const anioNum = periodo ? periodo.anio : getYear(semanaActual.inicio)
+      const nombreArchivo = `Facturacion_Semana${semanaNum}_${anioNum}.xlsx`
+      XLSX.writeFile(wb, nombreArchivo)
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Facturación Exportada',
+        html: `<p>Se descargó: <strong>${nombreArchivo}</strong></p><p>${filasExport.length} líneas generadas</p>`,
+        timer: 3000,
+        showConfirmButton: false
+      })
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo exportar el reporte de facturación', 'error')
+    } finally {
+      setExportingSiFactura(false)
+    }
+  }
+
+  // Preparar preview de Facturación desde Vista Previa (sin período generado)
+  // Consulta las tablas reales para obtener datos detallados de cada concepto
+  async function prepararFacturacionPreviewVistaPrevia() {
+    if (vistaPreviaData.length === 0) return
+
+    setLoadingSiFacturaPreview(true)
+    try {
+      const conductorIds = vistaPreviaData.map(f => f.conductor_id).filter(Boolean)
+      const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+      const anio = getYear(semanaActual.inicio)
+
+      // 1. Cargar emails de conductores
+      const dnis = [...new Set(vistaPreviaData.map(f => f.conductor_dni).filter(Boolean))]
+      const { data: conductoresData } = await supabase
+        .from('conductores')
+        .select('id, numero_dni, email')
+        .in('numero_dni', dnis)
+      
+      const emailMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c.email]))
+
+      // 2. Cargar garantías activas
+      const { data: garantiasData } = await supabase
+        .from('garantias_conductores')
+        .select('*')
+        .in('conductor_id', conductorIds)
+        .in('estado', ['pendiente', 'en_curso'])
+      
+      const garantiasMap = new Map((garantiasData || []).map((g: any) => [g.conductor_id, g]))
+
+      // 3. Cargar tickets a favor pendientes de aplicar
+      const { data: ticketsData } = await supabase
+        .from('tickets_favor')
+        .select('*')
+        .in('conductor_id', conductorIds)
+        .eq('estado', 'aprobado')
+        .is('periodo_aplicado_id', null)
+      
+      // Agrupar tickets por conductor
+      const ticketsMap = new Map<string, any[]>()
+      ;(ticketsData || []).forEach((t: any) => {
+        if (!ticketsMap.has(t.conductor_id)) ticketsMap.set(t.conductor_id, [])
+        ticketsMap.get(t.conductor_id)!.push(t)
+      })
+
+      // 4. Cargar penalidades pendientes para esta semana
+      const { data: penalidadesData } = await supabase
+        .from('penalidades')
+        .select('*, tipos_cobro_descuento(nombre)')
+        .in('conductor_id', conductorIds)
+        .eq('aplicado', false)
+        .eq('rechazado', false)
+      
+      // Filtrar por semana/año de aplicación o sin semana asignada
+      const penalidadesFiltradas = (penalidadesData || []).filter((p: any) => {
+        if (p.semana_aplicacion && p.anio_aplicacion) {
+          return p.semana_aplicacion === semana && p.anio_aplicacion === anio
+        }
+        return true // Penalidades sin semana asignada
+      })
+      
+      // Agrupar penalidades por conductor
+      const penalidadesMap = new Map<string, any[]>()
+      penalidadesFiltradas.forEach((p: any) => {
+        if (!penalidadesMap.has(p.conductor_id)) penalidadesMap.set(p.conductor_id, [])
+        penalidadesMap.get(p.conductor_id)!.push(p)
+      })
+
+      // 5. Cargar cobros fraccionados para esta semana
+      const { data: cobrosData } = await supabase
+        .from('cobros_fraccionados')
+        .select('*')
+        .in('conductor_id', conductorIds)
+        .eq('semana', semana)
+        .eq('anio', anio)
+        .eq('aplicado', false)
+      
+      // Agrupar cobros por conductor
+      const cobrosMap = new Map<string, any[]>()
+      ;(cobrosData || []).forEach((c: any) => {
+        if (!cobrosMap.has(c.conductor_id)) cobrosMap.set(c.conductor_id, [])
+        cobrosMap.get(c.conductor_id)!.push(c)
+      })
+
+      // 6. Cargar saldos (para mora)
+      const { data: saldosData } = await supabase
+        .from('saldos_conductores')
+        .select('*')
+        .in('conductor_id', conductorIds)
+      
+      const saldosMap = new Map((saldosData || []).map((s: any) => [s.conductor_id, s]))
+
+      // Fechas del período
+      const fechaEmision = semanaActual.fin
+      const fechaVencimiento = addWeeks(semanaActual.fin, 1)
+      const periodoDesc = `${format(semanaActual.inicio, 'dd/MM/yyyy')} al ${format(semanaActual.fin, 'dd/MM/yyyy')}`
+
+      // Función para crear fila preview
+      const crearFilaPreview = (
+        numero: number,
+        fact: FacturacionConductor,
+        total: number,
+        codigoProducto: string,
+        descripcionAdicional: string
+      ): FacturacionPreviewRow => {
+        const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
+        const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
+        const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
+        const email = emailMap.get(fact.conductor_dni) || ''
+        
+        const numeroCuil = fact.conductor_dni || ''
+        const numeroDni = fact.conductor_cuit || ''
+        
+        // IVA según producto
+        const conceptosConIva = ['P001', 'P002', 'P009']
+        const tieneIva = conceptosConIva.includes(codigoProducto)
+        
+        let netoGravado = 0
+        let ivaAmount = 0
+        let exento = 0
+        let ivaPorcentaje = 'IVA_EXENTO'
+        
+        if (tieneIva) {
+          netoGravado = Math.round((total / 1.21) * 100) / 100
+          ivaAmount = Math.round((total - netoGravado) * 100) / 100
+          ivaPorcentaje = 'IVA_21'
+        } else {
+          exento = total
+        }
+
+        let tieneError = false
+        let errorMsg = ''
+        if (!numeroCuil && !numeroDni) {
+          tieneError = true
+          errorMsg = 'Sin DNI ni CUIT'
+        }
+
+        return {
+          numero,
+          fechaEmision,
+          fechaVencimiento,
+          puntoVenta: 5,
+          tipoFactura,
+          tipoDocumento: 'CUIL',
+          numeroCuil,
+          numeroDni,
+          total,
+          cobrado: 0,
+          condicionIva,
+          condicionVenta: 'CTA_CTE',
+          razonSocial: fact.conductor_nombre,
+          domicilio: '',
+          codigoProducto,
+          descripcionAdicional,
+          email,
+          nota: '',
+          moneda: 'PES',
+          tipoCambio: 1,
+          netoGravado,
+          ivaAmount,
+          exento,
+          totalRepetido: total,
+          ivaPorcentaje,
+          generarAsiento: 'SI',
+          cuentaDebito: 4500007,
+          cuentaCredito: 0,
+          referencia: 'ND',
+          check: '',
+          conductorId: fact.conductor_id,
+          tieneError,
+          errorMsg
+        }
+      }
+
+      // Generar filas para preview
+      const filasPreview: FacturacionPreviewRow[] = []
+      let numeroFactura = 1
+
+      for (const fact of vistaPreviaData) {
+        // P001/P002 - Alquiler (TURNO/CARGO)
+        if (fact.subtotal_alquiler > 0) {
+          const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
+          filasPreview.push(crearFilaPreview(
+            numeroFactura++,
+            fact,
+            fact.subtotal_alquiler,
+            codigoAlquiler,
+            String(fact.turnos_cobrados || 7)
+          ))
+        }
+
+        // P003 - Garantía (desde garantias_conductores)
+        const garantia = garantiasMap.get(fact.conductor_id)
+        if (garantia && garantia.cuotas_pagadas < garantia.cuotas_totales) {
+          const cuotaActual = garantia.cuotas_pagadas + 1
+          const descripcionGarantia = `${cuotaActual} de ${garantia.cuotas_totales}`
+          filasPreview.push(crearFilaPreview(
+            numeroFactura++,
+            fact,
+            garantia.monto_cuota_semanal || 50000,
+            'P003',
+            descripcionGarantia
+          ))
+        }
+
+        // P004 - Tickets a favor (desde tickets_favor)
+        const tickets = ticketsMap.get(fact.conductor_id) || []
+        for (const ticket of tickets) {
+          let descripcionTicket = 'Telepases'
+          if (ticket.tipo === 'COMISION_REFERIDO') descripcionTicket = 'Comisión Referido'
+          else if (ticket.tipo === 'BONO_5_VENTAS') descripcionTicket = 'Bono 5 Ventas'
+          else if (ticket.tipo === 'BONO_EVENTO') descripcionTicket = 'Bono Evento'
+          else if (ticket.descripcion) descripcionTicket = ticket.descripcion
+          
+          filasPreview.push(crearFilaPreview(
+            numeroFactura++,
+            fact,
+            ticket.monto,
+            'P004',
+            descripcionTicket
+          ))
+        }
+
+        // P005 - Peajes (desde cabify - ya calculado en vistaPreviaData)
+        if (fact.monto_peajes && fact.monto_peajes > 0) {
+          filasPreview.push(crearFilaPreview(
+            numeroFactura++,
+            fact,
+            fact.monto_peajes,
+            'P005',
+            periodoDesc
+          ))
+        }
+
+        // P007 - Penalidades (desde penalidades)
+        const penalidades = penalidadesMap.get(fact.conductor_id) || []
+        for (const penalidad of penalidades) {
+          const descripcionPenalidad = penalidad.detalle || 
+            penalidad.tipos_cobro_descuento?.nombre || 
+            'Penalidad'
+          
+          filasPreview.push(crearFilaPreview(
+            numeroFactura++,
+            fact,
+            penalidad.monto,
+            'P007',
+            descripcionPenalidad
+          ))
+        }
+
+        // P009 - Mora (desde saldos_conductores)
+        const saldo = saldosMap.get(fact.conductor_id)
+        if (saldo && saldo.saldo_actual < 0) {
+          const deuda = Math.abs(saldo.saldo_actual)
+          const mora = Math.round(deuda * 0.05 * 100) / 100 // 5% semanal
+          if (mora > 0) {
+            filasPreview.push(crearFilaPreview(
+              numeroFactura++,
+              fact,
+              mora,
+              'P009',
+              `Mora 5% s/deuda $${deuda.toLocaleString()}`
+            ))
+          }
+        }
+
+        // P010 - Cobros fraccionados (desde cobros_fraccionados)
+        const cobros = cobrosMap.get(fact.conductor_id) || []
+        for (const cobro of cobros) {
+          const descripcionCobro = cobro.descripcion || 
+            `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`
+          
+          filasPreview.push(crearFilaPreview(
+            numeroFactura++,
+            fact,
+            cobro.monto_cuota,
+            'P010',
+            descripcionCobro
+          ))
+        }
+      }
+
+      if (filasPreview.length === 0) {
+        Swal.fire('Sin datos', 'No hay conceptos para el preview', 'warning')
+        return
+      }
+
+      setSiFacturaPreviewData(filasPreview)
+      setShowSiFacturaPreview(true)
+
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo cargar el preview de Facturación', 'error')
+    } finally {
+      setLoadingSiFacturaPreview(false)
+    }
+  }
+
   // Preparar datos para RIT Preview (formato Bruno Timoteo)
   async function prepareRITPreview() {
     if (!periodo) return
@@ -2171,7 +2903,112 @@ export function ReporteFacturacionTab() {
 
       return true
     } catch (error) {
-      console.error('Error sincronizando cambios:', error)
+      Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
+      return false
+    }
+  }
+
+  // Sincronizar cambios de FacturacionPreviewTable a la BD
+  async function syncFacturacionChanges(updatedData: FacturacionPreviewRow[]): Promise<boolean> {
+    if (!periodo) return false
+
+    try {
+      // Actualizar cada detalle de facturación
+      for (const row of updatedData) {
+        if (!row.detalleId) continue
+
+        // Actualizar facturacion_detalle con los valores editados
+        const { error } = await (supabase
+          .from('facturacion_detalle') as any)
+          .update({
+            total: row.total,
+            subtotal: row.netoGravado > 0 ? row.netoGravado : row.exento,
+            iva_monto: row.ivaAmount,
+            concepto_descripcion: row.descripcionAdicional
+          })
+          .eq('id', row.detalleId)
+
+        if (error) {
+          throw error
+        }
+      }
+
+      // Recargar datos para reflejar los cambios
+      await cargarFacturacion()
+      
+      // Recargar el preview con los datos actualizados
+      await prepararSiFacturaPreview()
+
+      return true
+    } catch (error) {
+      Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
+      return false
+    }
+  }
+
+  // Enlazar concepto pendiente a facturacion_detalle
+  async function enlazarConceptoPendiente(pendiente: ConceptoPendiente, codigoProducto: string): Promise<boolean> {
+    if (!periodo) return false
+
+    try {
+      // Buscar facturacion_conductores para este conductor
+      const facturacion = facturacionesFiltradas.find(f => f.conductor_id === pendiente.conductorId)
+      if (!facturacion) {
+        Swal.fire('Error', 'No se encontró la facturación del conductor', 'error')
+        return false
+      }
+
+      // Determinar si tiene IVA
+      const conceptosConIva = ['P001', 'P002', 'P009']
+      const tieneIva = conceptosConIva.includes(codigoProducto)
+      const subtotal = tieneIva ? Math.round((pendiente.monto / 1.21) * 100) / 100 : pendiente.monto
+      const ivaMonto = tieneIva ? pendiente.monto - subtotal : 0
+
+      // Insertar en facturacion_detalle
+      const { error: insertError } = await (supabase
+        .from('facturacion_detalle') as any)
+        .insert({
+          facturacion_id: facturacion.id,
+          concepto_codigo: codigoProducto,
+          concepto_descripcion: pendiente.descripcion,
+          cantidad: 1,
+          precio_unitario: pendiente.monto,
+          subtotal: subtotal,
+          iva_porcentaje: tieneIva ? 21 : 0,
+          iva_monto: ivaMonto,
+          total: pendiente.monto,
+          es_descuento: pendiente.tipo === 'ticket',
+          referencia_id: pendiente.id,
+          referencia_tipo: pendiente.tipo
+        })
+
+      if (insertError) throw insertError
+
+      // Marcar como aplicado en la tabla origen
+      if (pendiente.tabla === 'tickets_favor') {
+        await (supabase.from('tickets_favor') as any)
+          .update({ 
+            estado: 'aplicado', 
+            periodo_aplicado_id: periodo.id, 
+            fecha_aplicacion: new Date().toISOString() 
+          })
+          .eq('id', pendiente.id)
+      } else if (pendiente.tabla === 'penalidades') {
+        await (supabase.from('penalidades') as any)
+          .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
+          .eq('id', pendiente.id)
+      } else if (pendiente.tabla === 'cobros_fraccionados') {
+        await (supabase.from('cobros_fraccionados') as any)
+          .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
+          .eq('id', pendiente.id)
+      }
+
+      // Recargar datos
+      await prepararSiFacturaPreview()
+
+      return true
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo enlazar el concepto', 'error')
       return false
     }
   }
@@ -2624,22 +3461,46 @@ export function ReporteFacturacionTab() {
       id: 'alquiler_desglose',
       header: 'Alquiler',
       cell: ({ row }) => {
-        const base = row.original.tipo_alquiler === 'CARGO'
-          ? FACTURACION_CONFIG.ALQUILER_CARGO
-          : FACTURACION_CONFIG.ALQUILER_TURNO
-        const cobrado = row.original.subtotal_alquiler
-        const isProrrateo = cobrado < base
+        const alquiler = row.original.subtotal_alquiler
+        const ganancia = row.original.ganancia_cabify || 0
+        // Porcentaje de cobertura: cuánto de su alquiler cubrió con ganancia Cabify
+        const porcentajeCubierto = alquiler > 0 ? Math.min(100, Math.round((ganancia / alquiler) * 100)) : 0
+        const cubreCuota = ganancia >= alquiler && ganancia > 0
 
         return (
-          <div style={{ fontSize: '12px' }}>
-            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-              {formatCurrency(cobrado)}
+          <div style={{ fontSize: '12px', minWidth: '100px' }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+              {formatCurrency(alquiler)}
             </div>
-            {isProrrateo && (
-              <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
-                {formatCurrency(base)}
-              </div>
-            )}
+            {/* Barra de progreso: cuánto cubrió con Cabify */}
+            <div style={{ 
+              width: '100%', 
+              height: '8px', 
+              backgroundColor: '#e5e7eb', 
+              borderRadius: '4px',
+              overflow: 'hidden',
+              border: '1px solid #d1d5db'
+            }}>
+              <div style={{ 
+                width: `${Math.max(porcentajeCubierto, 0)}%`, 
+                height: '100%', 
+                backgroundColor: cubreCuota ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444',
+                borderRadius: '3px',
+                transition: 'width 0.3s ease',
+                minWidth: porcentajeCubierto > 0 ? '4px' : '0'
+              }} />
+            </div>
+            <div style={{ 
+              fontSize: '9px', 
+              color: cubreCuota ? '#10b981' : '#6b7280', 
+              marginTop: '3px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span>{porcentajeCubierto}% cubierto</span>
+              {cubreCuota && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
+            </div>
           </div>
         )
       }
@@ -2648,11 +3509,17 @@ export function ReporteFacturacionTab() {
       id: 'garantia_desglose',
       header: 'Garantía',
       cell: ({ row }) => {
-        const base = FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL
-        const cobrado = row.original.subtotal_garantia
-        const isProrrateo = cobrado > 0 && cobrado < base
+        const garantia = row.original.subtotal_garantia
         const cuotaNum = row.original.cuota_garantia_numero || ''
         const isCompletada = cuotaNum === 'NA'
+        const ganancia = row.original.ganancia_cabify || 0
+        const alquiler = row.original.subtotal_alquiler
+        
+        // Calcular restante después de cubrir alquiler
+        const restante = Math.max(0, ganancia - alquiler)
+        // Porcentaje de cobertura de garantía con el restante
+        const porcentajeCubierto = garantia > 0 ? Math.min(100, Math.round((restante / garantia) * 100)) : 0
+        const cubreGarantia = restante >= garantia && ganancia > 0
 
         if (isCompletada) {
           return (
@@ -2672,17 +3539,38 @@ export function ReporteFacturacionTab() {
         }
 
         return (
-          <div style={{ fontSize: '12px' }}>
-            <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>
-              {formatCurrency(cobrado)}
+          <div style={{ fontSize: '12px', minWidth: '90px' }}>
+            <div style={{ fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
+              {formatCurrency(garantia)}
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-              {cuotaNum && <span>Cuota {cuotaNum}</span>}
-              {isProrrateo && (
-                <span style={{ marginLeft: '4px', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
-                  {formatCurrency(base)}
-                </span>
-              )}
+            {/* Barra de progreso: cuánto cubrió con restante de Cabify */}
+            <div style={{ 
+              width: '100%', 
+              height: '8px', 
+              backgroundColor: '#e5e7eb', 
+              borderRadius: '4px',
+              overflow: 'hidden',
+              border: '1px solid #d1d5db'
+            }}>
+              <div style={{ 
+                width: `${Math.max(porcentajeCubierto, 0)}%`, 
+                height: '100%', 
+                backgroundColor: cubreGarantia ? '#10b981' : porcentajeCubierto >= 70 ? '#f59e0b' : '#ef4444',
+                borderRadius: '3px',
+                transition: 'width 0.3s ease',
+                minWidth: porcentajeCubierto > 0 ? '4px' : '0'
+              }} />
+            </div>
+            <div style={{ 
+              fontSize: '9px', 
+              color: cubreGarantia ? '#10b981' : '#6b7280', 
+              marginTop: '3px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span>{cuotaNum && `${cuotaNum}`}</span>
+              {cubreGarantia && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
             </div>
           </div>
         )
@@ -2842,6 +3730,42 @@ export function ReporteFacturacionTab() {
     const fin = format(semanaActual.fin, 'dd/MM', { locale: es })
     return { semana, anio, inicio, fin }
   }, [semanaActual])
+
+  // Si estamos en modo Preview Facturación, mostrar el componente de preview
+  if (showSiFacturaPreview && siFacturaPreviewData.length > 0) {
+    // Usar datos del período si existe, sino de semanaActual (Vista Previa)
+    const semanaNum = periodo ? periodo.semana : infoSemana.semana
+    const anioNum = periodo ? periodo.anio : infoSemana.anio
+    const fechaInicioStr = periodo 
+      ? format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')
+      : format(semanaActual.inicio, 'dd/MM/yyyy')
+    const fechaFinStr = periodo
+      ? format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')
+      : format(semanaActual.fin, 'dd/MM/yyyy')
+
+    const esPeriodoAbierto = periodo?.estado === 'abierto'
+    
+    return (
+      <FacturacionPreviewTable
+        data={siFacturaPreviewData}
+        semana={semanaNum}
+        anio={anioNum}
+        fechaInicio={fechaInicioStr}
+        fechaFin={fechaFinStr}
+        periodoAbierto={esPeriodoAbierto}
+        conceptosPendientes={conceptosPendientes}
+        onEnlazarConcepto={esPeriodoAbierto ? enlazarConceptoPendiente : undefined}
+        onClose={() => {
+          setShowSiFacturaPreview(false)
+          setSiFacturaPreviewData([])
+          setConceptosPendientes([])
+        }}
+        onExport={exportarSiFacturaExcel}
+        exporting={exportingSiFactura}
+        onSync={esPeriodoAbierto ? syncFacturacionChanges : undefined}
+      />
+    )
+  }
 
   // Si estamos en modo RIT Preview, mostrar el componente de preview
   if (showRITPreview && periodo) {
@@ -3100,6 +4024,15 @@ export function ReporteFacturacionTab() {
             <div className="fact-export-btn-group">
               <button
                 className="fact-btn-export"
+                onClick={prepararFacturacionPreviewVistaPrevia}
+                disabled={loadingSiFacturaPreview || vistaPreviaData.length === 0}
+                style={{ backgroundColor: '#059669' }}
+              >
+                {loadingSiFacturaPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
+                {loadingSiFacturaPreview ? 'Cargando...' : 'Preview Facturación'}
+              </button>
+              <button
+                className="fact-btn-export"
                 onClick={exportarVistaPreviaExcel}
                 disabled={exportingExcel || vistaPreviaData.length === 0}
               >
@@ -3140,8 +4073,8 @@ export function ReporteFacturacionTab() {
         </>
       )}
 
-      {/* Con período generado */}
-      {periodo && (
+      {/* Con período generado (solo si no está en modo vista previa) */}
+      {periodo && !modoVistaPrevia && (
         <>
           {/* Stats */}
           {stats && (
@@ -3235,20 +4168,16 @@ export function ReporteFacturacionTab() {
             <div className="fact-export-btn-group">
               <button
                 className="fact-btn-export"
-                onClick={exportarExcel}
-                disabled={exportingExcel || facturacionesFiltradas.length === 0}
+                onClick={prepararSiFacturaPreview}
+                disabled={loadingSiFacturaPreview || facturacionesFiltradas.length === 0}
+                style={{ backgroundColor: '#059669' }}
               >
-                {exportingExcel ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
-                {exportingExcel ? 'Exportando...' : 'Exportar Excel'}
+                {loadingSiFacturaPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
+                {loadingSiFacturaPreview ? 'Cargando...' : 'Preview Facturación'}
               </button>
-              <button
-                className="fact-btn-export"
-                onClick={prepareRITPreview}
-                disabled={loadingRITPreview || facturacionesFiltradas.length === 0}
-              >
-                {loadingRITPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
-                {loadingRITPreview ? 'Cargando...' : 'Preview RIT'}
-              </button>
+              {/* Botones ocultos para mantener funciones */}
+              <button style={{ display: 'none' }} onClick={exportarExcel} disabled={exportingExcel}>Excel</button>
+              <button style={{ display: 'none' }} onClick={prepareRITPreview} disabled={loadingRITPreview}>RIT</button>
             </div>
           </div>
 
