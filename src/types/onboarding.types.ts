@@ -96,7 +96,11 @@ export interface ProgramacionOnboarding {
   grupo_whatsapp: boolean
   citado_ypf: boolean
   confirmacion_asistencia?: ConfirmacionAsistencia
+  confirmacion_diurno?: ConfirmacionAsistencia
+  confirmacion_nocturno?: ConfirmacionAsistencia
   estado_cabify?: EstadoCabify
+  estado_cabify_diurno?: EstadoCabify
+  estado_cabify_nocturno?: EstadoCabify
   
   // Especialista
   especialista_id?: string
@@ -202,7 +206,11 @@ export interface ProgramacionOnboardingFormData {
   grupo_whatsapp: boolean
   citado_ypf: boolean
   confirmacion_asistencia?: ConfirmacionAsistencia
+  confirmacion_diurno?: ConfirmacionAsistencia
+  confirmacion_nocturno?: ConfirmacionAsistencia
   estado_cabify?: EstadoCabify
+  estado_cabify_diurno?: EstadoCabify
+  estado_cabify_nocturno?: EstadoCabify
   
   // Especialista
   especialista_id?: string

@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
-  MessageSquareText, ArrowRightLeft, Pencil, Copy, RefreshCw
+  MessageSquareText, Pencil, Copy, RefreshCw
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -230,11 +230,6 @@ export function ProgramacionModule() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_especialistas, _setEspecialistas] = useState<Array<{ id: string; nombre: string }>>([])
 
-  // Modal cambiar estado
-  const [showEstadoModal, setShowEstadoModal] = useState(false)
-  const [estadoModalProg, setEstadoModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
-  const [nuevoEstado, setNuevoEstado] = useState('')
-
   // Modal copiar mensaje
   const [showMensajeModal, setShowMensajeModal] = useState(false)
   const [mensajeModalProg, setMensajeModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
@@ -247,6 +242,7 @@ export function ProgramacionModule() {
         .from('v_programaciones_onboarding')
         .select('*')
         .neq('estado', 'completado') // Excluir las completadas (ya enviadas)
+        .or('eliminado.is.null,eliminado.eq.false') // Excluir las eliminadas
         .order('created_at', { ascending: false })
 
       if (queryError) throw queryError
@@ -473,70 +469,52 @@ export function ProgramacionModule() {
   const handleDelete = async (id: string, yaEnviada: boolean = false) => {
     const result = await Swal.fire({
       title: yaEnviada ? 'Eliminar programacion enviada?' : 'Eliminar programacion?',
-      text: yaEnviada
-        ? 'ATENCION: Esta programacion ya fue enviada a Entrega. Solo se eliminara de esta lista, la asignacion en Entrega permanecera.'
-        : 'Esta accion no se puede deshacer',
+      html: yaEnviada
+        ? '<p style="color: #DC2626; font-weight: 500;">ATENCION: Esta programacion ya fue enviada a Entrega.</p><p>Solo se eliminara de esta lista, la asignacion en Entrega permanecera.</p>'
+        : '<p>Por favor ingrese el motivo de la eliminacion:</p>',
+      input: 'textarea',
+      inputPlaceholder: 'Motivo de eliminacion...',
+      inputAttributes: {
+        'aria-label': 'Motivo de eliminacion'
+      },
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#DC2626',
-      confirmButtonText: 'Si, eliminar',
-      cancelButtonText: 'Cancelar'
+      confirmButtonText: 'Eliminar',
+      cancelButtonText: 'Cancelar',
+      inputValidator: (value) => {
+        if (!value || value.trim().length < 3) {
+          return 'Debe ingresar un motivo (minimo 3 caracteres)'
+        }
+        return null
+      }
     })
 
-    if (result.isConfirmed) {
+    if (result.isConfirmed && result.value) {
       try {
-        const { error } = await supabase
-          .from('programaciones_onboarding')
-          .delete()
+        // Eliminación lógica
+        const { error } = await (supabase
+          .from('programaciones_onboarding') as any)
+          .update({
+            eliminado: true,
+            motivo_eliminacion: result.value.trim(),
+            eliminado_at: new Date().toISOString(),
+            eliminado_by: user?.id || null
+          })
           .eq('id', id)
 
         if (error) throw error
         setProgramaciones(prev => prev.filter(p => p.id !== id))
-        Swal.fire('Eliminado', 'La programacion fue eliminada', 'success')
+        Swal.fire({
+          icon: 'success',
+          title: 'Eliminado',
+          text: 'La programacion fue eliminada',
+          timer: 1500,
+          showConfirmButton: false
+        })
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al eliminar', 'error')
       }
-    }
-  }
-
-  // Abrir modal cambiar estado
-  const handleCambiarEstado = (prog: ProgramacionOnboardingCompleta) => {
-    setEstadoModalProg(prog)
-    setNuevoEstado(prog.estado_cabify || 'pendiente')
-    setShowEstadoModal(true)
-  }
-
-  // Guardar nuevo estado cabify
-  const handleGuardarEstado = async () => {
-    if (!estadoModalProg || !nuevoEstado) return
-    
-    if (nuevoEstado === (estadoModalProg.estado_cabify || 'pendiente')) {
-      setShowEstadoModal(false)
-      return
-    }
-
-    try {
-      const { error } = await (supabase
-        .from('programaciones_onboarding') as any)
-        .update({ estado_cabify: nuevoEstado })
-        .eq('id', estadoModalProg.id)
-
-      if (error) throw error
-
-      // Actualizar estado local
-      setProgramaciones(prev => prev.map(p => 
-        p.id === estadoModalProg.id ? { ...p, estado_cabify: nuevoEstado as 'pendiente' | 'listo_cabify' | 'asignar_auto' | 'crear_cuenta' } : p
-      ))
-
-      setShowEstadoModal(false)
-      Swal.fire({
-        icon: 'success',
-        title: 'Estado Cabify actualizado',
-        timer: 1500,
-        showConfirmButton: false
-      })
-    } catch (err: any) {
-      Swal.fire('Error', err.message || 'Error al cambiar estado', 'error')
     }
   }
 
@@ -640,7 +618,6 @@ export function ProgramacionModule() {
         })
         return
       } catch (err: any) {
-        console.error('Error confirmando asignacion de compañero:', err)
         Swal.fire('Error', err.message || 'Error al confirmar', 'error')
         return
       }
@@ -662,15 +639,79 @@ export function ProgramacionModule() {
       return
     }
 
+    // Para TURNO: verificar confirmaciones y determinar qué conductores enviar
+    let enviarDiurno = true
+    let enviarNocturno = true
+    
+    if (prog.modalidad === 'TURNO') {
+      const diurnoConfirmo = prog.confirmacion_diurno === 'confirmo'
+      const nocturnoConfirmo = prog.confirmacion_nocturno === 'confirmo'
+      
+      // Si ninguno confirmó, advertir pero permitir continuar
+      if (!diurnoConfirmo && !nocturnoConfirmo) {
+        const result = await Swal.fire({
+          title: 'Ningún conductor confirmó',
+          html: `
+            <div style="text-align: left; font-size: 14px;">
+              <p style="color: #DC2626;"><strong>Atención:</strong> Ninguno de los conductores ha confirmado asistencia.</p>
+              <p><strong>D:</strong> ${prog.conductor_diurno_nombre || '-'} - <span style="color: #6B7280;">${prog.confirmacion_diurno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_diurno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar'}</span></p>
+              <p><strong>N:</strong> ${prog.conductor_nocturno_nombre || '-'} - <span style="color: #6B7280;">${prog.confirmacion_nocturno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_nocturno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar'}</span></p>
+            </div>
+          `,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#F59E0B',
+          confirmButtonText: 'Enviar de todas formas',
+          cancelButtonText: 'Cancelar'
+        })
+        if (!result.isConfirmed) return
+      }
+      // Si solo uno confirmó, preguntar si continuar solo con ese
+      else if (diurnoConfirmo !== nocturnoConfirmo) {
+        const quienConfirmo = diurnoConfirmo ? 'DIURNO' : 'NOCTURNO'
+        const quienNo = diurnoConfirmo ? 'NOCTURNO' : 'DIURNO'
+        const nombreConfirmo = diurnoConfirmo ? prog.conductor_diurno_nombre : prog.conductor_nocturno_nombre
+        const nombreNo = diurnoConfirmo ? prog.conductor_nocturno_nombre : prog.conductor_diurno_nombre
+        const estadoNo = diurnoConfirmo 
+          ? (prog.confirmacion_nocturno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_nocturno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
+          : (prog.confirmacion_diurno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_diurno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
+
+        const result = await Swal.fire({
+          title: 'Solo 1 conductor confirmó',
+          html: `
+            <div style="text-align: left; font-size: 14px;">
+              <p><strong style="color: #10B981;">${quienConfirmo}:</strong> ${nombreConfirmo} - <span style="color: #10B981;">Confirmó</span></p>
+              <p><strong style="color: #DC2626;">${quienNo}:</strong> ${nombreNo} - <span style="color: #DC2626;">${estadoNo}</span></p>
+              <p style="margin-top: 12px; color: #6B7280;">
+                ¿Desea crear la asignación solo con el conductor <strong>${quienConfirmo}</strong>?
+              </p>
+            </div>
+          `,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#10B981',
+          confirmButtonText: `Sí, solo ${quienConfirmo}`,
+          cancelButtonText: 'Cancelar'
+        })
+        
+        if (!result.isConfirmed) return
+        
+        // Solo enviar al que confirmó
+        enviarDiurno = diurnoConfirmo
+        enviarNocturno = nocturnoConfirmo
+      }
+      // Si ambos confirmaron, continuar normal
+    }
+
     // Formatear hora para mostrar
     const horaDisplay = prog.hora_cita ? prog.hora_cita.substring(0, 5) : 'Sin definir'
 
-    // Construir display de conductores según modalidad
+    // Construir display de conductores según modalidad (solo los que se van a enviar)
     let conductorDisplay = '-'
     if (prog.modalidad === 'TURNO') {
       const conductores = []
-      if (prog.conductor_diurno_nombre) conductores.push(`D: ${prog.conductor_diurno_nombre}`)
-      if (prog.conductor_nocturno_nombre) conductores.push(`N: ${prog.conductor_nocturno_nombre}`)
+      if (enviarDiurno && prog.conductor_diurno_nombre) conductores.push(`D: ${prog.conductor_diurno_nombre}`)
+      if (enviarNocturno && prog.conductor_nocturno_nombre) conductores.push(`N: ${prog.conductor_nocturno_nombre}`)
       conductorDisplay = conductores.length > 0 ? conductores.join('<br>') : '-'
     } else {
       conductorDisplay = prog.conductor_display || prog.conductor_nombre || '-'
@@ -681,7 +722,7 @@ export function ProgramacionModule() {
       html: `
         <div style="text-align: left; font-size: 14px;">
           <p><strong>Vehiculo:</strong> ${prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '-'}</p>
-          <p><strong>Conductor${prog.modalidad === 'TURNO' ? 'es' : ''}:</strong><br>${conductorDisplay}</p>
+          <p><strong>Conductor${prog.modalidad === 'TURNO' && enviarDiurno && enviarNocturno ? 'es' : ''}:</strong><br>${conductorDisplay}</p>
           <p><strong>Modalidad:</strong> ${prog.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}</p>
           <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin definir'}</p>
           <p><strong>Hora:</strong> ${horaDisplay}</p>
@@ -767,12 +808,12 @@ export function ProgramacionModule() {
       if (asignacionError) throw asignacionError
 
       // Crear asignacion_conductor(es) segun modalidad
-      // NOTA: Insertamos TODOS los conductores (incluso los que son asignacion_companero)
+      // NOTA: Solo insertamos conductores que confirmaron (o todos si no hay filtro)
       // La lógica especial de companero se ejecuta al CONFIRMAR la asignación
       let conductoresInsertados = 0
 
-      // Insertar conductor diurno
-      if (prog.conductor_diurno_id) {
+      // Insertar conductor diurno (solo si debe enviarse)
+      if (prog.conductor_diurno_id && enviarDiurno) {
         const { error: diurnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -783,14 +824,13 @@ export function ProgramacionModule() {
             documento: mapDocumento(prog.documento_diurno)
           })
         if (diurnoError) {
-          console.error('❌ Error insertando conductor diurno:', diurnoError)
           throw diurnoError
         }
         conductoresInsertados++
       }
 
-      // Insertar conductor nocturno
-      if (prog.conductor_nocturno_id) {
+      // Insertar conductor nocturno (solo si debe enviarse)
+      if (prog.conductor_nocturno_id && enviarNocturno) {
         const { error: nocturnoError } = await (supabase
           .from('asignaciones_conductores') as any)
           .insert({
@@ -801,7 +841,6 @@ export function ProgramacionModule() {
             documento: mapDocumento(prog.documento_nocturno)
           })
         if (nocturnoError) {
-          console.error('❌ Error insertando conductor nocturno:', nocturnoError)
           throw nocturnoError
         }
         conductoresInsertados++
@@ -1034,46 +1073,59 @@ export function ProgramacionModule() {
       header: 'Documento',
       cell: ({ row }) => {
         const prog = row.original
-        // Para TURNO: mostrar documentos de diurno/nocturno separados
-        // Para CARGO: mostrar tipo_documento
-        const DOCUMENTO_LABELS: Record<string, string> = {
-          contrato: 'Contrato',
-          anexo: 'Anexo',
-          carta_oferta: 'Carta Oferta',
-          na: 'N/A',
-          '': 'Sin definir'
-        }
 
+        // Para TURNO: mostrar 2 selects (diurno y nocturno)
         if (prog.modalidad === 'TURNO') {
           const docDiurno = prog.documento_diurno || ''
           const docNocturno = prog.documento_nocturno || ''
-          // Si ambos son iguales, mostrar uno solo
-          if (docDiurno === docNocturno && docDiurno) {
-            return (
-              <span className={`prog-documento-badge ${docDiurno}`}>
-                {DOCUMENTO_LABELS[docDiurno] || docDiurno}
-              </span>
-            )
-          }
-          // Si son diferentes, mostrar ambos
+
           return (
-            <div className="prog-documentos-compact">
-              <span className={`prog-documento-mini ${docDiurno || 'sin_definir'}`}>
-                D: {DOCUMENTO_LABELS[docDiurno] || 'Sin def.'}
-              </span>
-              <span className={`prog-documento-mini ${docNocturno || 'sin_definir'}`}>
-                N: {DOCUMENTO_LABELS[docNocturno] || 'Sin def.'}
-              </span>
+            <div className="prog-documento-turno">
+              <div className="prog-documento-row">
+                <span className="prog-documento-label">D:</span>
+                <select
+                  className={`prog-inline-select-mini documento ${docDiurno || 'sin_definir'}`}
+                  value={docDiurno}
+                  onChange={(e) => handleUpdateField(prog.id, 'documento_diurno', e.target.value || null)}
+                  title="Documento conductor diurno"
+                >
+                  <option value="">-</option>
+                  <option value="carta_oferta">Carta Oferta</option>
+                  <option value="anexo">Anexo</option>
+                  <option value="na">N/A</option>
+                </select>
+              </div>
+              <div className="prog-documento-row">
+                <span className="prog-documento-label">N:</span>
+                <select
+                  className={`prog-inline-select-mini documento ${docNocturno || 'sin_definir'}`}
+                  value={docNocturno}
+                  onChange={(e) => handleUpdateField(prog.id, 'documento_nocturno', e.target.value || null)}
+                  title="Documento conductor nocturno"
+                >
+                  <option value="">-</option>
+                  <option value="carta_oferta">Carta Oferta</option>
+                  <option value="anexo">Anexo</option>
+                  <option value="na">N/A</option>
+                </select>
+              </div>
             </div>
           )
         }
 
-        // Para CARGO: mostrar tipo_documento
-        const doc = prog.tipo_documento || ''
+        // Para A CARGO: un solo select
         return (
-          <span className={`prog-documento-badge ${doc || 'sin_definir'}`}>
-            {DOCUMENTO_LABELS[doc] || doc || 'Sin definir'}
-          </span>
+          <select
+            className={`prog-inline-select documento ${prog.tipo_documento || 'sin_definir'}`}
+            value={prog.tipo_documento || ''}
+            onChange={(e) => handleUpdateField(prog.id, 'tipo_documento', e.target.value || null)}
+            title="Tipo de documento"
+          >
+            <option value="">Sin definir</option>
+            <option value="carta_oferta">Carta Oferta</option>
+            <option value="anexo">Anexo</option>
+            <option value="na">N/A</option>
+          </select>
         )
       }
     },
@@ -1082,36 +1134,124 @@ export function ProgramacionModule() {
     {
       accessorKey: 'confirmacion_asistencia',
       header: 'Confirmación',
-      cell: ({ row }) => (
-        <select
-          className={`prog-inline-select confirmacion ${row.original.confirmacion_asistencia || 'sin_confirmar'}`}
-          value={row.original.confirmacion_asistencia || 'sin_confirmar'}
-          onChange={(e) => handleUpdateField(row.original.id, 'confirmacion_asistencia', e.target.value)}
-          title="Confirmación de asistencia"
-        >
-          <option value="sin_confirmar">Sin confirmar</option>
-          <option value="confirmo">Confirmó</option>
-          <option value="no_confirmo">No confirmó</option>
-          <option value="reprogramar">Reprogramar</option>
-        </select>
-      )
+      cell: ({ row }) => {
+        const prog = row.original
+
+        // Para TURNO: mostrar 2 selects (diurno y nocturno)
+        if (prog.modalidad === 'TURNO') {
+          const confD = prog.confirmacion_diurno || 'sin_confirmar'
+          const confN = prog.confirmacion_nocturno || 'sin_confirmar'
+
+          return (
+            <div className="prog-confirmacion-turno">
+              <div className="prog-confirmacion-row">
+                <span className="prog-confirmacion-label">D:</span>
+                <select
+                  className={`prog-inline-select-mini confirmacion ${confD}`}
+                  value={confD}
+                  onChange={(e) => handleUpdateField(prog.id, 'confirmacion_diurno', e.target.value)}
+                  title="Confirmación conductor diurno"
+                >
+                  <option value="sin_confirmar">Sin confirmar</option>
+                  <option value="confirmo">Confirmó</option>
+                  <option value="no_confirmo">No confirmó</option>
+                  <option value="reprogramar">Reprogramar</option>
+                </select>
+              </div>
+              <div className="prog-confirmacion-row">
+                <span className="prog-confirmacion-label">N:</span>
+                <select
+                  className={`prog-inline-select-mini confirmacion ${confN}`}
+                  value={confN}
+                  onChange={(e) => handleUpdateField(prog.id, 'confirmacion_nocturno', e.target.value)}
+                  title="Confirmación conductor nocturno"
+                >
+                  <option value="sin_confirmar">Sin confirmar</option>
+                  <option value="confirmo">Confirmó</option>
+                  <option value="no_confirmo">No confirmó</option>
+                  <option value="reprogramar">Reprogramar</option>
+                </select>
+              </div>
+            </div>
+          )
+        }
+
+        // Para A CARGO: un solo select
+        return (
+          <select
+            className={`prog-inline-select confirmacion ${prog.confirmacion_diurno || 'sin_confirmar'}`}
+            value={prog.confirmacion_diurno || 'sin_confirmar'}
+            onChange={(e) => handleUpdateField(prog.id, 'confirmacion_diurno', e.target.value)}
+            title="Confirmación de asistencia"
+          >
+            <option value="sin_confirmar">Sin confirmar</option>
+            <option value="confirmo">Confirmó</option>
+            <option value="no_confirmo">No confirmó</option>
+            <option value="reprogramar">Reprogramar</option>
+          </select>
+        )
+      }
     },
     {
       accessorKey: 'estado_cabify',
       header: 'Cabify',
-      cell: ({ row }) => (
-        <select
-          className={`prog-inline-select cabify ${row.original.estado_cabify || 'pendiente'}`}
-          value={row.original.estado_cabify || 'pendiente'}
-          onChange={(e) => handleUpdateField(row.original.id, 'estado_cabify', e.target.value)}
-          title="Estado Cabify"
-        >
-          <option value="pendiente">Pendiente</option>
-          <option value="listo_cabify">Listo Cabify</option>
-          <option value="asignar_auto">Asignar Auto</option>
-          <option value="crear_cuenta">Crear Cuenta</option>
-        </select>
-      )
+      cell: ({ row }) => {
+        const prog = row.original
+
+        // Para TURNO: mostrar 2 selects (diurno y nocturno)
+        if (prog.modalidad === 'TURNO') {
+          const estadoD = prog.estado_cabify_diurno || 'pendiente'
+          const estadoN = prog.estado_cabify_nocturno || 'pendiente'
+
+          return (
+            <div className="prog-cabify-turno">
+              <div className="prog-cabify-row">
+                <span className="prog-cabify-label">D:</span>
+                <select
+                  className={`prog-inline-select-mini cabify ${estadoD}`}
+                  value={estadoD}
+                  onChange={(e) => handleUpdateField(prog.id, 'estado_cabify_diurno', e.target.value)}
+                  title="Estado Cabify conductor diurno"
+                >
+                  <option value="pendiente">Pendiente</option>
+                  <option value="listo_cabify">Listo Cabify</option>
+                  <option value="asignar_auto">Asignar Auto</option>
+                  <option value="crear_cuenta">Crear Cuenta</option>
+                </select>
+              </div>
+              <div className="prog-cabify-row">
+                <span className="prog-cabify-label">N:</span>
+                <select
+                  className={`prog-inline-select-mini cabify ${estadoN}`}
+                  value={estadoN}
+                  onChange={(e) => handleUpdateField(prog.id, 'estado_cabify_nocturno', e.target.value)}
+                  title="Estado Cabify conductor nocturno"
+                >
+                  <option value="pendiente">Pendiente</option>
+                  <option value="listo_cabify">Listo Cabify</option>
+                  <option value="asignar_auto">Asignar Auto</option>
+                  <option value="crear_cuenta">Crear Cuenta</option>
+                </select>
+              </div>
+            </div>
+          )
+        }
+
+        // Para A CARGO: un solo select
+        return (
+          <select
+            className={`prog-inline-select cabify ${prog.estado_cabify_diurno || 'pendiente'}`}
+            value={prog.estado_cabify_diurno || 'pendiente'}
+            onChange={(e) => handleUpdateField(prog.id, 'estado_cabify_diurno', e.target.value)}
+            title="Estado Cabify"
+          >
+            <option value="pendiente">Pendiente</option>
+            <option value="listo_cabify">Listo Cabify</option>
+            <option value="asignar_auto">Asignar Auto</option>
+            <option value="crear_cuenta">Crear Cuenta</option>
+          </select>
+        )
+      }
     },
     {
       id: 'acciones',
@@ -1132,14 +1272,6 @@ export function ProgramacionModule() {
             disabled={!!row.original.asignacion_id}
           >
             <Send size={16} />
-          </button>
-          <button
-            className="prog-btn prog-btn-estado"
-            title="Cambiar estado"
-            onClick={() => handleCambiarEstado(row.original)}
-            disabled={!!row.original.asignacion_id}
-          >
-            <ArrowRightLeft size={16} />
           </button>
           <button
             className="prog-btn prog-btn-copy"
@@ -1849,52 +1981,6 @@ export function ProgramacionModule() {
                   </button>
                 </>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Cambiar Estado Cabify */}
-      {showEstadoModal && estadoModalProg && (
-        <div className="prog-modal-overlay" onClick={() => setShowEstadoModal(false)}>
-          <div className="prog-modal prog-modal-sm" onClick={e => e.stopPropagation()}>
-            <div className="prog-modal-header">
-              <h2>Cambiar Estado Cabify</h2>
-              <button onClick={() => setShowEstadoModal(false)}>
-                <XCircle size={20} />
-              </button>
-            </div>
-            <div className="prog-modal-body">
-              <div className="prog-modal-info">
-                <p><strong>Conductor:</strong> {estadoModalProg.conductor_display || estadoModalProg.conductor_nombre || 'Sin conductor'}</p>
-                <p><strong>Vehiculo:</strong> {estadoModalProg.vehiculo_entregar_patente || '-'}</p>
-                <p><strong>Estado actual:</strong> <span className={`prog-inline-select cabify ${estadoModalProg.estado_cabify || 'pendiente'}`} style={{ padding: '4px 8px', borderRadius: '4px' }}>{
-                  estadoModalProg.estado_cabify === 'listo_cabify' ? 'Listo Cabify' :
-                  estadoModalProg.estado_cabify === 'asignar_auto' ? 'Asignar Auto' :
-                  estadoModalProg.estado_cabify === 'crear_cuenta' ? 'Crear Cuenta' : 'Pendiente'
-                }</span></p>
-              </div>
-              <div className="form-group">
-                <label>Nuevo Estado</label>
-                <select 
-                  value={nuevoEstado} 
-                  onChange={e => setNuevoEstado(e.target.value)}
-                  className="form-select"
-                >
-                  <option value="pendiente">Pendiente</option>
-                  <option value="listo_cabify">Listo Cabify</option>
-                  <option value="asignar_auto">Asignar Auto</option>
-                  <option value="crear_cuenta">Crear Cuenta</option>
-                </select>
-              </div>
-            </div>
-            <div className="prog-modal-footer">
-              <button className="btn-secondary" onClick={() => setShowEstadoModal(false)}>
-                Cancelar
-              </button>
-              <button className="btn-primary" onClick={handleGuardarEstado}>
-                Guardar
-              </button>
             </div>
           </div>
         </div>
