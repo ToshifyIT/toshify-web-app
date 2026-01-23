@@ -1753,7 +1753,7 @@ export function ReporteFacturacionTab() {
     }
   }
 
-  // Exportar a formato SiFactura (30 columnas)
+  // Exportar a formato SiFactura (30 columnas) - formato exacto del Excel
   async function exportarSiFactura() {
     if (!periodo) return
 
@@ -1766,7 +1766,7 @@ export function ReporteFacturacionTab() {
           *,
           facturacion_conductores!inner(
             id, conductor_id, conductor_nombre, conductor_dni, conductor_cuit,
-            vehiculo_patente, tipo_alquiler, periodo_id
+            vehiculo_patente, tipo_alquiler, periodo_id, turnos_cobrados
           )
         `)
 
@@ -1774,8 +1774,6 @@ export function ReporteFacturacionTab() {
       const detallesFiltrados = (detalles || []).filter(
         (d: any) => d.facturacion_conductores?.periodo_id === periodo.id
       )
-
-      // Mapear detalles filtrados con tipo
       const detallesTyped = detallesFiltrados as any[]
       
       // Cargar emails de conductores
@@ -1787,10 +1785,68 @@ export function ReporteFacturacionTab() {
       
       const emailMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c.email]))
 
-      // Fechas del período
-      const fechaEmision = format(parseISO(periodo.fecha_fin), 'yyyy-MM-dd')
-      const fechaVencimiento = format(addWeeks(parseISO(periodo.fecha_fin), 1), 'yyyy-MM-dd')
+      // Fechas del período (formato yyyy-MM-dd para Excel)
+      const fechaEmision = parseISO(periodo.fecha_fin)
+      const fechaVencimiento = addWeeks(parseISO(periodo.fecha_fin), 1)
       const periodoDesc = `${format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')} al ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`
+
+      // Función para crear fila SiFactura
+      const crearFilaSiFactura = (
+        numero: number,
+        fact: FacturacionConductor,
+        total: number,
+        codigoProducto: string,
+        descripcionAdicional: string
+      ) => {
+        // Determinar tipo de factura según CUIT
+        const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
+        const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
+        const tipoDoc = 'CUIL'
+        const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
+        const email = emailMap.get(fact.conductor_dni) || ''
+        
+        // NUMERO CUIL = DNI (sin prefijo 20/23/27)
+        // NUMERO DNI = CUIT completo
+        const numeroCuil = fact.conductor_dni || ''
+        const numeroDni = fact.conductor_cuit || ''
+        
+        // Calcular IVA: NETO = TOTAL / 1.21, IVA = TOTAL - NETO
+        const netoGravado = Math.round((total / 1.21) * 100) / 100
+        const ivaAmount = Math.round((total - netoGravado) * 100) / 100
+
+        return [
+          numero,                               // N°
+          fechaEmision,                         // FECHA EMISION (Date object para Excel)
+          fechaVencimiento,                     // FECHA VENCIMIENTO
+          5,                                    // PUNTO DE VENTA
+          tipoFactura,                          // TIPO FACTURA
+          tipoDoc,                              // TIPO DOCUMENTO
+          numeroCuil,                           // NUMERO CUIL (es el DNI)
+          numeroDni,                            // NUMERO DNI (es el CUIT)
+          total,                                // TOTAL
+          0,                                    // COBRADO
+          condicionIva,                         // CONDICION IVA
+          'CTA_CTE',                            // CONDICION DE VENTA
+          fact.conductor_nombre,                // RAZON SOCIAL
+          '',                                   // DOMICILIO
+          codigoProducto,                       // CODIGO PRODUCTO
+          descripcionAdicional,                 // DESCRIPCION ADICIONAL
+          email,                                // EMAIL
+          '',                                   // NOTA
+          'PES',                                // MONEDA
+          1,                                    // TIPO DE CAMBIO
+          netoGravado,                          // NETO GRAVADO
+          ivaAmount,                            // Imp IVA al 21%
+          0,                                    // EXENTO
+          total,                                // TOTAL (repetido)
+          'IVA_21',                             // IVA PORCENTAJE
+          'SI',                                 // Generar asiento contable
+          4500007,                              // Cuenta débito
+          0,                                    // Cuenta crédito
+          'ND',                                 // REFERENCIA
+          ''                                    // CHECK
+        ]
+      }
 
       // Generar filas para SiFactura
       const filasExport: any[][] = []
@@ -1798,13 +1854,6 @@ export function ReporteFacturacionTab() {
 
       // Procesar cada facturación
       for (const fact of facturacionesFiltradas) {
-        // Determinar tipo de factura según CUIT
-        const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
-        const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_X'
-        const tipoDoc = tieneCuit ? 'CUIL' : 'DNI'
-        const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
-        const email = emailMap.get(fact.conductor_dni) || ''
-
         // Buscar detalles de este conductor
         const detallesConductor = detallesTyped.filter(
           (d: any) => d.facturacion_conductores?.id === fact.id
@@ -1813,7 +1862,7 @@ export function ReporteFacturacionTab() {
         // Si tiene detalles, crear una fila por cada concepto
         if (detallesConductor.length > 0) {
           for (const det of detallesConductor) {
-            if (det.total <= 0) continue // Saltar si es 0 o negativo
+            if (det.total <= 0) continue
 
             let descripcionAdicional = ''
             if (det.concepto_codigo === 'P001' || det.concepto_codigo === 'P002') {
@@ -1826,62 +1875,35 @@ export function ReporteFacturacionTab() {
               descripcionAdicional = det.concepto_descripcion
             }
 
-            filasExport.push([
-              numeroFactura++,                    // N°
-              fechaEmision,                       // FECHA EMISION
-              fechaVencimiento,                   // FECHA VENCIMIENTO
-              5,                                  // PUNTO DE VENTA
-              tipoFactura,                        // TIPO FACTURA
-              tipoDoc,                            // TIPO DOCUMENTO
-              tieneCuit ? fact.conductor_cuit : fact.conductor_dni, // NUMERO CUIL
-              fact.conductor_dni,                 // NUMERO DNI
-              det.total,                          // TOTAL
-              0,                                  // COBRADO
-              condicionIva,                       // CONDICION IVA
-              'CTA_CTE',                          // CONDICION DE VENTA
-              fact.conductor_nombre,              // RAZON SOCIAL
-              '',                                 // DOMICILIO
-              det.concepto_codigo,                // CODIGO PRODUCTO
-              descripcionAdicional,               // DESCRIPCION ADICIONAL
-              email,                              // EMAIL
-              '',                                 // NOTA
-              'PES',                              // MONEDA
-              1,                                  // TIPO DE CAMBIO
-              0,                                  // NETO GRAVADO
-              0,                                  // Imp IVA al 21%
-              det.total,                          // EXENTO
-              det.total,                          // TOTAL
-              'IVA_EXENTO',                       // IVA PORCENTAJE
-              'SI',                               // Generar asiento contable
-              4500007,                            // Cuenta débito
-              0,                                  // Cuenta crédito
-              'ND',                               // REFERENCIA
-              ''                                  // CHECK
-            ])
+            filasExport.push(crearFilaSiFactura(
+              numeroFactura++,
+              fact,
+              det.total,
+              det.concepto_codigo,
+              descripcionAdicional
+            ))
           }
         } else {
           // Sin detalles, crear filas basadas en subtotales
-          // P001/P002 - Alquiler
           if (fact.subtotal_alquiler > 0) {
             const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P001' : 'P002'
-            filasExport.push([
-              numeroFactura++, fechaEmision, fechaVencimiento, 5, tipoFactura, tipoDoc,
-              tieneCuit ? fact.conductor_cuit : fact.conductor_dni, fact.conductor_dni,
-              fact.subtotal_alquiler, 0, condicionIva, 'CTA_CTE', fact.conductor_nombre, '',
-              codigoAlquiler, String(fact.turnos_cobrados || 7), email, '', 'PES', 1,
-              0, 0, fact.subtotal_alquiler, fact.subtotal_alquiler, 'IVA_EXENTO', 'SI', 4500007, 0, 'ND', ''
-            ])
+            filasExport.push(crearFilaSiFactura(
+              numeroFactura++,
+              fact,
+              fact.subtotal_alquiler,
+              codigoAlquiler,
+              String(fact.turnos_cobrados || 7)
+            ))
           }
 
-          // P003 - Garantía
           if (fact.subtotal_garantia > 0) {
-            filasExport.push([
-              numeroFactura++, fechaEmision, fechaVencimiento, 5, tipoFactura, tipoDoc,
-              tieneCuit ? fact.conductor_cuit : fact.conductor_dni, fact.conductor_dni,
-              fact.subtotal_garantia, 0, condicionIva, 'CTA_CTE', fact.conductor_nombre, '',
-              'P003', fact.cuota_garantia_numero || '1 de 16', email, '', 'PES', 1,
-              0, 0, fact.subtotal_garantia, fact.subtotal_garantia, 'IVA_EXENTO', 'SI', 4500007, 0, 'ND', ''
-            ])
+            filasExport.push(crearFilaSiFactura(
+              numeroFactura++,
+              fact,
+              fact.subtotal_garantia,
+              'P003',
+              fact.cuota_garantia_numero || '1 de 16'
+            ))
           }
         }
       }
