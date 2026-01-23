@@ -1188,12 +1188,18 @@ export function AsignacionesModule() {
     
     // Cargar vehículos, conductores disponibles Y conductores de esta asignación
     const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all([
-      supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
+      supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)').order('patente'),
       supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
       supabase.from('asignaciones_conductores').select('conductor_id, horario').eq('asignacion_id', asignacion.id)
     ])
     
-    setVehiculosDisponibles(vehiculosRes.data || [])
+    // Filtrar solo vehículos disponibles (PKG_ON_BASE o EN_USO) o el vehículo actual de la asignación
+    const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO']
+    const vehiculosFiltrados = (vehiculosRes.data || []).filter((v: any) => 
+      estadosDisponibles.includes(v.vehiculos_estados?.codigo) || v.id === asignacion.vehiculo_id
+    )
+    
+    setVehiculosDisponibles(vehiculosFiltrados)
     setConductoresDisponibles(conductoresRes.data || [])
     
     // Obtener conductores actuales de la asignación

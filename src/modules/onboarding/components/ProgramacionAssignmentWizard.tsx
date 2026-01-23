@@ -285,11 +285,17 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             .map(p => p.vehiculo_entregar_id)
         )
 
-        // Filtrar vehiculos que NO esten en reparacion ni en mantenimiento
-        const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO', 'TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO']
+        // Filtrar vehiculos que estan disponibles para asignar (PKG_ON_BASE o EN_USO)
+        const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO']
+        // DEBUG: Ver qué estados vienen
+        const todosEstados = (vehiculosData || []).map((v: any) => ({ patente: v.patente, estado: v.vehiculos_estados?.codigo }))
+        // eslint-disable-next-line no-console
+        console.log('DEBUG vehiculos estados:', todosEstados.slice(0, 10))
         const vehiculosFiltrados = (vehiculosData || []).filter((v: any) =>
-          !estadosNoDisponibles.includes(v.vehiculos_estados?.codigo)
+          estadosDisponibles.includes(v.vehiculos_estados?.codigo)
         )
+        // eslint-disable-next-line no-console
+        console.log('DEBUG vehiculos filtrados:', vehiculosFiltrados.length)
 
         // Calcular disponibilidad de cada vehiculo
         const vehiculosConDisponibilidad: Vehicle[] = vehiculosFiltrados.map((vehiculo: any) => {
@@ -827,6 +833,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   // Filtrar vehiculos
+  // eslint-disable-next-line no-console
+  console.log('DEBUG vehicles en state:', vehicles.length, vehicles.slice(0, 5).map(v => ({ p: v.patente, d: v.disponibilidad })))
   const filteredVehicles = vehicles
     .filter(v => {
       // En modo edición, siempre incluir el vehículo actual
