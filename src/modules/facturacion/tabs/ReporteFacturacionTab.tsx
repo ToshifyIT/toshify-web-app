@@ -1907,6 +1907,9 @@ export function ReporteFacturacionTab() {
 
       setConceptosPendientes(pendientes)
 
+      // Crear Set de conductores con saldos pendientes para marcarlos en el preview
+      const conductoresConSaldosPendientes = new Set(pendientes.map(p => p.conductorId))
+
       // Fechas del período
       const fechaEmision = parseISO(periodo.fecha_fin)
       const fechaVencimiento = addWeeks(parseISO(periodo.fecha_fin), 1)
@@ -1994,7 +1997,8 @@ export function ReporteFacturacionTab() {
           tieneError,
           errorMsg,
           facturacionId,
-          detalleId
+          detalleId,
+          tieneSaldosPendientes: conductoresConSaldosPendientes.has(fact.conductor_id)
         }
       }
 
@@ -2282,6 +2286,12 @@ export function ReporteFacturacionTab() {
       const fechaVencimiento = addWeeks(semanaActual.fin, 1)
       const periodoDesc = `${format(semanaActual.inicio, 'dd/MM/yyyy')} al ${format(semanaActual.fin, 'dd/MM/yyyy')}`
 
+      // Crear Set de conductores con saldos pendientes (penalidades, tickets, cobros fraccionados)
+      const conductoresConSaldosPendientes = new Set<string>()
+      penalidadesFiltradas.forEach((p: any) => conductoresConSaldosPendientes.add(p.conductor_id))
+      ;(ticketsData || []).forEach((t: any) => conductoresConSaldosPendientes.add(t.conductor_id))
+      ;(cobrosData || []).forEach((c: any) => conductoresConSaldosPendientes.add(c.conductor_id))
+
       // Función para crear fila preview
       const crearFilaPreview = (
         numero: number,
@@ -2355,7 +2365,8 @@ export function ReporteFacturacionTab() {
           check: '',
           conductorId: fact.conductor_id,
           tieneError,
-          errorMsg
+          errorMsg,
+          tieneSaldosPendientes: conductoresConSaldosPendientes.has(fact.conductor_id)
         }
       }
 

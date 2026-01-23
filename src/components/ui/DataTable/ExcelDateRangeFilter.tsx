@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Filter, Calendar } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import './DataTable.css' // Assuming styles are shared or I'll add inline styles for specific layout
 
 interface ExcelDateRangeFilterProps {
