@@ -8,7 +8,7 @@ import {
   // Ticket, // Oculto - se maneja desde Incidencias
   // Gauge, // Oculto temporalmente
   // Ban, // Oculto temporalmente
-  UserMinus,
+  // UserMinus, // Liquidacion - sin tabla en BD
   // AlertTriangle, // Multas movido a modulo Multas/Telepase
   CreditCard
 } from 'lucide-react'
@@ -20,12 +20,12 @@ import { TicketsFavorTab } from './tabs/TicketsFavorTab'
 import { ConceptosFacturacionTab } from './tabs/ConceptosFacturacionTab'
 import { ExcesosKmTab } from './tabs/ExcesosKmTab'
 import { BloqueosConductoresTab } from './tabs/BloqueosConductoresTab'
-import { LiquidacionConductoresTab } from './tabs/LiquidacionConductoresTab'
+// import { LiquidacionConductoresTab } from './tabs/LiquidacionConductoresTab' // Sin tabla en BD
 // import { MultasTab } from './tabs/MultasTab' // Movido a modulo Multas/Telepase
 import { CobrosFraccionadosTab } from './tabs/CobrosFraccionadosTab'
 import './FacturacionModule.css'
 
-type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'bloqueos' | 'liquidacion' | 'conceptos' | 'cobros_fraccionados'
+type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'excesos' | 'bloqueos' | 'conceptos' | 'cobros_fraccionados'
 
 const TABS = [
   { id: 'reporte' as TabType, label: 'Reporte', icon: FileText },
@@ -36,7 +36,7 @@ const TABS = [
   // { id: 'excesos' as TabType, label: 'Excesos KM', icon: Gauge }, // Oculto temporalmente
   // { id: 'multas' as TabType, label: 'Multas', icon: AlertTriangle }, // Movido a modulo Multas/Telepase
   // { id: 'bloqueos' as TabType, label: 'Bloqueos', icon: Ban }, // Oculto temporalmente
-  { id: 'liquidacion' as TabType, label: 'Liquidacion', icon: UserMinus },
+  // { id: 'liquidacion' as TabType, label: 'Liquidacion', icon: UserMinus }, // Sin tabla en BD
   { id: 'cobros_fraccionados' as TabType, label: 'Cobros Fraccionados', icon: CreditCard },
   { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings }
 ]
@@ -73,7 +73,7 @@ export function FacturacionModule() {
          {activeTab === 'excesos' && <ExcesosKmTab />}
          {/* Multas movido a modulo Multas/Telepase */}
          {activeTab === 'bloqueos' && <BloqueosConductoresTab />}
-         {activeTab === 'liquidacion' && <LiquidacionConductoresTab />}
+         {/* Liquidacion - sin tabla en BD */}
          {activeTab === 'cobros_fraccionados' && <CobrosFraccionadosTab />}
          {activeTab === 'conceptos' && <ConceptosFacturacionTab />}
        </div>

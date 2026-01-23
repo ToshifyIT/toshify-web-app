@@ -285,10 +285,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             .map(p => p.vehiculo_entregar_id)
         )
 
-        // Filtrar vehiculos que NO esten en reparacion ni en mantenimiento
-        const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO', 'TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO']
+        // Filtrar vehiculos que estan disponibles para asignar (PKG_ON_BASE o EN_USO)
+        const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO']
         const vehiculosFiltrados = (vehiculosData || []).filter((v: any) =>
-          !estadosNoDisponibles.includes(v.vehiculos_estados?.codigo)
+          estadosDisponibles.includes(v.vehiculos_estados?.codigo)
         )
 
         // Calcular disponibilidad de cada vehiculo
