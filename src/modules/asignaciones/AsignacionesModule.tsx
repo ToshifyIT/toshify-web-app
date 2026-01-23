@@ -10,7 +10,43 @@ import { useAuth } from '../../contexts/AuthContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
+import { getWeek, getYear } from 'date-fns'
 import './AsignacionesModule.css'
+
+// Función para actualizar la tabla de control de facturación
+async function actualizarTablaControlFacturacion(
+  conductorDni: string,
+  patente: string,
+  modalidad: 'TURNO' | 'CARGO',
+  fecha: Date = new Date()
+) {
+  const semana = getWeek(fecha, { weekStartsOn: 1 })
+  const anio = getYear(fecha)
+  
+  // Intentar insertar, si ya existe actualizar
+  const { error } = await (supabase as any)
+    .from('conductores_semana_facturacion')
+    .upsert({
+      numero_dni: conductorDni,
+      semana,
+      anio,
+      estado: 'Activo',
+      patente,
+      modalidad
+    }, {
+      onConflict: 'numero_dni,semana,anio'
+    })
+  
+  if (error) {
+    // Si falla el upsert, intentar update
+    await (supabase as any)
+      .from('conductores_semana_facturacion')
+      .update({ estado: 'Activo', patente, modalidad })
+      .eq('numero_dni', conductorDni)
+      .eq('semana', semana)
+      .eq('anio', anio)
+  }
+}
 
 interface Asignacion {
   id: string
@@ -726,6 +762,35 @@ export function AsignacionesModule() {
         .from('asignaciones_conductores')
         .update({ confirmado: true, fecha_confirmacion: ahora, fecha_inicio: ahora })
         .in('id', conductoresToConfirm)
+
+      // Actualizar tabla de control de facturación para los conductores confirmados
+      const { data: conductoresConfirmados } = await supabase
+        .from('asignaciones_conductores')
+        .select(`
+          id,
+          conductor_id,
+          horario,
+          conductores:conductor_id (numero_dni)
+        `)
+        .in('id', conductoresToConfirm)
+
+      // Obtener patente del vehículo
+      const { data: vehiculoData } = await supabase
+        .from('vehiculos')
+        .select('patente')
+        .eq('id', selectedAsignacion.vehiculo_id)
+        .single()
+
+      const patente = (vehiculoData as any)?.patente || ''
+
+      // Actualizar tabla de control para cada conductor confirmado
+      for (const cond of (conductoresConfirmados || []) as any[]) {
+        const dni = cond.conductores?.numero_dni
+        if (dni) {
+          const modalidad = cond.horario === 'todo_dia' ? 'CARGO' : 'TURNO'
+          await actualizarTablaControlFacturacion(dni, patente, modalidad as 'TURNO' | 'CARGO')
+        }
+      }
 
       const { data: allConductores } = await supabase
         .from('asignaciones_conductores')
