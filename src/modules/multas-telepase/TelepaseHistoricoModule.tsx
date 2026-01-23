@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
+import ExcelDateRangeFilter from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
 import { Download, FileText, AlertCircle, CheckCircle, Eye, Edit2, X, Car, Users, DollarSign } from 'lucide-react'
 import Swal from 'sweetalert2'
@@ -83,6 +84,11 @@ export default function TelepaseHistoricoModule() {
   const [concesionarioFilter, setConcesionarioFilter] = useState<string[]>([])
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
   const [observacionesFilter, setObservacionesFilter] = useState<string[]>([])
+  const [semanaFilter, setSemanaFilter] = useState<string[]>([])
+  const [fechaDesde, setFechaDesde] = useState<string | null>(null)
+  const [fechaHasta, setFechaHasta] = useState<string | null>(null)
+  const [tarifaFilter, setTarifaFilter] = useState<string[]>([])
+  const [ibuttonFilter, setIbuttonFilter] = useState<string[]>([])
 
   useEffect(() => {
     cargarDatos()
@@ -94,7 +100,9 @@ export default function TelepaseHistoricoModule() {
       const { data, error } = await supabase
         .from('telepase_historico')
         .select('*')
-        .order('created_at', { ascending: false })
+        .gte('fecha', '2026-01-01')
+        .order('fecha', { ascending: false })
+        .order('hora', { ascending: false })
 
       if (error) throw error
       
@@ -127,6 +135,25 @@ export default function TelepaseHistoricoModule() {
 
   const observacionesOpciones = useMemo(() => ['Con observaciones', 'Sin observaciones'], [])
 
+  const semanasUnicas = useMemo(() => 
+    [...new Set(registros.map(r => {
+      const semanaVal = parseInt(r.semana || '0', 10)
+      return isNaN(semanaVal) ? '-' : (semanaVal + 1).toString()
+    }).filter(s => s !== '-'))].sort((a, b) => parseInt(a) - parseInt(b))
+  , [registros])
+
+  const tarifasUnicas = useMemo(() => 
+    [...new Set(registros.map(r => formatMoney(r.tarifa)).filter(t => t !== '$ 0'))].sort((a, b) => {
+      const valA = parseFloat(a.replace('$ ', '').replace(/\./g, '').replace(',', '.'))
+      const valB = parseFloat(b.replace('$ ', '').replace(/\./g, '').replace(',', '.'))
+      return valA - valB
+    })
+  , [registros])
+  
+  const ibuttonsUnicos = useMemo(() => 
+    [...new Set(registros.map(r => r.ibutton).filter(Boolean))].sort()
+  , [registros])
+
   // Filtrar registros
   const registrosFiltrados = useMemo(() => {
     let filtered = registros
@@ -149,8 +176,32 @@ export default function TelepaseHistoricoModule() {
       })
     }
 
+    if (semanaFilter.length > 0) {
+      filtered = filtered.filter(r => {
+        const semanaVal = parseInt(r.semana || '0', 10)
+        const displaySemana = isNaN(semanaVal) ? '-' : (semanaVal + 1).toString()
+        return semanaFilter.includes(displaySemana)
+      })
+    }
+
+    if (fechaDesde || fechaHasta) {
+      filtered = filtered.filter(r => {
+        if (!r.fecha) return false
+        if (fechaDesde && r.fecha < fechaDesde) return false
+        if (fechaHasta && r.fecha > fechaHasta) return false
+        return true
+      })
+    }
+
+    if (tarifaFilter.length > 0) {
+      filtered = filtered.filter(r => tarifaFilter.includes(formatMoney(r.tarifa)))
+    }
+    if (ibuttonFilter.length > 0) {
+      filtered = filtered.filter(r => ibuttonFilter.includes(r.ibutton))
+    }
+
     return filtered
-  }, [registros, patenteFilter, concesionarioFilter, conductorFilter, observacionesFilter])
+  }, [registros, patenteFilter, concesionarioFilter, conductorFilter, observacionesFilter, semanaFilter, fechaDesde, fechaHasta, tarifaFilter, ibuttonFilter])
 
   // Calcular totales
   const totalTarifa = useMemo(() => {
@@ -219,28 +270,122 @@ export default function TelepaseHistoricoModule() {
     }
   }
 
+  // Filtros activos para mostrar en la tabla
+  const activeFilters = useMemo(() => {
+    const filters: { id: string; label: string; onClear: () => void }[] = []
+
+    patenteFilter.forEach(val => filters.push({
+      id: `patente-${val}`,
+      label: `Patente: ${val}`,
+      onClear: () => setPatenteFilter(prev => prev.filter(p => p !== val))
+    }))
+
+    concesionarioFilter.forEach(val => filters.push({
+      id: `concesionario-${val}`,
+      label: `Concesionario: ${val}`,
+      onClear: () => setConcesionarioFilter(prev => prev.filter(c => c !== val))
+    }))
+
+    conductorFilter.forEach(val => filters.push({
+      id: `conductor-${val}`,
+      label: `Conductor: ${val}`,
+      onClear: () => setConductorFilter(prev => prev.filter(c => c !== val))
+    }))
+
+    observacionesFilter.forEach(val => filters.push({
+      id: `observaciones-${val}`,
+      label: `Obs: ${val}`,
+      onClear: () => setObservacionesFilter(prev => prev.filter(o => o !== val))
+    }))
+
+    semanaFilter.forEach(val => filters.push({
+      id: `semana-${val}`,
+      label: `Semana: ${val}`,
+      onClear: () => setSemanaFilter(prev => prev.filter(s => s !== val))
+    }))
+
+    if (fechaDesde || fechaHasta) {
+      filters.push({
+        id: 'fecha-rango',
+        label: `Fecha: ${fechaDesde ? fechaDesde.split('-').reverse().join('/') : 'Inicio'} - ${fechaHasta ? fechaHasta.split('-').reverse().join('/') : 'Fin'}`,
+        onClear: () => { setFechaDesde(null); setFechaHasta(null) }
+      })
+    }
+
+    tarifaFilter.forEach(val => filters.push({
+      id: `tarifa-${val}`,
+      label: `Tarifa: ${val}`,
+      onClear: () => setTarifaFilter(prev => prev.filter(t => t !== val))
+    }))
+
+    ibuttonFilter.forEach(val => filters.push({
+      id: `ibutton-${val}`,
+      label: `iButton: ${val}`,
+      onClear: () => setIbuttonFilter(prev => prev.filter(i => i !== val))
+    }))
+
+    return filters
+  }, [patenteFilter, concesionarioFilter, conductorFilter, observacionesFilter, semanaFilter, fechaDesde, fechaHasta, tarifaFilter, ibuttonFilter])
+
+  const clearAllFilters = () => {
+    setPatenteFilter([])
+    setConcesionarioFilter([])
+    setConductorFilter([])
+    setObservacionesFilter([])
+    setSemanaFilter([])
+    setFechaDesde(null)
+    setFechaHasta(null)
+    setTarifaFilter([])
+    setIbuttonFilter([])
+  }
+
   // Columnas
   const columns = useMemo<ColumnDef<TelepaseRegistro>[]>(() => [
     {
-      accessorKey: 'created_at',
-      header: 'Fecha Carga',
-      cell: ({ row }) => formatDateTime(row.original.created_at)
-    },
-    {
-      id: 'semana_facturacion',
-      header: 'Sem.',
-      cell: ({ row }) => {
-        if (!row.original.created_at) return '-'
-        return getWeekNumber(row.original.created_at)
-      }
-    },
-    {
       id: 'fecha_hora',
-      header: 'Fecha/Hora Peaje',
+      accessorFn: (row) => `${row.fecha || ''} ${row.hora || ''}`,
+      enableSorting: true,
+      header: () => (
+        <ExcelDateRangeFilter
+          label="FECHA CARGA"
+          startDate={fechaDesde}
+          endDate={fechaHasta}
+          onRangeChange={(start, end) => {
+            setFechaDesde(start)
+            setFechaHasta(end)
+          }}
+          filterId="fecha"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => {
         const fecha = row.original.fecha || ''
         const hora = row.original.hora || ''
         return `${fecha} ${hora}`.trim() || '-'
+      }
+    },
+    {
+      id: 'semana_facturacion',
+      accessorFn: (row) => {
+        const val = parseInt(row.semana || '0', 10)
+        return isNaN(val) ? 0 : val + 1
+      },
+      enableSorting: true,
+      header: () => (
+        <ExcelColumnFilter
+          label="Sem."
+          options={semanasUnicas}
+          selectedValues={semanaFilter}
+          onSelectionChange={setSemanaFilter}
+          filterId="semana"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => {
+        const semanaVal = parseInt(row.original.semana || '0', 10)
+        return isNaN(semanaVal) ? '-' : semanaVal + 1
       }
     },
     {
@@ -276,17 +421,18 @@ export default function TelepaseHistoricoModule() {
       )
     },
     {
-      id: 'detalle',
-      header: 'Detalle',
-      cell: ({ row }) => {
-        const { categoria, estacion, via, dispositivo } = row.original
-        const partes = [categoria, estacion, via, dispositivo].filter(Boolean)
-        return <span style={{ fontSize: '12px' }}>{partes.length > 0 ? partes.join(' / ') : '-'}</span>
-      }
-    },
-    {
       accessorKey: 'tarifa',
-      header: 'Tarifa',
+      header: () => (
+        <ExcelColumnFilter
+          label="Tarifa"
+          options={tarifasUnicas}
+          selectedValues={tarifaFilter}
+          onSelectionChange={setTarifaFilter}
+          filterId="tarifa"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => (
         <span style={{ fontWeight: 600, color: '#F59E0B' }}>
           {formatMoney(row.original.tarifa)}
@@ -310,7 +456,17 @@ export default function TelepaseHistoricoModule() {
     },
     {
       accessorKey: 'ibutton',
-      header: 'iButton',
+      header: () => (
+        <ExcelColumnFilter
+          label="iButton"
+          options={ibuttonsUnicos}
+          selectedValues={ibuttonFilter}
+          onSelectionChange={setIbuttonFilter}
+          filterId="ibutton"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
       cell: ({ row }) => row.original.ibutton || '-'
     },
     {
@@ -356,7 +512,7 @@ export default function TelepaseHistoricoModule() {
         </div>
       )
     }
-  ], [patentesUnicas, patenteFilter, concesionariosUnicos, concesionarioFilter, conductoresUnicos, conductorFilter, observacionesOpciones, observacionesFilter, openFilterId])
+  ], [patentesUnicas, patenteFilter, concesionariosUnicos, concesionarioFilter, conductoresUnicos, conductorFilter, observacionesOpciones, observacionesFilter, openFilterId, semanasUnicas, semanaFilter, fechaDesde, fechaHasta, tarifasUnicas, tarifaFilter, ibuttonsUnicos, ibuttonFilter])
 
   // Exportar a Excel
   function handleExportar() {
@@ -443,6 +599,8 @@ export default function TelepaseHistoricoModule() {
         columns={columns}
         searchPlaceholder="Buscar por patente, conductor..."
         disableAutoFilters={true}
+        externalFilters={activeFilters}
+        onClearAllFilters={clearAllFilters}
         headerAction={
           <button className="btn-secondary" onClick={handleExportar}>
             <Download size={16} />
