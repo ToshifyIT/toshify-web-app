@@ -177,6 +177,9 @@ export function ReporteFacturacionTab() {
   // Recalcular período abierto
   const [recalculando, setRecalculando] = useState(false)
 
+  // Exportar SiFactura
+  const [exportingSiFactura, setExportingSiFactura] = useState(false)
+
   // Al montar: buscar última semana generada y navegar a ella
   useEffect(() => {
     async function irAUltimaSemanaGenerada() {
@@ -1750,6 +1753,238 @@ export function ReporteFacturacionTab() {
     }
   }
 
+  // Exportar a formato SiFactura (30 columnas)
+  async function exportarSiFactura() {
+    if (!periodo) return
+
+    setExportingSiFactura(true)
+    try {
+      // Cargar detalles de facturación para este período
+      const { data: detalles } = await supabase
+        .from('facturacion_detalle')
+        .select(`
+          *,
+          facturacion_conductores!inner(
+            id, conductor_id, conductor_nombre, conductor_dni, conductor_cuit,
+            vehiculo_patente, tipo_alquiler, periodo_id
+          )
+        `)
+
+      // Filtrar por período actual
+      const detallesFiltrados = (detalles || []).filter(
+        (d: any) => d.facturacion_conductores?.periodo_id === periodo.id
+      )
+
+      // Mapear detalles filtrados con tipo
+      const detallesTyped = detallesFiltrados as any[]
+      
+      // Cargar emails de conductores
+      const dnis = [...new Set(facturacionesFiltradas.map(f => f.conductor_dni).filter(Boolean))]
+      const { data: conductoresData } = await supabase
+        .from('conductores')
+        .select('numero_dni, email')
+        .in('numero_dni', dnis)
+      
+      const emailMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c.email]))
+
+      // Fechas del período
+      const fechaEmision = format(parseISO(periodo.fecha_fin), 'yyyy-MM-dd')
+      const fechaVencimiento = format(addWeeks(parseISO(periodo.fecha_fin), 1), 'yyyy-MM-dd')
+      const periodoDesc = `${format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')} al ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`
+
+      // Generar filas para SiFactura
+      const filasExport: any[][] = []
+      let numeroFactura = 1
+
+      // Procesar cada facturación
+      for (const fact of facturacionesFiltradas) {
+        // Determinar tipo de factura según CUIT
+        const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
+        const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_X'
+        const tipoDoc = tieneCuit ? 'CUIL' : 'DNI'
+        const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
+        const email = emailMap.get(fact.conductor_dni) || ''
+
+        // Buscar detalles de este conductor
+        const detallesConductor = detallesTyped.filter(
+          (d: any) => d.facturacion_conductores?.id === fact.id
+        )
+
+        // Si tiene detalles, crear una fila por cada concepto
+        if (detallesConductor.length > 0) {
+          for (const det of detallesConductor) {
+            if (det.total <= 0) continue // Saltar si es 0 o negativo
+
+            let descripcionAdicional = ''
+            if (det.concepto_codigo === 'P001' || det.concepto_codigo === 'P002') {
+              descripcionAdicional = String(fact.turnos_cobrados || 7)
+            } else if (det.concepto_codigo === 'P003') {
+              descripcionAdicional = fact.cuota_garantia_numero || '1 de 16'
+            } else if (det.concepto_codigo === 'P005') {
+              descripcionAdicional = periodoDesc
+            } else if (det.concepto_descripcion) {
+              descripcionAdicional = det.concepto_descripcion
+            }
+
+            filasExport.push([
+              numeroFactura++,                    // N°
+              fechaEmision,                       // FECHA EMISION
+              fechaVencimiento,                   // FECHA VENCIMIENTO
+              5,                                  // PUNTO DE VENTA
+              tipoFactura,                        // TIPO FACTURA
+              tipoDoc,                            // TIPO DOCUMENTO
+              tieneCuit ? fact.conductor_cuit : fact.conductor_dni, // NUMERO CUIL
+              fact.conductor_dni,                 // NUMERO DNI
+              det.total,                          // TOTAL
+              0,                                  // COBRADO
+              condicionIva,                       // CONDICION IVA
+              'CTA_CTE',                          // CONDICION DE VENTA
+              fact.conductor_nombre,              // RAZON SOCIAL
+              '',                                 // DOMICILIO
+              det.concepto_codigo,                // CODIGO PRODUCTO
+              descripcionAdicional,               // DESCRIPCION ADICIONAL
+              email,                              // EMAIL
+              '',                                 // NOTA
+              'PES',                              // MONEDA
+              1,                                  // TIPO DE CAMBIO
+              0,                                  // NETO GRAVADO
+              0,                                  // Imp IVA al 21%
+              det.total,                          // EXENTO
+              det.total,                          // TOTAL
+              'IVA_EXENTO',                       // IVA PORCENTAJE
+              'SI',                               // Generar asiento contable
+              4500007,                            // Cuenta débito
+              0,                                  // Cuenta crédito
+              'ND',                               // REFERENCIA
+              ''                                  // CHECK
+            ])
+          }
+        } else {
+          // Sin detalles, crear filas basadas en subtotales
+          // P001/P002 - Alquiler
+          if (fact.subtotal_alquiler > 0) {
+            const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P001' : 'P002'
+            filasExport.push([
+              numeroFactura++, fechaEmision, fechaVencimiento, 5, tipoFactura, tipoDoc,
+              tieneCuit ? fact.conductor_cuit : fact.conductor_dni, fact.conductor_dni,
+              fact.subtotal_alquiler, 0, condicionIva, 'CTA_CTE', fact.conductor_nombre, '',
+              codigoAlquiler, String(fact.turnos_cobrados || 7), email, '', 'PES', 1,
+              0, 0, fact.subtotal_alquiler, fact.subtotal_alquiler, 'IVA_EXENTO', 'SI', 4500007, 0, 'ND', ''
+            ])
+          }
+
+          // P003 - Garantía
+          if (fact.subtotal_garantia > 0) {
+            filasExport.push([
+              numeroFactura++, fechaEmision, fechaVencimiento, 5, tipoFactura, tipoDoc,
+              tieneCuit ? fact.conductor_cuit : fact.conductor_dni, fact.conductor_dni,
+              fact.subtotal_garantia, 0, condicionIva, 'CTA_CTE', fact.conductor_nombre, '',
+              'P003', fact.cuota_garantia_numero || '1 de 16', email, '', 'PES', 1,
+              0, 0, fact.subtotal_garantia, fact.subtotal_garantia, 'IVA_EXENTO', 'SI', 4500007, 0, 'ND', ''
+            ])
+          }
+        }
+      }
+
+      if (filasExport.length === 0) {
+        Swal.fire('Sin datos', 'No hay conceptos para exportar a SiFactura', 'warning')
+        setExportingSiFactura(false)
+        return
+      }
+
+      // Crear Excel con formato SiFactura
+      const wb = XLSX.utils.book_new()
+
+      // Headers exactos de SiFactura
+      const headers = [
+        'N°',
+        'FECHA EMISION. Debe ser con formato dd/mm/aaaa',
+        'FECHA VENCIMIENTO. Debe ser con formato dd/mm/aaaa',
+        'PUNTO DE VENTA',
+        "TIPO FACTURA. Ver valores permiido en la solapa 'Tablas de ayuda'",
+        "TIPO DOCUMENTO. Ver valores permiido en la solapa 'Tablas de ayuda'",
+        'NUMERO CUIL ',
+        'NUMERO DNI ',
+        'TOTAL. Importe total de su comprobante',
+        'COBRADO. Importe total cobrado para este comprobante, valor entre 0 y TOTAL, en caso de ser mayor el sistema lo seteará en el valor igual al TOTAL',
+        "CONDICION IVA. Ver valores permitido en la solapa 'Tablas de ayuda'",
+        "CONDICION DE VENTA. Ver valores permiido en la solapa 'Tablas de ayuda'",
+        'RAZON SOCIAL. Indicar la razón social del receptor del comprobante, si éste existe detro de Sifactura,  se tomará dicha razón social para el comprobante generado, sino el software creará un nuevo cliente con el tipo de documento, número y razón social aquí indicada.',
+        'DOMICILIO',
+        "CODIGO PRODUCTO. Este código debe existir en la sección de Base de datos->Producto (el tipo de sección del producto debe ser VENTAS)",
+        'DESCRIPCION ADICIONAL. Esta descripción se concatenará al final de la descripción del producto previamente creado dentro de Sifactura',
+        'EMAIL. Correo electrónico al que se enviará el comprobante de venta',
+        'NOTA. Puede o no existir, si este campo s completa, se imprimirá al pie del comprobante y se verá en la impresión',
+        'MONEDA',
+        'TIPO DE CAMBIO. Debe ser igual a 1 para la moneda PES',
+        'NETO GRAVADO. Si el tipo decomprobante enviado es RECIBO y/o FACTURA C este valor debe ser cero',
+        'Imp IVA al 21%',
+        'EXENTO. Si el tipo decomprobante enviado es RECIBO y/o FACTURA C este valor debe ser cero',
+        'TOTAL ',
+        'IVA PORCENTAJE. Debe utilizar el valor IVA_EXENTO si el tipo de factura es RECIBO_C, RECIBO_X y/o FACTURA_X',
+        "Generar asiento contable. Ver valores permiido en la solapa 'Tablas de ayuda'",
+        'Contabilidad. ID del plan de cuenta de la cuenta debito (de la sección Contabilidad->Plan de Cuenta) sin puntos, solo números',
+        'Contabilidad. ID del plan de cuenta de la cuenta crédito (de la sección Contabilidad->Plan de Cuenta) sin puntos, solo números',
+        'REFERENCIA. En caso de ND o NC puede indicar el comprobante referenciado',
+        'CHECK '
+      ]
+
+      const wsData = [headers, ...filasExport]
+      const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+      // Ajustar anchos de columna
+      ws['!cols'] = [
+        { wch: 5 },   // N°
+        { wch: 12 },  // FECHA EMISION
+        { wch: 12 },  // FECHA VENCIMIENTO
+        { wch: 8 },   // PUNTO DE VENTA
+        { wch: 12 },  // TIPO FACTURA
+        { wch: 10 },  // TIPO DOCUMENTO
+        { wch: 14 },  // NUMERO CUIL
+        { wch: 12 },  // NUMERO DNI
+        { wch: 12 },  // TOTAL
+        { wch: 10 },  // COBRADO
+        { wch: 20 },  // CONDICION IVA
+        { wch: 12 },  // CONDICION DE VENTA
+        { wch: 30 },  // RAZON SOCIAL
+        { wch: 15 },  // DOMICILIO
+        { wch: 8 },   // CODIGO PRODUCTO
+        { wch: 40 },  // DESCRIPCION ADICIONAL
+        { wch: 25 },  // EMAIL
+        { wch: 15 },  // NOTA
+        { wch: 6 },   // MONEDA
+        { wch: 8 },   // TIPO DE CAMBIO
+        { wch: 12 },  // NETO GRAVADO
+        { wch: 12 },  // Imp IVA
+        { wch: 12 },  // EXENTO
+        { wch: 12 },  // TOTAL
+        { wch: 12 },  // IVA PORCENTAJE
+        { wch: 8 },   // Generar asiento
+        { wch: 10 },  // Cuenta débito
+        { wch: 10 },  // Cuenta crédito
+        { wch: 8 },   // REFERENCIA
+        { wch: 8 }    // CHECK
+      ]
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Encabezado ')
+
+      const nombreArchivo = `SiFactura_Semana${periodo.semana}_${periodo.anio}.xlsx`
+      XLSX.writeFile(wb, nombreArchivo)
+
+      Swal.fire({
+        icon: 'success',
+        title: 'SiFactura Exportado',
+        html: `<p>Se descargó: <strong>${nombreArchivo}</strong></p><p>${filasExport.length} líneas generadas</p>`,
+        timer: 3000,
+        showConfirmButton: false
+      })
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo exportar a formato SiFactura', 'error')
+    } finally {
+      setExportingSiFactura(false)
+    }
+  }
+
   // Preparar datos para RIT Preview (formato Bruno Timoteo)
   async function prepareRITPreview() {
     if (!periodo) return
@@ -3240,6 +3475,15 @@ export function ReporteFacturacionTab() {
               >
                 {exportingExcel ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
                 {exportingExcel ? 'Exportando...' : 'Exportar Excel'}
+              </button>
+              <button
+                className="fact-btn-export"
+                onClick={exportarSiFactura}
+                disabled={exportingSiFactura || facturacionesFiltradas.length === 0}
+                style={{ backgroundColor: '#059669' }}
+              >
+                {exportingSiFactura ? <Loader2 size={14} className="spinning" /> : <Download size={14} />}
+                {exportingSiFactura ? 'Exportando...' : 'Exportar SiFactura'}
               </button>
               <button
                 className="fact-btn-export"
