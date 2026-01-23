@@ -1466,9 +1466,13 @@ function SiniestroForm({
           <div className="form-group">
             <label>Presupuesto Real</label>
             <input
-              type="number"
-              value={formData.presupuesto_real || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, presupuesto_real: Number(e.target.value) || undefined }))}
+              type="text"
+              inputMode="numeric"
+              value={formData.presupuesto_real ?? ''}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9]/g, '')
+                setFormData(prev => ({ ...prev, presupuesto_real: val === '' ? undefined : Number(val) }))
+              }}
               placeholder="0"
               disabled={isFieldDisabled('other')}
             />
@@ -1476,9 +1480,13 @@ function SiniestroForm({
           <div className="form-group">
             <label>Presupuesto Enviado al Seguro</label>
             <input
-              type="number"
-              value={formData.presupuesto_enviado_seguro || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, presupuesto_enviado_seguro: Number(e.target.value) || undefined }))}
+              type="text"
+              inputMode="numeric"
+              value={formData.presupuesto_enviado_seguro ?? ''}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9]/g, '')
+                setFormData(prev => ({ ...prev, presupuesto_enviado_seguro: val === '' ? undefined : Number(val) }))
+              }}
               placeholder="0"
               disabled={isFieldDisabled('other')}
             />
@@ -1488,9 +1496,13 @@ function SiniestroForm({
           <div className="form-group">
             <label>Presupuesto Aprobado</label>
             <input
-              type="number"
-              value={formData.presupuesto_aprobado_seguro || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, presupuesto_aprobado_seguro: Number(e.target.value) || undefined }))}
+              type="text"
+              inputMode="numeric"
+              value={formData.presupuesto_aprobado_seguro ?? ''}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9]/g, '')
+                setFormData(prev => ({ ...prev, presupuesto_aprobado_seguro: val === '' ? undefined : Number(val) }))
+              }}
               placeholder="0"
               disabled={isFieldDisabled('other')}
             />
@@ -1498,9 +1510,13 @@ function SiniestroForm({
           <div className="form-group">
             <label>Total Pagado</label>
             <input
-              type="number"
-              value={formData.total_pagado || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, total_pagado: Number(e.target.value) || undefined }))}
+              type="text"
+              inputMode="numeric"
+              value={formData.total_pagado ?? ''}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9]/g, '')
+                setFormData(prev => ({ ...prev, total_pagado: val === '' ? undefined : Number(val) }))
+              }}
               placeholder="0"
               disabled={isFieldDisabled('other')}
             />
@@ -1519,10 +1535,14 @@ function SiniestroForm({
           <div className="form-group">
             <label>% Abogada</label>
             <input
-              type="number"
-              step="0.01"
-              value={formData.porcentaje_abogada || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, porcentaje_abogada: Number(e.target.value) || undefined }))}
+              type="text"
+              inputMode="decimal"
+              value={formData.porcentaje_abogada ?? ''}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9.]/g, '')
+                const num = parseFloat(val)
+                setFormData(prev => ({ ...prev, porcentaje_abogada: val === '' ? undefined : (isNaN(num) ? undefined : Math.min(100, num)) }))
+              }}
               placeholder="0"
               disabled={isFieldDisabled('other')}
             />

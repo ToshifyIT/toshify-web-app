@@ -1246,3 +1246,130 @@
   background: var(--badge-gray-bg, #F3F4F6);
   color: var(--badge-gray-text, #4B5563);
 }
+
+/* Layout para Cabify dual (TURNO) */
+.prog-cabify-turno {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prog-cabify-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prog-cabify-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 14px;
+}
+
+/* Estilos de estado Cabify para select-mini */
+.prog-inline-select-mini.cabify.pendiente {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select-mini.cabify.listo_cabify {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select-mini.cabify.asignar_auto {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select-mini.cabify.crear_cuenta {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+/* Layout para Documento dual (TURNO) */
+.prog-documento-turno {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prog-documento-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prog-documento-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 14px;
+}
+
+/* Estilos de documento para select inline */
+.prog-inline-select.documento.sin_definir,
+.prog-inline-select-mini.documento.sin_definir {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select.documento.carta_oferta,
+.prog-inline-select-mini.documento.carta_oferta {
+  background: var(--badge-blue-bg, #DBEAFE);
+  color: var(--badge-blue-text, #1E40AF);
+}
+
+.prog-inline-select.documento.anexo,
+.prog-inline-select-mini.documento.anexo {
+  background: var(--badge-purple-bg, #EDE9FE);
+  color: var(--badge-purple-text, #7C3AED);
+}
+
+.prog-inline-select.documento.na,
+.prog-inline-select-mini.documento.na {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #D97706);
+}
+
+/* Layout para Confirmación dual (TURNO) */
+.prog-confirmacion-turno {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prog-confirmacion-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prog-confirmacion-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 14px;
+}
+
+/* Estilos de confirmación para select-mini */
+.prog-inline-select-mini.confirmacion.sin_confirmar {
+  background: var(--badge-gray-bg, #F3F4F6);
+  color: var(--badge-gray-text, #6B7280);
+}
+
+.prog-inline-select-mini.confirmacion.confirmo {
+  background: var(--badge-green-bg, #D1FAE5);
+  color: var(--badge-green-text, #059669);
+}
+
+.prog-inline-select-mini.confirmacion.no_confirmo {
+  background: var(--badge-red-bg, #FEE2E2);
+  color: var(--badge-red-text, #DC2626);
+}
+
+.prog-inline-select-mini.confirmacion.reprogramar {
+  background: var(--badge-yellow-bg, #FEF3C7);
+  color: var(--badge-yellow-text, #D97706);
+}

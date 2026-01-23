@@ -899,6 +899,39 @@ export function DataTable<T>({
   if (data.length === 0) {
     return (
       <div className="dt-wrapper">
+        {/* Header with Search and Action - mostrar incluso cuando no hay datos */}
+        {(showSearch || headerAction) && (
+          <div className="dt-header-bar">
+            {showSearch && (
+              <div className="dt-search-wrapper">
+                <svg
+                  className="dt-search-icon"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="M21 21l-4.35-4.35" />
+                </svg>
+                <input
+                  type="text"
+                  className="dt-search-input"
+                  placeholder={searchPlaceholder}
+                  value={globalFilter}
+                  onChange={(e) => {
+                    setGlobalFilter(e.target.value);
+                  }}
+                />
+              </div>
+            )}
+            {headerAction && (
+              <div className="dt-header-action">{headerAction}</div>
+            )}
+          </div>
+        )}
         {/* Active Filters Bar - mostrar incluso cuando no hay datos */}
         {hasActiveFilters && (
           <div className="dt-active-filters">
