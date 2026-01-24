@@ -945,7 +945,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .wizard-container {
-          background: white;
+          background: var(--modal-bg);
           border-radius: 20px;
           width: 100%;
           max-width: 1100px;
@@ -955,15 +955,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           display: flex;
           flex-direction: column;
           box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+          border: 1px solid var(--border-primary);
         }
 
         .wizard-header {
           padding: 16px 28px;
-          border-bottom: 1px solid #E5E7EB;
+          border-bottom: 1px solid var(--border-primary);
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: linear-gradient(to bottom, #FFFFFF 0%, #F9FAFB 100%);
           flex-shrink: 0;
         }
 
@@ -971,21 +971,21 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           margin: 0;
           font-size: clamp(16px, 1.5vw, 20px);
           font-weight: 700;
-          color: #111827;
+          color: var(--text-primary);
           letter-spacing: -0.5px;
         }
 
         .wizard-subtitle {
           margin: 4px 0 0 0;
           font-size: clamp(10px, 1vw, 12px);
-          color: #6B7280;
+          color: var(--text-secondary);
           font-weight: 400;
         }
 
         .btn-close {
           background: none;
           border: none;
-          color: #6B7280;
+          color: var(--text-secondary);
           cursor: pointer;
           padding: 8px;
           border-radius: 6px;
@@ -994,7 +994,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         .btn-close:hover {
           background: #E5E7EB;
-          color: #1F2937;
+          color: var(--text-primary);
         }
 
         .wizard-stepper {
@@ -1002,8 +1002,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           align-items: center;
           justify-content: center;
           padding: 20px 24px;
-          background: white;
-          border-bottom: 1px solid #E5E7EB;
+          border-bottom: 1px solid var(--border-primary);
           flex-shrink: 0;
         }
 
@@ -1024,9 +1023,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           justify-content: center;
           font-weight: 700;
           font-size: clamp(11px, 1vw, 14px);
-          border: 2px solid #E5E7EB;
-          background: white;
-          color: #9CA3AF;
+          border: 2px solid var(--border-primary);
+          background: var(--modal-bg);
+          color: var(--text-tertiary);
           transition: all 0.25s ease;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
@@ -1049,14 +1048,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .step-label {
           font-size: clamp(9px, 0.8vw, 11px);
           font-weight: 600;
-          color: #9CA3AF;
+          color: var(--text-tertiary);
           white-space: nowrap;
           text-transform: uppercase;
           letter-spacing: 0.3px;
         }
 
         .step-label.active {
-          color: #E63946;
+          color: var(--color-primary);
         }
 
         .step-label.completed {
@@ -1066,7 +1065,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .step-connector {
           width: 80px;
           height: 2px;
-          background: #E5E7EB;
+          background: var(--border-primary);
           margin: 0 12px;
           margin-bottom: 28px;
           border-radius: 2px;
@@ -1082,7 +1081,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           overflow-y: auto;
           overflow-x: hidden;
           padding: 20px 24px;
-          background: #FAFBFC;
+          background: var(--bg-secondary);
           box-sizing: border-box;
         }
 
@@ -1093,10 +1092,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         .wizard-footer {
           padding: 20px 40px;
-          border-top: 1px solid #E5E7EB;
+          border-top: 1px solid var(--border-primary);
           display: flex;
           justify-content: space-between;
-          background: white;
+          background: var(--modal-bg);
         }
 
         .btn {
@@ -1114,33 +1113,34 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .btn-secondary {
-          background: white;
-          color: #6B7280;
-          border: 2px solid #E5E7EB;
+          background: var(--bg-secondary);
+          color: var(--text-secondary);
+          border: 2px solid var(--border-primary);
           box-shadow: none;
         }
 
         .btn-secondary:hover {
-          background: #F9FAFB;
-          border-color: #D1D5DB;
-          color: #374151;
+          background: var(--bg-tertiary);
+          border-color: var(--text-tertiary);
+          color: var(--text-primary);
         }
 
         .btn-primary {
-          background: linear-gradient(to bottom, #E63946 0%, #D62828 100%);
+          background: var(--color-primary);
           color: white;
-          border: 2px solid #E63946;
+          border: 2px solid var(--color-primary);
         }
 
         .btn-primary:hover {
-          background: linear-gradient(to bottom, #D62828 0%, #C62020 100%);
-          box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
+          background: var(--color-primary-hover);
+          box-shadow: 0 4px 12px var(--color-primary-shadow);
           transform: translateY(-1px);
         }
 
         .btn-primary:disabled {
-          background: #D1D5DB;
-          border-color: #D1D5DB;
+          background: var(--bg-tertiary);
+          border-color: var(--bg-tertiary);
+          color: var(--text-tertiary);
           cursor: not-allowed;
           box-shadow: none;
           transform: none;
@@ -1155,13 +1155,13 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .modality-card {
-          border: 2px solid #E5E7EB;
+          border: 2px solid var(--border-primary);
           border-radius: 16px;
           padding: 40px 24px;
           text-align: center;
           cursor: pointer;
           transition: all 0.2s ease;
-          background: white;
+          background: var(--bg-secondary);
           position: relative;
           overflow: hidden;
         }
@@ -1188,7 +1188,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         .modality-card.selected {
           border-color: #E63946;
-          background: #FFF;
+          background: var(--modal-bg);
           box-shadow: 0 4px 16px rgba(230, 57, 70, 0.15);
         }
 
@@ -1198,7 +1198,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         .modality-icon {
           margin-bottom: 20px;
-          color: #6B7280;
+          color: var(--text-secondary);
           transition: all 0.2s ease;
           display: flex;
           align-items: center;
@@ -1214,13 +1214,13 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .modality-title {
           font-size: clamp(16px, 1.5vw, 20px);
           font-weight: 700;
-          color: #1F2937;
+          color: var(--text-primary);
           margin: 0 0 8px 0;
         }
 
         .modality-description {
           font-size: clamp(11px, 1vw, 13px);
-          color: #6B7280;
+          color: var(--text-secondary);
           margin: 0;
           line-height: 1.5;
         }
@@ -1248,7 +1248,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .vehicle-card {
-          border: 2px solid #E5E7EB;
+          border: 2px solid var(--border-primary);
           border-radius: 14px;
           padding: 20px;
           display: grid;
@@ -1257,12 +1257,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           align-items: center;
           cursor: pointer;
           transition: all 0.2s ease;
-          background: white;
+          background: var(--modal-bg);
         }
 
         .vehicle-card:hover {
           border-color: #E63946;
-          background: #FFF;
+          background: var(--modal-bg);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
           transform: translateY(-1px);
         }
@@ -1280,14 +1280,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .vehicle-patente {
           font-size: clamp(14px, 1.3vw, 17px);
           font-weight: 700;
-          color: #111827;
+          color: var(--text-primary);
           margin: 0 0 6px 0;
           letter-spacing: 0.5px;
         }
 
         .vehicle-details {
           font-size: clamp(11px, 1vw, 13px);
-          color: #6B7280;
+          color: var(--text-secondary);
           margin: 0;
         }
 
@@ -1330,12 +1330,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .conductores-column {
-          border: 2px solid #E5E7EB;
+          border: 2px solid var(--border-primary);
           border-radius: 12px;
           padding: 14px;
           display: flex;
           flex-direction: column;
-          background: white;
+          background: var(--modal-bg);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
           min-height: 300px;
           max-height: 380px;
@@ -1407,7 +1407,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           margin: 0 0 10px 0;
           font-size: clamp(11px, 1vw, 13px);
           font-weight: 700;
-          color: #1F2937;
+          color: var(--text-primary);
           padding-bottom: 8px;
           border-bottom: 2px solid rgba(0, 0, 0, 0.1);
           flex-shrink: 0;
@@ -1423,12 +1423,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           gap: 10px;
           cursor: grab;
           transition: all 0.2s ease;
-          background: white;
+          background: var(--modal-bg);
         }
 
         .conductor-item:hover {
           border-color: #E63946;
-          background: #FFF;
+          background: var(--modal-bg);
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
         }
 
@@ -1447,7 +1447,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           justify-content: center;
           font-weight: 700;
           font-size: 12px;
-          color: #6B7280;
+          color: var(--text-secondary);
           flex-shrink: 0;
         }
 
@@ -1459,7 +1459,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .conductor-name {
           font-size: clamp(10px, 0.9vw, 12px);
           font-weight: 600;
-          color: #111827;
+          color: var(--text-primary);
           margin: 0 0 2px 0;
           white-space: nowrap;
           overflow: hidden;
@@ -1468,7 +1468,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         .conductor-license {
           font-size: clamp(9px, 0.8vw, 11px);
-          color: #9CA3AF;
+          color: var(--text-tertiary);
           margin: 0;
           font-weight: 500;
         }
@@ -1492,11 +1492,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .drop-zone.has-conductor {
           border-style: solid;
           border-color: #10B981;
-          background: white;
+          background: var(--modal-bg);
         }
 
         .drop-zone-empty {
-          color: #9CA3AF;
+          color: var(--text-tertiary);
           font-size: 12px;
           text-align: center;
         }
@@ -1506,7 +1506,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           border: 2px solid #10B981;
           border-radius: 10px;
           padding: 12px;
-          background: white;
+          background: var(--modal-bg);
           display: flex;
           align-items: center;
           gap: 12px;
@@ -1534,13 +1534,13 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .step-description h3 {
           font-size: clamp(14px, 1.3vw, 18px);
           font-weight: 700;
-          color: #1F2937;
+          color: var(--text-primary);
           margin: 0 0 6px 0;
         }
 
         .step-description p {
           font-size: clamp(10px, 0.9vw, 13px);
-          color: #6B7280;
+          color: var(--text-secondary);
           margin: 0;
           line-height: 1.5;
         }
@@ -1548,7 +1548,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .empty-state {
           text-align: center;
           padding: 32px;
-          color: #9CA3AF;
+          color: var(--text-tertiary);
           font-size: 14px;
         }
 
@@ -1575,6 +1575,143 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           .step-connector {
             width: 60px;
           }
+        }
+
+        /* Dark Mode */
+        [data-theme="dark"] .wizard-header {
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .wizard-header h2 {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .wizard-header p {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .wizard-progress {
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .wizard-footer {
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .step-description {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .step-description h3 {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .step-description p {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .modality-card {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .modality-card:hover {
+          border-color: var(--color-primary);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+        [data-theme="dark"] .modality-card.selected {
+          border-color: var(--color-primary);
+          background: var(--bg-secondary);
+        }
+        [data-theme="dark"] .modality-icon {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .modality-title {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .modality-description {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .vehicle-card {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .vehicle-card:hover {
+          border-color: var(--color-primary);
+          background: var(--bg-secondary);
+        }
+        [data-theme="dark"] .vehicle-card.selected {
+          border-color: var(--color-primary);
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .vehicle-patente {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .vehicle-details {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .vehicle-grid::-webkit-scrollbar-track {
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .vehicle-grid::-webkit-scrollbar-thumb {
+          background: var(--text-tertiary);
+        }
+        [data-theme="dark"] .conductor-card {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .conductor-card:hover {
+          border-color: var(--color-primary);
+        }
+        [data-theme="dark"] .conductor-card.selected {
+          border-color: var(--color-primary);
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .conductor-name {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .conductor-dni {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .wizard-footer {
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .btn-secondary {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .btn-secondary:hover {
+          background: var(--bg-tertiary);
+        }
+        [data-theme="dark"] .btn-primary:disabled {
+          background: var(--bg-tertiary);
+          border-color: var(--bg-tertiary);
+          color: var(--text-tertiary);
+        }
+        [data-theme="dark"] .step-number {
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .step-label {
+          color: var(--text-tertiary);
+        }
+        [data-theme="dark"] .step-connector {
+          background: var(--border-primary);
+        }
+        [data-theme="dark"] .empty-state {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .turno-column h4 {
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .turno-column p {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .detail-group label {
+          color: var(--text-secondary);
+        }
+        [data-theme="dark"] .detail-group input,
+        [data-theme="dark"] .detail-group select,
+        [data-theme="dark"] .detail-group textarea {
+          background: var(--bg-secondary);
+          border-color: var(--border-primary);
+          color: var(--text-primary);
+        }
+        [data-theme="dark"] .detail-value {
+          color: var(--text-primary);
         }
       `}</style>
 
