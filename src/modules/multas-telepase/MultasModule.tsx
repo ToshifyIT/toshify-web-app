@@ -555,11 +555,7 @@ export default function MultasModule() {
       ),
       cell: ({ row }) => formatFecha(row.original.fecha_infraccion)
     },
-    {
-      accessorKey: 'fecha_anotacion',
-      header: 'Fecha Anotacion',
-      cell: ({ row }) => formatFecha(row.original.fecha_anotacion)
-    },
+
     {
       accessorKey: 'patente',
       header: () => (
