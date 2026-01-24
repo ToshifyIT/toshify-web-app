@@ -83,9 +83,9 @@
   --table-row-hover: #FAFAFA;
   --table-border: #F3F4F6;
 
-  --input-bg: #F5F5F5;
+  --input-bg: #FFFFFF;
   --input-border: #E5E7EB;
-  --input-focus-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  --input-focus-shadow: 0 0 0 3px rgba(249, 6, 55, 0.1);
 
   --modal-bg: #FFFFFF;
   --card-bg: #FFFFFF;
@@ -446,17 +446,17 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
 
-  /* Component Specific */
-  --table-header-bg: #1E293B;
-  --table-row-hover: #1E293B;
-  --table-border: #334155;
+  /* Component Specific - Toshify Design System */
+  --table-header-bg: #1e1e1e;
+  --table-row-hover: rgba(255, 255, 255, 0.03);
+  --table-border: #3a272b;
 
-  --input-bg: #1E293B;
-  --input-border: #334155;
-  --input-focus-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+  --input-bg: #1e1e1e;
+  --input-border: #3a272b;
+  --input-focus-shadow: 0 0 0 3px rgba(249, 6, 55, 0.15);
 
-  --modal-bg: #1E293B;
-  --card-bg: #1E293B;
+  --modal-bg: #1e1e1e;
+  --card-bg: #1e1e1e;
 
   --pagination-bg: #1E293B;
 
