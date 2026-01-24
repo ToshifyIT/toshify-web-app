@@ -1853,7 +1853,7 @@ export function ReporteFacturacionTab() {
       // 2. Penalidades pendientes (NO fraccionadas, filtradas por fecha del período)
       const { data: penalidadesPendientes } = await (supabase
         .from('penalidades') as any)
-        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento(nombre)')
+        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento(nombre), siniestro:siniestros(id, codigo, tipo_siniestro)')
         .in('conductor_id', conductorIds)
         .eq('aplicado', false)
         .eq('rechazado', false)
@@ -1874,7 +1874,16 @@ export function ReporteFacturacionTab() {
             tabla: 'penalidades',
             fechaCreacion: p.created_at,
             creadoPor: p.created_by_name,
-            origenDetalle: `Penalidad completa - ${p.tipos_cobro_descuento?.nombre || 'Sin tipo'} - Creado ${p.created_at ? format(parseISO(p.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
+            origenDetalle: `Penalidad completa - ${p.tipos_cobro_descuento?.nombre || 'Sin tipo'} - Creado ${p.created_at ? format(parseISO(p.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`,
+            // Datos adicionales
+            penalidadId: p.id,
+            tipoPenalidad: p.tipos_cobro_descuento?.nombre,
+            motivoPenalidad: p.motivo,
+            notasPenalidad: p.notas,
+            fechaPenalidad: p.fecha,
+            // Origen siniestro si existe
+            siniestroId: p.siniestro_id,
+            siniestroCodigo: p.siniestro?.codigo
           })
         }
       }
@@ -1913,7 +1922,7 @@ export function ReporteFacturacionTab() {
       // 4. Penalidades cuotas (penalidades fraccionadas) pendientes de esta semana
       const { data: penalidadesCuotasPendientes } = await (supabase
         .from('penalidades_cuotas') as any)
-        .select('*, penalidad:penalidades(conductor_id, conductor_nombre, detalle, monto, created_at, created_by_name, conductor:conductores(nombres, apellidos))')
+        .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name, tipos_cobro_descuento(nombre), siniestro:siniestros(id, codigo, tipo_siniestro), conductor:conductores(nombres, apellidos))')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
         .eq('aplicado', false)
@@ -1937,7 +1946,16 @@ export function ReporteFacturacionTab() {
             montoTotal: pc.penalidad?.monto,
             cuotaActual: pc.numero_cuota,
             totalCuotas: pc.total_cuotas,
-            origenDetalle: `Penalidad fraccionada - Total: ${formatCurrency(pc.penalidad?.monto || 0)} en ${pc.total_cuotas} cuotas - Creado ${pc.penalidad?.created_at ? format(parseISO(pc.penalidad.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
+            origenDetalle: `Penalidad fraccionada - Total: ${formatCurrency(pc.penalidad?.monto || 0)} en ${pc.total_cuotas} cuotas - Creado ${pc.penalidad?.created_at ? format(parseISO(pc.penalidad.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`,
+            // Datos adicionales de la penalidad original
+            penalidadId: pc.penalidad?.id,
+            tipoPenalidad: pc.penalidad?.tipos_cobro_descuento?.nombre,
+            motivoPenalidad: pc.penalidad?.motivo,
+            notasPenalidad: pc.penalidad?.notas,
+            fechaPenalidad: pc.penalidad?.fecha,
+            // Origen siniestro si existe
+            siniestroId: pc.penalidad?.siniestro_id,
+            siniestroCodigo: pc.penalidad?.siniestro?.codigo
           })
         }
       }
