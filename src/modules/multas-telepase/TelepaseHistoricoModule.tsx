@@ -776,38 +776,46 @@ export default function TelepaseHistoricoModule() {
                 <div className="multas-form-group" style={{ position: 'relative' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <label className="multas-form-label" style={{ marginBottom: 0 }}>Conductor</label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer', userSelect: 'none', color: '#374151' }}>
-                      <span>Solo Activos</span>
-                      <div 
-                        style={{
-                          width: '36px',
-                          height: '20px',
-                          backgroundColor: showOnlyActiveConductores ? '#10B981' : '#E5E7EB',
-                          borderRadius: '9999px',
-                          position: 'relative',
-                          transition: 'background-color 0.2s',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <div style={{
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#4B5563', fontWeight: 500 }}>Solo Activos</span>
+                      <label style={{
+                        position: 'relative',
+                        display: 'inline-block',
+                        width: '36px',
+                        height: '20px',
+                        cursor: 'pointer'
+                      }}>
+                        <input 
+                          type="checkbox" 
+                          checked={showOnlyActiveConductores}
+                          onChange={(e) => setShowOnlyActiveConductores(e.target.checked)}
+                          style={{ opacity: 0, width: 0, height: 0 }}
+                        />
+                        <span style={{
                           position: 'absolute',
-                          top: '2px',
-                          left: showOnlyActiveConductores ? '18px' : '2px',
-                          width: '16px',
+                          cursor: 'pointer',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: showOnlyActiveConductores ? '#2563EB' : '#E5E7EB',
+                          transition: '.4s',
+                          borderRadius: '34px'
+                        }}></span>
+                        <span style={{
+                          position: 'absolute',
+                          content: '""',
                           height: '16px',
+                          width: '16px',
+                          left: '2px',
+                          bottom: '2px',
                           backgroundColor: 'white',
+                          transition: '.4s',
                           borderRadius: '50%',
-                          transition: 'left 0.2s',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
-                        }} />
-                      </div>
-                      <input 
-                        type="checkbox" 
-                        checked={showOnlyActiveConductores} 
-                        onChange={(e) => setShowOnlyActiveConductores(e.target.checked)}
-                        style={{ display: 'none' }}
-                      />
-                    </label>
+                          transform: showOnlyActiveConductores ? 'translateX(16px)' : 'translateX(0)'
+                        }}></span>
+                      </label>
+                    </div>
                   </div>
                   <input
                     type="text"
@@ -846,26 +854,38 @@ export default function TelepaseHistoricoModule() {
                           }
                           return true
                         })
-                        .map((c, i) => (
-                          <div
-                            key={i}
-                            onClick={() => {
-                              setEditingRegistro({ ...editingRegistro, conductor: c })
-                              setShowConductorSuggestions(false)
-                            }}
-                            style={{
-                              padding: '8px 12px',
-                              cursor: 'pointer',
-                              borderBottom: '1px solid #f3f4f6',
-                              fontSize: '14px',
-                              color: '#374151'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                          >
-                            {c}
-                          </div>
-                        ))}
+                        .map((c, i) => {
+                          const status = conductoresStatus[c.toLowerCase()]
+                          const isActive = status === 'activo'
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                setEditingRegistro({ ...editingRegistro, conductor: c })
+                                setShowConductorSuggestions(false)
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid #f3f4f6',
+                                fontSize: '14px',
+                                color: '#374151',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                            >
+                              <span>{c}</span>
+                              {isActive ? (
+                                <CheckCircle size={14} style={{ color: '#10B981' }} />
+                              ) : (
+                                <AlertCircle size={14} style={{ color: '#EF4444' }} />
+                              )}
+                            </div>
+                          )
+                        })}
                         {conductoresOptions.filter(c => {
                           const matchesSearch = c.toLowerCase().includes((editingRegistro.conductor || '').toLowerCase())
                           if (!matchesSearch) return false

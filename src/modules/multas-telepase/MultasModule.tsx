@@ -5,7 +5,7 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
-import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign } from 'lucide-react'
+import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign, CheckCircle, AlertCircle } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
@@ -89,6 +89,9 @@ export default function MultasModule() {
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [selectedMulta, setSelectedMulta] = useState<Multa | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingMulta, setEditingMulta] = useState<Multa | null>(null)
+  const [onlyActiveConductors, setOnlyActiveConductors] = useState(false)
 
   // Filtros
   const [openFilterId, setOpenFilterId] = useState<string | null>(null)
@@ -103,9 +106,50 @@ export default function MultasModule() {
   const [fechaCargaHasta, setFechaCargaHasta] = useState<string | null>(null)
   const [ibuttonFilter, setIbuttonFilter] = useState<string[]>([])
 
+  // Opciones para autocompletado y validación
+  const [conductoresOptions, setConductoresOptions] = useState<string[]>([])
+  const [conductoresStatus, setConductoresStatus] = useState<Record<string, string>>({})
+  const [showConductorSuggestions, setShowConductorSuggestions] = useState(false)
+
   useEffect(() => {
     cargarDatos()
+    fetchConductores()
   }, [])
+
+  async function fetchConductores() {
+    try {
+      // Consulta de referencia: SELECT DISTINCT CONCAT(nombres, ' ', apellidos) AS conductor FROM conductores
+      const { data, error } = await supabase
+        .from('conductores')
+        .select('nombres, apellidos, estado_facturacion')
+        .order('nombres', { ascending: true })
+        .limit(5000)
+      
+      if (error) throw error
+      
+      if (data) {
+        // Mapa de estados para validación
+        const statusMap: Record<string, string> = {}
+        const options: string[] = []
+
+        data.forEach((c: any) => {
+          const nombre = c.nombres || ''
+          const apellido = c.apellidos || ''
+          const fullName = `${nombre} ${apellido}`.trim()
+          
+          if (fullName) {
+            statusMap[fullName.toLowerCase()] = c.estado_facturacion
+            options.push(fullName)
+          }
+        })
+
+        setConductoresStatus(statusMap)
+        setConductoresOptions([...new Set(options)].sort())
+      }
+    } catch (error) {
+      console.error('Error cargando conductores:', error)
+    }
+  }
 
   async function cargarDatos() {
     setLoading(true)
@@ -322,94 +366,35 @@ export default function MultasModule() {
   }
 
   // Editar multa
-  async function editarMulta(multa: Multa) {
-    const patentesOptions = vehiculos
-      .sort((a, b) => (a.patente || '').localeCompare(b.patente || ''))
-      .map(v => `<option value="${v.patente}" ${v.patente === multa.patente ? 'selected' : ''}>${v.patente}</option>`)
-      .join('')
+  function editarMulta(multa: Multa) {
+    setEditingMulta({ ...multa })
+    setOnlyActiveConductors(false)
+    setShowEditModal(true)
+  }
 
-    const fechaValue = multa.fecha_infraccion ? multa.fecha_infraccion.split('T')[0] : ''
-
-    const { value: formValues } = await Swal.fire({
-      title: 'Editar Multa',
-      html: `
-        <div class="multas-modal-form">
-          <div class="multas-form-group">
-            <label class="multas-form-label">Patente *</label>
-            <select id="swal-patente" class="multas-form-select">
-              <option value="">Seleccione vehiculo...</option>
-              ${patentesOptions}
-            </select>
-          </div>
-          <div class="multas-form-group">
-            <label class="multas-form-label">Fecha Infraccion *</label>
-            <input id="swal-fecha" type="date" value="${fechaValue}" class="multas-form-input">
-          </div>
-          <div class="multas-form-group">
-            <label class="multas-form-label">Importe (Gs.) *</label>
-            <input id="swal-importe" type="number" value="${parseImporte(multa.importe)}" class="multas-form-input">
-          </div>
-          <div class="multas-form-group">
-            <label class="multas-form-label">Infraccion</label>
-            <input id="swal-infraccion" type="text" value="${multa.infraccion || ''}" class="multas-form-input">
-          </div>
-          <div class="multas-form-group">
-            <label class="multas-form-label">Lugar</label>
-            <input id="swal-lugar" type="text" value="${multa.lugar || ''}" class="multas-form-input">
-          </div>
-          <div class="multas-form-group">
-            <label class="multas-form-label">Conductor Responsable</label>
-            <input id="swal-conductor" type="text" value="${multa.conductor_responsable || ''}" class="multas-form-input">
-          </div>
-          <div class="multas-form-group">
-            <label class="multas-form-label">Observaciones</label>
-            <textarea id="swal-detalle" rows="2" class="multas-form-textarea">${multa.observaciones || multa.detalle || ''}</textarea>
-          </div>
-        </div>
-      `,
-      focusConfirm: false,
-      showCancelButton: true,
-      confirmButtonText: 'Guardar',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
-      width: 480,
-      preConfirm: () => {
-        const patente = (document.getElementById('swal-patente') as HTMLSelectElement).value
-        const fecha = (document.getElementById('swal-fecha') as HTMLInputElement).value
-        const importe = (document.getElementById('swal-importe') as HTMLInputElement).value
-        const infraccion = (document.getElementById('swal-infraccion') as HTMLInputElement).value
-        const lugar = (document.getElementById('swal-lugar') as HTMLInputElement).value
-        const conductor = (document.getElementById('swal-conductor') as HTMLInputElement).value
-        const detalle = (document.getElementById('swal-detalle') as HTMLTextAreaElement).value
-
-        if (!patente) { Swal.showValidationMessage('Seleccione una patente'); return false }
-        if (!fecha) { Swal.showValidationMessage('Ingrese la fecha'); return false }
-        if (!importe || parseFloat(importe) <= 0) { Swal.showValidationMessage('Ingrese un importe valido'); return false }
-
-        return { patente, fecha, importe, infraccion, lugar, conductor, detalle }
-      }
-    })
-
-    if (!formValues) return
+  async function handleGuardarEdicion() {
+    if (!editingMulta) return
 
     try {
       const { error } = await (supabase.from('multas_historico') as any)
         .update({
-          patente: formValues.patente,
-          fecha_infraccion: formValues.fecha,
-          importe: formValues.importe,
-          infraccion: formValues.infraccion || null,
-          lugar: formValues.lugar || null,
-          conductor_responsable: formValues.conductor || null,
-          detalle: formValues.detalle || null,
-          observaciones: formValues.detalle || null
+          patente: editingMulta.patente,
+          fecha_infraccion: editingMulta.fecha_infraccion,
+          importe: editingMulta.importe,
+          infraccion: editingMulta.infraccion || null,
+          lugar: editingMulta.lugar || null,
+          conductor_responsable: editingMulta.conductor_responsable || null,
+          detalle: editingMulta.detalle || null,
+          observaciones: editingMulta.observaciones || null,
+          ibutton: editingMulta.ibutton || null
         })
-        .eq('id', multa.id)
+        .eq('id', editingMulta.id)
 
       if (error) throw error
 
       showSuccess('Actualizada')
-      setShowModal(false)
+      setShowEditModal(false)
+      setEditingMulta(null)
       cargarDatos()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo actualizar', 'error')
@@ -826,12 +811,298 @@ export default function MultasModule() {
               </table>
             </div>
             <div className="multas-modal-footer">
-              <button className="multas-btn-primary" onClick={() => editarMulta(selectedMulta)}>
+              <button className="multas-btn-primary" onClick={() => { setShowModal(false); editarMulta(selectedMulta); }}>
                 <Edit2 size={14} style={{ marginRight: '6px' }} />
                 Editar
               </button>
               <button className="multas-btn-secondary" onClick={() => setShowModal(false)}>
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar */}
+      {showEditModal && editingMulta && (
+        <div className="multas-modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="multas-modal-container" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="multas-modal-header">
+              <h2 className="multas-modal-title">Editar Multa</h2>
+              <button className="multas-modal-close" onClick={() => setShowEditModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="multas-modal-body">
+              <div className="multas-modal-form">
+                {/* Patente */}
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Patente *</label>
+                  <select 
+                    className="multas-form-select"
+                    value={editingMulta.patente}
+                    onChange={e => setEditingMulta({...editingMulta, patente: e.target.value})}
+                  >
+                    <option value="">Seleccione...</option>
+                    {vehiculos
+                      .sort((a, b) => (a.patente || '').localeCompare(b.patente || ''))
+                      .map(v => (
+                        <option key={v.id} value={v.patente}>{v.patente}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* Fecha Infraccion */}
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Fecha Infraccion *</label>
+                  <input 
+                    type="date" 
+                    className="multas-form-input"
+                    value={editingMulta.fecha_infraccion ? editingMulta.fecha_infraccion.split('T')[0] : ''}
+                    onChange={e => setEditingMulta({...editingMulta, fecha_infraccion: e.target.value})}
+                  />
+                </div>
+
+                {/* Importe */}
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Importe (Gs.) *</label>
+                  <input 
+                    type="number" 
+                    className="multas-form-input"
+                    value={parseImporte(editingMulta.importe)}
+                    onChange={e => setEditingMulta({...editingMulta, importe: e.target.value})}
+                  />
+                </div>
+
+                {/* Infraccion */}
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Infraccion</label>
+                  <input 
+                    type="text" 
+                    className="multas-form-input"
+                    value={editingMulta.infraccion || ''}
+                    onChange={e => setEditingMulta({...editingMulta, infraccion: e.target.value})}
+                  />
+                </div>
+
+                {/* Lugar */}
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Lugar</label>
+                  <input 
+                    type="text" 
+                    className="multas-form-input"
+                    value={editingMulta.lugar || ''}
+                    onChange={e => setEditingMulta({...editingMulta, lugar: e.target.value})}
+                  />
+                </div>
+
+                {/* Conductor Responsable - Autocomplete */}
+                <div className="multas-form-group" style={{ position: 'relative' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label className="multas-form-label" style={{ marginBottom: 0 }}>Conductor Responsable</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#4B5563', fontWeight: 500 }}>Solo Activos</span>
+                      <label style={{
+                        position: 'relative',
+                        display: 'inline-block',
+                        width: '36px',
+                        height: '20px',
+                        cursor: 'pointer'
+                      }}>
+                        <input 
+                          type="checkbox" 
+                          checked={onlyActiveConductors}
+                          onChange={(e) => setOnlyActiveConductors(e.target.checked)}
+                          style={{ opacity: 0, width: 0, height: 0 }}
+                        />
+                        <span style={{
+                          position: 'absolute',
+                          cursor: 'pointer',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: onlyActiveConductors ? '#2563EB' : '#E5E7EB',
+                          transition: '.4s',
+                          borderRadius: '34px'
+                        }}></span>
+                        <span style={{
+                          position: 'absolute',
+                          content: '""',
+                          height: '16px',
+                          width: '16px',
+                          left: '2px',
+                          bottom: '2px',
+                          backgroundColor: 'white',
+                          transition: '.4s',
+                          borderRadius: '50%',
+                          transform: onlyActiveConductors ? 'translateX(16px)' : 'translateX(0)'
+                        }}></span>
+                      </label>
+                    </div>
+                  </div>
+                  <input
+                    type="text"
+                    className="multas-form-input"
+                    value={editingMulta.conductor_responsable || ''}
+                    onChange={(e) => {
+                      setEditingMulta({ ...editingMulta, conductor_responsable: e.target.value })
+                      setShowConductorSuggestions(true)
+                    }}
+                    onFocus={() => setShowConductorSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowConductorSuggestions(false), 200)}
+                    placeholder="Buscar conductor..."
+                    autoComplete="off"
+                  />
+                  {showConductorSuggestions && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      background: 'white',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '0 0 6px 6px',
+                      zIndex: 50,
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                    }}>
+                      {conductoresOptions
+                        .filter(c => {
+                          const matchesSearch = c.toLowerCase().includes((editingMulta.conductor_responsable || '').toLowerCase())
+                          if (!matchesSearch) return false
+                          if (onlyActiveConductors) {
+                            return conductoresStatus[c.toLowerCase()] === 'activo'
+                          }
+                          return true
+                        })
+                        .map((c, i) => {
+                          const status = conductoresStatus[c.toLowerCase()]
+                          const isActive = status === 'activo'
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                setEditingMulta({ ...editingMulta, conductor_responsable: c })
+                                setShowConductorSuggestions(false)
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid #f3f4f6',
+                                fontSize: '14px',
+                                color: '#374151',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                            >
+                              <span>{c}</span>
+                              {isActive ? (
+                                <CheckCircle size={14} style={{ color: '#10B981' }} />
+                              ) : (
+                                <AlertCircle size={14} style={{ color: '#EF4444' }} />
+                              )}
+                            </div>
+                          )
+                        })}
+                        {conductoresOptions.filter(c => {
+                          const matchesSearch = c.toLowerCase().includes((editingMulta.conductor_responsable || '').toLowerCase())
+                          if (!matchesSearch) return false
+                          if (onlyActiveConductors) {
+                            return conductoresStatus[c.toLowerCase()] === 'activo'
+                          }
+                          return true
+                        }).length === 0 && (
+                          <div style={{ padding: '8px 12px', color: '#9ca3af', fontSize: '14px' }}>
+                            No se encontraron conductores
+                          </div>
+                        )}
+                    </div>
+                  )}
+                  {/* Validación de estado del conductor */}
+                  {(() => {
+                    const conductorName = (editingMulta.conductor_responsable || '').trim().toLowerCase()
+                    if (!conductorName) return null
+                    
+                    const status = conductoresStatus[conductorName]
+                    
+                    if (status === 'activo') {
+                      return (
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '8px 12px',
+                          background: '#ECFDF5',
+                          border: '1px solid #A7F3D0',
+                          borderRadius: '6px',
+                          color: '#047857',
+                          fontSize: '13px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 500
+                        }}>
+                          <CheckCircle size={16} />
+                          Conductor Activo
+                        </div>
+                      )
+                    } else if (conductoresOptions.some(c => c.toLowerCase() === conductorName)) {
+                      return (
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '8px 12px',
+                          background: '#FEF2F2',
+                          border: '1px solid #FECACA',
+                          borderRadius: '6px',
+                          color: '#B91C1C',
+                          fontSize: '13px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 500
+                        }}>
+                          <AlertCircle size={16} />
+                          {`Conductor NO ACTIVO (Estado: ${status || 'Desconocido'})`}
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
+                </div>
+
+                {/* iButton */}
+                <div className="multas-form-group">
+                  <label className="multas-form-label">iButton</label>
+                  <input
+                    type="text"
+                    className="multas-form-input"
+                    value={editingMulta.ibutton || ''}
+                    onChange={(e) => setEditingMulta({...editingMulta, ibutton: e.target.value})}
+                    placeholder="Código iButton..."
+                  />
+                </div>
+
+                {/* Observaciones */}
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Observaciones</label>
+                  <textarea 
+                    className="multas-form-textarea"
+                    rows={3}
+                    value={editingMulta.observaciones || ''}
+                    onChange={e => setEditingMulta({...editingMulta, observaciones: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="multas-modal-footer">
+              <button className="multas-btn-primary" onClick={handleGuardarEdicion}>
+                Guardar
+              </button>
+              <button className="multas-btn-secondary" onClick={() => setShowEditModal(false)}>
+                Cancelar
               </button>
             </div>
           </div>
