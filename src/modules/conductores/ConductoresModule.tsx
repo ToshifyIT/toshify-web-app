@@ -1899,13 +1899,37 @@ export function ConductoresModule() {
         cell: ({ row }) => {
           const categorias = row.original.licencias_categorias;
           if (Array.isArray(categorias) && categorias.length > 0) {
+            const maxVisible = 2;
+            const visibles = categorias.slice(0, maxVisible);
+            const restantes = categorias.length - maxVisible;
             return (
-              <div className="dt-actions">
-                {categorias.map((cat: any, idx: number) => (
+              <div className="dt-categorias-cell">
+                {visibles.map((cat: any, idx: number) => (
                   <span key={idx} className="dt-badge dt-badge-blue">
                     {cat.codigo}
                   </span>
                 ))}
+                {restantes > 0 && (
+                  <button
+                    type="button"
+                    className="dt-badge dt-badge-gray dt-badge-more"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      Swal.fire({
+                        title: 'Categorías de Licencia',
+                        html: `<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 10px;">
+                          ${categorias.map((cat: any) => `<span style="background: rgba(59, 130, 246, 0.1); color: #3B82F6; padding: 6px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600;">${cat.codigo}</span>`).join('')}
+                        </div>`,
+                        showConfirmButton: false,
+                        showCloseButton: true,
+                        width: 350,
+                      });
+                    }}
+                    title={`Ver ${restantes} más: ${categorias.slice(maxVisible).map((c: any) => c.codigo).join(', ')}`}
+                  >
+                    +{restantes}
+                  </button>
+                )}
               </div>
             );
           }

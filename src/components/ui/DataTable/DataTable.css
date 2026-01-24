@@ -836,6 +836,30 @@
   flex-shrink: 0;
 }
 
+/* Celda de categorías con límite visible */
+.dt-categorias-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.dt-badge-more {
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+
+.dt-badge-more::before {
+  display: none;
+}
+
+.dt-badge-more:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
 .dt-badge-green {
   background: rgba(16, 185, 129, 0.1);
   color: #10B981;
