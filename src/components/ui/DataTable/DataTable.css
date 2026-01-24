@@ -1859,3 +1859,101 @@
   font-weight: 700;
   line-height: 1;
 }
+
+/* ===========================================
+   MOBILE CARDS VIEW - Toshify Design System
+   =========================================== */
+
+.dt-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.dt-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+
+.dt-card:active {
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.dt-card-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dt-card-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dt-card-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.dt-card-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: right;
+  word-break: break-word;
+}
+
+.dt-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary);
+  margin-top: 4px;
+}
+
+.dt-card-actions .dt-btn-action {
+  padding: 10px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.dt-no-results-card {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+/* Hide table wrapper on mobile, show cards */
+@media (max-width: 767px) {
+  .dt-table-wrapper {
+    display: none;
+  }
+  
+  .dt-cards-container {
+    display: flex;
+  }
+}
+
+/* Show table on desktop, hide cards */
+@media (min-width: 768px) {
+  .dt-cards-container {
+    display: none;
+  }
+  
+  .dt-table-wrapper {
+    display: block;
+  }
+}

@@ -115,6 +115,15 @@ export function DataTable<T>({
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [visibleColumnCount, setVisibleColumnCount] = useState(100); // Start high, resize will adjust
   const tableWrapperRef = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detectar mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Column filter state
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
@@ -1077,94 +1086,148 @@ export function DataTable<T>({
         </div>
       )}
 
-      {/* Table */}
+      {/* Table or Cards (mobile) */}
       <div className="dt-container">
-        <div className="dt-table-wrapper" ref={tableWrapperRef}>
-          <table className="dt-table dt-table-responsive">
-            <thead>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
-                    const isActionsColumn = alwaysVisibleColumns.includes(header.id);
-                    const isExpandColumn = header.id === "expand";
-                    return (
-                      <th
-                        key={header.id}
-                        onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
-                        className={`
-                          ${header.column.getCanSort() ? "dt-sortable" : ""}
-                          ${isActionsColumn ? "dt-sticky-col" : ""}
-                          ${isExpandColumn ? "dt-expand-col" : ""}
-                        `}
-                        style={isExpandColumn ? { width: '40px' } : undefined}
-                      >
-                        <div
-                          className={`dt-header-content ${
-                            isActionsColumn ? "dt-header-center" : ""
-                          }`}
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                          {header.column.getCanSort() && (
-                            <span className="dt-sort-indicator">
-                              {{
-                                asc: " ↑",
-                                desc: " ↓",
-                              }[header.column.getIsSorted() as string] ?? " ↕"}
-                            </span>
-                          )}
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.length === 0 ? (
-                <tr>
-                  <td colSpan={finalColumns.length} className="dt-no-results">
-                    No se encontraron resultados
-                  </td>
-                </tr>
-              ) : (
-                table.getRowModel().rows.map((row) => (
-                  <React.Fragment key={row.id}>
-                    <tr className={row.getIsExpanded() ? "dt-row-expanded" : ""}>
-                      {row.getVisibleCells().map((cell) => {
-                        const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
-                        const isExpandColumn = cell.column.id === "expand";
+        {/* Mobile Cards View */}
+        {isMobile ? (
+          <div className="dt-cards-container">
+            {table.getRowModel().rows.length === 0 ? (
+              <div className="dt-no-results-card">No se encontraron resultados</div>
+            ) : (
+              table.getRowModel().rows.map((row) => (
+                <div key={row.id} className="dt-card">
+                  <div className="dt-card-content">
+                    {row.getVisibleCells().map((cell) => {
+                      const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
+                      const isExpandColumn = cell.column.id === "expand";
+                      if (isExpandColumn) return null;
+                      
+                      // Get header label
+                      const header = cell.column.columnDef.header;
+                      let headerLabel = cell.column.id;
+                      if (typeof header === 'string') {
+                        headerLabel = header;
+                      } else if (typeof header === 'function') {
+                        const rendered = header({ column: cell.column, header: cell.column.columnDef, table } as any);
+                        if (typeof rendered === 'string') headerLabel = rendered;
+                        // Para FilterHeader, extraer el label
+                        if (rendered && typeof rendered === 'object' && 'props' in rendered) {
+                          const props = (rendered as any).props;
+                          if (props?.label) headerLabel = props.label;
+                        }
+                      }
+                      
+                      if (isActionsColumn) {
                         return (
-                          <td
-                            key={cell.id}
-                            className={`
-                              ${isActionsColumn ? "dt-sticky-col" : ""}
-                              ${isExpandColumn ? "dt-expand-col" : ""}
-                            `}
+                          <div key={cell.id} className="dt-card-actions">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </div>
+                        );
+                      }
+                      
+                      return (
+                        <div key={cell.id} className="dt-card-field">
+                          <span className="dt-card-label">{headerLabel}</span>
+                          <span className="dt-card-value">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          /* Desktop Table View */
+          <div className="dt-table-wrapper" ref={tableWrapperRef}>
+            <table className="dt-table dt-table-responsive">
+              <thead>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => {
+                      const isActionsColumn = alwaysVisibleColumns.includes(header.id);
+                      const isExpandColumn = header.id === "expand";
+                      return (
+                        <th
+                          key={header.id}
+                          onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                          className={`
+                            ${header.column.getCanSort() ? "dt-sortable" : ""}
+                            ${isActionsColumn ? "dt-sticky-col" : ""}
+                            ${isExpandColumn ? "dt-expand-col" : ""}
+                          `}
+                          style={isExpandColumn ? { width: '40px' } : undefined}
+                        >
+                          <div
+                            className={`dt-header-content ${
+                              isActionsColumn ? "dt-header-center" : ""
+                            }`}
                           >
                             {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
+                              header.column.columnDef.header,
+                              header.getContext()
                             )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                    {row.getIsExpanded() && hasHiddenColumns && (
-                      <tr className="dt-expanded-row">
-                        <td colSpan={finalColumns.length}>
-                          {renderExpandedContent(row.original, row.index)}
-                        </td>
+                            {header.column.getCanSort() && (
+                              <span className="dt-sort-indicator">
+                                {{
+                                  asc: " ↑",
+                                  desc: " ↓",
+                                }[header.column.getIsSorted() as string] ?? " ↕"}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </thead>
+              <tbody>
+                {table.getRowModel().rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={finalColumns.length} className="dt-no-results">
+                      No se encontraron resultados
+                    </td>
+                  </tr>
+                ) : (
+                  table.getRowModel().rows.map((row) => (
+                    <React.Fragment key={row.id}>
+                      <tr className={row.getIsExpanded() ? "dt-row-expanded" : ""}>
+                        {row.getVisibleCells().map((cell) => {
+                          const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
+                          const isExpandColumn = cell.column.id === "expand";
+                          return (
+                            <td
+                              key={cell.id}
+                              className={`
+                                ${isActionsColumn ? "dt-sticky-col" : ""}
+                                ${isExpandColumn ? "dt-expand-col" : ""}
+                              `}
+                            >
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext()
+                              )}
+                            </td>
+                          );
+                        })}
                       </tr>
-                    )}
-                  </React.Fragment>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                      {row.getIsExpanded() && hasHiddenColumns && (
+                        <tr className="dt-expanded-row">
+                          <td colSpan={finalColumns.length}>
+                            {renderExpandedContent(row.original, row.index)}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination */}
         {showPagination && table.getRowModel().rows.length > 0 && (
