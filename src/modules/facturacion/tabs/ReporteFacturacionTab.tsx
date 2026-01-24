@@ -1901,7 +1901,7 @@ export function ReporteFacturacionTab() {
       // 4. Penalidades cuotas (penalidades fraccionadas) pendientes de esta semana
       const { data: penalidadesCuotasPendientes } = await (supabase
         .from('penalidades_cuotas') as any)
-        .select('*, penalidad:penalidades(conductor_id, conductor_nombre, conductor:conductores(nombres, apellidos))')
+        .select('*, penalidad:penalidades(conductor_id, conductor_nombre, detalle, monto, conductor:conductores(nombres, apellidos))')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
         .eq('aplicado', false)
@@ -1911,13 +1911,14 @@ export function ReporteFacturacionTab() {
           const conductorNombre = pc.penalidad?.conductor?.nombres && pc.penalidad?.conductor?.apellidos
             ? `${pc.penalidad.conductor.nombres} ${pc.penalidad.conductor.apellidos}`
             : pc.penalidad?.conductor_nombre || 'Sin nombre'
+          const detallePenalidad = pc.penalidad?.detalle || 'Penalidad fraccionada'
           pendientes.push({
             id: pc.id,
             tipo: 'cobro_fraccionado',
             conductorId: pc.penalidad.conductor_id,
             conductorNombre,
             monto: pc.monto_cuota,
-            descripcion: `Cuota ${pc.numero_cuota} - Penalidad fraccionada`,
+            descripcion: `Cuota ${pc.numero_cuota}/${pc.total_cuotas} - ${detallePenalidad}`,
             tabla: 'penalidades_cuotas'
           })
         }

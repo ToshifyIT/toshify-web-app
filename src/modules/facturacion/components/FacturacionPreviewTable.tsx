@@ -691,10 +691,12 @@ export function FacturacionPreviewTable({
             {conceptosPendientes.map((p) => (
               <div key={p.id} className="fact-pendiente-item">
                 <div className="fact-pendiente-info">
-                  <span className="fact-pendiente-tipo">{p.tipo.replace('_', ' ')}</span>
-                  <span className="fact-pendiente-conductor">{p.conductorNombre}</span>
-                  <span className="fact-pendiente-desc">{p.descripcion}</span>
-                  <span className="fact-pendiente-monto">{formatCurrency(p.monto)}</span>
+                  <div className="fact-pendiente-row1">
+                    <span className="fact-pendiente-tipo">{p.tipo.replace('_', ' ')}</span>
+                    <span className="fact-pendiente-conductor">{p.conductorNombre}</span>
+                    <span className="fact-pendiente-monto">{formatCurrency(p.monto)}</span>
+                  </div>
+                  <div className="fact-pendiente-desc">{p.descripcion}</div>
                 </div>
                 <div className="fact-pendiente-actions">
                   <select 
@@ -908,13 +910,14 @@ export function FacturacionPreviewTable({
         .fact-pendientes-header button { background: none; border: none; cursor: pointer; color: #b45309; }
         .fact-pendientes-list { display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; }
         .fact-pendiente-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: white; border-radius: 6px; border: 1px solid #fcd34d; }
-        .fact-pendiente-info { display: flex; align-items: center; gap: 12px; flex: 1; }
-        .fact-pendiente-tipo { background: #fef3c7; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; color: #b45309; text-transform: uppercase; }
-        .fact-pendiente-conductor { font-weight: 600; font-size: 12px; color: var(--text-primary); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .fact-pendiente-desc { font-size: 11px; color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .fact-pendiente-monto { font-family: monospace; font-weight: 600; font-size: 12px; color: #b45309; }
-        .fact-pendiente-actions { display: flex; align-items: center; gap: 8px; }
-        .fact-pendiente-actions select { padding: 4px 8px; border: 1px solid #fcd34d; border-radius: 4px; font-size: 11px; background: white; }
+        .fact-pendiente-info { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+        .fact-pendiente-row1 { display: flex; align-items: center; gap: 10px; }
+        .fact-pendiente-tipo { background: #fef3c7; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; color: #b45309; text-transform: uppercase; flex-shrink: 0; }
+        .fact-pendiente-conductor { font-weight: 600; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fact-pendiente-monto { font-family: monospace; font-weight: 700; font-size: 13px; color: #dc2626; margin-left: auto; flex-shrink: 0; }
+        .fact-pendiente-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.3; }
+        .fact-pendiente-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .fact-pendiente-actions select { padding: 6px 10px; border: 1px solid #fcd34d; border-radius: 4px; font-size: 12px; background: white; cursor: pointer; }
         .fact-preview-productos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
         .fact-producto-badge { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 11px; }
         .fact-producto-nombre { font-size: 10px; color: var(--text-muted); }
