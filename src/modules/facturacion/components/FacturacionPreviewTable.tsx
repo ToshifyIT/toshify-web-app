@@ -34,24 +34,23 @@ export interface ConceptoPendiente {
   conductorNombre: string
   monto: number
   descripcion: string
-  conceptoCodigo?: string // null si no tiene código asignado
+  conceptoCodigo?: string
   tabla: string
-  // Información de origen
   fechaCreacion?: string
   creadoPor?: string
-  montoTotal?: number // Para cuotas, el monto total original
+  montoTotal?: number
   cuotaActual?: number
   totalCuotas?: number
-  origenDetalle?: string // Info adicional del origen
-  // Datos adicionales de penalidad
+  origenDetalle?: string
   penalidadId?: string
   tipoPenalidad?: string
   motivoPenalidad?: string
   notasPenalidad?: string
   fechaPenalidad?: string
-  // Origen siniestro
   siniestroId?: string
   siniestroCodigo?: string
+  incidenciaId?: string
+  esFraccionado?: boolean
 }
 
 // Tipo para cada fila del preview (igual al formato Excel)
@@ -559,7 +558,7 @@ export function FacturacionPreviewTable({
         setHasChanges(false)
         showSuccess('Sincronizado', 'Los cambios se guardaron correctamente')
       }
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
     } finally {
       setSyncing(false)
@@ -729,114 +728,51 @@ export function FacturacionPreviewTable({
                       <button
                         className="btn-ver-detalle"
                         onClick={() => {
+                          const origen = p.siniestroId ? 'Siniestro' : p.incidenciaId ? 'Incidencia' : 'Penalidad directa'
                           Swal.fire({
                             title: 'Detalle del Concepto',
                             html: `
                               <div style="text-align: left; font-size: 13px;">
-                                <!-- Información Principal -->
-                                <div style="display: grid; grid-template-columns: 130px 1fr; gap: 8px; margin-bottom: 16px;">
-                                  <strong>Tipo:</strong>
-                                  <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; 
-                                    background: ${p.tipo === 'cobro_fraccionado' ? '#dbeafe' : p.tipo === 'penalidad' ? '#fee2e2' : '#d1fae5'}; 
-                                    color: ${p.tipo === 'cobro_fraccionado' ? '#1e40af' : p.tipo === 'penalidad' ? '#991b1b' : '#065f46'};">
-                                    ${p.tipo === 'cobro_fraccionado' ? 'CUOTA DE PENALIDAD' : p.tipo === 'penalidad' ? 'PENALIDAD' : 'TICKET'}
-                                  </span>
-                                  
+                                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 10px; line-height: 1.8;">
                                   <strong>Conductor:</strong>
                                   <span style="font-weight: 600;">${p.conductorNombre}</span>
                                   
                                   <strong>Monto a cobrar:</strong>
                                   <span style="color: #dc2626; font-weight: 700; font-size: 16px;">${formatCurrency(p.monto)}</span>
                                   
-                                  ${p.cuotaActual && p.totalCuotas ? `
-                                    <strong>Cuota:</strong>
-                                    <span style="color: #1e40af; font-weight: 600;">${p.cuotaActual} de ${p.totalCuotas}</span>
+                                  <strong>Descripcion:</strong>
+                                  <span>${p.descripcion || '-'}</span>
+                                  
+                                  ${p.esFraccionado || p.cuotaActual ? `
+                                    <strong>Fraccionado:</strong>
+                                    <span style="color: #1e40af; font-weight: 600;">Si - Cuota ${p.cuotaActual || 1} de ${p.totalCuotas || '?'}</span>
                                     
-                                    <strong>Monto Total Deuda:</strong>
-                                    <span style="color: #6b7280;">${formatCurrency(p.montoTotal || 0)}</span>
+                                    <strong>Deuda total:</strong>
+                                    <span>${formatCurrency(p.montoTotal || 0)}</span>
                                   ` : ''}
-                                </div>
-                                
-                                <!-- Detalle de la Penalidad -->
-                                ${(p.tipo === 'penalidad' || p.tipo === 'cobro_fraccionado') ? `
-                                  <div style="border-top: 1px solid #e5e7eb; padding-top: 12px; margin-top: 8px;">
-                                    <div style="font-weight: 700; margin-bottom: 8px; color: #991b1b; display: flex; align-items: center; gap: 6px;">
-                                      <span style="font-size: 14px;">📋</span> Detalle de la Penalidad
-                                    </div>
-                                    <div style="display: grid; grid-template-columns: 130px 1fr; gap: 6px; font-size: 12px;">
-                                      ${p.tipoPenalidad ? `
-                                        <strong style="color: #374151;">Tipo Penalidad:</strong>
-                                        <span>${p.tipoPenalidad}</span>
-                                      ` : ''}
-                                      
-                                      <strong style="color: #374151;">Descripción:</strong>
-                                      <span>${p.descripcion || 'Sin descripción'}</span>
-                                      
-                                      ${p.motivoPenalidad ? `
-                                        <strong style="color: #374151;">Motivo:</strong>
-                                        <span>${p.motivoPenalidad}</span>
-                                      ` : ''}
-                                      
-                                      ${p.notasPenalidad ? `
-                                        <strong style="color: #374151;">Notas/Comentarios:</strong>
-                                        <span style="background: #f9fafb; padding: 6px 8px; border-radius: 4px; display: block; margin-top: 2px; white-space: pre-wrap;">${p.notasPenalidad}</span>
-                                      ` : ''}
-                                      
-                                      ${p.fechaPenalidad ? `
-                                        <strong style="color: #374151;">Fecha Penalidad:</strong>
-                                        <span>${new Date(p.fechaPenalidad).toLocaleDateString('es-AR')}</span>
-                                      ` : ''}
-                                    </div>
-                                  </div>
-                                ` : ''}
-                                
-                                <!-- Origen Siniestro -->
-                                ${p.siniestroId ? `
-                                  <div style="border-top: 1px solid #fecaca; padding-top: 12px; margin-top: 12px; background: #fef2f2; margin: 12px -20px 0; padding: 12px 20px; border-radius: 0 0 8px 8px;">
-                                    <div style="font-weight: 700; margin-bottom: 8px; color: #991b1b; display: flex; align-items: center; gap: 6px;">
-                                      <span style="font-size: 14px;">🚗</span> Origen: SINIESTRO
-                                    </div>
-                                    <div style="display: grid; grid-template-columns: 130px 1fr; gap: 6px; font-size: 12px;">
-                                      <strong style="color: #374151;">Código Siniestro:</strong>
-                                      <span style="font-weight: 700; color: #dc2626;">${p.siniestroCodigo || p.siniestroId}</span>
-                                    </div>
-                                    <div style="margin-top: 8px; font-size: 11px; color: #991b1b;">
-                                      Esta penalidad fue generada desde el módulo de Siniestros
-                                    </div>
-                                  </div>
-                                ` : ''}
-                                
-                                <!-- Información de Registro -->
-                                <div style="border-top: 1px solid #e5e7eb; padding-top: 12px; margin-top: ${p.siniestroId ? '0' : '12px'};">
-                                  <div style="font-weight: 700; margin-bottom: 8px; color: #374151; display: flex; align-items: center; gap: 6px;">
-                                    <span style="font-size: 14px;">📝</span> Información de Registro
-                                  </div>
-                                  <div style="display: grid; grid-template-columns: 130px 1fr; gap: 6px; font-size: 12px; color: #6b7280;">
-                                    <strong>Tabla origen:</strong>
-                                    <span style="text-transform: capitalize; font-family: monospace; font-size: 11px; background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">${p.tabla.replace(/_/g, ' ')}</span>
-                                    
-                                    ${p.creadoPor ? `
-                                      <strong>Registrado por:</strong>
-                                      <span>${p.creadoPor}</span>
-                                    ` : ''}
-                                    
-                                    ${p.fechaCreacion ? `
-                                      <strong>Fecha registro:</strong>
-                                      <span>${new Date(p.fechaCreacion).toLocaleString('es-AR')}</span>
-                                    ` : ''}
-                                    
-                                    <strong>ID registro:</strong>
-                                    <span style="font-family: monospace; font-size: 9px; color: #9ca3af;">${p.id}</span>
-                                    
-                                    ${p.penalidadId && p.penalidadId !== p.id ? `
-                                      <strong>ID penalidad:</strong>
-                                      <span style="font-family: monospace; font-size: 9px; color: #9ca3af;">${p.penalidadId}</span>
-                                    ` : ''}
-                                  </div>
+                                  
+                                  <strong style="border-top: 1px solid #e5e7eb; padding-top: 8px;">Origen:</strong>
+                                  <span style="border-top: 1px solid #e5e7eb; padding-top: 8px; font-weight: 600;">${origen}</span>
+                                  
+                                  ${p.siniestroCodigo ? `
+                                    <strong>Codigo siniestro:</strong>
+                                    <span style="color: #dc2626; font-weight: 600;">${p.siniestroCodigo}</span>
+                                  ` : ''}
+                                  
+                                  ${p.fechaPenalidad ? `
+                                    <strong>Fecha penalidad:</strong>
+                                    <span>${new Date(p.fechaPenalidad).toLocaleDateString('es-AR')}</span>
+                                  ` : ''}
+                                  
+                                  <strong style="border-top: 1px solid #e5e7eb; padding-top: 8px;">Registrado por:</strong>
+                                  <span style="border-top: 1px solid #e5e7eb; padding-top: 8px;">${p.creadoPor || '-'}</span>
+                                  
+                                  <strong>Fecha registro:</strong>
+                                  <span>${p.fechaCreacion ? new Date(p.fechaCreacion).toLocaleString('es-AR') : '-'}</span>
                                 </div>
                               </div>
                             `,
-                            width: 550,
+                            width: 480,
                             confirmButtonText: 'Cerrar',
                             confirmButtonColor: '#6b7280'
                           })
@@ -1153,6 +1089,43 @@ export function FacturacionPreviewTable({
         .btn-delete-row:hover { background: #fecaca; }
         .fact-preview-table tr.row-new .col-actions { background: #ecfdf5; }
         .fact-preview-table tr.row-new:hover .col-actions { background: #d1fae5; }
+        
+        /* Dark Mode */
+        [data-theme="dark"] .fact-stat-inline.pendientes { background: rgba(251, 191, 36, 0.15); color: #fcd34d; }
+        [data-theme="dark"] .fact-stat-inline.pendientes:hover { background: rgba(251, 191, 36, 0.25); }
+        [data-theme="dark"] .fact-stat-inline.pendientes strong { color: #fde68a; }
+        [data-theme="dark"] .fact-preview-badge.open { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+        [data-theme="dark"] .fact-preview-edit-hint { background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: #6ee7b7; }
+        [data-theme="dark"] .fact-pendientes-panel { background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.3); }
+        [data-theme="dark"] .fact-pendientes-header h3 { color: #fcd34d; }
+        [data-theme="dark"] .fact-pendientes-header button { color: #fcd34d; }
+        [data-theme="dark"] .fact-pendiente-item { background: var(--bg-secondary); border-color: rgba(251, 191, 36, 0.3); }
+        [data-theme="dark"] .fact-pendientes-table-wrapper { border-color: rgba(251, 191, 36, 0.3); }
+        [data-theme="dark"] .fact-pendientes-table th { background: rgba(251, 191, 36, 0.15); color: #fcd34d; border-color: rgba(251, 191, 36, 0.3); }
+        [data-theme="dark"] .fact-pendientes-table td { border-color: var(--border-primary); }
+        [data-theme="dark"] .fact-pendientes-table tr:hover { background: rgba(251, 191, 36, 0.1); }
+        [data-theme="dark"] .fact-pendiente-tipo.tipo-cobro_fraccionado { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+        [data-theme="dark"] .fact-pendiente-tipo.tipo-penalidad { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+        [data-theme="dark"] .fact-pendiente-tipo.tipo-ticket { background: rgba(34, 197, 94, 0.2); color: #86efac; }
+        [data-theme="dark"] .col-monto { color: #fca5a5; }
+        [data-theme="dark"] .col-action select { background: var(--bg-secondary); border-color: var(--border-primary); color: var(--text-primary); }
+        [data-theme="dark"] .col-action select:hover { border-color: #fbbf24; }
+        [data-theme="dark"] .btn-ver-detalle { border-color: var(--border-primary); color: var(--text-secondary); }
+        [data-theme="dark"] .btn-ver-detalle:hover { background: var(--bg-tertiary); border-color: var(--text-tertiary); color: var(--text-primary); }
+        [data-theme="dark"] .fact-preview-table-wrapper::-webkit-scrollbar-track { background: var(--bg-tertiary); }
+        [data-theme="dark"] .fact-preview-table-wrapper::-webkit-scrollbar-thumb { border-color: var(--bg-tertiary); }
+        [data-theme="dark"] .fact-preview-table tr.row-saldos-pendientes { background: rgba(251, 191, 36, 0.1); }
+        [data-theme="dark"] .fact-preview-table tr.row-saldos-pendientes:hover { background: rgba(251, 191, 36, 0.2); }
+        [data-theme="dark"] .fact-preview-table tr.row-new { background: rgba(16, 185, 129, 0.1) !important; }
+        [data-theme="dark"] .fact-preview-table tr.row-new:hover { background: rgba(16, 185, 129, 0.2) !important; }
+        [data-theme="dark"] .btn-delete-row { background: rgba(220, 53, 69, 0.2); color: #f87171; }
+        [data-theme="dark"] .btn-delete-row:hover { background: rgba(220, 53, 69, 0.3); }
+        [data-theme="dark"] .fact-preview-table tr.row-new .col-actions { background: rgba(16, 185, 129, 0.1); }
+        [data-theme="dark"] .fact-preview-table tr.row-new:hover .col-actions { background: rgba(16, 185, 129, 0.2); }
+        [data-theme="dark"] .col-origen .origen-tabla { color: var(--text-secondary); }
+        [data-theme="dark"] .col-origen .origen-creador { color: var(--text-tertiary); }
+        [data-theme="dark"] .col-origen .origen-fecha { color: var(--text-tertiary); }
+        [data-theme="dark"] .col-origen .origen-total { color: #f87171; }
       `}</style>
     </div>
   )
