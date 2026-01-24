@@ -1851,14 +1851,16 @@ export function ReporteFacturacionTab() {
       }
 
       // 2. Penalidades pendientes (NO fraccionadas, filtradas por fecha del período)
-      const { data: penalidadesPendientes } = await (supabase
+      const { data: penalidadesPendientes, error: errorPen } = await (supabase
         .from('penalidades') as any)
-        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento(nombre), siniestro:siniestros(id, codigo, tipo_siniestro)')
+        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento(nombre)')
         .in('conductor_id', conductorIds)
         .eq('aplicado', false)
         .eq('rechazado', false)
         .eq('fraccionado', false)
         .eq('semana', periodo.semana)
+      
+      if (errorPen) console.error('Error cargando penalidades:', errorPen)
 
       for (const p of (penalidadesPendientes || []) as any[]) {
         if (!detallesReferencias.has(p.id)) {
@@ -1881,9 +1883,8 @@ export function ReporteFacturacionTab() {
             motivoPenalidad: p.motivo,
             notasPenalidad: p.notas,
             fechaPenalidad: p.fecha,
-            // Origen siniestro si existe
-            siniestroId: p.siniestro_id,
-            siniestroCodigo: p.siniestro?.codigo
+            // Origen siniestro si existe (se cargará el código después)
+            siniestroId: p.siniestro_id
           })
         }
       }
@@ -1920,12 +1921,14 @@ export function ReporteFacturacionTab() {
       }
 
       // 4. Penalidades cuotas (penalidades fraccionadas) pendientes de esta semana
-      const { data: penalidadesCuotasPendientes } = await (supabase
+      const { data: penalidadesCuotasPendientes, error: errorPenCuotas } = await (supabase
         .from('penalidades_cuotas') as any)
-        .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name, tipos_cobro_descuento(nombre), siniestro:siniestros(id, codigo, tipo_siniestro), conductor:conductores(nombres, apellidos))')
+        .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name, tipos_cobro_descuento(nombre), conductor:conductores(nombres, apellidos))')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
         .eq('aplicado', false)
+      
+      if (errorPenCuotas) console.error('Error cargando penalidades_cuotas:', errorPenCuotas)
 
       for (const pc of (penalidadesCuotasPendientes || []) as any[]) {
         if (!detallesReferencias.has(pc.id) && pc.penalidad?.conductor_id && conductorIds.includes(pc.penalidad.conductor_id)) {
@@ -1953,11 +1956,26 @@ export function ReporteFacturacionTab() {
             motivoPenalidad: pc.penalidad?.motivo,
             notasPenalidad: pc.penalidad?.notas,
             fechaPenalidad: pc.penalidad?.fecha,
-            // Origen siniestro si existe
-            siniestroId: pc.penalidad?.siniestro_id,
-            siniestroCodigo: pc.penalidad?.siniestro?.codigo
+            // Origen siniestro si existe (se cargará el código después)
+            siniestroId: pc.penalidad?.siniestro_id
           })
         }
+      }
+
+      // Cargar códigos de siniestro para los pendientes que tienen siniestro_id
+      const siniestroIds = pendientes.filter(p => p.siniestroId).map(p => p.siniestroId).filter(Boolean) as string[]
+      if (siniestroIds.length > 0) {
+        const { data: siniestrosData } = await supabase
+          .from('siniestros')
+          .select('id, codigo')
+          .in('id', siniestroIds)
+        
+        const siniestroMap = new Map((siniestrosData || []).map((s: any) => [s.id, s.codigo]))
+        pendientes.forEach(p => {
+          if (p.siniestroId && siniestroMap.has(p.siniestroId)) {
+            p.siniestroCodigo = siniestroMap.get(p.siniestroId)
+          }
+        })
       }
 
       setConceptosPendientes(pendientes)

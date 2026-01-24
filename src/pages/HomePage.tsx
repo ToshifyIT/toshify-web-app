@@ -1,7 +1,13 @@
 // src/pages/HomePage.tsx
 import { useState, lazy, Suspense, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
-import { Menu, AlertCircle, RefreshCw } from 'lucide-react'
+import { 
+  Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
+  Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
+  Truck, Link2, Settings, CreditCard, Activity, Package,
+  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
@@ -10,6 +16,49 @@ import logoToshify from '../assets/logo-toshify.png'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { Spinner } from '../components/ui/LoadingOverlay'
+
+// Mapeo de iconos por nombre de menú
+const menuIcons: Record<string, LucideIcon> = {
+  'estado-de-flota': Activity,
+  'vehiculos': Car,
+  'conductores': Users,
+  'incidencias': AlertTriangle,
+  'siniestros': FileWarning,
+  'reportes': BarChart3,
+  'facturacion': Receipt,
+  'logistica': Truck,
+  'integraciones': Link2,
+  'administracion': Settings,
+  'multas-telepase': CreditCard,
+  'onboarding': Calendar,
+  'inventario': Package,
+  // Submenús comunes
+  'programacion': Calendar,
+  'programacion-entregas': Calendar,
+  'productos': Package,
+  'proveedores': Users,
+  'ctrl-exceso-vel': Gauge,
+  'bitacora-uss': History,
+  'cabify': MapPin,
+  'gestion-usuarios': UserCog,
+  'roles': Shield,
+  'menu-por-rol': List,
+  'menu-por-usuario': List,
+  'gestor-menus': ClipboardList,
+  'auditoria': FileText,
+  'telepase-historico': CreditCard,
+  'multas': FileWarning,
+  'inventario-dashboard': BarChart3,
+  'inventario-movimientos': Package,
+  'inventario-asignaciones': Users,
+  'inventario-historial': History,
+  'inventario-pedidos': ClipboardList,
+}
+
+// Función para obtener icono de un menú
+const getMenuIcon = (menuName: string): LucideIcon => {
+  return menuIcons[menuName] || Activity
+}
 
 // Loading component for lazy-loaded pages
 const PageLoader = () => (
@@ -151,6 +200,11 @@ export function HomePage() {
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed(!sidebarCollapsed)
+  }
 
   const handleSignOut = async () => {
     await signOut()
@@ -300,6 +354,127 @@ export function HomePage() {
           font-weight: 500;
         }
 
+        .sidebar-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .sidebar-collapse-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          background: transparent;
+          border: 1px solid var(--border-primary);
+          border-radius: 6px;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .sidebar-collapse-btn:hover {
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+        }
+
+        /* Sidebar Collapsed State */
+        .sidebar.collapsed {
+          width: 64px;
+        }
+
+        .sidebar.collapsed .sidebar-header {
+          padding: 16px 12px;
+        }
+
+        .sidebar.collapsed .sidebar-header-row {
+          justify-content: center;
+        }
+
+        .sidebar.collapsed .sidebar-nav {
+          padding: 12px 8px;
+        }
+
+        .sidebar.collapsed .nav-item {
+          justify-content: center;
+          padding: 12px;
+        }
+
+        .sidebar.collapsed .nav-label {
+          display: none;
+        }
+
+        .sidebar.collapsed .nav-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          min-width: 24px;
+          color: var(--text-secondary);
+        }
+
+        .sidebar.collapsed .nav-item:hover .nav-icon {
+          color: var(--text-primary);
+        }
+
+        .sidebar.collapsed .nav-item.active .nav-icon {
+          color: var(--text-inverse);
+        }
+
+        .sidebar.collapsed .nav-section-header {
+          justify-content: center;
+          padding: 12px;
+        }
+
+        .sidebar.collapsed .nav-section-title {
+          display: none;
+        }
+
+        .sidebar.collapsed .nav-section-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          min-width: 24px;
+          color: var(--text-tertiary);
+        }
+
+        .sidebar.collapsed .nav-section-header:hover .nav-section-icon {
+          color: var(--text-secondary);
+        }
+
+        .sidebar.collapsed .nav-section-arrow {
+          display: none;
+        }
+
+        .sidebar.collapsed .nav-section-items {
+          display: none;
+        }
+
+        .sidebar.collapsed .sidebar-footer {
+          padding: 12px 8px;
+        }
+
+        .sidebar.collapsed .user-card {
+          justify-content: center;
+          padding: 10px;
+        }
+
+        .sidebar.collapsed .user-info {
+          display: none;
+        }
+
+        .sidebar.collapsed .user-avatar {
+          width: 36px;
+          height: 36px;
+        }
+
+        /* Hide tooltips when sidebar is expanded */
+        .sidebar:not(.collapsed) .nav-tooltip {
+          display: none;
+        }
+
         .sidebar-nav {
           flex: 1;
           padding: 12px;
@@ -344,10 +519,53 @@ export function HomePage() {
           color: var(--text-secondary);
         }
 
-        .nav-icon {
-          font-size: 16px;
-          width: 16px;
-          text-align: center;
+        .nav-icon,
+        .nav-section-icon {
+          display: none;
+        }
+
+        /* Wrapper para tooltip */
+        .nav-item-wrapper,
+        .nav-section-wrapper {
+          position: relative;
+        }
+
+        /* Tooltip styles */
+        .nav-tooltip {
+          position: absolute;
+          left: 100%;
+          top: 50%;
+          transform: translateY(-50%);
+          margin-left: 12px;
+          padding: 8px 12px;
+          background: var(--color-gray-800);
+          color: var(--text-inverse);
+          font-size: 13px;
+          font-weight: 500;
+          white-space: nowrap;
+          border-radius: 6px;
+          opacity: 0;
+          visibility: hidden;
+          transition: opacity 0.2s, visibility 0.2s;
+          z-index: 1000;
+          pointer-events: none;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .nav-tooltip::before {
+          content: '';
+          position: absolute;
+          right: 100%;
+          top: 50%;
+          transform: translateY(-50%);
+          border: 6px solid transparent;
+          border-right-color: var(--color-gray-800);
+        }
+
+        .sidebar.collapsed .nav-item-wrapper:hover .nav-tooltip,
+        .sidebar.collapsed .nav-section-wrapper:hover .nav-tooltip {
+          opacity: 1;
+          visibility: visible;
         }
 
         .nav-section {
@@ -653,6 +871,9 @@ export function HomePage() {
           .menu-toggle {
             display: flex;
           }
+          .sidebar-collapse-btn {
+            display: none;
+          }
           .sidebar {
             width: 280px;
             max-width: 85vw;
@@ -662,6 +883,28 @@ export function HomePage() {
             bottom: 0;
             z-index: 1000;
             transition: left 0.3s ease;
+          }
+          .sidebar.collapsed {
+            width: 280px;
+          }
+          .sidebar.collapsed .sidebar-header {
+            padding: 16px 20px;
+          }
+          .sidebar.collapsed .sidebar-logo {
+            display: flex;
+          }
+          .sidebar.collapsed .nav-label,
+          .sidebar.collapsed .nav-section-title,
+          .sidebar.collapsed .nav-section-arrow,
+          .sidebar.collapsed .nav-section-items,
+          .sidebar.collapsed .user-info {
+            display: block;
+          }
+          .sidebar.collapsed .nav-section-items {
+            display: block;
+          }
+          .sidebar.collapsed .nav-section-items.collapsed {
+            display: none;
           }
           .sidebar.open {
             left: 0;
@@ -830,17 +1073,28 @@ export function HomePage() {
         <div className={`sidebar-overlay ${sidebarOpen ? 'show' : ''}`} onClick={toggleSidebar}></div>
 
         {/* Sidebar */}
-        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
           <div className="sidebar-header">
             <div className="sidebar-header-row">
-              <div className="sidebar-logo">
-                <img
-                  src={logoToshify}
-                  alt="Toshify"
-                  className="sidebar-logo-img"
-                />
+              {!sidebarCollapsed && (
+                <div className="sidebar-logo">
+                  <img
+                    src={logoToshify}
+                    alt="Toshify"
+                    className="sidebar-logo-img"
+                  />
+                </div>
+              )}
+              <div className="sidebar-header-actions">
+                {!sidebarCollapsed && <ThemeToggle />}
+                <button 
+                  className="sidebar-collapse-btn"
+                  onClick={toggleSidebarCollapse}
+                  title={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+                >
+                  {sidebarCollapsed ? <PanelLeft size={20} /> : <PanelLeftClose size={20} />}
+                </button>
               </div>
-              <ThemeToggle />
             </div>
           </div>
 
@@ -853,17 +1107,24 @@ export function HomePage() {
 
                 if (hasSubmenus) {
                   // Menú con submenús
+                  const MenuIcon = getMenuIcon(menu.menu_name)
                   return (
                     <div key={menu.menu_id} className="nav-section">
-                      <button
-                        className="nav-section-header"
-                        onClick={() => toggleMenu(menu.menu_name)}
-                      >
-                        <div className="nav-section-title">
-                          {menu.menu_label}
-                        </div>
-                        <span className={`nav-section-arrow ${isMenuOpen ? 'open' : ''}`}>▸</span>
-                      </button>
+                      <div className="nav-section-wrapper">
+                        <button
+                          className="nav-section-header"
+                          onClick={() => toggleMenu(menu.menu_name)}
+                        >
+                          <span className="nav-section-icon"><MenuIcon size={18} /></span>
+                          <div className="nav-section-title">
+                            {menu.menu_label}
+                          </div>
+                          <span className={`nav-section-arrow ${isMenuOpen ? 'open' : ''}`}>▸</span>
+                        </button>
+                        {sidebarCollapsed && (
+                          <div className="nav-tooltip">{menu.menu_label}</div>
+                        )}
+                      </div>
 
                       <div className={`nav-section-items ${!isMenuOpen ? 'collapsed' : ''}`}>
                         {renderSubmenus(submenus as SubmenuWithHierarchy[], null, 0)}
@@ -872,15 +1133,20 @@ export function HomePage() {
                   )
                 } else {
                   // Menú simple sin submenús
+                  const MenuIcon = getMenuIcon(menu.menu_name)
                   return (
-                    <button
-                      key={menu.menu_id}
-                      className={`nav-item ${isActiveRoute(menu.menu_route) ? 'active' : ''}`}
-                      onClick={() => navigate(menu.menu_route)}
-                      title={menu.menu_label}
-                    >
-                      <span className="nav-label">{menu.menu_label}</span>
-                    </button>
+                    <div key={menu.menu_id} className="nav-item-wrapper">
+                      <button
+                        className={`nav-item ${isActiveRoute(menu.menu_route) ? 'active' : ''}`}
+                        onClick={() => navigate(menu.menu_route)}
+                      >
+                        <span className="nav-icon"><MenuIcon size={18} /></span>
+                        <span className="nav-label">{menu.menu_label}</span>
+                      </button>
+                      {sidebarCollapsed && (
+                        <div className="nav-tooltip">{menu.menu_label}</div>
+                      )}
+                    </div>
                   )
                 }
               })
