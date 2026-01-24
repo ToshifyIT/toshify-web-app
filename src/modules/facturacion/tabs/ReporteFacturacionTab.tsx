@@ -1842,7 +1842,10 @@ export function ReporteFacturacionTab() {
               : t.conductor_nombre || 'Sin nombre',
             monto: t.monto,
             descripcion: t.descripcion || t.tipo,
-            tabla: 'tickets_favor'
+            tabla: 'tickets_favor',
+            fechaCreacion: t.created_at,
+            creadoPor: t.created_by_name,
+            origenDetalle: `Ticket ${t.tipo || ''} - Creado ${t.created_at ? format(parseISO(t.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
           })
         }
       }
@@ -1868,7 +1871,18 @@ export function ReporteFacturacionTab() {
               : p.conductor_nombre || 'Sin nombre',
             monto: p.monto || 0,
             descripcion: p.detalle || p.tipos_cobro_descuento?.nombre || 'Penalidad',
-            tabla: 'penalidades'
+            tabla: 'penalidades',
+            fechaCreacion: p.created_at,
+            creadoPor: p.created_by_name,
+            origenDetalle: `Penalidad completa - ${p.tipos_cobro_descuento?.nombre || 'Sin tipo'} - Creado ${p.created_at ? format(parseISO(p.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`,
+            // Datos adicionales
+            penalidadId: p.id,
+            tipoPenalidad: p.tipos_cobro_descuento?.nombre,
+            motivoPenalidad: p.motivo,
+            notasPenalidad: p.notas,
+            fechaPenalidad: p.fecha,
+            // Origen siniestro si existe (se cargará el código después)
+            siniestroId: p.siniestro_id
           })
         }
       }
@@ -1893,7 +1907,13 @@ export function ReporteFacturacionTab() {
               : 'Sin nombre',
             monto: c.monto_cuota,
             descripcion: c.descripcion || `Cuota ${c.numero_cuota} de ${c.total_cuotas}`,
-            tabla: 'cobros_fraccionados'
+            tabla: 'cobros_fraccionados',
+            fechaCreacion: c.created_at,
+            creadoPor: c.created_by_name,
+            montoTotal: c.monto_total,
+            cuotaActual: c.numero_cuota,
+            totalCuotas: c.total_cuotas,
+            origenDetalle: `Cobro fraccionado - Total: ${formatCurrency(c.monto_total || 0)} en ${c.total_cuotas} cuotas - Creado ${c.created_at ? format(parseISO(c.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
           })
         }
       }
@@ -1901,7 +1921,7 @@ export function ReporteFacturacionTab() {
       // 4. Penalidades cuotas (penalidades fraccionadas) pendientes de esta semana
       const { data: penalidadesCuotasPendientes } = await (supabase
         .from('penalidades_cuotas') as any)
-        .select('*, penalidad:penalidades(conductor_id, conductor_nombre, conductor:conductores(nombres, apellidos))')
+        .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name, conductor:conductores(nombres, apellidos))')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
         .eq('aplicado', false)
@@ -1917,10 +1937,36 @@ export function ReporteFacturacionTab() {
             conductorId: pc.penalidad.conductor_id,
             conductorNombre,
             monto: pc.monto_cuota,
-            descripcion: `Cuota ${pc.numero_cuota} - Penalidad fraccionada`,
-            tabla: 'penalidades_cuotas'
+            descripcion: pc.penalidad?.detalle || 'Penalidad fraccionada',
+            tabla: 'penalidades_cuotas',
+            fechaCreacion: pc.penalidad?.created_at,
+            creadoPor: pc.penalidad?.created_by_name,
+            montoTotal: pc.penalidad?.monto,
+            cuotaActual: pc.numero_cuota,
+            totalCuotas: pc.total_cuotas,
+            penalidadId: pc.penalidad?.id,
+            motivoPenalidad: pc.penalidad?.motivo,
+            notasPenalidad: pc.penalidad?.notas,
+            fechaPenalidad: pc.penalidad?.fecha,
+            siniestroId: pc.penalidad?.siniestro_id
           })
         }
+      }
+
+      // Cargar códigos de siniestro para los pendientes que tienen siniestro_id
+      const siniestroIds = pendientes.filter(p => p.siniestroId).map(p => p.siniestroId).filter(Boolean) as string[]
+      if (siniestroIds.length > 0) {
+        const { data: siniestrosData } = await supabase
+          .from('siniestros')
+          .select('id, codigo')
+          .in('id', siniestroIds)
+        
+        const siniestroMap = new Map((siniestrosData || []).map((s: any) => [s.id, s.codigo]))
+        pendientes.forEach(p => {
+          if (p.siniestroId && siniestroMap.has(p.siniestroId)) {
+            p.siniestroCodigo = siniestroMap.get(p.siniestroId)
+          }
+        })
       }
 
       setConceptosPendientes(pendientes)
