@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
 import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
+import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
@@ -19,6 +20,7 @@ import type {
 } from "../../types/database.types";
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "../../components/ui/DataTable";
+import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
 import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
@@ -1898,13 +1900,37 @@ export function ConductoresModule() {
         cell: ({ row }) => {
           const categorias = row.original.licencias_categorias;
           if (Array.isArray(categorias) && categorias.length > 0) {
+            const maxVisible = 1;
+            const visibles = categorias.slice(0, maxVisible);
+            const restantes = categorias.length - maxVisible;
             return (
-              <div className="dt-actions">
-                {categorias.map((cat: any, idx: number) => (
+              <div className="dt-categorias-cell">
+                {visibles.map((cat: any, idx: number) => (
                   <span key={idx} className="dt-badge dt-badge-blue">
                     {cat.codigo}
                   </span>
                 ))}
+                {restantes > 0 && (
+                  <button
+                    type="button"
+                    className="dt-badge dt-badge-gray dt-badge-more"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      Swal.fire({
+                        title: 'Categorías de Licencia',
+                        html: `<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 10px;">
+                          ${categorias.map((cat: any) => `<span style="background: rgba(59, 130, 246, 0.1); color: #3B82F6; padding: 6px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600;">${cat.codigo}</span>`).join('')}
+                        </div>`,
+                        showConfirmButton: false,
+                        showCloseButton: true,
+                        width: 350,
+                      });
+                    }}
+                    title={`Ver ${restantes} más: ${categorias.slice(maxVisible).map((c: any) => c.codigo).join(', ')}`}
+                  >
+                    +{restantes}
+                  </button>
+                )}
               </div>
             );
           }
@@ -2071,76 +2097,47 @@ export function ConductoresModule() {
         cell: ({ row }) => {
           const driveUrl = (row.original as any).drive_folder_url;
           const isCreatingFolder = creatingDriveFolder === row.original.id;
+          
           return (
-          <div className="dt-actions">
-            {/* Botón de Drive: abrir modal si existe, crear si no */}
-            {driveUrl ? (
-              <button
-                className="dt-btn-action"
-                style={{ color: '#16a34a', background: 'rgba(22, 163, 74, 0.1)' }}
-                onClick={() => handleOpenDriveFolder(row.original)}
-                title="Ver documentos en Drive"
-              >
-                <FolderOpen size={16} />
-              </button>
-            ) : (
-              <button
-                className="dt-btn-action"
-                style={{
-                  color: isCreatingFolder ? '#9ca3af' : '#6b7280',
-                  background: 'rgba(107, 114, 128, 0.1)'
-                }}
-                onClick={() => handleCreateDriveFolder(row.original)}
-                disabled={isCreatingFolder}
-                title="Crear carpeta en Drive"
-              >
-                {isCreatingFolder ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <FolderPlus size={16} />
-                )}
-              </button>
-            )}
-            <button
-              className="dt-btn-action dt-btn-view"
-              onClick={async () => {
-                // Cargar detalles completos antes de mostrar el modal
-                const fullDetails = await loadConductorDetails(row.original.id);
-                if (fullDetails) {
-                  setSelectedConductor(fullDetails as any);
-                  setShowDetailsModal(true);
+            <ActionsMenu
+              maxVisible={2}
+              actions={[
+                {
+                  icon: <Eye size={15} />,
+                  label: 'Ver detalles',
+                  onClick: async () => {
+                    const fullDetails = await loadConductorDetails(row.original.id);
+                    if (fullDetails) {
+                      setSelectedConductor(fullDetails as any);
+                      setShowDetailsModal(true);
+                    }
+                  }
+                },
+                {
+                  icon: <Edit2 size={15} />,
+                  label: 'Editar',
+                  onClick: () => openEditModal(row.original),
+                  disabled: !canUpdate,
+                  variant: 'info'
+                },
+                {
+                  icon: driveUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
+                  label: driveUrl ? 'Ver documentos' : 'Crear carpeta',
+                  onClick: () => driveUrl ? handleOpenDriveFolder(row.original) : handleCreateDriveFolder(row.original),
+                  disabled: isCreatingFolder,
+                  variant: driveUrl ? 'success' : 'default'
+                },
+                {
+                  icon: <Trash2 size={15} />,
+                  label: 'Eliminar',
+                  onClick: () => openDeleteModal(row.original),
+                  disabled: !canDelete,
+                  variant: 'danger'
                 }
-              }}
-              title="Ver detalles"
-            >
-              <Eye size={16} />
-            </button>
-            <button
-              className="dt-btn-action dt-btn-edit"
-              onClick={() => openEditModal(row.original)}
-              disabled={!canUpdate}
-              title={
-                !canUpdate
-                  ? "No tienes permisos para editar"
-                  : "Editar conductor"
-              }
-            >
-              <Edit2 size={16} />
-            </button>
-            <button
-              className="dt-btn-action dt-btn-delete"
-              onClick={() => openDeleteModal(row.original)}
-              disabled={!canDelete}
-              title={
-                !canDelete
-                  ? "No tienes permisos para eliminar"
-                  : "Eliminar conductor"
-              }
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        )},
+              ]}
+            />
+          );
+        },
         enableSorting: false,
       },
     ],
@@ -2149,6 +2146,9 @@ export function ConductoresModule() {
 
   return (
     <div className="cond-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando conductores..." size="lg" />
+
       {/* Stats Cards */}
       <div className="cond-stats">
         <div className="cond-stats-grid">

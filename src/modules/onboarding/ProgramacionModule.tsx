@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -1305,6 +1306,9 @@ export function ProgramacionModule() {
 
   return (
     <div className="prog-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando programaciones..." size="lg" />
+
       {/* Stats Cards - Ocultos temporalmente
       <div className="prog-stats">
         <div className="prog-stats-grid">

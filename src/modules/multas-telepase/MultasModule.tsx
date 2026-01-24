@@ -1,6 +1,7 @@
 // src/modules/multas-telepase/MultasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { DataTable } from '../../components/ui/DataTable'
 import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, DollarSign } from 'lucide-react'
@@ -525,6 +526,7 @@ export default function MultasModule() {
 
   return (
     <div className="multas-module">
+      <LoadingOverlay show={loading} message="Cargando multas..." size="lg" />
       {/* Stats Cards */}
       <div className="multas-stats">
         <div className="multas-stats-grid">

@@ -1,6 +1,7 @@
 // src/components/admin/UserManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { UserWithRole, Role } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
@@ -446,6 +447,7 @@ export function UserManagement() {
 
   return (
     <div className="admin-module">
+      <LoadingOverlay show={loading} message="Cargando usuarios..." size="lg" />
       {/* Stats Cards - Estilo Bitacora */}
       <div className="admin-stats">
         <div className="admin-stats-grid">

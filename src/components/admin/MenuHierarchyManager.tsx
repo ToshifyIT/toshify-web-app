@@ -1,6 +1,7 @@
 // src/components/admin/MenuHierarchyManager.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { Menu, Submenu } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
@@ -420,6 +421,7 @@ export function MenuHierarchyManager() {
 
   return (
     <div className="admin-module">
+      <LoadingOverlay show={loading} message="Cargando menus..." size="lg" />
       {/* DataTable with integrated action buttons */}
       <DataTable
         data={tableData}

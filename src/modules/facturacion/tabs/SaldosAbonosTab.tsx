@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
 
 interface ConductorBasico {
@@ -1416,6 +1417,9 @@ export function SaldosAbonosTab() {
 
   return (
     <>
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando saldos..." size="lg" />
+
       {/* Sub-tabs de navegación */}
       <div className="fact-subtabs" style={{ 
         display: 'flex', 

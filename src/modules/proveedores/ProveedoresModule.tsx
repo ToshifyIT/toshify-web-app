@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
 import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -724,6 +725,7 @@ export function ProveedoresModule() {
 
   return (
     <div className="prov-module">
+      <LoadingOverlay show={loading} message="Cargando proveedores..." size="lg" />
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prov-stats">
         <div className="prov-stats-grid">

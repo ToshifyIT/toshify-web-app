@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
 import { DataTable } from '../../components/ui/DataTable'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import './AsignacionesModule.css'
 
 interface AsignacionActiva {
@@ -573,6 +574,9 @@ export function AsignacionesActivasModule() {
 
   return (
     <div className="asig-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando estado de flota..." size="lg" />
+
       <style>{`
         .modal-header {
           padding: 24px 32px;

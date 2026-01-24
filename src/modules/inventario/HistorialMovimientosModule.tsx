@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import {
@@ -425,6 +426,7 @@ export function HistorialMovimientosModule() {
 
   return (
     <div className="hist-module">
+      <LoadingOverlay show={loading} message="Cargando historial..." size="lg" />
       {/* Filtro de tipo (adicional al buscador del DataTable) */}
       <div className="hist-filters">
         <select

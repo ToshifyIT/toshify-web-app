@@ -804,8 +804,33 @@
     justify-content: center;
   }
 
+  /* Tabs mobile - scroll horizontal */
   .fact-tabs {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 8px;
+    margin: 0 -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .fact-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fact-tab {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .fact-tab svg {
+    width: 14px;
+    height: 14px;
   }
 
   .fact-filtro-select {

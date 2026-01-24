@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
 import { Eye, Edit, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -845,6 +846,7 @@ export function ProductosModule() {
 
   return (
     <div className="prod-module">
+      <LoadingOverlay show={loading} message="Cargando productos..." size="lg" />
       {/* Stats Cards - Estilo Bitacora (clickeables como filtros) */}
       <div className="prod-stats">
         <div className="prod-stats-grid">
