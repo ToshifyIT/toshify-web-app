@@ -1,6 +1,7 @@
 // src/components/admin/AuditModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../ui/LoadingOverlay'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
 import { History, Eye, Filter, Calendar, User, Database, Monitor, Users } from 'lucide-react'
@@ -309,6 +310,7 @@ export function AuditModule() {
 
   return (
     <div className="admin-module">
+      <LoadingOverlay show={loading} message="Cargando auditoria..." size="lg" />
       {/* Tabs */}
       <div className="audit-tabs">
         <button

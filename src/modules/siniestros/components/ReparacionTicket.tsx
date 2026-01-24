@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { Clock, Wrench, Save } from 'lucide-react'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import type { SiniestroReparacion } from '../../../types/siniestros.types'
 
 interface ReparacionTicketProps {
@@ -86,16 +87,10 @@ export function ReparacionTicket({
         setExistingId(data.id)
       }
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Ticket guardado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Ticket guardado')
 
       onSave()
     } catch (error) {
-      console.error('Error guardando ticket:', error)
       Swal.fire('Error', 'No se pudo guardar el ticket de reparacion', 'error')
     } finally {
       setSaving(false)

@@ -1,6 +1,7 @@
 // src/modules/multas-telepase/MultasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
@@ -8,6 +9,7 @@ import { Download, AlertTriangle, Eye, Edit2, Trash2, Plus, X, Car, Users, Dolla
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import './MultasTelepase.css'
@@ -312,7 +314,7 @@ export default function MultasModule() {
 
       if (error) throw error
 
-      Swal.fire({ icon: 'success', title: 'Multa Registrada', timer: 1500, showConfirmButton: false })
+      showSuccess('Multa Registrada')
       cargarDatos()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo registrar', 'error')
@@ -406,7 +408,7 @@ export default function MultasModule() {
 
       if (error) throw error
 
-      Swal.fire({ icon: 'success', title: 'Actualizada', timer: 1500, showConfirmButton: false })
+      showSuccess('Actualizada')
       setShowModal(false)
       cargarDatos()
     } catch (error: any) {
@@ -432,7 +434,7 @@ export default function MultasModule() {
       const { error } = await (supabase.from('multas_historico') as any).delete().eq('id', multa.id)
       if (error) throw error
 
-      Swal.fire({ icon: 'success', title: 'Eliminada', timer: 1500, showConfirmButton: false })
+      showSuccess('Eliminada')
       setShowModal(false)
       cargarDatos()
     } catch (error: any) {
@@ -701,6 +703,7 @@ export default function MultasModule() {
 
   return (
     <div className="multas-module">
+      <LoadingOverlay show={loading} message="Cargando multas..." size="lg" />
       {/* Stats Cards */}
       <div className="multas-stats">
         <div className="multas-stats-grid">

@@ -16,11 +16,15 @@ import {
   AlertTriangle,
   Save,
   RotateCcw,
-  Link2
+  Link2,
+  Plus,
+  Trash2,
+  Eye
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatCurrency } from '../../../types/facturacion.types'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 
 // Tipo para conceptos pendientes de enlazar
 export interface ConceptoPendiente {
@@ -32,6 +36,22 @@ export interface ConceptoPendiente {
   descripcion: string
   conceptoCodigo?: string // null si no tiene código asignado
   tabla: string
+  // Información de origen
+  fechaCreacion?: string
+  creadoPor?: string
+  montoTotal?: number // Para cuotas, el monto total original
+  cuotaActual?: number
+  totalCuotas?: number
+  origenDetalle?: string // Info adicional del origen
+  // Datos adicionales de penalidad
+  penalidadId?: string
+  tipoPenalidad?: string
+  motivoPenalidad?: string
+  notasPenalidad?: string
+  fechaPenalidad?: string
+  // Origen siniestro
+  siniestroId?: string
+  siniestroCodigo?: string
 }
 
 // Tipo para cada fila del preview (igual al formato Excel)
@@ -74,10 +94,25 @@ export interface FacturacionPreviewRow {
   detalleId?: string
   // Indicador de saldos pendientes
   tieneSaldosPendientes?: boolean
+  // Para filas nuevas agregadas manualmente
+  isNew?: boolean
+  // Para eliminar filas
+  isDeleted?: boolean
+}
+
+// Tipo para conceptos de la BD
+export interface ConceptoNomina {
+  id: string
+  codigo: string
+  descripcion: string
+  tipo: string
+  es_variable: boolean
+  iva_porcentaje: number
 }
 
 interface FacturacionPreviewTableProps {
   data: FacturacionPreviewRow[]
+  conceptos?: ConceptoNomina[]  // Conceptos de la BD
   semana: number
   anio: number
   fechaInicio: string
@@ -93,6 +128,7 @@ interface FacturacionPreviewTableProps {
 
 export function FacturacionPreviewTable({
   data: initialData,
+  conceptos = [],
   semana,
   anio,
   fechaInicio,
@@ -178,8 +214,262 @@ export function FacturacionPreviewTable({
     'P006': 'Exceso KM',
     'P007': 'Penalidades',
     'P009': 'Mora',
-    'P010': 'Plan Pagos'
+    'P010': 'Plan Pagos',
+    'P011': 'Ajuste Manual'
   }
+
+
+
+  // Conductores únicos de los datos actuales
+  const conductoresUnicos = useMemo(() => {
+    const map = new Map<string, { id: string; nombre: string; cuit: string; dni: string; tipoFactura: string; condicionIva: string; email: string; facturacionId?: string }>()
+    data.forEach(row => {
+      if (row.conductorId && !map.has(row.conductorId)) {
+        map.set(row.conductorId, {
+          id: row.conductorId,
+          nombre: row.razonSocial,
+          cuit: row.numeroCuil,
+          dni: row.numeroDni,
+          tipoFactura: row.tipoFactura,
+          condicionIva: row.condicionIva,
+          email: row.email,
+          facturacionId: row.facturacionId
+        })
+      }
+    })
+    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }, [data])
+
+  // Función para agregar nueva fila (ajuste manual)
+  const agregarAjuste = useCallback(async () => {
+    // Construir options de conceptos desde la BD (solo activos)
+    const conceptoOptions = conceptos
+      .filter(c => c.codigo) // Solo los que tienen código
+      .map(c => `<option value="${c.codigo}" data-iva="${c.iva_porcentaje}" data-tipo="${c.tipo}">${c.codigo} - ${c.descripcion}</option>`)
+      .join('')
+
+    // Crear lista de conductores para búsqueda
+    const conductoresList = conductoresUnicos.map(c => ({
+      id: c.id,
+      nombre: c.nombre,
+      dni: c.dni,
+      display: `${c.nombre} (${c.dni})`
+    }))
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Agregar Ajuste',
+      html: `
+        <div style="display: flex; flex-direction: column; gap: 12px; text-align: left;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Conductor</label>
+            <input type="hidden" id="swal-conductor" value="">
+            <input 
+              type="text" 
+              id="swal-conductor-search" 
+              placeholder="Buscar conductor..."
+              autocomplete="off"
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;"
+            >
+            <div id="swal-conductor-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; margin-top: 4px; display: none; background: white;"></div>
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Concepto</label>
+            <select id="swal-concepto" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+              <option value="">Seleccionar concepto...</option>
+              ${conceptoOptions}
+            </select>
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Monto Total</label>
+            <input id="swal-monto" type="number" step="0.01" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;" placeholder="0.00">
+            <span style="font-size: 10px; color: #888;">Usa número negativo para descuentos/créditos</span>
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Descripción</label>
+            <input id="swal-descripcion" type="text" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;" placeholder="Motivo del ajuste...">
+          </div>
+        </div>
+      `,
+      width: 420,
+      showCancelButton: true,
+      confirmButtonText: 'Agregar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#059669',
+      focusConfirm: false,
+      didOpen: () => {
+        const searchInput = document.getElementById('swal-conductor-search') as HTMLInputElement
+        const hiddenInput = document.getElementById('swal-conductor') as HTMLInputElement
+        const listContainer = document.getElementById('swal-conductor-list') as HTMLDivElement
+
+        const renderList = (filter: string) => {
+          const filtered = filter 
+            ? conductoresList.filter(c => 
+                c.nombre.toLowerCase().includes(filter.toLowerCase()) ||
+                c.dni.includes(filter)
+              )
+            : conductoresList
+
+          if (filtered.length === 0) {
+            listContainer.innerHTML = '<div style="padding: 8px 12px; color: #888; font-size: 12px;">No se encontraron conductores</div>'
+          } else {
+            listContainer.innerHTML = filtered.slice(0, 50).map(c => `
+              <div 
+                data-id="${c.id}" 
+                data-display="${c.display}"
+                style="padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #eee;"
+                class="conductor-option"
+              >${c.display}</div>
+            `).join('')
+          }
+          listContainer.style.display = 'block'
+        }
+
+        searchInput.addEventListener('focus', () => renderList(searchInput.value))
+        searchInput.addEventListener('input', () => renderList(searchInput.value))
+        
+        listContainer.addEventListener('click', (e) => {
+          const target = e.target as HTMLElement
+          if (target.classList.contains('conductor-option')) {
+            hiddenInput.value = target.dataset.id || ''
+            searchInput.value = target.dataset.display || ''
+            listContainer.style.display = 'none'
+          }
+        })
+
+        // Hover styles
+        listContainer.addEventListener('mouseover', (e) => {
+          const target = e.target as HTMLElement
+          if (target.classList.contains('conductor-option')) {
+            target.style.backgroundColor = '#f3f4f6'
+          }
+        })
+        listContainer.addEventListener('mouseout', (e) => {
+          const target = e.target as HTMLElement
+          if (target.classList.contains('conductor-option')) {
+            target.style.backgroundColor = ''
+          }
+        })
+
+        // Close on click outside
+        document.addEventListener('click', (e) => {
+          if (!searchInput.contains(e.target as Node) && !listContainer.contains(e.target as Node)) {
+            listContainer.style.display = 'none'
+          }
+        })
+      },
+      preConfirm: () => {
+        const conductorId = (document.getElementById('swal-conductor') as HTMLInputElement).value
+        const conceptoEl = document.getElementById('swal-concepto') as HTMLSelectElement
+        const concepto = conceptoEl.value
+        const selectedOption = conceptoEl.options[conceptoEl.selectedIndex]
+        const ivaPorcentaje = parseFloat(selectedOption?.dataset.iva || '0')
+        const tipoConcepto = selectedOption?.dataset.tipo || ''
+        const monto = parseFloat((document.getElementById('swal-monto') as HTMLInputElement).value) || 0
+        const descripcion = (document.getElementById('swal-descripcion') as HTMLInputElement).value
+
+        if (!conductorId) {
+          Swal.showValidationMessage('Selecciona un conductor')
+          return false
+        }
+        if (!concepto) {
+          Swal.showValidationMessage('Selecciona un concepto')
+          return false
+        }
+        if (monto === 0) {
+          Swal.showValidationMessage('El monto no puede ser 0')
+          return false
+        }
+        if (!descripcion.trim()) {
+          Swal.showValidationMessage('Ingresa una descripción')
+          return false
+        }
+
+        const esDescuento = monto < 0 || tipoConcepto === 'descuento'
+        const tieneIva = ivaPorcentaje > 0
+
+        return { conductorId, concepto, monto: Math.abs(monto), descripcion, esDescuento, tieneIva }
+      }
+    })
+
+    if (!formValues) return
+
+    // Buscar datos del conductor seleccionado
+    const conductor = conductoresUnicos.find(c => c.id === formValues.conductorId)
+    if (!conductor) return
+
+    // Calcular valores IVA
+    let netoGravado = 0
+    let ivaAmount = 0
+    let exento = 0
+    const total = formValues.monto
+
+    if (formValues.tieneIva) {
+      netoGravado = Math.round((total / 1.21) * 100) / 100
+      ivaAmount = Math.round((total - netoGravado) * 100) / 100
+    } else {
+      exento = total
+    }
+
+    // Crear nueva fila
+    const maxNumero = Math.max(...data.map(r => r.numero), 0)
+    const newRow: FacturacionPreviewRow = {
+      numero: maxNumero + 1,
+      fechaEmision: new Date(),
+      fechaVencimiento: new Date(),
+      puntoVenta: 1,
+      tipoFactura: conductor.tipoFactura,
+      tipoDocumento: conductor.tipoFactura === 'FACTURA_A' ? 'CUIT' : 'DNI',
+      numeroCuil: conductor.cuit,
+      numeroDni: conductor.dni,
+      total: formValues.esDescuento ? -total : total,
+      cobrado: 0,
+      condicionIva: conductor.condicionIva,
+      condicionVenta: 'CTA_CTE',
+      razonSocial: conductor.nombre,
+      domicilio: '',
+      codigoProducto: formValues.concepto,
+      descripcionAdicional: formValues.descripcion,
+      email: conductor.email,
+      nota: '',
+      moneda: 'ARS',
+      tipoCambio: 1,
+      netoGravado: formValues.esDescuento ? -netoGravado : netoGravado,
+      ivaAmount: formValues.esDescuento ? -ivaAmount : ivaAmount,
+      exento: formValues.esDescuento ? -exento : exento,
+      totalRepetido: formValues.esDescuento ? -total : total,
+      ivaPorcentaje: formValues.tieneIva ? 'IVA_21' : 'EXENTO',
+      generarAsiento: 'NO',
+      cuentaDebito: 0,
+      cuentaCredito: 0,
+      referencia: '',
+      check: '',
+      conductorId: formValues.conductorId,
+      tieneError: false,
+      facturacionId: conductor.facturacionId,
+      isNew: true
+    }
+
+    setData(prev => [...prev, newRow])
+    setHasChanges(true)
+
+    const signo = formValues.esDescuento ? '-' : ''
+    showSuccess('Ajuste agregado', `${formValues.concepto} - ${signo}${formatCurrency(total)} para ${conductor.nombre}`)
+  }, [conductoresUnicos, conceptos, data])
+
+  // Función para eliminar una fila nueva
+  const eliminarFila = useCallback((rowIdx: number) => {
+    const row = data[rowIdx]
+    if (!row.isNew) {
+      // Si no es nueva, marcar como eliminada (para sincronizar)
+      const newData = [...data]
+      newData[rowIdx] = { ...row, isDeleted: true }
+      setData(newData)
+    } else {
+      // Si es nueva, simplemente quitar del array
+      setData(prev => prev.filter((_, idx) => idx !== rowIdx))
+    }
+    setHasChanges(true)
+  }, [data])
 
   // Iniciar edición
   const startEdit = useCallback((rowIdx: number, field: string, currentValue: number | string) => {
@@ -267,13 +557,7 @@ export function FacturacionPreviewTable({
       const success = await onSync(data)
       if (success) {
         setHasChanges(false)
-        Swal.fire({
-          icon: 'success',
-          title: 'Sincronizado',
-          text: 'Los cambios se guardaron correctamente',
-          timer: 2000,
-          showConfirmButton: false
-        })
+        showSuccess('Sincronizado', 'Los cambios se guardaron correctamente')
       }
     } catch (error) {
       Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
@@ -362,9 +646,19 @@ export function FacturacionPreviewTable({
         </div>
         <div className="fact-preview-header-right">
           {periodoAbierto && (
-            <span className="fact-preview-badge open">
-              PERÍODO ABIERTO
-            </span>
+            <>
+              <span className="fact-preview-badge open">
+                PERÍODO ABIERTO
+              </span>
+              <button
+                className="fact-preview-btn add"
+                onClick={agregarAjuste}
+                title="Agregar ajuste manual"
+              >
+                <Plus size={14} />
+                Agregar Ajuste
+              </button>
+            </>
           )}
           {stats.conErrores > 0 && (
             <span className="fact-preview-badge error">
@@ -407,50 +701,190 @@ export function FacturacionPreviewTable({
       {showPendientes && conceptosPendientes.length > 0 && (
         <div className="fact-pendientes-panel">
           <div className="fact-pendientes-header">
-            <h3><Link2 size={16} /> Conceptos Pendientes de Enlazar</h3>
+            <h3><Link2 size={16} /> Conceptos Pendientes de Enlazar ({conceptosPendientes.length})</h3>
             <button onClick={() => setShowPendientes(false)}><X size={16} /></button>
           </div>
-          <div className="fact-pendientes-list">
-            {conceptosPendientes.map((p) => (
-              <div key={p.id} className="fact-pendiente-item">
-                <div className="fact-pendiente-info">
-                  <span className="fact-pendiente-tipo">{p.tipo.replace('_', ' ')}</span>
-                  <span className="fact-pendiente-conductor">{p.conductorNombre}</span>
-                  <span className="fact-pendiente-desc">{p.descripcion}</span>
-                  <span className="fact-pendiente-monto">{formatCurrency(p.monto)}</span>
-                </div>
-                <div className="fact-pendiente-actions">
-                  <select 
-                    onChange={async (e) => {
-                      if (!e.target.value || !onEnlazarConcepto) return
-                      setEnlazando(true)
-                      const ok = await onEnlazarConcepto(p, e.target.value)
-                      setEnlazando(false)
-                      if (ok) {
-                        Swal.fire({
-                          icon: 'success',
-                          title: 'Enlazado',
-                          text: `Concepto enlazado como ${e.target.value}`,
-                          timer: 1500,
-                          showConfirmButton: false
-                        })
-                      }
-                    }}
-                    disabled={enlazando}
-                    defaultValue=""
-                  >
-                    <option value="">Enlazar con...</option>
-                    <option value="P004">P004 - Tickets/Telepases</option>
-                    <option value="P005">P005 - Peajes</option>
-                    <option value="P006">P006 - Exceso KM</option>
-                    <option value="P007">P007 - Penalidades</option>
-                    <option value="P009">P009 - Mora</option>
-                    <option value="P010">P010 - Plan Pagos</option>
-                  </select>
-                  {enlazando && <Loader2 size={14} className="spinning" />}
-                </div>
-              </div>
-            ))}
+          <div className="fact-pendientes-table-wrapper">
+            <table className="fact-pendientes-table">
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th style={{ width: '40px' }}></th>
+                  <th>Conductor</th>
+                  <th>Descripción</th>
+                  <th>Origen</th>
+                  <th className="col-right">Monto</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conceptosPendientes.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <span className={`fact-pendiente-tipo tipo-${p.tipo}`}>
+                        {p.tipo === 'cobro_fraccionado' ? 'CUOTA' : p.tipo === 'penalidad' ? 'PENALIDAD' : 'TICKET'}
+                      </span>
+                    </td>
+                    <td className="col-ver">
+                      <button
+                        className="btn-ver-detalle"
+                        onClick={() => {
+                          Swal.fire({
+                            title: 'Detalle del Concepto',
+                            html: `
+                              <div style="text-align: left; font-size: 13px;">
+                                <!-- Información Principal -->
+                                <div style="display: grid; grid-template-columns: 130px 1fr; gap: 8px; margin-bottom: 16px;">
+                                  <strong>Tipo:</strong>
+                                  <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; 
+                                    background: ${p.tipo === 'cobro_fraccionado' ? '#dbeafe' : p.tipo === 'penalidad' ? '#fee2e2' : '#d1fae5'}; 
+                                    color: ${p.tipo === 'cobro_fraccionado' ? '#1e40af' : p.tipo === 'penalidad' ? '#991b1b' : '#065f46'};">
+                                    ${p.tipo === 'cobro_fraccionado' ? 'CUOTA DE PENALIDAD' : p.tipo === 'penalidad' ? 'PENALIDAD' : 'TICKET'}
+                                  </span>
+                                  
+                                  <strong>Conductor:</strong>
+                                  <span style="font-weight: 600;">${p.conductorNombre}</span>
+                                  
+                                  <strong>Monto a cobrar:</strong>
+                                  <span style="color: #dc2626; font-weight: 700; font-size: 16px;">${formatCurrency(p.monto)}</span>
+                                  
+                                  ${p.cuotaActual && p.totalCuotas ? `
+                                    <strong>Cuota:</strong>
+                                    <span style="color: #1e40af; font-weight: 600;">${p.cuotaActual} de ${p.totalCuotas}</span>
+                                    
+                                    <strong>Monto Total Deuda:</strong>
+                                    <span style="color: #6b7280;">${formatCurrency(p.montoTotal || 0)}</span>
+                                  ` : ''}
+                                </div>
+                                
+                                <!-- Detalle de la Penalidad -->
+                                ${(p.tipo === 'penalidad' || p.tipo === 'cobro_fraccionado') ? `
+                                  <div style="border-top: 1px solid #e5e7eb; padding-top: 12px; margin-top: 8px;">
+                                    <div style="font-weight: 700; margin-bottom: 8px; color: #991b1b; display: flex; align-items: center; gap: 6px;">
+                                      <span style="font-size: 14px;">📋</span> Detalle de la Penalidad
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: 130px 1fr; gap: 6px; font-size: 12px;">
+                                      ${p.tipoPenalidad ? `
+                                        <strong style="color: #374151;">Tipo Penalidad:</strong>
+                                        <span>${p.tipoPenalidad}</span>
+                                      ` : ''}
+                                      
+                                      <strong style="color: #374151;">Descripción:</strong>
+                                      <span>${p.descripcion || 'Sin descripción'}</span>
+                                      
+                                      ${p.motivoPenalidad ? `
+                                        <strong style="color: #374151;">Motivo:</strong>
+                                        <span>${p.motivoPenalidad}</span>
+                                      ` : ''}
+                                      
+                                      ${p.notasPenalidad ? `
+                                        <strong style="color: #374151;">Notas/Comentarios:</strong>
+                                        <span style="background: #f9fafb; padding: 6px 8px; border-radius: 4px; display: block; margin-top: 2px; white-space: pre-wrap;">${p.notasPenalidad}</span>
+                                      ` : ''}
+                                      
+                                      ${p.fechaPenalidad ? `
+                                        <strong style="color: #374151;">Fecha Penalidad:</strong>
+                                        <span>${new Date(p.fechaPenalidad).toLocaleDateString('es-AR')}</span>
+                                      ` : ''}
+                                    </div>
+                                  </div>
+                                ` : ''}
+                                
+                                <!-- Origen Siniestro -->
+                                ${p.siniestroId ? `
+                                  <div style="border-top: 1px solid #fecaca; padding-top: 12px; margin-top: 12px; background: #fef2f2; margin: 12px -20px 0; padding: 12px 20px; border-radius: 0 0 8px 8px;">
+                                    <div style="font-weight: 700; margin-bottom: 8px; color: #991b1b; display: flex; align-items: center; gap: 6px;">
+                                      <span style="font-size: 14px;">🚗</span> Origen: SINIESTRO
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: 130px 1fr; gap: 6px; font-size: 12px;">
+                                      <strong style="color: #374151;">Código Siniestro:</strong>
+                                      <span style="font-weight: 700; color: #dc2626;">${p.siniestroCodigo || p.siniestroId}</span>
+                                    </div>
+                                    <div style="margin-top: 8px; font-size: 11px; color: #991b1b;">
+                                      Esta penalidad fue generada desde el módulo de Siniestros
+                                    </div>
+                                  </div>
+                                ` : ''}
+                                
+                                <!-- Información de Registro -->
+                                <div style="border-top: 1px solid #e5e7eb; padding-top: 12px; margin-top: ${p.siniestroId ? '0' : '12px'};">
+                                  <div style="font-weight: 700; margin-bottom: 8px; color: #374151; display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 14px;">📝</span> Información de Registro
+                                  </div>
+                                  <div style="display: grid; grid-template-columns: 130px 1fr; gap: 6px; font-size: 12px; color: #6b7280;">
+                                    <strong>Tabla origen:</strong>
+                                    <span style="text-transform: capitalize; font-family: monospace; font-size: 11px; background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">${p.tabla.replace(/_/g, ' ')}</span>
+                                    
+                                    ${p.creadoPor ? `
+                                      <strong>Registrado por:</strong>
+                                      <span>${p.creadoPor}</span>
+                                    ` : ''}
+                                    
+                                    ${p.fechaCreacion ? `
+                                      <strong>Fecha registro:</strong>
+                                      <span>${new Date(p.fechaCreacion).toLocaleString('es-AR')}</span>
+                                    ` : ''}
+                                    
+                                    <strong>ID registro:</strong>
+                                    <span style="font-family: monospace; font-size: 9px; color: #9ca3af;">${p.id}</span>
+                                    
+                                    ${p.penalidadId && p.penalidadId !== p.id ? `
+                                      <strong>ID penalidad:</strong>
+                                      <span style="font-family: monospace; font-size: 9px; color: #9ca3af;">${p.penalidadId}</span>
+                                    ` : ''}
+                                  </div>
+                                </div>
+                              </div>
+                            `,
+                            width: 550,
+                            confirmButtonText: 'Cerrar',
+                            confirmButtonColor: '#6b7280'
+                          })
+                        }}
+                        title="Ver detalle"
+                      >
+                        <Eye size={14} />
+                      </button>
+                    </td>
+                    <td className="col-conductor">{p.conductorNombre}</td>
+                    <td className="col-desc">
+                      <div className="desc-main">{p.descripcion}</div>
+                      {p.cuotaActual && p.totalCuotas && (
+                        <div className="desc-cuota">Cuota {p.cuotaActual} de {p.totalCuotas}</div>
+                      )}
+                    </td>
+                    <td className="col-origen">
+                      <div className="origen-tabla">{p.tabla.replace(/_/g, ' ')}</div>
+                    </td>
+                    <td className="col-right col-monto">{formatCurrency(p.monto)}</td>
+                    <td className="col-action">
+                      <select 
+                        onChange={async (e) => {
+                          if (!e.target.value || !onEnlazarConcepto) return
+                          setEnlazando(true)
+                          const ok = await onEnlazarConcepto(p, e.target.value)
+                          setEnlazando(false)
+                          if (ok) {
+                            showSuccess('Enlazado', `Concepto enlazado como ${e.target.value}`)
+                          }
+                        }}
+                        disabled={enlazando}
+                        defaultValue=""
+                      >
+                        <option value="">Enlazar con...</option>
+                        <option value="P004">P004 - Tickets</option>
+                        <option value="P005">P005 - Peajes</option>
+                        <option value="P006">P006 - Exceso KM</option>
+                        <option value="P007">P007 - Penalidades</option>
+                        <option value="P009">P009 - Mora</option>
+                        <option value="P010">P010 - Plan Pagos</option>
+                      </select>
+                      {enlazando && <Loader2 size={14} className="spinning" />}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -531,18 +965,20 @@ export function FacturacionPreviewTable({
               <th>Cta Créd</th>
               <th>Ref</th>
               <th>Check</th>
+              {periodoAbierto && <th className="col-actions"></th>}
             </tr>
           </thead>
           <tbody>
-            {filteredData.map((row, idx) => {
+            {filteredData.filter(r => !r.isDeleted).map((row, idx) => {
               const realIdx = data.findIndex(d => d.numero === row.numero && d.conductorId === row.conductorId && d.codigoProducto === row.codigoProducto)
               const rowClasses = [
                 row.tieneError ? 'row-error' : '',
-                row.tieneSaldosPendientes ? 'row-saldos-pendientes' : ''
+                row.tieneSaldosPendientes ? 'row-saldos-pendientes' : '',
+                row.isNew ? 'row-new' : ''
               ].filter(Boolean).join(' ')
               return (
                 <tr key={`${row.numero}-${row.codigoProducto}-${idx}`} className={rowClasses}>
-                  <td>{row.numero}</td>
+                  <td>{row.isNew ? <span className="badge-new">NUEVO</span> : row.numero}</td>
                   <td>{format(row.fechaEmision, 'dd/MM')}</td>
                   <td>{format(row.fechaVencimiento, 'dd/MM')}</td>
                   <td>{row.puntoVenta}</td>
@@ -572,6 +1008,17 @@ export function FacturacionPreviewTable({
                   <td className="col-mono">{row.cuentaCredito}</td>
                   <td>{row.referencia}</td>
                   <td>{row.check || ''}</td>
+                  {periodoAbierto && (
+                    <td className="col-actions">
+                      <button
+                        className="btn-delete-row"
+                        onClick={() => eliminarFila(realIdx)}
+                        title="Eliminar fila"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               )
             })}
@@ -585,7 +1032,7 @@ export function FacturacionPreviewTable({
               <td className="col-money"><strong>{formatCurrency(totales.ivaAmount)}</strong></td>
               <td className="col-money"><strong>{formatCurrency(totales.exento)}</strong></td>
               <td className="col-money"><strong>{formatCurrency(totales.total)}</strong></td>
-              <td colSpan={6}></td>
+              <td colSpan={periodoAbierto ? 7 : 6}></td>
             </tr>
           </tfoot>
         </table>
@@ -624,13 +1071,31 @@ export function FacturacionPreviewTable({
         .fact-pendientes-header button { background: none; border: none; cursor: pointer; color: #b45309; }
         .fact-pendientes-list { display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; }
         .fact-pendiente-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: white; border-radius: 6px; border: 1px solid #fcd34d; }
-        .fact-pendiente-info { display: flex; align-items: center; gap: 12px; flex: 1; }
-        .fact-pendiente-tipo { background: #fef3c7; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; color: #b45309; text-transform: uppercase; }
-        .fact-pendiente-conductor { font-weight: 600; font-size: 12px; color: var(--text-primary); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .fact-pendiente-desc { font-size: 11px; color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .fact-pendiente-monto { font-family: monospace; font-weight: 600; font-size: 12px; color: #b45309; }
-        .fact-pendiente-actions { display: flex; align-items: center; gap: 8px; }
-        .fact-pendiente-actions select { padding: 4px 8px; border: 1px solid #fcd34d; border-radius: 4px; font-size: 11px; background: white; }
+        .fact-pendientes-table-wrapper { max-height: 250px; overflow-y: auto; border: 1px solid #fcd34d; border-radius: 6px; }
+        .fact-pendientes-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .fact-pendientes-table th { position: sticky; top: 0; background: #fef3c7; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 11px; color: #92400e; border-bottom: 1px solid #fcd34d; white-space: nowrap; }
+        .fact-pendientes-table td { padding: 8px 10px; border-bottom: 1px solid #fef3c7; vertical-align: top; }
+        .fact-pendientes-table tr:hover { background: #fffbeb; }
+        .fact-pendiente-tipo { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+        .fact-pendiente-tipo.tipo-cobro_fraccionado { background: #dbeafe; color: #1e40af; }
+        .fact-pendiente-tipo.tipo-penalidad { background: #fee2e2; color: #991b1b; }
+        .fact-pendiente-tipo.tipo-ticket { background: #d1fae5; color: #065f46; }
+        .col-conductor { font-weight: 600; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-desc .desc-main { color: var(--text-primary); }
+        .col-desc .desc-cuota { font-size: 10px; color: #1e40af; font-weight: 600; margin-top: 2px; }
+        .col-origen { font-size: 10px; color: var(--text-secondary); }
+        .col-origen .origen-tabla { font-weight: 600; color: #6b7280; text-transform: capitalize; }
+        .col-origen .origen-creador { color: #9ca3af; }
+        .col-origen .origen-fecha { color: #9ca3af; }
+        .col-origen .origen-total { color: #dc2626; font-weight: 600; }
+        .col-right { text-align: right; }
+        .col-monto { font-family: monospace; font-weight: 700; font-size: 13px; color: #dc2626; white-space: nowrap; }
+        .col-action { white-space: nowrap; }
+        .col-action select { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 11px; background: white; cursor: pointer; }
+        .col-action select:hover { border-color: #fbbf24; }
+        .col-ver { width: 40px; text-align: center; }
+        .btn-ver-detalle { background: none; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 6px; cursor: pointer; color: #6b7280; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
+        .btn-ver-detalle:hover { background: #f3f4f6; border-color: #9ca3af; color: #374151; }
         .fact-preview-productos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
         .fact-producto-badge { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 11px; }
         .fact-producto-nombre { font-size: 10px; color: var(--text-muted); }
@@ -672,6 +1137,22 @@ export function FacturacionPreviewTable({
         .totals-row td { border-top: 2px solid var(--border-color); position: sticky; bottom: 0; background: var(--bg-secondary); }
         .spinning { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* Botón agregar ajuste */
+        .fact-preview-btn.add { background: #059669; color: white; }
+        .fact-preview-btn.add:hover { background: #047857; }
+        
+        /* Filas nuevas */
+        .fact-preview-table tr.row-new { background: #ecfdf5 !important; }
+        .fact-preview-table tr.row-new:hover { background: #d1fae5 !important; }
+        .badge-new { display: inline-block; padding: 2px 6px; background: #059669; color: white; border-radius: 3px; font-size: 9px; font-weight: 700; }
+        
+        /* Columna de acciones */
+        .col-actions { width: 40px; text-align: center; position: sticky; right: 0; background: inherit; }
+        .btn-delete-row { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: none; background: #fee2e2; color: #dc2626; border-radius: 4px; cursor: pointer; margin: 0 auto; }
+        .btn-delete-row:hover { background: #fecaca; }
+        .fact-preview-table tr.row-new .col-actions { background: #ecfdf5; }
+        .fact-preview-table tr.row-new:hover .col-actions { background: #d1fae5; }
       `}</style>
     </div>
   )

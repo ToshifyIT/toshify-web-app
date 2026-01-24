@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import {
   Shield,
   Users,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 
@@ -343,12 +345,7 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Garantía Agregada',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Garantía Agregada')
 
       cargarGarantias()
     } catch (error: any) {
@@ -435,12 +432,7 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Actualizado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Actualizado')
 
       cargarGarantias()
     } catch (error: any) {
@@ -475,12 +467,7 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Eliminado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Eliminado')
 
       cargarGarantias()
     } catch (error: any) {
@@ -592,13 +579,7 @@ export function GarantiasTab() {
 
       if (errorUpdate) throw errorUpdate
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Pago Registrado',
-        text: completada ? '¡Garantía completada!' : `Cuota ${nuevasCuotasPagadas} registrada`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Pago Registrado', completada ? '¡Garantía completada!' : `Cuota ${nuevasCuotasPagadas} registrada`)
 
       cargarGarantias()
     } catch (error: any) {
@@ -743,12 +724,7 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Actualizado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Actualizado')
 
       cargarGarantias()
     } catch (error: any) {
@@ -1071,6 +1047,9 @@ export function GarantiasTab() {
 
   return (
     <>
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando garantias..." size="lg" />
+
       {/* Sub-tabs de navegación */}
       <div className="fact-subtabs" style={{ 
         display: 'flex', 

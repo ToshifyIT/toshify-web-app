@@ -2,18 +2,21 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2 } from 'lucide-react'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { DriveFilesModal } from '../../components/DriveFilesModal'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import type {
   VehiculoWithRelations,
   VehiculoEstado
 } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { VehiculoWizard } from './components/VehiculoWizard'
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import './VehicleManagement.css'
@@ -232,8 +235,8 @@ export function VehicleManagement() {
     }
   }
 
-  const loadVehiculos = async () => {
-    setLoading(true)
+  const loadVehiculos = async (silent = false) => {
+    if (!silent) setLoading(true)
     setError('')
 
     try {
@@ -334,16 +337,10 @@ export function VehicleManagement() {
 
       if (insertError) throw insertError
 
-      Swal.fire({
-        icon: 'success',
-        title: '¡Éxito!',
-        text: 'Vehículo creado exitosamente',
-        confirmButtonColor: '#E63946',
-        timer: 2000
-      })
+      showSuccess('Vehículo creado')
       setShowCreateModal(false)
       resetForm()
-      await loadVehiculos()
+      await loadVehiculos(true)
     } catch (err: any) {
       console.error('Error creando vehículo:', err)
       Swal.fire({
@@ -487,17 +484,11 @@ export function VehicleManagement() {
 
       if (updateError) throw updateError
 
-      Swal.fire({
-        icon: 'success',
-        title: '¡Éxito!',
-        text: debeFinalizarAsignaciones ? 'Vehículo actualizado y asignaciones finalizadas' : 'Vehículo actualizado exitosamente',
-        confirmButtonColor: '#E63946',
-        timer: 2000
-      })
+      showSuccess('Vehículo actualizado', debeFinalizarAsignaciones ? 'Asignaciones finalizadas' : undefined)
       setShowEditModal(false)
       setSelectedVehiculo(null)
       resetForm()
-      await loadVehiculos()
+      await loadVehiculos(true)
     } catch (err: any) {
       console.error('Error actualizando vehículo:', err)
       Swal.fire({
@@ -533,16 +524,10 @@ export function VehicleManagement() {
 
       if (deleteError) throw deleteError
 
-      Swal.fire({
-        icon: 'success',
-        title: '¡Éxito!',
-        text: 'Vehículo eliminado exitosamente',
-        confirmButtonColor: '#E63946',
-        timer: 2000
-      })
+      showSuccess('Vehículo eliminado')
       setShowDeleteModal(false)
       setSelectedVehiculo(null)
-      await loadVehiculos()
+      await loadVehiculos(true)
     } catch (err: any) {
       console.error('Error eliminando vehículo:', err)
       Swal.fire({
@@ -660,15 +645,10 @@ export function VehicleManagement() {
         .update({ drive_folder_url: result.folderUrl })
         .eq('id', vehiculo.id)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Carpeta creada',
-        text: `Se creó la carpeta "${result.folderName}" en Google Drive`,
-        confirmButtonColor: '#E63946'
-      })
+      showSuccess('Carpeta creada', `Se creó "${result.folderName}" en Drive`)
 
-      // Recargar datos para mostrar el nuevo link
-      await loadAllData()
+      // Recargar datos para mostrar el nuevo link (silencioso)
+      await loadVehiculos(true)
 
       // Abrir la carpeta en nueva pestaña
       if (result.folderUrl) {
@@ -1069,52 +1049,39 @@ export function VehicleManagement() {
         cell: ({ row }) => {
           const driveUrl = (row.original as any).drive_folder_url
           const isCreatingFolder = creatingDriveFolder === row.original.id
+          
           return (
-            <div className="dt-actions">
-              {driveUrl ? (
-                <button
-                  className="dt-btn-action"
-                  style={{ color: '#16a34a', background: 'rgba(22, 163, 74, 0.1)' }}
-                  onClick={() => handleOpenDriveFolder(row.original)}
-                  title="Ver documentos en Drive"
-                >
-                  <FolderOpen size={16} />
-                </button>
-              ) : (
-                <button
-                  className="dt-btn-action"
-                  style={{ color: '#6b7280', background: 'rgba(107, 114, 128, 0.1)' }}
-                  onClick={() => handleCreateDriveFolder(row.original)}
-                  disabled={isCreatingFolder}
-                  title="Crear carpeta en Drive"
-                >
-                  {isCreatingFolder ? <Loader2 size={16} className="animate-spin" /> : <FolderPlus size={16} />}
-                </button>
-              )}
-              <button
-                className="dt-btn-action dt-btn-view"
-                onClick={() => loadVehiculoDetails(row.original.id)}
-                title="Ver detalles"
-              >
-                <Eye size={16} />
-              </button>
-              <button
-                className="dt-btn-action dt-btn-edit"
-                onClick={() => openEditModal(row.original)}
-                disabled={!canUpdate}
-                title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehiculo'}
-              >
-                <Edit size={16} />
-              </button>
-              <button
-                className="dt-btn-action dt-btn-delete"
-                onClick={() => openDeleteModal(row.original)}
-                disabled={!canDelete}
-                title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehiculo'}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
+            <ActionsMenu
+              maxVisible={2}
+              actions={[
+                {
+                  icon: <Eye size={15} />,
+                  label: 'Ver detalles',
+                  onClick: () => loadVehiculoDetails(row.original.id)
+                },
+                {
+                  icon: <Edit size={15} />,
+                  label: 'Editar',
+                  onClick: () => openEditModal(row.original),
+                  disabled: !canUpdate,
+                  variant: 'info'
+                },
+                {
+                  icon: driveUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
+                  label: driveUrl ? 'Ver documentos' : 'Crear carpeta',
+                  onClick: () => driveUrl ? handleOpenDriveFolder(row.original) : handleCreateDriveFolder(row.original),
+                  disabled: isCreatingFolder,
+                  variant: driveUrl ? 'success' : 'default'
+                },
+                {
+                  icon: <Trash2 size={15} />,
+                  label: 'Eliminar',
+                  onClick: () => openDeleteModal(row.original),
+                  disabled: !canDelete,
+                  variant: 'danger'
+                }
+              ]}
+            />
           )
         },
         enableSorting: false,
@@ -1125,6 +1092,9 @@ export function VehicleManagement() {
 
   return (
     <div className="veh-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando vehiculos..." size="lg" />
+
       {/* Stats Cards - Clickeables para filtrar */}
       <div className="veh-stats">
         <div className="veh-stats-grid">

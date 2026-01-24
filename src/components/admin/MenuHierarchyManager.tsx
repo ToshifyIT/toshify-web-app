@@ -1,11 +1,13 @@
 // src/components/admin/MenuHierarchyManager.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { Menu, Submenu } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
 import { Menu as MenuIcon } from 'lucide-react'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import './MenuHierarchyManager.css'
 import './AdminStyles.css'
 
@@ -96,7 +98,7 @@ export function MenuHierarchyManager() {
 
       if (error) throw error
 
-      Swal.fire('¡Éxito!', 'Menú creado exitosamente', 'success')
+      showSuccess('¡Éxito!', 'Menú creado exitosamente')
       setShowMenuModal(false)
       resetMenuForm()
       await loadData()
@@ -120,7 +122,7 @@ export function MenuHierarchyManager() {
 
       if (error) throw error
 
-      Swal.fire('¡Éxito!', 'Menú actualizado exitosamente', 'success')
+      showSuccess('¡Éxito!', 'Menú actualizado exitosamente')
       setShowMenuModal(false)
       setEditingMenu(null)
       resetMenuForm()
@@ -150,7 +152,7 @@ export function MenuHierarchyManager() {
       const { error } = await supabase.from('menus').delete().eq('id', menu.id)
       if (error) throw error
 
-      Swal.fire('¡Eliminado!', 'Menú eliminado exitosamente', 'success')
+      showSuccess('¡Eliminado!', 'Menú eliminado exitosamente')
       await loadData()
     } catch (err: any) {
       Swal.fire('Error', err.message, 'error')
@@ -191,7 +193,7 @@ export function MenuHierarchyManager() {
 
       if (error) throw error
 
-      Swal.fire('¡Éxito!', 'Submenú creado exitosamente', 'success')
+      showSuccess('¡Éxito!', 'Submenú creado exitosamente')
       setShowSubmenuModal(false)
       resetSubmenuForm()
       await loadData()
@@ -220,7 +222,7 @@ export function MenuHierarchyManager() {
 
       if (error) throw error
 
-      Swal.fire('¡Éxito!', 'Submenú actualizado exitosamente', 'success')
+      showSuccess('¡Éxito!', 'Submenú actualizado exitosamente')
       setShowSubmenuModal(false)
       setEditingSubmenu(null)
       resetSubmenuForm()
@@ -250,7 +252,7 @@ export function MenuHierarchyManager() {
       const { error } = await supabase.from('submenus').delete().eq('id', submenu.id)
       if (error) throw error
 
-      Swal.fire('¡Eliminado!', 'Submenú eliminado exitosamente', 'success')
+      showSuccess('¡Eliminado!', 'Submenú eliminado exitosamente')
       await loadData()
     } catch (err: any) {
       Swal.fire('Error', err.message, 'error')
@@ -420,6 +422,7 @@ export function MenuHierarchyManager() {
 
   return (
     <div className="admin-module">
+      <LoadingOverlay show={loading} message="Cargando menus..." size="lg" />
       {/* DataTable with integrated action buttons */}
       <DataTable
         data={tableData}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import jsPDF from 'jspdf'
 import * as XLSX from 'xlsx'
 import {
@@ -27,11 +28,12 @@ import {
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { formatCurrency, formatDate, FACTURACION_CONFIG, calcularMora } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, differenceInDays, isAfter, isBefore } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
-import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente } from '../components/FacturacionPreviewTable'
+import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
 
 // Tipos para datos de facturación generada
 interface FacturacionConductor {
@@ -186,6 +188,7 @@ export function ReporteFacturacionTab() {
   const [siFacturaPreviewData, setSiFacturaPreviewData] = useState<FacturacionPreviewRow[]>([])
   const [loadingSiFacturaPreview, setLoadingSiFacturaPreview] = useState(false)
   const [conceptosPendientes, setConceptosPendientes] = useState<ConceptoPendiente[]>([])
+  const [conceptosNomina, setConceptosNomina] = useState<ConceptoNomina[]>([])
 
   // Al montar: buscar última semana generada y navegar a ella
   useEffect(() => {
@@ -216,6 +219,22 @@ export function ReporteFacturacionTab() {
     setBuscarConductor('')
     cargarFacturacion()
   }, [semanaActual])
+
+  // Cargar conceptos de nómina al montar (para agregar ajustes manuales)
+  useEffect(() => {
+    async function cargarConceptos() {
+      const { data } = await supabase
+        .from('conceptos_nomina')
+        .select('id, codigo, descripcion, tipo, es_variable, iva_porcentaje')
+        .eq('activo', true)
+        .order('codigo')
+      
+      if (data) {
+        setConceptosNomina(data as ConceptoNomina[])
+      }
+    }
+    cargarConceptos()
+  }, [])
 
   // Cerrar dropdown de filtro al hacer click fuera
   useEffect(() => {
@@ -1265,23 +1284,7 @@ export function ReporteFacturacionTab() {
       if (totalMultasIncorp > 0) detallesIncorp.push(`Multas de Tránsito (${cantidadMultasIncorp}): Gs. ${formatMonto(totalMultasIncorp)}`)
       if (totalTicketsIncorp > 0) detallesIncorp.push(`Tickets a Favor: Gs. ${formatMonto(totalTicketsIncorp)}`)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Recálculo completado',
-        html: `
-          <p>Se actualizaron <strong>${actualizados}</strong> registros de facturación</p>
-          ${detallesIncorp.length > 0 ? `
-            <div style="text-align:left; margin-top:10px; padding:10px; background:#f5f5f5; border-radius:5px;">
-              <strong>Conceptos incorporados:</strong>
-              <ul style="margin:5px 0 0 0; padding-left:20px;">
-                ${detallesIncorp.map(d => `<li>${d}</li>`).join('')}
-              </ul>
-            </div>
-          ` : '<p style="color:#666;">No se encontraron conceptos adicionales para incorporar</p>'}
-        `,
-        confirmButtonText: 'Entendido',
-        confirmButtonColor: 'var(--color-primary)'
-      })
+      showSuccess('Recálculo completado', `${actualizados} registros actualizados${detallesIncorp.length > 0 ? ` - ${detallesIncorp.join(', ')}` : ''}`)
 
     } catch (error) {
       console.error('Error recalculando período:', error)
@@ -1666,13 +1669,7 @@ export function ReporteFacturacionTab() {
       const nombreArchivo = `Facturacion_${detalleFacturacion.conductor_nombre.replace(/\s+/g, '_')}_Semana${semanaNum}_${anioNum}.pdf`
       pdf.save(nombreArchivo)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'PDF Exportado',
-        text: `Se descargó: ${nombreArchivo}`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('PDF Exportado', `Se descargó: ${nombreArchivo}`)
     } catch (error) {
       console.error('Error exportando PDF:', error)
       Swal.fire('Error', 'No se pudo exportar el PDF', 'error')
@@ -1774,13 +1771,7 @@ export function ReporteFacturacionTab() {
       const nombreArchivo = `Facturacion_Semana${periodo.semana}_${periodo.anio}.xlsx`
       XLSX.writeFile(wb, nombreArchivo)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Reporte Exportado',
-        text: `Se descargó: ${nombreArchivo}`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
     } catch (error) {
       console.error('Error exportando Excel:', error)
       Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
@@ -1851,18 +1842,23 @@ export function ReporteFacturacionTab() {
               : t.conductor_nombre || 'Sin nombre',
             monto: t.monto,
             descripcion: t.descripcion || t.tipo,
-            tabla: 'tickets_favor'
+            tabla: 'tickets_favor',
+            fechaCreacion: t.created_at,
+            creadoPor: t.created_by_name,
+            origenDetalle: `Ticket ${t.tipo || ''} - Creado ${t.created_at ? format(parseISO(t.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
           })
         }
       }
 
-      // 2. Penalidades pendientes
+      // 2. Penalidades pendientes (NO fraccionadas, filtradas por fecha del período)
       const { data: penalidadesPendientes } = await (supabase
         .from('penalidades') as any)
-        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento(nombre)')
+        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento(nombre), siniestro:siniestros(id, codigo, tipo_siniestro)')
         .in('conductor_id', conductorIds)
         .eq('aplicado', false)
         .eq('rechazado', false)
+        .eq('fraccionado', false)
+        .eq('semana', periodo.semana)
 
       for (const p of (penalidadesPendientes || []) as any[]) {
         if (!detallesReferencias.has(p.id)) {
@@ -1875,7 +1871,19 @@ export function ReporteFacturacionTab() {
               : p.conductor_nombre || 'Sin nombre',
             monto: p.monto || 0,
             descripcion: p.detalle || p.tipos_cobro_descuento?.nombre || 'Penalidad',
-            tabla: 'penalidades'
+            tabla: 'penalidades',
+            fechaCreacion: p.created_at,
+            creadoPor: p.created_by_name,
+            origenDetalle: `Penalidad completa - ${p.tipos_cobro_descuento?.nombre || 'Sin tipo'} - Creado ${p.created_at ? format(parseISO(p.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`,
+            // Datos adicionales
+            penalidadId: p.id,
+            tipoPenalidad: p.tipos_cobro_descuento?.nombre,
+            motivoPenalidad: p.motivo,
+            notasPenalidad: p.notas,
+            fechaPenalidad: p.fecha,
+            // Origen siniestro si existe
+            siniestroId: p.siniestro_id,
+            siniestroCodigo: p.siniestro?.codigo
           })
         }
       }
@@ -1900,7 +1908,54 @@ export function ReporteFacturacionTab() {
               : 'Sin nombre',
             monto: c.monto_cuota,
             descripcion: c.descripcion || `Cuota ${c.numero_cuota} de ${c.total_cuotas}`,
-            tabla: 'cobros_fraccionados'
+            tabla: 'cobros_fraccionados',
+            fechaCreacion: c.created_at,
+            creadoPor: c.created_by_name,
+            montoTotal: c.monto_total,
+            cuotaActual: c.numero_cuota,
+            totalCuotas: c.total_cuotas,
+            origenDetalle: `Cobro fraccionado - Total: ${formatCurrency(c.monto_total || 0)} en ${c.total_cuotas} cuotas - Creado ${c.created_at ? format(parseISO(c.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
+          })
+        }
+      }
+
+      // 4. Penalidades cuotas (penalidades fraccionadas) pendientes de esta semana
+      const { data: penalidadesCuotasPendientes } = await (supabase
+        .from('penalidades_cuotas') as any)
+        .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name, tipos_cobro_descuento(nombre), siniestro:siniestros(id, codigo, tipo_siniestro), conductor:conductores(nombres, apellidos))')
+        .eq('semana', periodo.semana)
+        .eq('anio', periodo.anio)
+        .eq('aplicado', false)
+
+      for (const pc of (penalidadesCuotasPendientes || []) as any[]) {
+        if (!detallesReferencias.has(pc.id) && pc.penalidad?.conductor_id && conductorIds.includes(pc.penalidad.conductor_id)) {
+          const conductorNombre = pc.penalidad?.conductor?.nombres && pc.penalidad?.conductor?.apellidos
+            ? `${pc.penalidad.conductor.nombres} ${pc.penalidad.conductor.apellidos}`
+            : pc.penalidad?.conductor_nombre || 'Sin nombre'
+          const detallePenalidad = pc.penalidad?.detalle || 'Penalidad fraccionada'
+          pendientes.push({
+            id: pc.id,
+            tipo: 'cobro_fraccionado',
+            conductorId: pc.penalidad.conductor_id,
+            conductorNombre,
+            monto: pc.monto_cuota,
+            descripcion: detallePenalidad,
+            tabla: 'penalidades_cuotas',
+            fechaCreacion: pc.penalidad?.created_at,
+            creadoPor: pc.penalidad?.created_by_name,
+            montoTotal: pc.penalidad?.monto,
+            cuotaActual: pc.numero_cuota,
+            totalCuotas: pc.total_cuotas,
+            origenDetalle: `Penalidad fraccionada - Total: ${formatCurrency(pc.penalidad?.monto || 0)} en ${pc.total_cuotas} cuotas - Creado ${pc.penalidad?.created_at ? format(parseISO(pc.penalidad.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`,
+            // Datos adicionales de la penalidad original
+            penalidadId: pc.penalidad?.id,
+            tipoPenalidad: pc.penalidad?.tipos_cobro_descuento?.nombre,
+            motivoPenalidad: pc.penalidad?.motivo,
+            notasPenalidad: pc.penalidad?.notas,
+            fechaPenalidad: pc.penalidad?.fecha,
+            // Origen siniestro si existe
+            siniestroId: pc.penalidad?.siniestro_id,
+            siniestroCodigo: pc.penalidad?.siniestro?.codigo
           })
         }
       }
@@ -2176,13 +2231,7 @@ export function ReporteFacturacionTab() {
       const nombreArchivo = `Facturacion_Semana${semanaNum}_${anioNum}.xlsx`
       XLSX.writeFile(wb, nombreArchivo)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Facturación Exportada',
-        html: `<p>Se descargó: <strong>${nombreArchivo}</strong></p><p>${filasExport.length} líneas generadas</p>`,
-        timer: 3000,
-        showConfirmButton: false
-      })
+      showSuccess('Facturación Exportada', `Se descargó: ${nombreArchivo} (${filasExport.length} líneas)`)
     } catch (error) {
       Swal.fire('Error', 'No se pudo exportar el reporte de facturación', 'error')
     } finally {
@@ -2234,21 +2283,21 @@ export function ReporteFacturacionTab() {
         ticketsMap.get(t.conductor_id)!.push(t)
       })
 
-      // 4. Cargar penalidades pendientes para esta semana
-      const { data: penalidadesData } = await supabase
+      // 4. Cargar TODAS las penalidades pendientes (para detectar las no incluidas)
+      // Penalidades se filtran por el campo 'semana' (número de semana del período)
+      const { data: todasPenalidadesData } = await supabase
         .from('penalidades')
-        .select('*, tipos_cobro_descuento(nombre)')
-        .in('conductor_id', conductorIds)
+        .select('*, tipos_cobro_descuento(nombre), conductor:conductores(nombres, apellidos)')
         .eq('aplicado', false)
         .eq('rechazado', false)
+        .eq('fraccionado', false) // Solo NO fraccionadas (las fraccionadas van por penalidades_cuotas)
+        .eq('semana', semana)
       
-      // Filtrar por semana/año de aplicación o sin semana asignada
-      const penalidadesFiltradas = (penalidadesData || []).filter((p: any) => {
-        if (p.semana_aplicacion && p.anio_aplicacion) {
-          return p.semana_aplicacion === semana && p.anio_aplicacion === anio
-        }
-        return true // Penalidades sin semana asignada
-      })
+      const todasPenalidadesFiltradas = todasPenalidadesData || []
+      
+      // Separar penalidades incluidas (conductores en Vista Previa) de las no incluidas
+      const penalidadesFiltradas = todasPenalidadesFiltradas.filter((p: any) => conductorIds.includes(p.conductor_id))
+      const penalidadesNoIncluidas = todasPenalidadesFiltradas.filter((p: any) => !conductorIds.includes(p.conductor_id))
       
       // Agrupar penalidades por conductor
       const penalidadesMap = new Map<string, any[]>()
@@ -2281,16 +2330,125 @@ export function ReporteFacturacionTab() {
       
       const saldosMap = new Map((saldosData || []).map((s: any) => [s.conductor_id, s]))
 
+      // 7. Cargar penalidades_cuotas (cobros fraccionados de penalidades)
+      const { data: penalidadesCuotasData } = await supabase
+        .from('penalidades_cuotas')
+        .select('*, penalidad:penalidades(conductor_id, conductor_nombre, conductor:conductores(nombres, apellidos))')
+        .eq('semana', semana)
+        .eq('anio', anio)
+        .eq('aplicado', false)
+      
+      // Identificar penalidades_cuotas no incluidas (de conductores fuera de Vista Previa)
+      const penalidadesCuotasNoIncluidas = (penalidadesCuotasData || []).filter(
+        (pc: any) => pc.penalidad?.conductor_id && !conductorIds.includes(pc.penalidad.conductor_id)
+      )
+
+      // 8. Cargar tickets a favor de conductores NO en Vista Previa
+      const { data: todosTicketsData } = await supabase
+        .from('tickets_favor')
+        .select('*, conductor:conductores(nombres, apellidos)')
+        .eq('estado', 'aprobado')
+        .is('periodo_aplicado_id', null)
+      
+      const ticketsNoIncluidos = (todosTicketsData || []).filter(
+        (t: any) => !conductorIds.includes(t.conductor_id)
+      )
+
+      // 9. Cargar cobros fraccionados de conductores NO en Vista Previa
+      const { data: todosCobrosData } = await supabase
+        .from('cobros_fraccionados')
+        .select('*, conductor:conductores(nombres, apellidos)')
+        .eq('semana', semana)
+        .eq('anio', anio)
+        .eq('aplicado', false)
+      
+      const cobrosNoIncluidos = (todosCobrosData || []).filter(
+        (c: any) => !conductorIds.includes(c.conductor_id)
+      )
+
+      // Crear lista de conceptos NO incluidos para mostrar en el panel
+      const pendientes: ConceptoPendiente[] = []
+      
+      // Penalidades no incluidas
+      for (const p of penalidadesNoIncluidas as any[]) {
+        const conductorNombre = p.conductor?.nombres && p.conductor?.apellidos
+          ? `${p.conductor.nombres} ${p.conductor.apellidos}`
+          : p.conductor_nombre || 'Sin nombre'
+        pendientes.push({
+          id: p.id,
+          tipo: 'penalidad',
+          conductorId: p.conductor_id,
+          conductorNombre,
+          monto: p.monto || 0,
+          descripcion: `[NO EN PREVIEW] ${p.detalle || p.tipos_cobro_descuento?.nombre || 'Penalidad'}`,
+          tabla: 'penalidades'
+        })
+      }
+      
+      // Penalidades cuotas no incluidas
+      for (const pc of penalidadesCuotasNoIncluidas as any[]) {
+        const conductorNombre = pc.penalidad?.conductor?.nombres && pc.penalidad?.conductor?.apellidos
+          ? `${pc.penalidad.conductor.nombres} ${pc.penalidad.conductor.apellidos}`
+          : pc.penalidad?.conductor_nombre || 'Sin nombre'
+        pendientes.push({
+          id: pc.id,
+          tipo: 'cobro_fraccionado',
+          conductorId: pc.penalidad?.conductor_id || '',
+          conductorNombre,
+          monto: pc.monto_cuota,
+          descripcion: `[NO EN PREVIEW] Cuota ${pc.numero_cuota} - Penalidad fraccionada`,
+          tabla: 'penalidades_cuotas'
+        })
+      }
+      
+      // Tickets no incluidos
+      for (const t of ticketsNoIncluidos as any[]) {
+        const conductorNombre = t.conductor?.nombres && t.conductor?.apellidos
+          ? `${t.conductor.nombres} ${t.conductor.apellidos}`
+          : t.conductor_nombre || 'Sin nombre'
+        pendientes.push({
+          id: t.id,
+          tipo: 'ticket',
+          conductorId: t.conductor_id,
+          conductorNombre,
+          monto: t.monto,
+          descripcion: `[NO EN PREVIEW] ${t.descripcion || t.tipo}`,
+          tabla: 'tickets_favor'
+        })
+      }
+      
+      // Cobros fraccionados no incluidos
+      for (const c of cobrosNoIncluidos as any[]) {
+        const conductorNombre = c.conductor?.nombres && c.conductor?.apellidos
+          ? `${c.conductor.nombres} ${c.conductor.apellidos}`
+          : 'Sin nombre'
+        pendientes.push({
+          id: c.id,
+          tipo: 'cobro_fraccionado',
+          conductorId: c.conductor_id,
+          conductorNombre,
+          monto: c.monto_cuota,
+          descripcion: `[NO EN PREVIEW] Cuota ${c.numero_cuota} de ${c.total_cuotas}`,
+          tabla: 'cobros_fraccionados'
+        })
+      }
+      
+      // Guardar conceptos pendientes para mostrar en el panel
+      setConceptosPendientes(pendientes)
+
       // Fechas del período
       const fechaEmision = semanaActual.fin
       const fechaVencimiento = addWeeks(semanaActual.fin, 1)
       const periodoDesc = `${format(semanaActual.inicio, 'dd/MM/yyyy')} al ${format(semanaActual.fin, 'dd/MM/yyyy')}`
 
-      // Crear Set de conductores con saldos pendientes (penalidades, tickets, cobros fraccionados)
+      // Crear Set de conductores con saldos pendientes (penalidades, tickets, cobros fraccionados, penalidades_cuotas)
       const conductoresConSaldosPendientes = new Set<string>()
       penalidadesFiltradas.forEach((p: any) => conductoresConSaldosPendientes.add(p.conductor_id))
       ;(ticketsData || []).forEach((t: any) => conductoresConSaldosPendientes.add(t.conductor_id))
       ;(cobrosData || []).forEach((c: any) => conductoresConSaldosPendientes.add(c.conductor_id))
+      ;(penalidadesCuotasData || []).forEach((pc: any) => {
+        if (pc.penalidad?.conductor_id) conductoresConSaldosPendientes.add(pc.penalidad.conductor_id)
+      })
 
       // Función para crear fila preview
       const crearFilaPreview = (
@@ -2924,24 +3082,67 @@ export function ReporteFacturacionTab() {
     if (!periodo) return false
 
     try {
-      // Actualizar cada detalle de facturación
-      for (const row of updatedData) {
-        if (!row.detalleId) continue
+      // 1. Procesar filas eliminadas
+      const deletedRows = updatedData.filter(row => row.isDeleted && row.detalleId)
+      for (const row of deletedRows) {
+        const { error } = await (supabase
+          .from('facturacion_detalle') as any)
+          .delete()
+          .eq('id', row.detalleId)
+        
+        if (error) throw error
+      }
 
-        // Actualizar facturacion_detalle con los valores editados
+      // 2. Procesar filas nuevas (ajustes manuales)
+      const newRows = updatedData.filter(row => row.isNew && !row.isDeleted)
+      for (const row of newRows) {
+        if (!row.facturacionId) {
+          // Si no tiene facturacionId, buscar por conductorId
+          const facturacion = facturacionesFiltradas.find(f => f.conductor_id === row.conductorId)
+          if (!facturacion) continue
+          row.facturacionId = facturacion.id
+        }
+
+        // Determinar si es descuento basado en el total negativo
+        const esDescuento = row.total < 0
+        const montoAbsoluto = Math.abs(row.total)
+        const netoAbsoluto = Math.abs(row.netoGravado)
+        const ivaAbsoluto = Math.abs(row.ivaAmount)
+
+        const { error } = await (supabase
+          .from('facturacion_detalle') as any)
+          .insert({
+            facturacion_id: row.facturacionId,
+            concepto_codigo: row.codigoProducto,
+            concepto_descripcion: row.descripcionAdicional || `Ajuste Manual - ${row.codigoProducto}`,
+            cantidad: 1,
+            precio_unitario: montoAbsoluto,
+            subtotal: netoAbsoluto > 0 ? netoAbsoluto : montoAbsoluto,
+            iva_porcentaje: row.ivaPorcentaje === 'IVA_21' ? 21 : 0,
+            iva_monto: ivaAbsoluto,
+            total: montoAbsoluto,
+            es_descuento: esDescuento,
+            referencia_id: null,
+            referencia_tipo: 'ajuste_manual'
+          })
+
+        if (error) throw error
+      }
+
+      // 3. Actualizar filas existentes modificadas
+      const existingRows = updatedData.filter(row => !row.isNew && !row.isDeleted && row.detalleId)
+      for (const row of existingRows) {
         const { error } = await (supabase
           .from('facturacion_detalle') as any)
           .update({
-            total: row.total,
-            subtotal: row.netoGravado > 0 ? row.netoGravado : row.exento,
-            iva_monto: row.ivaAmount,
+            total: Math.abs(row.total),
+            subtotal: row.netoGravado > 0 ? Math.abs(row.netoGravado) : Math.abs(row.exento),
+            iva_monto: Math.abs(row.ivaAmount),
             concepto_descripcion: row.descripcionAdicional
           })
           .eq('id', row.detalleId)
 
-        if (error) {
-          throw error
-        }
+        if (error) throw error
       }
 
       // Recargar datos para reflejar los cambios
@@ -3230,13 +3431,7 @@ export function ReporteFacturacionTab() {
       const nombreArchivo = `Facturacion_Semana${semana}_${anio}.xlsx`
       XLSX.writeFile(wb, nombreArchivo)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Reporte Exportado',
-        text: `Se descargó: ${nombreArchivo}`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
     } catch (error) {
       console.error('Error exportando Excel:', error)
       Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
@@ -3330,13 +3525,7 @@ export function ReporteFacturacionTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Saldo Actualizado',
-        text: 'El nuevo saldo se aplicará en la próxima generación',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Saldo Actualizado', 'El nuevo saldo se aplicará en la próxima generación')
     } catch (error: any) {
       console.error('Error actualizando saldo:', error)
       Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
@@ -3759,6 +3948,7 @@ export function ReporteFacturacionTab() {
     return (
       <FacturacionPreviewTable
         data={siFacturaPreviewData}
+        conceptos={conceptosNomina}
         semana={semanaNum}
         anio={anioNum}
         fechaInicio={fechaInicioStr}
@@ -3800,6 +3990,9 @@ export function ReporteFacturacionTab() {
 
   return (
     <>
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando facturacion..." size="lg" />
+
       {/* Selector de semana */}
       <div className="fact-semana-selector">
         <div className="fact-semana-nav">

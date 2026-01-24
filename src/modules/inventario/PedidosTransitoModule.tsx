@@ -1,8 +1,10 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import {
   Package,
   Truck,
@@ -215,12 +217,7 @@ export function PedidosTransitoModule() {
       const result = data as { success: boolean; error?: string; mensaje?: string }
       if (!result.success) throw new Error(result.error || 'Error procesando recepcion')
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Recepcion confirmada',
-        text: result.mensaje || `Se recibieron ${cantidad} unidades`,
-        timer: 2500
-      })
+      showSuccess('Recepción confirmada', result.mensaje || `Se recibieron ${cantidad} unidades`)
       loadData()
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar' })
@@ -282,12 +279,7 @@ export function PedidosTransitoModule() {
       const result = data as { success: boolean; error?: string; mensaje?: string }
       if (!result.success) throw new Error(result.error || 'Error procesando recepcion')
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Recepcion confirmada',
-        text: `Se recibieron ${cantidad} unidades`,
-        timer: 2500
-      })
+      showSuccess('Recepción confirmada', `Se recibieron ${cantidad} unidades`)
       loadData()
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar' })
@@ -526,6 +518,7 @@ export function PedidosTransitoModule() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <LoadingOverlay show={loading} message="Cargando pedidos..." size="lg" />
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-primary)', paddingBottom: '0' }}>
         <button

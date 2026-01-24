@@ -8,6 +8,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useCategorizedTipos } from '../../hooks/useCategorizedTipos'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import {
   Plus,
   Eye,
@@ -31,9 +32,11 @@ import {
   CheckSquare,
   Ban
 } from 'lucide-react'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import type {
   IncidenciaCompleta,
   IncidenciaEstado,
@@ -326,8 +329,8 @@ export function IncidenciasModule() {
     }
   }, [searchParams, incidencias, penalidades, setSearchParams])
 
-  async function cargarDatos() {
-    setLoading(true)
+  async function cargarDatos(silent = false) {
+    if (!silent) setLoading(true)
     try {
       const [
         estadosRes,
@@ -677,16 +680,10 @@ export function IncidenciasModule() {
     if (errores > 0) {
       Swal.fire('Resultado', `Enviadas: ${enviados}, Errores: ${errores}`, 'warning')
     } else {
-      Swal.fire({
-        icon: 'success',
-        title: 'Enviadas a facturación',
-        text: `${enviados} incidencias enviadas correctamente`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Enviadas a facturación', `${enviados} incidencias enviadas correctamente`)
     }
     
-    cargarDatos()
+    cargarDatos(true)
   }
 
   // Incidencias filtradas según tab activo
@@ -886,19 +883,29 @@ export function IncidenciasModule() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
-        <div className="dt-actions">
-          <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerIncidencia(row.original)}>
-            <Eye size={14} />
-          </button>
-          <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
-            <Edit2 size={14} />
-          </button>
-          {canDelete && (
-            <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
+        <ActionsMenu
+          maxVisible={2}
+          actions={[
+            {
+              icon: <Eye size={15} />,
+              label: 'Ver detalle',
+              onClick: () => handleVerIncidencia(row.original)
+            },
+            {
+              icon: <Edit2 size={15} />,
+              label: 'Editar',
+              onClick: () => handleEditarIncidencia(row.original),
+              variant: 'info'
+            },
+            {
+              icon: <Trash2 size={15} />,
+              label: 'Eliminar',
+              onClick: () => handleEliminarIncidencia(row.original),
+              hidden: !canDelete,
+              variant: 'danger'
+            }
+          ]}
+        />
       )
     }
   ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete])
@@ -1064,36 +1071,36 @@ export function IncidenciasModule() {
         const puedeEnviar = !tienePenalidad || estaRechazada
         
         return (
-          <div className="dt-actions">
-            <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerIncidencia(row.original)}>
-              <Eye size={14} />
-            </button>
-            <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
-              <Edit2 size={14} />
-            </button>
-            {puedeEnviar ? (
-              <button 
-                className={`dt-btn-action ${estaRechazada ? 'dt-btn-danger' : 'dt-btn-warning'}`}
-                data-tooltip={estaRechazada ? 'Reenviar a facturación' : 'Enviar a facturación'}
-                onClick={() => handleEnviarAFacturacion(row.original)}
-              >
-                <DollarSign size={14} />
-              </button>
-            ) : (
-              <button 
-                className="dt-btn-action dt-btn-success" 
-                data-tooltip="Ya enviado a facturación"
-                style={{ opacity: 0.5, cursor: 'default' }}
-              >
-                <CheckCircle size={14} />
-              </button>
-            )}
-            {canDelete && (
-              <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
-                <Trash2 size={14} />
-              </button>
-            )}
-          </div>
+          <ActionsMenu
+            maxVisible={2}
+            actions={[
+              {
+                icon: <Eye size={15} />,
+                label: 'Ver detalle',
+                onClick: () => handleVerIncidencia(row.original)
+              },
+              {
+                icon: <Edit2 size={15} />,
+                label: 'Editar',
+                onClick: () => handleEditarIncidencia(row.original),
+                variant: 'info'
+              },
+              {
+                icon: puedeEnviar ? <DollarSign size={15} /> : <CheckCircle size={15} />,
+                label: puedeEnviar ? (estaRechazada ? 'Reenviar a facturacion' : 'Enviar a facturacion') : 'Ya enviado',
+                onClick: () => puedeEnviar && handleEnviarAFacturacion(row.original),
+                disabled: !puedeEnviar,
+                variant: puedeEnviar ? (estaRechazada ? 'danger' : 'warning') : 'success'
+              },
+              {
+                icon: <Trash2 size={15} />,
+                label: 'Eliminar',
+                onClick: () => handleEliminarIncidencia(row.original),
+                hidden: !canDelete,
+                variant: 'danger'
+              }
+            ]}
+          />
         )
       }
     })
@@ -1204,6 +1211,24 @@ export function IncidenciasModule() {
           >
             {pendientes > 0 ? `${pendientes}/${total} pend.` : `${total} cuotas`}
           </span>
+        )
+      }
+    },
+    {
+      id: 'incidencia',
+      header: 'Inc.',
+      cell: ({ row }) => {
+        const tieneIncidencia = !!row.original.incidencia_id
+        return tieneIncidencia ? (
+          <span 
+            className="dt-badge dt-badge-blue" 
+            style={{ fontSize: '10px', padding: '2px 6px' }}
+            title={`Incidencia: ${row.original.incidencia_id?.slice(0, 8)}...`}
+          >
+            Sí
+          </span>
+        ) : (
+          <span className="text-gray-400">-</span>
         )
       }
     },
@@ -1358,14 +1383,8 @@ export function IncidenciasModule() {
         
         if (error) throw error
         
-        Swal.fire({
-          icon: 'success',
-          title: 'Reenviado',
-          text: 'La incidencia fue reenviada a facturación',
-          timer: 2000,
-          showConfirmButton: false
-        })
-        cargarDatos()
+        showSuccess('Reenviado', 'La incidencia fue reenviada a facturación')
+        cargarDatos(true)
         return
       } catch (error: any) {
         Swal.fire('Error', error.message || 'No se pudo reenviar', 'error')
@@ -1428,16 +1447,10 @@ export function IncidenciasModule() {
           .eq('id', insertedData.id)
       }
       
-      Swal.fire({
-        icon: 'success',
-        title: 'Enviado a facturación',
-        html: 'El cobro fue registrado correctamente.<br>Aparecerá en la pestaña <strong>Cobros/Descuentos</strong> como "Por Aplicar".',
-        timer: 3000,
-        showConfirmButton: false
-      })
+      showSuccess('Enviado a facturación', 'El cobro fue registrado. Aparecerá en Cobros/Descuentos como "Por Aplicar".')
       
       // Recargar datos para actualizar la vista
-      cargarDatos()
+      cargarDatos(true)
       
     } catch (error: any) {
       console.error('Error creando penalidad:', error)
@@ -1556,8 +1569,8 @@ export function IncidenciasModule() {
           .eq('id', incidencia.id)
         if (error) throw error
 
-        Swal.fire('Eliminado', 'La incidencia fue eliminada correctamente', 'success')
-        cargarDatos()
+        showSuccess('Eliminado', 'La incidencia fue eliminada correctamente')
+        cargarDatos(true)
       } catch (error: any) {
         console.error('Error eliminando:', error)
         Swal.fire('Error', error.message || 'No se pudo eliminar la incidencia', 'error')
@@ -1593,8 +1606,8 @@ export function IncidenciasModule() {
           .eq('id', penalidad.id)
         if (error) throw error
 
-        Swal.fire('Eliminado', 'La penalidad fue eliminada correctamente', 'success')
-        cargarDatos()
+        showSuccess('Eliminado', 'La penalidad fue eliminada correctamente')
+        cargarDatos(true)
       } catch (error: any) {
         console.error('Error eliminando:', error)
         Swal.fire('Error', error.message || 'No se pudo eliminar la penalidad', 'error')
@@ -1635,18 +1648,12 @@ export function IncidenciasModule() {
       
       if (errorPenalidad) throw errorPenalidad
       
-      Swal.fire({
-        icon: 'success',
-        title: 'Rechazado',
-        text: 'La penalidad fue rechazada y volverá a Incidencia (Cobro) para revisión',
-        timer: 2500,
-        showConfirmButton: false
-      })
+      showSuccess('Rechazado', 'La penalidad fue rechazada y volverá a Incidencia (Cobro) para revisión')
       
       setShowRechazoModal(false)
       setPenalidadRechazar(null)
       setMotivoRechazo('')
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error rechazando:', error)
       Swal.fire('Error', error.message || 'No se pudo rechazar', 'error')
@@ -1722,7 +1729,8 @@ export function IncidenciasModule() {
         created_by: user?.id,
         tipo: esCobro ? 'cobro' : 'logistica',
         tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
-        monto: esCobro ? (incidenciaForm.monto || 0) : null // Guardar monto solo para incidencias de cobro
+        monto: esCobro ? (incidenciaForm.monto || 0) : null, // Guardar monto solo para incidencias de cobro
+        km_exceso: esCobro ? (incidenciaForm.km_exceso || null) : null // Guardar km excedidos solo para cobro
       }
 
       if (modalMode === 'edit' && selectedIncidencia) {
@@ -1730,20 +1738,20 @@ export function IncidenciasModule() {
           .update({ ...dataToSave, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedIncidencia.id)
         if (error) throw error
-        Swal.fire('Guardado', 'Incidencia actualizada correctamente', 'success')
+        showSuccess('Guardado', 'Incidencia actualizada correctamente')
       } else {
         // Insertar incidencia (NO crear penalidad automáticamente - se crea al "Enviar a facturación")
         const { error } = await (supabase.from('incidencias' as any) as any)
           .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
         if (error) throw error
         
-        Swal.fire('Guardado', esCobro 
-          ? 'Incidencia de cobro registrada. Use el botón $ para enviar a facturación.' 
-          : 'Incidencia registrada correctamente', 'success')
+        showSuccess('Guardado', esCobro 
+          ? 'Incidencia de cobro registrada. Use botón $ para enviar a facturación.' 
+          : 'Incidencia registrada correctamente')
       }
 
       setShowModal(false)
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error guardando:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
@@ -1797,16 +1805,16 @@ export function IncidenciasModule() {
           .update({ ...dataToSave, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedPenalidad.id)
         if (error) throw error
-        Swal.fire('Guardado', 'Penalidad actualizada correctamente', 'success')
+        showSuccess('Guardado', 'Penalidad actualizada correctamente')
       } else {
         const { error } = await (supabase.from('penalidades' as any) as any)
           .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
         if (error) throw error
-        Swal.fire('Guardado', 'Penalidad registrada correctamente', 'success')
+        showSuccess('Guardado', 'Penalidad registrada correctamente')
       }
 
       setShowModal(false)
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error guardando:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
@@ -1932,12 +1940,7 @@ export function IncidenciasModule() {
         
         if (updateError) throw updateError
         
-        Swal.fire({
-          icon: 'success',
-          title: 'Cobro Fraccionado',
-          html: `Se crearon <strong>${cantidadCuotas} cuotas</strong> de ${formatMoney(montoCuota)} c/u<br>
-                 Comenzando en Semana ${semanaInicio} - ${anioInicio}`
-        })
+        showSuccess('Cobro Fraccionado', `Se crearon ${cantidadCuotas} cuotas de ${formatMoney(montoCuota)} c/u. Comienza en Semana ${semanaInicio}-${anioInicio}`)
       } else {
         // Aplicar completo en la semana seleccionada
         const { error } = await (supabase.from('penalidades' as any) as any)
@@ -1953,16 +1956,11 @@ export function IncidenciasModule() {
         
         if (error) throw error
         
-        Swal.fire({
-          icon: 'success',
-          title: esAFavor ? 'Descuento Aplicado' : 'Cobro Aplicado',
-          html: `Se aplicará en <strong>Semana ${semanaInicio} - ${anioInicio}</strong><br>
-                 Monto: ${formatMoney(penalidadAplicar.monto)}${esAFavor ? ' (a favor del conductor)' : ''}`
-        })
+        showSuccess(esAFavor ? 'Descuento Aplicado' : 'Cobro Aplicado', `Se aplicará en Semana ${semanaInicio}-${anioInicio}. Monto: ${formatMoney(penalidadAplicar.monto)}${esAFavor ? ' (a favor)' : ''}`)
       }
       
       setShowAplicarModal(false)
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error aplicando cobro:', error)
       Swal.fire('Error', error.message || 'No se pudo aplicar el cobro', 'error')
@@ -2017,13 +2015,9 @@ export function IncidenciasModule() {
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Desaplicado',
-          text: 'El cobro/descuento volvió a estado pendiente'
-        })
+        showSuccess('Desaplicado', 'El cobro/descuento volvió a estado pendiente')
         
-        cargarDatos()
+        cargarDatos(true)
       } catch (error: any) {
         console.error('Error desaplicando:', error)
         Swal.fire('Error', error.message || 'No se pudo desaplicar', 'error')
@@ -2159,13 +2153,9 @@ export function IncidenciasModule() {
       
       setShowReasignarModal(false)
       
-      Swal.fire({
-        icon: 'success',
-        title: 'Semana reasignada',
-        html: `El cobro se movió de <strong>Semana ${semanaOrigen}-${anioOrigen}</strong> a <strong>Semana ${nuevaSemana}-${nuevoAnio}</strong><br><br>Los totales de ambos períodos fueron recalculados.`
-      })
+      showSuccess('Semana reasignada', `El cobro se movió de Semana ${semanaOrigen}-${anioOrigen} a Semana ${nuevaSemana}-${nuevoAnio}`)
       
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error reasignando semana:', error)
       Swal.fire('Error', error.message || 'No se pudo reasignar la semana', 'error')
@@ -2274,6 +2264,9 @@ export function IncidenciasModule() {
 
   return (
     <div className="incidencias-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando incidencias..." size="lg" />
+
       {/* Stats rápidos - Arriba de todo (igual que Siniestros) */}
       <div className="incidencias-stats">
         <div className="stats-grid">
@@ -3666,14 +3659,26 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             />
           </div>
           <div className="form-group">
-            <label>Turno</label>
-            <input
-              type="text"
-              value={formData.turno || '-'}
-              readOnly
-              className="form-input-readonly"
-              placeholder="Se carga del conductor"
-            />
+            <label>Modalidad</label>
+            {formData.turno ? (
+              <input
+                type="text"
+                value={formData.turno}
+                readOnly
+                className="form-input-readonly"
+              />
+            ) : (
+              <select
+                value={formData.turno || ''}
+                onChange={e => setFormData(prev => ({ ...prev, turno: e.target.value || undefined }))}
+                disabled={disabled}
+              >
+                <option value="">Seleccionar</option>
+                <option value="Diurno">Diurno</option>
+                <option value="Nocturno">Nocturno</option>
+                <option value="A cargo">A cargo</option>
+              </select>
+            )}
           </div>
         </div>
         <div className="form-row three-cols">
@@ -3761,9 +3766,9 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             </select>
           </div>
         </div>
-        {/* Monto solo para cobro */}
+        {/* Monto, KM Excedidos, Estado Vehículo - solo para cobro (3 columnas) */}
         {esCobro && (
-          <div className="form-row">
+          <div className="form-row three-cols">
             <div className="form-group">
               <label>Monto <span className="required">*</span></label>
               <input
@@ -3774,6 +3779,19 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                 onChange={e => setFormData(prev => ({ ...prev, monto: e.target.value ? parseFloat(e.target.value) : undefined }))}
                 placeholder="0.00"
                 disabled={disabled}
+              />
+            </div>
+            <div className="form-group">
+              <label>KM Excedidos</label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={formData.km_exceso || ''}
+                onChange={e => setFormData(prev => ({ ...prev, km_exceso: e.target.value ? parseInt(e.target.value) : undefined }))}
+                placeholder="0"
+                disabled={tiposCobroDescuento.find(t => t.id === formData.tipo_cobro_descuento_id)?.nombre?.toLowerCase().includes('exceso') ? disabled : true}
+                style={{ opacity: tiposCobroDescuento.find(t => t.id === formData.tipo_cobro_descuento_id)?.nombre?.toLowerCase().includes('exceso') ? 1 : 0.5 }}
               />
             </div>
             <div className="form-group">
@@ -4085,6 +4103,29 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
           </div>
         </div>
       </div>
+
+      {/* Incidencia Enlazada */}
+      {penalidad.incidencia_id && (
+        <div className="detail-card" style={{ marginTop: '16px' }}>
+          <div className="detail-card-title">Incidencia Enlazada</div>
+          <div className="detail-item">
+            <span className="detail-item-label">ID Incidencia</span>
+            <span className="detail-item-value" style={{ fontFamily: 'monospace', fontSize: '12px' }}>{penalidad.incidencia_id.slice(0, 8)}...</span>
+          </div>
+          {penalidad.incidencia_descripcion && (
+            <div className="detail-item">
+              <span className="detail-item-label">Descripción</span>
+              <span className="detail-item-value">{penalidad.incidencia_descripcion}</span>
+            </div>
+          )}
+          {penalidad.incidencia_estado && (
+            <div className="detail-item">
+              <span className="detail-item-label">Estado</span>
+              <span className="detail-item-value">{penalidad.incidencia_estado}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {penalidad.observaciones && (
         <div className="detail-description">

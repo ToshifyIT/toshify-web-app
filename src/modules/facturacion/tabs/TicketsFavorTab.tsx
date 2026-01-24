@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import {
   Ticket,
   CheckCircle,
@@ -268,7 +269,7 @@ export function TicketsFavorTab() {
       })
 
       if (error) throw error
-      Swal.fire({ icon: 'success', title: 'Ticket Creado', timer: 1500, showConfirmButton: false })
+      showSuccess('Ticket Creado')
       cargarTickets()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo crear el ticket', 'error')
@@ -295,7 +296,7 @@ export function TicketsFavorTab() {
         .eq('id', ticket.id)
 
       if (error) throw error
-      Swal.fire({ icon: 'success', title: 'Ticket Aprobado', timer: 1500, showConfirmButton: false })
+      showSuccess('Ticket Aprobado')
       cargarTickets()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo aprobar', 'error')
@@ -323,7 +324,7 @@ export function TicketsFavorTab() {
         .eq('id', ticket.id)
 
       if (error) throw error
-      Swal.fire({ icon: 'success', title: 'Ticket Rechazado', timer: 1500, showConfirmButton: false })
+      showSuccess('Ticket Rechazado')
       cargarTickets()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo rechazar', 'error')
@@ -366,7 +367,7 @@ export function TicketsFavorTab() {
         .eq('id', ticket.id)
 
       if (error) throw error
-      Swal.fire({ icon: 'success', title: 'Ticket Aplicado', timer: 2000, showConfirmButton: false })
+      showSuccess('Ticket Aplicado')
       cargarTickets()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo aplicar', 'error')

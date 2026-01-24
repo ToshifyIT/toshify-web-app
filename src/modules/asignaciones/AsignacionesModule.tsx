@@ -4,12 +4,15 @@ import { useState, useEffect, useMemo } from 'react'
 import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import { getWeek, getYear } from 'date-fns'
 import './AsignacionesModule.css'
 
@@ -717,14 +720,7 @@ export function AsignacionesModule() {
           }
         }
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Eliminado',
-          html: `La asignación ha sido eliminada.<br><br>
-                 <strong>Si deseas re-enviar esta programación:</strong><br>
-                 Ve a <em>Programaciones</em> y recarga la página (F5), luego podrás enviarla nuevamente.`,
-          confirmButtonText: 'Entendido'
-        })
+        showSuccess('Eliminado', 'La asignación ha sido eliminada. Puedes re-enviar desde Programaciones.')
         loadAsignaciones()
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
@@ -1009,7 +1005,7 @@ export function AsignacionesModule() {
             })
             .eq('id', selectedAsignacion.id)
 
-          Swal.fire('Confirmado', 'Los conductores nuevos fueron agregados a la asignación existente. Esta asignación ha sido finalizada.', 'success')
+          showSuccess('Confirmado', 'Los conductores nuevos fueron agregados a la asignación existente.')
 
         } else {
           // Lógica normal (sin companeros)
@@ -1096,7 +1092,7 @@ export function AsignacionesModule() {
             }
           }
 
-          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.', 'success')
+          showSuccess('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.')
         }
       } else {
         // Confirmación parcial: aún así poner vehículo en EN_USO
@@ -1154,7 +1150,7 @@ export function AsignacionesModule() {
         await (supabase as any).from('vehiculos').update({ estado_id: estadoDisponible.id }).eq('id', selectedAsignacion.vehiculo_id)
       }
 
-      Swal.fire('Cancelada', 'La programación ha sido cancelada', 'success')
+      showSuccess('Cancelada', 'La programación ha sido cancelada')
       setShowCancelModal(false)
       setCancelMotivo('')
       setSelectedAsignacion(null)
@@ -1173,7 +1169,7 @@ export function AsignacionesModule() {
         .update({ confirmado: false, fecha_confirmacion: null })
         .eq('id', conductorAsignacionId)
 
-      Swal.fire('Actualizado', 'El conductor ha sido desconfirmado.', 'success')
+      showSuccess('Actualizado', 'El conductor ha sido desconfirmado.')
       loadAsignaciones()
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Error al desconfirmar', 'error')
@@ -1316,13 +1312,7 @@ export function AsignacionesModule() {
         }
       }
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Regularizado',
-        text: 'Los datos de la asignación han sido actualizados correctamente.',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Regularizado', 'Los datos de la asignación han sido actualizados correctamente.')
 
       setShowRegularizarModal(false)
       setRegularizarAsignacion(null)
@@ -1539,69 +1529,66 @@ export function AsignacionesModule() {
       id: 'acciones',
       header: 'Acciones',
       enableSorting: false,
-      cell: ({ row }) => (
-        <div className="dt-actions">
-          {row.original.estado === 'programado' && (
-            <>
-              <button
-                onClick={() => {
-                  setSelectedAsignacion(row.original)
-                  setShowConfirmModal(true)
-                }}
-                className="dt-btn-action asig-btn-confirm"
-                title="Confirmar programación"
-                disabled={!canEdit}
-              >
-                <CheckCircle size={16} />
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedAsignacion(row.original)
-                  setShowCancelModal(true)
-                }}
-                className="dt-btn-action asig-btn-cancel-prog"
-                title="Cancelar programación"
-                disabled={!canEdit}
-              >
-                <XCircle size={16} />
-              </button>
-            </>
-          )}
-          <button
-            className="dt-btn-action dt-btn-view"
-            title="Ver detalles"
-            onClick={() => {
+      cell: ({ row }) => {
+        const actions = [
+          // Acciones de programación (solo si está programado)
+          ...(row.original.estado === 'programado' ? [
+            {
+              icon: <CheckCircle size={15} />,
+              label: 'Confirmar',
+              onClick: () => {
+                setSelectedAsignacion(row.original)
+                setShowConfirmModal(true)
+              },
+              disabled: !canEdit,
+              variant: 'success' as const,
+            },
+            {
+              icon: <XCircle size={15} />,
+              label: 'Cancelar',
+              onClick: () => {
+                setSelectedAsignacion(row.original)
+                setShowCancelModal(true)
+              },
+              disabled: !canEdit,
+              variant: 'warning' as const,
+            },
+          ] : []),
+          // Ver detalles
+          {
+            icon: <Eye size={15} />,
+            label: 'Ver detalles',
+            onClick: () => {
               setViewAsignacion(row.original)
               setShowViewModal(true)
-            }}
-          >
-            <Eye size={16} />
-          </button>
-          {/* Botón regularizar - solo para admin, fullstack.senior y tech.spec */}
-          {canCreateManualAssignment && (
-            <button
-              onClick={() => handleOpenRegularizar(row.original)}
-              className="dt-btn-action dt-btn-edit"
-              title="Regularizar datos"
-            >
-              <Pencil size={16} />
-            </button>
-          )}
-          <button
-            onClick={() => handleDelete(row.original.id)}
-            className="dt-btn-action dt-btn-delete"
-            title="Eliminar"
-            disabled={!canDelete}
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
-      )
+            },
+          },
+          // Regularizar (solo para ciertos roles)
+          {
+            icon: <Pencil size={15} />,
+            label: 'Regularizar',
+            onClick: () => handleOpenRegularizar(row.original),
+            hidden: !canCreateManualAssignment,
+          },
+          // Eliminar
+          {
+            icon: <Trash2 size={15} />,
+            label: 'Eliminar',
+            onClick: () => handleDelete(row.original.id),
+            disabled: !canDelete,
+            variant: 'danger' as const,
+          },
+        ]
+        return <ActionsMenu actions={actions} maxVisible={2} />
+      }
     }
   ], [canEdit, canDelete, canCreateManualAssignment])
 
   return (
     <div className="asig-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando asignaciones..." size="lg" />
+
       {/* Stats Cards - Estilo Bitácora */}
       <div className="asig-stats">
         <div className="asig-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
@@ -1864,7 +1851,7 @@ export function AsignacionesModule() {
                           .eq('id', selectedAsignacion.vehiculo_id)
                       }
 
-                      Swal.fire('Activado', 'La asignación está ahora ACTIVA.', 'success')
+                      showSuccess('Activado', 'La asignación está ahora ACTIVA.')
                       setShowConfirmModal(false)
                       setConfirmComentarios('')
                       setSelectedAsignacion(null)

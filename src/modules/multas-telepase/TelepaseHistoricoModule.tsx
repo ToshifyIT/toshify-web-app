@@ -1,11 +1,13 @@
 // src/modules/multas-telepase/TelepaseHistoricoModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import ExcelDateRangeFilter from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
 import { Download, FileText, AlertCircle, CheckCircle, Eye, Edit2, X, Car, Users, DollarSign } from 'lucide-react'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import './MultasTelepase.css'
@@ -254,12 +256,7 @@ export default function TelepaseHistoricoModule() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Actualizado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Actualizado')
 
       setShowEditModal(false)
       setEditingRegistro(null)
@@ -552,6 +549,7 @@ export default function TelepaseHistoricoModule() {
 
   return (
     <div className="multas-module">
+      <LoadingOverlay show={loading} message="Cargando telepase..." size="lg" />
       {/* Stats Cards */}
       <div className="multas-stats">
         <div className="multas-stats-grid five-cols">

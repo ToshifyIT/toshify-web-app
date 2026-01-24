@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import { Eye, Edit, Trash2, Package, Tag, Info, Calendar, Filter, Wrench, Box } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
@@ -322,12 +324,7 @@ export function ProductosModule() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Producto creado',
-        text: 'El producto ha sido creado exitosamente',
-        timer: 2000
-      })
+      showSuccess('Producto creado', 'El producto ha sido creado exitosamente')
 
       setShowCreateModal(false)
       resetForm()
@@ -376,12 +373,7 @@ export function ProductosModule() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Producto actualizado',
-        text: 'El producto ha sido actualizado exitosamente',
-        timer: 2000
-      })
+      showSuccess('Producto actualizado', 'El producto ha sido actualizado exitosamente')
 
       setShowEditModal(false)
       resetForm()
@@ -458,12 +450,7 @@ export function ProductosModule() {
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Producto eliminado',
-          timer: 2000,
-          showConfirmButton: false
-        })
+        showSuccess('Producto eliminado')
 
         loadProductos()
       } catch (err: any) {
@@ -845,6 +832,7 @@ export function ProductosModule() {
 
   return (
     <div className="prod-module">
+      <LoadingOverlay show={loading} message="Cargando productos..." size="lg" />
       {/* Stats Cards - Estilo Bitacora (clickeables como filtros) */}
       <div className="prod-stats">
         <div className="prod-stats-grid">

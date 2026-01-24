@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import { Eye, Edit, Trash2, Building2, FileText, Phone, CreditCard, Calendar, Filter, CheckCircle, XCircle, RotateCcw } from 'lucide-react'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { DataTable } from '../../components/ui/DataTable'
@@ -244,12 +246,7 @@ export function ProveedoresModule() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Proveedor creado',
-        text: 'El proveedor ha sido creado exitosamente',
-        timer: 2000
-      })
+      showSuccess('Proveedor creado', 'El proveedor ha sido creado exitosamente')
 
       setShowCreateModal(false)
       resetForm()
@@ -295,12 +292,7 @@ export function ProveedoresModule() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Proveedor actualizado',
-        text: 'El proveedor ha sido actualizado exitosamente',
-        timer: 2000
-      })
+      showSuccess('Proveedor actualizado', 'El proveedor ha sido actualizado exitosamente')
 
       setShowEditModal(false)
       resetForm()
@@ -350,13 +342,7 @@ export function ProveedoresModule() {
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Proveedor desactivado',
-          text: `${nombreProveedor} ha sido desactivado correctamente.`,
-          timer: 2500,
-          showConfirmButton: false
-        })
+        showSuccess('Proveedor desactivado', `${nombreProveedor} ha sido desactivado correctamente.`)
 
         loadProveedores()
       } catch (err: any) {
@@ -403,13 +389,7 @@ export function ProveedoresModule() {
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Proveedor reactivado',
-          text: `${nombreProveedor} ha sido reactivado correctamente.`,
-          timer: 2500,
-          showConfirmButton: false
-        })
+        showSuccess('Proveedor reactivado', `${nombreProveedor} ha sido reactivado correctamente.`)
 
         loadProveedores()
       } catch (err: any) {
@@ -724,6 +704,7 @@ export function ProveedoresModule() {
 
   return (
     <div className="prov-module">
+      <LoadingOverlay show={loading} message="Cargando proveedores..." size="lg" />
       {/* Stats Cards - Estilo Bitacora */}
       <div className="prov-stats">
         <div className="prov-stats-grid">

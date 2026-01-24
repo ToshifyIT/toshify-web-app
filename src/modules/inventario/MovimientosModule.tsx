@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import {
   RotateCcw,
   Truck,
@@ -460,11 +462,7 @@ export function MovimientosModule() {
 
           if (pedidoError) throw pedidoError
 
-          Swal.fire({
-            icon: 'success',
-            title: 'Pedido creado',
-            text: `Pedido ${numeroPedido} creado con ${productosLote.length} productos en tránsito`
-          })
+          showSuccess('Pedido creado', `Pedido ${numeroPedido} creado con ${productosLote.length} productos en tránsito`)
         } else {
           // Entrada directa a stock (estado disponible)
           for (const pl of productosLote) {
@@ -479,11 +477,7 @@ export function MovimientosModule() {
             if (error) throw error
           }
 
-          Swal.fire({
-            icon: 'success',
-            title: 'Éxito',
-            text: `Entrada de ${productosLote.length} productos registrada correctamente`
-          })
+          showSuccess('Éxito', `Entrada de ${productosLote.length} productos registrada correctamente`)
         }
 
         resetForm()
@@ -531,12 +525,7 @@ export function MovimientosModule() {
           if (error) throw error
         }
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Lote enviado para aprobación',
-          text: `${productosLoteSalida.length} salidas registradas. Pendientes de aprobación por un encargado.`,
-          timer: 3000
-        })
+        showSuccess('Lote enviado para aprobación', `${productosLoteSalida.length} salidas registradas. Pendientes de aprobación.`)
 
         resetForm()
         loadData()
@@ -654,12 +643,7 @@ export function MovimientosModule() {
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Entrada registrada',
-          text: 'El producto está en tránsito. Confirma la recepción desde "Pedidos en Tránsito".',
-          timer: 3000
-        })
+        showSuccess('Entrada registrada', 'El producto está en tránsito. Confirma recepción desde "Pedidos en Tránsito".')
       } else {
         // Para salida, asignación y devolución: insertar directamente con estado PENDIENTE
         const movimientoData: any = {
@@ -681,12 +665,7 @@ export function MovimientosModule() {
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Movimiento enviado para aprobación',
-          text: `${getTipoLabel(tipoMovimiento)} registrada. Pendiente de aprobación por un encargado.`,
-          timer: 3000
-        })
+        showSuccess('Movimiento enviado para aprobación', `${getTipoLabel(tipoMovimiento)} registrada. Pendiente de aprobación.`)
       }
 
       resetForm()
@@ -774,6 +753,7 @@ export function MovimientosModule() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '1200px', margin: '0 auto' }}>
+      <LoadingOverlay show={loading} message="Cargando movimientos..." size="lg" />
       {requiereAprobacion() && (
         <div style={{
           padding: '8px 12px',

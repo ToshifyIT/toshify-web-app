@@ -7,6 +7,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import {
   Package,
   Truck,
@@ -302,12 +303,7 @@ export function PedidosUnificadoModule() {
       const result = data as { success: boolean; error?: string; mensaje?: string }
       if (!result.success) throw new Error(result.error || 'Error procesando recepcion')
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Recepcion confirmada',
-        text: result.mensaje || `Se recibieron ${cantidad} unidades`,
-        timer: 2500
-      })
+      showSuccess('Recepción confirmada', result.mensaje || `Se recibieron ${cantidad} unidades`)
       loadPedidosData()
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar' })
@@ -375,12 +371,7 @@ export function PedidosUnificadoModule() {
       const result = data as { success: boolean; error?: string; mensaje?: string }
       if (!result.success) throw new Error(result.error || 'Error procesando recepcion')
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Recepcion confirmada',
-        text: `Se recibieron ${cantidad} unidades`,
-        timer: 2500
-      })
+      showSuccess('Recepción confirmada', `Se recibieron ${cantidad} unidades`)
       loadPedidosData()
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar' })
@@ -508,13 +499,7 @@ export function PedidosUnificadoModule() {
       if (rpcError) throw rpcError
       if (rpcResult && !rpcResult.success) throw new Error(rpcResult.error)
 
-      await Swal.fire({
-        title: '¡Aprobado!',
-        text: 'El movimiento ha sido aprobado y el stock actualizado',
-        icon: 'success',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('¡Aprobado!', 'El movimiento ha sido aprobado y el stock actualizado')
 
       cargarMovimientosPendientes()
     } catch (error: any) {

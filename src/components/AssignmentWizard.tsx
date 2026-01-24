@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { TimeInput24h } from './ui/TimeInput24h'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../utils/toast'
 
 interface Vehicle {
   id: string
@@ -558,13 +559,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       // NO actualizar estado del vehículo - se mantiene en su estado actual
       // Solo se actualizará cuando se CONFIRME la programación
 
-      Swal.fire({
-        icon: 'success',
-        title: '¡Programación creada!',
-        text: `Número de asignación: ${codigoAsignacion}\nEstado: PROGRAMADO para ${new Date(formData.fecha_programada).toLocaleDateString('es-AR')}`,
-        showConfirmButton: false,
-        timer: 3000
-      })
+      showSuccess('¡Programación creada!', `Número: ${codigoAsignacion} - PROGRAMADO para ${new Date(formData.fecha_programada).toLocaleDateString('es-AR')}`)
 
       onSuccess()
       onClose()
