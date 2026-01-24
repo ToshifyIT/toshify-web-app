@@ -7,6 +7,7 @@ import ExcelDateRangeFilter from '../../components/ui/DataTable/ExcelDateRangeFi
 import { DataTable } from '../../components/ui/DataTable'
 import { Download, FileText, AlertCircle, CheckCircle, Eye, Edit2, X, Car, Users, DollarSign } from 'lucide-react'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import './MultasTelepase.css'
@@ -255,12 +256,7 @@ export default function TelepaseHistoricoModule() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Actualizado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Actualizado')
 
       setShowEditModal(false)
       setEditingRegistro(null)

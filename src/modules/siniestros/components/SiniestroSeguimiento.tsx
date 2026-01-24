@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import { Plus, Clock, FileText, DollarSign, AlertTriangle, X, ExternalLink } from 'lucide-react'
 import type { SiniestroSeguimientoConEstados, SiniestroCompleto } from '../../../types/siniestros.types'
 import type { VehiculoSimple, ConductorSimple } from '../../../types/incidencias.types'
@@ -271,18 +272,12 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
 
       if (segError) throw segError
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Seguimiento registrado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Seguimiento registrado')
 
       resetForm()
       cargarSeguimientos()
       onReload()
     } catch (error: any) {
-      console.error('Error guardando seguimiento:', error)
       Swal.fire('Error', error?.message || 'No se pudo guardar el seguimiento', 'error')
     } finally {
       setSaving(false)
@@ -357,13 +352,7 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
 
       if (segError) throw segError
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Incidencia registrada',
-        text: 'Se ha creado la incidencia y el seguimiento correctamente',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Incidencia registrada', 'Se ha creado la incidencia y el seguimiento correctamente')
 
       setShowIncidenciaModal(false)
       setIncidenciaForm({

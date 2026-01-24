@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { AvatarUploadModal } from '../../components/ui/AvatarUploadModal'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import './ProfileModule.css'
 
 interface ProfileFormData {
@@ -97,13 +98,7 @@ export function ProfileModule() {
       await refreshProfile()
       setIsEditing(false)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Perfil actualizado',
-        text: 'Los cambios han sido guardados correctamente',
-        timer: 2000,
-        showConfirmButton: false,
-      })
+      showSuccess('Perfil actualizado', 'Los cambios han sido guardados correctamente')
     } catch (error: any) {
       console.error('Error actualizando perfil:', error)
       Swal.fire({
@@ -198,13 +193,7 @@ export function ProfileModule() {
       })
       setShowPasswordForm(false)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Contraseña actualizada',
-        text: 'Tu contraseña ha sido cambiada correctamente',
-        timer: 2000,
-        showConfirmButton: false,
-      })
+      showSuccess('Contraseña actualizada', 'Tu contraseña ha sido cambiada correctamente')
     } catch (error: any) {
       console.error('Error cambiando contraseña:', error)
       Swal.fire({
@@ -268,13 +257,7 @@ export function ProfileModule() {
 
     await refreshProfile()
 
-    Swal.fire({
-      icon: 'success',
-      title: 'Foto actualizada',
-      text: 'Tu foto de perfil ha sido actualizada',
-      timer: 2000,
-      showConfirmButton: false,
-    })
+    showSuccess('Foto actualizada', 'Tu foto de perfil ha sido actualizada')
   }
 
   return (

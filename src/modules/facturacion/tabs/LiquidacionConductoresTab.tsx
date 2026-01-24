@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import {
   UserMinus,
   Calculator,
@@ -481,25 +482,8 @@ export function LiquidacionConductoresTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Liquidación Calculada',
-        html: `
-          <div style="text-align: left;">
-            <p><strong>Conductor:</strong> ${cond.nombres} ${cond.apellidos}</p>
-            <p><strong>Días trabajados:</strong> ${diasTrabajados}/7</p>
-            <p><strong>Total a ${totalLiquidacion >= 0 ? 'cobrar' : 'devolver'}:</strong>
-              <span style="font-weight: 700; color: ${totalLiquidacion >= 0 ? '#DC2626' : '#10B981'}">
-                ${formatCurrency(Math.abs(totalLiquidacion))}
-              </span>
-            </p>
-            ${garantiaADevolver > 0 ? `<p><strong>Garantía a devolver:</strong> ${formatCurrency(garantiaADevolver)}</p>` : ''}
-          </div>
-        `,
-        confirmButtonText: 'Ver Detalle'
-      }).then(() => {
-        verDetalle(liquidacion)
-      })
+      showSuccess('Liquidación Calculada', `${cond.nombres} ${cond.apellidos} - ${diasTrabajados}/7 días - ${formatCurrency(Math.abs(totalLiquidacion))}`)
+      verDetalle(liquidacion)
 
       cargarLiquidaciones()
     } catch (error: any) {
@@ -658,13 +642,7 @@ export function LiquidacionConductoresTab() {
     const nombreArchivo = `Liquidacion_${liquidacion.conductor_nombre.replace(/\s/g, '_')}_${format(new Date(liquidacion.fecha_liquidacion), 'yyyyMMdd')}.xlsx`
     XLSX.writeFile(wb, nombreArchivo)
 
-    Swal.fire({
-      icon: 'success',
-      title: 'Exportado',
-      text: `Se descargó: ${nombreArchivo}`,
-      timer: 2000,
-      showConfirmButton: false
-    })
+    showSuccess('Exportado', `Se descargó: ${nombreArchivo}`)
   }
 
   async function aprobarLiquidacion(liquidacion: Liquidacion) {
@@ -712,13 +690,7 @@ export function LiquidacionConductoresTab() {
         .eq('conductor_id', liquidacion.conductor_id)
         .eq('estado', 'activa')
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Liquidación Aprobada',
-        text: 'El conductor ha sido dado de baja',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Liquidación Aprobada', 'El conductor ha sido dado de baja')
 
       cargarLiquidaciones()
     } catch (error: any) {
@@ -752,12 +724,7 @@ export function LiquidacionConductoresTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Eliminada',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Eliminada')
 
       cargarLiquidaciones()
     } catch (error: any) {

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import {
   Plus,
   Edit2,
@@ -209,16 +210,9 @@ export function ConceptosTab() {
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Eliminado',
-          text: 'Concepto eliminado correctamente',
-          timer: 1500,
-          showConfirmButton: false
-        })
+        showSuccess('Eliminado')
         cargarDatos()
       } catch (error) {
-        console.error('Error eliminando concepto:', error)
         Swal.fire('Error', 'No se pudo eliminar el concepto', 'error')
       }
     }
@@ -255,13 +249,7 @@ export function ConceptosTab() {
           throw error
         }
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Creado',
-          text: 'Concepto creado correctamente',
-          timer: 1500,
-          showConfirmButton: false
-        })
+        showSuccess('Creado')
       } else if (modalMode === 'edit' && selectedConcepto) {
         const { error } = await (supabase
           .from('conceptos_nomina') as any)
@@ -270,19 +258,12 @@ export function ConceptosTab() {
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Actualizado',
-          text: 'Concepto actualizado correctamente',
-          timer: 1500,
-          showConfirmButton: false
-        })
+        showSuccess('Actualizado')
       }
 
       setShowModal(false)
       cargarDatos()
     } catch (error: any) {
-      console.error('Error guardando concepto:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar el concepto', 'error')
     } finally {
       setSaving(false)

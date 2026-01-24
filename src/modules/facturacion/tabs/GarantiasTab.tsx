@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import {
   Shield,
   Users,
@@ -344,12 +345,7 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Garantía Agregada',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Garantía Agregada')
 
       cargarGarantias()
     } catch (error: any) {
@@ -436,12 +432,7 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Actualizado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Actualizado')
 
       cargarGarantias()
     } catch (error: any) {
@@ -476,12 +467,7 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Eliminado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Eliminado')
 
       cargarGarantias()
     } catch (error: any) {
@@ -593,13 +579,7 @@ export function GarantiasTab() {
 
       if (errorUpdate) throw errorUpdate
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Pago Registrado',
-        text: completada ? '¡Garantía completada!' : `Cuota ${nuevasCuotasPagadas} registrada`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Pago Registrado', completada ? '¡Garantía completada!' : `Cuota ${nuevasCuotasPagadas} registrada`)
 
       cargarGarantias()
     } catch (error: any) {
@@ -744,12 +724,7 @@ export function GarantiasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Actualizado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Actualizado')
 
       cargarGarantias()
     } catch (error: any) {

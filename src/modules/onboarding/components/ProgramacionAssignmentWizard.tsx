@@ -8,6 +8,7 @@ import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import type { TipoCandidato, TipoDocumento, TipoAsignacion } from '../../../types/onboarding.types'
 
 // Labels para estados
@@ -808,13 +809,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: isEditMode ? 'Programacion actualizada' : 'Programacion creada',
-        text: isEditMode ? 'Los cambios se guardaron correctamente' : 'La programacion se agrego al tablero correctamente',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess(isEditMode ? 'Programación actualizada' : 'Programación creada', isEditMode ? 'Los cambios se guardaron correctamente' : 'La programación se agregó al tablero')
 
       onSuccess()
       onClose()

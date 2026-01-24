@@ -8,6 +8,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useCategorizedTipos } from '../../hooks/useCategorizedTipos'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import {
   Plus,
   Eye,
@@ -328,8 +329,8 @@ export function IncidenciasModule() {
     }
   }, [searchParams, incidencias, penalidades, setSearchParams])
 
-  async function cargarDatos() {
-    setLoading(true)
+  async function cargarDatos(silent = false) {
+    if (!silent) setLoading(true)
     try {
       const [
         estadosRes,
@@ -679,16 +680,10 @@ export function IncidenciasModule() {
     if (errores > 0) {
       Swal.fire('Resultado', `Enviadas: ${enviados}, Errores: ${errores}`, 'warning')
     } else {
-      Swal.fire({
-        icon: 'success',
-        title: 'Enviadas a facturación',
-        text: `${enviados} incidencias enviadas correctamente`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Enviadas a facturación', `${enviados} incidencias enviadas correctamente`)
     }
     
-    cargarDatos()
+    cargarDatos(true)
   }
 
   // Incidencias filtradas según tab activo
@@ -1388,14 +1383,8 @@ export function IncidenciasModule() {
         
         if (error) throw error
         
-        Swal.fire({
-          icon: 'success',
-          title: 'Reenviado',
-          text: 'La incidencia fue reenviada a facturación',
-          timer: 2000,
-          showConfirmButton: false
-        })
-        cargarDatos()
+        showSuccess('Reenviado', 'La incidencia fue reenviada a facturación')
+        cargarDatos(true)
         return
       } catch (error: any) {
         Swal.fire('Error', error.message || 'No se pudo reenviar', 'error')
@@ -1458,16 +1447,10 @@ export function IncidenciasModule() {
           .eq('id', insertedData.id)
       }
       
-      Swal.fire({
-        icon: 'success',
-        title: 'Enviado a facturación',
-        html: 'El cobro fue registrado correctamente.<br>Aparecerá en la pestaña <strong>Cobros/Descuentos</strong> como "Por Aplicar".',
-        timer: 3000,
-        showConfirmButton: false
-      })
+      showSuccess('Enviado a facturación', 'El cobro fue registrado. Aparecerá en Cobros/Descuentos como "Por Aplicar".')
       
       // Recargar datos para actualizar la vista
-      cargarDatos()
+      cargarDatos(true)
       
     } catch (error: any) {
       console.error('Error creando penalidad:', error)
@@ -1586,8 +1569,8 @@ export function IncidenciasModule() {
           .eq('id', incidencia.id)
         if (error) throw error
 
-        Swal.fire('Eliminado', 'La incidencia fue eliminada correctamente', 'success')
-        cargarDatos()
+        showSuccess('Eliminado', 'La incidencia fue eliminada correctamente')
+        cargarDatos(true)
       } catch (error: any) {
         console.error('Error eliminando:', error)
         Swal.fire('Error', error.message || 'No se pudo eliminar la incidencia', 'error')
@@ -1623,8 +1606,8 @@ export function IncidenciasModule() {
           .eq('id', penalidad.id)
         if (error) throw error
 
-        Swal.fire('Eliminado', 'La penalidad fue eliminada correctamente', 'success')
-        cargarDatos()
+        showSuccess('Eliminado', 'La penalidad fue eliminada correctamente')
+        cargarDatos(true)
       } catch (error: any) {
         console.error('Error eliminando:', error)
         Swal.fire('Error', error.message || 'No se pudo eliminar la penalidad', 'error')
@@ -1665,18 +1648,12 @@ export function IncidenciasModule() {
       
       if (errorPenalidad) throw errorPenalidad
       
-      Swal.fire({
-        icon: 'success',
-        title: 'Rechazado',
-        text: 'La penalidad fue rechazada y volverá a Incidencia (Cobro) para revisión',
-        timer: 2500,
-        showConfirmButton: false
-      })
+      showSuccess('Rechazado', 'La penalidad fue rechazada y volverá a Incidencia (Cobro) para revisión')
       
       setShowRechazoModal(false)
       setPenalidadRechazar(null)
       setMotivoRechazo('')
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error rechazando:', error)
       Swal.fire('Error', error.message || 'No se pudo rechazar', 'error')
@@ -1761,20 +1738,20 @@ export function IncidenciasModule() {
           .update({ ...dataToSave, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedIncidencia.id)
         if (error) throw error
-        Swal.fire('Guardado', 'Incidencia actualizada correctamente', 'success')
+        showSuccess('Guardado', 'Incidencia actualizada correctamente')
       } else {
         // Insertar incidencia (NO crear penalidad automáticamente - se crea al "Enviar a facturación")
         const { error } = await (supabase.from('incidencias' as any) as any)
           .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
         if (error) throw error
         
-        Swal.fire('Guardado', esCobro 
-          ? 'Incidencia de cobro registrada. Use el botón $ para enviar a facturación.' 
-          : 'Incidencia registrada correctamente', 'success')
+        showSuccess('Guardado', esCobro 
+          ? 'Incidencia de cobro registrada. Use botón $ para enviar a facturación.' 
+          : 'Incidencia registrada correctamente')
       }
 
       setShowModal(false)
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error guardando:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
@@ -1828,16 +1805,16 @@ export function IncidenciasModule() {
           .update({ ...dataToSave, updated_by: profile?.full_name || 'Sistema' })
           .eq('id', selectedPenalidad.id)
         if (error) throw error
-        Swal.fire('Guardado', 'Penalidad actualizada correctamente', 'success')
+        showSuccess('Guardado', 'Penalidad actualizada correctamente')
       } else {
         const { error } = await (supabase.from('penalidades' as any) as any)
           .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
         if (error) throw error
-        Swal.fire('Guardado', 'Penalidad registrada correctamente', 'success')
+        showSuccess('Guardado', 'Penalidad registrada correctamente')
       }
 
       setShowModal(false)
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error guardando:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
@@ -1963,12 +1940,7 @@ export function IncidenciasModule() {
         
         if (updateError) throw updateError
         
-        Swal.fire({
-          icon: 'success',
-          title: 'Cobro Fraccionado',
-          html: `Se crearon <strong>${cantidadCuotas} cuotas</strong> de ${formatMoney(montoCuota)} c/u<br>
-                 Comenzando en Semana ${semanaInicio} - ${anioInicio}`
-        })
+        showSuccess('Cobro Fraccionado', `Se crearon ${cantidadCuotas} cuotas de ${formatMoney(montoCuota)} c/u. Comienza en Semana ${semanaInicio}-${anioInicio}`)
       } else {
         // Aplicar completo en la semana seleccionada
         const { error } = await (supabase.from('penalidades' as any) as any)
@@ -1984,16 +1956,11 @@ export function IncidenciasModule() {
         
         if (error) throw error
         
-        Swal.fire({
-          icon: 'success',
-          title: esAFavor ? 'Descuento Aplicado' : 'Cobro Aplicado',
-          html: `Se aplicará en <strong>Semana ${semanaInicio} - ${anioInicio}</strong><br>
-                 Monto: ${formatMoney(penalidadAplicar.monto)}${esAFavor ? ' (a favor del conductor)' : ''}`
-        })
+        showSuccess(esAFavor ? 'Descuento Aplicado' : 'Cobro Aplicado', `Se aplicará en Semana ${semanaInicio}-${anioInicio}. Monto: ${formatMoney(penalidadAplicar.monto)}${esAFavor ? ' (a favor)' : ''}`)
       }
       
       setShowAplicarModal(false)
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error aplicando cobro:', error)
       Swal.fire('Error', error.message || 'No se pudo aplicar el cobro', 'error')
@@ -2048,13 +2015,9 @@ export function IncidenciasModule() {
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Desaplicado',
-          text: 'El cobro/descuento volvió a estado pendiente'
-        })
+        showSuccess('Desaplicado', 'El cobro/descuento volvió a estado pendiente')
         
-        cargarDatos()
+        cargarDatos(true)
       } catch (error: any) {
         console.error('Error desaplicando:', error)
         Swal.fire('Error', error.message || 'No se pudo desaplicar', 'error')
@@ -2190,13 +2153,9 @@ export function IncidenciasModule() {
       
       setShowReasignarModal(false)
       
-      Swal.fire({
-        icon: 'success',
-        title: 'Semana reasignada',
-        html: `El cobro se movió de <strong>Semana ${semanaOrigen}-${anioOrigen}</strong> a <strong>Semana ${nuevaSemana}-${nuevoAnio}</strong><br><br>Los totales de ambos períodos fueron recalculados.`
-      })
+      showSuccess('Semana reasignada', `El cobro se movió de Semana ${semanaOrigen}-${anioOrigen} a Semana ${nuevaSemana}-${nuevoAnio}`)
       
-      cargarDatos()
+      cargarDatos(true)
     } catch (error: any) {
       console.error('Error reasignando semana:', error)
       Swal.fire('Error', error.message || 'No se pudo reasignar la semana', 'error')
