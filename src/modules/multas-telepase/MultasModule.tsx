@@ -503,7 +503,7 @@ export default function MultasModule() {
   const columns = useMemo<ColumnDef<Multa>[]>(() => [
     {
       accessorKey: 'created_at',
-      header: ({ column }) => (
+      header: () => (
         <ExcelDateRangeFilter
           label="Fecha Carga"
           startDate={fechaCargaDesde}
@@ -539,7 +539,7 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'fecha_infraccion',
-      header: ({ column }) => (
+      header: () => (
         <ExcelDateRangeFilter
           label="Fecha Infraccion"
           startDate={fechaInfraccionDesde}
