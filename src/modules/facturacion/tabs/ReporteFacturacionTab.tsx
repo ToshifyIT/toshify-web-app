@@ -1842,7 +1842,10 @@ export function ReporteFacturacionTab() {
               : t.conductor_nombre || 'Sin nombre',
             monto: t.monto,
             descripcion: t.descripcion || t.tipo,
-            tabla: 'tickets_favor'
+            tabla: 'tickets_favor',
+            fechaCreacion: t.created_at,
+            creadoPor: t.created_by_name,
+            origenDetalle: `Ticket ${t.tipo || ''} - Creado ${t.created_at ? format(parseISO(t.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
           })
         }
       }
@@ -1868,7 +1871,10 @@ export function ReporteFacturacionTab() {
               : p.conductor_nombre || 'Sin nombre',
             monto: p.monto || 0,
             descripcion: p.detalle || p.tipos_cobro_descuento?.nombre || 'Penalidad',
-            tabla: 'penalidades'
+            tabla: 'penalidades',
+            fechaCreacion: p.created_at,
+            creadoPor: p.created_by_name,
+            origenDetalle: `Penalidad completa - ${p.tipos_cobro_descuento?.nombre || 'Sin tipo'} - Creado ${p.created_at ? format(parseISO(p.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
           })
         }
       }
@@ -1893,7 +1899,13 @@ export function ReporteFacturacionTab() {
               : 'Sin nombre',
             monto: c.monto_cuota,
             descripcion: c.descripcion || `Cuota ${c.numero_cuota} de ${c.total_cuotas}`,
-            tabla: 'cobros_fraccionados'
+            tabla: 'cobros_fraccionados',
+            fechaCreacion: c.created_at,
+            creadoPor: c.created_by_name,
+            montoTotal: c.monto_total,
+            cuotaActual: c.numero_cuota,
+            totalCuotas: c.total_cuotas,
+            origenDetalle: `Cobro fraccionado - Total: ${formatCurrency(c.monto_total || 0)} en ${c.total_cuotas} cuotas - Creado ${c.created_at ? format(parseISO(c.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
           })
         }
       }
@@ -1901,7 +1913,7 @@ export function ReporteFacturacionTab() {
       // 4. Penalidades cuotas (penalidades fraccionadas) pendientes de esta semana
       const { data: penalidadesCuotasPendientes } = await (supabase
         .from('penalidades_cuotas') as any)
-        .select('*, penalidad:penalidades(conductor_id, conductor_nombre, detalle, monto, conductor:conductores(nombres, apellidos))')
+        .select('*, penalidad:penalidades(conductor_id, conductor_nombre, detalle, monto, created_at, created_by_name, conductor:conductores(nombres, apellidos))')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
         .eq('aplicado', false)
@@ -1918,8 +1930,14 @@ export function ReporteFacturacionTab() {
             conductorId: pc.penalidad.conductor_id,
             conductorNombre,
             monto: pc.monto_cuota,
-            descripcion: `Cuota ${pc.numero_cuota}/${pc.total_cuotas} - ${detallePenalidad}`,
-            tabla: 'penalidades_cuotas'
+            descripcion: detallePenalidad,
+            tabla: 'penalidades_cuotas',
+            fechaCreacion: pc.penalidad?.created_at,
+            creadoPor: pc.penalidad?.created_by_name,
+            montoTotal: pc.penalidad?.monto,
+            cuotaActual: pc.numero_cuota,
+            totalCuotas: pc.total_cuotas,
+            origenDetalle: `Penalidad fraccionada - Total: ${formatCurrency(pc.penalidad?.monto || 0)} en ${pc.total_cuotas} cuotas - Creado ${pc.penalidad?.created_at ? format(parseISO(pc.penalidad.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
           })
         }
       }

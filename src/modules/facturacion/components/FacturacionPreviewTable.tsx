@@ -35,6 +35,13 @@ export interface ConceptoPendiente {
   descripcion: string
   conceptoCodigo?: string // null si no tiene código asignado
   tabla: string
+  // Información de origen
+  fechaCreacion?: string
+  creadoPor?: string
+  montoTotal?: number // Para cuotas, el monto total original
+  cuotaActual?: number
+  totalCuotas?: number
+  origenDetalle?: string // Info adicional del origen
 }
 
 // Tipo para cada fila del preview (igual al formato Excel)
@@ -684,46 +691,73 @@ export function FacturacionPreviewTable({
       {showPendientes && conceptosPendientes.length > 0 && (
         <div className="fact-pendientes-panel">
           <div className="fact-pendientes-header">
-            <h3><Link2 size={16} /> Conceptos Pendientes de Enlazar</h3>
+            <h3><Link2 size={16} /> Conceptos Pendientes de Enlazar ({conceptosPendientes.length})</h3>
             <button onClick={() => setShowPendientes(false)}><X size={16} /></button>
           </div>
-          <div className="fact-pendientes-list">
-            {conceptosPendientes.map((p) => (
-              <div key={p.id} className="fact-pendiente-item">
-                <div className="fact-pendiente-info">
-                  <div className="fact-pendiente-row1">
-                    <span className="fact-pendiente-tipo">{p.tipo.replace('_', ' ')}</span>
-                    <span className="fact-pendiente-conductor">{p.conductorNombre}</span>
-                    <span className="fact-pendiente-monto">{formatCurrency(p.monto)}</span>
-                  </div>
-                  <div className="fact-pendiente-desc">{p.descripcion}</div>
-                </div>
-                <div className="fact-pendiente-actions">
-                  <select 
-                    onChange={async (e) => {
-                      if (!e.target.value || !onEnlazarConcepto) return
-                      setEnlazando(true)
-                      const ok = await onEnlazarConcepto(p, e.target.value)
-                      setEnlazando(false)
-                      if (ok) {
-                        showSuccess('Enlazado', `Concepto enlazado como ${e.target.value}`)
-                      }
-                    }}
-                    disabled={enlazando}
-                    defaultValue=""
-                  >
-                    <option value="">Enlazar con...</option>
-                    <option value="P004">P004 - Tickets/Telepases</option>
-                    <option value="P005">P005 - Peajes</option>
-                    <option value="P006">P006 - Exceso KM</option>
-                    <option value="P007">P007 - Penalidades</option>
-                    <option value="P009">P009 - Mora</option>
-                    <option value="P010">P010 - Plan Pagos</option>
-                  </select>
-                  {enlazando && <Loader2 size={14} className="spinning" />}
-                </div>
-              </div>
-            ))}
+          <div className="fact-pendientes-table-wrapper">
+            <table className="fact-pendientes-table">
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Conductor</th>
+                  <th>Descripción</th>
+                  <th>Origen</th>
+                  <th className="col-right">Monto</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conceptosPendientes.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <span className={`fact-pendiente-tipo tipo-${p.tipo}`}>
+                        {p.tipo === 'cobro_fraccionado' ? 'CUOTA' : p.tipo === 'penalidad' ? 'PENALIDAD' : 'TICKET'}
+                      </span>
+                    </td>
+                    <td className="col-conductor">{p.conductorNombre}</td>
+                    <td className="col-desc">
+                      <div className="desc-main">{p.descripcion}</div>
+                      {p.cuotaActual && p.totalCuotas && (
+                        <div className="desc-cuota">Cuota {p.cuotaActual} de {p.totalCuotas}</div>
+                      )}
+                    </td>
+                    <td className="col-origen">
+                      <div className="origen-tabla">{p.tabla.replace(/_/g, ' ')}</div>
+                      {p.creadoPor && <div className="origen-creador">Por: {p.creadoPor}</div>}
+                      {p.fechaCreacion && <div className="origen-fecha">{new Date(p.fechaCreacion).toLocaleDateString('es-AR')}</div>}
+                      {p.montoTotal && p.montoTotal !== p.monto && (
+                        <div className="origen-total">Total: {formatCurrency(p.montoTotal)}</div>
+                      )}
+                    </td>
+                    <td className="col-right col-monto">{formatCurrency(p.monto)}</td>
+                    <td className="col-action">
+                      <select 
+                        onChange={async (e) => {
+                          if (!e.target.value || !onEnlazarConcepto) return
+                          setEnlazando(true)
+                          const ok = await onEnlazarConcepto(p, e.target.value)
+                          setEnlazando(false)
+                          if (ok) {
+                            showSuccess('Enlazado', `Concepto enlazado como ${e.target.value}`)
+                          }
+                        }}
+                        disabled={enlazando}
+                        defaultValue=""
+                      >
+                        <option value="">Enlazar con...</option>
+                        <option value="P004">P004 - Tickets</option>
+                        <option value="P005">P005 - Peajes</option>
+                        <option value="P006">P006 - Exceso KM</option>
+                        <option value="P007">P007 - Penalidades</option>
+                        <option value="P009">P009 - Mora</option>
+                        <option value="P010">P010 - Plan Pagos</option>
+                      </select>
+                      {enlazando && <Loader2 size={14} className="spinning" />}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -910,14 +944,28 @@ export function FacturacionPreviewTable({
         .fact-pendientes-header button { background: none; border: none; cursor: pointer; color: #b45309; }
         .fact-pendientes-list { display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; }
         .fact-pendiente-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: white; border-radius: 6px; border: 1px solid #fcd34d; }
-        .fact-pendiente-info { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
-        .fact-pendiente-row1 { display: flex; align-items: center; gap: 10px; }
-        .fact-pendiente-tipo { background: #fef3c7; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; color: #b45309; text-transform: uppercase; flex-shrink: 0; }
-        .fact-pendiente-conductor { font-weight: 600; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .fact-pendiente-monto { font-family: monospace; font-weight: 700; font-size: 13px; color: #dc2626; margin-left: auto; flex-shrink: 0; }
-        .fact-pendiente-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.3; }
-        .fact-pendiente-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-        .fact-pendiente-actions select { padding: 6px 10px; border: 1px solid #fcd34d; border-radius: 4px; font-size: 12px; background: white; cursor: pointer; }
+        .fact-pendientes-table-wrapper { max-height: 250px; overflow-y: auto; border: 1px solid #fcd34d; border-radius: 6px; }
+        .fact-pendientes-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .fact-pendientes-table th { position: sticky; top: 0; background: #fef3c7; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 11px; color: #92400e; border-bottom: 1px solid #fcd34d; white-space: nowrap; }
+        .fact-pendientes-table td { padding: 8px 10px; border-bottom: 1px solid #fef3c7; vertical-align: top; }
+        .fact-pendientes-table tr:hover { background: #fffbeb; }
+        .fact-pendiente-tipo { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+        .fact-pendiente-tipo.tipo-cobro_fraccionado { background: #dbeafe; color: #1e40af; }
+        .fact-pendiente-tipo.tipo-penalidad { background: #fee2e2; color: #991b1b; }
+        .fact-pendiente-tipo.tipo-ticket { background: #d1fae5; color: #065f46; }
+        .col-conductor { font-weight: 600; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-desc .desc-main { color: var(--text-primary); }
+        .col-desc .desc-cuota { font-size: 10px; color: #1e40af; font-weight: 600; margin-top: 2px; }
+        .col-origen { font-size: 10px; color: var(--text-secondary); }
+        .col-origen .origen-tabla { font-weight: 600; color: #6b7280; text-transform: capitalize; }
+        .col-origen .origen-creador { color: #9ca3af; }
+        .col-origen .origen-fecha { color: #9ca3af; }
+        .col-origen .origen-total { color: #dc2626; font-weight: 600; }
+        .col-right { text-align: right; }
+        .col-monto { font-family: monospace; font-weight: 700; font-size: 13px; color: #dc2626; white-space: nowrap; }
+        .col-action { white-space: nowrap; }
+        .col-action select { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 11px; background: white; cursor: pointer; }
+        .col-action select:hover { border-color: #fbbf24; }
         .fact-preview-productos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
         .fact-producto-badge { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 11px; }
         .fact-producto-nombre { font-size: 10px; color: var(--text-muted); }
