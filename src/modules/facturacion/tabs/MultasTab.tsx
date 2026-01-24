@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import {
   AlertTriangle,
   Car,
@@ -240,13 +241,7 @@ export function MultasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Multa Registrada',
-        text: `Multa de Gs. ${parseFloat(formValues.importe).toLocaleString()} registrada`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Multa Registrada', `Multa de Gs. ${parseFloat(formValues.importe).toLocaleString()} registrada`)
 
       cargarDatos()
     } catch (error: any) {
@@ -349,16 +344,10 @@ export function MultasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Multa Actualizada',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Multa Actualizada')
 
       cargarDatos()
     } catch (error: any) {
-      console.error('Error editando multa:', error)
       Swal.fire('Error', error.message || 'No se pudo actualizar la multa', 'error')
     }
   }
@@ -383,12 +372,7 @@ export function MultasTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Eliminada',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Eliminada')
 
       cargarDatos()
     } catch (error: any) {

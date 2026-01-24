@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import jsPDF from 'jspdf'
 import * as XLSX from 'xlsx'
 import {
@@ -736,13 +737,7 @@ export function ReporteNominasTab() {
       const nombreArchivo = `Facturacion_${nominaDetalle.conductor_nombre.replace(/\s+/g, '_')}_Semana${nominaDetalle.semana}_${nominaDetalle.anio}.pdf`
       pdf.save(nombreArchivo)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'PDF Exportado',
-        text: `Se descargó: ${nombreArchivo}`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('PDF Exportado', `Se descargó: ${nombreArchivo}`)
     } catch (error) {
       console.error('Error exportando PDF:', error)
       Swal.fire('Error', 'No se pudo exportar el PDF', 'error')
@@ -1065,13 +1060,7 @@ export function ReporteNominasTab() {
       // Descargar
       XLSX.writeFile(wb, nombreArchivo)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Reporte Exportado',
-        text: `Se descargó: ${nombreArchivo}`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
     } catch (error) {
       console.error('Error exportando Excel:', error)
       Swal.fire('Error', 'No se pudo exportar el reporte', 'error')

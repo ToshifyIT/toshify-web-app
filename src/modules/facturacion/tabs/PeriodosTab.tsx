@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import {
   Calendar,
   Lock,
@@ -716,17 +717,7 @@ export function PeriodosTab() {
         })
         .eq('id', periodoId)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Facturación Generada',
-        html: `
-          <p>Semana ${semana.semana} - ${semana.anio}</p>
-          <p><strong>${conductoresProcesadosCount}</strong> conductores procesados</p>
-          <p>Total: <strong>${formatCurrency(totalCargosGlobal - totalDescuentosGlobal)}</strong></p>
-        `,
-        timer: 3000,
-        showConfirmButton: false
-      })
+      showSuccess('Facturación Generada', `Semana ${semana.semana}/${semana.anio} - ${conductoresProcesadosCount} conductores - ${formatCurrency(totalCargosGlobal - totalDescuentosGlobal)}`)
 
       cargarSemanas()
     } catch (error: any) {
@@ -767,7 +758,7 @@ export function PeriodosTab() {
 
       if (error) throw error
 
-      Swal.fire({ icon: 'success', title: 'Período Cerrado', timer: 1500, showConfirmButton: false })
+      showSuccess('Período Cerrado')
       cargarSemanas()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo cerrar el período', 'error')
@@ -796,7 +787,7 @@ export function PeriodosTab() {
 
       if (error) throw error
 
-      Swal.fire({ icon: 'success', title: 'Período Reabierto', timer: 1500, showConfirmButton: false })
+      showSuccess('Período Reabierto')
       cargarSemanas()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo reabrir el período', 'error')

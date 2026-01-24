@@ -16,11 +16,14 @@ import {
   AlertTriangle,
   Save,
   RotateCcw,
-  Link2
+  Link2,
+  Plus,
+  Trash2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatCurrency } from '../../../types/facturacion.types'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 
 // Tipo para conceptos pendientes de enlazar
 export interface ConceptoPendiente {
@@ -74,10 +77,25 @@ export interface FacturacionPreviewRow {
   detalleId?: string
   // Indicador de saldos pendientes
   tieneSaldosPendientes?: boolean
+  // Para filas nuevas agregadas manualmente
+  isNew?: boolean
+  // Para eliminar filas
+  isDeleted?: boolean
+}
+
+// Tipo para conceptos de la BD
+export interface ConceptoNomina {
+  id: string
+  codigo: string
+  descripcion: string
+  tipo: string
+  es_variable: boolean
+  iva_porcentaje: number
 }
 
 interface FacturacionPreviewTableProps {
   data: FacturacionPreviewRow[]
+  conceptos?: ConceptoNomina[]  // Conceptos de la BD
   semana: number
   anio: number
   fechaInicio: string
@@ -93,6 +111,7 @@ interface FacturacionPreviewTableProps {
 
 export function FacturacionPreviewTable({
   data: initialData,
+  conceptos = [],
   semana,
   anio,
   fechaInicio,
@@ -178,8 +197,193 @@ export function FacturacionPreviewTable({
     'P006': 'Exceso KM',
     'P007': 'Penalidades',
     'P009': 'Mora',
-    'P010': 'Plan Pagos'
+    'P010': 'Plan Pagos',
+    'P011': 'Ajuste Manual'
   }
+
+
+
+  // Conductores únicos de los datos actuales
+  const conductoresUnicos = useMemo(() => {
+    const map = new Map<string, { id: string; nombre: string; cuit: string; dni: string; tipoFactura: string; condicionIva: string; email: string; facturacionId?: string }>()
+    data.forEach(row => {
+      if (row.conductorId && !map.has(row.conductorId)) {
+        map.set(row.conductorId, {
+          id: row.conductorId,
+          nombre: row.razonSocial,
+          cuit: row.numeroCuil,
+          dni: row.numeroDni,
+          tipoFactura: row.tipoFactura,
+          condicionIva: row.condicionIva,
+          email: row.email,
+          facturacionId: row.facturacionId
+        })
+      }
+    })
+    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }, [data])
+
+  // Función para agregar nueva fila (ajuste manual)
+  const agregarAjuste = useCallback(async () => {
+    // Construir options de conductores
+    const conductorOptions = conductoresUnicos.map(c => 
+      `<option value="${c.id}">${c.nombre} (${c.dni})</option>`
+    ).join('')
+
+    // Construir options de conceptos desde la BD (solo activos)
+    const conceptoOptions = conceptos
+      .filter(c => c.codigo) // Solo los que tienen código
+      .map(c => `<option value="${c.codigo}" data-iva="${c.iva_porcentaje}" data-tipo="${c.tipo}">${c.codigo} - ${c.descripcion}</option>`)
+      .join('')
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Agregar Ajuste',
+      html: `
+        <div style="display: flex; flex-direction: column; gap: 12px; text-align: left;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Conductor</label>
+            <select id="swal-conductor" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+              <option value="">Seleccionar conductor...</option>
+              ${conductorOptions}
+            </select>
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Concepto</label>
+            <select id="swal-concepto" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+              <option value="">Seleccionar concepto...</option>
+              ${conceptoOptions}
+            </select>
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Monto Total</label>
+            <input id="swal-monto" type="number" step="0.01" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;" placeholder="0.00">
+            <span style="font-size: 10px; color: #888;">Usa número negativo para descuentos/créditos</span>
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Descripción</label>
+            <input id="swal-descripcion" type="text" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;" placeholder="Motivo del ajuste...">
+          </div>
+        </div>
+      `,
+      width: 420,
+      showCancelButton: true,
+      confirmButtonText: 'Agregar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#059669',
+      focusConfirm: false,
+      preConfirm: () => {
+        const conductorId = (document.getElementById('swal-conductor') as HTMLSelectElement).value
+        const conceptoEl = document.getElementById('swal-concepto') as HTMLSelectElement
+        const concepto = conceptoEl.value
+        const selectedOption = conceptoEl.options[conceptoEl.selectedIndex]
+        const ivaPorcentaje = parseFloat(selectedOption?.dataset.iva || '0')
+        const tipoConcepto = selectedOption?.dataset.tipo || ''
+        const monto = parseFloat((document.getElementById('swal-monto') as HTMLInputElement).value) || 0
+        const descripcion = (document.getElementById('swal-descripcion') as HTMLInputElement).value
+
+        if (!conductorId) {
+          Swal.showValidationMessage('Selecciona un conductor')
+          return false
+        }
+        if (!concepto) {
+          Swal.showValidationMessage('Selecciona un concepto')
+          return false
+        }
+        if (monto === 0) {
+          Swal.showValidationMessage('El monto no puede ser 0')
+          return false
+        }
+        if (!descripcion.trim()) {
+          Swal.showValidationMessage('Ingresa una descripción')
+          return false
+        }
+
+        const esDescuento = monto < 0 || tipoConcepto === 'descuento'
+        const tieneIva = ivaPorcentaje > 0
+
+        return { conductorId, concepto, monto: Math.abs(monto), descripcion, esDescuento, tieneIva }
+      }
+    })
+
+    if (!formValues) return
+
+    // Buscar datos del conductor seleccionado
+    const conductor = conductoresUnicos.find(c => c.id === formValues.conductorId)
+    if (!conductor) return
+
+    // Calcular valores IVA
+    let netoGravado = 0
+    let ivaAmount = 0
+    let exento = 0
+    const total = formValues.monto
+
+    if (formValues.tieneIva) {
+      netoGravado = Math.round((total / 1.21) * 100) / 100
+      ivaAmount = Math.round((total - netoGravado) * 100) / 100
+    } else {
+      exento = total
+    }
+
+    // Crear nueva fila
+    const maxNumero = Math.max(...data.map(r => r.numero), 0)
+    const newRow: FacturacionPreviewRow = {
+      numero: maxNumero + 1,
+      fechaEmision: new Date(),
+      fechaVencimiento: new Date(),
+      puntoVenta: 1,
+      tipoFactura: conductor.tipoFactura,
+      tipoDocumento: conductor.tipoFactura === 'FACTURA_A' ? 'CUIT' : 'DNI',
+      numeroCuil: conductor.cuit,
+      numeroDni: conductor.dni,
+      total: formValues.esDescuento ? -total : total,
+      cobrado: 0,
+      condicionIva: conductor.condicionIva,
+      condicionVenta: 'CTA_CTE',
+      razonSocial: conductor.nombre,
+      domicilio: '',
+      codigoProducto: formValues.concepto,
+      descripcionAdicional: formValues.descripcion,
+      email: conductor.email,
+      nota: '',
+      moneda: 'ARS',
+      tipoCambio: 1,
+      netoGravado: formValues.esDescuento ? -netoGravado : netoGravado,
+      ivaAmount: formValues.esDescuento ? -ivaAmount : ivaAmount,
+      exento: formValues.esDescuento ? -exento : exento,
+      totalRepetido: formValues.esDescuento ? -total : total,
+      ivaPorcentaje: formValues.tieneIva ? 'IVA_21' : 'EXENTO',
+      generarAsiento: 'NO',
+      cuentaDebito: 0,
+      cuentaCredito: 0,
+      referencia: '',
+      check: '',
+      conductorId: formValues.conductorId,
+      tieneError: false,
+      facturacionId: conductor.facturacionId,
+      isNew: true
+    }
+
+    setData(prev => [...prev, newRow])
+    setHasChanges(true)
+
+    const signo = formValues.esDescuento ? '-' : ''
+    showSuccess('Ajuste agregado', `${formValues.concepto} - ${signo}${formatCurrency(total)} para ${conductor.nombre}`)
+  }, [conductoresUnicos, conceptos, data])
+
+  // Función para eliminar una fila nueva
+  const eliminarFila = useCallback((rowIdx: number) => {
+    const row = data[rowIdx]
+    if (!row.isNew) {
+      // Si no es nueva, marcar como eliminada (para sincronizar)
+      const newData = [...data]
+      newData[rowIdx] = { ...row, isDeleted: true }
+      setData(newData)
+    } else {
+      // Si es nueva, simplemente quitar del array
+      setData(prev => prev.filter((_, idx) => idx !== rowIdx))
+    }
+    setHasChanges(true)
+  }, [data])
 
   // Iniciar edición
   const startEdit = useCallback((rowIdx: number, field: string, currentValue: number | string) => {
@@ -267,13 +471,7 @@ export function FacturacionPreviewTable({
       const success = await onSync(data)
       if (success) {
         setHasChanges(false)
-        Swal.fire({
-          icon: 'success',
-          title: 'Sincronizado',
-          text: 'Los cambios se guardaron correctamente',
-          timer: 2000,
-          showConfirmButton: false
-        })
+        showSuccess('Sincronizado', 'Los cambios se guardaron correctamente')
       }
     } catch (error) {
       Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
@@ -362,9 +560,19 @@ export function FacturacionPreviewTable({
         </div>
         <div className="fact-preview-header-right">
           {periodoAbierto && (
-            <span className="fact-preview-badge open">
-              PERÍODO ABIERTO
-            </span>
+            <>
+              <span className="fact-preview-badge open">
+                PERÍODO ABIERTO
+              </span>
+              <button
+                className="fact-preview-btn add"
+                onClick={agregarAjuste}
+                title="Agregar ajuste manual"
+              >
+                <Plus size={14} />
+                Agregar Ajuste
+              </button>
+            </>
           )}
           {stats.conErrores > 0 && (
             <span className="fact-preview-badge error">
@@ -427,13 +635,7 @@ export function FacturacionPreviewTable({
                       const ok = await onEnlazarConcepto(p, e.target.value)
                       setEnlazando(false)
                       if (ok) {
-                        Swal.fire({
-                          icon: 'success',
-                          title: 'Enlazado',
-                          text: `Concepto enlazado como ${e.target.value}`,
-                          timer: 1500,
-                          showConfirmButton: false
-                        })
+                        showSuccess('Enlazado', `Concepto enlazado como ${e.target.value}`)
                       }
                     }}
                     disabled={enlazando}
@@ -531,18 +733,20 @@ export function FacturacionPreviewTable({
               <th>Cta Créd</th>
               <th>Ref</th>
               <th>Check</th>
+              {periodoAbierto && <th className="col-actions"></th>}
             </tr>
           </thead>
           <tbody>
-            {filteredData.map((row, idx) => {
+            {filteredData.filter(r => !r.isDeleted).map((row, idx) => {
               const realIdx = data.findIndex(d => d.numero === row.numero && d.conductorId === row.conductorId && d.codigoProducto === row.codigoProducto)
               const rowClasses = [
                 row.tieneError ? 'row-error' : '',
-                row.tieneSaldosPendientes ? 'row-saldos-pendientes' : ''
+                row.tieneSaldosPendientes ? 'row-saldos-pendientes' : '',
+                row.isNew ? 'row-new' : ''
               ].filter(Boolean).join(' ')
               return (
                 <tr key={`${row.numero}-${row.codigoProducto}-${idx}`} className={rowClasses}>
-                  <td>{row.numero}</td>
+                  <td>{row.isNew ? <span className="badge-new">NUEVO</span> : row.numero}</td>
                   <td>{format(row.fechaEmision, 'dd/MM')}</td>
                   <td>{format(row.fechaVencimiento, 'dd/MM')}</td>
                   <td>{row.puntoVenta}</td>
@@ -572,6 +776,17 @@ export function FacturacionPreviewTable({
                   <td className="col-mono">{row.cuentaCredito}</td>
                   <td>{row.referencia}</td>
                   <td>{row.check || ''}</td>
+                  {periodoAbierto && (
+                    <td className="col-actions">
+                      <button
+                        className="btn-delete-row"
+                        onClick={() => eliminarFila(realIdx)}
+                        title="Eliminar fila"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               )
             })}
@@ -585,7 +800,7 @@ export function FacturacionPreviewTable({
               <td className="col-money"><strong>{formatCurrency(totales.ivaAmount)}</strong></td>
               <td className="col-money"><strong>{formatCurrency(totales.exento)}</strong></td>
               <td className="col-money"><strong>{formatCurrency(totales.total)}</strong></td>
-              <td colSpan={6}></td>
+              <td colSpan={periodoAbierto ? 7 : 6}></td>
             </tr>
           </tfoot>
         </table>
@@ -672,6 +887,22 @@ export function FacturacionPreviewTable({
         .totals-row td { border-top: 2px solid var(--border-color); position: sticky; bottom: 0; background: var(--bg-secondary); }
         .spinning { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* Botón agregar ajuste */
+        .fact-preview-btn.add { background: #059669; color: white; }
+        .fact-preview-btn.add:hover { background: #047857; }
+        
+        /* Filas nuevas */
+        .fact-preview-table tr.row-new { background: #ecfdf5 !important; }
+        .fact-preview-table tr.row-new:hover { background: #d1fae5 !important; }
+        .badge-new { display: inline-block; padding: 2px 6px; background: #059669; color: white; border-radius: 3px; font-size: 9px; font-weight: 700; }
+        
+        /* Columna de acciones */
+        .col-actions { width: 40px; text-align: center; position: sticky; right: 0; background: inherit; }
+        .btn-delete-row { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: none; background: #fee2e2; color: #dc2626; border-radius: 4px; cursor: pointer; margin: 0 auto; }
+        .btn-delete-row:hover { background: #fecaca; }
+        .fact-preview-table tr.row-new .col-actions { background: #ecfdf5; }
+        .fact-preview-table tr.row-new:hover .col-actions { background: #d1fae5; }
       `}</style>
     </div>
   )

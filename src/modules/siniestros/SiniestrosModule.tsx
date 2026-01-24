@@ -6,6 +6,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { TimeInput24h } from '../../components/ui/TimeInput24h'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import {
   Plus,
   Eye,
@@ -629,13 +630,7 @@ export function SiniestrosModule() {
           }
         }
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Siniestro registrado',
-          text: estado_vehiculo ? 'El estado del vehículo y asignaciones fueron actualizados' : undefined,
-          timer: 2000,
-          showConfirmButton: false
-        })
+        showSuccess('Siniestro registrado', estado_vehiculo ? 'El estado del vehículo y asignaciones fueron actualizados' : undefined)
       } else if (modalMode === 'edit' && selectedSiniestro) {
         const { error } = await (supabase.from('siniestros' as any) as any).update({
           ...dataToSave,
@@ -702,19 +697,12 @@ export function SiniestrosModule() {
           }
         }
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Siniestro actualizado',
-          text: estado_vehiculo ? 'El estado del vehículo y asignaciones fueron actualizados' : undefined,
-          timer: 1500,
-          showConfirmButton: false
-        })
+        showSuccess('Siniestro actualizado', estado_vehiculo ? 'El estado del vehículo y asignaciones fueron actualizados' : undefined)
       }
 
       setShowModal(false)
       cargarDatos()
     } catch (error: any) {
-      console.error('Error guardando siniestro:', error)
       const errorMsg = error?.message || error?.details || error?.hint || 'Error desconocido'
       Swal.fire('Error', `No se pudo guardar: ${errorMsg}`, 'error')
     } finally {
@@ -758,13 +746,7 @@ export function SiniestrosModule() {
         if (error) throw error
       }
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Vehículo habilitado',
-        text: `${siniestro.vehiculo_patente} ahora puede circular`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Vehículo habilitado', `${siniestro.vehiculo_patente} ahora puede circular`)
 
       cargarDatos()
     } catch (error) {

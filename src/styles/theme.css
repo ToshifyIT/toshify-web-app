@@ -121,6 +121,100 @@
   background: rgba(0, 0, 0, 0.4) !important;
 }
 
+/* Toast container - sin backdrop oscuro */
+.swal2-container.swal2-top {
+  background: transparent !important;
+}
+
+/* ==========================================
+   TOAST STYLES - Banner notifications
+   ========================================== */
+
+.toast-popup {
+  padding: 12px 20px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+  border: none !important;
+  border-left: 4px solid var(--color-success) !important;
+  background: var(--card-bg) !important;
+  min-width: 280px !important;
+  max-width: 400px !important;
+}
+
+.toast-popup.swal2-icon-success {
+  border-left-color: var(--color-success) !important;
+  background: linear-gradient(to right, rgba(16, 185, 129, 0.08), var(--card-bg)) !important;
+}
+
+.toast-popup.swal2-icon-error {
+  border-left-color: var(--color-danger) !important;
+  background: linear-gradient(to right, rgba(239, 68, 68, 0.08), var(--card-bg)) !important;
+}
+
+.toast-popup.swal2-icon-warning {
+  border-left-color: var(--color-warning) !important;
+  background: linear-gradient(to right, rgba(245, 158, 11, 0.08), var(--card-bg)) !important;
+}
+
+.toast-popup.swal2-icon-info {
+  border-left-color: var(--color-info) !important;
+  background: linear-gradient(to right, rgba(59, 130, 246, 0.08), var(--card-bg)) !important;
+}
+
+.toast-popup .swal2-icon {
+  width: 28px !important;
+  height: 28px !important;
+  margin: 0 12px 0 0 !important;
+  border-width: 2px !important;
+}
+
+.toast-popup .swal2-icon .swal2-icon-content {
+  font-size: 16px !important;
+}
+
+.toast-popup .swal2-icon.swal2-success .swal2-success-line-tip,
+.toast-popup .swal2-icon.swal2-success .swal2-success-line-long {
+  background-color: var(--color-success) !important;
+}
+
+.toast-popup .swal2-icon.swal2-success .swal2-success-circular-line-left,
+.toast-popup .swal2-icon.swal2-success .swal2-success-circular-line-right,
+.toast-popup .swal2-icon.swal2-success .swal2-success-fix {
+  background-color: transparent !important;
+}
+
+.toast-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: var(--text-primary) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.toast-popup .swal2-html-container {
+  font-size: 13px !important;
+  color: var(--text-secondary) !important;
+  margin: 4px 0 0 0 !important;
+  padding: 0 !important;
+}
+
+.toast-popup .swal2-timer-progress-bar {
+  background: var(--color-success) !important;
+  height: 3px !important;
+}
+
+.toast-popup.swal2-icon-error .swal2-timer-progress-bar {
+  background: var(--color-danger) !important;
+}
+
+.toast-popup.swal2-icon-warning .swal2-timer-progress-bar {
+  background: var(--color-warning) !important;
+}
+
+.toast-popup.swal2-icon-info .swal2-timer-progress-bar {
+  background: var(--color-info) !important;
+}
+
 /* Popup container - Diseño limpio tipo banner */
 .swal2-popup {
   border-radius: 12px !important;
@@ -197,12 +291,22 @@
   color: var(--color-success) !important;
 }
 
-.swal2-icon.swal2-success [class^='swal2-success-line'] {
-  background-color: var(--color-success) !important;
-}
-
 .swal2-icon.swal2-success .swal2-success-ring {
   border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+/* Fix para el ícono de success - líneas del checkmark */
+.swal2-icon.swal2-success .swal2-success-line-tip,
+.swal2-icon.swal2-success .swal2-success-line-long {
+  background-color: var(--color-success) !important;
+  display: block !important;
+}
+
+/* Fix para el ícono de success - círculos de fondo deben coincidir con el fondo del popup */
+.swal2-icon.swal2-success .swal2-success-circular-line-left,
+.swal2-icon.swal2-success .swal2-success-circular-line-right,
+.swal2-icon.swal2-success .swal2-success-fix {
+  background-color: var(--card-bg) !important;
 }
 
 .swal2-icon.swal2-info {

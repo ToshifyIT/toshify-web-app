@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import { getWeek, getYear } from 'date-fns'
 import './AsignacionesModule.css'
 
@@ -719,14 +720,7 @@ export function AsignacionesModule() {
           }
         }
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Eliminado',
-          html: `La asignación ha sido eliminada.<br><br>
-                 <strong>Si deseas re-enviar esta programación:</strong><br>
-                 Ve a <em>Programaciones</em> y recarga la página (F5), luego podrás enviarla nuevamente.`,
-          confirmButtonText: 'Entendido'
-        })
+        showSuccess('Eliminado', 'La asignación ha sido eliminada. Puedes re-enviar desde Programaciones.')
         loadAsignaciones()
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
@@ -1011,7 +1005,7 @@ export function AsignacionesModule() {
             })
             .eq('id', selectedAsignacion.id)
 
-          Swal.fire('Confirmado', 'Los conductores nuevos fueron agregados a la asignación existente. Esta asignación ha sido finalizada.', 'success')
+          showSuccess('Confirmado', 'Los conductores nuevos fueron agregados a la asignación existente.')
 
         } else {
           // Lógica normal (sin companeros)
@@ -1098,7 +1092,7 @@ export function AsignacionesModule() {
             }
           }
 
-          Swal.fire('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.', 'success')
+          showSuccess('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.')
         }
       } else {
         // Confirmación parcial: aún así poner vehículo en EN_USO
@@ -1156,7 +1150,7 @@ export function AsignacionesModule() {
         await (supabase as any).from('vehiculos').update({ estado_id: estadoDisponible.id }).eq('id', selectedAsignacion.vehiculo_id)
       }
 
-      Swal.fire('Cancelada', 'La programación ha sido cancelada', 'success')
+      showSuccess('Cancelada', 'La programación ha sido cancelada')
       setShowCancelModal(false)
       setCancelMotivo('')
       setSelectedAsignacion(null)
@@ -1175,7 +1169,7 @@ export function AsignacionesModule() {
         .update({ confirmado: false, fecha_confirmacion: null })
         .eq('id', conductorAsignacionId)
 
-      Swal.fire('Actualizado', 'El conductor ha sido desconfirmado.', 'success')
+      showSuccess('Actualizado', 'El conductor ha sido desconfirmado.')
       loadAsignaciones()
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Error al desconfirmar', 'error')
@@ -1318,13 +1312,7 @@ export function AsignacionesModule() {
         }
       }
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Regularizado',
-        text: 'Los datos de la asignación han sido actualizados correctamente.',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Regularizado', 'Los datos de la asignación han sido actualizados correctamente.')
 
       setShowRegularizarModal(false)
       setRegularizarAsignacion(null)
@@ -1863,7 +1851,7 @@ export function AsignacionesModule() {
                           .eq('id', selectedAsignacion.vehiculo_id)
                       }
 
-                      Swal.fire('Activado', 'La asignación está ahora ACTIVA.', 'success')
+                      showSuccess('Activado', 'La asignación está ahora ACTIVA.')
                       setShowConfirmModal(false)
                       setConfirmComentarios('')
                       setSelectedAsignacion(null)

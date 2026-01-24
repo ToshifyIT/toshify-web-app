@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import {
   Gauge,
   Users,
@@ -391,13 +392,7 @@ export function ExcesosKmTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Exceso Registrado',
-        text: `Exceso de ${resultado.kmExceso} km - Total: ${formatCurrency(resultado.total)}`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Exceso Registrado', `Exceso de ${resultado.kmExceso} km - Total: ${formatCurrency(resultado.total)}`)
 
       cargarDatos()
     } catch (error: any) {
@@ -463,12 +458,7 @@ export function ExcesosKmTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Actualizado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Actualizado')
 
       cargarDatos()
     } catch (error: any) {
@@ -502,12 +492,7 @@ export function ExcesosKmTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Eliminado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Eliminado')
 
       cargarDatos()
     } catch (error: any) {

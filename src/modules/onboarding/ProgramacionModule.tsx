@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
 import type { ProgramacionOnboardingCompleta, EstadoKanban } from '../../types/onboarding.types'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import './ProgramacionModule.css'
 
 // Labels para mostrar
@@ -458,7 +459,7 @@ export function ProgramacionModule() {
       await loadProgramaciones()
       setShowQuickEdit(false)
       setEditingProgramacion(null)
-      Swal.fire('Guardado', 'Programacion actualizada correctamente', 'success')
+      showSuccess('Guardado', 'Programación actualizada correctamente')
     } catch (err: any) {
       console.error('Error actualizando:', err)
       Swal.fire('Error', err.message || 'Error al guardar', 'error')
@@ -506,13 +507,7 @@ export function ProgramacionModule() {
 
         if (error) throw error
         setProgramaciones(prev => prev.filter(p => p.id !== id))
-        Swal.fire({
-          icon: 'success',
-          title: 'Eliminado',
-          text: 'La programacion fue eliminada',
-          timer: 1500,
-          showConfirmButton: false
-        })
+        showSuccess('Eliminado', 'La programacion fue eliminada')
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al eliminar', 'error')
       }
@@ -611,12 +606,7 @@ export function ProgramacionModule() {
             : p
         ))
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Programación Confirmada',
-          text: 'Los conductores de compañero han sido confirmados sin afectar sus asignaciones actuales.',
-          confirmButtonText: 'Entendido'
-        })
+        showSuccess('Programación Confirmada', 'Los conductores de compañero han sido confirmados')
         return
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al confirmar', 'error')
@@ -878,12 +868,7 @@ export function ProgramacionModule() {
       // Remover de la lista local (ya no debe aparecer)
       setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Asignacion Creada',
-        html: `<p>Codigo: <strong>${asignacion.codigo}</strong></p><p>Puedes verla en el modulo de Asignaciones</p>`,
-        confirmButtonText: 'Entendido'
-      })
+      showSuccess('Asignación Creada', `Código: ${asignacion.codigo}`)
 
     } catch (err: any) {
       console.error('Error creando asignacion:', err)

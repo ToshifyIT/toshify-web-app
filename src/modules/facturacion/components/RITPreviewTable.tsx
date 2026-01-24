@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
 
 // Tipo para cada fila del preview
@@ -247,13 +248,7 @@ export function RITPreviewTable({
       const success = await onSync(data)
       if (success) {
         setHasChanges(false)
-        Swal.fire({
-          icon: 'success',
-          title: 'Sincronizado',
-          text: 'Los cambios se guardaron correctamente',
-          timer: 2000,
-          showConfirmButton: false
-        })
+        showSuccess('Sincronizado', 'Los cambios se guardaron correctamente')
       }
     } catch (error) {
       console.error('Error sincronizando:', error)
@@ -449,13 +444,7 @@ export function RITPreviewTable({
       const nombreArchivo = `Facturacion_Semana${semana}_${anio}.xlsx`
       XLSX.writeFile(wb, nombreArchivo)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Exportación exitosa',
-        text: `Se descargó: ${nombreArchivo}`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Exportación exitosa', `Se descargó: ${nombreArchivo}`)
     } catch (error) {
       console.error('Error exportando:', error)
       Swal.fire('Error', 'No se pudo exportar el archivo', 'error')

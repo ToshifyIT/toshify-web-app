@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../utils/toast'
 
 interface Props {
   onSuccess: () => void
@@ -62,14 +63,7 @@ export function ForcePasswordChangeModal({ onSuccess }: Props) {
       // Marcar en el perfil que ya no necesita cambiar contraseña
       await markPasswordChanged()
 
-      await Swal.fire({
-        icon: 'success',
-        title: 'Contraseña Actualizada',
-        text: 'Tu contraseña ha sido cambiada exitosamente',
-        confirmButtonColor: '#FF0033',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Contraseña Actualizada', 'Tu contraseña ha sido cambiada exitosamente')
 
       onSuccess()
     } catch (error: any) {
