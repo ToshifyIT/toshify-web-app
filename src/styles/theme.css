@@ -479,13 +479,13 @@
    DARK MODE
    ========================================== */
 [data-theme="dark"] {
-  /* Brand Colors - Ligeramente más brillantes para contraste */
-  --color-primary: #EF4444;
-  --color-primary-hover: #F87171;
-  --color-primary-light: rgba(239, 68, 68, 0.15);
-  --color-primary-shadow: rgba(239, 68, 68, 0.25);
+  /* Brand Colors - Crimson Red */
+  --color-primary: #DC3545;
+  --color-primary-hover: #E74C5C;
+  --color-primary-light: rgba(220, 53, 69, 0.15);
+  --color-primary-shadow: rgba(220, 53, 69, 0.3);
 
-  /* Semantic Colors - Ajustados para dark mode */
+  /* Semantic Colors */
   --color-success: #22C55E;
   --color-success-light: rgba(34, 197, 94, 0.15);
   --color-success-dark: #86EFAC;
@@ -496,10 +496,10 @@
   --color-warning-dark: #FDE68A;
   --color-warning-hover: #FCD34D;
 
-  --color-danger: #EF4444;
-  --color-danger-light: rgba(239, 68, 68, 0.15);
-  --color-danger-dark: #FCA5A5;
-  --color-danger-hover: #F87171;
+  --color-danger: #DC3545;
+  --color-danger-light: rgba(220, 53, 69, 0.15);
+  --color-danger-dark: #F1A1A8;
+  --color-danger-hover: #E74C5C;
 
   --color-info: #60A5FA;
   --color-info-light: rgba(96, 165, 250, 0.15);
@@ -514,72 +514,72 @@
   --color-indigo-light: rgba(129, 140, 248, 0.15);
   --color-indigo-dark: #A5B4FC;
 
-  /* Neutral Colors - Invertidos */
-  --color-gray-50: #111827;
-  --color-gray-100: #1F2937;
-  --color-gray-200: #374151;
-  --color-gray-300: #4B5563;
-  --color-gray-400: #6B7280;
-  --color-gray-500: #9CA3AF;
-  --color-gray-600: #D1D5DB;
-  --color-gray-700: #E5E7EB;
-  --color-gray-800: #F3F4F6;
-  --color-gray-900: #F9FAFB;
+  /* Neutral Colors - Dark palette */
+  --color-gray-50: #0d0d0d;
+  --color-gray-100: #1a1a1a;
+  --color-gray-200: #2d2d2d;
+  --color-gray-300: #404040;
+  --color-gray-400: #737373;
+  --color-gray-500: #a3a3a3;
+  --color-gray-600: #d4d4d4;
+  --color-gray-700: #e5e5e5;
+  --color-gray-800: #f5f5f5;
+  --color-gray-900: #fafafa;
 
-  /* Background Colors */
-  --bg-primary: #0F172A;
-  --bg-secondary: #1E293B;
-  --bg-tertiary: #334155;
-  --bg-hover: #1E293B;
-  --bg-overlay: rgba(0, 0, 0, 0.7);
+  /* Background Colors - True dark */
+  --bg-primary: #121212;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #2d2d2d;
+  --bg-hover: #252525;
+  --bg-overlay: rgba(0, 0, 0, 0.8);
 
   /* Text Colors */
-  --text-primary: #F1F5F9;
-  --text-secondary: #94A3B8;
-  --text-tertiary: #64748B;
-  --text-inverse: #0F172A;
-  --text-muted: #64748B;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a3a3a3;
+  --text-tertiary: #737373;
+  --text-inverse: #121212;
+  --text-muted: #737373;
 
-  /* Border Colors */
-  --border-primary: #334155;
-  --border-secondary: #1E293B;
-  --border-focus: #EF4444;
+  /* Border Colors - Subtle with crimson tint */
+  --border-primary: #2d2d2d;
+  --border-secondary: #1f1f1f;
+  --border-focus: #DC3545;
 
-  /* Shadow - Más suave en dark mode */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  /* Shadow */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
 
-  /* Component Specific - Toshify Design System */
-  --table-header-bg: #1e1e1e;
-  --table-row-hover: rgba(255, 255, 255, 0.03);
-  --table-border: #3a272b;
+  /* Component Specific */
+  --table-header-bg: #1a1a1a;
+  --table-row-hover: rgba(220, 53, 69, 0.05);
+  --table-border: #2d2d2d;
 
-  --input-bg: #1e1e1e;
-  --input-border: #3a272b;
-  --input-focus-shadow: 0 0 0 3px rgba(249, 6, 55, 0.15);
+  --input-bg: #1a1a1a;
+  --input-border: #2d2d2d;
+  --input-focus-shadow: 0 0 0 3px rgba(220, 53, 69, 0.2);
 
-  --modal-bg: #1e1e1e;
-  --card-bg: #1e1e1e;
+  --modal-bg: #1a1a1a;
+  --card-bg: #1a1a1a;
 
-  --pagination-bg: #1E293B;
+  --pagination-bg: #1a1a1a;
 
-  /* Status Badge Backgrounds - Dark variants */
-  --badge-green-bg: rgba(34, 197, 94, 0.2);
+  /* Status Badge Backgrounds */
+  --badge-green-bg: rgba(34, 197, 94, 0.15);
   --badge-green-text: #86EFAC;
-  --badge-blue-bg: rgba(96, 165, 250, 0.2);
+  --badge-blue-bg: rgba(96, 165, 250, 0.15);
   --badge-blue-text: #93C5FD;
-  --badge-yellow-bg: rgba(251, 191, 36, 0.2);
+  --badge-yellow-bg: rgba(251, 191, 36, 0.15);
   --badge-yellow-text: #FDE68A;
-  --badge-red-bg: rgba(239, 68, 68, 0.2);
-  --badge-red-text: #FCA5A5;
-  --badge-gray-bg: rgba(100, 116, 139, 0.2);
-  --badge-gray-text: #94A3B8;
-  --badge-purple-bg: rgba(167, 139, 250, 0.2);
+  --badge-red-bg: rgba(220, 53, 69, 0.15);
+  --badge-red-text: #F1A1A8;
+  --badge-gray-bg: rgba(115, 115, 115, 0.15);
+  --badge-gray-text: #a3a3a3;
+  --badge-purple-bg: rgba(167, 139, 250, 0.15);
   --badge-purple-text: #C4B5FD;
-  --badge-indigo-bg: rgba(129, 140, 248, 0.2);
+  --badge-indigo-bg: rgba(129, 140, 248, 0.15);
   --badge-indigo-text: #A5B4FC;
-  --badge-orange-bg: rgba(251, 146, 60, 0.2);
+  --badge-orange-bg: rgba(251, 146, 60, 0.15);
   --badge-orange-text: #FED7AA;
 }
 
