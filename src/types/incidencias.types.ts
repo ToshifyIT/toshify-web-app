@@ -157,6 +157,7 @@ export interface IncidenciaFormData {
   vehiculo_patente?: string
   auto_a_cargo?: boolean
   monto?: number  // Monto para incidencias de cobro
+  km_exceso?: number  // KM excedidos para tipo "Exceso de kilometraje"
   tipo?: TipoIncidencia  // Tipo de incidencia (logistica o cobro)
   tipo_incidencia?: string  // Legacy: Tipo específico (ej: "Exceso de kilometraje", "Falta de lavado")
   tipo_cobro_descuento_id?: string // Nueva FK unificada

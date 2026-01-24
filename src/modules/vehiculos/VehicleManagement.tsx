@@ -14,6 +14,7 @@ import type {
 } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { VehiculoWizard } from './components/VehiculoWizard'
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import './VehicleManagement.css'
@@ -1125,6 +1126,9 @@ export function VehicleManagement() {
 
   return (
     <div className="veh-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando vehiculos..." size="lg" />
+
       {/* Stats Cards - Clickeables para filtrar */}
       <div className="veh-stats">
         <div className="veh-stats-grid">

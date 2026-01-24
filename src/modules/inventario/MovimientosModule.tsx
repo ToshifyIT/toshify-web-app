@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import {
@@ -774,6 +775,7 @@ export function MovimientosModule() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '1200px', margin: '0 auto' }}>
+      <LoadingOverlay show={loading} message="Cargando movimientos..." size="lg" />
       {requiereAprobacion() && (
         <div style={{
           padding: '8px 12px',

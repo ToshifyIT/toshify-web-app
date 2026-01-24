@@ -19,6 +19,7 @@ import type {
 } from "../../types/database.types";
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "../../components/ui/DataTable";
+import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
 import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
@@ -2149,6 +2150,9 @@ export function ConductoresModule() {
 
   return (
     <div className="cond-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando conductores..." size="lg" />
+
       {/* Stats Cards */}
       <div className="cond-stats">
         <div className="cond-stats-grid">

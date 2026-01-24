@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, Edit2, Trash2, Info } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { Role } from '../../types/database.types'
 import Swal from 'sweetalert2'
 import './AdminStyles.css'
@@ -230,6 +231,7 @@ export function RoleManagement() {
 
   return (
     <div className="admin-module">
+      <LoadingOverlay show={loading} message="Cargando roles..." size="lg" />
       {/* Action buttons */}
       <div className="rm-action-bar">
         <button

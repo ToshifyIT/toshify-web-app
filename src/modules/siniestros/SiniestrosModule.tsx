@@ -25,6 +25,7 @@ import {
 import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import type {
   SiniestroCompleto,
   SiniestroCategoria,
@@ -894,6 +895,9 @@ export function SiniestrosModule() {
 
   return (
     <div className="siniestros-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando siniestros..." size="lg" />
+
       {/* Stats rápidos - Arriba de todo */}
       <div className="siniestros-stats">
         <div className="stats-grid">

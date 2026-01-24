@@ -22,6 +22,7 @@ import {
   type FilterFn,
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronRight, Check, Filter, Calendar } from "lucide-react";
+import { Spinner } from "../LoadingOverlay";
 import "./DataTable.css";
 
 // Tipo para filtros de columna
@@ -882,8 +883,7 @@ export function DataTable<T>({
   if (loading) {
     return (
       <div className="dt-loading">
-        <div className="dt-loading-spinner"></div>
-        <span>Cargando...</span>
+        <Spinner size="md" message="Cargando..." />
       </div>
     );
   }
