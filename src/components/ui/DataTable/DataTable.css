@@ -682,17 +682,112 @@
   box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
 }
 
-/* Action Buttons - Toshify Design System */
+/* Action Buttons Container - Toshify Design System */
 .dt-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   justify-content: flex-end;
+  flex-wrap: nowrap;
 }
 
-.dt-btn-action {
-  padding: 8px;
-  border: none;
+/* Actions Dropdown Menu */
+.dt-btn-more.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.dt-actions-dropdown {
+  min-width: 160px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  overflow: hidden;
+  animation: dt-dropdown-fade 0.15s ease-out;
+}
+
+[data-theme="dark"] .dt-actions-dropdown {
+  background: var(--bg-secondary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes dt-dropdown-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dt-actions-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dt-actions-dropdown-item:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+
+.dt-actions-dropdown-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dt-actions-dropdown-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.dt-actions-dropdown-item:hover svg {
+  color: var(--text-primary);
+}
+
+/* Dropdown item variants */
+.dt-dropdown-danger {
+  color: var(--color-danger);
+}
+
+.dt-dropdown-danger svg {
+  color: var(--color-danger);
+}
+
+.dt-dropdown-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.dt-dropdown-success svg {
+  color: var(--color-success);
+}
+
+.dt-dropdown-warning svg {
+  color: var(--color-warning);
+}
+
+.dt-dropdown-info svg {
+  color: var(--color-info);
+}
+
+/* Action Buttons - Toshify Design System */
+.dt-btn-action {
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
   background: transparent;
   cursor: pointer;
   transition: all 0.15s;
@@ -701,6 +796,12 @@
   justify-content: center;
   color: var(--text-tertiary);
   position: relative;
+  flex-shrink: 0;
+}
+
+.dt-btn-action svg {
+  width: 15px;
+  height: 15px;
 }
 
 .dt-btn-action:hover {

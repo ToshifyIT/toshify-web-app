@@ -5,6 +5,7 @@ import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCh
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -1540,64 +1541,58 @@ export function AsignacionesModule() {
       id: 'acciones',
       header: 'Acciones',
       enableSorting: false,
-      cell: ({ row }) => (
-        <div className="dt-actions">
-          {row.original.estado === 'programado' && (
-            <>
-              <button
-                onClick={() => {
-                  setSelectedAsignacion(row.original)
-                  setShowConfirmModal(true)
-                }}
-                className="dt-btn-action asig-btn-confirm"
-                title="Confirmar programación"
-                disabled={!canEdit}
-              >
-                <CheckCircle size={16} />
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedAsignacion(row.original)
-                  setShowCancelModal(true)
-                }}
-                className="dt-btn-action asig-btn-cancel-prog"
-                title="Cancelar programación"
-                disabled={!canEdit}
-              >
-                <XCircle size={16} />
-              </button>
-            </>
-          )}
-          <button
-            className="dt-btn-action dt-btn-view"
-            title="Ver detalles"
-            onClick={() => {
+      cell: ({ row }) => {
+        const actions = [
+          // Acciones de programación (solo si está programado)
+          ...(row.original.estado === 'programado' ? [
+            {
+              icon: <CheckCircle size={15} />,
+              label: 'Confirmar',
+              onClick: () => {
+                setSelectedAsignacion(row.original)
+                setShowConfirmModal(true)
+              },
+              disabled: !canEdit,
+              variant: 'success' as const,
+            },
+            {
+              icon: <XCircle size={15} />,
+              label: 'Cancelar',
+              onClick: () => {
+                setSelectedAsignacion(row.original)
+                setShowCancelModal(true)
+              },
+              disabled: !canEdit,
+              variant: 'warning' as const,
+            },
+          ] : []),
+          // Ver detalles
+          {
+            icon: <Eye size={15} />,
+            label: 'Ver detalles',
+            onClick: () => {
               setViewAsignacion(row.original)
               setShowViewModal(true)
-            }}
-          >
-            <Eye size={16} />
-          </button>
-          {/* Botón regularizar - solo para admin, fullstack.senior y tech.spec */}
-          {canCreateManualAssignment && (
-            <button
-              onClick={() => handleOpenRegularizar(row.original)}
-              className="dt-btn-action dt-btn-edit"
-              title="Regularizar datos"
-            >
-              <Pencil size={16} />
-            </button>
-          )}
-          <button
-            onClick={() => handleDelete(row.original.id)}
-            className="dt-btn-action dt-btn-delete"
-            title="Eliminar"
-            disabled={!canDelete}
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
-      )
+            },
+          },
+          // Regularizar (solo para ciertos roles)
+          {
+            icon: <Pencil size={15} />,
+            label: 'Regularizar',
+            onClick: () => handleOpenRegularizar(row.original),
+            hidden: !canCreateManualAssignment,
+          },
+          // Eliminar
+          {
+            icon: <Trash2 size={15} />,
+            label: 'Eliminar',
+            onClick: () => handleDelete(row.original.id),
+            disabled: !canDelete,
+            variant: 'danger' as const,
+          },
+        ]
+        return <ActionsMenu actions={actions} maxVisible={2} />
+      }
     }
   ], [canEdit, canDelete, canCreateManualAssignment])
 
