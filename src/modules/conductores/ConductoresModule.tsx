@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
 import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
+import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
@@ -2096,76 +2097,47 @@ export function ConductoresModule() {
         cell: ({ row }) => {
           const driveUrl = (row.original as any).drive_folder_url;
           const isCreatingFolder = creatingDriveFolder === row.original.id;
+          
           return (
-          <div className="dt-actions">
-            {/* Botón de Drive: abrir modal si existe, crear si no */}
-            {driveUrl ? (
-              <button
-                className="dt-btn-action"
-                style={{ color: '#16a34a', background: 'rgba(22, 163, 74, 0.1)' }}
-                onClick={() => handleOpenDriveFolder(row.original)}
-                title="Ver documentos en Drive"
-              >
-                <FolderOpen size={16} />
-              </button>
-            ) : (
-              <button
-                className="dt-btn-action"
-                style={{
-                  color: isCreatingFolder ? '#9ca3af' : '#6b7280',
-                  background: 'rgba(107, 114, 128, 0.1)'
-                }}
-                onClick={() => handleCreateDriveFolder(row.original)}
-                disabled={isCreatingFolder}
-                title="Crear carpeta en Drive"
-              >
-                {isCreatingFolder ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <FolderPlus size={16} />
-                )}
-              </button>
-            )}
-            <button
-              className="dt-btn-action dt-btn-view"
-              onClick={async () => {
-                // Cargar detalles completos antes de mostrar el modal
-                const fullDetails = await loadConductorDetails(row.original.id);
-                if (fullDetails) {
-                  setSelectedConductor(fullDetails as any);
-                  setShowDetailsModal(true);
+            <ActionsMenu
+              maxVisible={2}
+              actions={[
+                {
+                  icon: <Eye size={15} />,
+                  label: 'Ver detalles',
+                  onClick: async () => {
+                    const fullDetails = await loadConductorDetails(row.original.id);
+                    if (fullDetails) {
+                      setSelectedConductor(fullDetails as any);
+                      setShowDetailsModal(true);
+                    }
+                  }
+                },
+                {
+                  icon: <Edit2 size={15} />,
+                  label: 'Editar',
+                  onClick: () => openEditModal(row.original),
+                  disabled: !canUpdate,
+                  variant: 'info'
+                },
+                {
+                  icon: driveUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
+                  label: driveUrl ? 'Ver documentos' : 'Crear carpeta',
+                  onClick: () => driveUrl ? handleOpenDriveFolder(row.original) : handleCreateDriveFolder(row.original),
+                  disabled: isCreatingFolder,
+                  variant: driveUrl ? 'success' : 'default'
+                },
+                {
+                  icon: <Trash2 size={15} />,
+                  label: 'Eliminar',
+                  onClick: () => openDeleteModal(row.original),
+                  disabled: !canDelete,
+                  variant: 'danger'
                 }
-              }}
-              title="Ver detalles"
-            >
-              <Eye size={16} />
-            </button>
-            <button
-              className="dt-btn-action dt-btn-edit"
-              onClick={() => openEditModal(row.original)}
-              disabled={!canUpdate}
-              title={
-                !canUpdate
-                  ? "No tienes permisos para editar"
-                  : "Editar conductor"
-              }
-            >
-              <Edit2 size={16} />
-            </button>
-            <button
-              className="dt-btn-action dt-btn-delete"
-              onClick={() => openDeleteModal(row.original)}
-              disabled={!canDelete}
-              title={
-                !canDelete
-                  ? "No tienes permisos para eliminar"
-                  : "Eliminar conductor"
-              }
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        )},
+              ]}
+            />
+          );
+        },
         enableSorting: false,
       },
     ],

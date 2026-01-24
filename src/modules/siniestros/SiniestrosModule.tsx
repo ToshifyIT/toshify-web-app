@@ -20,8 +20,10 @@ import {
   Clock,
   ExternalLink,
   FolderOpen,
-  Download
+  Download,
+  CheckCircle
 } from 'lucide-react'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -436,85 +438,47 @@ export function SiniestrosModule() {
         )
       }
     },
-    {
-      id: 'habilitar',
-      header: 'Habilitar',
-      cell: ({ row }) => {
-        const isHabilitado = row.original.habilitado_circular
-        const hasVehiculo = !!row.original.vehiculo_id
 
-        // Si ya está habilitado, mostrar check verde
-        if (isHabilitado) {
-          return (
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '24px',
-              height: '24px',
-              borderRadius: '4px',
-              background: 'rgba(16, 185, 129, 0.15)',
-              color: '#10b981'
-            }}>
-              ✓
-            </span>
-          )
-        }
-
-        // Si no tiene vehículo, mostrar deshabilitado
-        if (!hasVehiculo) {
-          return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-        }
-
-        // Mostrar checkbox para habilitar
-        return (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              handleHabilitarVehiculo(row.original)
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '24px',
-              height: '24px',
-              borderRadius: '4px',
-              border: '2px solid #ef4444',
-              background: 'transparent',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            title="Habilitar vehículo (PKG_ON_BASE)"
-          />
-        )
-      }
-    },
     {
       id: 'acciones',
       header: 'Acciones',
-      cell: ({ row }) => (
-        <div className="dt-actions">
-          <button className="dt-btn-action dt-btn-view" title="Ver" onClick={() => handleVerSiniestro(row.original)}>
-            <Eye size={14} />
-          </button>
-          <button className="dt-btn-action dt-btn-edit" title="Editar" onClick={() => handleEditarSiniestro(row.original)}>
-            <Edit2 size={14} />
-          </button>
-          {row.original.carpeta_drive_url && (
-            <a
-              href={row.original.carpeta_drive_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="dt-btn-action"
-              title="Drive"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <FolderOpen size={14} />
-            </a>
-          )}
-        </div>
-      )
+      cell: ({ row }) => {
+        const isHabilitado = row.original.habilitado_circular;
+        const hasVehiculo = !!row.original.vehiculo_id;
+        
+        return (
+          <ActionsMenu
+            maxVisible={2}
+            actions={[
+              {
+                icon: <Eye size={15} />,
+                label: 'Ver detalle',
+                onClick: () => handleVerSiniestro(row.original)
+              },
+              {
+                icon: <Edit2 size={15} />,
+                label: 'Editar',
+                onClick: () => handleEditarSiniestro(row.original),
+                variant: 'info'
+              },
+              {
+                icon: <FolderOpen size={15} />,
+                label: 'Ver en Drive',
+                onClick: () => window.open(row.original.carpeta_drive_url!, '_blank'),
+                hidden: !row.original.carpeta_drive_url,
+                variant: 'success'
+              },
+              {
+                icon: <CheckCircle size={15} />,
+                label: 'Habilitar vehiculo',
+                onClick: () => handleHabilitarVehiculo(row.original),
+                hidden: isHabilitado || !hasVehiculo,
+                variant: 'warning'
+              }
+            ]}
+          />
+        );
+      }
     }
   ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, categoriasUnicas, categoriaFilter, responsableFilter, estadosUnicos, estadoFilter, openFilterId, canEdit])
 

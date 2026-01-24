@@ -41,6 +41,165 @@ import "./DataTable.css";
 type ColumnFilters = Record<string, string[]>;
 type DateFilters = Record<string, { from?: string; to?: string }>;
 
+// Filter Header Component - extracted to avoid hooks in callbacks
+interface FilterHeaderProps {
+  colId: string;
+  label: string;
+  isOpen: boolean;
+  hasFilter: boolean;
+  isDate: boolean;
+  uniqueValues: string[];
+  selectedValues: string[];
+  dateFilter: { from?: string; to?: string } | undefined;
+  onToggle: (colId: string) => void;
+  onSelectValue: (colId: string, value: string) => void;
+  onDateChange: (colId: string, field: 'from' | 'to', value: string) => void;
+  onClearFilter: (colId: string) => void;
+}
+
+function FilterHeader({
+  colId,
+  label,
+  isOpen,
+  hasFilter,
+  isDate,
+  uniqueValues,
+  selectedValues,
+  dateFilter,
+  onToggle,
+  onSelectValue,
+  onDateChange,
+  onClearFilter,
+}: FilterHeaderProps) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredOptions = searchTerm
+    ? uniqueValues.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
+    : uniqueValues;
+
+  // Calculate position when opening
+  useLayoutEffect(() => {
+    if (!isOpen || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + 4;
+
+    // Adjust if goes off screen
+    if (left + 220 > window.innerWidth) {
+      left = window.innerWidth - 230;
+    }
+    if (top + 300 > window.innerHeight) {
+      top = rect.top - 304;
+    }
+    setPosition({ top, left });
+  }, [isOpen]);
+
+  // Clear search when closing
+  useEffect(() => {
+    if (!isOpen) setSearchTerm('');
+  }, [isOpen]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
+        buttonRef.current && !buttonRef.current.contains(e.target as Node)
+      ) {
+        onToggle(colId);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [isOpen, colId, onToggle]);
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggle(colId);
+  };
+
+  return (
+    <div className="dt-filter-header">
+      <span className="dt-filter-label">{label}</span>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`dt-filter-btn ${hasFilter ? 'active' : ''}`}
+        onClick={handleToggle}
+        title={`Filtrar por ${label}`}
+      >
+        {isDate ? <Calendar size={12} /> : <FilterIcon size={12} />}
+      </button>
+      {isOpen && createPortal(
+        <div
+          ref={dropdownRef}
+          className="dt-filter-dropdown"
+          style={{ position: 'fixed', top: position.top, left: position.left }}
+          onClick={e => e.stopPropagation()}
+        >
+          {isDate ? (
+            <div className="dt-filter-date">
+              <label>
+                <span>Desde:</span>
+                <input
+                  type="date"
+                  value={dateFilter?.from || ''}
+                  onChange={e => onDateChange(colId, 'from', e.target.value)}
+                />
+              </label>
+              <label>
+                <span>Hasta:</span>
+                <input
+                  type="date"
+                  value={dateFilter?.to || ''}
+                  onChange={e => onDateChange(colId, 'to', e.target.value)}
+                />
+              </label>
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="dt-filter-search"
+                autoFocus
+              />
+              <div className="dt-filter-options">
+                {filteredOptions.length === 0 ? (
+                  <div className="dt-filter-empty">Sin resultados</div>
+                ) : (
+                  filteredOptions.slice(0, 50).map(option => (
+                    <label key={option} className="dt-filter-option">
+                      <input
+                        type="checkbox"
+                        checked={selectedValues.includes(option)}
+                        onChange={() => onSelectValue(colId, option)}
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+          {hasFilter && (
+            <button type="button" className="dt-filter-clear" onClick={() => onClearFilter(colId)}>
+              Limpiar filtro
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 export interface DataTableProps<T> {
   /** Array de datos a mostrar en la tabla */
   data: T[];
@@ -398,171 +557,44 @@ export function DataTable<T>({
   const hiddenColumns = useMemo(() => regularColumns.slice(visibleColumnCount), [regularColumns, visibleColumnCount]);
   const hasHiddenColumns = hiddenColumns.length > 0;
 
-  // Filter Header Component - renders inline in header
-  const FilterHeader = useCallback(({ colId, label }: { colId: string; label: string }) => {
-    const buttonRef = useRef<HTMLButtonElement>(null);
-    const dropdownRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ top: 0, left: 0 });
-    const [searchTerm, setSearchTerm] = useState('');
+  // Filter header callbacks - stable references for FilterHeader component
+  const handleFilterToggle = useCallback((colId: string) => {
+    setOpenFilterId(prev => prev === colId ? null : colId);
+  }, []);
 
-    const isDate = isDateColumn(colId);
-    const isOpen = openFilterId === colId;
-    const hasFilter = isDate
-      ? !!(dateFilters[colId]?.from || dateFilters[colId]?.to)
-      : (columnFilters[colId]?.length || 0) > 0;
-
-    const uniqueValues = useMemo(() => isDate ? [] : getUniqueValues(colId), [colId, isDate]);
-    const filteredOptions = searchTerm
-      ? uniqueValues.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
-      : uniqueValues;
-
-    // Calculate position when opening
-    useLayoutEffect(() => {
-      if (!isOpen || !buttonRef.current) return;
-      const rect = buttonRef.current.getBoundingClientRect();
-      let left = rect.left;
-      let top = rect.bottom + 4;
-
-      // Adjust if goes off screen
-      if (left + 220 > window.innerWidth) {
-        left = window.innerWidth - 230;
-      }
-      if (top + 300 > window.innerHeight) {
-        top = rect.top - 304;
-      }
-      setPosition({ top, left });
-    }, [isOpen]);
-
-    // Clear search when closing
-    useEffect(() => {
-      if (!isOpen) setSearchTerm('');
-    }, [isOpen]);
-
-    // Close on outside click
-    useEffect(() => {
-      if (!isOpen) return;
-      const handleClick = (e: MouseEvent) => {
-        if (
-          dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
-          buttonRef.current && !buttonRef.current.contains(e.target as Node)
-        ) {
-          setOpenFilterId(null);
-        }
-      };
-      document.addEventListener('mousedown', handleClick);
-      return () => document.removeEventListener('mousedown', handleClick);
-    }, [isOpen]);
-
-    const handleToggle = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      setOpenFilterId(isOpen ? null : colId);
-    };
-
-    const handleSelectValue = (value: string) => {
-      const current = columnFilters[colId] || [];
+  const handleSelectValue = useCallback((colId: string, value: string) => {
+    setColumnFilters(prev => {
+      const current = prev[colId] || [];
       if (current.includes(value)) {
-        setColumnFilters({ ...columnFilters, [colId]: current.filter(v => v !== value) });
+        return { ...prev, [colId]: current.filter(v => v !== value) };
       } else {
-        setColumnFilters({ ...columnFilters, [colId]: [...current, value] });
+        return { ...prev, [colId]: [...current, value] };
       }
-    };
+    });
+  }, []);
 
-    const handleDateChange = (field: 'from' | 'to', value: string) => {
-      setDateFilters({
-        ...dateFilters,
-        [colId]: { ...dateFilters[colId], [field]: value }
-      });
-    };
+  const handleDateChange = useCallback((colId: string, field: 'from' | 'to', value: string) => {
+    setDateFilters(prev => ({
+      ...prev,
+      [colId]: { ...prev[colId], [field]: value }
+    }));
+  }, []);
 
-    const clearFilter = () => {
-      if (isDate) {
-        const newDateFilters = { ...dateFilters };
-        delete newDateFilters[colId];
-        setDateFilters(newDateFilters);
-      } else {
-        const newFilters = { ...columnFilters };
+  const handleClearFilter = useCallback((colId: string) => {
+    if (isDateColumn(colId)) {
+      setDateFilters(prev => {
+        const newFilters = { ...prev };
         delete newFilters[colId];
-        setColumnFilters(newFilters);
-      }
-    };
-
-    return (
-      <div className="dt-filter-header">
-        <span className="dt-filter-label">{label}</span>
-        <button
-          ref={buttonRef}
-          type="button"
-          className={`dt-filter-btn ${hasFilter ? 'active' : ''}`}
-          onClick={handleToggle}
-          title={`Filtrar por ${label}`}
-        >
-          {isDate ? <Calendar size={12} /> : <FilterIcon size={12} />}
-        </button>
-        {isOpen && createPortal(
-          <div
-            ref={dropdownRef}
-            className="dt-filter-dropdown"
-            style={{ position: 'fixed', top: position.top, left: position.left }}
-            onClick={e => e.stopPropagation()}
-          >
-            {isDate ? (
-              <div className="dt-filter-date">
-                <label>
-                  <span>Desde:</span>
-                  <input
-                    type="date"
-                    value={dateFilters[colId]?.from || ''}
-                    onChange={e => handleDateChange('from', e.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>Hasta:</span>
-                  <input
-                    type="date"
-                    value={dateFilters[colId]?.to || ''}
-                    onChange={e => handleDateChange('to', e.target.value)}
-                  />
-                </label>
-              </div>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="dt-filter-search"
-                  autoFocus
-                />
-                <div className="dt-filter-options">
-                  {filteredOptions.length === 0 ? (
-                    <div className="dt-filter-empty">Sin resultados</div>
-                  ) : (
-                    filteredOptions.slice(0, 50).map(option => (
-                      <label key={option} className="dt-filter-option">
-                        <input
-                          type="checkbox"
-                          checked={(columnFilters[colId] || []).includes(option)}
-                          onChange={() => handleSelectValue(option)}
-                        />
-                        <span>{option}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
-            {hasFilter && (
-              <button type="button" className="dt-filter-clear" onClick={clearFilter}>
-                Limpiar filtro
-              </button>
-            )}
-          </div>,
-          document.body
-        )}
-      </div>
-    );
-  }, [openFilterId, columnFilters, dateFilters, isDateColumn, getUniqueValues]);
+        return newFilters;
+      });
+    } else {
+      setColumnFilters(prev => {
+        const newFilters = { ...prev };
+        delete newFilters[colId];
+        return newFilters;
+      });
+    }
+  }, [isDateColumn]);
 
   // Wrap columns with auto-filters (if enabled)
   const columnsWithFilters = useMemo(() => {
@@ -590,12 +622,33 @@ export function DataTable<T>({
         headerLabel = colDef.header;
       }
 
+      const isDate = isDateColumn(colId);
+      const isOpen = openFilterId === colId;
+      const hasFilter = isDate
+        ? !!(dateFilters[colId]?.from || dateFilters[colId]?.to)
+        : (columnFilters[colId]?.length || 0) > 0;
+
       return {
         ...col,
-        header: () => <FilterHeader colId={colId} label={headerLabel} />,
+        header: () => (
+          <FilterHeader
+            colId={colId}
+            label={headerLabel}
+            isOpen={isOpen}
+            hasFilter={hasFilter}
+            isDate={isDate}
+            uniqueValues={isDate ? [] : getUniqueValues(colId)}
+            selectedValues={columnFilters[colId] || []}
+            dateFilter={dateFilters[colId]}
+            onToggle={handleFilterToggle}
+            onSelectValue={handleSelectValue}
+            onDateChange={handleDateChange}
+            onClearFilter={handleClearFilter}
+          />
+        ),
       } as ColumnDef<T, unknown>;
     });
-  }, [visibleColumns, FilterHeader, disableAutoFilters]);
+  }, [visibleColumns, disableAutoFilters, isDateColumn, openFilterId, dateFilters, columnFilters, getUniqueValues, handleFilterToggle, handleSelectValue, handleDateChange, handleClearFilter]);
 
   // Memoize final columns to prevent unnecessary re-renders that reset expand state
   const finalColumns = useMemo<ColumnDef<T, unknown>[]>(() => {
@@ -1094,49 +1147,88 @@ export function DataTable<T>({
             {table.getRowModel().rows.length === 0 ? (
               <div className="dt-no-results-card">No se encontraron resultados</div>
             ) : (
-              table.getRowModel().rows.map((row) => (
-                <div key={row.id} className="dt-card">
-                  <div className="dt-card-content">
-                    {row.getVisibleCells().map((cell) => {
-                      const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
-                      const isExpandColumn = cell.column.id === "expand";
-                      if (isExpandColumn) return null;
-                      
-                      // Get header label
-                      const header = cell.column.columnDef.header;
-                      let headerLabel = cell.column.id;
-                      if (typeof header === 'string') {
-                        headerLabel = header;
-                      } else if (typeof header === 'function') {
-                        const rendered = header({ column: cell.column, header: cell.column.columnDef, table } as any);
-                        if (typeof rendered === 'string') headerLabel = rendered;
-                        // Para FilterHeader, extraer el label
-                        if (rendered && typeof rendered === 'object' && 'props' in rendered) {
-                          const props = (rendered as any).props;
-                          if (props?.label) headerLabel = props.label;
+              table.getRowModel().rows.map((row) => {
+                // Separar celdas: acciones van al final, el resto se filtra
+                const actionsCells: typeof row.getVisibleCells extends () => infer R ? R : never = [];
+                const contentCells: typeof row.getVisibleCells extends () => infer R ? R : never = [];
+                
+                row.getVisibleCells().forEach((cell) => {
+                  const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
+                  const isExpandColumn = cell.column.id === "expand";
+                  
+                  if (isExpandColumn) return;
+                  if (isActionsColumn) {
+                    actionsCells.push(cell);
+                  } else {
+                    contentCells.push(cell);
+                  }
+                });
+
+                return (
+                  <div key={row.id} className="dt-card">
+                    <div className="dt-card-content">
+                      {contentCells.map((cell) => {
+                        // Get header label
+                        const header = cell.column.columnDef.header;
+                        let headerLabel = cell.column.id;
+                        if (typeof header === 'string') {
+                          headerLabel = header;
+                        } else if (typeof header === 'function') {
+                          const rendered = header({ column: cell.column, header: cell.column.columnDef, table } as any);
+                          if (typeof rendered === 'string') headerLabel = rendered;
+                          // Para FilterHeader, extraer el label
+                          if (rendered && typeof rendered === 'object' && 'props' in rendered) {
+                            const props = (rendered as any).props;
+                            if (props?.label) headerLabel = props.label;
+                          }
                         }
-                      }
-                      
-                      if (isActionsColumn) {
+                        
+                        // Renderizar valor
+                        const renderedValue = flexRender(cell.column.columnDef.cell, cell.getContext());
+                        
+                        // Obtener valor raw para determinar si está vacío
+                        const rawValue = cell.getValue();
+                        
+                        // Determinar si el valor está vacío o es un placeholder
+                        const isEmptyValue = (val: unknown, rendered: React.ReactNode): boolean => {
+                          // Valores nulos/undefined
+                          if (val === null || val === undefined || val === '') return true;
+                          // Strings vacíos o solo guiones
+                          if (typeof val === 'string' && (val.trim() === '' || val.trim() === '-' || val === 'N/A')) return true;
+                          // Verificar el contenido renderizado
+                          if (typeof rendered === 'string' && (rendered.trim() === '-' || rendered.trim() === '' || rendered === 'N/A')) return true;
+                          return false;
+                        };
+                        
+                        // Ocultar campos vacíos en mobile para cards más limpias
+                        if (isEmptyValue(rawValue, renderedValue)) {
+                          return null;
+                        }
+                        
                         return (
-                          <div key={cell.id} className="dt-card-actions">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          <div key={cell.id} className="dt-card-field">
+                            <span className="dt-card-label">{headerLabel}</span>
+                            <span className="dt-card-value">
+                              {renderedValue}
+                            </span>
                           </div>
                         );
-                      }
+                      })}
                       
-                      return (
-                        <div key={cell.id} className="dt-card-field">
-                          <span className="dt-card-label">{headerLabel}</span>
-                          <span className="dt-card-value">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </span>
+                      {/* Acciones siempre al final */}
+                      {actionsCells.length > 0 && (
+                        <div className="dt-card-actions">
+                          {actionsCells.map((cell) => (
+                            <React.Fragment key={cell.id}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </React.Fragment>
+                          ))}
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         ) : (

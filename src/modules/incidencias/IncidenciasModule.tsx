@@ -31,6 +31,7 @@ import {
   CheckSquare,
   Ban
 } from 'lucide-react'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -887,19 +888,29 @@ export function IncidenciasModule() {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
-        <div className="dt-actions">
-          <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerIncidencia(row.original)}>
-            <Eye size={14} />
-          </button>
-          <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
-            <Edit2 size={14} />
-          </button>
-          {canDelete && (
-            <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
+        <ActionsMenu
+          maxVisible={2}
+          actions={[
+            {
+              icon: <Eye size={15} />,
+              label: 'Ver detalle',
+              onClick: () => handleVerIncidencia(row.original)
+            },
+            {
+              icon: <Edit2 size={15} />,
+              label: 'Editar',
+              onClick: () => handleEditarIncidencia(row.original),
+              variant: 'info'
+            },
+            {
+              icon: <Trash2 size={15} />,
+              label: 'Eliminar',
+              onClick: () => handleEliminarIncidencia(row.original),
+              hidden: !canDelete,
+              variant: 'danger'
+            }
+          ]}
+        />
       )
     }
   ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete])
@@ -1065,36 +1076,36 @@ export function IncidenciasModule() {
         const puedeEnviar = !tienePenalidad || estaRechazada
         
         return (
-          <div className="dt-actions">
-            <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerIncidencia(row.original)}>
-              <Eye size={14} />
-            </button>
-            <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarIncidencia(row.original)}>
-              <Edit2 size={14} />
-            </button>
-            {puedeEnviar ? (
-              <button 
-                className={`dt-btn-action ${estaRechazada ? 'dt-btn-danger' : 'dt-btn-warning'}`}
-                data-tooltip={estaRechazada ? 'Reenviar a facturación' : 'Enviar a facturación'}
-                onClick={() => handleEnviarAFacturacion(row.original)}
-              >
-                <DollarSign size={14} />
-              </button>
-            ) : (
-              <button 
-                className="dt-btn-action dt-btn-success" 
-                data-tooltip="Ya enviado a facturación"
-                style={{ opacity: 0.5, cursor: 'default' }}
-              >
-                <CheckCircle size={14} />
-              </button>
-            )}
-            {canDelete && (
-              <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarIncidencia(row.original)}>
-                <Trash2 size={14} />
-              </button>
-            )}
-          </div>
+          <ActionsMenu
+            maxVisible={2}
+            actions={[
+              {
+                icon: <Eye size={15} />,
+                label: 'Ver detalle',
+                onClick: () => handleVerIncidencia(row.original)
+              },
+              {
+                icon: <Edit2 size={15} />,
+                label: 'Editar',
+                onClick: () => handleEditarIncidencia(row.original),
+                variant: 'info'
+              },
+              {
+                icon: puedeEnviar ? <DollarSign size={15} /> : <CheckCircle size={15} />,
+                label: puedeEnviar ? (estaRechazada ? 'Reenviar a facturacion' : 'Enviar a facturacion') : 'Ya enviado',
+                onClick: () => puedeEnviar && handleEnviarAFacturacion(row.original),
+                disabled: !puedeEnviar,
+                variant: puedeEnviar ? (estaRechazada ? 'danger' : 'warning') : 'success'
+              },
+              {
+                icon: <Trash2 size={15} />,
+                label: 'Eliminar',
+                onClick: () => handleEliminarIncidencia(row.original),
+                hidden: !canDelete,
+                variant: 'danger'
+              }
+            ]}
+          />
         )
       }
     })

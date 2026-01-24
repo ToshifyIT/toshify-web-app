@@ -31,28 +31,10 @@ export function ActionsMenu({ actions, maxVisible = 2 }: ActionsMenuProps) {
   // Filtrar acciones ocultas
   const visibleActions = actions.filter(a => !a.hidden)
   
-  // Si hay pocas acciones, mostrar todas
-  if (visibleActions.length <= maxVisible + 1) {
-    return (
-      <div className="dt-actions">
-        {visibleActions.map((action, idx) => (
-          <button
-            key={idx}
-            onClick={action.onClick}
-            disabled={action.disabled}
-            className={`dt-btn-action ${action.variant ? `dt-btn-${action.variant}` : ''}`}
-            title={action.label}
-          >
-            {action.icon}
-          </button>
-        ))}
-      </div>
-    )
-  }
-
-  // Separar acciones visibles y las del menu
-  const primaryActions = visibleActions.slice(0, maxVisible)
-  const menuActions = visibleActions.slice(maxVisible)
+  // Determinar si mostrar solo botones o tambien menu dropdown
+  const showDropdown = visibleActions.length > maxVisible + 1
+  const primaryActions = showDropdown ? visibleActions.slice(0, maxVisible) : visibleActions
+  const menuActions = showDropdown ? visibleActions.slice(maxVisible) : []
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -106,18 +88,20 @@ export function ActionsMenu({ actions, maxVisible = 2 }: ActionsMenuProps) {
         </button>
       ))}
       
-      {/* Boton de menu */}
-      <button
-        ref={buttonRef}
-        onClick={handleToggle}
-        className={`dt-btn-action dt-btn-more ${isOpen ? 'active' : ''}`}
-        title="Mas opciones"
-      >
-        <MoreVertical size={15} />
-      </button>
+      {/* Boton de menu - solo si hay acciones adicionales */}
+      {showDropdown && (
+        <button
+          ref={buttonRef}
+          onClick={handleToggle}
+          className={`dt-btn-action dt-btn-more ${isOpen ? 'active' : ''}`}
+          title="Mas opciones"
+        >
+          <MoreVertical size={15} />
+        </button>
+      )}
 
       {/* Dropdown menu */}
-      {isOpen && createPortal(
+      {isOpen && showDropdown && createPortal(
         <div
           ref={dropdownRef}
           className="dt-actions-dropdown"

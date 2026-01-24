@@ -1867,14 +1867,14 @@
 .dt-cards-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 10px;
+  padding: 10px;
 }
 
 .dt-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
   transition: box-shadow 0.15s;
 }
@@ -1884,27 +1884,31 @@
 }
 
 .dt-card-content {
-  padding: 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .dt-card-field {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
 }
 
 .dt-card-label {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
+  letter-spacing: 0;
   flex-shrink: 0;
-  padding-top: 2px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dt-card-value {
@@ -1912,21 +1916,37 @@
   color: var(--text-primary);
   text-align: right;
   word-break: break-word;
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* Badges dentro de cards deben ser mas compactos */
+.dt-card-value .dt-badge {
+  font-size: 10px;
+  padding: 3px 8px;
 }
 
 .dt-card-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding-top: 12px;
+  gap: 6px;
+  padding-top: 10px;
   border-top: 1px solid var(--border-primary);
   margin-top: 4px;
+  flex-wrap: wrap;
 }
 
 .dt-card-actions .dt-btn-action {
-  padding: 10px;
-  min-width: 44px;
-  min-height: 44px;
+  padding: 8px;
+  min-width: 40px;
+  min-height: 40px;
+}
+
+/* Acciones menu dentro de cards */
+.dt-card-actions .dt-actions {
+  gap: 6px;
 }
 
 .dt-no-results-card {
@@ -1934,6 +1954,12 @@
   padding: 40px 20px;
   color: var(--text-tertiary);
   font-size: 14px;
+}
+
+/* Cards: primer campo destacado (titulo) */
+.dt-card-field:first-child .dt-card-value {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 /* Hide table wrapper on mobile, show cards */
