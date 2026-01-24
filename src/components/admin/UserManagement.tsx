@@ -7,6 +7,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
 import { Users, UserCheck, UserX, Shield, KeyRound } from 'lucide-react'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import './UserManagement.css'
 import './AdminStyles.css'
 
@@ -121,13 +122,7 @@ export function UserManagement() {
         throw new Error(result.error || 'Error creando usuario')
       }
 
-      await Swal.fire({
-        icon: 'success',
-        title: 'Usuario Creado',
-        text: 'El usuario se ha creado exitosamente',
-        showConfirmButton: false,
-        timer: 2000
-      })
+      showSuccess('Usuario Creado', 'El usuario se ha creado exitosamente')
       setShowCreateModal(false)
       setNewUser({ email: '', password: '', fullName: '', roleId: '', mustChangePassword: true })
       await loadData()
@@ -166,13 +161,7 @@ export function UserManagement() {
 
       await loadData()
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Rol Actualizado',
-        text: 'El rol se ha actualizado correctamente',
-        showConfirmButton: false,
-        timer: 2000
-      })
+      showSuccess('Rol Actualizado', 'El rol se ha actualizado correctamente')
     } catch (err: any) {
       console.error('❌ Error completo:', err)
       Swal.fire({
@@ -194,13 +183,7 @@ export function UserManagement() {
       if (error) throw error
 
       await loadData()
-      Swal.fire({
-        icon: 'success',
-        title: 'Estado Actualizado',
-        text: `Usuario ${!currentStatus ? 'activado' : 'desactivado'} correctamente`,
-        showConfirmButton: false,
-        timer: 2000
-      })
+      showSuccess('Estado Actualizado', `Usuario ${!currentStatus ? 'activado' : 'desactivado'} correctamente`)
     } catch (err: any) {
       Swal.fire({
         icon: 'error',
@@ -320,12 +303,7 @@ export function UserManagement() {
             if (emailError) throw emailError
             if (emailData && !emailData.success) throw new Error(emailData.error || 'Error desconocido')
 
-            Swal.fire({
-              icon: 'success',
-              title: 'Correo Enviado',
-              html: `La contraseña fue enviada a <strong>${userEmail}</strong>`,
-              confirmButtonColor: '#FF0033'
-            })
+            showSuccess('Correo Enviado', `La contraseña fue enviada a ${userEmail}`)
           } catch (emailErr: any) {
             Swal.fire({
               icon: 'error',
@@ -336,13 +314,7 @@ export function UserManagement() {
           }
         }
       } else {
-        Swal.fire({
-          icon: 'success',
-          title: 'Contraseña Actualizada',
-          html: `La contraseña de <strong>${userName}</strong> ha sido cambiada.<br>Deberá cambiarla en el próximo inicio.`,
-          showConfirmButton: false,
-          timer: 3000
-        })
+        showSuccess('Contraseña Actualizada', `La contraseña de ${userName} ha sido cambiada. Deberá cambiarla en el próximo inicio.`)
       }
     } catch (err: any) {
       Swal.fire({

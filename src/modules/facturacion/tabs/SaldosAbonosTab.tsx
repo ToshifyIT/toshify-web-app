@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import {
   Wallet,
   Users,
@@ -601,24 +602,7 @@ export function SaldosAbonosTab() {
         }
       }
 
-      const mensajeFraccionado = formValues.fraccionado 
-        ? `<p><strong>Fraccionado:</strong> ${formValues.cuotas} cuotas de ${formatCurrency(Math.ceil(Math.abs(formValues.saldo) / formValues.cuotas))}</p>
-           <p><strong>Inicio:</strong> Semana ${formValues.semanaInicio} - ${formValues.anioInicio}</p>`
-        : ''
-
-      Swal.fire({
-        icon: 'success',
-        title: 'Saldo Agregado',
-        html: `
-          <div style="text-align: left; font-size: 13px;">
-            <p><strong>Conductor:</strong> ${conductorNombre}</p>
-            <p><strong>Deuda:</strong> <span style="color: #dc2626; font-weight: 600;">${formatCurrency(formValues.saldo)}</span></p>
-            ${mensajeFraccionado}
-            <p><strong>Fecha referencia:</strong> ${formValues.fecha}</p>
-          </div>
-        `,
-        confirmButtonColor: '#16a34a'
-      })
+      showSuccess('Saldo Agregado', `${conductorNombre} - ${formatCurrency(formValues.saldo)}${formValues.fraccionado ? ` (${formValues.cuotas} cuotas)` : ''}`)
 
       // Recargar datos
       cargarSaldos()
@@ -755,13 +739,7 @@ export function SaldosAbonosTab() {
 
       if (errorUpdate) throw errorUpdate
 
-      Swal.fire({
-        icon: 'success',
-        title: formValues.tipo === 'abono' ? 'Abono Registrado' : 'Cargo Registrado',
-        text: `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess(formValues.tipo === 'abono' ? 'Abono Registrado' : 'Cargo Registrado', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
 
       cargarSaldos()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -803,17 +781,10 @@ export function SaldosAbonosTab() {
 
       if (error) throw error
 
-      await Swal.fire({
-        icon: 'success',
-        title: 'Eliminado',
-        text: 'El saldo ha sido eliminado correctamente',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Eliminado')
 
       cargarSaldos()
     } catch (error) {
-      console.error('Error eliminando saldo:', error)
       Swal.fire('Error', 'No se pudo eliminar el saldo', 'error')
     }
   }
@@ -890,13 +861,7 @@ export function SaldosAbonosTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Actualizado',
-        text: 'El saldo ha sido actualizado correctamente',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Actualizado', 'El saldo ha sido actualizado correctamente')
 
       cargarSaldos()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1078,13 +1043,7 @@ export function SaldosAbonosTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Actualizado',
-        text: 'El movimiento ha sido actualizado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Actualizado')
 
       // Recargar datos
       cargarSaldos()

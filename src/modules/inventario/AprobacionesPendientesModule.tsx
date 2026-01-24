@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import { Check, X, Eye, Clock, Package, ArrowUpRight, ArrowDownLeft, RotateCcw, Filter, RefreshCw, History, CheckCircle, XCircle } from 'lucide-react'
 
 interface MovimientoPendiente {
@@ -183,13 +184,7 @@ export function AprobacionesPendientesModule() {
       if (rpcError) throw rpcError
       if (rpcResult && !rpcResult.success) throw new Error(rpcResult.error)
 
-      await Swal.fire({
-        title: '¡Aprobado!',
-        text: 'El movimiento ha sido aprobado y el stock actualizado',
-        icon: 'success',
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('¡Aprobado!', 'El movimiento ha sido aprobado y el stock actualizado')
 
       cargarMovimientosPendientes()
     } catch (error: any) {

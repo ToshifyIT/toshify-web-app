@@ -8,6 +8,7 @@ import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
 import Swal from "sweetalert2";
+import { showSuccess } from "../../utils/toast";
 import { getWeek, getYear } from "date-fns";
 import type {
   ConductorWithRelations,
@@ -566,13 +567,7 @@ export function ConductoresModule() {
           : c
       ));
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Carpeta creada',
-        text: `Se creó la carpeta "${result.folderName}" en Google Drive`,
-        confirmButtonColor: '#E63946',
-        timer: 3000,
-      });
+      showSuccess('Carpeta creada', `Se creó "${result.folderName}" en Google Drive`);
 
       // Abrir la carpeta en nueva pestaña
       window.open(result.folderUrl, '_blank');
@@ -666,8 +661,8 @@ export function ConductoresModule() {
     }
   };
 
-  const loadConductores = async () => {
-    setLoading(true);
+  const loadConductores = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError("");
 
     try {
@@ -856,16 +851,10 @@ export function ConductoresModule() {
         });
       }
 
-      Swal.fire({
-        icon: "success",
-        title: "¡Éxito!",
-        text: "Conductor creado exitosamente",
-        confirmButtonColor: "#E63946",
-        timer: 2000,
-      });
+      showSuccess("Conductor creado");
       setShowCreateModal(false);
       resetForm();
-      await loadConductores();
+      await loadConductores(true);
     } catch (err: any) {
       console.error("Error creando conductor:", err);
       Swal.fire({
@@ -917,17 +906,11 @@ export function ConductoresModule() {
     try {
       await performConductorUpdate();
 
-      Swal.fire({
-        icon: "success",
-        title: "¡Éxito!",
-        text: "Conductor actualizado exitosamente",
-        confirmButtonColor: "#E63946",
-        timer: 2000,
-      });
+      showSuccess("Conductor actualizado");
       setShowEditModal(false);
       setSelectedConductor(null);
       resetForm();
-      await loadConductores();
+      await loadConductores(true);
     } catch (err: any) {
       console.error("Error actualizando conductor:", err);
       Swal.fire({
@@ -1224,17 +1207,10 @@ export function ConductoresModule() {
       setShowEditModal(false);
       setSelectedConductor(null);
       resetForm();
-      await loadConductores();
+      await loadConductores(true);
 
-      Swal.fire({
-        icon: "success",
-        title: "¡Baja procesada!",
-        text: "El conductor ha sido dado de baja y sus asignaciones han sido actualizadas",
-        confirmButtonColor: "#E63946",
-        timer: 3000,
-      });
+      showSuccess("Baja procesada", "El conductor y sus asignaciones fueron actualizados");
     } catch (err: any) {
-      console.error("Error procesando baja:", err);
       Swal.fire({
         icon: "error",
         title: "Error",
@@ -1268,16 +1244,10 @@ export function ConductoresModule() {
 
       if (deleteError) throw deleteError;
 
-      Swal.fire({
-        icon: "success",
-        title: "¡Éxito!",
-        text: "Conductor eliminado exitosamente",
-        confirmButtonColor: "#E63946",
-        timer: 2000,
-      });
+      showSuccess("Conductor eliminado");
       setShowDeleteModal(false);
       setSelectedConductor(null);
-      await loadConductores();
+      await loadConductores(true);
     } catch (err: any) {
       console.error("Error eliminando conductor:", err);
       Swal.fire({

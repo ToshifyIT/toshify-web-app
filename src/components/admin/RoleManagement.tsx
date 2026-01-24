@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { Role } from '../../types/database.types'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import './AdminStyles.css'
 
 // @ts-nocheck en operaciones de base de datos por problemas de tipos generados
@@ -79,13 +80,7 @@ export function RoleManagement() {
       // Nota: Los permisos ahora se manejan a través de role_menu_permissions
       // No necesitamos crear permisos por defecto aquí
 
-      await Swal.fire({
-        icon: 'success',
-        title: 'Rol Creado',
-        text: 'El rol se ha creado exitosamente',
-        showConfirmButton: false,
-        timer: 2000
-      })
+      showSuccess('Rol Creado', 'El rol se ha creado exitosamente')
       setShowCreateModal(false)
       setNewRole({ name: '', description: '', icon: '' })
       await loadRoles()
@@ -124,13 +119,7 @@ export function RoleManagement() {
 
       if (error) throw error
 
-      await Swal.fire({
-        icon: 'success',
-        title: 'Rol Actualizado',
-        text: 'El rol se ha actualizado exitosamente',
-        showConfirmButton: false,
-        timer: 2000
-      })
+      showSuccess('Rol Actualizado', 'El rol se ha actualizado exitosamente')
       setShowEditModal(false)
       setSelectedRole(null)
       await loadRoles()
@@ -183,13 +172,7 @@ export function RoleManagement() {
 
       if (roleError) throw roleError
 
-      await Swal.fire({
-        icon: 'success',
-        title: 'Rol Eliminado',
-        text: 'El rol se ha eliminado exitosamente',
-        showConfirmButton: false,
-        timer: 2000
-      })
+      showSuccess('Rol Eliminado', 'El rol se ha eliminado exitosamente')
       setShowDeleteModal(false)
       setSelectedRole(null)
       await loadRoles()

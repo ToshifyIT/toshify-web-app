@@ -6,6 +6,7 @@ import { X, ChevronRight, ChevronLeft, Check, Car } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import type {
   ProgramacionOnboardingFormData,
   ProgramacionOnboardingCompleta,
@@ -229,13 +230,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Programacion actualizada',
-          text: 'Los cambios se guardaron correctamente',
-          timer: 2000,
-          showConfirmButton: false
-        })
+        showSuccess('Programación actualizada', 'Los cambios se guardaron correctamente')
       } else {
         // INSERT - crear nueva
         const { error } = await (supabase.from('programaciones_onboarding') as any).insert({
@@ -247,13 +242,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
 
         if (error) throw error
 
-        Swal.fire({
-          icon: 'success',
-          title: 'Programacion creada',
-          text: 'La programacion se agrego al tablero',
-          timer: 2000,
-          showConfirmButton: false
-        })
+        showSuccess('Programación creada', 'La programación se agregó al tablero')
       }
 
       onSuccess()

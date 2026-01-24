@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import { Plus, Edit2, Trash2, Filter } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -53,8 +54,8 @@ export function ConceptosFacturacionTab() {
     })
   }, [conceptos, tipoFilter, activoFilter])
 
-  async function cargarConceptos() {
-    setLoading(true)
+  async function cargarConceptos(silent = false) {
+    if (!silent) setLoading(true)
     try {
       const { data, error } = await supabase
         .from('conceptos_nomina')
@@ -166,8 +167,8 @@ export function ConceptosFacturacionTab() {
     try {
       const { error } = await supabase.from('conceptos_nomina').insert(formValues)
       if (error) throw error
-      Swal.fire({ icon: 'success', title: 'Concepto creado', timer: 1500, showConfirmButton: false })
-      cargarConceptos()
+      showSuccess('Concepto creado')
+      cargarConceptos(true)
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo crear el concepto', 'error')
     }
@@ -270,8 +271,8 @@ export function ConceptosFacturacionTab() {
     try {
       const { error } = await (supabase.from('conceptos_nomina') as any).update(formValues).eq('id', concepto.id)
       if (error) throw error
-      Swal.fire({ icon: 'success', title: 'Concepto actualizado', timer: 1500, showConfirmButton: false })
-      cargarConceptos()
+      showSuccess('Concepto actualizado')
+      cargarConceptos(true)
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo actualizar', 'error')
     }
@@ -293,8 +294,8 @@ export function ConceptosFacturacionTab() {
     try {
       const { error } = await supabase.from('conceptos_nomina').delete().eq('id', concepto.id)
       if (error) throw error
-      Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1500, showConfirmButton: false })
-      cargarConceptos()
+      showSuccess('Eliminado')
+      cargarConceptos(true)
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo eliminar', 'error')
     }

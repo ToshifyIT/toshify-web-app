@@ -9,6 +9,7 @@ import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTabl
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import type {
   VehiculoWithRelations,
   VehiculoEstado
@@ -234,8 +235,8 @@ export function VehicleManagement() {
     }
   }
 
-  const loadVehiculos = async () => {
-    setLoading(true)
+  const loadVehiculos = async (silent = false) => {
+    if (!silent) setLoading(true)
     setError('')
 
     try {
@@ -336,16 +337,10 @@ export function VehicleManagement() {
 
       if (insertError) throw insertError
 
-      Swal.fire({
-        icon: 'success',
-        title: '¡Éxito!',
-        text: 'Vehículo creado exitosamente',
-        confirmButtonColor: '#E63946',
-        timer: 2000
-      })
+      showSuccess('Vehículo creado')
       setShowCreateModal(false)
       resetForm()
-      await loadVehiculos()
+      await loadVehiculos(true)
     } catch (err: any) {
       console.error('Error creando vehículo:', err)
       Swal.fire({
@@ -489,17 +484,11 @@ export function VehicleManagement() {
 
       if (updateError) throw updateError
 
-      Swal.fire({
-        icon: 'success',
-        title: '¡Éxito!',
-        text: debeFinalizarAsignaciones ? 'Vehículo actualizado y asignaciones finalizadas' : 'Vehículo actualizado exitosamente',
-        confirmButtonColor: '#E63946',
-        timer: 2000
-      })
+      showSuccess('Vehículo actualizado', debeFinalizarAsignaciones ? 'Asignaciones finalizadas' : undefined)
       setShowEditModal(false)
       setSelectedVehiculo(null)
       resetForm()
-      await loadVehiculos()
+      await loadVehiculos(true)
     } catch (err: any) {
       console.error('Error actualizando vehículo:', err)
       Swal.fire({
@@ -535,16 +524,10 @@ export function VehicleManagement() {
 
       if (deleteError) throw deleteError
 
-      Swal.fire({
-        icon: 'success',
-        title: '¡Éxito!',
-        text: 'Vehículo eliminado exitosamente',
-        confirmButtonColor: '#E63946',
-        timer: 2000
-      })
+      showSuccess('Vehículo eliminado')
       setShowDeleteModal(false)
       setSelectedVehiculo(null)
-      await loadVehiculos()
+      await loadVehiculos(true)
     } catch (err: any) {
       console.error('Error eliminando vehículo:', err)
       Swal.fire({
@@ -662,15 +645,10 @@ export function VehicleManagement() {
         .update({ drive_folder_url: result.folderUrl })
         .eq('id', vehiculo.id)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Carpeta creada',
-        text: `Se creó la carpeta "${result.folderName}" en Google Drive`,
-        confirmButtonColor: '#E63946'
-      })
+      showSuccess('Carpeta creada', `Se creó "${result.folderName}" en Drive`)
 
-      // Recargar datos para mostrar el nuevo link
-      await loadAllData()
+      // Recargar datos para mostrar el nuevo link (silencioso)
+      await loadVehiculos(true)
 
       // Abrir la carpeta en nueva pestaña
       if (result.folderUrl) {

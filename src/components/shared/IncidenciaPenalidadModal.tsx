@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../utils/toast'
 import { X, Car, User } from 'lucide-react'
 
 interface IncidenciaPenalidadModalProps {
@@ -262,18 +263,7 @@ export function IncidenciaPenalidadModal({
       if (penError) throw penError
       const penalidadId = penalidadData?.id
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Guardado correctamente',
-        html: `
-          <p>Se ha creado:</p>
-          <ul style="text-align: left; margin-top: 10px;">
-            <li>Incidencia registrada</li>
-            <li>Penalidad por <strong>$${penalidadForm.monto.toLocaleString('es-AR')}</strong></li>
-          </ul>
-        `,
-        confirmButtonColor: '#dc2626'
-      })
+      showSuccess('Guardado correctamente', `Incidencia y penalidad por $${penalidadForm.monto.toLocaleString('es-AR')} creados`)
 
       onSuccess(incidenciaId, penalidadId)
       onClose()

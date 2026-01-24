@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
+import { showSuccess } from '../../../utils/toast'
 import {
   Ban,
   Users,
@@ -220,13 +221,7 @@ export function BloqueosConductoresTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Conductor Bloqueado',
-        text: `${conductor.nombres} ${conductor.apellidos} ha sido bloqueado`,
-        timer: 2000,
-        showConfirmButton: false
-      })
+      showSuccess('Conductor Bloqueado', `${conductor.nombres} ${conductor.apellidos} ha sido bloqueado`)
 
       cargarConductores()
     } catch (error: any) {
@@ -279,12 +274,7 @@ export function BloqueosConductoresTab() {
 
       if (error) throw error
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Conductor Desbloqueado',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Conductor Desbloqueado')
 
       cargarConductores()
     } catch (error: any) {
@@ -409,12 +399,7 @@ export function BloqueosConductoresTab() {
       setMontoLimite(formValues.monto)
       setDiasMoraLimite(formValues.dias)
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Parámetros Actualizados',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      showSuccess('Parámetros Actualizados')
     } catch (error: any) {
       Swal.fire('Error', error.message, 'error')
     }
