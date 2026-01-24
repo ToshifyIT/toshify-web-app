@@ -1899,7 +1899,7 @@ export function ConductoresModule() {
         cell: ({ row }) => {
           const categorias = row.original.licencias_categorias;
           if (Array.isArray(categorias) && categorias.length > 0) {
-            const maxVisible = 2;
+            const maxVisible = 1;
             const visibles = categorias.slice(0, maxVisible);
             const restantes = categorias.length - maxVisible;
             return (
