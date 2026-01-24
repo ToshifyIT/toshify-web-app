@@ -1851,7 +1851,7 @@ export function ReporteFacturacionTab() {
       }
 
       // 2. Penalidades pendientes (NO fraccionadas, filtradas por fecha del período)
-      const { data: penalidadesPendientes, error: errorPen } = await (supabase
+      const { data: penalidadesPendientes } = await (supabase
         .from('penalidades') as any)
         .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento(nombre)')
         .in('conductor_id', conductorIds)
@@ -1859,8 +1859,6 @@ export function ReporteFacturacionTab() {
         .eq('rechazado', false)
         .eq('fraccionado', false)
         .eq('semana', periodo.semana)
-      
-      if (errorPen) console.error('Error cargando penalidades:', errorPen)
 
       for (const p of (penalidadesPendientes || []) as any[]) {
         if (!detallesReferencias.has(p.id)) {
@@ -1921,41 +1919,33 @@ export function ReporteFacturacionTab() {
       }
 
       // 4. Penalidades cuotas (penalidades fraccionadas) pendientes de esta semana
-      const { data: penalidadesCuotasPendientes, error: errorPenCuotas } = await (supabase
+      const { data: penalidadesCuotasPendientes } = await (supabase
         .from('penalidades_cuotas') as any)
         .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name)')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
         .eq('aplicado', false)
-      
-      if (errorPenCuotas) console.error('Error cargando penalidades_cuotas:', errorPenCuotas)
-      console.log('penalidades_cuotas encontradas:', penalidadesCuotasPendientes?.length || 0, 'para semana', periodo.semana, 'anio', periodo.anio)
 
       for (const pc of (penalidadesCuotasPendientes || []) as any[]) {
         const conductorIdPen = pc.penalidad?.conductor_id
         if (!detallesReferencias.has(pc.id) && conductorIdPen && conductorIds.includes(conductorIdPen)) {
-          const conductorNombre = pc.penalidad?.conductor_nombre || 'Sin nombre'
-          const detallePenalidad = pc.penalidad?.detalle || 'Penalidad fraccionada'
           pendientes.push({
             id: pc.id,
             tipo: 'cobro_fraccionado',
             conductorId: conductorIdPen,
-            conductorNombre,
+            conductorNombre: pc.penalidad?.conductor_nombre || 'Sin nombre',
             monto: pc.monto_cuota,
-            descripcion: detallePenalidad,
+            descripcion: pc.penalidad?.detalle || 'Penalidad fraccionada',
             tabla: 'penalidades_cuotas',
             fechaCreacion: pc.penalidad?.created_at,
             creadoPor: pc.penalidad?.created_by_name,
             montoTotal: pc.penalidad?.monto,
             cuotaActual: pc.numero_cuota,
             totalCuotas: pc.total_cuotas,
-            origenDetalle: `Penalidad fraccionada - Total: ${formatCurrency(pc.penalidad?.monto || 0)} en ${pc.total_cuotas} cuotas`,
-            // Datos adicionales de la penalidad original
             penalidadId: pc.penalidad?.id,
             motivoPenalidad: pc.penalidad?.motivo,
             notasPenalidad: pc.penalidad?.notas,
             fechaPenalidad: pc.penalidad?.fecha,
-            // Origen siniestro si existe (se cargará el código después)
             siniestroId: pc.penalidad?.siniestro_id
           })
         }
@@ -1977,7 +1967,6 @@ export function ReporteFacturacionTab() {
         })
       }
 
-      console.log('Total conceptos pendientes encontrados:', pendientes.length)
       setConceptosPendientes(pendientes)
 
       // Crear Set de conductores con saldos pendientes para marcarlos en el preview

@@ -201,24 +201,9 @@ export function HomePage() {
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [hoveredMenu, setHoveredMenu] = useState<string | null>(null)
-  const [flyoutPosition, setFlyoutPosition] = useState<{ top: number } | null>(null)
 
   const toggleSidebarCollapse = () => {
     setSidebarCollapsed(!sidebarCollapsed)
-  }
-
-  const handleMenuHover = (menuId: string, event: React.MouseEvent) => {
-    if (sidebarCollapsed) {
-      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-      setFlyoutPosition({ top: rect.top })
-      setHoveredMenu(menuId)
-    }
-  }
-
-  const handleMenuLeave = () => {
-    setHoveredMenu(null)
-    setFlyoutPosition(null)
   }
 
   const handleSignOut = async () => {
@@ -413,10 +398,7 @@ export function HomePage() {
           overflow: visible;
         }
 
-        .sidebar.collapsed .nav-section {
-          position: relative;
-        }
-
+        .sidebar.collapsed .nav-section-wrapper,
         .sidebar.collapsed .nav-item-wrapper {
           position: relative;
         }
@@ -557,8 +539,10 @@ export function HomePage() {
 
         /* Tooltip styles */
         .nav-tooltip {
-          position: fixed;
-          left: 72px;
+          position: absolute;
+          left: calc(100% + 8px);
+          top: 50%;
+          transform: translateY(-50%);
           padding: 8px 12px;
           background: var(--color-gray-800);
           color: var(--text-inverse);
@@ -567,8 +551,11 @@ export function HomePage() {
           white-space: nowrap;
           border-radius: 6px;
           z-index: 9999;
+          opacity: 0;
+          visibility: hidden;
           pointer-events: none;
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          transition: opacity 0.15s, visibility 0.15s;
         }
 
         .nav-tooltip::before {
@@ -581,54 +568,46 @@ export function HomePage() {
           border-right-color: var(--color-gray-800);
         }
 
+        .sidebar.collapsed .nav-item-wrapper:hover .nav-tooltip {
+          opacity: 1;
+          visibility: visible;
+        }
+
         /* Flyout menu for collapsed sidebar with submenus */
         .nav-flyout {
-          position: fixed;
-          left: 64px;
+          position: absolute;
+          left: 100%;
+          top: 0;
           min-width: 200px;
+          padding-left: 8px;
+          z-index: 9999;
+          opacity: 0;
+          visibility: hidden;
+          transition: opacity 0.15s, visibility 0.15s;
+        }
+
+        .nav-flyout-content {
           background: var(--bg-primary);
           border: 1px solid var(--border-primary);
           border-radius: 8px;
-          z-index: 9999;
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-          padding-left: 8px;
-          margin-left: 0;
+          overflow: hidden;
         }
 
         /* Área invisible para conectar el icono con el flyout */
         .nav-flyout::before {
           content: '';
           position: absolute;
-          right: 100%;
+          left: 0;
           top: 0;
           bottom: 0;
-          width: 16px;
+          width: 8px;
           background: transparent;
         }
 
-        .nav-flyout-content {
-          background: var(--bg-primary);
-          border-radius: 8px;
-          overflow: hidden;
-        }
-
-        .nav-flyout-arrow {
-          position: absolute;
-          left: 2px;
-          top: 16px;
-          width: 0;
-          height: 0;
-          border: 6px solid transparent;
-          border-right-color: var(--border-primary);
-        }
-
-        .nav-flyout-arrow::after {
-          content: '';
-          position: absolute;
-          left: -4px;
-          top: -5px;
-          border: 5px solid transparent;
-          border-right-color: var(--bg-primary);
+        .sidebar.collapsed .nav-section-wrapper:hover .nav-flyout {
+          opacity: 1;
+          visibility: visible;
         }
 
         .nav-flyout-header {
@@ -1232,14 +1211,9 @@ export function HomePage() {
                 if (hasSubmenus) {
                   // Menú con submenús
                   const MenuIcon = getMenuIcon(menu.menu_name)
-                  const isHovered = hoveredMenu === menu.menu_id
                   return (
                     <div key={menu.menu_id} className="nav-section">
-                      <div 
-                        className="nav-section-wrapper"
-                        onMouseEnter={(e) => handleMenuHover(menu.menu_id, e)}
-                        onMouseLeave={handleMenuLeave}
-                      >
+                      <div className="nav-section-wrapper">
                         <button
                           className="nav-section-header"
                           onClick={() => !sidebarCollapsed && toggleMenu(menu.menu_name)}
@@ -1250,40 +1224,34 @@ export function HomePage() {
                           </div>
                           <span className={`nav-section-arrow ${isMenuOpen ? 'open' : ''}`}>▸</span>
                         </button>
-                      </div>
                       
-                      {/* Flyout para estado colapsado - usando position fixed */}
-                      {sidebarCollapsed && isHovered && flyoutPosition && (
-                        <div 
-                          className="nav-flyout"
-                          style={{ top: flyoutPosition.top }}
-                          onMouseEnter={() => setHoveredMenu(menu.menu_id)}
-                          onMouseLeave={handleMenuLeave}
-                        >
-                          <div className="nav-flyout-arrow" />
-                          <div className="nav-flyout-content">
-                            <div className="nav-flyout-header">{menu.menu_label}</div>
-                            <div className="nav-flyout-items">
-                              {(submenus as SubmenuWithHierarchy[])
-                                .filter(sub => sub.parent_id === null)
-                                .sort((a, b) => a.order_index - b.order_index)
-                                .map(submenu => {
-                                  const SubIcon = getMenuIcon(submenu.submenu_name)
-                                  return (
-                                    <button
-                                      key={submenu.submenu_id}
-                                      className={`nav-flyout-item ${isActiveRoute(submenu.submenu_route) ? 'active' : ''}`}
-                                      onClick={() => navigate(submenu.submenu_route)}
-                                    >
-                                      <span className="nav-flyout-icon"><SubIcon size={16} /></span>
-                                      <span>{submenu.submenu_label}</span>
-                                    </button>
-                                  )
-                                })}
+                        {/* Flyout para estado colapsado */}
+                        {sidebarCollapsed && (
+                          <div className="nav-flyout">
+                            <div className="nav-flyout-content">
+                              <div className="nav-flyout-header">{menu.menu_label}</div>
+                              <div className="nav-flyout-items">
+                                {(submenus as SubmenuWithHierarchy[])
+                                  .filter(sub => sub.parent_id === null)
+                                  .sort((a, b) => a.order_index - b.order_index)
+                                  .map(submenu => {
+                                    const SubIcon = getMenuIcon(submenu.submenu_name)
+                                    return (
+                                      <button
+                                        key={submenu.submenu_id}
+                                        className={`nav-flyout-item ${isActiveRoute(submenu.submenu_route) ? 'active' : ''}`}
+                                        onClick={() => navigate(submenu.submenu_route)}
+                                      >
+                                        <span className="nav-flyout-icon"><SubIcon size={16} /></span>
+                                        <span>{submenu.submenu_label}</span>
+                                      </button>
+                                    )
+                                  })}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
 
                       <div className={`nav-section-items ${!isMenuOpen ? 'collapsed' : ''}`}>
                         {renderSubmenus(submenus as SubmenuWithHierarchy[], null, 0)}
@@ -1293,14 +1261,8 @@ export function HomePage() {
                 } else {
                   // Menú simple sin submenús
                   const MenuIcon = getMenuIcon(menu.menu_name)
-                  const isHovered = hoveredMenu === menu.menu_id
                   return (
-                    <div 
-                      key={menu.menu_id} 
-                      className="nav-item-wrapper"
-                      onMouseEnter={(e) => handleMenuHover(menu.menu_id, e)}
-                      onMouseLeave={handleMenuLeave}
-                    >
+                    <div key={menu.menu_id} className="nav-item-wrapper">
                       <button
                         className={`nav-item ${isActiveRoute(menu.menu_route) ? 'active' : ''}`}
                         onClick={() => navigate(menu.menu_route)}
@@ -1308,10 +1270,8 @@ export function HomePage() {
                         <span className="nav-icon"><MenuIcon size={18} /></span>
                         <span className="nav-label">{menu.menu_label}</span>
                       </button>
-                      {sidebarCollapsed && isHovered && flyoutPosition && (
-                        <div className="nav-tooltip" style={{ top: flyoutPosition.top + 4 }}>
-                          {menu.menu_label}
-                        </div>
+                      {sidebarCollapsed && (
+                        <div className="nav-tooltip">{menu.menu_label}</div>
                       )}
                     </div>
                   )
