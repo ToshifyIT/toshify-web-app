@@ -21,7 +21,19 @@ import {
   type ExpandedState,
   type FilterFn,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight, Check, Filter, Calendar } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, Calendar } from "lucide-react";
+
+// Icono de filtro estilo Excel - dropdown arrow
+const FilterIcon = ({ size = 12 }: { size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 12 12"
+    fill="currentColor"
+  >
+    <path d="M2 4L6 8L10 4H2Z" />
+  </svg>
+);
 import { Spinner } from "../LoadingOverlay";
 import "./DataTable.css";
 
@@ -475,7 +487,7 @@ export function DataTable<T>({
           onClick={handleToggle}
           title={`Filtrar por ${label}`}
         >
-          {isDate ? <Calendar size={12} /> : <Filter size={12} />}
+          {isDate ? <Calendar size={12} /> : <FilterIcon size={12} />}
         </button>
         {isOpen && createPortal(
           <div
@@ -936,7 +948,7 @@ export function DataTable<T>({
         {hasActiveFilters && (
           <div className="dt-active-filters">
             <div className="dt-active-filters-label">
-              <Filter size={14} />
+              <FilterIcon size={14} />
               <span>Filtros activos:</span>
             </div>
             <div className="dt-active-filters-list">
@@ -1012,7 +1024,7 @@ export function DataTable<T>({
       {hasActiveFilters && (
         <div className="dt-active-filters">
           <div className="dt-active-filters-label">
-            <Filter size={14} />
+            <FilterIcon size={14} />
             <span>Filtros activos:</span>
           </div>
           <div className="dt-active-filters-list">

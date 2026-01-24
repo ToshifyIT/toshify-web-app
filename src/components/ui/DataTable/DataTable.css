@@ -2,28 +2,31 @@
 /* Estilos estandarizados para tablas - Diseño compacto y responsive */
 /* Con soporte para Dark Mode mediante CSS Variables */
 
-/* Loading State */
+/* Loading State - Usa el componente Spinner de LoadingOverlay */
 .dt-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 16px;
+  padding: 48px 16px;
   color: var(--text-secondary);
-  gap: 10px;
+  gap: 12px;
 }
 
-.dt-loading-spinner {
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--border-primary);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: dt-spin 0.8s linear infinite;
+/* Estilos heredados del spinner Toshify para consistencia */
+.dt-loading .spinner-inline {
+  padding: 0;
 }
 
-@keyframes dt-spin {
-  to { transform: rotate(360deg); }
+.dt-loading .spinner-toshify {
+  width: 40px;
+  height: 40px;
+}
+
+.dt-loading .spinner-message {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 /* Error State */
@@ -404,33 +407,43 @@
 
 .dt-search-input {
   width: 100%;
-  padding: 8px 14px 8px 38px;
-  font-size: 13px;
-  border: 1px solid var(--input-border);
-  border-radius: 6px;
-  background: var(--input-bg);
+  padding: 12px 16px 12px 44px;
+  font-size: 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  background: var(--bg-secondary);
   color: var(--text-primary);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: all 0.2s;
   font-family: inherit;
 }
 
 .dt-search-input:focus {
   outline: none;
-  border-color: var(--border-focus);
-  box-shadow: var(--input-focus-shadow);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
+  background: var(--bg-primary);
 }
 
 .dt-search-input::placeholder {
   color: var(--text-tertiary);
 }
 
-/* Table Container */
+.dt-search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+/* Table Container - Toshify Design System */
 .dt-container {
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  overflow: visible; /* Permite que los dropdowns de filtros se muestren */
-  box-shadow: var(--shadow-sm);
+  border-radius: 12px;
+  overflow: visible;
+  box-shadow: none;
   position: relative;
 }
 
@@ -465,7 +478,7 @@
   min-width: 800px; /* Minimo para asegurar scroll horizontal en pantallas pequeñas/zoom */
   border-collapse: collapse;
   overflow: visible; /* Permite que los dropdowns de filtros se muestren */
-  table-layout: auto; /* Permite que las columnas se ajusten */
+  table-layout: auto;
 }
 
 /* Responsive table adjusts to container */
@@ -495,34 +508,34 @@
   box-shadow: -4px 0 8px rgba(0, 0, 0, 0.2);
 }
 
-/* Header */
+/* Header - Toshify Design System */
 .dt-table th {
   background: var(--table-header-bg);
-  padding: 8px 12px;
+  padding: 10px 12px;
   text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.025em;
+  letter-spacing: 0.05em;
   border-bottom: 1px solid var(--border-primary);
   white-space: nowrap;
   user-select: none;
-  position: relative; /* Para que el dropdown absoluto se posicione correctamente */
-  overflow: visible; /* Permite que el dropdown se muestre fuera */
+  position: relative;
+  overflow: visible;
 }
 
 .dt-table th.dt-sortable {
   cursor: pointer;
-  transition: background 0.15s;
+  transition: color 0.15s;
 }
 
 .dt-table th.dt-sortable:hover {
-  background: var(--table-row-hover);
+  color: var(--color-primary);
 }
 
 .dt-table th:last-child {
-  text-align: center;
+  text-align: right;
 }
 
 .dt-header-content {
@@ -540,24 +553,24 @@
   font-size: 12px;
 }
 
-/* Body */
+/* Body - Toshify Design System */
 .dt-table td {
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--table-border);
   color: var(--text-primary);
   font-size: 13px;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .dt-table td:last-child {
-  text-align: center;
+  text-align: right;
 }
 
 .dt-table tbody tr {
   transition: background 0.15s;
-  /* Performance: Skip rendering off-screen rows */
   content-visibility: auto;
-  contain-intrinsic-size: 0 48px;
+  contain-intrinsic-size: 0 42px;
 }
 
 .dt-table tbody tr:hover {
@@ -574,21 +587,30 @@
   color: var(--text-tertiary) !important;
 }
 
-/* Pagination */
+/* Pagination - Toshify Design System */
 .dt-pagination {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: 16px 24px;
   border-top: 1px solid var(--border-primary);
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 16px;
 }
 
 .dt-pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.dt-pagination-info strong {
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 .dt-pagination-controls {
@@ -599,69 +621,92 @@
 }
 
 .dt-pagination-btn {
-  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: 1px solid var(--border-primary);
   background: var(--bg-primary);
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
+  font-weight: 600;
+  color: var(--text-secondary);
   transition: all 0.15s;
-  min-width: 28px;
 }
 
 .dt-pagination-btn:hover:not(:disabled) {
-  background: var(--bg-secondary);
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
 
 .dt-pagination-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.3;
   cursor: not-allowed;
+}
+
+.dt-pagination-btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(255, 0, 51, 0.25);
 }
 
 .dt-pagination-text {
   font-size: 12px;
-  color: var(--text-secondary);
-  padding: 0 6px;
+  color: var(--text-tertiary);
+  padding: 0 8px;
+  font-weight: 600;
 }
 
 .dt-pagination-select {
-  padding: 5px 8px;
+  padding: 8px 12px;
+  padding-right: 32px;
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 12px;
-  background: var(--bg-primary);
+  font-weight: 700;
+  background: var(--bg-secondary);
   cursor: pointer;
   color: var(--text-primary);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23FF0033' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
 }
 
 .dt-pagination-select:focus {
   outline: none;
-  border-color: var(--border-focus);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
 }
 
-/* Action Buttons */
+/* Action Buttons - Toshify Design System */
 .dt-actions {
   display: flex;
-  gap: 3px;
-  justify-content: center;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .dt-btn-action {
-  padding: 5px 8px;
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  background: var(--bg-primary);
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
   cursor: pointer;
   transition: all 0.15s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   position: relative;
+}
+
+.dt-btn-action:hover {
+  color: var(--color-primary);
+  background: rgba(255, 0, 51, 0.05);
 }
 
 /* Tooltip para botones de acción - posición a la izquierda */
@@ -768,49 +813,90 @@
   background: var(--color-danger, #ef4444);
 }
 
-/* Badge */
+/* Badge - Toshify Design System */
 .dt-badge {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
   white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+/* Badge con punto indicador */
+.dt-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
 }
 
 .dt-badge-green {
-  background: var(--badge-green-bg);
-  color: var(--badge-green-text);
+  background: rgba(16, 185, 129, 0.1);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
 .dt-badge-blue {
-  background: var(--badge-blue-bg);
-  color: var(--badge-blue-text);
+  background: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+  border: 1px solid rgba(59, 130, 246, 0.2);
 }
 
 .dt-badge-yellow {
-  background: var(--badge-yellow-bg);
-  color: var(--badge-yellow-text);
+  background: rgba(245, 158, 11, 0.1);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
 .dt-badge-red {
-  background: var(--badge-red-bg);
-  color: var(--badge-red-text);
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 .dt-badge-gray {
   background: var(--badge-gray-bg);
   color: var(--badge-gray-text);
+  border: 1px solid var(--border-primary);
 }
 
 .dt-badge-orange {
-  background: #FFF7ED;
-  color: #C2410C;
+  background: rgba(249, 115, 22, 0.1);
+  color: #F97316;
+  border: 1px solid rgba(249, 115, 22, 0.2);
+}
+
+/* Dark mode badges */
+[data-theme="dark"] .dt-badge-green {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+[data-theme="dark"] .dt-badge-blue {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+[data-theme="dark"] .dt-badge-yellow {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+[data-theme="dark"] .dt-badge-red {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
 [data-theme="dark"] .dt-badge-orange {
-  background: rgba(251, 146, 60, 0.15);
-  color: #FB923C;
+  background: rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.3);
 }
 
 .dt-badge-solid-green {
@@ -1315,30 +1401,54 @@
   text-overflow: ellipsis;
 }
 
+/* Filter Button - Toshify Design System */
 .dt-filter-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s;
   flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.dt-filter-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.dt-filter-header:hover .dt-filter-btn {
+  opacity: 1;
 }
 
 .dt-filter-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  color: var(--color-primary);
+  opacity: 1;
 }
 
 .dt-filter-btn.active {
+  color: var(--color-primary);
+  opacity: 1;
+}
+
+/* Indicador de filtro activo - punto rojo */
+.dt-filter-btn.active::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 5px;
+  height: 5px;
   background: var(--color-primary);
-  color: white;
+  border-radius: 50%;
 }
 
 /* Filter Dropdown */

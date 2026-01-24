@@ -1,5 +1,6 @@
 /* ===========================================
-   LOADING OVERLAY - Toshify Style
+   LOADING OVERLAY - Toshify Design System
+   Based on Toshify Master UI Kit v1.0.4
    =========================================== */
 
 /* Overlay que bloquea la pantalla */
@@ -7,7 +8,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(248, 245, 246, 0.95); /* background-light con transparencia */
   backdrop-filter: blur(4px);
   z-index: 9999;
 }
@@ -36,7 +37,10 @@
   gap: 16px;
 }
 
-/* Spinner Toshify */
+/* ===========================================
+   SPINNER TOSHIFY - Estilo del Design System
+   =========================================== */
+
 .spinner-toshify {
   position: relative;
 }
@@ -47,73 +51,66 @@
 }
 
 .spinner-toshify.md {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
 }
 
 .spinner-toshify.lg {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
 }
 
+/* Spinner circular tipo border (como en el Design System) */
+.spinner-toshify::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 4px solid #e5e5e5; /* Track color light */
+  border-top-color: #f90637; /* Primary Toshify */
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+.spinner-toshify.sm::after {
+  border-width: 3px;
+}
+
+.spinner-toshify.lg::after {
+  border-width: 5px;
+}
+
+/* Ocultar el SVG ya que usamos CSS puro */
 .spinner-toshify svg {
-  width: 100%;
-  height: 100%;
-  animation: spinner-rotate 2s linear infinite;
-}
-
-.spinner-track {
-  stroke: #FDE8EC;
-}
-
-.spinner-progress {
-  stroke: url(#spinner-gradient);
-  stroke-dasharray: 80, 200;
-  stroke-dashoffset: 0;
-  animation: spinner-dash 1.5s ease-in-out infinite;
-}
-
-/* Gradiente para el spinner - rojo Toshify a rosa */
-.spinner-toshify svg {
-  --spinner-color-start: #E63946;
-  --spinner-color-end: #FD97CA;
-}
-
-.spinner-progress {
-  stroke: #E63946;
+  display: none;
 }
 
 @keyframes spinner-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
   100% {
     transform: rotate(360deg);
   }
 }
 
-@keyframes spinner-dash {
-  0% {
-    stroke-dasharray: 1, 200;
-    stroke-dashoffset: 0;
-  }
-  50% {
-    stroke-dasharray: 89, 200;
-    stroke-dashoffset: -35;
-  }
-  100% {
-    stroke-dasharray: 89, 200;
-    stroke-dashoffset: -124;
-  }
-}
-
 /* Mensaje de carga */
 .loading-message {
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
   font-weight: 500;
   color: #374151;
   margin: 0;
   text-align: center;
+  letter-spacing: -0.01em;
 }
 
-/* Barra de progreso circular */
+/* ===========================================
+   PROGRESS BAR - Barra de progreso
+   =========================================== */
+
 .progress-container {
   display: flex;
   align-items: center;
@@ -124,22 +121,23 @@
 .progress-bar {
   flex: 1;
   height: 6px;
-  background: #FDE8EC;
+  background: #e5e5e5;
   border-radius: 3px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #E63946, #FD97CA);
+  background: linear-gradient(90deg, #f90637, #FD97CA);
   border-radius: 3px;
   transition: width 0.3s ease;
 }
 
 .progress-text {
+  font-family: 'Inter', sans-serif;
   font-size: 13px;
   font-weight: 600;
-  color: #E63946;
+  color: #f90637;
   min-width: 40px;
   text-align: right;
 }
@@ -158,7 +156,9 @@
 }
 
 .spinner-message {
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
+  font-weight: 500;
   color: #6B7280;
   margin: 0;
 }
@@ -173,8 +173,9 @@
 }
 
 .linear-progress-message {
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: #374151;
   margin: 0 0 8px 0;
 }
@@ -188,32 +189,53 @@
 .linear-progress-bar {
   flex: 1;
   height: 8px;
-  background: #FDE8EC;
+  background: #e5e5e5;
   border-radius: 4px;
   overflow: hidden;
 }
 
 .linear-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #E63946, #FD97CA);
+  background: linear-gradient(90deg, #f90637, #FD97CA);
   border-radius: 4px;
   transition: width 0.3s ease;
 }
 
 .linear-progress-text {
+  font-family: 'Inter', sans-serif;
   font-size: 13px;
   font-weight: 600;
-  color: #E63946;
+  color: #f90637;
   min-width: 40px;
   text-align: right;
 }
 
 /* ===========================================
-   DARK MODE
+   SKELETON LOADER - Toshify Style
+   =========================================== */
+
+.skeleton {
+  background: linear-gradient(90deg, #e5e5e5 25%, #f0f0f0 50%, #e5e5e5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ===========================================
+   DARK MODE - Basado en Toshify Design System
    =========================================== */
 
 [data-theme="dark"] .loading-overlay {
-  background: rgba(15, 23, 42, 0.92);
+  background: rgba(10, 10, 10, 0.95); /* background-dark */
 }
 
 [data-theme="dark"] .loading-message,
@@ -221,8 +243,9 @@
   color: #F1F5F9;
 }
 
-[data-theme="dark"] .spinner-track {
-  stroke: #334155;
+[data-theme="dark"] .spinner-toshify::after {
+  border-color: #3a272b; /* border-dark */
+  border-top-color: #f90637; /* Primary */
 }
 
 [data-theme="dark"] .spinner-message {
@@ -231,5 +254,10 @@
 
 [data-theme="dark"] .progress-bar,
 [data-theme="dark"] .linear-progress-bar {
-  background: #334155;
+  background: #3a272b; /* border-dark */
+}
+
+[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #1e1e1e 25%, #2a2a2a 50%, #1e1e1e 75%);
+  background-size: 200% 100%;
 }
