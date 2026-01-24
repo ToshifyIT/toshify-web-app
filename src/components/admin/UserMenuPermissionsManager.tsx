@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Check, AlertTriangle, Shield } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../ui/LoadingOverlay'
 import { useAuth } from '../../contexts/AuthContext'
 import './AdminStyles.css'
 import type { UserWithRole, Menu, Submenu } from '../../types/database.types'
@@ -911,6 +912,7 @@ export function UserMenuPermissionsManager() {
 
   return (
     <div className="admin-module">
+      <LoadingOverlay show={loading} message="Cargando permisos..." size="lg" />
       <style>{`
         .permissions-container {
           width: 100%;

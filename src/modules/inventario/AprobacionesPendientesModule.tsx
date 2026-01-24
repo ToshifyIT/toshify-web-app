@@ -1,6 +1,7 @@
 // src/modules/inventario/AprobacionesPendientesModule.tsx
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { useAuth } from '../../contexts/AuthContext'
 import Swal from 'sweetalert2'
 import { Check, X, Eye, Clock, Package, ArrowUpRight, ArrowDownLeft, RotateCcw, Filter, RefreshCw, History, CheckCircle, XCircle } from 'lucide-react'
@@ -791,6 +792,7 @@ export function AprobacionesPendientesModule() {
       `}</style>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <LoadingOverlay show={loading} message="Cargando aprobaciones..." size="lg" />
         {/* Tabs */}
         <div className="tabs-container">
           <button

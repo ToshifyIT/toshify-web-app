@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import Swal from 'sweetalert2'
@@ -526,6 +527,7 @@ export function PedidosTransitoModule() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <LoadingOverlay show={loading} message="Cargando pedidos..." size="lg" />
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-primary)', paddingBottom: '0' }}>
         <button

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 
@@ -1071,6 +1072,9 @@ export function GarantiasTab() {
 
   return (
     <>
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando garantias..." size="lg" />
+
       {/* Sub-tabs de navegación */}
       <div className="fact-subtabs" style={{ 
         display: 'flex', 

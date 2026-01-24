@@ -1,7 +1,7 @@
 // src/pages/HomePage.tsx
 import { useState, lazy, Suspense, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
-import { Menu, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
+import { Menu, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
@@ -9,6 +9,7 @@ import { useTheme } from '../contexts/ThemeContext'
 import logoToshify from '../assets/logo-toshify.png'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
+import { Spinner } from '../components/ui/LoadingOverlay'
 
 // Loading component for lazy-loaded pages
 const PageLoader = () => (
@@ -16,12 +17,9 @@ const PageLoader = () => (
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '50vh',
-    gap: '12px',
-    color: 'var(--text-secondary)'
+    height: '50vh'
   }}>
-    <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
-    <span>Cargando...</span>
+    <Spinner size="lg" message="Cargando..." />
   </div>
 )
 

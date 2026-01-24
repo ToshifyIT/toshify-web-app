@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import {
   Package,
@@ -360,6 +361,7 @@ export function InventarioDashboardModule() {
 
   return (
     <div className="inv-module">
+      <LoadingOverlay show={loading} message="Cargando inventario..." size="lg" />
       {/* Cards de Categorías Clickeables */}
       {/* Tarjetas de categoría - Solo muestran conteo, no filtran */}
       <div className="inv-category-cards">

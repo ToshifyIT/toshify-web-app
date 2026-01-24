@@ -2,6 +2,7 @@
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2 } from 'lucide-react'
+import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { DriveFilesModal } from '../../components/DriveFilesModal'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
@@ -14,6 +15,7 @@ import type {
 } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { VehiculoWizard } from './components/VehiculoWizard'
 import { formatDateTimeAR } from '../../utils/dateUtils'
 import './VehicleManagement.css'
@@ -1069,52 +1071,39 @@ export function VehicleManagement() {
         cell: ({ row }) => {
           const driveUrl = (row.original as any).drive_folder_url
           const isCreatingFolder = creatingDriveFolder === row.original.id
+          
           return (
-            <div className="dt-actions">
-              {driveUrl ? (
-                <button
-                  className="dt-btn-action"
-                  style={{ color: '#16a34a', background: 'rgba(22, 163, 74, 0.1)' }}
-                  onClick={() => handleOpenDriveFolder(row.original)}
-                  title="Ver documentos en Drive"
-                >
-                  <FolderOpen size={16} />
-                </button>
-              ) : (
-                <button
-                  className="dt-btn-action"
-                  style={{ color: '#6b7280', background: 'rgba(107, 114, 128, 0.1)' }}
-                  onClick={() => handleCreateDriveFolder(row.original)}
-                  disabled={isCreatingFolder}
-                  title="Crear carpeta en Drive"
-                >
-                  {isCreatingFolder ? <Loader2 size={16} className="animate-spin" /> : <FolderPlus size={16} />}
-                </button>
-              )}
-              <button
-                className="dt-btn-action dt-btn-view"
-                onClick={() => loadVehiculoDetails(row.original.id)}
-                title="Ver detalles"
-              >
-                <Eye size={16} />
-              </button>
-              <button
-                className="dt-btn-action dt-btn-edit"
-                onClick={() => openEditModal(row.original)}
-                disabled={!canUpdate}
-                title={!canUpdate ? 'No tienes permisos para editar' : 'Editar vehiculo'}
-              >
-                <Edit size={16} />
-              </button>
-              <button
-                className="dt-btn-action dt-btn-delete"
-                onClick={() => openDeleteModal(row.original)}
-                disabled={!canDelete}
-                title={!canDelete ? 'No tienes permisos para eliminar' : 'Eliminar vehiculo'}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
+            <ActionsMenu
+              maxVisible={2}
+              actions={[
+                {
+                  icon: <Eye size={15} />,
+                  label: 'Ver detalles',
+                  onClick: () => loadVehiculoDetails(row.original.id)
+                },
+                {
+                  icon: <Edit size={15} />,
+                  label: 'Editar',
+                  onClick: () => openEditModal(row.original),
+                  disabled: !canUpdate,
+                  variant: 'info'
+                },
+                {
+                  icon: driveUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
+                  label: driveUrl ? 'Ver documentos' : 'Crear carpeta',
+                  onClick: () => driveUrl ? handleOpenDriveFolder(row.original) : handleCreateDriveFolder(row.original),
+                  disabled: isCreatingFolder,
+                  variant: driveUrl ? 'success' : 'default'
+                },
+                {
+                  icon: <Trash2 size={15} />,
+                  label: 'Eliminar',
+                  onClick: () => openDeleteModal(row.original),
+                  disabled: !canDelete,
+                  variant: 'danger'
+                }
+              ]}
+            />
           )
         },
         enableSorting: false,
@@ -1125,6 +1114,9 @@ export function VehicleManagement() {
 
   return (
     <div className="veh-module">
+      {/* Loading Overlay - bloquea toda la pantalla */}
+      <LoadingOverlay show={loading} message="Cargando vehiculos..." size="lg" />
+
       {/* Stats Cards - Clickeables para filtrar */}
       <div className="veh-stats">
         <div className="veh-stats-grid">
