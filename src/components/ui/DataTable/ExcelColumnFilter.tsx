@@ -6,7 +6,18 @@
 
 import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Filter } from 'lucide-react'
+
+// Icono de filtro estilo Excel - dropdown arrow
+const FilterIcon = ({ size = 12 }: { size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 12 12"
+    fill="currentColor"
+  >
+    <path d="M2 4L6 8L10 4H2Z" />
+  </svg>
+)
 
 interface ExcelColumnFilterProps {
   /** Nombre de la columna para mostrar en el header */
@@ -183,7 +194,7 @@ export function ExcelColumnFilter({
         onClick={handleToggle}
         title={`Filtrar por ${label.toLowerCase()}`}
       >
-        <Filter size={12} />
+        <FilterIcon size={12} />
       </button>
       {isOpen && createPortal(
         <div

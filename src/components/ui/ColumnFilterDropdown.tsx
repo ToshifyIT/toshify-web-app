@@ -6,7 +6,18 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Filter } from 'lucide-react'
+
+// Icono de filtro estilo Excel - dropdown arrow
+const FilterIcon = ({ size = 12 }: { size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 12 12"
+    fill="currentColor"
+  >
+    <path d="M2 4L6 8L10 4H2Z" />
+  </svg>
+)
 
 interface ColumnFilterDropdownProps {
   /** ID único del filtro (ej: 'patente', 'conductor') */
@@ -112,7 +123,7 @@ export function ColumnFilterDropdown({
         onClick={handleToggle}
         title={`Filtrar por ${label.toLowerCase()}`}
       >
-        <Filter size={12} />
+        <FilterIcon size={12} />
       </button>
       {isOpen && createPortal(
         <div
