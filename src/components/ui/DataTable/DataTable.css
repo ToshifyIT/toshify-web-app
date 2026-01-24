@@ -560,7 +560,6 @@
   color: var(--text-primary);
   font-size: 13px;
   vertical-align: middle;
-  white-space: nowrap;
 }
 
 .dt-table td:last-child {

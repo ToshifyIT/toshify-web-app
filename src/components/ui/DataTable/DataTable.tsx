@@ -23,15 +23,15 @@ import {
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronRight, Check, Calendar } from "lucide-react";
 
-// Icono de filtro estilo Excel - dropdown arrow
-const FilterIcon = ({ size = 12 }: { size?: number }) => (
+// Icono de filtro estilo Excel - dropdown arrow pequeño y sutil
+const FilterIcon = ({ size = 8 }: { size?: number }) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 12 12"
+    viewBox="0 0 8 6"
     fill="currentColor"
   >
-    <path d="M2 4L6 8L10 4H2Z" />
+    <path d="M0.5 0.5L4 5L7.5 0.5H0.5Z" />
   </svg>
 );
 import { Spinner } from "../LoadingOverlay";
