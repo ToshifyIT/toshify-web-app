@@ -225,16 +225,19 @@ export function FacturacionPreviewTable({
 
   // Función para agregar nueva fila (ajuste manual)
   const agregarAjuste = useCallback(async () => {
-    // Construir options de conductores
-    const conductorOptions = conductoresUnicos.map(c => 
-      `<option value="${c.id}">${c.nombre} (${c.dni})</option>`
-    ).join('')
-
     // Construir options de conceptos desde la BD (solo activos)
     const conceptoOptions = conceptos
       .filter(c => c.codigo) // Solo los que tienen código
       .map(c => `<option value="${c.codigo}" data-iva="${c.iva_porcentaje}" data-tipo="${c.tipo}">${c.codigo} - ${c.descripcion}</option>`)
       .join('')
+
+    // Crear lista de conductores para búsqueda
+    const conductoresList = conductoresUnicos.map(c => ({
+      id: c.id,
+      nombre: c.nombre,
+      dni: c.dni,
+      display: `${c.nombre} (${c.dni})`
+    }))
 
     const { value: formValues } = await Swal.fire({
       title: 'Agregar Ajuste',
@@ -242,10 +245,15 @@ export function FacturacionPreviewTable({
         <div style="display: flex; flex-direction: column; gap: 12px; text-align: left;">
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Conductor</label>
-            <select id="swal-conductor" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
-              <option value="">Seleccionar conductor...</option>
-              ${conductorOptions}
-            </select>
+            <input type="hidden" id="swal-conductor" value="">
+            <input 
+              type="text" 
+              id="swal-conductor-search" 
+              placeholder="Buscar conductor..."
+              autocomplete="off"
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;"
+            >
+            <div id="swal-conductor-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; margin-top: 4px; display: none; background: white;"></div>
           </div>
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Concepto</label>
@@ -271,8 +279,69 @@ export function FacturacionPreviewTable({
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#059669',
       focusConfirm: false,
+      didOpen: () => {
+        const searchInput = document.getElementById('swal-conductor-search') as HTMLInputElement
+        const hiddenInput = document.getElementById('swal-conductor') as HTMLInputElement
+        const listContainer = document.getElementById('swal-conductor-list') as HTMLDivElement
+
+        const renderList = (filter: string) => {
+          const filtered = filter 
+            ? conductoresList.filter(c => 
+                c.nombre.toLowerCase().includes(filter.toLowerCase()) ||
+                c.dni.includes(filter)
+              )
+            : conductoresList
+
+          if (filtered.length === 0) {
+            listContainer.innerHTML = '<div style="padding: 8px 12px; color: #888; font-size: 12px;">No se encontraron conductores</div>'
+          } else {
+            listContainer.innerHTML = filtered.slice(0, 50).map(c => `
+              <div 
+                data-id="${c.id}" 
+                data-display="${c.display}"
+                style="padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #eee;"
+                class="conductor-option"
+              >${c.display}</div>
+            `).join('')
+          }
+          listContainer.style.display = 'block'
+        }
+
+        searchInput.addEventListener('focus', () => renderList(searchInput.value))
+        searchInput.addEventListener('input', () => renderList(searchInput.value))
+        
+        listContainer.addEventListener('click', (e) => {
+          const target = e.target as HTMLElement
+          if (target.classList.contains('conductor-option')) {
+            hiddenInput.value = target.dataset.id || ''
+            searchInput.value = target.dataset.display || ''
+            listContainer.style.display = 'none'
+          }
+        })
+
+        // Hover styles
+        listContainer.addEventListener('mouseover', (e) => {
+          const target = e.target as HTMLElement
+          if (target.classList.contains('conductor-option')) {
+            target.style.backgroundColor = '#f3f4f6'
+          }
+        })
+        listContainer.addEventListener('mouseout', (e) => {
+          const target = e.target as HTMLElement
+          if (target.classList.contains('conductor-option')) {
+            target.style.backgroundColor = ''
+          }
+        })
+
+        // Close on click outside
+        document.addEventListener('click', (e) => {
+          if (!searchInput.contains(e.target as Node) && !listContainer.contains(e.target as Node)) {
+            listContainer.style.display = 'none'
+          }
+        })
+      },
       preConfirm: () => {
-        const conductorId = (document.getElementById('swal-conductor') as HTMLSelectElement).value
+        const conductorId = (document.getElementById('swal-conductor') as HTMLInputElement).value
         const conceptoEl = document.getElementById('swal-concepto') as HTMLSelectElement
         const concepto = conceptoEl.value
         const selectedOption = conceptoEl.options[conceptoEl.selectedIndex]
