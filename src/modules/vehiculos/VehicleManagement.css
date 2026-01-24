@@ -197,55 +197,59 @@
   transition: all 0.2s;
 }
 
+/* Wizard Step Number - Toshify Design System */
 .vehiculo-wizard .wizard-step-number {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--bg-tertiary);
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--bg-secondary);
   color: var(--text-tertiary);
-  border: 2px solid var(--border-primary);
+  border: none;
   transition: all 0.2s;
 }
 
 .vehiculo-wizard .wizard-step.active .wizard-step-number {
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
-  border-color: #DC2626;
+  box-shadow: 0 0 0 4px rgba(249, 6, 55, 0.15);
 }
 
 .vehiculo-wizard .wizard-step.completed .wizard-step-number {
-  background: #059669;
+  background: var(--color-primary);
   color: white;
-  border-color: #059669;
 }
 
 .vehiculo-wizard .wizard-step-title {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.05em;
 }
 
 .vehiculo-wizard .wizard-step.active .wizard-step-title {
-  color: #DC2626;
-  font-weight: 600;
+  color: var(--color-primary);
 }
 
 .vehiculo-wizard .wizard-step.completed .wizard-step-title {
-  color: #059669;
+  color: var(--color-primary);
 }
 
 .vehiculo-wizard .wizard-step-line {
-  width: 40px;
+  width: 50px;
   height: 2px;
   background: var(--border-primary);
-  margin: 0 4px;
+  margin: 0 8px;
+  margin-bottom: 20px;
+}
+
+.vehiculo-wizard .wizard-step-line.active {
+  background: #FD97CA;
 }
 
 /* Wizard Content */
