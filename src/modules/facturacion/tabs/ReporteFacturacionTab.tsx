@@ -1921,19 +1921,21 @@ export function ReporteFacturacionTab() {
       // 4. Penalidades cuotas (penalidades fraccionadas) pendientes de esta semana
       const { data: penalidadesCuotasPendientes } = await (supabase
         .from('penalidades_cuotas') as any)
-        .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name)')
+        .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name, conductor:conductores(nombres, apellidos))')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
         .eq('aplicado', false)
 
       for (const pc of (penalidadesCuotasPendientes || []) as any[]) {
-        const conductorIdPen = pc.penalidad?.conductor_id
-        if (!detallesReferencias.has(pc.id) && conductorIdPen && conductorIds.includes(conductorIdPen)) {
+        if (!detallesReferencias.has(pc.id) && pc.penalidad?.conductor_id && conductorIds.includes(pc.penalidad.conductor_id)) {
+          const conductorNombre = pc.penalidad?.conductor?.nombres && pc.penalidad?.conductor?.apellidos
+            ? `${pc.penalidad.conductor.nombres} ${pc.penalidad.conductor.apellidos}`
+            : pc.penalidad?.conductor_nombre || 'Sin nombre'
           pendientes.push({
             id: pc.id,
             tipo: 'cobro_fraccionado',
-            conductorId: conductorIdPen,
-            conductorNombre: pc.penalidad?.conductor_nombre || 'Sin nombre',
+            conductorId: pc.penalidad.conductor_id,
+            conductorNombre,
             monto: pc.monto_cuota,
             descripcion: pc.penalidad?.detalle || 'Penalidad fraccionada',
             tabla: 'penalidades_cuotas',
