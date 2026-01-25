@@ -259,7 +259,7 @@ export function HomePage() {
                 toggleNestedMenu(submenu.submenu_id)
               }}
             >
-              <span>{submenu.submenu_label}</span>
+              <span>{submenu.submenu_label === 'Telepase Histórico' ? 'Telepase' : submenu.submenu_label}</span>
               <span className={`nav-nested-arrow ${isNestedOpen ? 'open' : ''}`}>▸</span>
             </button>
             <div className={`nav-nested-items ${!isNestedOpen ? 'collapsed' : ''}`}>
@@ -275,7 +275,7 @@ export function HomePage() {
             className={`nav-item ${depth > 0 ? 'nested' : ''} ${isActiveRoute(submenu.submenu_route) ? 'active' : ''}`}
             onClick={() => navigate(submenu.submenu_route)}
           >
-            <span className="nav-label">{submenu.submenu_label}</span>
+            <span className="nav-label">{submenu.submenu_label === 'Telepase Histórico' ? 'Telepase' : submenu.submenu_label}</span>
           </button>
         )
       }
@@ -1243,7 +1243,7 @@ export function HomePage() {
                                         onClick={() => navigate(submenu.submenu_route)}
                                       >
                                         <span className="nav-flyout-icon"><SubIcon size={16} /></span>
-                                        <span>{submenu.submenu_label}</span>
+                                        <span>{submenu.submenu_label === 'Telepase Histórico' ? 'Telepase' : submenu.submenu_label}</span>
                                       </button>
                                     )
                                   })}

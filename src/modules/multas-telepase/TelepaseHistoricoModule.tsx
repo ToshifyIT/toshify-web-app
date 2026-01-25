@@ -91,10 +91,54 @@ export default function TelepaseHistoricoModule() {
   const [fechaHasta, setFechaHasta] = useState<string | null>(null)
   const [tarifaFilter, setTarifaFilter] = useState<string[]>([])
   const [ibuttonFilter, setIbuttonFilter] = useState<string[]>([])
+  
+  // Opciones para autocompletado y validación
+  const [conductoresOptions, setConductoresOptions] = useState<string[]>([])
+  const [conductoresStatus, setConductoresStatus] = useState<Record<string, string>>({})
+  const [showConductorSuggestions, setShowConductorSuggestions] = useState(false)
+  const [showOnlyActiveConductores, setShowOnlyActiveConductores] = useState(false)
 
   useEffect(() => {
     cargarDatos()
+    fetchConductores()
   }, [])
+
+  async function fetchConductores() {
+    try {
+      // Consulta de referencia: SELECT DISTINCT CONCAT(nombres, ' ', apellidos) AS conductor FROM conductores
+      const { data, error } = await supabase
+        .from('conductores')
+        .select('nombres, apellidos, estado_facturacion')
+        .order('nombres', { ascending: true })
+        .limit(5000)
+      
+      if (error) throw error
+      
+      if (data) {
+        // Mapa de estados para validación
+        const statusMap: Record<string, string> = {}
+        const options: string[] = []
+
+        data.forEach((c: any) => {
+          const nombre = c.nombres || ''
+          const apellido = c.apellidos || ''
+          const fullName = `${nombre} ${apellido}`.trim()
+          
+          if (fullName) {
+            statusMap[fullName.toLowerCase()] = c.estado_facturacion
+            
+            // Agregar todos los conductores para permitir búsqueda
+            options.push(fullName)
+          }
+        })
+
+        setConductoresStatus(statusMap)
+        setConductoresOptions([...new Set(options)].sort())
+      }
+    } catch (error) {
+      console.error('Error cargando conductores:', error)
+    }
+  }
 
   async function cargarDatos() {
     setLoading(true)
@@ -239,6 +283,7 @@ export default function TelepaseHistoricoModule() {
   function handleEditar(registro: TelepaseRegistro) {
     setEditingRegistro({ ...registro })
     setShowEditModal(true)
+    setShowOnlyActiveConductores(false)
   }
 
   async function handleGuardarEdicion() {
@@ -536,20 +581,9 @@ export default function TelepaseHistoricoModule() {
     XLSX.writeFile(wb, `telepase_historico_${new Date().toISOString().split('T')[0]}.xlsx`)
   }
 
-  if (loading) {
-    return (
-      <div className="module-container">
-        <div className="loading-container">
-          <div className="spinner" />
-          <p>Cargando datos de Telepase...</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="multas-module">
-      <LoadingOverlay show={loading} message="Cargando telepase..." size="lg" />
+      <LoadingOverlay show={loading} message="Cargando datos de Telepase..." size="lg" />
       {/* Stats Cards */}
       <div className="multas-stats">
         <div className="multas-stats-grid five-cols">
@@ -728,15 +762,207 @@ export default function TelepaseHistoricoModule() {
 
               {/* Campos editables */}
               <div className="multas-modal-form">
-                <div className="multas-form-group">
-                  <label className="multas-form-label">Conductor</label>
+                <div className="multas-form-group" style={{ position: 'relative' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label className="multas-form-label" style={{ marginBottom: 0 }}>Conductor</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#4B5563', fontWeight: 500 }}>Solo Activos</span>
+                      <label style={{
+                        position: 'relative',
+                        display: 'inline-block',
+                        width: '36px',
+                        height: '20px',
+                        cursor: 'pointer'
+                      }}>
+                        <input 
+                          type="checkbox" 
+                          checked={showOnlyActiveConductores}
+                          onChange={(e) => setShowOnlyActiveConductores(e.target.checked)}
+                          style={{ opacity: 0, width: 0, height: 0 }}
+                        />
+                        <span style={{
+                          position: 'absolute',
+                          cursor: 'pointer',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: showOnlyActiveConductores ? '#2563EB' : '#E5E7EB',
+                          transition: '.4s',
+                          borderRadius: '34px'
+                        }}></span>
+                        <span style={{
+                          position: 'absolute',
+                          content: '""',
+                          height: '16px',
+                          width: '16px',
+                          left: '2px',
+                          bottom: '2px',
+                          backgroundColor: 'white',
+                          transition: '.4s',
+                          borderRadius: '50%',
+                          transform: showOnlyActiveConductores ? 'translateX(16px)' : 'translateX(0)'
+                        }}></span>
+                      </label>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     className="multas-form-input"
                     value={editingRegistro.conductor || ''}
-                    onChange={(e) => setEditingRegistro({ ...editingRegistro, conductor: e.target.value })}
-                    placeholder="Nombre del conductor..."
+                    onChange={(e) => {
+                      setEditingRegistro({ ...editingRegistro, conductor: e.target.value })
+                      setShowConductorSuggestions(true)
+                    }}
+                    onFocus={() => setShowConductorSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowConductorSuggestions(false), 200)}
+                    placeholder="Buscar conductor..."
+                    autoComplete="off"
                   />
+                  {showConductorSuggestions && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      background: 'white',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '0 0 6px 6px',
+                      zIndex: 50,
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                    }}>
+                      {conductoresOptions
+                        .filter(c => {
+                          const matchesSearch = c.toLowerCase().includes((editingRegistro.conductor || '').toLowerCase())
+                          if (!matchesSearch) return false
+                          
+                          if (showOnlyActiveConductores) {
+                            return conductoresStatus[c.toLowerCase()] === 'activo'
+                          }
+                          return true
+                        })
+                        .map((c, i) => {
+                          const status = conductoresStatus[c.toLowerCase()]
+                          const isActive = status === 'activo'
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                setEditingRegistro({ ...editingRegistro, conductor: c })
+                                setShowConductorSuggestions(false)
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid #f3f4f6',
+                                fontSize: '14px',
+                                color: '#374151',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                            >
+                              <span>{c}</span>
+                              {isActive ? (
+                                <CheckCircle size={14} style={{ color: '#10B981' }} />
+                              ) : (
+                                <AlertCircle size={14} style={{ color: '#EF4444' }} />
+                              )}
+                            </div>
+                          )
+                        })}
+                        {conductoresOptions.filter(c => {
+                          const matchesSearch = c.toLowerCase().includes((editingRegistro.conductor || '').toLowerCase())
+                          if (!matchesSearch) return false
+                          if (showOnlyActiveConductores) {
+                            return conductoresStatus[c.toLowerCase()] === 'activo'
+                          }
+                          return true
+                        }).length === 0 && (
+                          <div style={{ padding: '8px 12px', color: '#9ca3af', fontSize: '14px' }}>
+                            No se encontraron conductores
+                          </div>
+                        )}
+                    </div>
+                  )}
+                  {/* Validación de estado del conductor */}
+                  {(() => {
+                    const conductorName = (editingRegistro.conductor || '').trim().toLowerCase()
+                    if (!conductorName) return null
+                    
+                    const exists = Object.prototype.hasOwnProperty.call(conductoresStatus, conductorName)
+                    const status = conductoresStatus[conductorName]
+                    
+                    if (status === 'activo') {
+                      return (
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '8px 12px',
+                          background: '#ECFDF5',
+                          border: '1px solid #A7F3D0',
+                          borderRadius: '6px',
+                          color: '#047857',
+                          fontSize: '13px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 500
+                        }}>
+                          <CheckCircle size={16} />
+                          Conductor Activo
+                        </div>
+                      )
+                    } else if (exists) {
+                      return (
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '8px 12px',
+                          background: '#FEF2F2',
+                          border: '1px solid #FECACA',
+                          borderRadius: '6px',
+                          color: '#B91C1C',
+                          fontSize: '13px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 500
+                        }}>
+                          <AlertCircle size={16} />
+                          {`Conductor NO ACTIVO (Estado: ${status || 'Desconocido'})`}
+                        </div>
+                      )
+                    } else {
+                      // Verificar si hay coincidencias parciales
+                      const hasPartialMatches = conductoresOptions.some(c => 
+                        c.toLowerCase().includes(conductorName)
+                      )
+
+                      if (hasPartialMatches) return null
+
+                      return (
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '8px 12px',
+                          background: '#F3F4F6',
+                          border: '1px solid #D1D5DB',
+                          borderRadius: '6px',
+                          color: '#4B5563',
+                          fontSize: '13px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 500
+                        }}>
+                          <AlertCircle size={16} />
+                          Conductor no encontrado en base de datos
+                        </div>
+                      )
+                    }
+                  })()}
                 </div>
 
                 <div className="multas-form-group">
