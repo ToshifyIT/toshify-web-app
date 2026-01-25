@@ -34,6 +34,7 @@ import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, p
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
 import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
+import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyPreviewTable'
 
 // Tipos para datos de facturación generada
 interface FacturacionConductor {
@@ -182,6 +183,14 @@ export function ReporteFacturacionTab() {
 
   // Exportar SiFactura
   const [exportingSiFactura, setExportingSiFactura] = useState(false)
+  
+  // Exportar Facturación Cabify
+  const [exportingCabify, setExportingCabify] = useState(false)
+  
+  // Cabify Preview mode
+  const [showCabifyPreview, setShowCabifyPreview] = useState(false)
+  const [cabifyPreviewData, setCabifyPreviewData] = useState<CabifyPreviewRow[]>([])
+  const [loadingCabifyPreview, setLoadingCabifyPreview] = useState(false)
   
   // SiFactura Preview mode
   const [showSiFacturaPreview, setShowSiFacturaPreview] = useState(false)
@@ -3449,6 +3458,362 @@ export function ReporteFacturacionTab() {
     }
   }
 
+  // Preparar Preview Facturación Cabify
+  async function prepararCabifyPreview() {
+    if (vistaPreviaData.length === 0) {
+      Swal.fire('Sin datos', 'No hay datos para generar preview', 'warning')
+      return
+    }
+
+    setLoadingCabifyPreview(true)
+    try {
+      // Filtrar datos según filtros actuales
+      const dataToExport = vistaPreviaData.filter(f => {
+        if (buscarConductor) {
+          const search = buscarConductor.toLowerCase()
+          if (!f.conductor_nombre.toLowerCase().includes(search) &&
+              !f.conductor_dni?.toLowerCase().includes(search) &&
+              !f.vehiculo_patente?.toLowerCase().includes(search)) {
+            return false
+          }
+        }
+        if (filtroTipo !== 'todos' && f.tipo_alquiler !== filtroTipo) return false
+        if (filtroEstado === 'deuda' && f.total_a_pagar <= 0) return false
+        if (filtroEstado === 'favor' && f.total_a_pagar > 0) return false
+        return true
+      })
+
+      // Obtener emails de conductores
+      const dnis = [...new Set(dataToExport.map(f => f.conductor_dni).filter(Boolean))]
+      const { data: conductoresData } = await supabase
+        .from('conductores')
+        .select('numero_dni, email')
+        .in('numero_dni', dnis)
+      
+      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [c.numero_dni, c.email]))
+
+      // Cargar datos de Cabify desde cabify_historico
+      const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
+      const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
+      
+      const { data: cabifyData } = await supabase
+        .from('cabify_historico')
+        .select('dni, horas_conectadas, ganancia_total, cobro_app, cobro_efectivo')
+        .gte('fecha_inicio', fechaInicio + 'T00:00:00')
+        .lte('fecha_inicio', fechaFin + 'T23:59:59')
+
+      // Agrupar datos de Cabify por DNI (sumar si hay múltiples registros)
+      const cabifyMap = new Map<string, { horas: number; ganancia: number; cobroApp: number; efectivo: number }>()
+      ;(cabifyData || []).forEach((record: { dni: string; horas_conectadas: number; ganancia_total: number; cobro_app: number; cobro_efectivo: number }) => {
+        if (record.dni) {
+          const existing = cabifyMap.get(record.dni) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+          cabifyMap.set(record.dni, {
+            horas: existing.horas + (Number(record.horas_conectadas) || 0),
+            ganancia: existing.ganancia + (Number(record.ganancia_total) || 0),
+            cobroApp: existing.cobroApp + (Number(record.cobro_app) || 0),
+            efectivo: existing.efectivo + (Number(record.cobro_efectivo) || 0)
+          })
+        }
+      })
+
+      const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+      const anio = getYear(semanaActual.inicio)
+
+      // Generar filas para el preview
+      const previewRows: CabifyPreviewRow[] = dataToExport.map(f => {
+        const email = emailMap.get(f.conductor_dni || '') || ''
+        const cabifyInfo = cabifyMap.get(f.conductor_dni || '') || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+        
+        // Importe Contrato = Monto del alquiler (P001/P002)
+        const importeContrato = f.subtotal_alquiler || 0
+        
+        // EXCEDENTES = Todo lo demás: garantía, penalidades, peajes, excesos km, etc.
+        // EXCLUYENDO: descuentos (tickets a favor), saldo anterior y mora
+        const excedentes = (f.subtotal_garantia || 0) + 
+                          (f.monto_penalidades || 0) + 
+                          (f.monto_peajes || 0) + 
+                          (f.monto_excesos || 0)
+
+        return {
+          anio,
+          semana,
+          fechaInicial: semanaActual.inicio,
+          fechaFinal: semanaActual.fin,
+          conductor: f.conductor_nombre,
+          email,
+          patente: f.vehiculo_patente || '',
+          dni: f.conductor_dni || '',
+          importeContrato,
+          excedentes,
+          conductorId: f.conductor_id,
+          horasConexion: cabifyInfo.horas,
+          importeGenerado: cabifyInfo.ganancia,
+          importeGeneradoConBonos: cabifyInfo.cobroApp,
+          generadoEfectivo: cabifyInfo.efectivo
+        }
+      })
+
+      setCabifyPreviewData(previewRows)
+      setShowCabifyPreview(true)
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo generar el preview de Cabify', 'error')
+    } finally {
+      setLoadingCabifyPreview(false)
+    }
+  }
+
+  // Preparar Preview Cabify desde Facturación Generada (con período)
+  async function prepararCabifyPreviewDesdeFacturacion() {
+    if (facturaciones.length === 0 || !periodo) {
+      Swal.fire('Sin datos', 'No hay datos para generar preview', 'warning')
+      return
+    }
+
+    setLoadingCabifyPreview(true)
+    try {
+      // Obtener emails de conductores
+      const dnis = [...new Set(facturaciones.map(f => f.conductor_dni).filter(Boolean))]
+      const { data: conductoresData } = await supabase
+        .from('conductores')
+        .select('numero_dni, email')
+        .in('numero_dni', dnis)
+      
+      const emailMap = new Map((conductoresData || []).map((c: { numero_dni: string; email: string | null }) => [c.numero_dni, c.email]))
+
+      // Cargar datos guardados de facturacion_cabify (si existen)
+      const { data: savedCabifyData } = await (supabase
+        .from('facturacion_cabify') as any)
+        .select('*')
+        .eq('periodo_id', periodo.id)
+      
+      // Crear mapa de datos guardados por conductor_id
+      const savedDataMap = new Map<string, any>()
+      ;(savedCabifyData || []).forEach((record: any) => {
+        if (record.conductor_id) {
+          savedDataMap.set(record.conductor_id, record)
+        }
+      })
+
+      // Cargar datos de Cabify desde cabify_historico (para valores por defecto)
+      const { data: cabifyData } = await supabase
+        .from('cabify_historico')
+        .select('dni, horas_conectadas, ganancia_total, cobro_app, cobro_efectivo')
+        .gte('fecha_inicio', periodo.fecha_inicio + 'T00:00:00')
+        .lte('fecha_inicio', periodo.fecha_fin + 'T23:59:59')
+
+      // Agrupar datos de Cabify por DNI (sumar si hay múltiples registros)
+      const cabifyMap = new Map<string, { horas: number; ganancia: number; cobroApp: number; efectivo: number }>()
+      ;(cabifyData || []).forEach((record: { dni: string; horas_conectadas: number; ganancia_total: number; cobro_app: number; cobro_efectivo: number }) => {
+        if (record.dni) {
+          const existing = cabifyMap.get(record.dni) || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+          cabifyMap.set(record.dni, {
+            horas: existing.horas + (Number(record.horas_conectadas) || 0),
+            ganancia: existing.ganancia + (Number(record.ganancia_total) || 0),
+            cobroApp: existing.cobroApp + (Number(record.cobro_app) || 0),
+            efectivo: existing.efectivo + (Number(record.cobro_efectivo) || 0)
+          })
+        }
+      })
+
+      const fechaInicio = parseISO(periodo.fecha_inicio)
+      const fechaFin = parseISO(periodo.fecha_fin)
+
+      // Generar filas para el preview
+      const previewRows: CabifyPreviewRow[] = facturaciones.map(f => {
+        const email = emailMap.get(f.conductor_dni || '') || ''
+        const cabifyInfo = cabifyMap.get(f.conductor_dni || '') || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
+        const savedData = savedDataMap.get(f.conductor_id)
+        
+        // Si hay datos guardados, usarlos; sino usar los calculados
+        if (savedData) {
+          return {
+            anio: periodo.anio,
+            semana: periodo.semana,
+            fechaInicial: fechaInicio,
+            fechaFinal: fechaFin,
+            conductor: savedData.conductor_nombre || f.conductor_nombre,
+            email: savedData.conductor_email || email,
+            patente: savedData.vehiculo_patente || f.vehiculo_patente || '',
+            dni: savedData.conductor_dni || f.conductor_dni || '',
+            importeContrato: Number(savedData.importe_contrato) || 0,
+            excedentes: Number(savedData.excedentes) || 0,
+            conductorId: f.conductor_id,
+            horasConexion: Number(savedData.horas_conexion) || 0,
+            importeGenerado: Number(savedData.importe_generado) || 0,
+            importeGeneradoConBonos: Number(savedData.importe_generado_bonos) || 0,
+            generadoEfectivo: Number(savedData.generado_efectivo) || 0,
+            id: savedData.id
+          }
+        }
+        
+        // Importe Contrato = Monto del alquiler
+        const importeContrato = f.subtotal_alquiler || 0
+        
+        // EXCEDENTES = garantía + penalidades + peajes + excesos
+        const excedentes = (f.subtotal_garantia || 0) + 
+                          (f.monto_penalidades || 0) + 
+                          (f.monto_peajes || 0) + 
+                          (f.monto_excesos || 0)
+
+        return {
+          anio: periodo.anio,
+          semana: periodo.semana,
+          fechaInicial: fechaInicio,
+          fechaFinal: fechaFin,
+          conductor: f.conductor_nombre,
+          email,
+          patente: f.vehiculo_patente || '',
+          dni: f.conductor_dni || '',
+          importeContrato,
+          excedentes,
+          conductorId: f.conductor_id,
+          horasConexion: cabifyInfo.horas,
+          importeGenerado: cabifyInfo.ganancia,
+          importeGeneradoConBonos: cabifyInfo.cobroApp,
+          generadoEfectivo: cabifyInfo.efectivo
+        }
+      })
+
+      setCabifyPreviewData(previewRows)
+      setShowCabifyPreview(true)
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo generar el preview de Cabify', 'error')
+    } finally {
+      setLoadingCabifyPreview(false)
+    }
+  }
+
+  // Exportar Facturación Cabify desde el Preview
+  function exportarCabifyExcel() {
+    if (cabifyPreviewData.length === 0) return
+
+    setExportingCabify(true)
+    try {
+      const semana = cabifyPreviewData[0].semana
+      const anio = cabifyPreviewData[0].anio
+      
+      // Fechas como número de Excel (días desde 1/1/1900)
+      const fechaInicioExcel = Math.floor((cabifyPreviewData[0].fechaInicial.getTime() - new Date(1899, 11, 30).getTime()) / 86400000)
+      const fechaFinExcel = Math.floor((cabifyPreviewData[0].fechaFinal.getTime() - new Date(1899, 11, 30).getTime()) / 86400000)
+
+      const wb = XLSX.utils.book_new()
+
+      // Formato Cabify: cada fila es un conductor (todas las columnas del Excel)
+      const cabifyData: (string | number | null)[][] = [
+        ['Año', 'Semana Fact.', 'Fecha Inicial', 'Fecha Final', 'Conductor', 'Email', 'Patente', 'DNI', 'Importe Contrato', 'EXCEDENTES', '#DO', 'Horas de conexion', 'Importe Generado', 'Importe Generado (con bonos)', 'Generado efectivo']
+      ]
+
+      cabifyPreviewData.forEach(row => {
+        cabifyData.push([
+          row.anio,
+          row.semana,
+          fechaInicioExcel,
+          fechaFinExcel,
+          row.conductor,
+          row.email,
+          row.patente,
+          row.dni,
+          row.importeContrato,
+          row.excedentes,
+          '', // #DO - vacío, lo llena Cabify
+          row.horasConexion,
+          row.importeGenerado,
+          row.importeGeneradoConBonos,
+          row.generadoEfectivo
+        ])
+      })
+
+      const ws = XLSX.utils.aoa_to_sheet(cabifyData)
+      
+      // Formato de columnas
+      ws['!cols'] = [
+        { wch: 6 },   // Año
+        { wch: 12 },  // Semana Fact.
+        { wch: 14 },  // Fecha Inicial
+        { wch: 14 },  // Fecha Final
+        { wch: 30 },  // Conductor
+        { wch: 35 },  // Email
+        { wch: 12 },  // Patente
+        { wch: 12 },  // DNI
+        { wch: 16 },  // Importe Contrato
+        { wch: 14 },  // EXCEDENTES
+        { wch: 8 },   // #DO
+        { wch: 16 },  // Horas de conexion
+        { wch: 16 },  // Importe Generado
+        { wch: 22 },  // Importe Generado (con bonos)
+        { wch: 16 }   // Generado efectivo
+      ]
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Facturación Cabify')
+
+      const nombreArchivo = `Facturacion_Cabify_S${semana}_${anio}.xlsx`
+      XLSX.writeFile(wb, nombreArchivo)
+
+      showSuccess('Reporte Cabify Exportado', `Se descargó: ${nombreArchivo}`)
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo exportar el reporte de Cabify', 'error')
+    } finally {
+      setExportingCabify(false)
+    }
+  }
+
+  // Sincronizar cambios del preview Cabify con la BD
+  async function syncCabifyChanges(updatedData: CabifyPreviewRow[]): Promise<boolean> {
+    if (!periodo) return false
+
+    try {
+      for (const row of updatedData) {
+        // Verificar si ya existe un registro para este conductor en este período
+        const { data: existingRecord } = await (supabase
+          .from('facturacion_cabify') as any)
+          .select('id')
+          .eq('periodo_id', periodo.id)
+          .eq('conductor_id', row.conductorId)
+          .single()
+
+        const recordData = {
+          periodo_id: periodo.id,
+          conductor_id: row.conductorId,
+          conductor_nombre: row.conductor,
+          conductor_dni: row.dni,
+          conductor_email: row.email,
+          vehiculo_patente: row.patente,
+          importe_contrato: row.importeContrato,
+          excedentes: row.excedentes,
+          horas_conexion: row.horasConexion,
+          importe_generado: row.importeGenerado,
+          importe_generado_bonos: row.importeGeneradoConBonos,
+          generado_efectivo: row.generadoEfectivo,
+          updated_at: new Date().toISOString()
+        }
+
+        if (existingRecord) {
+          // Actualizar registro existente
+          const { error } = await (supabase
+            .from('facturacion_cabify') as any)
+            .update(recordData)
+            .eq('id', existingRecord.id)
+
+          if (error) throw error
+        } else {
+          // Insertar nuevo registro
+          const { error } = await (supabase
+            .from('facturacion_cabify') as any)
+            .insert(recordData)
+
+          if (error) throw error
+        }
+      }
+
+      // Actualizar el estado local con los datos guardados
+      setCabifyPreviewData(updatedData)
+      return true
+    } catch (error) {
+      Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
+      return false
+    }
+  }
+
   // Stats calculados - funciona para facturación generada y vista previa
   const stats = useMemo(() => {
     // Si estamos en modo vista previa, calcular desde vistaPreviaData
@@ -3997,6 +4362,38 @@ export function ReporteFacturacionTab() {
     )
   }
 
+  // Si estamos en modo Cabify Preview, mostrar el componente de preview
+  if (showCabifyPreview && cabifyPreviewData.length > 0) {
+    const semanaNum = periodo ? periodo.semana : infoSemana.semana
+    const anioNum = periodo ? periodo.anio : infoSemana.anio
+    const fechaInicioStr = periodo 
+      ? format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')
+      : format(semanaActual.inicio, 'dd/MM/yyyy')
+    const fechaFinStr = periodo
+      ? format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')
+      : format(semanaActual.fin, 'dd/MM/yyyy')
+    
+    const esPeriodoAbierto = periodo?.estado === 'abierto'
+
+    return (
+      <CabifyPreviewTable
+        data={cabifyPreviewData}
+        semana={semanaNum}
+        anio={anioNum}
+        fechaInicio={fechaInicioStr}
+        fechaFin={fechaFinStr}
+        periodoId={esPeriodoAbierto ? periodo?.id : undefined}
+        onClose={() => {
+          setShowCabifyPreview(false)
+          setCabifyPreviewData([])
+        }}
+        onExport={exportarCabifyExcel}
+        exporting={exportingCabify}
+        onSync={esPeriodoAbierto ? syncCabifyChanges : undefined}
+      />
+    )
+  }
+
   return (
     <>
       {/* Loading Overlay - bloquea toda la pantalla */}
@@ -4252,6 +4649,15 @@ export function ReporteFacturacionTab() {
                 {exportingExcel ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
                 {exportingExcel ? 'Exportando...' : 'Exportar Excel RIT'}
               </button>
+              <button
+                className="fact-btn-export"
+                onClick={prepararCabifyPreview}
+                disabled={loadingCabifyPreview || vistaPreviaData.length === 0}
+                style={{ backgroundColor: '#7C3AED' }}
+              >
+                {loadingCabifyPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
+                {loadingCabifyPreview ? 'Cargando...' : 'Preview Cabify'}
+              </button>
             </div>
           </div>
 
@@ -4387,6 +4793,15 @@ export function ReporteFacturacionTab() {
               >
                 {loadingSiFacturaPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
                 {loadingSiFacturaPreview ? 'Cargando...' : 'Preview Facturación'}
+              </button>
+              <button
+                className="fact-btn-export"
+                onClick={prepararCabifyPreviewDesdeFacturacion}
+                disabled={loadingCabifyPreview || facturacionesFiltradas.length === 0}
+                style={{ backgroundColor: '#7C3AED' }}
+              >
+                {loadingCabifyPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
+                {loadingCabifyPreview ? 'Cargando...' : 'Preview Cabify'}
               </button>
               {/* Botones ocultos para mantener funciones */}
               <button style={{ display: 'none' }} onClick={exportarExcel} disabled={exportingExcel}>Excel</button>
