@@ -1,7 +1,7 @@
 // src/modules/multas-telepase/TelepaseHistoricoModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
-import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import ExcelDateRangeFilter from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
@@ -583,11 +583,8 @@ export default function TelepaseHistoricoModule() {
 
   if (loading) {
     return (
-      <div className="module-container">
-        <div className="loading-container">
-          <div className="spinner" />
-          <p>Cargando datos de Telepase...</p>
-        </div>
+      <div className="module-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
+        <Spinner size="lg" message="Cargando datos de Telepase..." />
       </div>
     )
   }
