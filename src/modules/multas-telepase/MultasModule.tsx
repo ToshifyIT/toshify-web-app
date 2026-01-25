@@ -1,7 +1,7 @@
 // src/modules/multas-telepase/MultasModule.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
-import { LoadingOverlay, Spinner } from '../../components/ui/LoadingOverlay'
+import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { ExcelDateRangeFilter } from '../../components/ui/DataTable/ExcelDateRangeFilter'
 import { DataTable } from '../../components/ui/DataTable'
@@ -669,14 +669,6 @@ export default function MultasModule() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Multas')
     XLSX.writeFile(wb, `multas_${new Date().toISOString().split('T')[0]}.xlsx`)
-  }
-
-  if (loading) {
-    return (
-      <div className="module-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
-        <Spinner size="lg" message="Cargando multas..." />
-      </div>
-    )
   }
 
   return (
