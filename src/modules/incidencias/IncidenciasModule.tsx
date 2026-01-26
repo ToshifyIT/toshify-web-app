@@ -535,8 +535,9 @@ export function IncidenciasModule() {
     if (soloPendientesEnviar) {
       filtered = filtered.filter(i => {
         const penalidad = penalidades.find(p => p.incidencia_id === i.id)
-        // Puede enviarse si no tiene penalidad O si fue rechazada
-        return !penalidad || penalidad.rechazado === true
+        // Puede enviarse SOLO si no tiene penalidad asociada
+        // Si ya tiene penalidad (aplicada o rechazada/no aplica), ya no esta pendiente
+        return !penalidad
       })
     }
 
@@ -559,11 +560,12 @@ export function IncidenciasModule() {
     return filtered
   }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, dateRangeCobro, soloPendientesEnviar, penalidades])
 
-  // Incidencias que pueden enviarse a facturación (no tienen penalidad o fue rechazada, y tienen monto)
+  // Incidencias que pueden enviarse a facturación (no tienen penalidad y tienen monto)
   const incidenciasEnviables = useMemo(() => {
     return incidenciasCobro.filter(i => {
       const penalidad = penalidades.find(p => p.incidencia_id === i.id)
-      const puedeEnviar = !penalidad || penalidad.rechazado === true
+      // Solo puede enviarse si NO tiene penalidad asociada (ni aplicada ni rechazada)
+      const puedeEnviar = !penalidad
       const tieneMonto = (i.monto || 0) > 0
       return puedeEnviar && tieneMonto
     })
@@ -1064,11 +1066,8 @@ export function IncidenciasModule() {
       cell: ({ row }) => {
         // Buscar penalidad asociada - total_penalidades > 0 significa que tiene penalidad
         const tienePenalidad = (row.original.total_penalidades || 0) > 0
-        // Si tiene penalidad, verificar si está rechazada
-        const penalidadAsociada = tienePenalidad ? penalidades.find(p => p.incidencia_id === row.original.id) : null
-        const estaRechazada = penalidadAsociada?.rechazado === true
-        // Puede enviar: no tiene penalidad O está rechazada
-        const puedeEnviar = !tienePenalidad || estaRechazada
+        // Solo puede enviar si NO tiene penalidad (ni aplicada ni rechazada/no aplica)
+        const puedeEnviar = !tienePenalidad
         
         return (
           <ActionsMenu
@@ -1087,10 +1086,10 @@ export function IncidenciasModule() {
               },
               {
                 icon: puedeEnviar ? <DollarSign size={15} /> : <CheckCircle size={15} />,
-                label: puedeEnviar ? (estaRechazada ? 'Reenviar a facturacion' : 'Enviar a facturacion') : 'Ya enviado',
+                label: puedeEnviar ? 'Enviar a facturacion' : 'Ya enviado',
                 onClick: () => puedeEnviar && handleEnviarAFacturacion(row.original),
                 disabled: !puedeEnviar,
-                variant: puedeEnviar ? (estaRechazada ? 'danger' : 'warning') : 'success'
+                variant: puedeEnviar ? 'warning' : 'success'
               },
               {
                 icon: <Trash2 size={15} />,
