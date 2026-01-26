@@ -1189,8 +1189,8 @@ export function AsignacionesModule() {
       supabase.from('asignaciones_conductores').select('conductor_id, horario').eq('asignacion_id', asignacion.id)
     ])
     
-    // Filtrar solo vehículos disponibles (PKG_ON_BASE o EN_USO) o el vehículo actual de la asignación
-    const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO']
+    // Filtrar solo vehículos disponibles o el vehículo actual de la asignación
+    const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE']
     const vehiculosFiltrados = (vehiculosRes.data || []).filter((v: any) => 
       estadosDisponibles.includes(v.vehiculos_estados?.codigo) || v.id === asignacion.vehiculo_id
     )

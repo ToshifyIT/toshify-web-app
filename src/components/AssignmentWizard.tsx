@@ -167,8 +167,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
         if (asignacionesError) throw asignacionesError
 
-        // 3. Filtrar vehículos que estén disponibles (PKG_ON_BASE o EN_USO)
-        const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO']
+        // 3. Filtrar vehículos que estén disponibles
+        const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE']
         const vehiculosFiltrados = (vehiculosData || []).filter((v: any) =>
           estadosDisponibles.includes(v.vehiculos_estados?.codigo)
         )
