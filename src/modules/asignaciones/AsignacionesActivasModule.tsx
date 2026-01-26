@@ -44,9 +44,8 @@ interface AsignacionActiva {
   }>
 }
 
-// Estados NO operativos que se excluyen del conteo de flota
-const ESTADOS_NO_OPERATIVOS = [
-  'CORPORATIVO',
+// Estados a EXCLUIR del total (igual que en vehículos)
+const ESTADOS_EXCLUIDOS = [
   'ROBO',
   'DESTRUCCION_TOTAL',
   'JUBILADO'
@@ -59,6 +58,7 @@ export function AsignacionesActivasModule() {
   const [vehiculosPkgOn, setVehiculosPkgOn] = useState(0) // Solo PKG_ON_BASE
   const [vehiculosEnUso, setVehiculosEnUso] = useState(0) // Solo EN_USO
   const [vehiculosPkgOnSinAsignacion, setVehiculosPkgOnSinAsignacion] = useState<any[]>([]) // PKG_ON_BASE sin asignación
+  const [todosVehiculosPkgOn, setTodosVehiculosPkgOn] = useState<any[]>([]) // TODOS los PKG_ON_BASE
   const [loading, setLoading] = useState(true)
   const [selectedAsignacion, setSelectedAsignacion] = useState<AsignacionActiva | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -145,23 +145,27 @@ export function AsignacionesActivasModule() {
         let pkgOn = 0
         let enUso = 0
         const pkgOnSinAsignacion: any[] = []
+        const todosLosPkgOn: any[] = []
 
+        // REPLICAR EXACTAMENTE LA LÓGICA DE VEHÍCULOS
         for (const v of vehiculos) {
           const estadoCodigo = v.vehiculos_estados?.codigo || ''
-
-          // Total flota (excluir no operativos)
-          if (!ESTADOS_NO_OPERATIVOS.includes(estadoCodigo)) {
+          
+          // Excluir del total (igual que en vehículos)
+          if (!ESTADOS_EXCLUIDOS.includes(estadoCodigo)) {
             totalFlota++
           }
 
-          // Operativos (PKG_ON_BASE + EN_USO)
+          // Contar por estado (igual que en vehículos)
           if (estadoCodigo === 'PKG_ON_BASE') {
-            operativos++
             pkgOn++
+            todosLosPkgOn.push(v) // Guardar TODOS los PKG_ON
             // Si no tiene asignación, guardarlo para mostrarlo
             if (!vehiculosConAsignacion.has(v.id)) {
               pkgOnSinAsignacion.push(v)
             }
+            // Contar como operativo
+            operativos++
           } else if (estadoCodigo === 'EN_USO') {
             operativos++
             enUso++
@@ -173,6 +177,7 @@ export function AsignacionesActivasModule() {
         setVehiculosPkgOn(pkgOn)
         setVehiculosEnUso(enUso)
         setVehiculosPkgOnSinAsignacion(pkgOnSinAsignacion)
+        setTodosVehiculosPkgOn(todosLosPkgOn)
       }
     } catch (err: any) {
       console.error('Error cargando datos:', err)
@@ -361,8 +366,8 @@ export function AsignacionesActivasModule() {
       }
     }
 
-    // Si el filtro es vacantes o disponibles, agregar vehículos PKG_ON_BASE sin asignación
-    if (activeStatFilter === 'vacantes' || activeStatFilter === 'disponibles') {
+    // Si el filtro es vacantes, agregar solo vehículos PKG_ON_BASE sin asignación
+    if (activeStatFilter === 'vacantes') {
       // Crear filas "fake" para vehículos sin asignación
       const vehiculosSinAsignacionRows = vehiculosPkgOnSinAsignacion.map(v => ({
         id: `sin-asignacion-${v.id}`,
@@ -387,9 +392,47 @@ export function AsignacionesActivasModule() {
 
       result = [...result, ...vehiculosSinAsignacionRows]
     }
+    
+    // Si el filtro es disponibles, mostrar TODOS los PKG_ON_BASE
+    if (activeStatFilter === 'disponibles') {
+      // Crear filas para TODOS los vehículos PKG_ON_BASE
+      const todosVehiculosPkgOnRows = todosVehiculosPkgOn.map(v => {
+        // Ver si tiene asignación
+        const asignacion = asignaciones.find(a => a.vehiculo_id === v.id)
+        
+        if (asignacion) {
+          // Si tiene asignación, devolver la asignación existente
+          return asignacion
+        } else {
+          // Si no tiene asignación, crear fila "fake"
+          return {
+            id: `sin-asignacion-${v.id}`,
+            codigo: '-',
+            vehiculo_id: v.id,
+            fecha_programada: null,
+            fecha_inicio: '-',
+            modalidad: '-',
+            horario: 'TURNO',
+            estado: 'sin_asignacion',
+            created_at: '',
+            vehiculos: {
+              patente: v.patente,
+              marca: v.marca,
+              modelo: v.modelo,
+              anio: v.anio,
+              vehiculos_tipos: v.vehiculos_tipos,
+              vehiculos_estados: v.vehiculos_estados
+            },
+            asignaciones_conductores: []
+          } as AsignacionActiva
+        }
+      })
+      
+      result = todosVehiculosPkgOnRows
+    }
 
     return result
-  }, [asignaciones, activeStatFilter, vehiculosPkgOnSinAsignacion])
+  }, [asignaciones, activeStatFilter, vehiculosPkgOnSinAsignacion, todosVehiculosPkgOn])
 
   // Procesar asignaciones - UNA fila por asignación (no expandir)
   const processedAsignaciones = useMemo(() => {
@@ -670,7 +713,7 @@ export function AsignacionesActivasModule() {
         <div className="asig-stats-grid">
           <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'totalFlota' ? 'stat-card-active' : ''}`}
-            title="Total de vehículos en la flota (excluye corporativos, robos, destruidos, jubilados)"
+            title="Total de vehículos en la flota (excluye robos, destruidos, jubilados)"
             onClick={() => handleStatCardClick('totalFlota')}
           >
             <Car size={18} className="stat-icon" />
@@ -692,12 +735,12 @@ export function AsignacionesActivasModule() {
           </div>
           <div
             className={`stat-card stat-card-clickable ${activeStatFilter === 'disponibles' ? 'stat-card-active' : ''}`}
-            title="Vehículos PKG_ON_BASE sin asignación activa - Click para ver listado"
+            title="Total de vehículos con estado PKG_ON_BASE - Click para ver listado"
             onClick={() => handleStatCardClick('disponibles')}
           >
             <Car size={18} className="stat-icon" style={{ color: '#059669' }} />
             <div className="stat-content">
-              <span className="stat-value" style={{ color: '#059669' }}>{stats.autosDisponibles}</span>
+              <span className="stat-value" style={{ color: '#059669' }}>{stats.pkgOnBase}</span>
               <span className="stat-label">Disponibles</span>
             </div>
           </div>
