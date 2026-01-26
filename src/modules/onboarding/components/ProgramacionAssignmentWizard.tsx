@@ -37,7 +37,7 @@ interface Vehicle {
     turnoDiurnoOcupado: boolean
     turnoNocturnoOcupado: boolean
   }
-  disponibilidad: 'disponible' | 'turno_diurno_libre' | 'turno_nocturno_libre' | 'ocupado'
+  disponibilidad: 'disponible' | 'turno_diurno_libre' | 'turno_nocturno_libre' | 'ocupado' | 'programado'
 }
 
 interface Conductor {
@@ -365,20 +365,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           }
         })
 
-        // Excluir vehiculos programados (excepto el de la programación actual en modo edición)
-        const vehiculosFinales = vehiculosConDisponibilidad.filter(
-          (v: any) => v.disponibilidad !== 'programado' || (editData && v.id === editData.vehiculo_entregar_id)
-        )
-
-        // Si estamos editando, marcar el vehículo actual como disponible
-        const vehiculosConEditData = vehiculosFinales.map((v: any) => {
+        // Si estamos editando, marcar el vehículo actual como disponible (no programado)
+        const vehiculosFinales = vehiculosConDisponibilidad.map((v: any) => {
           if (editData && v.id === editData.vehiculo_entregar_id && v.disponibilidad === 'programado') {
             return { ...v, disponibilidad: 'disponible' }
           }
           return v
         })
 
-        setVehicles(vehiculosConEditData)
+        setVehicles(vehiculosFinales)
       } catch (error) {
         console.error('Error loading vehicles:', error)
       }
@@ -1862,6 +1857,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       let badgeColor = ''
                       let detalleText = ''
 
+                      const isProgramado = vehicle.disponibilidad === 'programado'
+                      
                       switch (vehicle.disponibilidad) {
                         case 'disponible':
                           badgeText = 'Disponible'
@@ -1887,13 +1884,20 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           badgeColor = 'white'
                           detalleText = vehicle.asignacionActiva?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'
                           break
+                        case 'programado':
+                          badgeText = 'Programado'
+                          badgeBg = '#EF4444'
+                          badgeColor = 'white'
+                          detalleText = 'Tiene entrega pendiente'
+                          break
                       }
 
                       return (
                         <div
                           key={vehicle.id}
-                          className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
-                          onClick={() => handleSelectVehicle(vehicle)}
+                          className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''} ${isProgramado ? 'disabled' : ''}`}
+                          onClick={() => !isProgramado && handleSelectVehicle(vehicle)}
+                          style={isProgramado ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                         >
                           <div className="vehicle-info">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
@@ -1910,7 +1914,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               </span>
                               {detalleText && (
                                 <span style={{
-                                  color: '#6B7280',
+                                  color: isProgramado ? '#EF4444' : '#6B7280',
                                   fontSize: 'clamp(9px, 0.8vw, 11px)',
                                   fontWeight: '500'
                                 }}>
