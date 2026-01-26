@@ -2,7 +2,7 @@
 // Wizard visual para crear nuevas programaciones de entregas
 // Basado en AssignmentWizard con drag & drop dual conductor
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { X, Calendar, User, ChevronRight, Check, Sun, Moon } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -37,7 +37,7 @@ interface Vehicle {
     turnoDiurnoOcupado: boolean
     turnoNocturnoOcupado: boolean
   }
-  disponibilidad: 'disponible' | 'turno_diurno_libre' | 'turno_nocturno_libre' | 'ocupado'
+  disponibilidad: 'disponible' | 'turno_diurno_libre' | 'turno_nocturno_libre' | 'ocupado' | 'programado'
 }
 
 interface Conductor {
@@ -142,6 +142,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingVehicles, setLoadingVehicles] = useState(true)
+  const [loadingConductores, setLoadingConductores] = useState(true)
   const [vehicleSearch, setVehicleSearch] = useState('')
   const [vehicleAvailabilityFilter, setVehicleAvailabilityFilter] = useState<string>('')
   const [conductorSearch, setConductorSearch] = useState('')
@@ -237,112 +239,74 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   // Cargar vehiculos con informacion de disponibilidad
   useEffect(() => {
     const loadVehicles = async () => {
+      setLoadingVehicles(true)
       try {
-        const { data: vehiculosData, error: vehiculosError } = await supabase
-          .from('vehiculos')
-          .select(`
-            id,
-            patente,
-            marca,
-            modelo,
-            anio,
-            color,
-            estado_id,
-            vehiculos_estados (
-              codigo,
-              descripcion
-            )
-          `)
-          .order('patente')
+        // Hacer los 3 queries en PARALELO - solo campos minimos necesarios
+        const [vehiculosRes, asignacionesRes, programacionesRes] = await Promise.all([
+          supabase
+            .from('vehiculos')
+            .select('id, patente, marca, modelo, anio, color, vehiculos_estados!inner(codigo)')
+            .in('vehiculos_estados.codigo', ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE'])
+            .order('patente'),
+          supabase
+            .from('asignaciones')
+            .select('vehiculo_id, horario, estado, asignaciones_conductores(horario)')
+            .in('estado', ['activa', 'programado']),
+          supabase
+            .from('programaciones_onboarding')
+            .select('vehiculo_entregar_id, id')
+            .in('estado', ['por_agendar', 'agendado', 'en_curso'])
+        ])
 
-        if (vehiculosError) throw vehiculosError
+        if (vehiculosRes.error) throw vehiculosRes.error
+        const vehiculosData = vehiculosRes.data || []
+        const asignacionesData = asignacionesRes.data || []
+        const programacionesData = programacionesRes.data || []
 
-        // Obtener asignaciones activas y programadas
-        const { data: asignacionesData, error: asignacionesError } = await supabase
-          .from('asignaciones')
-          .select(`
-            id,
-            vehiculo_id,
-            horario,
-            estado,
-            asignaciones_conductores (
-              horario
-            )
-          `)
-          .in('estado', ['activa', 'programado'])
-
-        if (asignacionesError) throw asignacionesError
-
-        // Obtener programaciones pendientes
-        const { data: programacionesData } = await supabase
-          .from('programaciones_onboarding')
-          .select('vehiculo_entregar_id, id')
-          .in('estado', ['por_agendar', 'agendado', 'en_curso'])
-
-        // En modo edición, excluir el vehículo de la programación actual de la lista de "programados"
-        const vehiculosProgramados = new Set(
-          (programacionesData as any[] || [])
-            .filter(p => !editData || p.id !== editData.id) // No excluir el vehículo de la programación que estamos editando
-            .map(p => p.vehiculo_entregar_id)
+        // Crear Maps para busqueda O(1) en vez de O(n)
+        const vehiculosProgramadosSet = new Set(
+          programacionesData
+            .filter((p: any) => !editData || p.id !== editData.id)
+            .map((p: any) => p.vehiculo_entregar_id)
         )
 
-        // Filtrar vehiculos que estan disponibles para asignar (PKG_ON_BASE o EN_USO)
-        const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO']
-        const vehiculosFiltrados = (vehiculosData || []).filter((v: any) =>
-          estadosDisponibles.includes(v.vehiculos_estados?.codigo)
-        )
+        const asignacionesPorVehiculo = new Map<string, any>()
+        for (const a of asignacionesData as any[]) {
+          const existing = asignacionesPorVehiculo.get(a.vehiculo_id)
+          // Priorizar 'activa' sobre 'programado'
+          if (!existing || (a.estado === 'activa' && existing.estado !== 'activa')) {
+            asignacionesPorVehiculo.set(a.vehiculo_id, a)
+          }
+        }
 
         // Calcular disponibilidad de cada vehiculo
-        const vehiculosConDisponibilidad: Vehicle[] = vehiculosFiltrados.map((vehiculo: any) => {
-          // Si ya tiene programacion pendiente, no mostrar
-          if (vehiculosProgramados.has(vehiculo.id)) {
-            return {
-              ...vehiculo,
-              disponibilidad: 'programado' as const,
-              asignacionActiva: undefined
+        const vehiculosConDisponibilidad: Vehicle[] = vehiculosData.map((vehiculo: any) => {
+          if (vehiculosProgramadosSet.has(vehiculo.id)) {
+            return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
+          }
+
+          const asignacion = asignacionesPorVehiculo.get(vehiculo.id)
+
+          if (!asignacion || asignacion.estado === 'programado') {
+            return { 
+              ...vehiculo, 
+              disponibilidad: asignacion ? 'programado' as const : 'disponible' as const, 
+              asignacionActiva: undefined 
             }
           }
 
-          const asignacionActiva = asignacionesData?.find(
-            (a: any) => a.vehiculo_id === vehiculo.id && a.estado === 'activa'
-          ) as any
-
-          const asignacionProgramada = asignacionesData?.find(
-            (a: any) => a.vehiculo_id === vehiculo.id && a.estado === 'programado'
-          )
-
-          if (asignacionProgramada) {
-            return {
-              ...vehiculo,
-              disponibilidad: 'programado' as const,
-              asignacionActiva: undefined
-            }
-          }
-
-          if (!asignacionActiva) {
-            return {
-              ...vehiculo,
-              disponibilidad: 'disponible' as const,
-              asignacionActiva: undefined
-            }
-          }
-
-          if (asignacionActiva.horario === 'CARGO') {
+          // Es asignacion activa
+          if (asignacion.horario === 'CARGO') {
             return {
               ...vehiculo,
               disponibilidad: 'ocupado' as const,
-              asignacionActiva: {
-                id: asignacionActiva.id,
-                horario: 'CARGO' as const,
-                turnoDiurnoOcupado: true,
-                turnoNocturnoOcupado: true
-              }
+              asignacionActiva: { id: asignacion.id, horario: 'CARGO' as const, turnoDiurnoOcupado: true, turnoNocturnoOcupado: true }
             }
           }
 
-          const conductoresAsignados = asignacionActiva.asignaciones_conductores || []
-          const turnoDiurnoOcupado = conductoresAsignados.some((c: any) => c.horario === 'diurno')
-          const turnoNocturnoOcupado = conductoresAsignados.some((c: any) => c.horario === 'nocturno')
+          const conductores = asignacion.asignaciones_conductores || []
+          const turnoDiurnoOcupado = conductores.some((c: any) => c.horario === 'diurno')
+          const turnoNocturnoOcupado = conductores.some((c: any) => c.horario === 'nocturno')
 
           let disponibilidad: Vehicle['disponibilidad'] = 'ocupado'
           if (!turnoDiurnoOcupado && !turnoNocturnoOcupado) {
@@ -357,7 +321,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             ...vehiculo,
             disponibilidad,
             asignacionActiva: {
-              id: asignacionActiva.id,
+              id: asignacion.id,
               horario: 'TURNO' as const,
               turnoDiurnoOcupado,
               turnoNocturnoOcupado
@@ -365,22 +329,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           }
         })
 
-        // Excluir vehiculos programados (excepto el de la programación actual en modo edición)
-        const vehiculosFinales = vehiculosConDisponibilidad.filter(
-          (v: any) => v.disponibilidad !== 'programado' || (editData && v.id === editData.vehiculo_entregar_id)
-        )
-
-        // Si estamos editando, marcar el vehículo actual como disponible
-        const vehiculosConEditData = vehiculosFinales.map((v: any) => {
+        // Si estamos editando, marcar el vehículo actual como disponible (no programado)
+        const vehiculosFinales = vehiculosConDisponibilidad.map((v: any) => {
           if (editData && v.id === editData.vehiculo_entregar_id && v.disponibilidad === 'programado') {
             return { ...v, disponibilidad: 'disponible' }
           }
           return v
         })
 
-        setVehicles(vehiculosConEditData)
+        setVehicles(vehiculosFinales)
       } catch (error) {
         console.error('Error loading vehicles:', error)
+      } finally {
+        setLoadingVehicles(false)
       }
     }
 
@@ -390,6 +351,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   // Cargar conductores disponibles
   useEffect(() => {
     const loadConductores = async () => {
+      setLoadingConductores(true)
       try {
         const { data, error } = await supabase
           .from('conductores')
@@ -453,13 +415,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         setConductores(conductoresConEstado)
       } catch (error) {
         console.error('Error loading conductores:', error)
+      } finally {
+        setLoadingConductores(false)
       }
     }
 
     loadConductores()
   }, [])
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step === 1) {
       if (!formData.modalidad) {
         Swal.fire('Error', 'Debes seleccionar una modalidad', 'error')
@@ -470,6 +434,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         Swal.fire('Error', 'Debes seleccionar un vehiculo', 'error')
         return
       }
+      // Cargar conductores del vehiculo antes de pasar al paso 3
+      setLoading(true)
+      await loadConductoresDelVehiculo(formData.vehiculo_id)
+      setLoading(false)
     } else if (step === 3) {
       // Validar conductores segun modalidad
       if (formData.modalidad === 'CARGO') {
@@ -517,6 +485,69 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       vehiculo_modelo: `${vehicle.marca} ${vehicle.modelo}`,
       vehiculo_color: vehicle.color || ''
     })
+  }
+
+  // Cargar conductores asignados al vehiculo seleccionado (llamado en handleNext del paso 2)
+  const loadConductoresDelVehiculo = async (vehiculoId: string) => {
+    try {
+      const { data: asignacionData } = await supabase
+        .from('asignaciones')
+        .select(`
+          id,
+          horario,
+          asignaciones_conductores (
+            horario,
+            conductor_id,
+            conductores (
+              id,
+              nombres,
+              apellidos,
+              numero_dni
+            )
+          )
+        `)
+        .eq('vehiculo_id', vehiculoId)
+        .eq('estado', 'activa')
+        .single()
+
+      if (asignacionData) {
+        const asigData = asignacionData as any
+        const conductoresAsig = asigData.asignaciones_conductores || []
+        
+        let updates: Partial<ProgramacionData> = {}
+        
+        if (asigData.horario === 'CARGO') {
+          const conductorCargo = conductoresAsig[0]?.conductores
+          if (conductorCargo) {
+            updates = {
+              conductor_id: conductorCargo.id,
+              conductor_nombre: `${conductorCargo.nombres} ${conductorCargo.apellidos}`,
+              conductor_dni: conductorCargo.numero_dni || ''
+            }
+          }
+        } else {
+          const diurnoData = conductoresAsig.find((c: any) => c.horario === 'diurno')
+          const nocturnoData = conductoresAsig.find((c: any) => c.horario === 'nocturno')
+          
+          if (diurnoData?.conductores) {
+            updates.conductor_diurno_id = diurnoData.conductores.id
+            updates.conductor_diurno_nombre = `${diurnoData.conductores.nombres} ${diurnoData.conductores.apellidos}`
+            updates.conductor_diurno_dni = diurnoData.conductores.numero_dni || ''
+          }
+          if (nocturnoData?.conductores) {
+            updates.conductor_nocturno_id = nocturnoData.conductores.id
+            updates.conductor_nocturno_nombre = `${nocturnoData.conductores.nombres} ${nocturnoData.conductores.apellidos}`
+            updates.conductor_nocturno_dni = nocturnoData.conductores.numero_dni || ''
+          }
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          setFormData(prev => ({ ...prev, ...updates }))
+        }
+      }
+    } catch {
+      // Si no hay asignacion activa, no pasa nada
+    }
   }
 
   // Para modo A CARGO
@@ -821,43 +852,47 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
   }
 
-  // Filtrar vehiculos
-  const filteredVehicles = vehicles
-    .filter(v => {
-      // En modo edición, siempre incluir el vehículo actual
-      if (isEditMode && v.id === formData.vehiculo_id) {
-        return true
-      }
+  // Filtrar vehiculos con useMemo
+  const filteredVehicles = useMemo(() => {
+    const searchLower = vehicleSearch.toLowerCase()
+    return vehicles
+      .filter(v => {
+        // En modo edicion, siempre incluir el vehiculo actual
+        if (isEditMode && v.id === formData.vehiculo_id) {
+          return true
+        }
 
-      const matchesSearch = v.patente.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
-        v.marca.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
-        v.modelo.toLowerCase().includes(vehicleSearch.toLowerCase())
+        const matchesSearch = !searchLower || 
+          v.patente.toLowerCase().includes(searchLower) ||
+          v.marca.toLowerCase().includes(searchLower) ||
+          v.modelo.toLowerCase().includes(searchLower)
 
-      const matchesAvailability = vehicleAvailabilityFilter === '' ||
-        vehicleAvailabilityFilter === v.disponibilidad ||
-        (vehicleAvailabilityFilter === 'con_turno_libre' &&
-          (v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre')) ||
-        (vehicleAvailabilityFilter === 'en_uso' &&
-          (v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre'))
+        const matchesAvailability = vehicleAvailabilityFilter === '' ||
+          vehicleAvailabilityFilter === v.disponibilidad ||
+          (vehicleAvailabilityFilter === 'con_turno_libre' &&
+            (v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre')) ||
+          (vehicleAvailabilityFilter === 'en_uso' &&
+            (v.disponibilidad === 'ocupado' || v.disponibilidad === 'turno_diurno_libre' || v.disponibilidad === 'turno_nocturno_libre'))
 
-      return matchesSearch && matchesAvailability
-    })
-    .sort((a, b) => {
-      // En modo edición, poner el vehículo actual primero
-      if (isEditMode && formData.vehiculo_id) {
-        if (a.id === formData.vehiculo_id) return -1
-        if (b.id === formData.vehiculo_id) return 1
-      }
-      const prioridad: Record<string, number> = {
-        'disponible': 0,
-        'turno_diurno_libre': 1,
-        'turno_nocturno_libre': 1,
-        'ocupado': 2
-      }
-      const prioA = prioridad[a.disponibilidad] ?? 99
-      const prioB = prioridad[b.disponibilidad] ?? 99
-      return prioA - prioB
-    })
+        return matchesSearch && matchesAvailability
+      })
+      .sort((a, b) => {
+        // En modo edicion, poner el vehiculo actual primero
+        if (isEditMode && formData.vehiculo_id) {
+          if (a.id === formData.vehiculo_id) return -1
+          if (b.id === formData.vehiculo_id) return 1
+        }
+        const prioridad: Record<string, number> = {
+          'disponible': 0,
+          'turno_diurno_libre': 1,
+          'turno_nocturno_libre': 1,
+          'ocupado': 2
+        }
+        const prioA = prioridad[a.disponibilidad] ?? 99
+        const prioB = prioridad[b.disponibilidad] ?? 99
+        return prioA - prioB
+      })
+  }, [vehicles, vehicleSearch, vehicleAvailabilityFilter, isEditMode, formData.vehiculo_id])
 
   // Obtener conductores seleccionados (buscar en lista o crear objeto temporal con datos del form)
   const conductorDiurno = conductores.find(c => c.id === formData.conductor_diurno_id) || 
@@ -887,48 +922,56 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   // Modo TURNO o CARGO
   const isTurnoMode = formData.modalidad === 'TURNO'
 
-  // Filtrar conductores disponibles
-  const filteredConductores = conductores
-    .filter(c => {
-      // Excluir conductores ya seleccionados
-      if (c.id === formData.conductor_diurno_id || c.id === formData.conductor_nocturno_id || c.id === formData.conductor_id) return false
+  // Filtrar conductores disponibles con useMemo
+  const filteredConductores = useMemo(() => {
+    const searchLower = conductorSearch.toLowerCase()
+    return conductores
+      .filter(c => {
+        // Excluir conductores ya seleccionados
+        if (c.id === formData.conductor_diurno_id || c.id === formData.conductor_nocturno_id || c.id === formData.conductor_id) return false
 
-      const matchesSearch = c.nombres.toLowerCase().includes(conductorSearch.toLowerCase()) ||
-        c.apellidos.toLowerCase().includes(conductorSearch.toLowerCase()) ||
-        (c.numero_dni || '').includes(conductorSearch)
+        const matchesSearch = !searchLower ||
+          c.nombres.toLowerCase().includes(searchLower) ||
+          c.apellidos.toLowerCase().includes(searchLower) ||
+          (c.numero_dni || '').includes(searchLower)
 
-      // Filtro por estado
-      let matchesStatus = true
-      if (conductorStatusFilter === 'disponible') {
-        matchesStatus = !c.tieneAsignacionActiva && !c.tieneAsignacionProgramada
-      } else if (conductorStatusFilter === 'activo') {
-        matchesStatus = c.tieneAsignacionActiva || false
-      } else if (conductorStatusFilter === 'con_asignacion') {
-        matchesStatus = c.tieneAsignacionActiva || c.tieneAsignacionProgramada || false
-      }
+        // Filtro por estado
+        let matchesStatus = true
+        if (conductorStatusFilter === 'disponible') {
+          matchesStatus = !c.tieneAsignacionActiva && !c.tieneAsignacionProgramada
+        } else if (conductorStatusFilter === 'activo') {
+          matchesStatus = c.tieneAsignacionActiva || false
+        } else if (conductorStatusFilter === 'con_asignacion') {
+          matchesStatus = c.tieneAsignacionActiva || c.tieneAsignacionProgramada || false
+        }
 
-      // Filtro por preferencia de turno
-      let matchesTurno = true
-      if (conductorTurnoFilter === 'diurno') {
-        matchesTurno = c.preferencia_turno === 'DIURNO' || c.preferencia_turno === 'SIN_PREFERENCIA'
-      } else if (conductorTurnoFilter === 'nocturno') {
-        matchesTurno = c.preferencia_turno === 'NOCTURNO' || c.preferencia_turno === 'SIN_PREFERENCIA'
-      } else if (conductorTurnoFilter === 'cargo') {
-        matchesTurno = c.preferencia_turno === 'A_CARGO'
-      }
+        // Filtro por preferencia de turno
+        let matchesTurno = true
+        if (conductorTurnoFilter === 'diurno') {
+          matchesTurno = c.preferencia_turno === 'DIURNO' || c.preferencia_turno === 'SIN_PREFERENCIA'
+        } else if (conductorTurnoFilter === 'nocturno') {
+          matchesTurno = c.preferencia_turno === 'NOCTURNO' || c.preferencia_turno === 'SIN_PREFERENCIA'
+        } else if (conductorTurnoFilter === 'cargo') {
+          matchesTurno = c.preferencia_turno === 'A_CARGO'
+        }
 
-      return matchesSearch && matchesStatus && matchesTurno
-    })
-    .sort((a, b) => {
-      // Disponibles primero
-      if (!a.tieneAsignacionActiva && b.tieneAsignacionActiva) return -1
-      if (a.tieneAsignacionActiva && !b.tieneAsignacionActiva) return 1
-      return a.apellidos.localeCompare(b.apellidos)
-    })
+        return matchesSearch && matchesStatus && matchesTurno
+      })
+      .sort((a, b) => {
+        // Disponibles primero
+        if (!a.tieneAsignacionActiva && b.tieneAsignacionActiva) return -1
+        if (a.tieneAsignacionActiva && !b.tieneAsignacionActiva) return 1
+        return a.apellidos.localeCompare(b.apellidos)
+      })
+  }, [conductores, conductorSearch, conductorStatusFilter, conductorTurnoFilter, formData.conductor_diurno_id, formData.conductor_nocturno_id, formData.conductor_id])
 
   return (
     <>
       <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
         .wizard-overlay {
           position: fixed;
           top: 0;
@@ -1713,6 +1756,103 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         [data-theme="dark"] .detail-value {
           color: var(--text-primary);
         }
+
+        /* Conductor form cards */
+        .conductor-form-card {
+          margin-bottom: 24px;
+          padding: 20px;
+          border-radius: 12px;
+          border: 2px solid;
+        }
+        .conductor-form-card.diurno {
+          background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+          border-color: #FCD34D;
+        }
+        .conductor-form-card.nocturno {
+          background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+          border-color: #93C5FD;
+        }
+        .conductor-form-card.cargo {
+          background: linear-gradient(135deg, #F0FDF4 0%, #D1FAE5 100%);
+          border-color: #6EE7B7;
+        }
+        .conductor-form-card h4 {
+          margin: 0 0 16px 0;
+          font-size: 14px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .conductor-form-card.diurno h4 { color: #92400E; }
+        .conductor-form-card.nocturno h4 { color: #1E40AF; }
+        .conductor-form-card.cargo h4 { color: #065F46; }
+        
+        .conductor-form-card label {
+          display: block;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          margin-bottom: 6px;
+        }
+        .conductor-form-card input,
+        .conductor-form-card select {
+          width: 100%;
+          padding: 10px;
+          border: 2px solid var(--border-primary);
+          border-radius: 8px;
+          font-size: 12px;
+          background: var(--modal-bg);
+          color: var(--text-primary);
+        }
+        .conductor-form-card input::placeholder {
+          color: var(--text-tertiary);
+        }
+
+        /* Dark mode for conductor form cards */
+        [data-theme="dark"] .conductor-form-card.diurno {
+          background: rgba(251, 191, 36, 0.1);
+          border-color: rgba(251, 191, 36, 0.4);
+        }
+        [data-theme="dark"] .conductor-form-card.nocturno {
+          background: rgba(59, 130, 246, 0.1);
+          border-color: rgba(59, 130, 246, 0.4);
+        }
+        [data-theme="dark"] .conductor-form-card.cargo {
+          background: rgba(16, 185, 129, 0.1);
+          border-color: rgba(16, 185, 129, 0.4);
+        }
+        [data-theme="dark"] .conductor-form-card.diurno h4 { color: #FCD34D; }
+        [data-theme="dark"] .conductor-form-card.nocturno h4 { color: #93C5FD; }
+        [data-theme="dark"] .conductor-form-card.cargo h4 { color: #6EE7B7; }
+
+        /* Step 4 general form styles */
+        .step4-form label {
+          display: block;
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          margin-bottom: 6px;
+        }
+        .step4-form input,
+        .step4-form select,
+        .step4-form textarea {
+          width: 100%;
+          padding: 10px;
+          border: 2px solid var(--border-primary);
+          border-radius: 8px;
+          font-size: 13px;
+          font-family: inherit;
+          background: var(--modal-bg);
+          color: var(--text-primary);
+        }
+        .step4-form input::placeholder,
+        .step4-form textarea::placeholder {
+          color: var(--text-tertiary);
+        }
+        .step4-form textarea {
+          resize: vertical;
+        }
       `}</style>
 
       <div className="wizard-overlay" onClick={onClose}>
@@ -1851,7 +1991,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                 </div>
 
                 <div className="vehicle-grid">
-                  {filteredVehicles.length === 0 ? (
+                  {loadingVehicles ? (
+                    <div className="empty-state" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ 
+                        width: '32px', 
+                        height: '32px', 
+                        border: '3px solid var(--border-primary)', 
+                        borderTopColor: 'var(--color-primary)', 
+                        borderRadius: '50%', 
+                        animation: 'spin 1s linear infinite' 
+                      }} />
+                      <span>Cargando vehiculos...</span>
+                    </div>
+                  ) : filteredVehicles.length === 0 ? (
                     <div className="empty-state">
                       {vehicleSearch || vehicleAvailabilityFilter ? 'No se encontraron vehiculos con ese criterio' : 'No hay vehiculos disponibles'}
                     </div>
@@ -1862,6 +2014,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       let badgeColor = ''
                       let detalleText = ''
 
+                      const isProgramado = vehicle.disponibilidad === 'programado'
+                      const asig = vehicle.asignacionActiva
+                      
                       switch (vehicle.disponibilidad) {
                         case 'disponible':
                           badgeText = 'Disponible'
@@ -1885,15 +2040,22 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           badgeText = 'En Uso'
                           badgeBg = '#F59E0B'
                           badgeColor = 'white'
-                          detalleText = vehicle.asignacionActiva?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'
+                          detalleText = asig?.horario === 'CARGO' ? 'A Cargo' : 'Turnos completos'
+                          break
+                        case 'programado':
+                          badgeText = 'Programado'
+                          badgeBg = '#EF4444'
+                          badgeColor = 'white'
+                          detalleText = 'Tiene entrega pendiente'
                           break
                       }
 
                       return (
                         <div
                           key={vehicle.id}
-                          className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
-                          onClick={() => handleSelectVehicle(vehicle)}
+                          className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''} ${isProgramado ? 'disabled' : ''}`}
+                          onClick={() => !isProgramado && handleSelectVehicle(vehicle)}
+                          style={isProgramado ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                         >
                           <div className="vehicle-info">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
@@ -1910,7 +2072,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               </span>
                               {detalleText && (
                                 <span style={{
-                                  color: '#6B7280',
+                                  color: isProgramado ? '#EF4444' : '#6B7280',
                                   fontSize: 'clamp(9px, 0.8vw, 11px)',
                                   fontWeight: '500'
                                 }}>
@@ -1999,7 +2161,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     </div>
 
                     <div className="conductores-list">
-                      {filteredConductores.length === 0 ? (
+                      {loadingConductores ? (
+                        <div className="empty-state" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ 
+                            width: '24px', 
+                            height: '24px', 
+                            border: '2px solid var(--border-primary)', 
+                            borderTopColor: 'var(--color-primary)', 
+                            borderRadius: '50%', 
+                            animation: 'spin 1s linear infinite' 
+                          }} />
+                          <span style={{ fontSize: '11px' }}>Cargando...</span>
+                        </div>
+                      ) : filteredConductores.length === 0 ? (
                         <div className="empty-state" style={{ padding: '16px' }}>
                           {conductorSearch ? 'Sin resultados' : 'Sin conductores'}
                         </div>
@@ -2278,31 +2452,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                   <p>Completa la informacion de la cita y documentacion</p>
                 </div>
 
-                <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+                <div className="step4-form" style={{ maxWidth: '700px', margin: '0 auto' }}>
                   {/* Fecha y Hora (compartidos) */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                        Fecha de Cita *
-                      </label>
+                      <label>Fecha de Cita *</label>
                       <input
                         type="date"
                         value={formData.fecha_cita}
                         onChange={(e) => setFormData({ ...formData, fecha_cita: e.target.value })}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          border: '2px solid #E5E7EB',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                          fontFamily: 'inherit'
-                        }}
                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                        Hora de Cita *
-                      </label>
+                      <label>Hora de Cita *</label>
                       <TimeInput24h
                         value={formData.hora_cita}
                         onChange={(value) => setFormData({ ...formData, hora_cita: value })}
@@ -2312,25 +2474,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                   {/* Campos por conductor - Modo A CARGO (un solo set) */}
                   {!isTurnoMode && conductorCargo && (
-                    <div style={{
-                      marginBottom: '24px',
-                      padding: '20px',
-                      background: 'linear-gradient(135deg, #F0FDF4 0%, #D1FAE5 100%)',
-                      borderRadius: '12px',
-                      border: '2px solid #6EE7B7'
-                    }}>
-                      <h4 style={{ margin: '0 0 16px 0', color: '#065F46', fontSize: '14px', fontWeight: '700' }}>
-                        {conductorCargo.nombres} {conductorCargo.apellidos}
-                      </h4>
+                    <div className="conductor-form-card cargo">
+                      <h4>{conductorCargo.nombres} {conductorCargo.apellidos}</h4>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Tipo de Candidato *
-                          </label>
+                          <label>Tipo de Candidato *</label>
                           <select
                             value={formData.tipo_candidato_cargo}
                             onChange={(e) => setFormData({ ...formData, tipo_candidato_cargo: e.target.value as TipoCandidato })}
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="nuevo">Nuevo</option>
@@ -2339,33 +2490,27 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           </select>
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Tipo de Asignación *
-                          </label>
+                          <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_cargo}
                             onChange={(e) => setFormData({ ...formData, tipo_asignacion_cargo: e.target.value as TipoAsignacion })}
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="entrega_auto">Entrega de auto</option>
-                            <option value="asignacion_companero">Asignación compañero</option>
+                            <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
                             <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
                             <option value="entrega_auto_cargo">Entrega auto a cargo</option>
                             <option value="cambio_turno">Cambio de turno</option>
-                            <option value="devolucion_vehiculo">Devolución vehículo</option>
+                            <option value="devolucion_vehiculo">Devolucion vehiculo</option>
                           </select>
                         </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Documento *
-                          </label>
+                          <label>Documento *</label>
                           <select
                             value={formData.documento_cargo}
                             onChange={(e) => setFormData({ ...formData, documento_cargo: e.target.value as TipoDocumento })}
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="anexo">Anexo</option>
@@ -2377,27 +2522,21 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Zona *
-                          </label>
+                          <label>Zona *</label>
                           <input
                             type="text"
                             value={formData.zona_cargo}
                             onChange={(e) => setFormData({ ...formData, zona_cargo: e.target.value })}
                             placeholder="Ej: Norte, CABA..."
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px' }}
                           />
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Distancia (minutos)
-                          </label>
+                          <label>Distancia (minutos)</label>
                           <input
                             type="number"
                             value={formData.distancia_cargo}
                             onChange={(e) => setFormData({ ...formData, distancia_cargo: e.target.value ? parseInt(e.target.value) : '' })}
                             placeholder="Tiempo estimado"
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px' }}
                           />
                         </div>
                       </div>
@@ -2406,25 +2545,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                   {/* Campos por conductor - Modo TURNO - Diurno */}
                   {isTurnoMode && conductorDiurno && (
-                    <div style={{
-                      marginBottom: '24px',
-                      padding: '20px',
-                      background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
-                      borderRadius: '12px',
-                      border: '2px solid #FCD34D'
-                    }}>
-                      <h4 style={{ margin: '0 0 16px 0', color: '#92400E', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Sun size={16} /> Conductor Diurno: {conductorDiurno.nombres} {conductorDiurno.apellidos}
-                      </h4>
+                    <div className="conductor-form-card diurno">
+                      <h4><Sun size={16} /> Conductor Diurno: {conductorDiurno.nombres} {conductorDiurno.apellidos}</h4>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Tipo de Candidato *
-                          </label>
+                          <label>Tipo de Candidato *</label>
                           <select
                             value={formData.tipo_candidato_diurno}
                             onChange={(e) => setFormData({ ...formData, tipo_candidato_diurno: e.target.value as TipoCandidato })}
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="nuevo">Nuevo</option>
@@ -2433,33 +2561,27 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           </select>
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Tipo de Asignación *
-                          </label>
+                          <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_diurno}
                             onChange={(e) => setFormData({ ...formData, tipo_asignacion_diurno: e.target.value as TipoAsignacion })}
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="entrega_auto">Entrega de auto</option>
-                            <option value="asignacion_companero">Asignación compañero</option>
+                            <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
                             <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
                             <option value="entrega_auto_cargo">Entrega auto a cargo</option>
                             <option value="cambio_turno">Cambio de turno</option>
-                            <option value="devolucion_vehiculo">Devolución vehículo</option>
+                            <option value="devolucion_vehiculo">Devolucion vehiculo</option>
                           </select>
                         </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Documento *
-                          </label>
+                          <label>Documento *</label>
                           <select
                             value={formData.documento_diurno}
                             onChange={(e) => setFormData({ ...formData, documento_diurno: e.target.value as TipoDocumento })}
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="anexo">Anexo</option>
@@ -2471,27 +2593,21 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Zona *
-                          </label>
+                          <label>Zona *</label>
                           <input
                             type="text"
                             value={formData.zona_diurno}
                             onChange={(e) => setFormData({ ...formData, zona_diurno: e.target.value })}
                             placeholder="Ej: Norte, CABA..."
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px' }}
                           />
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Distancia (minutos)
-                          </label>
+                          <label>Distancia (minutos)</label>
                           <input
                             type="number"
                             value={formData.distancia_diurno}
                             onChange={(e) => setFormData({ ...formData, distancia_diurno: e.target.value ? parseInt(e.target.value) : '' })}
                             placeholder="Tiempo estimado"
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px' }}
                           />
                         </div>
                       </div>
@@ -2500,25 +2616,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                   {/* Campos por conductor - Modo TURNO - Nocturno */}
                   {isTurnoMode && conductorNocturno && (
-                    <div style={{
-                      marginBottom: '24px',
-                      padding: '20px',
-                      background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
-                      borderRadius: '12px',
-                      border: '2px solid #93C5FD'
-                    }}>
-                      <h4 style={{ margin: '0 0 16px 0', color: '#1E40AF', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Moon size={16} /> Conductor Nocturno: {conductorNocturno.nombres} {conductorNocturno.apellidos}
-                      </h4>
+                    <div className="conductor-form-card nocturno">
+                      <h4><Moon size={16} /> Conductor Nocturno: {conductorNocturno.nombres} {conductorNocturno.apellidos}</h4>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Tipo de Candidato *
-                          </label>
+                          <label>Tipo de Candidato *</label>
                           <select
                             value={formData.tipo_candidato_nocturno}
                             onChange={(e) => setFormData({ ...formData, tipo_candidato_nocturno: e.target.value as TipoCandidato })}
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="nuevo">Nuevo</option>
@@ -2527,33 +2632,27 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           </select>
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Tipo de Asignación *
-                          </label>
+                          <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_nocturno}
                             onChange={(e) => setFormData({ ...formData, tipo_asignacion_nocturno: e.target.value as TipoAsignacion })}
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="entrega_auto">Entrega de auto</option>
-                            <option value="asignacion_companero">Asignación compañero</option>
+                            <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
                             <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
                             <option value="entrega_auto_cargo">Entrega auto a cargo</option>
                             <option value="cambio_turno">Cambio de turno</option>
-                            <option value="devolucion_vehiculo">Devolución vehículo</option>
+                            <option value="devolucion_vehiculo">Devolucion vehiculo</option>
                           </select>
                         </div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Documento *
-                          </label>
+                          <label>Documento *</label>
                           <select
                             value={formData.documento_nocturno}
                             onChange={(e) => setFormData({ ...formData, documento_nocturno: e.target.value as TipoDocumento })}
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px', background: 'white' }}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="anexo">Anexo</option>
@@ -2565,27 +2664,21 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Zona *
-                          </label>
+                          <label>Zona *</label>
                           <input
                             type="text"
                             value={formData.zona_nocturno}
                             onChange={(e) => setFormData({ ...formData, zona_nocturno: e.target.value })}
                             placeholder="Ej: Norte, CABA..."
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px' }}
                           />
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                            Distancia (minutos)
-                          </label>
+                          <label>Distancia (minutos)</label>
                           <input
                             type="number"
                             value={formData.distancia_nocturno}
                             onChange={(e) => setFormData({ ...formData, distancia_nocturno: e.target.value ? parseInt(e.target.value) : '' })}
                             placeholder="Tiempo estimado"
-                            style={{ width: '100%', padding: '10px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '12px' }}
                           />
                         </div>
                       </div>
@@ -2594,23 +2687,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
                   {/* Observaciones */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
-                      Observaciones
-                    </label>
+                    <label>Observaciones</label>
                     <textarea
                       value={formData.observaciones}
                       onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
                       placeholder="Notas adicionales..."
                       rows={3}
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        border: '2px solid #E5E7EB',
-                        borderRadius: '8px',
-                        fontSize: '13px',
-                        fontFamily: 'inherit',
-                        resize: 'vertical'
-                      }}
                     />
                   </div>
                 </div>
