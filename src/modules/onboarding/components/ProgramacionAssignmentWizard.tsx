@@ -286,8 +286,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             .map(p => p.vehiculo_entregar_id)
         )
 
-        // Filtrar vehiculos que estan disponibles para asignar (PKG_ON_BASE o EN_USO)
-        const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO']
+        // Filtrar vehiculos que estan disponibles para asignar
+        const estadosDisponibles = ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE']
         const vehiculosFiltrados = (vehiculosData || []).filter((v: any) =>
           estadosDisponibles.includes(v.vehiculos_estados?.codigo)
         )
