@@ -114,10 +114,37 @@
   color: var(--text-primary);
 }
 
+.date-range-month-year {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .date-range-month {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.date-range-year-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.date-range-year-select:hover {
+  border-color: #ef4444;
+}
+
+.date-range-year-select:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
 }
 
 /* Días header */
