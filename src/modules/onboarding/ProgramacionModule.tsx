@@ -135,8 +135,11 @@ export function ProgramacionModule() {
   const canDelete = canDeleteInMenu('programacion-entregas')
 
   const [programaciones, setProgramaciones] = useState<ProgramacionOnboardingCompleta[]>([])
+  const [programacionesHistorico, setProgramacionesHistorico] = useState<ProgramacionOnboardingCompleta[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'pendientes' | 'historico'>('pendientes')
   
   // Filtro activo por stat card
   // Stats cards ocultas temporalmente
@@ -279,6 +282,34 @@ export function ProgramacionModule() {
     loadProgramaciones()
     loadEspecialistas()
   }, [])
+
+  // Cargar histórico de programaciones (completadas)
+  const loadHistorico = async () => {
+    setLoadingHistorico(true)
+    try {
+      const { data, error: queryError } = await supabase
+        .from('v_programaciones_onboarding')
+        .select('*')
+        .eq('estado', 'completado')
+        .or('eliminado.is.null,eliminado.eq.false')
+        .order('created_at', { ascending: false })
+        .limit(500)
+
+      if (queryError) throw queryError
+      setProgramacionesHistorico((data || []) as ProgramacionOnboardingCompleta[])
+    } catch (err: any) {
+      console.error('Error loading historico:', err)
+    } finally {
+      setLoadingHistorico(false)
+    }
+  }
+
+  // Cargar histórico cuando se cambia al tab
+  useEffect(() => {
+    if (activeTab === 'historico' && programacionesHistorico.length === 0) {
+      loadHistorico()
+    }
+  }, [activeTab])
 
   // Handlers
   const handleCreate = () => {
@@ -1237,6 +1268,213 @@ export function ProgramacionModule() {
     }
   ], [canCreate, canEdit, canDelete])
 
+  // Columnas para Enviados (igual que pendientes pero solo botón Ver)
+  const enviadosColumns = useMemo<ColumnDef<ProgramacionOnboardingCompleta, any>[]>(() => [
+    {
+      accessorKey: 'vehiculo_entregar_patente',
+      header: 'Vehiculo',
+      cell: ({ row }) => (
+        <div className="prog-vehiculo-cell">
+          <span className="prog-patente" style={{ fontSize: '13px' }}>
+            {row.original.vehiculo_entregar_patente || row.original.vehiculo_entregar_patente_sistema || '-'}
+          </span>
+          <span className="prog-modelo" style={{ fontSize: '11px' }}>
+            {row.original.vehiculo_entregar_modelo || row.original.vehiculo_entregar_modelo_sistema || ''}
+          </span>
+        </div>
+      )
+    },
+    {
+      id: 'programados',
+      header: 'Programados',
+      accessorFn: (row) => {
+        if (row.modalidad === 'CARGO' || !row.modalidad) {
+          return row.conductor_display || row.conductor_nombre || row.conductor_diurno_nombre || ''
+        }
+        const d = row.conductor_diurno_nombre || row.conductor_nombre || ''
+        const n = row.conductor_nocturno_nombre || ''
+        return `${d} ${n}`.trim()
+      },
+      cell: ({ row }) => {
+        const { modalidad, conductor_diurno_nombre, conductor_nocturno_nombre, conductor_display, conductor_nombre, turno } = row.original
+
+        if (modalidad === 'CARGO' || !modalidad) {
+          const nombre = conductor_display || conductor_nombre || conductor_diurno_nombre
+          if (nombre) {
+            return <span className="prog-conductor-cell" style={{ fontSize: '13px' }}>{nombre}</span>
+          }
+          return <span className="prog-sin-conductor">Sin asignar</span>
+        }
+
+        if (conductor_diurno_nombre || conductor_nocturno_nombre) {
+          return (
+            <div className="prog-conductores-compact" style={{ fontSize: '13px' }}>
+              <span className={conductor_diurno_nombre ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
+                <span className="prog-turno-label prog-label-diurno">D</span>
+                {conductor_diurno_nombre || 'Vacante'}
+              </span>
+              <span className={conductor_nocturno_nombre ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
+                <span className="prog-turno-label prog-label-nocturno">N</span>
+                {conductor_nocturno_nombre || 'Vacante'}
+              </span>
+            </div>
+          )
+        }
+
+        const nombre = conductor_display || conductor_nombre
+        if (nombre && turno) {
+          const isDiurno = turno === 'diurno'
+          return (
+            <div className="prog-conductores-compact" style={{ fontSize: '13px' }}>
+              <span className={isDiurno ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
+                <span className="prog-turno-label prog-label-diurno">D</span>
+                {isDiurno ? nombre : 'Vacante'}
+              </span>
+              <span className={!isDiurno ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
+                <span className="prog-turno-label prog-label-nocturno">N</span>
+                {!isDiurno ? nombre : 'Vacante'}
+              </span>
+            </div>
+          )
+        }
+
+        return <span className="prog-sin-conductor">Sin asignar</span>
+      }
+    },
+    {
+      accessorKey: 'tipo_asignacion',
+      header: 'Tipo Asig.',
+      cell: ({ row }) => {
+        const prog = row.original
+
+        const tipoLabelsShort: Record<string, string> = {
+          entrega_auto: 'Entrega aut.',
+          asignacion_companero: 'Asig. comp.',
+          cambio_auto: 'Cambio aut.',
+          cambio_turno: 'Cambio turno',
+          devolucion_vehiculo: 'Devolución',
+          asignacion_auto_cargo: 'Asig. cargo',
+          entrega_auto_cargo: 'Entrega cargo'
+        }
+
+        if (prog.modalidad === 'TURNO') {
+          const tipoD = prog.tipo_asignacion_diurno || prog.tipo_asignacion || ''
+          const tipoN = prog.tipo_asignacion_nocturno || prog.tipo_asignacion || ''
+
+          return (
+            <div className="prog-tipo-asig-turno">
+              <div className="prog-tipo-asig-row">
+                <span className="prog-tipo-asig-label">D:</span>
+                <span className={`prog-inline-select-mini tipo-asignacion ${tipoD}`} style={{ cursor: 'default', border: 'none' }}>
+                  {tipoLabelsShort[tipoD] || tipoD || '-'}
+                </span>
+              </div>
+              <div className="prog-tipo-asig-row">
+                <span className="prog-tipo-asig-label">N:</span>
+                <span className={`prog-inline-select-mini tipo-asignacion ${tipoN}`} style={{ cursor: 'default', border: 'none' }}>
+                  {tipoLabelsShort[tipoN] || tipoN || '-'}
+                </span>
+              </div>
+            </div>
+          )
+        }
+
+        const tipo = prog.tipo_asignacion || ''
+
+        return (
+          <span className={`prog-inline-select tipo-asignacion ${tipo}`} style={{ cursor: 'default', border: 'none' }}>
+            {tipoLabelsShort[tipo] || tipo || '-'}
+          </span>
+        )
+      }
+    },
+    {
+      accessorKey: 'modalidad',
+      header: 'Modalidad',
+      cell: ({ row }) => (
+        <span className={`prog-modalidad-badge ${row.original.modalidad?.toLowerCase()}`} style={{ fontSize: '12px' }}>
+          {row.original.modalidad === 'TURNO' ? 'Turno' : 'A Cargo'}
+        </span>
+      )
+    },
+    {
+      accessorKey: 'fecha_cita',
+      header: 'Cita',
+      cell: ({ row }) => {
+        const fecha = row.original.fecha_cita
+        const hora = row.original.hora_cita?.substring(0, 5)
+        if (!fecha) return <span className="prog-hora">-</span>
+        const fechaObj = new Date(fecha + 'T12:00:00')
+        const fechaCorta = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+        return (
+          <div className="prog-fecha-hora" style={{ fontSize: '13px' }}>
+            <span className="prog-fecha">{fechaCorta}</span>
+            {hora && <span className="prog-hora">{hora}</span>}
+          </div>
+        )
+      }
+    },
+    {
+      id: 'tipo_documento_display',
+      header: 'Documento',
+      cell: ({ row }) => {
+        const prog = row.original
+
+        const docLabels: Record<string, string> = {
+          carta_oferta: 'Carta Ofert.',
+          anexo: 'Anexo',
+          na: 'N/A',
+          contrato: 'Contrato'
+        }
+
+        if (prog.modalidad === 'TURNO') {
+          const docDiurno = prog.documento_diurno || ''
+          const docNocturno = prog.documento_nocturno || ''
+
+          return (
+            <div className="prog-documento-turno">
+              <div className="prog-documento-row">
+                <span className="prog-documento-label">D:</span>
+                <span className={`prog-inline-select-mini documento ${docDiurno || 'sin_definir'}`} style={{ cursor: 'default', border: 'none' }}>
+                  {docLabels[docDiurno] || docDiurno || '-'}
+                </span>
+              </div>
+              <div className="prog-documento-row">
+                <span className="prog-documento-label">N:</span>
+                <span className={`prog-inline-select-mini documento ${docNocturno || 'sin_definir'}`} style={{ cursor: 'default', border: 'none' }}>
+                  {docLabels[docNocturno] || docNocturno || '-'}
+                </span>
+              </div>
+            </div>
+          )
+        }
+
+        const doc = prog.tipo_documento || ''
+
+        return (
+          <span className={`prog-inline-select documento ${doc || 'sin_definir'}`} style={{ cursor: 'default', border: 'none' }}>
+            {docLabels[doc] || doc || '-'}
+          </span>
+        )
+      }
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      cell: ({ row }) => (
+        <div className="prog-actions">
+          <button
+            className="prog-btn prog-btn-view"
+            title="Ver detalles"
+            onClick={() => setPreviewProgramacion(row.original)}
+          >
+            <Eye size={18} />
+          </button>
+        </div>
+      )
+    }
+  ], [])
+
   // Stats cards ocultas temporalmente - mostrar todas las programaciones
   const filteredData = programaciones
 
@@ -1302,35 +1540,104 @@ export function ProgramacionModule() {
       </div>
       */}
 
-      {/* DataTable con boton de crear */}
-      <DataTable
-        data={filteredData}
-        columns={columns}
-        loading={loading}
-        error={error}
-        searchPlaceholder="Buscar por patente, conductor..."
-        emptyIcon={<Calendar size={48} />}
-        emptyTitle="No hay programaciones"
-        emptyDescription={canCreate ? "Crea una nueva programacion para comenzar" : "No tienes programaciones asignadas"}
-        pageSize={100}
-        pageSizeOptions={[10, 20, 50, 100]}
-        headerAction={(
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              className="btn-secondary"
-              onClick={() => loadProgramaciones()}
-              title="Recargar datos"
-              disabled={loading}
-            >
-              <RefreshCw size={16} className={loading ? 'spin' : ''} />
-            </button>
-            <button className="btn-primary" onClick={handleCreate}>
-              <Plus size={16} />
-              Nueva Programación
-            </button>
-          </div>
-        )}
-      />
+      {/* Tabs */}
+      <div className="prog-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        <button
+          className={`prog-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
+          onClick={() => setActiveTab('pendientes')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            border: activeTab === 'pendientes' ? '2px solid #ef4444' : '1px solid #e5e7eb',
+            background: activeTab === 'pendientes' ? 'rgba(239, 68, 68, 0.05)' : 'white',
+            color: activeTab === 'pendientes' ? '#ef4444' : '#6b7280',
+            fontWeight: activeTab === 'pendientes' ? 600 : 500,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <Calendar size={16} />
+          Pendientes
+          <span style={{ padding: '2px 8px', borderRadius: '12px', background: activeTab === 'pendientes' ? '#ef4444' : '#e5e7eb', color: activeTab === 'pendientes' ? 'white' : '#6b7280', fontSize: '12px' }}>
+            {programaciones.length}
+          </span>
+        </button>
+        <button
+          className={`prog-tab ${activeTab === 'historico' ? 'active' : ''}`}
+          onClick={() => setActiveTab('historico')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            border: activeTab === 'historico' ? '2px solid #10b981' : '1px solid #e5e7eb',
+            background: activeTab === 'historico' ? 'rgba(16, 185, 129, 0.05)' : 'white',
+            color: activeTab === 'historico' ? '#10b981' : '#6b7280',
+            fontWeight: activeTab === 'historico' ? 600 : 500,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <Send size={16} />
+          Enviados
+          {programacionesHistorico.length > 0 && (
+            <span style={{ padding: '2px 8px', borderRadius: '12px', background: activeTab === 'historico' ? '#10b981' : '#e5e7eb', color: activeTab === 'historico' ? 'white' : '#6b7280', fontSize: '12px' }}>
+              {programacionesHistorico.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* DataTable - Pendientes */}
+      {activeTab === 'pendientes' && (
+        <DataTable
+          data={filteredData}
+          columns={columns}
+          loading={loading}
+          error={error}
+          searchPlaceholder="Buscar por patente, conductor..."
+          emptyIcon={<Calendar size={48} />}
+          emptyTitle="No hay programaciones"
+          emptyDescription={canCreate ? "Crea una nueva programacion para comenzar" : "No tienes programaciones asignadas"}
+          pageSize={100}
+          pageSizeOptions={[10, 20, 50, 100]}
+          headerAction={(
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className="btn-secondary"
+                onClick={() => loadProgramaciones()}
+                title="Recargar datos"
+                disabled={loading}
+              >
+                <RefreshCw size={16} className={loading ? 'spin' : ''} />
+              </button>
+              <button className="btn-primary" onClick={handleCreate}>
+                <Plus size={16} />
+                Nueva Programación
+              </button>
+            </div>
+          )}
+        />
+      )}
+
+      {/* DataTable - Enviados */}
+      {activeTab === 'historico' && (
+        <DataTable
+          data={programacionesHistorico}
+          columns={enviadosColumns}
+          loading={loadingHistorico}
+          searchPlaceholder="Buscar en enviados..."
+          emptyIcon={<Send size={48} />}
+          emptyTitle="No hay programaciones enviadas"
+          emptyDescription="Las programaciones enviadas a Entrega aparecerán aquí"
+          pageSize={100}
+          pageSizeOptions={[10, 20, 50, 100]}
+        />
+      )}
 
       {/* Wizard Modal para CREAR (nuevo diseño visual) */}
       {showCreateWizard && (
