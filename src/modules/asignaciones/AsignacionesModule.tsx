@@ -119,8 +119,11 @@ export function AsignacionesModule() {
   const canCreateManualAssignment = userRole === 'admin' || userRole === 'fullstack.senior'
 
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
+  const [asignacionesHistorico, setAsignacionesHistorico] = useState<Asignacion[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'activas' | 'historico'>('activas')
   const [showWizard, setShowWizard] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -443,6 +446,40 @@ export function AsignacionesModule() {
   useEffect(() => {
     loadAllData()
   }, [])
+
+  // Cargar histórico de asignaciones (finalizadas y canceladas)
+  const loadHistorico = async () => {
+    setLoadingHistorico(true)
+    try {
+      const { data, error: queryError } = await supabase
+        .from('asignaciones')
+        .select(`
+          id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at,
+          vehiculos (patente, marca, modelo),
+          asignaciones_conductores (
+            id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
+            conductores (nombres, apellidos, numero_licencia)
+          )
+        `)
+        .in('estado', ['finalizada', 'cancelada'])
+        .order('created_at', { ascending: false })
+        .limit(500)
+
+      if (queryError) throw queryError
+      setAsignacionesHistorico(data || [])
+    } catch (err: any) {
+      console.error('Error loading historico:', err)
+    } finally {
+      setLoadingHistorico(false)
+    }
+  }
+
+  // Cargar histórico cuando se cambia al tab
+  useEffect(() => {
+    if (activeTab === 'historico' && asignacionesHistorico.length === 0) {
+      loadHistorico()
+    }
+  }, [activeTab])
 
   // Programacion de entregas movida a /onboarding/programacion
 
@@ -1584,6 +1621,121 @@ export function AsignacionesModule() {
     }
   ], [canEdit, canDelete, canCreateManualAssignment])
 
+  // Columnas simplificadas para el histórico (solo Ver)
+  const historicoColumns = useMemo<ColumnDef<ExpandedAsignacion, any>[]>(() => [
+    {
+      accessorKey: 'created_at',
+      header: 'Fecha',
+      cell: ({ row }) => {
+        const fecha = row.original.created_at
+        if (!fecha) return '-'
+        return new Date(fecha).toLocaleDateString('es-AR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        })
+      }
+    },
+    {
+      accessorKey: 'codigo',
+      header: 'Código',
+      cell: ({ row }) => row.original.codigo || '-'
+    },
+    {
+      accessorKey: 'vehiculos.patente',
+      header: 'Vehículo',
+      cell: ({ row }) => {
+        const v = row.original.vehiculos
+        if (!v) return '-'
+        return (
+          <div>
+            <strong>{v.patente}</strong>
+            <br />
+            <span style={{ fontSize: '12px', color: '#6B7280' }}>{v.marca} {v.modelo}</span>
+          </div>
+        )
+      }
+    },
+    {
+      id: 'conductores',
+      header: 'Conductores',
+      cell: ({ row }) => {
+        const conductores = row.original.asignaciones_conductores || []
+        if (conductores.length === 0) return '-'
+        return (
+          <div style={{ fontSize: '13px' }}>
+            {conductores.map((c) => (
+              <div key={c.id}>
+                <span style={{ color: c.horario === 'diurno' ? '#F59E0B' : c.horario === 'nocturno' ? '#3B82F6' : '#6B7280' }}>
+                  {c.horario === 'diurno' ? 'D' : c.horario === 'nocturno' ? 'N' : 'C'}:
+                </span>{' '}
+                {c.conductores?.nombres} {c.conductores?.apellidos}
+              </div>
+            ))}
+          </div>
+        )
+      }
+    },
+    {
+      accessorKey: 'horario',
+      header: 'Modalidad',
+      cell: ({ row }) => {
+        const horario = row.original.horario
+        return horario === 'TURNO' ? 'Turno' : horario === 'A_CARGO' ? 'A Cargo' : horario || '-'
+      }
+    },
+    {
+      accessorKey: 'estado',
+      header: 'Estado',
+      cell: ({ row }) => {
+        const estado = row.original.estado
+        const color = estado === 'finalizada' ? 'green' : estado === 'cancelada' ? 'red' : 'gray'
+        return <span className={`dt-badge dt-badge-${color}`}>{estado}</span>
+      }
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      cell: ({ row }) => (
+        <button
+          className="btn-icon"
+          onClick={() => {
+            setViewAsignacion(row.original)
+            setShowViewModal(true)
+          }}
+          title="Ver detalle"
+        >
+          <Eye size={16} />
+        </button>
+      )
+    }
+  ], [])
+
+  // Expandir histórico con los mismos datos de conductores
+  const expandedHistorico = useMemo<ExpandedAsignacion[]>(() => {
+    return asignacionesHistorico.map(a => {
+      const conductores = a.asignaciones_conductores || []
+      let conductoresTurno: ConductorTurno | null = null
+      let conductorCargo: { id: string; nombre: string; confirmado: boolean } | null = null
+
+      if (a.horario === 'TURNO') {
+        const diurno = conductores.find(c => c.horario === 'diurno')
+        const nocturno = conductores.find(c => c.horario === 'nocturno')
+        conductoresTurno = {
+          diurno: diurno ? { id: diurno.id, nombre: `${diurno.conductores?.nombres || ''} ${diurno.conductores?.apellidos || ''}`.trim(), confirmado: diurno.confirmado } : null,
+          nocturno: nocturno ? { id: nocturno.id, nombre: `${nocturno.conductores?.nombres || ''} ${nocturno.conductores?.apellidos || ''}`.trim(), confirmado: nocturno.confirmado } : null
+        }
+      } else {
+        const cargo = conductores[0]
+        if (cargo) {
+          conductorCargo = { id: cargo.id, nombre: `${cargo.conductores?.nombres || ''} ${cargo.conductores?.apellidos || ''}`.trim(), confirmado: cargo.confirmado }
+        }
+      }
+
+      return { ...a, conductoresTurno, conductorCargo }
+    })
+  }, [asignacionesHistorico])
+
   return (
     <div className="asig-module">
       {/* Loading Overlay - bloquea toda la pantalla */}
@@ -1664,30 +1816,93 @@ export function AsignacionesModule() {
         </div>
       </div>
 
-      {/* DataTable */}
-      <DataTable
-        data={expandedAsignaciones}
-        columns={columns}
-        loading={loading}
-        error={error}
-        searchPlaceholder="Buscar por vehículo, conductor o número..."
-        emptyIcon={<FileText size={48} />}
-        emptyTitle="No hay asignaciones"
-        emptyDescription="Las asignaciones se crean desde la pestaña Programacion"
-        pageSize={100}
-        pageSizeOptions={[10, 20, 50, 100]}
-        externalFilters={externalFilters}
-        headerAction={canCreateManualAssignment ? (
-          <button
-            className="btn-primary"
-            onClick={() => setShowWizard(true)}
-            title="Crear asignación manual (solo para regularización)"
-          >
-            <Plus size={16} />
-            Nueva Asignación
-          </button>
-        ) : undefined}
-      />
+      {/* Tabs */}
+      <div className="asig-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        <button
+          className={`asig-tab ${activeTab === 'activas' ? 'active' : ''}`}
+          onClick={() => setActiveTab('activas')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            border: activeTab === 'activas' ? '2px solid #ef4444' : '1px solid #e5e7eb',
+            background: activeTab === 'activas' ? 'rgba(239, 68, 68, 0.05)' : 'white',
+            color: activeTab === 'activas' ? '#ef4444' : '#6b7280',
+            fontWeight: activeTab === 'activas' ? 600 : 500,
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          <CheckCircle size={16} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+          Activas
+          <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '12px', background: activeTab === 'activas' ? '#ef4444' : '#e5e7eb', color: activeTab === 'activas' ? 'white' : '#6b7280', fontSize: '12px' }}>
+            {asignaciones.filter(a => a.estado === 'activa' || a.estado === 'programado').length}
+          </span>
+        </button>
+        <button
+          className={`asig-tab ${activeTab === 'historico' ? 'active' : ''}`}
+          onClick={() => setActiveTab('historico')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            border: activeTab === 'historico' ? '2px solid #ef4444' : '1px solid #e5e7eb',
+            background: activeTab === 'historico' ? 'rgba(239, 68, 68, 0.05)' : 'white',
+            color: activeTab === 'historico' ? '#ef4444' : '#6b7280',
+            fontWeight: activeTab === 'historico' ? 600 : 500,
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          <FileText size={16} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+          Histórico
+          {asignacionesHistorico.length > 0 && (
+            <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '12px', background: activeTab === 'historico' ? '#ef4444' : '#e5e7eb', color: activeTab === 'historico' ? 'white' : '#6b7280', fontSize: '12px' }}>
+              {asignacionesHistorico.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* DataTable - Activas */}
+      {activeTab === 'activas' && (
+        <DataTable
+          data={expandedAsignaciones}
+          columns={columns}
+          loading={loading}
+          error={error}
+          searchPlaceholder="Buscar por vehículo, conductor o número..."
+          emptyIcon={<FileText size={48} />}
+          emptyTitle="No hay asignaciones"
+          emptyDescription="Las asignaciones se crean desde la pestaña Programacion"
+          pageSize={100}
+          pageSizeOptions={[10, 20, 50, 100]}
+          externalFilters={externalFilters}
+          headerAction={canCreateManualAssignment ? (
+            <button
+              className="btn-primary"
+              onClick={() => setShowWizard(true)}
+              title="Crear asignación manual (solo para regularización)"
+            >
+              <Plus size={16} />
+              Nueva Asignación
+            </button>
+          ) : undefined}
+        />
+      )}
+
+      {/* DataTable - Histórico */}
+      {activeTab === 'historico' && (
+        <DataTable
+          data={expandedHistorico}
+          columns={historicoColumns}
+          loading={loadingHistorico}
+          searchPlaceholder="Buscar en histórico..."
+          emptyIcon={<FileText size={48} />}
+          emptyTitle="No hay registros en el histórico"
+          emptyDescription="Las asignaciones finalizadas o canceladas aparecerán aquí"
+          pageSize={100}
+          pageSizeOptions={[10, 20, 50, 100]}
+        />
+      )}
 
       {/* Wizard Modal */}
       {showWizard && (
