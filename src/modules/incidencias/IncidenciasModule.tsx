@@ -3577,17 +3577,25 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
       const conductoresData: ConductorAsignado[] = []
       for (const asig of (data || [])) {
         const asigConductores = (asig as any).asignaciones_conductores || []
+        const esAsignacionTurno = (asig as any).horario === 'TURNO'
+        
         for (const ac of asigConductores) {
           if (ac.conductores) {
-            // Mapear turno: diurno -> Diurno, nocturno -> Nocturno, todo_dia -> A cargo
+            // Mapear turno según el tipo de asignación y horario del conductor
             let turnoDisplay = 'A cargo'
-            if (ac.horario === 'diurno') turnoDisplay = 'Diurno'
-            else if (ac.horario === 'nocturno') turnoDisplay = 'Nocturno'
+            
+            if (esAsignacionTurno) {
+              // Si la asignación es por TURNO, usar el horario del conductor
+              if (ac.horario === 'diurno') turnoDisplay = 'Diurno'
+              else if (ac.horario === 'nocturno') turnoDisplay = 'Nocturno'
+              else turnoDisplay = 'A cargo' // todo_dia en asignación turno
+            }
+            // Si es A_CARGO, siempre mostrar "A cargo"
 
             conductoresData.push({
               id: ac.conductores.id,
               nombre_completo: `${ac.conductores.nombres} ${ac.conductores.apellidos}`,
-              horario: (asig as any).horario === 'TURNO' ? 'Turno' : 'A Cargo',
+              horario: esAsignacionTurno ? 'Turno' : 'A Cargo',
               turno: turnoDisplay
             })
           }
@@ -3608,8 +3616,8 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
         setShowConductorSelectModal(true)
       }
       // Si no hay conductores asignados, no hacer nada (permite búsqueda manual)
-    } catch (error) {
-      console.error('Error buscando conductores asignados:', error)
+    } catch {
+      // Error silencioso - permite búsqueda manual si falla
     } finally {
       setLoadingConductores(false)
     }
