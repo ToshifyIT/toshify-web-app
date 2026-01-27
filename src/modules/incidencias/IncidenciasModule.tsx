@@ -130,17 +130,25 @@ export function IncidenciasModule() {
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [areaFilter, setAreaFilter] = useState<string[]>([])
+  const [tipoIncFilter, setTipoIncFilter] = useState<string[]>([])
   
   // Filtro especial: Solo pendientes de enviar a facturación
   const [soloPendientesEnviar, setSoloPendientesEnviar] = useState(false)
   
-  // Filtros de rango de fecha
-  const [dateRangeLogistica, setDateRangeLogistica] = useState<DateRange | null>(null)
-  const [dateRangeCobro, setDateRangeCobro] = useState<DateRange | null>(null)
-  const [dateRangePenalidades, setDateRangePenalidades] = useState<DateRange | null>(null)
+  // Filtros de rango de fecha - Por defecto: año actual
+  const currentYear = new Date().getFullYear()
+  const defaultYearRange: DateRange = {
+    startDate: `${currentYear}-01-01`,
+    endDate: `${currentYear}-12-31`,
+    label: `Año ${currentYear}`,
+    type: 'year'
+  }
+  const [dateRangeLogistica, setDateRangeLogistica] = useState<DateRange | null>(defaultYearRange)
+  const [dateRangeCobro, setDateRangeCobro] = useState<DateRange | null>(defaultYearRange)
+  const [dateRangePenalidades, setDateRangePenalidades] = useState<DateRange | null>(defaultYearRange)
 
   // Helper: ¿Hay filtros activos en incidencias?
-  const hayFiltrosIncidenciasActivos = patenteFilter.length > 0 || conductorFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || areaFilter.length > 0 || soloPendientesEnviar
+  const hayFiltrosIncidenciasActivos = patenteFilter.length > 0 || conductorFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || areaFilter.length > 0 || tipoIncFilter.length > 0 || soloPendientesEnviar
 
   // Limpiar todos los filtros de incidencias
   function limpiarFiltrosIncidencias() {
@@ -149,6 +157,7 @@ export function IncidenciasModule() {
     setEstadoFilter([])
     setTurnoFilter([])
     setAreaFilter([])
+    setTipoIncFilter([])
     setSoloPendientesEnviar(false)
   }
 
@@ -473,6 +482,15 @@ export function IncidenciasModule() {
     [...new Set(incidencias.map(i => i.area).filter(Boolean))].sort() as string[]
   , [incidencias])
 
+  // Lista de tipos de incidencia únicos (solo los que están en uso)
+  const tiposIncUnicos = useMemo(() => {
+    const tipoIdsEnUso = new Set(incidencias.map(i => i.tipo_cobro_descuento_id).filter(Boolean))
+    return tiposCobroDescuento
+      .filter(t => tipoIdsEnUso.has(t.id))
+      .map(t => t.nombre)
+      .sort()
+  }, [incidencias, tiposCobroDescuento])
+
 
   // Listas para penalidades
   const penPatentesUnicas = useMemo(() =>
@@ -556,9 +574,16 @@ export function IncidenciasModule() {
     if (areaFilter.length > 0) {
       filtered = filtered.filter(i => areaFilter.includes(i.area || ''))
     }
+    if (tipoIncFilter.length > 0) {
+      filtered = filtered.filter(i => {
+        if (!i.tipo_cobro_descuento_id) return false
+        const tipoNombre = tiposCobroDescuento.find(t => t.id === i.tipo_cobro_descuento_id)?.nombre
+        return tipoNombre && tipoIncFilter.includes(tipoNombre)
+      })
+    }
 
     return filtered
-  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, dateRangeCobro, soloPendientesEnviar, penalidades])
+  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, tipoIncFilter, dateRangeCobro, soloPendientesEnviar, penalidades, tiposCobroDescuento])
 
   // Incidencias que pueden enviarse a facturación (no tienen penalidad y tienen monto)
   const incidenciasEnviables = useMemo(() => {
@@ -810,10 +835,44 @@ export function IncidenciasModule() {
       cell: ({ row }) => row.original.conductor_display || '-'
     },
     {
+      accessorKey: 'tipo_cobro_descuento_id',
+      header: 'Tipo',
+      cell: ({ row }) => {
+        const tipoId = row.original.tipo_cobro_descuento_id
+        if (!tipoId) return '-'
+        // Para logística, los tipos empiezan con "__"
+        if (tipoId.startsWith('__')) {
+          // Mapear tipos de logística a nombres legibles
+          const tiposLogistica: Record<string, string> = {
+            '__ENTREGA_TARDIA': 'Entrega tardía',
+            '__LLEGADA_TARDE_REVISION': 'Llegada tarde revisión',
+            '__ZONAS_RESTRINGIDAS': 'Zonas restringidas',
+            '__FALTA_LAVADO': 'Falta de lavado',
+            '__FALTA_RESTITUCION_UNIDAD': 'Falta restitución unidad',
+            '__PERDIDA_DANO_SEGURIDAD': 'Pérdida/daño seguridad',
+            '__FALTA_RESTITUCION_GNC': 'Falta restitución GNC',
+            '__FALTA_RESTITUCION_NAFTA': 'Falta restitución nafta',
+            '__MORA_CANON': 'Mora en canon',
+            '__MANIPULACION_GPS': 'Manipulación GPS',
+            '__ABANDONO_VEHICULO': 'Abandono vehículo',
+            '__SIN_LUGAR_GUARDA': 'Sin lugar de guarda',
+            '__IBUTTON': 'iButton',
+            '__MULTA_TRANSITO': 'Multa de tránsito',
+            '__REPARACION_SINIESTRO': 'Reparación siniestro',
+            '__FALTA_REPORTE': 'Falta de reporte',
+            '__OTRO': 'Otro'
+          }
+          return tiposLogistica[tipoId] || tipoId.replace('__', '')
+        }
+        const tipo = tiposCobroDescuento.find(t => t.id === tipoId)
+        return tipo?.nombre || '-'
+      }
+    },
+    {
       accessorKey: 'turno',
       header: () => (
         <ExcelColumnFilter
-          label="Tipo"
+          label="Turno"
           options={turnosUnicos}
           selectedValues={turnoFilter}
           onSelectionChange={setTurnoFilter}
@@ -910,7 +969,7 @@ export function IncidenciasModule() {
         />
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, tiposCobroDescuento])
 
   // Columnas específicas para incidencias de COBRO (incluye botón generar cobro/descuento)
   const incidenciasCobroColumns = useMemo<ColumnDef<IncidenciaCompleta>[]>(() => {
@@ -989,10 +1048,30 @@ export function IncidenciasModule() {
       }
     },
     {
+      accessorKey: 'tipo_cobro_descuento_id',
+      header: () => (
+        <ExcelColumnFilter
+          label="Tipo Inc."
+          options={tiposIncUnicos}
+          selectedValues={tipoIncFilter}
+          onSelectionChange={setTipoIncFilter}
+          filterId="inc_cobro_tipo_inc"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => {
+        const tipoId = row.original.tipo_cobro_descuento_id
+        if (!tipoId) return '-'
+        const tipo = tiposCobroDescuento.find(t => t.id === tipoId)
+        return tipo?.nombre || '-'
+      }
+    },
+    {
       accessorKey: 'turno',
       header: () => (
         <ExcelColumnFilter
-          label="Tipo"
+          label="Turno"
           options={turnosUnicos}
           selectedValues={turnoFilter}
           onSelectionChange={setTurnoFilter}
@@ -1105,7 +1184,7 @@ export function IncidenciasModule() {
     })
     
     return cols
-  }, [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, modoSeleccionMasiva, incidenciasSeleccionadas, incidenciasEnviables, penalidades])
+  }, [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, modoSeleccionMasiva, incidenciasSeleccionadas, incidenciasEnviables, penalidades, tiposCobroDescuento])
 
   // Columnas para tabla de penalidades
   const penalidadesColumns = useMemo<ColumnDef<PenalidadCompleta>[]>(() => [
@@ -1690,16 +1769,48 @@ export function IncidenciasModule() {
       return
     }
 
-    if (!incidenciaForm.estado_id || !incidenciaForm.fecha || !incidenciaForm.area) {
-      Swal.fire('Error', 'Por favor complete los campos requeridos (fecha, estado, área)', 'warning')
+    // Validar campos obligatorios comunes
+    if (!incidenciaForm.vehiculo_id) {
+      Swal.fire('Error', 'Por favor seleccione una patente', 'warning')
+      return
+    }
+    if (!incidenciaForm.conductor_id) {
+      Swal.fire('Error', 'Por favor seleccione un conductor', 'warning')
+      return
+    }
+    if (!incidenciaForm.fecha) {
+      Swal.fire('Error', 'Por favor seleccione una fecha', 'warning')
+      return
+    }
+    if (!incidenciaForm.turno) {
+      Swal.fire('Error', 'Por favor seleccione una modalidad (turno)', 'warning')
+      return
+    }
+    if (!incidenciaForm.tipo_cobro_descuento_id) {
+      Swal.fire('Error', 'Por favor seleccione el tipo de incidencia', 'warning')
+      return
+    }
+    if (!incidenciaForm.area) {
+      Swal.fire('Error', 'Por favor seleccione un área', 'warning')
+      return
+    }
+    if (!incidenciaForm.estado_id) {
+      Swal.fire('Error', 'Por favor seleccione un estado', 'warning')
       return
     }
 
-    // Si es incidencia de cobro, validar que tenga monto
-    const esCobro = activeTab === 'cobro'
-    if (esCobro && (!incidenciaForm.monto || incidenciaForm.monto <= 0)) {
-      Swal.fire('Error', 'Por favor ingrese el monto del cobro', 'warning')
-      return
+    // Si es incidencia de cobro, validar campos adicionales
+    // Es cobro si: estamos en la pestaña cobro O si la incidencia que editamos ya era de tipo cobro
+    const esCobro = activeTab === 'cobro' || (modalMode === 'edit' && selectedIncidencia?.tipo === 'cobro')
+    if (esCobro) {
+      if (!incidenciaForm.monto || incidenciaForm.monto <= 0) {
+        Swal.fire('Error', 'Por favor ingrese el monto del cobro', 'warning')
+        return
+      }
+      if (!incidenciaForm.estado_vehiculo) {
+        Swal.fire('Error', 'Por favor seleccione el estado del vehículo', 'warning')
+        return
+      }
     }
 
     setSaving(true)
@@ -2940,6 +3051,7 @@ export function IncidenciasModule() {
                   <IncidenciaDetailView
                     incidencia={selectedIncidencia}
                     onEdit={() => handleEditarIncidencia(selectedIncidencia)}
+                    tiposCobroDescuento={tiposCobroDescuento}
                   />
                 ) : modalType === 'penalidad' && selectedPenalidad ? (
                   <PenalidadDetailView
@@ -3559,7 +3671,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
         <div className="form-section-title">Datos de la Incidencia</div>
         <div className="form-row">
           <div className="form-group">
-            <label>Patente</label>
+            <label>Patente <span className="required">*</span></label>
             <div className="searchable-select">
               <input
                 type="text"
@@ -3598,7 +3710,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             </div>
           </div>
           <div className="form-group">
-            <label>Conductor</label>
+            <label>Conductor <span className="required">*</span></label>
             <div className="searchable-select">
               <input
                 type="text"
@@ -3658,7 +3770,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             />
           </div>
           <div className="form-group">
-            <label>Modalidad</label>
+            <label>Modalidad <span className="required">*</span></label>
             {formData.turno ? (
               <input
                 type="text"
@@ -3794,7 +3906,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               />
             </div>
             <div className="form-group">
-              <label>Estado del Vehículo</label>
+              <label>Estado del Vehículo <span className="required">*</span></label>
               <select value={formData.estado_vehiculo || ''} onChange={e => setFormData(prev => ({ ...prev, estado_vehiculo: e.target.value }))} disabled={disabled}>
                 <option value="">Seleccionar</option>
                 <option value="En uso">En uso</option>
@@ -3920,14 +4032,20 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
 interface IncidenciaDetailViewProps {
   incidencia: IncidenciaCompleta
   onEdit: () => void
+  tiposCobroDescuento: TipoCobroDescuento[]
 }
 
-function IncidenciaDetailView({ incidencia, onEdit }: IncidenciaDetailViewProps) {
+function IncidenciaDetailView({ incidencia, onEdit, tiposCobroDescuento }: IncidenciaDetailViewProps) {
   function formatDate(dateStr: string | undefined | null) {
     if (!dateStr) return '-'
     const [year, month, day] = dateStr.split('T')[0].split('-')
     return `${day}/${month}/${year}`
   }
+
+  // Obtener nombre del tipo de incidencia
+  const tipoIncidenciaNombre = incidencia.tipo_cobro_descuento_id
+    ? tiposCobroDescuento.find(t => t.id === incidencia.tipo_cobro_descuento_id)?.nombre || '-'
+    : '-'
 
   return (
     <div className="incidencia-detail">
@@ -3955,8 +4073,12 @@ function IncidenciaDetailView({ incidencia, onEdit }: IncidenciaDetailViewProps)
             <span className="detail-item-value">{incidencia.semana || '-'}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-item-label">Tipo</span>
+            <span className="detail-item-label">Turno</span>
             <span className="detail-item-value">{incidencia.turno || '-'}</span>
+          </div>
+          <div className="detail-item">
+            <span className="detail-item-label">Tipo de Incidencia</span>
+            <span className="detail-item-value">{tipoIncidenciaNombre}</span>
           </div>
           <div className="detail-item">
             <span className="detail-item-label">Área</span>

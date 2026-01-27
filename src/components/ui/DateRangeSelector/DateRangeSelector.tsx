@@ -13,7 +13,7 @@ export interface DateRange {
   startDate: string // ISO string YYYY-MM-DD
   endDate: string   // ISO string YYYY-MM-DD
   label: string
-  type: 'day' | 'week' | 'custom' | 'all'
+  type: 'day' | 'week' | 'custom' | 'all' | 'year'
 }
 
 interface DateRangeSelectorProps {
@@ -244,6 +244,16 @@ export function DateRangeSelector({
           label: `Semana pasada (S${lastWeekNum})`,
           type: 'week' as const
         }
+      },
+      {
+        id: 'this-year',
+        label: `Este año (${currentYear})`,
+        range: {
+          startDate: toISODateString(currentYear, 0, 1), // 1 de enero
+          endDate: toISODateString(currentYear, 11, 31), // 31 de diciembre
+          label: `Año ${currentYear}`,
+          type: 'year' as const
+        }
       }
     ]
   }, [])
@@ -314,9 +324,18 @@ export function DateRangeSelector({
             <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="date-range-nav">
               <ChevronLeft size={16} />
             </button>
-            <span className="date-range-month">
-              {MONTH_NAMES[viewDate.getMonth()]} {viewDate.getFullYear()}
-            </span>
+            <div className="date-range-month-year">
+              <span className="date-range-month">{MONTH_NAMES[viewDate.getMonth()]}</span>
+              <select 
+                className="date-range-year-select"
+                value={viewDate.getFullYear()}
+                onChange={(e) => setViewDate(new Date(parseInt(e.target.value), viewDate.getMonth(), 1))}
+              >
+                {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
             <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="date-range-nav">
               <ChevronRight size={16} />
             </button>
