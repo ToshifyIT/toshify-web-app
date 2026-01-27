@@ -16,7 +16,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 
 import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
-import type { ProgramacionOnboardingCompleta, EstadoKanban } from '../../types/onboarding.types'
+import type { ProgramacionOnboardingCompleta } from '../../types/onboarding.types'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import './ProgramacionModule.css'
@@ -556,63 +556,14 @@ export function ProgramacionModule() {
 
   // Enviar a entrega - Crear asignacion
   const handleEnviarAEntrega = async (prog: ProgramacionOnboardingCompleta) => {
-    // Verificar qué conductores son "asignacion_companero" (no deben agregarse a la asignación)
+    // Verificar qué conductores son "asignacion_companero" (informativo, no bloquea)
     const diurnoEsCompanero = prog.tipo_asignacion_diurno === 'asignacion_companero'
     const nocturnoEsCompanero = prog.tipo_asignacion_nocturno === 'asignacion_companero'
     const legacyEsCompanero = prog.tipo_asignacion === 'asignacion_companero'
 
-    // Para modalidad TURNO: verificar si AMBOS son compañero
-    // Para modalidad A CARGO: verificar si el único conductor es compañero
-    const todosEsCompanero = prog.modalidad === 'TURNO'
-      ? (diurnoEsCompanero && nocturnoEsCompanero)
-      : legacyEsCompanero
-
-    // Si TODOS los conductores son asignacion de compañero, NO crear asignación
-    if (todosEsCompanero) {
-      const result = await Swal.fire({
-        title: 'Confirmar Asignación de Compañero',
-        html: `
-          <div style="text-align: left; font-size: 14px;">
-            <p><strong>Conductor:</strong> ${prog.conductor_display || prog.conductor_nombre || '-'}</p>
-            <p><strong>Vehiculo:</strong> ${prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '-'}</p>
-            <p style="margin-top: 12px; color: #6B7280;">
-              <strong>Nota:</strong> Todos los conductores ya tienen asignación activa con su compañero.
-              Solo se marcará la programación como confirmada, sin crear una nueva asignación.
-            </p>
-          </div>
-        `,
-        icon: 'info',
-        showCancelButton: true,
-        confirmButtonColor: '#10B981',
-        confirmButtonText: 'Confirmar',
-        cancelButtonText: 'Cancelar'
-      })
-
-      if (!result.isConfirmed) return
-
-      try {
-        // Solo actualizar el estado de la programacion a completado
-        await (supabase.from('programaciones_onboarding') as any)
-          .update({
-            estado: 'completado',
-            fecha_asignacion_creada: new Date().toISOString()
-          })
-          .eq('id', prog.id)
-
-        // Actualizar localmente
-        setProgramaciones(prev => prev.map(p =>
-          p.id === prog.id
-            ? { ...p, estado: 'completado' as EstadoKanban }
-            : p
-        ))
-
-        showSuccess('Programación Confirmada', 'Los conductores de compañero han sido confirmados')
-        return
-      } catch (err: any) {
-        Swal.fire('Error', err.message || 'Error al confirmar', 'error')
-        return
-      }
-    }
+    // NOTA: Ya no bloqueamos la creación de asignación para "asignacion_companero"
+    // Siempre se crea/actualiza la asignación para que quede en el histórico
+    // El tipo "asignacion_companero" solo es informativo
 
     // Validar que tenga los datos minimos
     if (!prog.vehiculo_entregar_id && !prog.vehiculo_entregar_patente) {
