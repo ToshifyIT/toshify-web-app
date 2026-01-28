@@ -756,26 +756,70 @@ export function VehicleManagement() {
 
   // Generar filtros externos para mostrar en la barra de filtros del DataTable
   const externalFilters = useMemo(() => {
-    if (!activeStatCard) return []
+    const filters: Array<{ id: string; label: string; onClear: () => void }> = []
 
-    const labels: Record<string, string> = {
-      total: 'Total Flota',
-      enCochera: 'Disponibles',
-      enUso: 'En Uso',
-      tallerMecanico: 'Taller Mecánico',
-      chapaPintura: 'Chapa y Pintura',
-      corporativos: 'Corporativos'
+    // Stat card filter
+    if (activeStatCard) {
+      const labels: Record<string, string> = {
+        total: 'Total Flota',
+        enCochera: 'Disponibles',
+        enUso: 'En Uso',
+        tallerMecanico: 'Taller Mecánico',
+        chapaPintura: 'Chapa y Pintura',
+        corporativos: 'Corporativos'
+      }
+      filters.push({
+        id: 'statCard',
+        label: labels[activeStatCard] || activeStatCard,
+        onClear: () => {
+          setActiveStatCard(null)
+          setStatCardEstadoFilter([])
+        }
+      })
     }
 
-    return [{
-      id: activeStatCard,
-      label: labels[activeStatCard] || activeStatCard,
-      onClear: () => {
-        setActiveStatCard(null)
-        setStatCardEstadoFilter([]) // Solo limpiar el filtro del stat card
-      }
-    }]
-  }, [activeStatCard])
+    // Column filters
+    if (patenteFilter.length > 0) {
+      filters.push({
+        id: 'patente',
+        label: `Patente: ${patenteFilter.length === 1 ? patenteFilter[0] : `${patenteFilter.length} seleccionados`}`,
+        onClear: () => setPatenteFilter([])
+      })
+    }
+    if (marcaFilter.length > 0) {
+      filters.push({
+        id: 'marca',
+        label: `Marca: ${marcaFilter.length === 1 ? marcaFilter[0] : `${marcaFilter.length} seleccionados`}`,
+        onClear: () => setMarcaFilter([])
+      })
+    }
+    if (modeloFilter.length > 0) {
+      filters.push({
+        id: 'modelo',
+        label: `Modelo: ${modeloFilter.length === 1 ? modeloFilter[0] : `${modeloFilter.length} seleccionados`}`,
+        onClear: () => setModeloFilter([])
+      })
+    }
+    if (estadoFilter.length > 0) {
+      filters.push({
+        id: 'estado',
+        label: `Estado: ${estadoFilter.length === 1 ? estadoFilter[0] : `${estadoFilter.length} seleccionados`}`,
+        onClear: () => setEstadoFilter([])
+      })
+    }
+
+    return filters
+  }, [activeStatCard, patenteFilter, marcaFilter, modeloFilter, estadoFilter])
+
+  // Limpiar todos los filtros
+  const handleClearAllFilters = () => {
+    setActiveStatCard(null)
+    setStatCardEstadoFilter([])
+    setPatenteFilter([])
+    setMarcaFilter([])
+    setModeloFilter([])
+    setEstadoFilter([])
+  }
 
   // Extraer marcas y modelos únicos para autocomplete
   const marcasExistentes = useMemo(() => {
@@ -1203,6 +1247,7 @@ export function VehicleManagement() {
           </button>
         }
         externalFilters={externalFilters}
+        onClearAllFilters={handleClearAllFilters}
       />
 
       {/* MODALS */}

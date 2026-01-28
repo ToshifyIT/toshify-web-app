@@ -825,6 +825,7 @@ export function DataTable<T>({
                 // Create a getValue function specific to THIS column
                 // Cell renderers call getValue() without arguments, expecting the value for their column
                 const cellGetValue = () => mockRow.getValue(colId);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 displayValue = flexRender(colDef.cell as ColumnDef<T>['cell'], { row: mockRow, getValue: cellGetValue } as any);
               } catch (e) {
                 console.warn('Error rendering expanded cell:', colId, e);
@@ -863,8 +864,9 @@ export function DataTable<T>({
                     displayValue = String(obj.nombre || obj.full_name);
                   // Array of items
                   } else if (Array.isArray(rawValue)) {
-                    displayValue = rawValue.length > 0 ? rawValue.map(item =>
-                      typeof item === 'object' ? (item as any).nombre || (item as any).descripcion || JSON.stringify(item) : String(item)
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    displayValue = rawValue.length > 0 ? rawValue.map((item: any) =>
+                      typeof item === 'object' ? item.nombre || item.descripcion || JSON.stringify(item) : String(item)
                     ).join(', ') : '-';
                   // Generic object - show values in a readable format
                   } else {
@@ -1028,6 +1030,34 @@ export function DataTable<T>({
                   </button>
                 </div>
               ))}
+              {/* Internal column filters */}
+              {activeFiltersInfo.map(filter => (
+                <div key={filter.colId} className="dt-active-filter-chip">
+                  <span className="dt-chip-label">{filter.label}</span>
+                  {filter.type === 'column' && filter.values && (
+                    <span className="dt-chip-value">
+                      {filter.values.length === 1 ? filter.values[0] : `${filter.values.length} seleccionados`}
+                    </span>
+                  )}
+                  {filter.type === 'date' && filter.dateRange && (
+                    <span className="dt-chip-value">
+                      {filter.dateRange.from && filter.dateRange.to
+                        ? `${filter.dateRange.from} - ${filter.dateRange.to}`
+                        : filter.dateRange.from
+                          ? `Desde ${filter.dateRange.from}`
+                          : `Hasta ${filter.dateRange.to}`}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="dt-chip-remove"
+                    onClick={() => clearFilter(filter.colId, filter.type)}
+                    title="Quitar filtro"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
             </div>
             <button className="dt-clear-all-filters" onClick={clearAllFilters}>
               Limpiar todo
@@ -1174,10 +1204,12 @@ export function DataTable<T>({
                         if (typeof header === 'string') {
                           headerLabel = header;
                         } else if (typeof header === 'function') {
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           const rendered = header({ column: cell.column, header: cell.column.columnDef, table } as any);
                           if (typeof rendered === 'string') headerLabel = rendered;
                           // Para FilterHeader, extraer el label
                           if (rendered && typeof rendered === 'object' && 'props' in rendered) {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const props = (rendered as any).props;
                             if (props?.label) headerLabel = props.label;
                           }

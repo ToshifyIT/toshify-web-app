@@ -1,5 +1,5 @@
 // src/modules/multas-telepase/MultasModule.tsx
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
@@ -104,8 +104,6 @@ export default function MultasModule() {
   const [importeFilter, setImporteFilter] = useState<string[]>([])
   const [fechaInfraccionDesde, setFechaInfraccionDesde] = useState<string | null>(null)
   const [fechaInfraccionHasta, setFechaInfraccionHasta] = useState<string | null>(null)
-  const [fechaCargaDesde, setFechaCargaDesde] = useState<string | null>(null)
-  const [fechaCargaHasta, setFechaCargaHasta] = useState<string | null>(null)
   const [ibuttonFilter, setIbuttonFilter] = useState<string[]>([])
 
   // Opciones para autocompletado y validación
@@ -172,108 +170,102 @@ export default function MultasModule() {
     }
   }
 
-  // Valores unicos para filtros
+  // Lógica de filtrado centralizada
+  const filterPredicates = useMemo(() => ({
+    obs: (m: Multa) => {
+      if (obsFilter.length === 0) return true
+      const tieneObs = !m.conductor_responsable || !m.ibutton
+      const estado = tieneObs ? 'Con observaciones' : 'Sin observaciones'
+      return obsFilter.includes(estado)
+    },
+    importe: (m: Multa) => importeFilter.length === 0 || importeFilter.includes(String(m.importe)),
+    patente: (m: Multa) => patenteFilter.length === 0 || patenteFilter.includes(m.patente),
+    conductor: (m: Multa) => conductorFilter.length === 0 || conductorFilter.includes(m.conductor_responsable || '-'),
+    lugar: (m: Multa) => lugarFilter.length === 0 || lugarFilter.includes(m.lugar),
+    infraccion: (m: Multa) => infraccionFilter.length === 0 || infraccionFilter.includes(m.infraccion),
+    semana: (m: Multa) => {
+      if (semanaFilter.length === 0) return true
+      if (!m.fecha_infraccion) return false
+      return semanaFilter.includes((getWeekNumber(m.fecha_infraccion) + 1).toString())
+    },
+    ibutton: (m: Multa) => {
+      if (ibuttonFilter.length === 0) return true
+      const val = (!m.ibutton || m.ibutton.trim() === '') ? '-' : m.ibutton.trim()
+      return ibuttonFilter.includes(val)
+    },
+    fecha: (m: Multa) => {
+      if (fechaInfraccionDesde && (!m.fecha_infraccion || m.fecha_infraccion < fechaInfraccionDesde)) return false
+      if (fechaInfraccionHasta && (!m.fecha_infraccion || m.fecha_infraccion > `${fechaInfraccionHasta}T23:59:59`)) return false
+      return true
+    }
+  }), [obsFilter, importeFilter, patenteFilter, conductorFilter, lugarFilter, infraccionFilter, semanaFilter, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta])
+
+  const getFilteredData = useCallback((excludeKey?: string) => {
+    return multas.filter(m => {
+      if (excludeKey !== 'obs' && !filterPredicates.obs(m)) return false
+      if (excludeKey !== 'importe' && !filterPredicates.importe(m)) return false
+      if (excludeKey !== 'patente' && !filterPredicates.patente(m)) return false
+      if (excludeKey !== 'conductor' && !filterPredicates.conductor(m)) return false
+      if (excludeKey !== 'lugar' && !filterPredicates.lugar(m)) return false
+      if (excludeKey !== 'infraccion' && !filterPredicates.infraccion(m)) return false
+      if (excludeKey !== 'semana' && !filterPredicates.semana(m)) return false
+      if (excludeKey !== 'ibutton' && !filterPredicates.ibutton(m)) return false
+      if (excludeKey !== 'fecha' && !filterPredicates.fecha(m)) return false
+      return true
+    })
+  }, [multas, filterPredicates])
+
+  // Valores unicos para filtros (Cascading)
   const patentesUnicas = useMemo(() =>
-    [...new Set(multas.map(m => m.patente).filter(Boolean))].sort()
-  , [multas])
+    [...new Set(getFilteredData('patente').map(m => m.patente).filter(Boolean))].sort()
+  , [getFilteredData])
 
   const conductoresUnicos = useMemo(() =>
-    [...new Set(multas.map(m => m.conductor_responsable).filter(Boolean))].sort()
-  , [multas])
+    [...new Set(getFilteredData('conductor').map(m => m.conductor_responsable || '-'))].sort()
+  , [getFilteredData])
 
   const lugaresUnicos = useMemo(() =>
-    [...new Set(multas.map(m => m.lugar).filter(Boolean))].sort()
-  , [multas])
+    [...new Set(getFilteredData('lugar').map(m => m.lugar).filter(Boolean))].sort()
+  , [getFilteredData])
 
   const infraccionesUnicas = useMemo(() =>
-    [...new Set(multas.map(m => m.infraccion).filter(Boolean))].sort()
-  , [multas])
+    [...new Set(getFilteredData('infraccion').map(m => m.infraccion).filter(Boolean))].sort()
+  , [getFilteredData])
 
   const semanasUnicas = useMemo(() => {
     const semanas = new Set<string>()
-    multas.forEach(m => {
-      if (m.created_at) {
-        semanas.add(getWeekNumber(m.created_at).toString())
+    getFilteredData('semana').forEach(m => {
+      if (m.fecha_infraccion) {
+        semanas.add((getWeekNumber(m.fecha_infraccion) + 1).toString())
       }
     })
     return [...semanas].sort((a, b) => parseInt(a) - parseInt(b))
-  }, [multas])
+  }, [getFilteredData])
 
   const ibuttonsUnicos = useMemo(() =>
-    [...new Set(multas.map(m => m.ibutton).filter(Boolean))].sort()
-  , [multas])
+    [...new Set(getFilteredData('ibutton').map(m => {
+      if (!m.ibutton) return '-'
+      const clean = m.ibutton.trim()
+      return clean === '' ? '-' : clean
+    }))].sort()
+  , [getFilteredData])
 
-  const obsOptions = ['Sin observaciones', 'Con observaciones']
+  const obsOptions = useMemo(() => {
+     const data = getFilteredData('obs')
+     const options = new Set<string>()
+     data.forEach(m => {
+        const tieneObs = !m.conductor_responsable || !m.ibutton
+        options.add(tieneObs ? 'Con observaciones' : 'Sin observaciones')
+     })
+     return [...options].sort()
+  }, [getFilteredData])
 
   const importesUnicos = useMemo(() =>
-    [...new Set(multas.map(m => String(m.importe || '')))].filter(Boolean).sort()
-  , [multas])
+    [...new Set(getFilteredData('importe').map(m => String(m.importe || '')))].filter(Boolean).sort()
+  , [getFilteredData])
 
-  // Filtrar registros
-  const multasFiltradas = useMemo(() => {
-    let filtered = multas
-
-    if (obsFilter.length > 0) {
-      filtered = filtered.filter(m => {
-        const tieneObs = !m.conductor_responsable || !m.ibutton
-        const estado = tieneObs ? 'Con observaciones' : 'Sin observaciones'
-        return obsFilter.includes(estado)
-      })
-    }
-
-    if (importeFilter.length > 0) {
-      filtered = filtered.filter(m => importeFilter.includes(String(m.importe)))
-    }
-
-    if (patenteFilter.length > 0) {
-      filtered = filtered.filter(m => patenteFilter.includes(m.patente))
-    }
-    if (conductorFilter.length > 0) {
-      filtered = filtered.filter(m => conductorFilter.includes(m.conductor_responsable))
-    }
-    if (lugarFilter.length > 0) {
-      filtered = filtered.filter(m => lugarFilter.includes(m.lugar))
-    }
-    if (infraccionFilter.length > 0) {
-      filtered = filtered.filter(m => infraccionFilter.includes(m.infraccion))
-    }
-    if (semanaFilter.length > 0) {
-      filtered = filtered.filter(m => {
-        if (!m.created_at) return false
-        return semanaFilter.includes(getWeekNumber(m.created_at).toString())
-      })
-    }
-    if (ibuttonFilter.length > 0) {
-      filtered = filtered.filter(m => ibuttonFilter.includes(m.ibutton))
-    }
-    if (fechaInfraccionDesde) {
-      filtered = filtered.filter(m => {
-        if (!m.fecha_infraccion) return false
-        return m.fecha_infraccion >= fechaInfraccionDesde
-      })
-    }
-    if (fechaInfraccionHasta) {
-      filtered = filtered.filter(m => {
-        if (!m.fecha_infraccion) return false
-        // Añadimos T23:59:59 para incluir todo el día final
-        return m.fecha_infraccion <= `${fechaInfraccionHasta}T23:59:59`
-      })
-    }
-    if (fechaCargaDesde) {
-      filtered = filtered.filter(m => {
-        if (!m.created_at) return false
-        return m.created_at >= fechaCargaDesde
-      })
-    }
-    if (fechaCargaHasta) {
-      filtered = filtered.filter(m => {
-        if (!m.created_at) return false
-        return m.created_at <= `${fechaCargaHasta}T23:59:59`
-      })
-    }
-
-    return filtered
-  }, [multas, patenteFilter, conductorFilter, lugarFilter, infraccionFilter, semanaFilter, ibuttonFilter, obsFilter, importeFilter, fechaInfraccionDesde, fechaInfraccionHasta, fechaCargaDesde, fechaCargaHasta])
+  // Filtrar registros (Resultado final)
+  const multasFiltradas = useMemo(() => getFilteredData(), [getFilteredData])
 
   // Estadisticas
   const totalImporte = useMemo(() =>
@@ -449,11 +441,6 @@ export default function MultasModule() {
 
   // Filtros activos
   const activeFilters = [
-    ...(fechaCargaDesde || fechaCargaHasta ? [{
-      id: 'fecha_carga',
-      label: `Fecha Carga: ${fechaCargaDesde || '...'} - ${fechaCargaHasta || '...'}`,
-      onClear: () => { setFechaCargaDesde(null); setFechaCargaHasta(null) }
-    }] : []),
     ...(fechaInfraccionDesde || fechaInfraccionHasta ? [{
       id: 'fecha_infraccion',
       label: `Fecha Infracción: ${fechaInfraccionDesde || '...'} - ${fechaInfraccionHasta || '...'}`,
@@ -512,48 +499,10 @@ export default function MultasModule() {
     setImporteFilter([])
     setFechaInfraccionDesde(null)
     setFechaInfraccionHasta(null)
-    setFechaCargaDesde(null)
-    setFechaCargaHasta(null)
   }
 
   // Columnas
   const columns = useMemo<ColumnDef<Multa>[]>(() => [
-    {
-      accessorKey: 'created_at',
-      header: () => (
-        <ExcelDateRangeFilter
-          label="Fecha Carga"
-          startDate={fechaCargaDesde}
-          endDate={fechaCargaHasta}
-          onRangeChange={(start, end) => {
-            setFechaCargaDesde(start)
-            setFechaCargaHasta(end)
-          }}
-          filterId="fecha_carga"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => formatDateTime(row.original.created_at)
-    },
-    {
-      id: 'semana',
-      header: () => (
-        <ExcelColumnFilter
-          label="Sem."
-          options={semanasUnicas}
-          selectedValues={semanaFilter}
-          onSelectionChange={setSemanaFilter}
-          filterId="semana"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => {
-        if (!row.original.created_at) return '-'
-        return getWeekNumber(row.original.created_at)
-      }
-    },
     {
       accessorKey: 'fecha_infraccion',
       header: () => (
@@ -571,6 +520,24 @@ export default function MultasModule() {
         />
       ),
       cell: ({ row }) => formatDateTime(row.original.fecha_infraccion)
+    },
+    {
+      id: 'semana',
+      header: () => (
+        <ExcelColumnFilter
+          label="Sem."
+          options={semanasUnicas}
+          selectedValues={semanaFilter}
+          onSelectionChange={setSemanaFilter}
+          filterId="semana"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => {
+        if (!row.original.fecha_infraccion) return '-'
+        return getWeekNumber(row.original.fecha_infraccion) + 1
+      }
     },
     {
       accessorKey: 'patente',
@@ -727,7 +694,7 @@ export default function MultasModule() {
         </div>
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, fechaCargaDesde, fechaCargaHasta, openFilterId, obsFilter, importesUnicos, importeFilter])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter])
 
   // Exportar a Excel
   function handleExportar() {

@@ -49,6 +49,31 @@ export function AsignacionesActivasModule() {
     })
   }, [asignaciones, patenteFilter, productoFilter])
 
+  // Filtros externos para mostrar en la barra de filtros del DataTable
+  const externalFilters = useMemo(() => {
+    const filters: Array<{ id: string; label: string; onClear: () => void }> = []
+    if (patenteFilter.length > 0) {
+      filters.push({
+        id: 'patente',
+        label: `Patente: ${patenteFilter.length === 1 ? patenteFilter[0] : `${patenteFilter.length} seleccionados`}`,
+        onClear: () => setPatenteFilter([])
+      })
+    }
+    if (productoFilter.length > 0) {
+      filters.push({
+        id: 'producto',
+        label: `Producto: ${productoFilter.length === 1 ? productoFilter[0] : `${productoFilter.length} seleccionados`}`,
+        onClear: () => setProductoFilter([])
+      })
+    }
+    return filters
+  }, [patenteFilter, productoFilter])
+
+  const handleClearAllFilters = () => {
+    setPatenteFilter([])
+    setProductoFilter([])
+  }
+
   const loadAsignaciones = async () => {
     try {
       setLoading(true)
@@ -78,6 +103,7 @@ export function AsignacionesActivasModule() {
 
       if (fetchError) throw fetchError
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const transformed = (data || []).map((item: any) => ({
         id: item.id,
         vehiculo_id: item.vehiculos?.id || '',
@@ -91,6 +117,7 @@ export function AsignacionesActivasModule() {
       }))
 
       setAsignaciones(transformed)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       console.error('Error cargando asignaciones:', err)
       setError(err.message || 'Error al cargar asignaciones')
@@ -107,6 +134,7 @@ export function AsignacionesActivasModule() {
   }, [asignaciones])
 
   // Columnas
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const columns = useMemo<ColumnDef<AsignacionActiva, any>[]>(() => [
     {
       accessorKey: 'vehiculo_patente',
@@ -280,8 +308,10 @@ export function AsignacionesActivasModule() {
         emptyIcon={<Package size={48} />}
         emptyTitle="No hay herramientas asignadas"
         emptyDescription="Las herramientas asignadas a vehiculos apareceran aqui"
-pageSize={100}
+        pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
+        externalFilters={externalFilters}
+        onClearAllFilters={handleClearAllFilters}
       />
     </div>
   )
