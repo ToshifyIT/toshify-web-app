@@ -219,7 +219,7 @@ export function ExcelColumnFilter({
             {filteredOptions.length === 0 ? (
               <div className="dt-excel-filter-empty">Sin resultados</div>
             ) : (
-              filteredOptions.slice(0, 50).map(option => (
+              filteredOptions.map(option => (
                 <label
                   key={option}
                   className={`dt-column-filter-checkbox ${selectedValues.includes(option) ? 'selected' : ''}`}
