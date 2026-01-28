@@ -31,6 +31,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@react-google-maps/api": "^2.20.8",
     "@supabase/supabase-js": "^2.76.1",
     "@tanstack/react-table": "^8.21.3",
     "axios": "^1.13.2",
