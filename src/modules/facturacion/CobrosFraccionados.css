@@ -186,12 +186,40 @@
   background: #f1f8f4;
 }
 
+.cuotas-table tr.pagada {
+  background: #f0fdf4;
+}
+
 .cuotas-table tr.pendiente:hover {
   background: #fffbf0;
 }
 
 .cuotas-table td:last-child {
-  text-align: right;
+  text-align: center;
+}
+
+/* Boton de pago por cuota */
+.btn-pagar-cuota {
+  background: #16a34a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.2s;
+}
+
+.btn-pagar-cuota:hover {
+  background: #15803d;
+}
+
+.btn-pagar-cuota:active {
+  background: #166534;
 }
 
 /* Responsive */

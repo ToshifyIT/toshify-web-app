@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
@@ -1491,6 +1492,166 @@ export function ReporteFacturacionTab() {
     }
   }
 
+  // ==========================================
+  // REGISTRAR PAGO DE FACTURACIÓN SEMANAL
+  // ==========================================
+  async function registrarPagoFacturacion(facturacion: FacturacionConductor) {
+    const semanaNum = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+    const anioNum = periodo?.anio || getYear(semanaActual.inicio)
+
+    const hoy = new Date()
+    const semanaHoy = Math.ceil(
+      (hoy.getTime() - new Date(hoy.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000)
+    )
+    const anioHoy = hoy.getFullYear()
+
+    let semanaOptionsHtml = ''
+    for (let s = 1; s <= 52; s++) {
+      const selected = s === semanaHoy ? 'selected' : ''
+      semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
+    }
+
+    const saldoColor = facturacion.total_a_pagar > 0 ? '#DC2626' : '#16a34a'
+    const saldoLabel = facturacion.total_a_pagar > 0 ? 'Debe' : 'A Favor'
+
+    const { value: formValues } = await Swal.fire({
+      title: '<span style="font-size: 16px; font-weight: 600;">Registrar Pago Semanal</span>',
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">${facturacion.conductor_nombre}</div>
+            <div style="display: flex; gap: 12px; margin-top: 4px;">
+              <span style="color: #6B7280; font-size: 12px;">DNI: <strong style="color: #374151;">${facturacion.conductor_dni || '-'}</strong></span>
+              <span style="color: #6B7280; font-size: 12px;">Semana: <strong style="color: #374151;">S${semanaNum}/${anioNum}</strong></span>
+            </div>
+            <div style="margin-top: 6px; padding: 6px 8px; background: white; border-radius: 4px; border: 1px solid #E5E7EB;">
+              <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                <span>Alquiler:</span><span>${formatCurrency(facturacion.subtotal_alquiler)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                <span>Garantía:</span><span>${formatCurrency(facturacion.subtotal_garantia)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                <span>Cargos:</span><span>${formatCurrency(facturacion.subtotal_cargos)}</span>
+              </div>
+              ${facturacion.subtotal_descuentos > 0 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; color: #16a34a;">
+                <span>Descuentos:</span><span>-${formatCurrency(facturacion.subtotal_descuentos)}</span>
+              </div>` : ''}
+              ${facturacion.saldo_anterior !== 0 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; color: ${facturacion.saldo_anterior > 0 ? '#DC2626' : '#16a34a'};">
+                <span>Saldo Anterior:</span><span>${formatCurrency(facturacion.saldo_anterior)}</span>
+              </div>` : ''}
+              <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; margin-top: 4px; padding-top: 4px; border-top: 1px solid #E5E7EB; color: ${saldoColor};">
+                <span>TOTAL (${saldoLabel}):</span><span>${formatCurrency(Math.abs(facturacion.total_a_pagar))}</span>
+              </div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Semana pago:</label>
+              <select id="swal-semana" class="swal2-select" style="width: 100%; font-size: 14px;">
+                ${semanaOptionsHtml}
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Año:</label>
+              <select id="swal-anio" class="swal2-select" style="width: 100%; font-size: 14px;">
+                <option value="2025">2025</option>
+                <option value="${anioHoy}" selected>${anioHoy}</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a pagar:</label>
+            <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${Math.abs(facturacion.total_a_pagar)}">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
+            <input id="swal-ref" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Transferencia, Efectivo, Recibo #123">
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Registrar Pago',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#16a34a',
+      width: 420,
+      preConfirm: () => {
+        const semana = parseInt((document.getElementById('swal-semana') as HTMLSelectElement).value)
+        const anio = parseInt((document.getElementById('swal-anio') as HTMLSelectElement).value)
+        const monto = (document.getElementById('swal-monto') as HTMLInputElement).value
+        const referencia = (document.getElementById('swal-ref') as HTMLInputElement).value
+        if (!monto || parseFloat(monto) <= 0) {
+          Swal.showValidationMessage('Ingrese un monto válido')
+          return false
+        }
+        return { monto: parseFloat(monto), referencia, semana, anio }
+      }
+    })
+
+    if (!formValues) return
+
+    try {
+      // 1. Registrar pago en pagos_conductores
+      const { error: errorPago } = await (supabase.from('pagos_conductores') as any)
+        .insert({
+          conductor_id: facturacion.conductor_id,
+          tipo_cobro: 'facturacion_semanal',
+          referencia_id: facturacion.id,
+          referencia_tabla: 'facturacion_conductores',
+          numero_cuota: null,
+          monto: formValues.monto,
+          fecha_pago: new Date().toISOString(),
+          referencia: formValues.referencia || null,
+          semana: formValues.semana,
+          anio: formValues.anio,
+          conductor_nombre: facturacion.conductor_nombre
+        })
+
+      if (errorPago) throw errorPago
+
+      // 2. Actualizar saldo_actual en saldos_conductores
+      const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+        .select('id, saldo_actual')
+        .eq('conductor_id', facturacion.conductor_id)
+        .single()
+
+      if (saldoExistente) {
+        const nuevoSaldo = saldoExistente.saldo_actual + formValues.monto
+        await (supabase.from('saldos_conductores') as any)
+          .update({
+            saldo_actual: nuevoSaldo,
+            ultima_actualizacion: new Date().toISOString()
+          })
+          .eq('id', saldoExistente.id)
+      }
+
+      // 3. Registrar en abonos_conductores como audit trail
+      await (supabase.from('abonos_conductores') as any).insert({
+        conductor_id: facturacion.conductor_id,
+        tipo: 'abono',
+        monto: formValues.monto,
+        concepto: `Pago facturación S${semanaNum}/${anioNum}`,
+        referencia: formValues.referencia || null,
+        semana: formValues.semana,
+        anio: formValues.anio,
+        fecha_abono: new Date().toISOString()
+      })
+
+      // 4. Si el pago cubre el total, marcar facturación como pagada
+      if (formValues.monto >= Math.abs(facturacion.total_a_pagar) && !facturacion.id.startsWith('preview-')) {
+        await (supabase.from('facturacion_conductores') as any)
+          .update({ estado: 'pagado' })
+          .eq('id', facturacion.id)
+      }
+
+      showSuccess('Pago Registrado', `${facturacion.conductor_nombre} - ${formatCurrency(formValues.monto)}`)
+    } catch (error: any) {
+      console.error('Error registrando pago:', error)
+      Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
+    }
+  }
+
   // Navegación de semanas
   function semanaAnterior() {
     const nuevaFecha = subWeeks(semanaActual.inicio, 1)
@@ -2145,7 +2306,7 @@ export function ReporteFacturacionTab() {
       setSiFacturaPreviewData(filasPreview)
       setShowSiFacturaPreview(true)
 
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo cargar el preview de SiFactura', 'error')
     } finally {
       setLoadingSiFacturaPreview(false)
@@ -2250,7 +2411,7 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Facturación Exportada', `Se descargó: ${nombreArchivo} (${filasExport.length} líneas)`)
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo exportar el reporte de facturación', 'error')
     } finally {
       setExportingSiFactura(false)
@@ -2662,7 +2823,7 @@ export function ReporteFacturacionTab() {
       setSiFacturaPreviewData(filasPreview)
       setShowSiFacturaPreview(true)
 
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo cargar el preview de Facturación', 'error')
     } finally {
       setLoadingSiFacturaPreview(false)
@@ -3089,7 +3250,7 @@ export function ReporteFacturacionTab() {
       await cargarFacturacion()
 
       return true
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
       return false
     }
@@ -3170,7 +3331,7 @@ export function ReporteFacturacionTab() {
       await prepararSiFacturaPreview()
 
       return true
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
       return false
     }
@@ -3237,7 +3398,7 @@ export function ReporteFacturacionTab() {
       await prepararSiFacturaPreview()
 
       return true
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo enlazar el concepto', 'error')
       return false
     }
@@ -3555,7 +3716,7 @@ export function ReporteFacturacionTab() {
 
       setCabifyPreviewData(previewRows)
       setShowCabifyPreview(true)
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo generar el preview de Cabify', 'error')
     } finally {
       setLoadingCabifyPreview(false)
@@ -3676,7 +3837,7 @@ export function ReporteFacturacionTab() {
 
       setCabifyPreviewData(previewRows)
       setShowCabifyPreview(true)
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo generar el preview de Cabify', 'error')
     } finally {
       setLoadingCabifyPreview(false)
@@ -3750,7 +3911,7 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Reporte Cabify Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo exportar el reporte de Cabify', 'error')
     } finally {
       setExportingCabify(false)
@@ -3808,7 +3969,7 @@ export function ReporteFacturacionTab() {
       // Actualizar el estado local con los datos guardados
       setCabifyPreviewData(updatedData)
       return true
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
       return false
     }
@@ -4284,14 +4445,26 @@ export function ReporteFacturacionTab() {
       id: 'acciones',
       header: '',
       cell: ({ row }) => (
-        <button
-          className="dt-btn-action dt-btn-view"
-          onClick={(e) => { e.stopPropagation(); verDetalle(row.original) }}
-          data-tooltip="Ver detalle"
-          style={{ padding: '6px' }}
-        >
-          <Eye size={14} />
-        </button>
+        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+          <button
+            className="dt-btn-action dt-btn-view"
+            onClick={(e) => { e.stopPropagation(); verDetalle(row.original) }}
+            data-tooltip="Ver detalle"
+            style={{ padding: '6px' }}
+          >
+            <Eye size={14} />
+          </button>
+          {row.original.total_a_pagar > 0 && (
+            <button
+              className="dt-btn-action"
+              onClick={(e) => { e.stopPropagation(); registrarPagoFacturacion(row.original) }}
+              data-tooltip="Registrar pago"
+              style={{ padding: '6px', color: '#16a34a' }}
+            >
+              <DollarSign size={14} />
+            </button>
+          )}
+        </div>
       )
     }
   ], [excesos, modoVistaPrevia, conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, patenteFilter, patenteSearch, patentesFiltradas, openColumnFilter])
@@ -4974,6 +5147,16 @@ export function ReporteFacturacionTab() {
               <button className="fact-btn-secondary" onClick={() => setShowDetalle(false)}>
                 Cerrar
               </button>
+              {detalleFacturacion && detalleFacturacion.total_a_pagar > 0 && (
+                <button
+                  className="fact-btn-primary"
+                  onClick={() => { setShowDetalle(false); registrarPagoFacturacion(detalleFacturacion) }}
+                  style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                >
+                  <DollarSign size={16} />
+                  Registrar Pago
+                </button>
+              )}
               <button
                 className="fact-btn-primary"
                 onClick={exportarPDF}

@@ -72,6 +72,10 @@ function getAreaPorRol(roleName: string | undefined | null): string {
   if (rol.includes('logist') || rol.includes('operador') || rol.includes('operacion')) {
     return 'Logística'
   }
+  // Roles de marketing
+  if (rol.includes('marketing')) {
+    return 'Marketing'
+  }
 
   return ''
 }
@@ -92,6 +96,10 @@ function getAreaResponsablePorRol(roleName: string | undefined | null): string {
   // Roles de logística/operaciones
   if (rol.includes('logist') || rol.includes('operador') || rol.includes('operacion')) {
     return 'LOGISTICA'
+  }
+  // Roles de marketing
+  if (rol.includes('marketing')) {
+    return 'MARKETING'
   }
 
   return ''
@@ -3873,6 +3881,7 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               <option value="Data Entry">Data Entry</option>
               <option value="Administración">Administración</option>
               <option value="Siniestros">Siniestros</option>
+              <option value="Marketing">Marketing</option>
             </select>
           </div>
           <div className="form-group">
