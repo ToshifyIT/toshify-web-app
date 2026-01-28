@@ -39,7 +39,8 @@ const ESTADO_LABELS: Record<string, string> = {
   'ROBO': 'Robo',
   'DESTRUCCION_TOTAL': 'Destrucción',
   'JUBILADO': 'Jubilado',
-  'PROGRAMADO': 'Programado'
+  'PROGRAMADO': 'Programado',
+  'DEVUELTO_PROVEEDOR': 'Dev. Proveedor'
 }
 
 
@@ -381,8 +382,10 @@ export function VehicleManagement() {
         nuevoEstadoCodigo = estadoSeleccionado?.codigo || ''
       }
 
-      // Si cambia DE "EN_USO" A otro estado, debe finalizar asignaciones
-      const debeFinalizarAsignaciones = estadoAnteriorCodigo === 'EN_USO' && !estadosOperativos.includes(nuevoEstadoCodigo)
+      // Si cambia DE "EN_USO" A otro estado, o cambia A "DEVUELTO_PROVEEDOR" desde cualquier estado → finalizar asignaciones
+      const debeFinalizarAsignaciones =
+        (estadoAnteriorCodigo === 'EN_USO' && !estadosOperativos.includes(nuevoEstadoCodigo)) ||
+        nuevoEstadoCodigo === 'DEVUELTO_PROVEEDOR'
 
       // Si cambia a un estado que finaliza asignaciones, verificar si hay asignaciones activas
       if (debeFinalizarAsignaciones) {
