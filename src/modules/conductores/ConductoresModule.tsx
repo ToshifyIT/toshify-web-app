@@ -2507,7 +2507,7 @@ function ModalEditar({
         <div className="section-title">Información Fiscal</div>
 
         <div className="form-row">
-          <div className="form-group">
+          <div className="form-group" style={{ flex: 2 }}>
             <label className="form-label">CBU</label>
             <input
               type="text"
@@ -2521,31 +2521,46 @@ function ModalEditar({
               disabled={saving}
             />
           </div>
-          <div className="form-group" style={{ display: "flex", alignItems: "flex-end" }}>
-            <label
+          <div className="form-group" style={{ flex: 1 }}>
+            <label className="form-label">Régimen</label>
+            <div
+              onClick={() => !saving && setFormData({ ...formData, monotributo: !formData.monotributo })}
               style={{
                 display: "flex",
                 alignItems: "center",
-                cursor: "pointer",
-                marginBottom: "8px",
+                gap: "10px",
+                padding: "10px 14px",
+                backgroundColor: formData.monotributo ? "rgba(16, 185, 129, 0.1)" : "var(--bg-tertiary)",
+                border: formData.monotributo ? "1px solid #10B981" : "1px solid var(--border-primary)",
+                borderRadius: "8px",
+                cursor: saving ? "not-allowed" : "pointer",
+                transition: "all 0.2s ease",
+                opacity: saving ? 0.6 : 1
               }}
             >
-              <input
-                type="checkbox"
-                className="form-checkbox"
-                checked={formData.monotributo}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    monotributo: e.target.checked,
-                  })
-                }
-                disabled={saving}
-              />
-              <span style={{ fontSize: "14px", fontWeight: "500", marginLeft: "8px" }}>
+              <div
+                style={{
+                  width: "20px",
+                  height: "20px",
+                  borderRadius: "4px",
+                  backgroundColor: formData.monotributo ? "#10B981" : "transparent",
+                  border: formData.monotributo ? "none" : "2px solid var(--border-secondary)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                {formData.monotributo && (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
+              <span style={{ fontSize: "14px", fontWeight: "500", color: formData.monotributo ? "#10B981" : "var(--text-primary)" }}>
                 Monotributo
               </span>
-            </label>
+            </div>
           </div>
         </div>
 
