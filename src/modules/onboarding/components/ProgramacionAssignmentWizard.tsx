@@ -1,6 +1,8 @@
 // src/modules/onboarding/components/ProgramacionAssignmentWizard.tsx
 // Wizard visual para crear nuevas programaciones de entregas
 // Basado en AssignmentWizard con drag & drop dual conductor
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useMemo } from 'react'
 import { X, Calendar, User, ChevronRight, Check, Sun, Moon } from 'lucide-react'
@@ -149,6 +151,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const [conductorSearch, setConductorSearch] = useState('')
   const [conductorStatusFilter, setConductorStatusFilter] = useState<string>('')
   const [conductorTurnoFilter, setConductorTurnoFilter] = useState<string>('')
+  const [conductoresDelVehiculoActual, setConductoresDelVehiculoActual] = useState<string[]>([])
 
   const [formData, setFormData] = useState<ProgramacionData>(() => {
     // Si hay datos de edición, pre-cargar
@@ -513,40 +516,61 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       if (asignacionData) {
         const asigData = asignacionData as any
         const conductoresAsig = asigData.asignaciones_conductores || []
-        
-        let updates: Partial<ProgramacionData> = {}
-        
-        if (asigData.horario === 'CARGO') {
-          const conductorCargo = conductoresAsig[0]?.conductores
-          if (conductorCargo) {
-            updates = {
-              conductor_id: conductorCargo.id,
-              conductor_nombre: `${conductorCargo.nombres} ${conductorCargo.apellidos}`,
-              conductor_dni: conductorCargo.numero_dni || ''
+
+        // Guardar los IDs de conductores que ya están asignados a este vehículo
+        // para que aparezcan disponibles en la lista aunque tengan asignación activa
+        const conductorIds = conductoresAsig
+          .map((c: any) => c.conductor_id)
+          .filter((id: string) => id)
+        setConductoresDelVehiculoActual(conductorIds)
+
+        // Solo pre-llenar los campos si la modalidad seleccionada coincide con la del vehículo
+        // Si el usuario cambió de CARGO a TURNO (o viceversa), no pre-llenar para que pueda elegir
+        const modalidadSeleccionada = formData.modalidad
+        const modalidadVehiculo = asigData.horario
+
+        // Si la modalidad coincide, pre-llenar los campos del conductor
+        if (modalidadSeleccionada === modalidadVehiculo) {
+          let updates: Partial<ProgramacionData> = {}
+
+          if (asigData.horario === 'CARGO') {
+            const conductorCargo = conductoresAsig[0]?.conductores
+            if (conductorCargo) {
+              updates = {
+                conductor_id: conductorCargo.id,
+                conductor_nombre: `${conductorCargo.nombres} ${conductorCargo.apellidos}`,
+                conductor_dni: conductorCargo.numero_dni || ''
+              }
+            }
+          } else {
+            const diurnoData = conductoresAsig.find((c: any) => c.horario === 'diurno')
+            const nocturnoData = conductoresAsig.find((c: any) => c.horario === 'nocturno')
+
+            if (diurnoData?.conductores) {
+              updates.conductor_diurno_id = diurnoData.conductores.id
+              updates.conductor_diurno_nombre = `${diurnoData.conductores.nombres} ${diurnoData.conductores.apellidos}`
+              updates.conductor_diurno_dni = diurnoData.conductores.numero_dni || ''
+            }
+            if (nocturnoData?.conductores) {
+              updates.conductor_nocturno_id = nocturnoData.conductores.id
+              updates.conductor_nocturno_nombre = `${nocturnoData.conductores.nombres} ${nocturnoData.conductores.apellidos}`
+              updates.conductor_nocturno_dni = nocturnoData.conductores.numero_dni || ''
             }
           }
-        } else {
-          const diurnoData = conductoresAsig.find((c: any) => c.horario === 'diurno')
-          const nocturnoData = conductoresAsig.find((c: any) => c.horario === 'nocturno')
-          
-          if (diurnoData?.conductores) {
-            updates.conductor_diurno_id = diurnoData.conductores.id
-            updates.conductor_diurno_nombre = `${diurnoData.conductores.nombres} ${diurnoData.conductores.apellidos}`
-            updates.conductor_diurno_dni = diurnoData.conductores.numero_dni || ''
-          }
-          if (nocturnoData?.conductores) {
-            updates.conductor_nocturno_id = nocturnoData.conductores.id
-            updates.conductor_nocturno_nombre = `${nocturnoData.conductores.nombres} ${nocturnoData.conductores.apellidos}`
-            updates.conductor_nocturno_dni = nocturnoData.conductores.numero_dni || ''
+
+          if (Object.keys(updates).length > 0) {
+            setFormData(prev => ({ ...prev, ...updates }))
           }
         }
-        
-        if (Object.keys(updates).length > 0) {
-          setFormData(prev => ({ ...prev, ...updates }))
-        }
+        // Si la modalidad NO coincide, los conductores del vehículo ya están en conductoresDelVehiculoActual
+        // y aparecerán en la lista para que el usuario los seleccione manualmente
+      } else {
+        // No hay asignación activa, limpiar lista de conductores del vehículo
+        setConductoresDelVehiculoActual([])
       }
     } catch {
-      // Si no hay asignacion activa, no pasa nada
+      // Si no hay asignacion activa, limpiar lista
+      setConductoresDelVehiculoActual([])
     }
   }
 
@@ -927,7 +951,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     const searchLower = conductorSearch.toLowerCase()
     return conductores
       .filter(c => {
-        // Excluir conductores ya seleccionados
+        // Excluir conductores ya seleccionados en los slots
         if (c.id === formData.conductor_diurno_id || c.id === formData.conductor_nocturno_id || c.id === formData.conductor_id) return false
 
         const matchesSearch = !searchLower ||
@@ -935,7 +959,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           c.apellidos.toLowerCase().includes(searchLower) ||
           (c.numero_dni || '').includes(searchLower)
 
-        // Filtro por estado
+        // Si el conductor ya está asignado al vehículo seleccionado, SIEMPRE mostrarlo
+        // (solo respetando la búsqueda, ignorando otros filtros)
+        const esDelVehiculoActual = conductoresDelVehiculoActual.includes(c.id)
+        if (esDelVehiculoActual && matchesSearch) {
+          return true
+        }
+
+        // Filtro por estado (solo para conductores que NO son del vehículo actual)
         let matchesStatus = true
         if (conductorStatusFilter === 'disponible') {
           matchesStatus = !c.tieneAsignacionActiva && !c.tieneAsignacionProgramada
@@ -958,12 +989,17 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         return matchesSearch && matchesStatus && matchesTurno
       })
       .sort((a, b) => {
-        // Disponibles primero
+        // Conductores del vehículo actual primero
+        const aEsDelVehiculo = conductoresDelVehiculoActual.includes(a.id)
+        const bEsDelVehiculo = conductoresDelVehiculoActual.includes(b.id)
+        if (aEsDelVehiculo && !bEsDelVehiculo) return -1
+        if (!aEsDelVehiculo && bEsDelVehiculo) return 1
+        // Disponibles segundo
         if (!a.tieneAsignacionActiva && b.tieneAsignacionActiva) return -1
         if (a.tieneAsignacionActiva && !b.tieneAsignacionActiva) return 1
         return a.apellidos.localeCompare(b.apellidos)
       })
-  }, [conductores, conductorSearch, conductorStatusFilter, conductorTurnoFilter, formData.conductor_diurno_id, formData.conductor_nocturno_id, formData.conductor_id])
+  }, [conductores, conductorSearch, conductorStatusFilter, conductorTurnoFilter, formData.conductor_diurno_id, formData.conductor_nocturno_id, formData.conductor_id, conductoresDelVehiculoActual])
 
   return (
     <>
