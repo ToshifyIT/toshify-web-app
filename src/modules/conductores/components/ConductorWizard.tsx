@@ -1,4 +1,5 @@
 // src/modules/conductores/components/ConductorWizard.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
 import { User, CreditCard, FileCheck, Phone, Shield, Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 
@@ -80,11 +81,11 @@ export function ConductorWizard({
       if (!formData.nombres.trim()) newErrors.nombres = 'Requerido'
       if (!formData.apellidos.trim()) newErrors.apellidos = 'Requerido'
       if (!formData.numero_dni.trim()) newErrors.numero_dni = 'Requerido'
+      if (!formData.numero_cuit.trim()) newErrors.numero_cuit = 'Requerido'
       if (!formData.fecha_nacimiento) newErrors.fecha_nacimiento = 'Requerido'
       if (!formData.nacionalidad_id) newErrors.nacionalidad_id = 'Requerido'
       if (!formData.estado_civil_id) newErrors.estado_civil_id = 'Requerido'
       if (!formData.zona.trim()) newErrors.zona = 'Requerido'
-      // CUIT (numero_cuit) es opcional
     }
 
     if (step === 3) {
@@ -128,7 +129,7 @@ export function ConductorWizard({
               <User size={20} />
               <h3>Información Personal</h3>
             </div>
-            <p className="step-description">Datos básicos del conductor. Todos los campos son obligatorios excepto CUIL.</p>
+            <p className="step-description">Datos básicos del conductor. Todos los campos son obligatorios.</p>
 
             <div className="form-row">
               <div className="form-group">
@@ -168,15 +169,16 @@ export function ConductorWizard({
                 {errors.numero_dni && <span className="error-message">{errors.numero_dni}</span>}
               </div>
               <div className="form-group">
-                <label className="form-label">CUIL</label>
+                <label className="form-label">CUIL *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.numero_cuit ? 'input-error' : ''}`}
                   value={formData.numero_cuit}
                   onChange={(e) => setFormData({ ...formData, numero_cuit: e.target.value })}
                   disabled={saving}
-                  placeholder="Opcional"
+                  placeholder="20-12345678-9"
                 />
+                {errors.numero_cuit && <span className="error-message">{errors.numero_cuit}</span>}
               </div>
               <div className="form-group">
                 <label className="form-label">Fecha de Nacimiento *</label>

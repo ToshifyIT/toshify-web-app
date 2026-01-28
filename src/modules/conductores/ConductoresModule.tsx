@@ -881,6 +881,17 @@ export function ConductoresModule() {
 
     if (!selectedConductor) return;
 
+    // Validar CUIL obligatorio
+    if (!formData.numero_cuit?.trim()) {
+      Swal.fire({
+        icon: "warning",
+        title: "CUIL requerido",
+        text: "El CUIL es obligatorio para la facturación mensual",
+        confirmButtonColor: "#E63946",
+      });
+      return;
+    }
+
     // Detectar si está cambiando a estado "Baja"
     const bajaEstadoId = estadosConductor.find(e => e.codigo?.toLowerCase() === 'baja')?.id;
     const isChangingToBaja = bajaEstadoId &&
@@ -2407,7 +2418,7 @@ function ModalEditar({
             />
           </div>
           <div className="form-group">
-            <label className="form-label">CUIT</label>
+            <label className="form-label">CUIL *</label>
             <input
               type="text"
               className="form-input"
@@ -2416,6 +2427,7 @@ function ModalEditar({
                 setFormData({ ...formData, numero_cuit: e.target.value })
               }
               disabled={saving}
+              placeholder="20-12345678-9"
             />
           </div>
           <div className="form-group">
