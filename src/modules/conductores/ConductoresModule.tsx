@@ -88,6 +88,7 @@ export function ConductoresModule() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [selectedConductor, setSelectedConductor] =
     useState<ConductorWithRelations | null>(null);
 
@@ -882,7 +883,13 @@ export function ConductoresModule() {
     if (!selectedConductor) return;
 
     // Validar CUIL obligatorio
+    const newErrors: Record<string, string> = {};
     if (!formData.numero_cuit?.trim()) {
+      newErrors.numero_cuit = 'Requerido para facturación';
+    }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setEditErrors(newErrors);
       Swal.fire({
         icon: "warning",
         title: "CUIL requerido",
@@ -891,6 +898,7 @@ export function ConductoresModule() {
       });
       return;
     }
+    setEditErrors({});
 
     // Detectar si está cambiando a estado "Baja"
     const bajaEstadoId = estadosConductor.find(e => e.codigo?.toLowerCase() === 'baja')?.id;
@@ -2243,6 +2251,8 @@ export function ConductoresModule() {
           estadosConductor={estadosConductor}
           estadosLicencia={estadosLicencia}
           tiposLicencia={tiposLicencia}
+          editErrors={editErrors}
+          setEditErrors={setEditErrors}
         />
       )}
       {showDeleteModal && selectedConductor && (
@@ -2357,6 +2367,8 @@ function ModalEditar({
   estadosConductor,
   estadosLicencia,
   tiposLicencia,
+  editErrors,
+  setEditErrors,
 }: any) {
   return (
     <div
@@ -2421,14 +2433,16 @@ function ModalEditar({
             <label className="form-label">CUIL *</label>
             <input
               type="text"
-              className="form-input"
+              className={`form-input ${editErrors.numero_cuit ? 'input-error' : ''}`}
               value={formData.numero_cuit}
-              onChange={(e) =>
-                setFormData({ ...formData, numero_cuit: e.target.value })
-              }
+              onChange={(e) => {
+                setFormData({ ...formData, numero_cuit: e.target.value });
+                if (editErrors.numero_cuit) setEditErrors({});
+              }}
               disabled={saving}
               placeholder="20-12345678-9"
             />
+            {editErrors.numero_cuit && <span className="error-message">{editErrors.numero_cuit}</span>}
           </div>
           <div className="form-group">
             <label className="form-label">Fecha de Nacimiento</label>
