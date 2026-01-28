@@ -3059,13 +3059,13 @@ function ModalDetalles({
     fetchVehiculosAsignados();
   }, [selectedConductor?.id]);
 
-  // Helper para obtener el estado badge de asignación
-  const getAsignacionEstadoBadge = (estado: string) => {
+  // Helper para obtener el estado badge del conductor en la asignación
+  const getConductorAsignacionEstadoBadge = (estado: string) => {
     const estados: Record<string, { bg: string; color: string; label: string }> = {
-      activa: { bg: 'rgba(34, 197, 94, 0.1)', color: '#22C55E', label: 'Activa' },
-      programado: { bg: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', label: 'Programada' },
-      cancelada: { bg: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', label: 'Cancelada' },
-      finalizada: { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: 'Finalizada' },
+      activo: { bg: 'rgba(34, 197, 94, 0.1)', color: '#22C55E', label: 'Activa' },
+      asignado: { bg: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', label: 'Asignado' },
+      cancelado: { bg: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', label: 'Cancelada' },
+      completado: { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: 'Finalizada' },
     };
     return estados[estado] || { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: estado };
   };
@@ -3341,7 +3341,7 @@ function ModalDetalles({
               {vehiculosAsignados.map((item) => {
                 const asig = item.asignaciones;
                 const vehiculo = asig?.vehiculos;
-                const estadoBadge = getAsignacionEstadoBadge(asig?.estado);
+                const estadoBadge = getConductorAsignacionEstadoBadge(item.estado);
                 const turnoBadge = getTurnoBadge(item.horario);
                 const isActiva = asig?.estado === 'activa';
 
