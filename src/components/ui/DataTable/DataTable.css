@@ -685,8 +685,9 @@
 /* Action Buttons Container - Toshify Design System */
 .dt-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   justify-content: center;
+  align-items: center;
   flex-wrap: nowrap;
 }
 
@@ -785,7 +786,7 @@
 
 /* Action Buttons - Toshify Design System */
 .dt-btn-action {
-  padding: 6px;
+  padding: 8px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -797,11 +798,13 @@
   color: var(--text-tertiary);
   position: relative;
   flex-shrink: 0;
+  min-width: 32px;
+  min-height: 32px;
 }
 
 .dt-btn-action svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
 .dt-btn-action:hover {

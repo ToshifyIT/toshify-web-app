@@ -92,13 +92,13 @@ interface Asignacion {
 }
 
 interface ConductorTurno {
-  diurno: { id: string; nombre: string; confirmado: boolean } | null
-  nocturno: { id: string; nombre: string; confirmado: boolean } | null
+  diurno: { id: string; nombre: string; confirmado: boolean; cancelado?: boolean } | null
+  nocturno: { id: string; nombre: string; confirmado: boolean; cancelado?: boolean } | null
 }
 
 interface ExpandedAsignacion extends Asignacion {
   conductoresTurno: ConductorTurno | null
-  conductorCargo: { id: string; nombre: string; confirmado: boolean } | null
+  conductorCargo: { id: string; nombre: string; confirmado: boolean; cancelado?: boolean } | null
 }
 
 // Helper: Convierte fecha ISO UTC a string YYYY-MM-DD en zona horaria LOCAL
@@ -521,9 +521,22 @@ export function AsignacionesModule() {
         break
     }
 
-    // Ordenar: programados primero, luego por fecha_programada ascendente
+    // Ordenar según el contexto:
+    // - Para filtros históricos (completadas, canceladas): más recientes primero (descendente)
+    // - Para vista operativa (programadas, activas, sin filtro): próximas primero (ascendente)
+    const esVistaHistorica = activeStatCard === 'completadas' || activeStatCard === 'canceladas'
+    
     return result.sort((a, b) => {
-      // Prioridad de estados: programado > activa > otros
+      if (esVistaHistorica) {
+        // Vista histórica: ordenar por fecha de entrega/cancelación, más recientes primero
+        const fechaA = a.fecha_inicio || a.fecha_fin || a.created_at
+        const fechaB = b.fecha_inicio || b.fecha_fin || b.created_at
+        const timeA = fechaA ? new Date(fechaA).getTime() : 0
+        const timeB = fechaB ? new Date(fechaB).getTime() : 0
+        return timeB - timeA // Descendente (más recientes primero)
+      }
+      
+      // Vista operativa: prioridad por estado, luego por fecha programada
       const estadoPrioridad: Record<string, number> = { programado: 0, activa: 1, finalizada: 2, cancelada: 3 }
       const prioA = estadoPrioridad[a.estado] ?? 99
       const prioB = estadoPrioridad[b.estado] ?? 99
@@ -551,26 +564,19 @@ export function AsignacionesModule() {
       const conductores = asignacion.asignaciones_conductores || []
       const esAsignacionFinalizada = asignacion.estado === 'finalizada' || asignacion.estado === 'completada'
       
-      // Para asignaciones ACTIVAS: filtrar solo conductores activos (no completados/finalizados)
-      // Para asignaciones FINALIZADAS: mostrar los últimos conductores (histórico)
-      // Para asignaciones ACTIVAS: filtrar conductores que ya no están (completado, finalizado, cancelado)
-      const conductoresParaMostrar = esAsignacionFinalizada
-        ? conductores // Mostrar todos los conductores (histórico)
-        : conductores.filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
-
       // Para modalidad TURNO: extraer conductor diurno y nocturno
+      // IMPORTANTE: Para trazabilidad, mostramos TODOS los conductores (incluidos cancelados)
+      // pero marcamos los cancelados para mostrarlos diferente en la UI
       if (asignacion.horario === 'TURNO') {
-        // Para asignaciones finalizadas, buscar el último conductor de cada turno (el más reciente)
         const conductoresDiurno = conductores.filter(ac => ac.horario === 'diurno')
         const conductoresNocturno = conductores.filter(ac => ac.horario === 'nocturno')
         
-        const diurno = esAsignacionFinalizada
-          ? conductoresDiurno[conductoresDiurno.length - 1] // El último agregado
-          : conductoresParaMostrar.find(ac => ac.horario === 'diurno')
+        // Buscar el conductor activo primero, si no hay, mostrar el último (cancelado o no)
+        const diurnoActivo = conductoresDiurno.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
+        const diurno = diurnoActivo || (esAsignacionFinalizada ? conductoresDiurno[conductoresDiurno.length - 1] : conductoresDiurno.find(ac => ac.estado === 'cancelado') || conductoresDiurno[conductoresDiurno.length - 1])
         
-        const nocturno = esAsignacionFinalizada
-          ? conductoresNocturno[conductoresNocturno.length - 1] // El último agregado
-          : conductoresParaMostrar.find(ac => ac.horario === 'nocturno')
+        const nocturnoActivo = conductoresNocturno.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
+        const nocturno = nocturnoActivo || (esAsignacionFinalizada ? conductoresNocturno[conductoresNocturno.length - 1] : conductoresNocturno.find(ac => ac.estado === 'cancelado') || conductoresNocturno[conductoresNocturno.length - 1])
 
         return {
           ...asignacion,
@@ -578,12 +584,14 @@ export function AsignacionesModule() {
             diurno: diurno ? {
               id: diurno.id,
               nombre: `${diurno.conductores.nombres} ${diurno.conductores.apellidos}`,
-              confirmado: diurno.confirmado || false
+              confirmado: diurno.confirmado || false,
+              cancelado: diurno.estado === 'cancelado'
             } : null,
             nocturno: nocturno ? {
               id: nocturno.id,
               nombre: `${nocturno.conductores.nombres} ${nocturno.conductores.apellidos}`,
-              confirmado: nocturno.confirmado || false
+              confirmado: nocturno.confirmado || false,
+              cancelado: nocturno.estado === 'cancelado'
             } : null
           },
           conductorCargo: null
@@ -591,16 +599,18 @@ export function AsignacionesModule() {
       }
 
       // Para modalidad A CARGO: mostrar conductor
-      const primerConductor = esAsignacionFinalizada
-        ? conductores[conductores.length - 1] // El último agregado (histórico)
-        : conductoresParaMostrar[0]
+      // Buscar conductor activo primero, si no hay, mostrar el último
+      const conductorActivo = conductores.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
+      const primerConductor = conductorActivo || (esAsignacionFinalizada ? conductores[conductores.length - 1] : conductores.find(ac => ac.estado === 'cancelado') || conductores[conductores.length - 1])
+      
       return {
         ...asignacion,
         conductoresTurno: null,
         conductorCargo: primerConductor ? {
           id: primerConductor.id,
           nombre: `${primerConductor.conductores.nombres} ${primerConductor.conductores.apellidos}`,
-          confirmado: primerConductor.confirmado || false
+          confirmado: primerConductor.confirmado || false,
+          cancelado: primerConductor.estado === 'cancelado'
         } : null
       }
     })
@@ -1394,6 +1404,14 @@ export function AsignacionesModule() {
         // Si es A CARGO, mostrar solo el conductor
         if (horario === 'CARGO' || !horario) {
           if (conductorCargo) {
+            // Si está cancelado, mostrar con estilo tachado
+            if (conductorCargo.cancelado) {
+              return (
+                <span className="asig-conductor-compacto" style={{ textDecoration: 'line-through', color: 'var(--color-error)', opacity: 0.7 }} title="Conductor cancelado">
+                  {conductorCargo.nombre}
+                </span>
+              )
+            }
             return <span className="asig-conductor-compacto">{conductorCargo.nombre}</span>
           }
           return <span className="asig-sin-conductor">Sin asignar</span>
@@ -1405,11 +1423,19 @@ export function AsignacionesModule() {
 
         return (
           <div className="asig-conductores-compact">
-            <span className={diurno ? 'asig-conductor-turno asig-turno-diurno' : 'asig-turno-vacante asig-turno-diurno'}>
+            <span 
+              className={diurno ? 'asig-conductor-turno asig-turno-diurno' : 'asig-turno-vacante asig-turno-diurno'}
+              style={diurno?.cancelado ? { textDecoration: 'line-through', color: 'var(--color-error)', opacity: 0.7 } : undefined}
+              title={diurno?.cancelado ? 'Conductor cancelado' : undefined}
+            >
               <span className="asig-turno-label asig-label-diurno">D</span>
               {diurno ? diurno.nombre : 'Vacante'}
             </span>
-            <span className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}>
+            <span 
+              className={nocturno ? 'asig-conductor-turno asig-turno-nocturno' : 'asig-turno-vacante asig-turno-nocturno'}
+              style={nocturno?.cancelado ? { textDecoration: 'line-through', color: 'var(--color-error)', opacity: 0.7 } : undefined}
+              title={nocturno?.cancelado ? 'Conductor cancelado' : undefined}
+            >
               <span className="asig-turno-label asig-label-nocturno">N</span>
               {nocturno ? nocturno.nombre : 'Vacante'}
             </span>
