@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/components/shared/PenalidadForm.tsx
 // Componente compartido para formulario de penalidades
 // Usado en: IncidenciasModule y SiniestroSeguimiento
@@ -390,6 +391,7 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, tiposCobr
               <option value="DATA ENTRY">Data Entry</option>
               <option value="ADMINISTRACION">Administracion</option>
               <option value="SINIESTROS">Siniestros</option>
+              <option value="MARKETING">Marketing</option>
             </select>
           </div>
         </div>

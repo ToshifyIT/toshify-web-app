@@ -100,6 +100,8 @@ export default function MultasModule() {
   const [lugarFilter, setLugarFilter] = useState<string[]>([])
   const [infraccionFilter, setInfraccionFilter] = useState<string[]>([])
   const [semanaFilter, setSemanaFilter] = useState<string[]>([])
+  const [obsFilter, setObsFilter] = useState<string[]>([])
+  const [importeFilter, setImporteFilter] = useState<string[]>([])
   const [fechaInfraccionDesde, setFechaInfraccionDesde] = useState<string | null>(null)
   const [fechaInfraccionHasta, setFechaInfraccionHasta] = useState<string | null>(null)
   const [fechaCargaDesde, setFechaCargaDesde] = useState<string | null>(null)
@@ -184,7 +186,7 @@ export default function MultasModule() {
   , [multas])
 
   const infraccionesUnicas = useMemo(() =>
-    [...new Set(multas.map(m => m.detalle).filter(Boolean))].sort()
+    [...new Set(multas.map(m => m.infraccion).filter(Boolean))].sort()
   , [multas])
 
   const semanasUnicas = useMemo(() => {
@@ -201,9 +203,27 @@ export default function MultasModule() {
     [...new Set(multas.map(m => m.ibutton).filter(Boolean))].sort()
   , [multas])
 
+  const obsOptions = ['Sin observaciones', 'Con observaciones']
+
+  const importesUnicos = useMemo(() =>
+    [...new Set(multas.map(m => String(m.importe || '')))].filter(Boolean).sort()
+  , [multas])
+
   // Filtrar registros
   const multasFiltradas = useMemo(() => {
     let filtered = multas
+
+    if (obsFilter.length > 0) {
+      filtered = filtered.filter(m => {
+        const tieneObs = !m.conductor_responsable || !m.ibutton
+        const estado = tieneObs ? 'Con observaciones' : 'Sin observaciones'
+        return obsFilter.includes(estado)
+      })
+    }
+
+    if (importeFilter.length > 0) {
+      filtered = filtered.filter(m => importeFilter.includes(String(m.importe)))
+    }
 
     if (patenteFilter.length > 0) {
       filtered = filtered.filter(m => patenteFilter.includes(m.patente))
@@ -215,7 +235,7 @@ export default function MultasModule() {
       filtered = filtered.filter(m => lugarFilter.includes(m.lugar))
     }
     if (infraccionFilter.length > 0) {
-      filtered = filtered.filter(m => infraccionFilter.includes(m.detalle))
+      filtered = filtered.filter(m => infraccionFilter.includes(m.infraccion))
     }
     if (semanaFilter.length > 0) {
       filtered = filtered.filter(m => {
@@ -253,7 +273,7 @@ export default function MultasModule() {
     }
 
     return filtered
-  }, [multas, patenteFilter, conductorFilter, lugarFilter, infraccionFilter, semanaFilter, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, fechaCargaDesde, fechaCargaHasta])
+  }, [multas, patenteFilter, conductorFilter, lugarFilter, infraccionFilter, semanaFilter, ibuttonFilter, obsFilter, importeFilter, fechaInfraccionDesde, fechaInfraccionHasta, fechaCargaDesde, fechaCargaHasta])
 
   // Estadisticas
   const totalImporte = useMemo(() =>
@@ -468,6 +488,16 @@ export default function MultasModule() {
       id: 'semana',
       label: `Semana: ${semanaFilter.join(', ')}`,
       onClear: () => setSemanaFilter([])
+    }] : []),
+    ...(obsFilter.length > 0 ? [{
+      id: 'obs',
+      label: `Obs: ${obsFilter.join(', ')}`,
+      onClear: () => setObsFilter([])
+    }] : []),
+    ...(importeFilter.length > 0 ? [{
+      id: 'importe',
+      label: `Importe: ${importeFilter.length} seleccionados`,
+      onClear: () => setImporteFilter([])
     }] : [])
   ]
 
@@ -478,6 +508,8 @@ export default function MultasModule() {
     setInfraccionFilter([])
     setSemanaFilter([])
     setIbuttonFilter([])
+    setObsFilter([])
+    setImporteFilter([])
     setFechaInfraccionDesde(null)
     setFechaInfraccionHasta(null)
     setFechaCargaDesde(null)
@@ -538,9 +570,8 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => formatFecha(row.original.fecha_infraccion)
+      cell: ({ row }) => formatDateTime(row.original.fecha_infraccion)
     },
-
     {
       accessorKey: 'patente',
       header: () => (
@@ -574,7 +605,7 @@ export default function MultasModule() {
       cell: ({ row }) => row.original.lugar || '-'
     },
     {
-      accessorKey: 'detalle',
+      accessorKey: 'infraccion',
       header: () => (
         <ExcelColumnFilter
           label="Infraccion"
@@ -588,7 +619,26 @@ export default function MultasModule() {
       ),
       cell: ({ row }) => (
         <span style={{ fontSize: '13px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-          {row.original.detalle || '-'}
+          {row.original.infraccion || '-'}
+        </span>
+      )
+    },
+    {
+      accessorKey: 'importe',
+      header: () => (
+        <ExcelColumnFilter
+          label="Importe"
+          options={importesUnicos}
+          selectedValues={importeFilter}
+          onSelectionChange={setImporteFilter}
+          filterId="importe"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => (
+        <span className="font-medium text-orange-500">
+          {row.original.importe}
         </span>
       )
     },
@@ -623,6 +673,32 @@ export default function MultasModule() {
       cell: ({ row }) => row.original.ibutton || '-'
     },
     {
+      id: 'obs',
+      header: () => (
+        <ExcelColumnFilter
+          label="Obs."
+          options={obsOptions}
+          selectedValues={obsFilter}
+          onSelectionChange={setObsFilter}
+          filterId="obs"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => {
+        const tieneObs = !row.original.conductor_responsable || !row.original.ibutton
+        return (
+          <div className="flex justify-center" title={tieneObs ? "Con observaciones" : "Sin observaciones"}>
+            {tieneObs ? (
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+            ) : (
+              <CheckCircle className="w-5 h-5 text-emerald-500" />
+            )}
+          </div>
+        )
+      }
+    },
+    {
       id: 'acciones',
       header: 'Acciones',
       cell: ({ row }) => (
@@ -651,7 +727,7 @@ export default function MultasModule() {
         </div>
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, fechaCargaDesde, fechaCargaHasta, openFilterId])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, fechaCargaDesde, fechaCargaHasta, openFilterId, obsFilter, importesUnicos, importeFilter])
 
   // Exportar a Excel
   function handleExportar() {
