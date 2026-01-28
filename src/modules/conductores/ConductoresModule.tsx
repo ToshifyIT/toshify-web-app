@@ -26,6 +26,7 @@ import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilt
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
 import { createConductorDriveFolder } from "../../services/driveService";
+import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 
 // Función para actualizar estado en tabla de control de facturación
 async function actualizarEstadoControlFacturacion(
@@ -175,6 +176,8 @@ export function ConductoresModule() {
     telefono_contacto: "",
     email: "",
     direccion: "",
+    direccion_lat: null as number | null,
+    direccion_lng: null as number | null,
     zona: "",
     fecha_nacimiento: "",
     estado_civil_id: "",
@@ -792,6 +795,8 @@ export function ConductoresModule() {
             telefono_contacto: formData.telefono_contacto || null,
             email: formData.email || null,
             direccion: formData.direccion || null,
+            direccion_lat: formData.direccion_lat,
+            direccion_lng: formData.direccion_lng,
             zona: formData.zona || null,
             fecha_nacimiento: formData.fecha_nacimiento || null,
             estado_civil_id: formData.estado_civil_id || null,
@@ -1156,6 +1161,8 @@ export function ConductoresModule() {
         telefono_contacto: formData.telefono_contacto || null,
         email: formData.email || null,
         direccion: formData.direccion || null,
+        direccion_lat: formData.direccion_lat,
+        direccion_lng: formData.direccion_lng,
         zona: formData.zona || null,
         fecha_nacimiento: formData.fecha_nacimiento || null,
         estado_civil_id: formData.estado_civil_id || null,
@@ -1308,6 +1315,8 @@ export function ConductoresModule() {
       telefono_contacto: fc.telefono_contacto || "",
       email: fc.email || "",
       direccion: fc.direccion || "",
+      direccion_lat: fc.direccion_lat || null,
+      direccion_lng: fc.direccion_lng || null,
       zona: fc.zona || "",
       fecha_nacimiento: fc.fecha_nacimiento || "",
       estado_civil_id: fc.estado_civil_id || "",
@@ -2664,19 +2673,21 @@ function ModalEditar({
           </div>
         </div>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Dirección</label>
-            <input
-              type="text"
-              className="form-input"
-              value={formData.direccion}
-              onChange={(e) =>
-                setFormData({ ...formData, direccion: e.target.value })
-              }
-              disabled={saving}
-            />
-          </div>
+        <div className="form-group" style={{ width: '100%' }}>
+          <label className="form-label">Dirección</label>
+          <AddressAutocomplete
+            value={formData.direccion}
+            onChange={(address, lat, lng) =>
+              setFormData({
+                ...formData,
+                direccion: address,
+                direccion_lat: lat ?? null,
+                direccion_lng: lng ?? null
+              })
+            }
+            disabled={saving}
+            placeholder="Buscar dirección..."
+          />
         </div>
 
         <div className="section-title">Contacto de Emergencia</div>
