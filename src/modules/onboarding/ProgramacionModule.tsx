@@ -639,13 +639,13 @@ export function ProgramacionModule() {
         })
         if (!result.isConfirmed) return
       }
-      // Si solo uno confirmó, preguntar si continuar solo con ese
+      // Si solo uno confirmó, preguntar qué hacer
       else if (diurnoConfirmo !== nocturnoConfirmo) {
         const quienConfirmo = diurnoConfirmo ? 'DIURNO' : 'NOCTURNO'
         const quienNo = diurnoConfirmo ? 'NOCTURNO' : 'DIURNO'
         const nombreConfirmo = diurnoConfirmo ? prog.conductor_diurno_nombre : prog.conductor_nocturno_nombre
         const nombreNo = diurnoConfirmo ? prog.conductor_nocturno_nombre : prog.conductor_diurno_nombre
-        const estadoNo = diurnoConfirmo 
+        const estadoNo = diurnoConfirmo
           ? (prog.confirmacion_nocturno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_nocturno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
           : (prog.confirmacion_diurno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_diurno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
 
@@ -656,22 +656,28 @@ export function ProgramacionModule() {
               <p><strong style="color: #10B981;">${quienConfirmo}:</strong> ${nombreConfirmo} - <span style="color: #10B981;">Confirmó</span></p>
               <p><strong style="color: #DC2626;">${quienNo}:</strong> ${nombreNo} - <span style="color: #DC2626;">${estadoNo}</span></p>
               <p style="margin-top: 12px; color: #6B7280;">
-                ¿Desea crear la asignación solo con el conductor <strong>${quienConfirmo}</strong>?
+                ¿Cómo desea proceder?
               </p>
             </div>
           `,
           icon: 'question',
           showCancelButton: true,
+          showDenyButton: true,
           confirmButtonColor: '#10B981',
-          confirmButtonText: `Sí, solo ${quienConfirmo}`,
+          denyButtonColor: '#3B82F6',
+          confirmButtonText: 'Enviar ambos',
+          denyButtonText: `Solo ${quienConfirmo}`,
           cancelButtonText: 'Cancelar'
         })
-        
-        if (!result.isConfirmed) return
-        
-        // Solo enviar al que confirmó
-        enviarDiurno = diurnoConfirmo
-        enviarNocturno = nocturnoConfirmo
+
+        if (result.isDismissed) return
+
+        // Si eligió "Solo el confirmado" (deny button)
+        if (result.isDenied) {
+          enviarDiurno = diurnoConfirmo
+          enviarNocturno = nocturnoConfirmo
+        }
+        // Si eligió "Enviar ambos" (confirm button) - ambos quedan en true
       }
       // Si ambos confirmaron, continuar normal
     }
@@ -1455,6 +1461,49 @@ export function ProgramacionModule() {
           <span className={`prog-inline-select documento ${doc || 'sin_definir'}`} style={{ cursor: 'default', border: 'none' }}>
             {docLabels[doc] || doc || '-'}
           </span>
+        )
+      }
+    },
+    {
+      accessorKey: 'confirmacion_asistencia',
+      header: 'Confirmación',
+      cell: ({ row }) => {
+        const prog = row.original
+
+        const confLabels: Record<string, { label: string; color: string }> = {
+          confirmo: { label: 'Confirmó', color: '#10B981' },
+          no_confirmo: { label: 'No confirmó', color: '#EF4444' },
+          reprogramar: { label: 'Reprogramar', color: '#F59E0B' },
+          sin_confirmar: { label: 'Sin confirmar', color: '#6B7280' }
+        }
+
+        // Para TURNO: mostrar ambas confirmaciones
+        if (prog.modalidad === 'TURNO') {
+          const confD = prog.confirmacion_diurno || 'sin_confirmar'
+          const confN = prog.confirmacion_nocturno || 'sin_confirmar'
+          const confDInfo = confLabels[confD] || confLabels.sin_confirmar
+          const confNInfo = confLabels[confN] || confLabels.sin_confirmar
+
+          return (
+            <div className="prog-confirmacion-turno">
+              <div className="prog-confirmacion-row">
+                <span className="prog-confirmacion-label">D:</span>
+                <span style={{ color: confDInfo.color, fontSize: '12px' }}>{confDInfo.label}</span>
+              </div>
+              <div className="prog-confirmacion-row">
+                <span className="prog-confirmacion-label">N:</span>
+                <span style={{ color: confNInfo.color, fontSize: '12px' }}>{confNInfo.label}</span>
+              </div>
+            </div>
+          )
+        }
+
+        // Para A CARGO: un solo valor
+        const conf = prog.confirmacion_diurno || 'sin_confirmar'
+        const confInfo = confLabels[conf] || confLabels.sin_confirmar
+
+        return (
+          <span style={{ color: confInfo.color, fontSize: '12px' }}>{confInfo.label}</span>
         )
       }
     },

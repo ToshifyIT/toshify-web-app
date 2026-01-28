@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
 import { User, CreditCard, FileCheck, Phone, Shield, Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { AddressAutocomplete } from '../../../components/ui/AddressAutocomplete'
 
 interface ConductorFormData {
   nombres: string
@@ -18,6 +19,8 @@ interface ConductorFormData {
   telefono_contacto: string
   email: string
   direccion: string
+  direccion_lat: number | null
+  direccion_lng: number | null
   zona: string
   fecha_nacimiento: string
   estado_civil_id: string
@@ -398,14 +401,18 @@ export function ConductorWizard({
               </div>
             </div>
 
-            <div className="form-group">
+            <div className="form-group" style={{ width: '100%' }}>
               <label className="form-label">Dirección</label>
-              <input
-                type="text"
-                className="form-input"
+              <AddressAutocomplete
                 value={formData.direccion}
-                onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                onChange={(address, lat, lng) => setFormData({
+                  ...formData,
+                  direccion: address,
+                  direccion_lat: lat ?? null,
+                  direccion_lng: lng ?? null
+                })}
                 disabled={saving}
+                placeholder="Buscar dirección..."
               />
             </div>
 
