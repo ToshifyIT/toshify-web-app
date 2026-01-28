@@ -894,7 +894,15 @@ export function ProgramacionModule() {
         return `${d} ${n}`.trim()
       },
       cell: ({ row }) => {
-        const { modalidad, conductor_diurno_nombre, conductor_nocturno_nombre, conductor_display, conductor_nombre, turno } = row.original
+        const { modalidad, conductor_diurno_nombre, conductor_nocturno_nombre, conductor_display, conductor_nombre, turno, confirmacion_diurno, confirmacion_nocturno } = row.original
+
+        // Helper para mostrar indicador de confirmación
+        const getConfirmIcon = (confirmacion: string | null | undefined) => {
+          if (confirmacion === 'confirmo') return <span title="Confirmó" style={{ color: '#10B981', marginLeft: '4px' }}>✓</span>
+          if (confirmacion === 'no_confirmo') return <span title="No confirmó" style={{ color: '#EF4444', marginLeft: '4px' }}>✗</span>
+          if (confirmacion === 'reprogramar') return <span title="Reprogramar" style={{ color: '#F59E0B', marginLeft: '4px' }}>↻</span>
+          return <span title="Sin confirmar" style={{ color: '#6B7280', marginLeft: '4px' }}>?</span>
+        }
 
         // Si es A CARGO, mostrar solo el conductor
         if (modalidad === 'CARGO' || !modalidad) {
@@ -912,10 +920,12 @@ export function ProgramacionModule() {
               <span className={conductor_diurno_nombre ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
                 <span className="prog-turno-label prog-label-diurno">D</span>
                 {conductor_diurno_nombre || 'Vacante'}
+                {conductor_diurno_nombre && getConfirmIcon(confirmacion_diurno)}
               </span>
               <span className={conductor_nocturno_nombre ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
                 <span className="prog-turno-label prog-label-nocturno">N</span>
                 {conductor_nocturno_nombre || 'Vacante'}
+                {conductor_nocturno_nombre && getConfirmIcon(confirmacion_nocturno)}
               </span>
             </div>
           )
@@ -930,10 +940,12 @@ export function ProgramacionModule() {
               <span className={isDiurno ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
                 <span className="prog-turno-label prog-label-diurno">D</span>
                 {isDiurno ? nombre : 'Vacante'}
+                {isDiurno && getConfirmIcon(confirmacion_diurno)}
               </span>
               <span className={!isDiurno ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
                 <span className="prog-turno-label prog-label-nocturno">N</span>
                 {!isDiurno ? nombre : 'Vacante'}
+                {!isDiurno && getConfirmIcon(confirmacion_nocturno)}
               </span>
             </div>
           )
@@ -1302,7 +1314,15 @@ export function ProgramacionModule() {
         return `${d} ${n}`.trim()
       },
       cell: ({ row }) => {
-        const { modalidad, conductor_diurno_nombre, conductor_nocturno_nombre, conductor_display, conductor_nombre, turno } = row.original
+        const { modalidad, conductor_diurno_nombre, conductor_nocturno_nombre, conductor_display, conductor_nombre, turno, confirmacion_diurno, confirmacion_nocturno } = row.original
+
+        // Helper para mostrar indicador de confirmación
+        const getConfirmIcon = (confirmacion: string | null | undefined) => {
+          if (confirmacion === 'confirmo') return <span title="Confirmó" style={{ color: '#10B981', marginLeft: '4px' }}>✓</span>
+          if (confirmacion === 'no_confirmo') return <span title="No confirmó" style={{ color: '#EF4444', marginLeft: '4px' }}>✗</span>
+          if (confirmacion === 'reprogramar') return <span title="Reprogramar" style={{ color: '#F59E0B', marginLeft: '4px' }}>↻</span>
+          return <span title="Sin confirmar" style={{ color: '#6B7280', marginLeft: '4px' }}>?</span>
+        }
 
         if (modalidad === 'CARGO' || !modalidad) {
           const nombre = conductor_display || conductor_nombre || conductor_diurno_nombre
@@ -1318,10 +1338,12 @@ export function ProgramacionModule() {
               <span className={conductor_diurno_nombre ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
                 <span className="prog-turno-label prog-label-diurno">D</span>
                 {conductor_diurno_nombre || 'Vacante'}
+                {conductor_diurno_nombre && getConfirmIcon(confirmacion_diurno)}
               </span>
               <span className={conductor_nocturno_nombre ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
                 <span className="prog-turno-label prog-label-nocturno">N</span>
                 {conductor_nocturno_nombre || 'Vacante'}
+                {conductor_nocturno_nombre && getConfirmIcon(confirmacion_nocturno)}
               </span>
             </div>
           )
@@ -1335,10 +1357,12 @@ export function ProgramacionModule() {
               <span className={isDiurno ? 'prog-conductor-turno prog-turno-diurno' : 'prog-turno-vacante prog-turno-diurno'}>
                 <span className="prog-turno-label prog-label-diurno">D</span>
                 {isDiurno ? nombre : 'Vacante'}
+                {isDiurno && getConfirmIcon(confirmacion_diurno)}
               </span>
               <span className={!isDiurno ? 'prog-conductor-turno prog-turno-nocturno' : 'prog-turno-vacante prog-turno-nocturno'}>
                 <span className="prog-turno-label prog-label-nocturno">N</span>
                 {!isDiurno ? nombre : 'Vacante'}
+                {!isDiurno && getConfirmIcon(confirmacion_nocturno)}
               </span>
             </div>
           )
