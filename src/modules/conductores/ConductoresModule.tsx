@@ -88,6 +88,7 @@ export function ConductoresModule() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [selectedConductor, setSelectedConductor] =
     useState<ConductorWithRelations | null>(null);
 
@@ -881,6 +882,24 @@ export function ConductoresModule() {
 
     if (!selectedConductor) return;
 
+    // Validar CUIL obligatorio
+    const newErrors: Record<string, string> = {};
+    if (!formData.numero_cuit?.trim()) {
+      newErrors.numero_cuit = 'Requerido para facturación';
+    }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setEditErrors(newErrors);
+      Swal.fire({
+        icon: "warning",
+        title: "CUIL requerido",
+        text: "El CUIL es obligatorio para la facturación mensual",
+        confirmButtonColor: "#E63946",
+      });
+      return;
+    }
+    setEditErrors({});
+
     // Detectar si está cambiando a estado "Baja"
     const bajaEstadoId = estadosConductor.find(e => e.codigo?.toLowerCase() === 'baja')?.id;
     const isChangingToBaja = bajaEstadoId &&
@@ -1478,12 +1497,6 @@ export function ConductoresModule() {
     if (estadoFilter.length > 0) {
       result = result.filter(c => {
         const codigo = c.conductores_estados?.codigo || '';
-        // Handle custom DISPONIBLE filter
-        if (estadoFilter.includes('DISPONIBLE')) {
-          const esActivo = codigo.toLowerCase() === 'activo';
-          const tieneAsignacion = !!(c as any).vehiculo_asignado;
-          if (esActivo && !tieneAsignacion) return true;
-        }
         return estadoFilter.includes(codigo);
       });
     }
@@ -1585,26 +1598,15 @@ export function ConductoresModule() {
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
     const estados = new Map<string, string>();
-    let hasDisponible = false;
 
     conductores.forEach(c => {
       if (c.conductores_estados?.codigo) {
         // Usar el helper para display consistente en el filtro
         estados.set(c.conductores_estados.codigo, getEstadoConductorDisplay(c.conductores_estados));
       }
-      // Check if is available
-      if (c.conductores_estados?.codigo?.toLowerCase() === 'activo' && !(c as any).vehiculo_asignado) {
-        hasDisponible = true;
-      }
     });
 
-    const result = Array.from(estados.entries());
-    
-    if (hasDisponible) {
-      result.push(['DISPONIBLE', 'Disponible']);
-    }
-
-    return result.sort((a, b) => a[1].localeCompare(b[1]));
+    return Array.from(estados.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [conductores]);
 
   // Obtener lista única de categorías de licencia para el filtro
@@ -2232,6 +2234,8 @@ export function ConductoresModule() {
           estadosConductor={estadosConductor}
           estadosLicencia={estadosLicencia}
           tiposLicencia={tiposLicencia}
+          editErrors={editErrors}
+          setEditErrors={setEditErrors}
         />
       )}
       {showDeleteModal && selectedConductor && (
@@ -2346,6 +2350,8 @@ function ModalEditar({
   estadosConductor,
   estadosLicencia,
   tiposLicencia,
+  editErrors,
+  setEditErrors,
 }: any) {
   return (
     <div
@@ -2407,16 +2413,19 @@ function ModalEditar({
             />
           </div>
           <div className="form-group">
-            <label className="form-label">CUIT</label>
+            <label className="form-label">CUIL *</label>
             <input
               type="text"
-              className="form-input"
+              className={`form-input ${editErrors.numero_cuit ? 'input-error' : ''}`}
               value={formData.numero_cuit}
-              onChange={(e) =>
-                setFormData({ ...formData, numero_cuit: e.target.value })
-              }
+              onChange={(e) => {
+                setFormData({ ...formData, numero_cuit: e.target.value });
+                if (editErrors.numero_cuit) setEditErrors({});
+              }}
               disabled={saving}
+              placeholder="20-12345678-9"
             />
+            {editErrors.numero_cuit && <span className="error-message">{editErrors.numero_cuit}</span>}
           </div>
           <div className="form-group">
             <label className="form-label">Fecha de Nacimiento</label>
@@ -3050,13 +3059,13 @@ function ModalDetalles({
     fetchVehiculosAsignados();
   }, [selectedConductor?.id]);
 
-  // Helper para obtener el estado badge de asignación
-  const getAsignacionEstadoBadge = (estado: string) => {
+  // Helper para obtener el estado badge del conductor en la asignación
+  const getConductorAsignacionEstadoBadge = (estado: string) => {
     const estados: Record<string, { bg: string; color: string; label: string }> = {
-      activa: { bg: 'rgba(34, 197, 94, 0.1)', color: '#22C55E', label: 'Activa' },
-      programado: { bg: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', label: 'Programada' },
-      cancelada: { bg: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', label: 'Cancelada' },
-      finalizada: { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: 'Finalizada' },
+      activo: { bg: 'rgba(34, 197, 94, 0.1)', color: '#22C55E', label: 'Activa' },
+      asignado: { bg: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', label: 'Asignado' },
+      cancelado: { bg: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', label: 'Cancelada' },
+      completado: { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: 'Finalizada' },
     };
     return estados[estado] || { bg: 'rgba(107, 114, 128, 0.1)', color: '#6B7280', label: estado };
   };
@@ -3064,12 +3073,12 @@ function ModalDetalles({
   // Helper para obtener el turno badge
   const getTurnoBadge = (turno: string) => {
     if (turno === 'diurno') {
-      return { bg: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', color: '#92400E', label: 'Diurno' };
+      return { bg: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', color: '#92400E', label: 'DIURNO' };
     }
     if (turno === 'nocturno') {
-      return { bg: '#DBEAFE', color: '#1E40AF', label: 'Nocturno' };
+      return { bg: '#DBEAFE', color: '#1E40AF', label: 'NOCTURNO' };
     }
-    return { bg: '#F3F4F6', color: '#374151', label: 'Todo el día' };
+    return { bg: '#F3F4F6', color: '#374151', label: 'A CARGO' };
   };
 
   return (
@@ -3332,7 +3341,7 @@ function ModalDetalles({
               {vehiculosAsignados.map((item) => {
                 const asig = item.asignaciones;
                 const vehiculo = asig?.vehiculos;
-                const estadoBadge = getAsignacionEstadoBadge(asig?.estado);
+                const estadoBadge = getConductorAsignacionEstadoBadge(item.estado);
                 const turnoBadge = getTurnoBadge(item.horario);
                 const isActiva = asig?.estado === 'activa';
 
