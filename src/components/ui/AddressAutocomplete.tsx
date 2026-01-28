@@ -3,7 +3,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from '@react-google-maps/api'
 import { MapPin, X, Loader2 } from 'lucide-react'
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+// Fallback a key hardcodeada si no está en env (para producción)
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
 
 // Librerías necesarias para Places API
 const libraries: ("places")[] = ['places']
