@@ -3073,12 +3073,12 @@ function ModalDetalles({
   // Helper para obtener el turno badge
   const getTurnoBadge = (turno: string) => {
     if (turno === 'diurno') {
-      return { bg: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', color: '#92400E', label: 'Diurno' };
+      return { bg: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', color: '#92400E', label: 'DIURNO' };
     }
     if (turno === 'nocturno') {
-      return { bg: '#DBEAFE', color: '#1E40AF', label: 'Nocturno' };
+      return { bg: '#DBEAFE', color: '#1E40AF', label: 'NOCTURNO' };
     }
-    return { bg: '#F3F4F6', color: '#374151', label: 'Todo el día' };
+    return { bg: '#F3F4F6', color: '#374151', label: 'A CARGO' };
   };
 
   return (
