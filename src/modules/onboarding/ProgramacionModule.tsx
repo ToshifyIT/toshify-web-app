@@ -639,13 +639,13 @@ export function ProgramacionModule() {
         })
         if (!result.isConfirmed) return
       }
-      // Si solo uno confirmó, preguntar si continuar solo con ese
+      // Si solo uno confirmó, preguntar qué hacer
       else if (diurnoConfirmo !== nocturnoConfirmo) {
         const quienConfirmo = diurnoConfirmo ? 'DIURNO' : 'NOCTURNO'
         const quienNo = diurnoConfirmo ? 'NOCTURNO' : 'DIURNO'
         const nombreConfirmo = diurnoConfirmo ? prog.conductor_diurno_nombre : prog.conductor_nocturno_nombre
         const nombreNo = diurnoConfirmo ? prog.conductor_nocturno_nombre : prog.conductor_diurno_nombre
-        const estadoNo = diurnoConfirmo 
+        const estadoNo = diurnoConfirmo
           ? (prog.confirmacion_nocturno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_nocturno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
           : (prog.confirmacion_diurno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_diurno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar')
 
@@ -656,22 +656,28 @@ export function ProgramacionModule() {
               <p><strong style="color: #10B981;">${quienConfirmo}:</strong> ${nombreConfirmo} - <span style="color: #10B981;">Confirmó</span></p>
               <p><strong style="color: #DC2626;">${quienNo}:</strong> ${nombreNo} - <span style="color: #DC2626;">${estadoNo}</span></p>
               <p style="margin-top: 12px; color: #6B7280;">
-                ¿Desea crear la asignación solo con el conductor <strong>${quienConfirmo}</strong>?
+                ¿Cómo desea proceder?
               </p>
             </div>
           `,
           icon: 'question',
           showCancelButton: true,
+          showDenyButton: true,
           confirmButtonColor: '#10B981',
-          confirmButtonText: `Sí, solo ${quienConfirmo}`,
+          denyButtonColor: '#3B82F6',
+          confirmButtonText: 'Enviar ambos',
+          denyButtonText: `Solo ${quienConfirmo}`,
           cancelButtonText: 'Cancelar'
         })
-        
-        if (!result.isConfirmed) return
-        
-        // Solo enviar al que confirmó
-        enviarDiurno = diurnoConfirmo
-        enviarNocturno = nocturnoConfirmo
+
+        if (result.isDismissed) return
+
+        // Si eligió "Solo el confirmado" (deny button)
+        if (result.isDenied) {
+          enviarDiurno = diurnoConfirmo
+          enviarNocturno = nocturnoConfirmo
+        }
+        // Si eligió "Enviar ambos" (confirm button) - ambos quedan en true
       }
       // Si ambos confirmaron, continuar normal
     }
