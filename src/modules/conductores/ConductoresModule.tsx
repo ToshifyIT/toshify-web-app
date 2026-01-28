@@ -397,9 +397,37 @@ export function ConductoresModule() {
         onClear: () => setEstadoFilter([])
       });
     }
+    if (categoriaFilter.length > 0) {
+      filters.push({
+        id: 'categoria',
+        label: `Categoría: ${categoriaFilter.length === 1 ? categoriaFilter[0] : `${categoriaFilter.length} seleccionados`}`,
+        onClear: () => setCategoriaFilter([])
+      });
+    }
+    if (asignacionFilter.length > 0) {
+      filters.push({
+        id: 'asignacion',
+        label: `Asignación: ${asignacionFilter.length === 1 ? asignacionFilter[0] : `${asignacionFilter.length} seleccionados`}`,
+        onClear: () => setAsignacionFilter([])
+      });
+    }
 
     return filters;
-  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter]);
+  }, [activeStatCard, nombreFilter, dniFilter, cbuFilter, turnoFilter, estadoFilter, categoriaFilter, asignacionFilter]);
+
+  const handleClearAllFilters = () => {
+    setActiveStatCard(null);
+    setStatCardEstadoFilter([]);
+    setStatCardAsignacionFilter([]);
+    setStatCardLicenciaFilter(false);
+    setNombreFilter([]);
+    setDniFilter([]);
+    setCbuFilter([]);
+    setEstadoFilter([]);
+    setTurnoFilter([]);
+    setCategoriaFilter([]);
+    setAsignacionFilter([]);
+  };
 
   // ✅ OPTIMIZADO: Carga TODO en paralelo (conductores + catálogos)
   const loadAllData = async () => {
@@ -2211,6 +2239,7 @@ export function ConductoresModule() {
           </button>
         }
         externalFilters={externalFilters}
+        onClearAllFilters={handleClearAllFilters}
       />
 
       {/* Modales definidos en componente separado para reducir tamaño del archivo */}
