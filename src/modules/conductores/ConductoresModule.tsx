@@ -1358,6 +1358,8 @@ export function ConductoresModule() {
       telefono_contacto: "",
       email: "",
       direccion: "",
+      direccion_lat: null,
+      direccion_lng: null,
       zona: "",
       fecha_nacimiento: "",
       estado_civil_id: "",
