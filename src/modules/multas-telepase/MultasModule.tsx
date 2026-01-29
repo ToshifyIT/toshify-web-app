@@ -99,11 +99,14 @@ export default function MultasModule() {
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
   const [lugarFilter, setLugarFilter] = useState<string[]>([])
   const [infraccionFilter, setInfraccionFilter] = useState<string[]>([])
+  const [detalleFilter, setDetalleFilter] = useState<string[]>([])
   const [semanaFilter, setSemanaFilter] = useState<string[]>([])
   const [obsFilter, setObsFilter] = useState<string[]>([])
   const [importeFilter, setImporteFilter] = useState<string[]>([])
   const [fechaInfraccionDesde, setFechaInfraccionDesde] = useState<string | null>(null)
   const [fechaInfraccionHasta, setFechaInfraccionHasta] = useState<string | null>(null)
+  const [fechaCargaDesde, setFechaCargaDesde] = useState<string | null>(null)
+  const [fechaCargaHasta, setFechaCargaHasta] = useState<string | null>(null)
   const [ibuttonFilter, setIbuttonFilter] = useState<string[]>([])
 
   // Opciones para autocompletado y validación
@@ -155,7 +158,7 @@ export default function MultasModule() {
     setLoading(true)
     try {
       const [multasRes, vehiculosRes] = await Promise.all([
-        supabase.from('multas_historico').select('*').order('created_at', { ascending: false }),
+        supabase.from('multas_historico').select('*').order('fecha_infraccion', { ascending: false }),
         supabase.from('vehiculos').select('id, patente')
       ])
 
@@ -183,10 +186,11 @@ export default function MultasModule() {
     conductor: (m: Multa) => conductorFilter.length === 0 || conductorFilter.includes(m.conductor_responsable || '-'),
     lugar: (m: Multa) => lugarFilter.length === 0 || lugarFilter.includes(m.lugar),
     infraccion: (m: Multa) => infraccionFilter.length === 0 || infraccionFilter.includes(m.infraccion),
+    detalle: (m: Multa) => detalleFilter.length === 0 || detalleFilter.includes(m.detalle || '-'),
     semana: (m: Multa) => {
       if (semanaFilter.length === 0) return true
-      if (!m.fecha_infraccion) return false
-      return semanaFilter.includes((getWeekNumber(m.fecha_infraccion) + 1).toString())
+      if (!m.created_at) return false
+      return semanaFilter.includes((getWeekNumber(m.created_at) + 1).toString())
     },
     ibutton: (m: Multa) => {
       if (ibuttonFilter.length === 0) return true
@@ -197,8 +201,13 @@ export default function MultasModule() {
       if (fechaInfraccionDesde && (!m.fecha_infraccion || m.fecha_infraccion < fechaInfraccionDesde)) return false
       if (fechaInfraccionHasta && (!m.fecha_infraccion || m.fecha_infraccion > `${fechaInfraccionHasta}T23:59:59`)) return false
       return true
+    },
+    fechaCarga: (m: Multa) => {
+      if (fechaCargaDesde && (!m.created_at || m.created_at < fechaCargaDesde)) return false
+      if (fechaCargaHasta && (!m.created_at || m.created_at > `${fechaCargaHasta}T23:59:59`)) return false
+      return true
     }
-  }), [obsFilter, importeFilter, patenteFilter, conductorFilter, lugarFilter, infraccionFilter, semanaFilter, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta])
+  }), [obsFilter, importeFilter, patenteFilter, conductorFilter, lugarFilter, infraccionFilter, detalleFilter, semanaFilter, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, fechaCargaDesde, fechaCargaHasta])
 
   const getFilteredData = useCallback((excludeKey?: string) => {
     return multas.filter(m => {
@@ -208,9 +217,11 @@ export default function MultasModule() {
       if (excludeKey !== 'conductor' && !filterPredicates.conductor(m)) return false
       if (excludeKey !== 'lugar' && !filterPredicates.lugar(m)) return false
       if (excludeKey !== 'infraccion' && !filterPredicates.infraccion(m)) return false
+      if (excludeKey !== 'detalle' && !filterPredicates.detalle(m)) return false
       if (excludeKey !== 'semana' && !filterPredicates.semana(m)) return false
       if (excludeKey !== 'ibutton' && !filterPredicates.ibutton(m)) return false
       if (excludeKey !== 'fecha' && !filterPredicates.fecha(m)) return false
+      if (excludeKey !== 'fechaCarga' && !filterPredicates.fechaCarga(m)) return false
       return true
     })
   }, [multas, filterPredicates])
@@ -232,11 +243,15 @@ export default function MultasModule() {
     [...new Set(getFilteredData('infraccion').map(m => m.infraccion).filter(Boolean))].sort()
   , [getFilteredData])
 
+  const detallesUnicos = useMemo(() =>
+    [...new Set(getFilteredData('detalle').map(m => m.detalle || '-'))].sort()
+  , [getFilteredData])
+
   const semanasUnicas = useMemo(() => {
     const semanas = new Set<string>()
     getFilteredData('semana').forEach(m => {
-      if (m.fecha_infraccion) {
-        semanas.add((getWeekNumber(m.fecha_infraccion) + 1).toString())
+      if (m.created_at) {
+        semanas.add((getWeekNumber(m.created_at) + 1).toString())
       }
     })
     return [...semanas].sort((a, b) => parseInt(a) - parseInt(b))
@@ -265,7 +280,18 @@ export default function MultasModule() {
   , [getFilteredData])
 
   // Filtrar registros (Resultado final)
-  const multasFiltradas = useMemo(() => getFilteredData(), [getFilteredData])
+  const multasFiltradas = useMemo(() => {
+    const data = getFilteredData()
+    // Ordenar por fecha_infraccion descendente (más actual a más antiguo)
+    return data.sort((a, b) => {
+      const fechaA = a.fecha_infraccion || ''
+      const fechaB = b.fecha_infraccion || ''
+      if (fechaA === fechaB) return 0
+      if (!fechaA) return 1 // Nulos al final
+      if (!fechaB) return -1
+      return fechaB.localeCompare(fechaA)
+    })
+  }, [getFilteredData])
 
   // Estadisticas
   const totalImporte = useMemo(() =>
@@ -441,6 +467,11 @@ export default function MultasModule() {
 
   // Filtros activos
   const activeFilters = [
+    ...(fechaCargaDesde || fechaCargaHasta ? [{
+      id: 'fecha_carga',
+      label: `Fecha Carga: ${fechaCargaDesde || '...'} - ${fechaCargaHasta || '...'}`,
+      onClear: () => { setFechaCargaDesde(null); setFechaCargaHasta(null) }
+    }] : []),
     ...(fechaInfraccionDesde || fechaInfraccionHasta ? [{
       id: 'fecha_infraccion',
       label: `Fecha Infracción: ${fechaInfraccionDesde || '...'} - ${fechaInfraccionHasta || '...'}`,
@@ -466,6 +497,11 @@ export default function MultasModule() {
       label: `Infracción: ${infraccionFilter.length} seleccionados`,
       onClear: () => setInfraccionFilter([])
     }] : []),
+    ...(detalleFilter.length > 0 ? [{
+      id: 'detalle',
+      label: `Detalle: ${detalleFilter.length} seleccionados`,
+      onClear: () => setDetalleFilter([])
+    }] : []),
     ...(ibuttonFilter.length > 0 ? [{
       id: 'ibutton',
       label: `iButton: ${ibuttonFilter.length} seleccionados`,
@@ -489,10 +525,13 @@ export default function MultasModule() {
   ]
 
   function clearAllFilters() {
+    setFechaCargaDesde(null)
+    setFechaCargaHasta(null)
     setPatenteFilter([])
     setConductorFilter([])
     setLugarFilter([])
     setInfraccionFilter([])
+    setDetalleFilter([])
     setSemanaFilter([])
     setIbuttonFilter([])
     setObsFilter([])
@@ -503,6 +542,42 @@ export default function MultasModule() {
 
   // Columnas
   const columns = useMemo<ColumnDef<Multa>[]>(() => [
+    {
+      accessorKey: 'created_at',
+      header: () => (
+        <ExcelDateRangeFilter
+          label="Fecha Carga"
+          startDate={fechaCargaDesde}
+          endDate={fechaCargaHasta}
+          onRangeChange={(start, end) => {
+            setFechaCargaDesde(start)
+            setFechaCargaHasta(end)
+          }}
+          filterId="fecha_carga"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => formatDateTime(row.original.created_at)
+    },
+    {
+      id: 'semana',
+      header: () => (
+        <ExcelColumnFilter
+          label="Sem."
+          options={semanasUnicas}
+          selectedValues={semanaFilter}
+          onSelectionChange={setSemanaFilter}
+          filterId="semana"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => {
+        if (!row.original.created_at) return '-'
+        return getWeekNumber(row.original.created_at) + 1
+      }
+    },
     {
       accessorKey: 'fecha_infraccion',
       header: () => (
@@ -520,24 +595,6 @@ export default function MultasModule() {
         />
       ),
       cell: ({ row }) => formatDateTime(row.original.fecha_infraccion)
-    },
-    {
-      id: 'semana',
-      header: () => (
-        <ExcelColumnFilter
-          label="Sem."
-          options={semanasUnicas}
-          selectedValues={semanaFilter}
-          onSelectionChange={setSemanaFilter}
-          filterId="semana"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => {
-        if (!row.original.fecha_infraccion) return '-'
-        return getWeekNumber(row.original.fecha_infraccion) + 1
-      }
     },
     {
       accessorKey: 'patente',
@@ -587,6 +644,28 @@ export default function MultasModule() {
       cell: ({ row }) => (
         <span style={{ fontSize: '13px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
           {row.original.infraccion || '-'}
+        </span>
+      )
+    },
+    {
+      accessorKey: 'detalle',
+      header: () => (
+        <ExcelColumnFilter
+          label="Detalle Infraccion"
+          options={detallesUnicos}
+          selectedValues={detalleFilter}
+          onSelectionChange={setDetalleFilter}
+          filterId="detalle"
+          openFilterId={openFilterId}
+          onOpenChange={setOpenFilterId}
+        />
+      ),
+      cell: ({ row }) => (
+        <span 
+          title={row.original.detalle || '-'}
+          style={{ fontSize: '13px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
+        >
+          {row.original.detalle || '-'}
         </span>
       )
     },
@@ -694,7 +773,7 @@ export default function MultasModule() {
         </div>
       )
     }
-  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter])
+  ], [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, lugaresUnicos, lugarFilter, infraccionesUnicas, infraccionFilter, detallesUnicos, detalleFilter, semanasUnicas, semanaFilter, ibuttonsUnicos, ibuttonFilter, fechaInfraccionDesde, fechaInfraccionHasta, openFilterId, obsFilter, importesUnicos, importeFilter, fechaCargaDesde, fechaCargaHasta])
 
   // Exportar a Excel
   function handleExportar() {
@@ -703,9 +782,10 @@ export default function MultasModule() {
       'Fecha Infraccion': formatFecha(m.fecha_infraccion),
       'Importe': parseImporte(m.importe),
       'Infraccion': m.infraccion,
+      'Detalle Infraccion': m.detalle,
       'Lugar': m.lugar,
       'Conductor': m.conductor_responsable,
-      'Observaciones': m.observaciones || m.detalle
+      'Observaciones': m.observaciones
     }))
 
     const ws = XLSX.utils.json_to_sheet(dataExport)
@@ -891,7 +971,8 @@ export default function MultasModule() {
                     type="date" 
                     className="multas-form-input"
                     value={editingMulta.fecha_infraccion ? editingMulta.fecha_infraccion.split('T')[0] : ''}
-                    onChange={e => setEditingMulta({...editingMulta, fecha_infraccion: e.target.value})}
+                    readOnly
+                    style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
                   />
                 </div>
 
@@ -902,7 +983,8 @@ export default function MultasModule() {
                     type="number" 
                     className="multas-form-input"
                     value={parseImporte(editingMulta.importe)}
-                    onChange={e => setEditingMulta({...editingMulta, importe: e.target.value})}
+                    readOnly
+                    style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
                   />
                 </div>
 
@@ -913,7 +995,20 @@ export default function MultasModule() {
                     type="text" 
                     className="multas-form-input"
                     value={editingMulta.infraccion || ''}
-                    onChange={e => setEditingMulta({...editingMulta, infraccion: e.target.value})}
+                    readOnly
+                    style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
+                  />
+                </div>
+
+                {/* Detalle Infraccion */}
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Detalle Infraccion</label>
+                  <input 
+                    type="text" 
+                    className="multas-form-input"
+                    value={editingMulta.detalle || ''}
+                    readOnly
+                    style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
                   />
                 </div>
 
