@@ -53,6 +53,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'inventario-asignaciones': Users,
   'inventario-historial': History,
   'inventario-pedidos': ClipboardList,
+  'zonas-peligrosas': MapPin,
 }
 
 // Función para obtener icono de un menú
@@ -174,6 +175,7 @@ import { MenuPorRolPage } from './administracion/MenuPorRolPage'
 import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
 import { AuditoriaPage } from './administracion/AuditoriaPage'
+import { ZonasPage } from './administracion/ZonasPage'
 import { ProfilePage } from './profile/ProfilePage'
 // Multas/Telepase
 import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
@@ -1477,6 +1479,11 @@ export function HomePage() {
               <Route path="/auditoria" element={
                 <ProtectedRoute submenuName="auditoria" action="view">
                   <AuditoriaPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/administracion/zonas" element={
+                <ProtectedRoute submenuName="zonas-peligrosas" action="view">
+                  <ZonasPage />
                 </ProtectedRoute>
               } />
 
