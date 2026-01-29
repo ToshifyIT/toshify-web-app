@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2 } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2, Undo2 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { DriveFilesModal } from '../../components/DriveFilesModal'
 import { supabase } from '../../lib/supabase'
@@ -131,7 +131,7 @@ export function VehicleManagement() {
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (elimina 6+ queries)
   const calculatedStats = useMemo(() => {
     // Estados a EXCLUIR del total
-    const estadosExcluidos = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO']
+    const estadosExcluidos = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PROVEEDOR']
     // Estados de taller mecánico
     const estadosTallerMecanico = ['TALLER_AXIS', 'TALLER_ALLIANCE', 'TALLER_KALZALO', 'TALLER_BASE_VALIENTE', 'INSTALACION_GNC']
 
@@ -141,6 +141,7 @@ export function VehicleManagement() {
     let vehiculosTallerMecanico = 0
     let vehiculosChapaPintura = 0
     let vehiculosCorporativos = 0
+    let vehiculosDevueltos = 0
 
     // UNA SOLA PASADA sobre los vehículos
     for (const v of vehiculos) {
@@ -162,6 +163,8 @@ export function VehicleManagement() {
         vehiculosChapaPintura++
       } else if (estadoCodigo === 'CORPORATIVO') {
         vehiculosCorporativos++
+      } else if (estadoCodigo === 'DEVUELTO_PROVEEDOR') {
+        vehiculosDevueltos++
       }
     }
 
@@ -172,6 +175,7 @@ export function VehicleManagement() {
       vehiculosTallerMecanico,
       vehiculosChapaPintura,
       vehiculosCorporativos,
+      vehiculosDevueltos,
     }
   }, [vehiculos])
 
@@ -728,6 +732,7 @@ export function VehicleManagement() {
     const estadosTallerMecanico = ['Taller Axis', 'Taller Alliance', 'Taller Kalzalo', 'Base Valiente', 'Inst. GNC']
     const estadosChapaPintura = ['Chapa&Pintura']
     const estadosCorporativos = ['Corporativo']
+    const estadosDevueltos = ['Dev. Proveedor']
 
     // Usar statCardEstadoFilter para no interferir con el filtro de columna
     switch (cardType) {
@@ -749,6 +754,9 @@ export function VehicleManagement() {
       case 'corporativos':
         setStatCardEstadoFilter(estadosCorporativos)
         break
+      case 'devueltos':
+        setStatCardEstadoFilter(estadosDevueltos)
+        break
       default:
         setStatCardEstadoFilter([])
     }
@@ -766,7 +774,8 @@ export function VehicleManagement() {
         enUso: 'En Uso',
         tallerMecanico: 'Taller Mecánico',
         chapaPintura: 'Chapa y Pintura',
-        corporativos: 'Corporativos'
+        corporativos: 'Corporativos',
+        devueltos: 'Dev. Proveedor'
       }
       filters.push({
         id: 'statCard',
@@ -1209,6 +1218,17 @@ export function VehicleManagement() {
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.vehiculosCorporativos}</span>
               <span className="stat-label">Corporativos</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'devueltos' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('devueltos')}
+            title="Click para filtrar: Devueltos a Proveedor"
+          >
+            <Undo2 size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.vehiculosDevueltos}</span>
+              <span className="stat-label">Dev. Proveedor</span>
             </div>
           </div>
         </div>
