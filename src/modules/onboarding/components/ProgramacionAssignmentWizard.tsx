@@ -161,15 +161,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const [conductorTurnoFilter, setConductorTurnoFilter] = useState<string>('')
   const [conductoresDelVehiculoActual, setConductoresDelVehiculoActual] = useState<string[]>([])
 
-  // Estados para emparejamiento sugerido
-  const [showEmparejamientoModal, setShowEmparejamientoModal] = useState(false)
-  const [loadingEmparejamiento, setLoadingEmparejamiento] = useState(false)
-  const [emparejamientoSugerido, setEmparejamientoSugerido] = useState<{
-    conductorDiurno: Conductor | null
-    conductorNocturno: Conductor | null
-    distanciaMinutos: number | null
-  } | null>(null)
-
   // Estado para modo de vista por pares cercanos
   const [mostrarParesCercanos, setMostrarParesCercanos] = useState(false)
   const [paresCercanos, setParesCercanos] = useState<Array<{
@@ -556,37 +547,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     return R * c
   }
 
-  // Función para calcular distancia en minutos usando Distance Matrix Service (solo para resultado final)
-  const calcularDistanciaEnMinutos = async (
-    origen: { lat: number; lng: number },
-    destino: { lat: number; lng: number }
-  ): Promise<number | null> => {
-    return new Promise((resolve) => {
-      const service = new google.maps.DistanceMatrixService()
-
-      service.getDistanceMatrix(
-        {
-          origins: [new google.maps.LatLng(origen.lat, origen.lng)],
-          destinations: [new google.maps.LatLng(destino.lat, destino.lng)],
-          travelMode: google.maps.TravelMode.DRIVING,
-          drivingOptions: {
-            departureTime: new Date(),
-            trafficModel: google.maps.TrafficModel.BEST_GUESS
-          }
-        },
-        (response, status) => {
-          if (status === 'OK' && response?.rows[0]?.elements[0]?.status === 'OK') {
-            const element = response.rows[0].elements[0]
-            const duracion = element.duration_in_traffic || element.duration
-            resolve(Math.round(duracion.value / 60))
-          } else {
-            resolve(null)
-          }
-        }
-      )
-    })
-  }
-
   // Función para obtener distancia y tiempo en auto usando Distance Matrix API
   const obtenerDistanciaEnAuto = async (
     origen: { lat: number; lng: number },
@@ -658,6 +618,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       for (const diurno of diurnos) {
         for (const nocturno of nocturnos) {
           if (diurno.id === nocturno.id) continue
+          // Evitar emparejar conductores con exactamente la misma ubicación (duplicados de datos)
+          if (diurno.direccion_lat === nocturno.direccion_lat && diurno.direccion_lng === nocturno.direccion_lng) continue
 
           const distanciaKm = calcularDistanciaHaversine(
             diurno.direccion_lat!,
@@ -725,130 +687,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     } else {
       setMostrarParesCercanos(false)
     }
-  }
-
-  // Función para encontrar el mejor emparejamiento de conductores (legacy - ahora se usa calcularParesCercanos)
-  // @ts-ignore - Mantenido para posible uso futuro en modal de emparejamiento
-  const _calcularEmparejamientoSugerido = async () => {
-    setLoadingEmparejamiento(true)
-    setShowEmparejamientoModal(true)
-    setEmparejamientoSugerido(null)
-
-    try {
-      // Primero, geocodificar conductores sin coordenadas
-      const conductoresActualizados = await geocodificarConductoresSinCoordenadas(conductores)
-      setConductores(conductoresActualizados)
-
-      // Filtrar conductores disponibles con coordenadas
-      const conductoresDisponibles = conductoresActualizados.filter(c =>
-        c.direccion_lat &&
-        c.direccion_lng &&
-        !c.tieneAsignacionDiurna &&
-        !c.tieneAsignacionNocturna
-      )
-
-      // Filtrar por preferencia de turno
-      const conductoresDiurnos = conductoresDisponibles.filter(c =>
-        c.preferencia_turno === 'DIURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno
-      )
-      const conductoresNocturnos = conductoresDisponibles.filter(c =>
-        c.preferencia_turno === 'NOCTURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno
-      )
-
-      if (conductoresDiurnos.length === 0 || conductoresNocturnos.length === 0) {
-        Swal.fire({
-          icon: 'warning',
-          title: 'Conductores insuficientes',
-          text: 'No hay suficientes conductores con coordenadas y disponibilidad para sugerir un emparejamiento.',
-          confirmButtonColor: '#3085d6'
-        })
-        setLoadingEmparejamiento(false)
-        setShowEmparejamientoModal(false)
-        return
-      }
-
-      // Paso 1: Calcular distancias con Haversine (instantáneo) para encontrar el mejor par
-      let mejorPar: { diurno: Conductor; nocturno: Conductor; distanciaKm: number } | null = null
-
-      for (const diurno of conductoresDiurnos) {
-        for (const nocturno of conductoresNocturnos) {
-          if (diurno.id === nocturno.id) continue
-
-          const distanciaKm = calcularDistanciaHaversine(
-            diurno.direccion_lat!,
-            diurno.direccion_lng!,
-            nocturno.direccion_lat!,
-            nocturno.direccion_lng!
-          )
-
-          if (!mejorPar || distanciaKm < mejorPar.distanciaKm) {
-            mejorPar = { diurno, nocturno, distanciaKm }
-          }
-        }
-      }
-
-      if (mejorPar) {
-        // Paso 2: Calcular tiempo real con Google Maps solo para el mejor par
-        await loadGoogleMapsAPI()
-        const distanciaMinutos = await calcularDistanciaEnMinutos(
-          { lat: mejorPar.diurno.direccion_lat!, lng: mejorPar.diurno.direccion_lng! },
-          { lat: mejorPar.nocturno.direccion_lat!, lng: mejorPar.nocturno.direccion_lng! }
-        )
-
-        setEmparejamientoSugerido({
-          conductorDiurno: mejorPar.diurno,
-          conductorNocturno: mejorPar.nocturno,
-          distanciaMinutos: distanciaMinutos || Math.round(mejorPar.distanciaKm * 2) // Estimado: 2 min/km si falla API
-        })
-      } else {
-        Swal.fire({
-          icon: 'warning',
-          title: 'No se pudo calcular',
-          text: 'No se pudo calcular la distancia entre los conductores. Verifica que las direcciones sean válidas.',
-          confirmButtonColor: '#3085d6'
-        })
-        setShowEmparejamientoModal(false)
-      }
-    } catch (error) {
-      console.error('Error calculando emparejamiento:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Ocurrió un error al calcular el emparejamiento sugerido.',
-        confirmButtonColor: '#3085d6'
-      })
-      setShowEmparejamientoModal(false)
-    } finally {
-      setLoadingEmparejamiento(false)
-    }
-  }
-
-  // Función para aplicar el emparejamiento sugerido
-  const aplicarEmparejamiento = () => {
-    if (!emparejamientoSugerido) return
-
-    const { conductorDiurno, conductorNocturno } = emparejamientoSugerido
-
-    if (conductorDiurno) {
-      setFormData(prev => ({
-        ...prev,
-        conductor_diurno_id: conductorDiurno.id,
-        conductor_diurno_nombre: `${conductorDiurno.nombres} ${conductorDiurno.apellidos}`,
-        conductor_diurno_dni: conductorDiurno.numero_dni || ''
-      }))
-    }
-
-    if (conductorNocturno) {
-      setFormData(prev => ({
-        ...prev,
-        conductor_nocturno_id: conductorNocturno.id,
-        conductor_nocturno_nombre: `${conductorNocturno.nombres} ${conductorNocturno.apellidos}`,
-        conductor_nocturno_dni: conductorNocturno.numero_dni || ''
-      }))
-    }
-
-    setShowEmparejamientoModal(false)
-    showSuccess('Emparejamiento aplicado')
   }
 
   const handleNext = async () => {
@@ -2691,11 +2529,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     {par.distanciaKm.toFixed(1)} km
                                   </span>
                                 </div>
-                                {par.tiempoMinutos && (
+                                {par.tiempoMinutos !== undefined && par.tiempoMinutos > 0 && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Route size={12} style={{ color: '#3B82F6' }} />
                                     <span style={{ fontSize: '10px', fontWeight: '600', color: '#2563EB' }}>
-                                      {par.tiempoMinutos} min en auto
+                                      ~{par.tiempoMinutos} min
                                     </span>
                                   </div>
                                 )}
@@ -3306,150 +3144,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           </div>
         </div>
       </div>
-
-      {/* Modal de Emparejamiento Sugerido */}
-      {showEmparejamientoModal && (
-        <div className="modal-overlay" style={{ zIndex: 10001 }}>
-          <div className="modal-content" style={{ maxWidth: '500px', padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Route size={20} />
-                Emparejamiento Sugerido
-              </h3>
-              <button
-                onClick={() => setShowEmparejamientoModal(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  display: 'flex'
-                }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {loadingEmparejamiento ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
-                <Loader2 size={40} style={{ animation: 'spin 1s linear infinite', color: '#667EEA' }} />
-                <p style={{ marginTop: '16px', color: '#6B7280' }}>
-                  Calculando distancias con Google Maps...
-                </p>
-                <p style={{ fontSize: '12px', color: '#9CA3AF' }}>
-                  Esto puede tomar unos segundos
-                </p>
-              </div>
-            ) : emparejamientoSugerido ? (
-              <div>
-                <p style={{ marginBottom: '16px', color: '#6B7280', fontSize: '14px' }}>
-                  Basado en la distancia de viaje en auto, el mejor emparejamiento es:
-                </p>
-
-                <div style={{ display: 'grid', gap: '12px', marginBottom: '20px' }}>
-                  {/* Conductor Diurno */}
-                  <div style={{
-                    background: '#FFFBEB',
-                    border: '1px solid #FCD34D',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px'
-                  }}>
-                    <Sun size={20} style={{ color: '#F59E0B' }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '600', fontSize: '13px' }}>Conductor Diurno</div>
-                      <div style={{ fontSize: '14px' }}>
-                        {emparejamientoSugerido.conductorDiurno?.nombres} {emparejamientoSugerido.conductorDiurno?.apellidos}
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#6B7280' }}>
-                        <MapPin size={12} style={{ display: 'inline', marginRight: '4px' }} />
-                        {emparejamientoSugerido.conductorDiurno?.direccion || 'Sin direccion'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Conductor Nocturno */}
-                  <div style={{
-                    background: '#EFF6FF',
-                    border: '1px solid #93C5FD',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px'
-                  }}>
-                    <Moon size={20} style={{ color: '#3B82F6' }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '600', fontSize: '13px' }}>Conductor Nocturno</div>
-                      <div style={{ fontSize: '14px' }}>
-                        {emparejamientoSugerido.conductorNocturno?.nombres} {emparejamientoSugerido.conductorNocturno?.apellidos}
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#6B7280' }}>
-                        <MapPin size={12} style={{ display: 'inline', marginRight: '4px' }} />
-                        {emparejamientoSugerido.conductorNocturno?.direccion || 'Sin direccion'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Distancia */}
-                <div style={{
-                  background: '#F3F4F6',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  textAlign: 'center',
-                  marginBottom: '20px'
-                }}>
-                  <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
-                    Distancia en auto entre ellos
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#1F2937' }}>
-                    {emparejamientoSugerido.distanciaMinutos} min
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
-                    Con trafico actual
-                  </div>
-                </div>
-
-                {/* Botones */}
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button
-                    onClick={() => setShowEmparejamientoModal(false)}
-                    style={{
-                      flex: 1,
-                      padding: '10px 16px',
-                      border: '1px solid #E5E7EB',
-                      background: 'white',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontWeight: '500'
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={aplicarEmparejamiento}
-                    style={{
-                      flex: 1,
-                      padding: '10px 16px',
-                      border: 'none',
-                      background: 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)',
-                      color: 'white',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontWeight: '600'
-                    }}
-                  >
-                    Aplicar
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
     </>
   )
 }
