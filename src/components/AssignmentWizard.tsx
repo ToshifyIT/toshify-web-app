@@ -687,7 +687,6 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: linear-gradient(to bottom, #FFFFFF 0%, #F9FAFB 100%);
           flex-shrink: 0;
         }
 
@@ -806,7 +805,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           overflow-y: auto;
           overflow-x: hidden;
           padding: 20px 24px;
-          background: #FAFBFC;
+          background: var(--bg-secondary);
           box-sizing: border-box;
         }
 
@@ -899,7 +898,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           text-align: center;
           cursor: pointer;
           transition: all 0.2s ease;
-          background: var(--modal-bg);
+          background: var(--bg-secondary);
           position: relative;
           overflow: hidden;
         }
@@ -1376,10 +1375,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
         /* Dark Mode */
         [data-theme="dark"] .wizard-container {
-          background: #1a1a1a;
+          background: var(--modal-bg);
         }
         [data-theme="dark"] .wizard-header {
-          border-color: #2d2d2d;
+          border-color: var(--border-primary);
+        }
+        [data-theme="dark"] .wizard-content {
+          background: var(--bg-secondary);
         }
         [data-theme="dark"] .wizard-header h2 {
           color: #f5f5f5;

@@ -302,22 +302,24 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         // Calcular disponibilidad de cada vehiculo
         const vehiculosConDisponibilidad: Vehicle[] = vehiculosData.map((vehiculo: any) => {
-          if (vehiculosProgramadosSet.has(vehiculo.id)) {
-            return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
-          }
-
+          const tieneProgramacionPendiente = vehiculosProgramadosSet.has(vehiculo.id)
           const asignacion = asignacionesPorVehiculo.get(vehiculo.id)
 
+          // Si no tiene asignacion activa
           if (!asignacion || asignacion.estado === 'programado') {
-            return { 
-              ...vehiculo, 
-              disponibilidad: asignacion ? 'programado' as const : 'disponible' as const, 
-              asignacionActiva: undefined 
+            // Si tiene programacion pendiente O asignacion en estado 'programado', marcar como programado
+            if (tieneProgramacionPendiente || asignacion) {
+              return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
             }
+            return { ...vehiculo, disponibilidad: 'disponible' as const, asignacionActiva: undefined }
           }
 
           // Es asignacion activa
           if (asignacion.horario === 'CARGO') {
+            // CARGO siempre ocupado - si tiene programacion pendiente, marcar como programado
+            if (tieneProgramacionPendiente) {
+              return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
+            }
             return {
               ...vehiculo,
               disponibilidad: 'ocupado' as const,
@@ -325,6 +327,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             }
           }
 
+          // Es TURNO - verificar slots libres
           const conductores = asignacion.asignaciones_conductores || []
           const turnoDiurnoOcupado = conductores.some((c: any) => c.horario === 'diurno')
           const turnoNocturnoOcupado = conductores.some((c: any) => c.horario === 'nocturno')
@@ -336,6 +339,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             disponibilidad = 'turno_diurno_libre'
           } else if (!turnoNocturnoOcupado) {
             disponibilidad = 'turno_nocturno_libre'
+          }
+
+          // Si tiene programacion pendiente Y esta completamente ocupado, marcar como programado
+          // Pero si tiene slot libre, permitir seleccion (mostrar el slot disponible)
+          if (tieneProgramacionPendiente && disponibilidad === 'ocupado') {
+            return { ...vehiculo, disponibilidad: 'programado' as const, asignacionActiva: undefined }
           }
 
           return {
