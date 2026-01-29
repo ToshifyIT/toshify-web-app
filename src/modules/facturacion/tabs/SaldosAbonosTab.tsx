@@ -288,14 +288,14 @@ export function SaldosAbonosTab() {
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 8px; font-weight: 500;">¿Cómo desea aplicar el cobro?</label>
             <div style="display: flex; gap: 10px;">
               <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; border: 2px solid #e5e5e5; border-radius: 8px; cursor: pointer; transition: all 0.2s;" id="label-completo">
-                <input type="radio" name="tipo-cobro" value="completo" id="swal-completo" checked style="accent-color: #DC2626;">
+                <input type="radio" name="tipo-cobro" value="completo" id="swal-completo" checked style="accent-color: #ff0033;">
                 <div>
                   <div style="font-weight: 600; font-size: 13px;">Completo</div>
                   <div style="font-size: 11px; color: #666;">Se cobra todo en una semana</div>
                 </div>
               </label>
               <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; border: 2px solid #e5e5e5; border-radius: 8px; cursor: pointer; transition: all 0.2s;" id="label-fraccionado">
-                <input type="radio" name="tipo-cobro" value="fraccionado" id="swal-fraccionado" style="accent-color: #DC2626;">
+                <input type="radio" name="tipo-cobro" value="fraccionado" id="swal-fraccionado" style="accent-color: #ff0033;">
                 <div>
                   <div style="font-weight: 600; font-size: 13px;">Fraccionado</div>
                   <div style="font-size: 11px; color: #666;">Dividir en cuotas semanales</div>
@@ -359,7 +359,7 @@ export function SaldosAbonosTab() {
           } else {
             dropdown.innerHTML = filtered.map(c => `
               <div class="conductor-option" data-id="${c.id}" style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background 0.15s;">
-                <strong style="color: #DC2626;">${c.apellidos}, ${c.nombres}</strong>
+                <strong style="color: #ff0033;">${c.apellidos}, ${c.nombres}</strong>
               </div>
             `).join('')
             
@@ -439,13 +439,13 @@ export function SaldosAbonosTab() {
 
         const updateStyles = () => {
           if (radioCompleto.checked) {
-            labelCompleto.style.borderColor = '#DC2626'
+            labelCompleto.style.borderColor = '#ff0033'
             labelCompleto.style.background = '#FEF2F2'
             labelFraccionado.style.borderColor = '#e5e5e5'
             labelFraccionado.style.background = 'white'
             seccionCuotas.style.display = 'none'
           } else {
-            labelFraccionado.style.borderColor = '#DC2626'
+            labelFraccionado.style.borderColor = '#ff0033'
             labelFraccionado.style.background = '#FEF2F2'
             labelCompleto.style.borderColor = '#e5e5e5'
             labelCompleto.style.background = 'white'
@@ -676,7 +676,7 @@ export function SaldosAbonosTab() {
       showCancelButton: true,
       confirmButtonText: 'Registrar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       width: 380,
       customClass: {
@@ -753,14 +753,14 @@ export function SaldosAbonosTab() {
       title: 'Eliminar Saldo',
       html: `
         <p>¿Estás seguro de eliminar el saldo de <strong>${saldo.conductor_nombre}</strong>?</p>
-        <p style="color: #DC2626; font-weight: 600; margin-top: 10px;">Saldo actual: ${formatCurrency(saldo.saldo_actual)}</p>
+        <p style="color: #ff0033; font-weight: 600; margin-top: 10px;">Saldo actual: ${formatCurrency(saldo.saldo_actual)}</p>
         <p style="font-size: 12px; color: #666; margin-top: 10px;">Esta acción eliminará el registro y sus cobros fraccionados asociados.</p>
       `,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280'
     })
 
@@ -816,7 +816,7 @@ export function SaldosAbonosTab() {
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       width: 340,
       customClass: {
@@ -910,7 +910,7 @@ export function SaldosAbonosTab() {
                 <span style="color: ${saldoColor}; font-size: 14px; font-weight: 700;">${formatCurrency(saldo.saldo_actual)}</span>
                 <span style="background: ${saldo.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2'}; color: ${saldoColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${saldoLabel}</span>
               </div>
-              ${saldo.dias_mora && saldo.dias_mora > 0 ? `<div style="color: #DC2626; font-size: 11px; margin-top: 4px;">En mora: ${saldo.dias_mora} días</div>` : ''}
+              ${saldo.dias_mora && saldo.dias_mora > 0 ? `<div style="color: #ff0033; font-size: 11px; margin-top: 4px;">En mora: ${saldo.dias_mora} días</div>` : ''}
             </div>
             <div style="max-height: 220px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px;">
               <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
@@ -998,7 +998,7 @@ export function SaldosAbonosTab() {
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       width: 400,
       customClass: {
@@ -1396,7 +1396,7 @@ export function SaldosAbonosTab() {
             gap: '6px',
             padding: '10px 16px',
             border: 'none',
-            background: activeSubTab === 'saldos' ? '#DC2626' : 'transparent',
+            background: activeSubTab === 'saldos' ? '#ff0033' : 'transparent',
             color: activeSubTab === 'saldos' ? 'white' : '#6B7280',
             borderRadius: '6px 6px 0 0',
             cursor: 'pointer',
@@ -1425,7 +1425,7 @@ export function SaldosAbonosTab() {
             gap: '6px',
             padding: '10px 16px',
             border: 'none',
-            background: activeSubTab === 'abonos' ? '#DC2626' : 'transparent',
+            background: activeSubTab === 'abonos' ? '#ff0033' : 'transparent',
             color: activeSubTab === 'abonos' ? 'white' : '#6B7280',
             borderRadius: '6px 6px 0 0',
             cursor: 'pointer',

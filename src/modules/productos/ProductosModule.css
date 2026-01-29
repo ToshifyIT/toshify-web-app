@@ -24,7 +24,7 @@
 }
 
 .prod-header-title {
-  border-left: 4px solid #DC2626;
+  border-left: 4px solid var(--color-primary);
   padding-left: 16px;
 }
 
@@ -78,12 +78,12 @@
 }
 
 .prod-stats .stat-card.active {
-  background: rgba(220, 38, 38, 0.1);
-  border-color: #DC2626;
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
 }
 
 .prod-stats .stat-card .stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -278,9 +278,9 @@
 .prod-form-select:focus,
 .prod-form-textarea:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .prod-form-input::placeholder,
@@ -294,7 +294,7 @@
 
 .prod-btn-primary {
   padding: 10px 20px;
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -305,7 +305,7 @@
 }
 
 .prod-btn-primary:hover:not(:disabled) {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 .prod-btn-primary:disabled {
@@ -371,17 +371,17 @@
   align-items: center;
   gap: 8px;
   padding-bottom: 8px;
-  border-bottom: 2px solid #DC2626;
+  border-bottom: 2px solid var(--color-primary);
 }
 
 .prod-section-header svg {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .prod-section-header h3 {
   font-size: 16px;
   font-weight: 700;
-  color: #DC2626;
+  color: var(--color-primary);
   margin: 0;
 }
 

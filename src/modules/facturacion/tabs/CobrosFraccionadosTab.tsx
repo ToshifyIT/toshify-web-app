@@ -324,7 +324,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
               <span style="color: #6B7280; font-size: 12px;">Cuota: <strong style="color: #374151;">#${cuota.numero_cuota}</strong></span>
               <span style="color: #6B7280; font-size: 12px;">Semana: <strong style="color: #374151;">${cuota.semana}/${cuota.anio || '?'}</strong></span>
             </div>
-            <div style="color: #DC2626; font-size: 12px; margin-top: 4px;">
+            <div style="color: #ff0033; font-size: 12px; margin-top: 4px;">
               Monto cuota: <strong>${formatCurrency(cuota.monto_cuota)}</strong>
             </div>
           </div>
@@ -482,7 +482,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
             <div style="font-weight: 600; color: #111827;">${conductorNombre}</div>
             <div style="display: flex; gap: 12px; margin-top: 4px;">
               <span style="color: #16a34a; font-size: 12px;">Pagado: <strong>${formatCurrency(totalPagado)}</strong></span>
-              <span style="color: #DC2626; font-size: 12px;">Total: <strong>${formatCurrency(cobro.monto)}</strong></span>
+              <span style="color: #ff0033; font-size: 12px;">Total: <strong>${formatCurrency(cobro.monto)}</strong></span>
             </div>
             <div style="background: #E5E7EB; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
               <div style="background: #16a34a; height: 100%; width: ${progreso}%;"></div>

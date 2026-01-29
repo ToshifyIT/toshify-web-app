@@ -924,7 +924,7 @@ export default function TelepaseHistoricoModule() {
                           background: '#FEF2F2',
                           border: '1px solid #FECACA',
                           borderRadius: '6px',
-                          color: '#B91C1C',
+                          color: '#e6002e',
                           fontSize: '13px',
                           display: 'flex',
                           alignItems: 'center',

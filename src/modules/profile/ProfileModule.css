@@ -26,7 +26,7 @@
 }
 
 .profile-header-title {
-  border-left: 4px solid #DC2626;
+  border-left: 4px solid var(--color-primary);
   padding-left: 16px;
 }
 
@@ -79,7 +79,7 @@
 .profile-avatar {
   width: 80px;
   height: 80px;
-  background: linear-gradient(135deg, #DC2626 0%, #991B1B 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -87,14 +87,14 @@
   color: white;
   font-size: 32px;
   font-weight: 700;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+  box-shadow: 0 4px 12px var(--color-primary-shadow);
   overflow: hidden;
   transition: all 0.2s;
 }
 
 .profile-avatar:hover {
   transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.4);
+  box-shadow: 0 6px 16px var(--color-primary-shadow);
 }
 
 .profile-avatar.has-image {
@@ -149,7 +149,7 @@
 .profile-role {
   font-size: 13px;
   font-weight: 600;
-  color: #DC2626;
+  color: var(--color-primary);
   margin: 0 0 4px 0;
 }
 
@@ -195,7 +195,7 @@
 }
 
 .profile-section-title svg {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .profile-section-title h3 {
@@ -259,7 +259,7 @@
 
 .profile-btn-save {
   padding: 8px 16px;
-  background: #DC2626;
+  background: var(--color-primary);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -273,7 +273,7 @@
 }
 
 .profile-btn-save:hover:not(:disabled) {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 .profile-btn-save:disabled {
@@ -345,8 +345,8 @@
 .profile-form-group input:focus,
 .profile-form-group textarea:focus {
   outline: none;
-  border-color: #DC2626;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .profile-form-group input:disabled,

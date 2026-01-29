@@ -235,7 +235,7 @@ export function GarantiasTab() {
       showCancelButton: true,
       confirmButtonText: 'Agregar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 400,
       didOpen: () => {
         // Configurar búsqueda con dropdown custom
@@ -255,7 +255,7 @@ export function GarantiasTab() {
           } else {
             dropdown.innerHTML = filtered.map(c => `
               <div class="conductor-option" data-id="${c.id}" style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background 0.15s;">
-                <strong style="color: #DC2626;">${c.apellidos}, ${c.nombres}</strong>
+                <strong style="color: #ff0033;">${c.apellidos}, ${c.nombres}</strong>
               </div>
             `).join('')
             
@@ -383,7 +383,7 @@ export function GarantiasTab() {
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 340,
       preConfirm: () => {
         const cuotasPagadas = parseInt((document.getElementById('swal-cuotas-pagadas') as HTMLInputElement).value)
@@ -444,12 +444,12 @@ export function GarantiasTab() {
     const result = await Swal.fire({
       title: 'Eliminar Garantía',
       html: `<p>¿Eliminar la garantía de <strong>${garantia.conductor_nombre}</strong>?</p>
-             <p style="color: #DC2626; font-size: 12px;">Esto también eliminará el historial de pagos.</p>`,
+             <p style="color: #ff0033; font-size: 12px;">Esto también eliminará el historial de pagos.</p>`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Eliminar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626'
+      confirmButtonColor: '#ff0033'
     })
 
     if (!result.isConfirmed) return
@@ -501,7 +501,7 @@ export function GarantiasTab() {
             <div style="display: flex; gap: 12px; margin-top: 4px;">
               <span style="color: #6B7280; font-size: 12px;">Cuota: <strong style="color: #374151;">${siguienteCuota}/${garantia.cuotas_totales}</strong></span>
             </div>
-            <div style="color: #DC2626; font-size: 12px; margin-top: 4px;">
+            <div style="color: #ff0033; font-size: 12px; margin-top: 4px;">
               Pendiente: <strong>${formatCurrency(pendiente)}</strong>
             </div>
           </div>
@@ -533,7 +533,7 @@ export function GarantiasTab() {
       showCancelButton: true,
       confirmButtonText: 'Registrar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 340,
       preConfirm: () => {
         const semana = parseInt((document.getElementById('swal-semana') as HTMLSelectElement).value)
@@ -619,7 +619,7 @@ export function GarantiasTab() {
               <div style="font-weight: 600; color: #111827;">${garantia.conductor_nombre}</div>
               <div style="display: flex; gap: 12px; margin-top: 4px;">
                 <span style="color: #16a34a; font-size: 12px;">Pagado: <strong>${formatCurrency(garantia.monto_pagado)}</strong></span>
-                <span style="color: #DC2626; font-size: 12px;">Pendiente: <strong>${formatCurrency(garantia.monto_total - garantia.monto_pagado)}</strong></span>
+                <span style="color: #ff0033; font-size: 12px;">Pendiente: <strong>${formatCurrency(garantia.monto_total - garantia.monto_pagado)}</strong></span>
               </div>
               <div style="background: #E5E7EB; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
                 <div style="background: #16a34a; height: 100%; width: ${porcentaje}%;"></div>
@@ -698,7 +698,7 @@ export function GarantiasTab() {
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 360,
       preConfirm: () => {
         const semanaValue = (document.getElementById('swal-semana') as HTMLSelectElement).value
@@ -1067,7 +1067,7 @@ export function GarantiasTab() {
             gap: '6px',
             padding: '10px 16px',
             border: 'none',
-            background: activeSubTab === 'garantias' ? '#DC2626' : 'transparent',
+            background: activeSubTab === 'garantias' ? '#ff0033' : 'transparent',
             color: activeSubTab === 'garantias' ? 'white' : '#6B7280',
             borderRadius: '6px 6px 0 0',
             cursor: 'pointer',
@@ -1096,7 +1096,7 @@ export function GarantiasTab() {
             gap: '6px',
             padding: '10px 16px',
             border: 'none',
-            background: activeSubTab === 'movimientos' ? '#DC2626' : 'transparent',
+            background: activeSubTab === 'movimientos' ? '#ff0033' : 'transparent',
             color: activeSubTab === 'movimientos' ? 'white' : '#6B7280',
             borderRadius: '6px 6px 0 0',
             cursor: 'pointer',
@@ -1171,9 +1171,9 @@ export function GarantiasTab() {
                 </div>
               </div>
               <div className="fact-stat-card">
-                <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#DC2626' }} />
+                <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#ff0033' }} />
                 <div className="fact-stat-content">
-                  <span className="fact-stat-value" style={{ color: '#DC2626' }}>{formatCurrency(stats.totalPorRecaudar)}</span>
+                  <span className="fact-stat-value" style={{ color: '#ff0033' }}>{formatCurrency(stats.totalPorRecaudar)}</span>
                   <span className="fact-stat-label">Por Recaudar</span>
                 </div>
               </div>

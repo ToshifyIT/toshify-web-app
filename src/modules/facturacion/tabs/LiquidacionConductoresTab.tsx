@@ -291,7 +291,7 @@ export function LiquidacionConductoresTab() {
       showCancelButton: true,
       confirmButtonText: 'Calcular Liquidación',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 480,
       preConfirm: () => {
         const conductorId = (document.getElementById('swal-conductor-id') as HTMLInputElement).value
@@ -538,7 +538,7 @@ export function LiquidacionConductoresTab() {
             </tr>
             <tr style="font-weight: 600;">
               <td style="padding: 8px;">Subtotal Cargos</td>
-              <td style="padding: 8px; text-align: right; color: #DC2626;">${formatCurrency(liquidacion.subtotal_cargos)}</td>
+              <td style="padding: 8px; text-align: right; color: #ff0033;">${formatCurrency(liquidacion.subtotal_cargos)}</td>
             </tr>
 
             <tr style="background: #D1FAE5;">
@@ -557,7 +557,7 @@ export function LiquidacionConductoresTab() {
               <td style="padding: 10px; font-weight: 700; font-size: 14px;">
                 TOTAL A ${esDeuda ? 'COBRAR' : 'DEVOLVER'}
               </td>
-              <td style="padding: 10px; text-align: right; font-weight: 700; font-size: 16px; color: ${esDeuda ? '#DC2626' : '#10B981'};">
+              <td style="padding: 10px; text-align: right; font-weight: 700; font-size: 16px; color: ${esDeuda ? '#ff0033' : '#10B981'};">
                 ${formatCurrency(Math.abs(liquidacion.total_liquidacion))}
               </td>
             </tr>
@@ -709,7 +709,7 @@ export function LiquidacionConductoresTab() {
       text: `Se eliminará la liquidación de ${liquidacion.conductor_nombre}`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       confirmButtonText: 'Eliminar',
       cancelButtonText: 'Cancelar'
     })
@@ -842,7 +842,7 @@ export function LiquidacionConductoresTab() {
         return (
           <span style={{
             fontWeight: 600,
-            color: esDeuda ? '#DC2626' : '#10B981'
+            color: esDeuda ? '#ff0033' : '#10B981'
           }}>
             {esDeuda ? '' : '-'}{formatCurrency(Math.abs(row.original.total_liquidacion))}
           </span>
@@ -977,7 +977,7 @@ export function LiquidacionConductoresTab() {
             </div>
           </div>
           <div className="fact-stat-card">
-            <DollarSign size={18} className="fact-stat-icon" style={{ color: '#DC2626' }} />
+            <DollarSign size={18} className="fact-stat-icon" style={{ color: '#ff0033' }} />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{formatCurrency(stats.montoCobrar)}</span>
               <span className="fact-stat-label">Total a Cobrar</span>

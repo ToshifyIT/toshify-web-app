@@ -503,7 +503,7 @@ export function ProgramacionModule() {
     const result = await Swal.fire({
       title: yaEnviada ? 'Eliminar programacion enviada?' : 'Eliminar programacion?',
       html: yaEnviada
-        ? '<p style="color: #DC2626; font-weight: 500;">ATENCION: Esta programacion ya fue enviada a Entrega.</p><p>Solo se eliminara de esta lista, la asignacion en Entrega permanecera.</p>'
+        ? '<p style="color: #ff0033; font-weight: 500;">ATENCION: Esta programacion ya fue enviada a Entrega.</p><p>Solo se eliminara de esta lista, la asignacion en Entrega permanecera.</p>'
         : '<p>Por favor ingrese el motivo de la eliminacion:</p>',
       input: 'textarea',
       inputPlaceholder: 'Motivo de eliminacion...',
@@ -512,7 +512,7 @@ export function ProgramacionModule() {
       },
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       confirmButtonText: 'Eliminar',
       cancelButtonText: 'Cancelar',
       inputValidator: (value) => {
@@ -626,7 +626,7 @@ export function ProgramacionModule() {
           title: 'Ningún conductor confirmó',
           html: `
             <div style="text-align: left; font-size: 14px;">
-              <p style="color: #DC2626;"><strong>Atención:</strong> Ninguno de los conductores ha confirmado asistencia.</p>
+              <p style="color: #ff0033;"><strong>Atención:</strong> Ninguno de los conductores ha confirmado asistencia.</p>
               <p><strong>D:</strong> ${prog.conductor_diurno_nombre || '-'} - <span style="color: #6B7280;">${prog.confirmacion_diurno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_diurno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar'}</span></p>
               <p><strong>N:</strong> ${prog.conductor_nocturno_nombre || '-'} - <span style="color: #6B7280;">${prog.confirmacion_nocturno === 'no_confirmo' ? 'No confirmó' : prog.confirmacion_nocturno === 'reprogramar' ? 'Reprogramar' : 'Sin confirmar'}</span></p>
             </div>
@@ -654,7 +654,7 @@ export function ProgramacionModule() {
           html: `
             <div style="text-align: left; font-size: 14px;">
               <p><strong style="color: #10B981;">${quienConfirmo}:</strong> ${nombreConfirmo} - <span style="color: #10B981;">Confirmó</span></p>
-              <p><strong style="color: #DC2626;">${quienNo}:</strong> ${nombreNo} - <span style="color: #DC2626;">${estadoNo}</span></p>
+              <p><strong style="color: #ff0033;">${quienNo}:</strong> ${nombreNo} - <span style="color: #ff0033;">${estadoNo}</span></p>
               <p style="margin-top: 12px; color: #6B7280;">
                 ¿Cómo desea proceder?
               </p>

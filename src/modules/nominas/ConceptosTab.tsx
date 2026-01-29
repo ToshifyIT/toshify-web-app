@@ -195,7 +195,7 @@ export function ConceptosTab() {
       text: `¿Está seguro de eliminar "${concepto.descripcion}"?`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar'
