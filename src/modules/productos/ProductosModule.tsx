@@ -1349,8 +1349,8 @@ export function ProductosModule() {
                             </tr>
                           ))}
                           <tr style={{ background: 'var(--bg-secondary)' }}>
-                            <td colSpan={2} style={{ textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>TOTAL:</td>
-                            <td style={{ textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>
+                            <td colSpan={2} style={{ textAlign: 'right', fontWeight: 700, color: '#ff0033' }}>TOTAL:</td>
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: '#ff0033' }}>
                               {stockPorProveedor.reduce((sum, stock) => sum + stock.cantidad, 0)} {selectedProducto.unidades_medida?.descripcion || ''}
                             </td>
                           </tr>

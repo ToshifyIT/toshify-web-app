@@ -179,42 +179,42 @@ export function PeriodosTab() {
           <div style="color: #374151; font-size: 12px; margin-bottom: 8px;">Este proceso:</div>
           <div style="display: flex; flex-direction: column; gap: 6px;">
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
-              <span style="width: 6px; height: 6px; background: #DC2626; border-radius: 50%; flex-shrink: 0;"></span>
+              <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
               Procesará todos los conductores con asignación activa
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
-              <span style="width: 6px; height: 6px; background: #DC2626; border-radius: 50%; flex-shrink: 0;"></span>
+              <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
               Calculará alquiler proporcional <span style="color: #9CA3AF;">(P001/P002)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
-              <span style="width: 6px; height: 6px; background: #DC2626; border-radius: 50%; flex-shrink: 0;"></span>
+              <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
               Calculará cuota de garantía <span style="color: #9CA3AF;">(P003)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
-              <span style="width: 6px; height: 6px; background: #DC2626; border-radius: 50%; flex-shrink: 0;"></span>
+              <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
               Aplicará penalidades pendientes <span style="color: #9CA3AF;">(P007)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
-              <span style="width: 6px; height: 6px; background: #DC2626; border-radius: 50%; flex-shrink: 0;"></span>
+              <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
               Aplicará tickets a favor <span style="color: #9CA3AF;">(P004)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
-              <span style="width: 6px; height: 6px; background: #DC2626; border-radius: 50%; flex-shrink: 0;"></span>
+              <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
               Aplicará excesos de kilometraje <span style="color: #9CA3AF;">(P006)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
-              <span style="width: 6px; height: 6px; background: #DC2626; border-radius: 50%; flex-shrink: 0;"></span>
+              <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
               Calculará saldos y mora <span style="color: #9CA3AF;">(P009)</span>
             </div>
           </div>
         </div>
       `,
       icon: 'question',
-      iconColor: '#DC2626',
+      iconColor: '#ff0033',
       showCancelButton: true,
       confirmButtonText: 'Generar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       width: 380,
       customClass: {
@@ -735,11 +735,11 @@ export function PeriodosTab() {
       title: 'Cerrar Período',
       html: `
         <p>¿Cerrar el período <strong>Semana ${semana.semana} - ${semana.anio}</strong>?</p>
-        <p style="color: #DC2626; margin-top: 10px;">Esta acción bloqueará las ediciones.</p>
+        <p style="color: #ff0033; margin-top: 10px;">Esta acción bloqueará las ediciones.</p>
       `,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       confirmButtonText: 'Sí, cerrar',
       cancelButtonText: 'Cancelar'
     })
@@ -820,7 +820,7 @@ export function PeriodosTab() {
         <div style="text-align: left;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 13px; margin-bottom: 16px;">
             <div style="display: flex; justify-content: space-between;"><span style="color: #6B7280;">Período</span> <strong>${format(new Date(semana.fecha_inicio), 'dd/MM', { locale: es })} - ${format(new Date(semana.fecha_fin), 'dd/MM/yyyy', { locale: es })}</strong></div>
-            <div style="display: flex; justify-content: space-between;"><span style="color: #6B7280;">Estado</span> <strong style="text-transform: uppercase; color: ${semana.estado === 'cerrado' ? '#E63946' : '#10B981'};">${semana.estado}</strong></div>
+            <div style="display: flex; justify-content: space-between;"><span style="color: #6B7280;">Estado</span> <strong style="text-transform: uppercase; color: ${semana.estado === 'cerrado' ? '#ff0033' : '#10B981'};">${semana.estado}</strong></div>
             <div style="display: flex; justify-content: space-between;"><span style="color: #6B7280;">Conductores</span> <strong>${semana.total_conductores}</strong></div>
             <div style="display: flex; justify-content: space-between;"><span style="color: #6B7280;">Total Neto</span> <strong style="color: #10B981;">${formatCurrency(semana.total_neto)}</strong></div>
           </div>
@@ -840,7 +840,7 @@ export function PeriodosTab() {
                       <div style="font-weight: 500;">${c.conductor_nombre}</div>
                       <div style="font-size: 11px; color: #9CA3AF;">${c.vehiculo_patente || '-'}</div>
                     </td>
-                    <td style="padding: 10px 12px; text-align: right; font-weight: 600; color: ${c.total_a_pagar < 0 ? '#E63946' : '#10B981'};">
+                    <td style="padding: 10px 12px; text-align: right; font-weight: 600; color: ${c.total_a_pagar < 0 ? '#ff0033' : '#10B981'};">
                       ${formatCurrency(c.total_a_pagar)}
                     </td>
                   </tr>

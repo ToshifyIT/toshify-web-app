@@ -323,7 +323,7 @@ export interface ConceptoFacturacionFormData {
 
 export const TIPOS_CONCEPTO = [
   { value: 'alquiler', label: 'Alquiler', color: '#3B82F6' },
-  { value: 'cargo', label: 'Cargo', color: '#DC2626' },
+  { value: 'cargo', label: 'Cargo', color: '#ff0033' },
   { value: 'descuento', label: 'Descuento', color: '#059669' },
   { value: 'penalidad', label: 'Penalidad', color: '#D97706' },
   { value: 'ingreso', label: 'Ingreso', color: '#8B5CF6' }

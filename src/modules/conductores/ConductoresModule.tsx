@@ -610,7 +610,7 @@ export function ConductoresModule() {
         icon: 'error',
         title: 'Error',
         text: err.message || 'No se pudo crear la carpeta de Drive',
-        confirmButtonColor: '#E63946',
+        confirmButtonColor: '#ff0033',
       });
     } finally {
       setCreatingDriveFolder(null);
@@ -651,7 +651,7 @@ export function ConductoresModule() {
         icon: 'error',
         title: 'Error',
         text: err.message || 'No se pudieron cargar los archivos',
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       });
     } finally {
       setLoadingDriveFiles(false);
@@ -781,7 +781,7 @@ export function ConductoresModule() {
         icon: "error",
         title: "Sin permisos",
         text: "No tienes permisos para crear conductores",
-        confirmButtonColor: "#E63946",
+        confirmButtonColor: "#ff0033",
       });
       return;
     }
@@ -795,7 +795,7 @@ export function ConductoresModule() {
         icon: "warning",
         title: "Campos requeridos",
         text: "Complete todos los campos requeridos",
-        confirmButtonColor: "#E63946",
+        confirmButtonColor: "#ff0033",
       });
       return;
     }
@@ -895,7 +895,7 @@ export function ConductoresModule() {
         icon: "error",
         title: "Error",
         text: err.message,
-        confirmButtonColor: "#E63946",
+        confirmButtonColor: "#ff0033",
       });
     } finally {
       setSaving(false);
@@ -908,7 +908,7 @@ export function ConductoresModule() {
         icon: "error",
         title: "Sin permisos",
         text: "No tienes permisos para editar conductores",
-        confirmButtonColor: "#E63946",
+        confirmButtonColor: "#ff0033",
       });
       return;
     }
@@ -927,7 +927,7 @@ export function ConductoresModule() {
         icon: "warning",
         title: "CUIL requerido",
         text: "El CUIL es obligatorio para la facturación mensual",
-        confirmButtonColor: "#E63946",
+        confirmButtonColor: "#ff0033",
       });
       return;
     }
@@ -969,7 +969,7 @@ export function ConductoresModule() {
         icon: "error",
         title: "Error",
         text: err.message,
-        confirmButtonColor: "#E63946",
+        confirmButtonColor: "#ff0033",
       });
     } finally {
       setSaving(false);
@@ -1269,7 +1269,7 @@ export function ConductoresModule() {
         icon: "error",
         title: "Error",
         text: err.message,
-        confirmButtonColor: "#E63946",
+        confirmButtonColor: "#ff0033",
       });
     } finally {
       setPendingBajaUpdate(false);
@@ -1282,7 +1282,7 @@ export function ConductoresModule() {
         icon: "error",
         title: "Sin permisos",
         text: "No tienes permisos para eliminar conductores",
-        confirmButtonColor: "#E63946",
+        confirmButtonColor: "#ff0033",
       });
       return;
     }
@@ -1308,7 +1308,7 @@ export function ConductoresModule() {
         icon: "error",
         title: "Error",
         text: err.message,
-        confirmButtonColor: "#E63946",
+        confirmButtonColor: "#ff0033",
       });
     } finally {
       setSaving(false);
@@ -2903,7 +2903,7 @@ function ModalEditar({
                     setFormData({ ...formData, fecha_terminacion: e.target.value })
                   }
                   disabled={saving}
-                  style={{ borderColor: '#DC2626' }}
+                  style={{ borderColor: '#ff0033' }}
                 />
               </div>
             </div>
@@ -2919,7 +2919,7 @@ function ModalEditar({
                   disabled={saving}
                   placeholder="Describa el motivo de la baja..."
                   rows={3}
-                  style={{ borderColor: '#DC2626', resize: 'vertical' }}
+                  style={{ borderColor: '#ff0033', resize: 'vertical' }}
                 />
               </div>
             </div>
@@ -3010,7 +3010,7 @@ function ModalEliminar({
     >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 style={{ color: "#DC2626" }}>Eliminar Conductor</h2>
+          <h2 style={{ color: "#ff0033" }}>Eliminar Conductor</h2>
           <button
             className="modal-close"
             onClick={() => !saving && setShowDeleteModal(false)}
@@ -3053,7 +3053,7 @@ function ModalEliminar({
             className="btn-primary"
             onClick={handleDelete}
             disabled={saving}
-            style={{ background: "#DC2626" }}
+            style={{ background: "#ff0033" }}
           >
             {saving ? "Eliminando..." : "Sí, Eliminar"}
           </button>
@@ -3499,7 +3499,7 @@ function ModalConfirmBaja({
         style={{ maxWidth: '600px' }}
       >
         <div className="modal-header">
-          <h2 style={{ color: '#DC2626' }}>Confirmar Baja de Conductor</h2>
+          <h2 style={{ color: '#ff0033' }}>Confirmar Baja de Conductor</h2>
           <button
             className="modal-close"
             onClick={() => !processing && onCancel()}
@@ -3593,7 +3593,7 @@ function ModalConfirmBaja({
             fontWeight: 600,
             color: 'var(--text-primary)'
           }}>
-            Motivo de la baja <span style={{ color: '#DC2626' }}>*</span>
+            Motivo de la baja <span style={{ color: '#ff0033' }}>*</span>
           </label>
           <textarea
             value={motivoBaja}
@@ -3627,7 +3627,7 @@ function ModalConfirmBaja({
             onClick={() => onConfirm(motivoBaja)}
             disabled={processing || !motivoBaja.trim()}
             style={{
-              background: '#DC2626',
+              background: '#ff0033',
               color: 'white',
               border: 'none',
               padding: '10px 20px',

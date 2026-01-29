@@ -24,7 +24,7 @@
 }
 
 .veh-header-title {
-  border-left: 4px solid #DC2626;
+  border-left: 4px solid var(--color-primary);
   padding-left: 16px;
 }
 
@@ -69,7 +69,7 @@
 }
 
 .veh-stats .stat-card .stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -104,14 +104,14 @@
 }
 
 .veh-stats .stat-card.stat-card-active {
-  border-color: #DC2626;
-  background: rgba(220, 38, 38, 0.05);
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
 /* Stat Loading Spinner */
 .veh-stats .stat-spinner {
   animation: spin 1s linear infinite;
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 @keyframes spin {
@@ -268,7 +268,7 @@
 }
 
 .vehiculo-wizard .wizard-step-header svg {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .vehiculo-wizard .wizard-step-header h3 {
@@ -291,7 +291,7 @@
   padding: 12px;
   background: var(--bg-secondary);
   border-radius: 6px;
-  border-left: 3px solid #DC2626;
+  border-left: 3px solid var(--color-primary);
 }
 
 /* Checkbox Cards */
@@ -321,7 +321,7 @@
 }
 
 .vehiculo-wizard .checkbox-card:has(input:checked) {
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: #FEF2F2;
 }
 
@@ -329,7 +329,7 @@
   margin-bottom: 8px;
   width: 18px;
   height: 18px;
-  accent-color: #DC2626;
+  accent-color: var(--color-primary);
 }
 
 .vehiculo-wizard .checkbox-card-label {
@@ -340,7 +340,7 @@
 }
 
 .vehiculo-wizard .checkbox-card:has(input:checked) .checkbox-card-label {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .vehiculo-wizard .checkbox-card-desc {
@@ -393,13 +393,13 @@
 
 /* Form validation */
 .vehiculo-wizard .input-error {
-  border-color: #DC2626 !important;
+  border-color: var(--color-primary) !important;
   background: #FEF2F2 !important;
 }
 
 .vehiculo-wizard .error-message {
   font-size: 11px;
-  color: #DC2626;
+  color: var(--color-primary);
   margin-top: 2px;
 }
 

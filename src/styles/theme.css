@@ -7,11 +7,12 @@
      COLOR SCHEME - LIGHT MODE (Default)
      ========================================== */
 
-  /* Brand Colors */
-  --color-primary: #E63946;
-  --color-primary-hover: #D62828;
-  --color-primary-light: rgba(230, 57, 70, 0.1);
-  --color-primary-shadow: rgba(230, 57, 70, 0.2);
+  /* Brand Colors - Toshify Dev Library */
+  --color-primary: #ff0033;
+  --color-primary-hover: #e6002e;
+  --color-primary-light: rgba(255, 0, 51, 0.1);
+  --color-primary-shadow: rgba(255, 0, 51, 0.2);
+  --color-secondary: #fd97ca;
 
   /* Semantic Colors */
   --color-success: #10B981;
@@ -54,9 +55,9 @@
   --color-gray-800: #1F2937;
   --color-gray-900: #111827;
 
-  /* Background Colors */
+  /* Background Colors - Toshify Dev Library */
   --bg-primary: #FFFFFF;
-  --bg-secondary: #F9FAFB;
+  --bg-secondary: #f8f5f6;
   --bg-tertiary: #F3F4F6;
   --bg-hover: #FAFAFA;
   --bg-overlay: rgba(0, 0, 0, 0.5);
@@ -71,7 +72,7 @@
   /* Border Colors */
   --border-primary: #E5E7EB;
   --border-secondary: #F3F4F6;
-  --border-focus: #E63946;
+  --border-focus: #ff0033;
 
   /* Shadow */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -85,7 +86,7 @@
 
   --input-bg: #FFFFFF;
   --input-border: #E5E7EB;
-  --input-focus-shadow: 0 0 0 3px rgba(249, 6, 55, 0.1);
+  --input-focus-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
 
   --modal-bg: #FFFFFF;
   --card-bg: #FFFFFF;
@@ -367,7 +368,7 @@
 }
 
 .swal2-confirm:focus {
-  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.2) !important;
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.2) !important;
 }
 
 /* Boton cancelar */
@@ -451,7 +452,7 @@
 .swal2-textarea:focus,
 .swal2-select:focus {
   border-color: var(--color-primary) !important;
-  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1) !important;
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1) !important;
   outline: none !important;
 }
 
@@ -479,11 +480,12 @@
    DARK MODE
    ========================================== */
 [data-theme="dark"] {
-  /* Brand Colors - Crimson Red */
-  --color-primary: #DC3545;
-  --color-primary-hover: #E74C5C;
-  --color-primary-light: rgba(220, 53, 69, 0.15);
-  --color-primary-shadow: rgba(220, 53, 69, 0.3);
+  /* Brand Colors - Toshify Dev Library */
+  --color-primary: #ff0033;
+  --color-primary-hover: #ff3366;
+  --color-primary-light: rgba(255, 0, 51, 0.15);
+  --color-primary-shadow: rgba(255, 0, 51, 0.3);
+  --color-secondary: #fd97ca;
 
   /* Semantic Colors */
   --color-success: #22C55E;
@@ -496,10 +498,10 @@
   --color-warning-dark: #FDE68A;
   --color-warning-hover: #FCD34D;
 
-  --color-danger: #DC3545;
-  --color-danger-light: rgba(220, 53, 69, 0.15);
-  --color-danger-dark: #F1A1A8;
-  --color-danger-hover: #E74C5C;
+  --color-danger: #ff0033;
+  --color-danger-light: rgba(255, 0, 51, 0.15);
+  --color-danger-dark: #ff6680;
+  --color-danger-hover: #ff3366;
 
   --color-info: #60A5FA;
   --color-info-light: rgba(96, 165, 250, 0.15);
@@ -526,11 +528,11 @@
   --color-gray-800: #f5f5f5;
   --color-gray-900: #fafafa;
 
-  /* Background Colors - True dark */
-  --bg-primary: #121212;
-  --bg-secondary: #1a1a1a;
-  --bg-tertiary: #2d2d2d;
-  --bg-hover: #252525;
+  /* Background Colors - Toshify Dev Library Dark */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #171717;
+  --bg-tertiary: #262626;
+  --bg-hover: #1f1f1f;
   --bg-overlay: rgba(0, 0, 0, 0.8);
 
   /* Text Colors */
@@ -540,10 +542,10 @@
   --text-inverse: #121212;
   --text-muted: #737373;
 
-  /* Border Colors - Subtle with crimson tint */
-  --border-primary: #2d2d2d;
-  --border-secondary: #1f1f1f;
-  --border-focus: #DC3545;
+  /* Border Colors - Toshify Dev Library */
+  --border-primary: #262626;
+  --border-secondary: #1a1a1a;
+  --border-focus: #ff0033;
 
   /* Shadow */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -551,18 +553,18 @@
   --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
 
   /* Component Specific */
-  --table-header-bg: #1a1a1a;
-  --table-row-hover: rgba(220, 53, 69, 0.05);
-  --table-border: #2d2d2d;
+  --table-header-bg: #171717;
+  --table-row-hover: rgba(255, 0, 51, 0.05);
+  --table-border: #262626;
 
-  --input-bg: #1a1a1a;
-  --input-border: #2d2d2d;
-  --input-focus-shadow: 0 0 0 3px rgba(220, 53, 69, 0.2);
+  --input-bg: #171717;
+  --input-border: #262626;
+  --input-focus-shadow: 0 0 0 3px rgba(255, 0, 51, 0.2);
 
-  --modal-bg: #1a1a1a;
-  --card-bg: #1a1a1a;
+  --modal-bg: #171717;
+  --card-bg: #171717;
 
-  --pagination-bg: #1a1a1a;
+  --pagination-bg: #171717;
 
   /* Status Badge Backgrounds */
   --badge-green-bg: rgba(34, 197, 94, 0.15);
@@ -571,8 +573,8 @@
   --badge-blue-text: #93C5FD;
   --badge-yellow-bg: rgba(251, 191, 36, 0.15);
   --badge-yellow-text: #FDE68A;
-  --badge-red-bg: rgba(220, 53, 69, 0.15);
-  --badge-red-text: #F1A1A8;
+  --badge-red-bg: rgba(255, 0, 51, 0.15);
+  --badge-red-text: #ff6680;
   --badge-gray-bg: rgba(115, 115, 115, 0.15);
   --badge-gray-text: #a3a3a3;
   --badge-purple-bg: rgba(167, 139, 250, 0.15);

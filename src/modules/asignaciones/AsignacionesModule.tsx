@@ -675,7 +675,7 @@ export function AsignacionesModule() {
       text: 'Esta acción eliminará la asignación permanentemente. Si fue creada desde Programaciones, podrás enviarla nuevamente.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar'
@@ -933,7 +933,7 @@ export function AsignacionesModule() {
                 }
                 
                 // Info del conflicto
-                mensajeHtml += `<p style="margin:0;color:#DC2626;"><strong>⚠️ Ese turno está ocupado por ${conflicto.conductorActual.nombre}</strong></p>`
+                mensajeHtml += `<p style="margin:0;color:#ff0033;"><strong>⚠️ Ese turno está ocupado por ${conflicto.conductorActual.nombre}</strong></p>`
                 mensajeHtml += `<p style="margin:4px 0 0 0;color:#666;font-size:13px;">Si confirmas, ${conflicto.conductorActual.nombre} quedará sin asignación.</p>`
                 
                 mensajeHtml += `</div>`
@@ -1915,7 +1915,7 @@ export function AsignacionesModule() {
             <h2 className="asig-modal-title">Cancelar Programación</h2>
             <p>¿Estás seguro de cancelar la programación del vehículo <strong>{selectedAsignacion.vehiculos?.patente}</strong>?</p>
 
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: '#DC2626' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: '#ff0033' }}>
               Motivo de cancelación (requerido):
             </label>
             <textarea
@@ -1942,7 +1942,7 @@ export function AsignacionesModule() {
                 className="btn-primary"
                 onClick={handleCancelProgramacion}
                 disabled={!cancelMotivo.trim() || isSubmitting}
-                style={{ background: cancelMotivo.trim() && !isSubmitting ? '#DC2626' : '#D1D5DB' }}
+                style={{ background: cancelMotivo.trim() && !isSubmitting ? '#ff0033' : '#D1D5DB' }}
               >
                 {isSubmitting ? 'Procesando...' : 'Cancelar Programación'}
               </button>
@@ -2016,7 +2016,7 @@ export function AsignacionesModule() {
                                       title: '¿Desconfirmar conductor?',
                                       icon: 'warning',
                                       showCancelButton: true,
-                                      confirmButtonColor: '#E63946',
+                                      confirmButtonColor: '#ff0033',
                                       confirmButtonText: 'Sí, desconfirmar'
                                     }).then((result) => {
                                       if (result.isConfirmed) {

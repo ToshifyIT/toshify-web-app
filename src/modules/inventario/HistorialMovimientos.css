@@ -24,7 +24,7 @@
 }
 
 .hist-header-title {
-  border-left: 4px solid #DC2626;
+  border-left: 4px solid var(--color-primary);
   padding-left: 16px;
 }
 

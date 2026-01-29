@@ -249,9 +249,9 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
 }
 
 .form-group input:disabled,
@@ -299,7 +299,7 @@
   outline: none;
   border-color: var(--color-primary);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 3px rgba(249, 6, 55, 0.1);
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
 }
 
 .form-input:disabled {
@@ -317,12 +317,12 @@
 .form-checkbox {
   margin-right: 6px;
   cursor: pointer;
-  accent-color: #DC2626;
+  accent-color: var(--color-primary);
 }
 
 /* Checkboxes globales con accent rojo */
 input[type="checkbox"] {
-  accent-color: #DC2626;
+  accent-color: var(--color-primary);
 }
 
 .form-checkbox-label {
@@ -409,7 +409,7 @@ input[type="checkbox"] {
 
 /* Botón primario ROJO */
 .modal-footer .btn-primary {
-  background: #DC2626 !important;
+  background: var(--color-primary) !important;
   border: none !important;
   color: white !important;
   padding: 10px 20px !important;
@@ -419,7 +419,7 @@ input[type="checkbox"] {
 }
 
 .modal-footer .btn-primary:hover:not(:disabled) {
-  background: #B91C1C !important;
+  background: var(--color-primary-hover) !important;
 }
 
 /* Botón secundario GRIS CLARO */

@@ -62,7 +62,7 @@
 }
 
 .siniestros-tab.active {
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
 }
 
@@ -111,7 +111,7 @@
 }
 
 .stat-card .stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -214,7 +214,7 @@
 .filter-select:focus,
 .filter-input:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
 }
 
 .search-wrapper {
@@ -244,7 +244,7 @@
 
 .search-input:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
 }
 
 /* =====================================================
@@ -389,7 +389,7 @@
 
 /* Responsable */
 .responsable-tercero { color: #059669; }
-.responsable-conductor { color: #DC2626; }
+.responsable-conductor { color: var(--color-primary); }
 .responsable-compartida { color: #D97706; }
 
 /* Monto */
@@ -399,7 +399,7 @@
 }
 
 .monto-positivo { color: #059669; }
-.monto-pendiente { color: #DC2626; }
+.monto-pendiente { color: var(--color-primary); }
 
 /* Acciones */
 .table-actions {
@@ -422,8 +422,8 @@
 }
 
 .btn-icon:hover {
-  border-color: #DC2626;
-  color: #DC2626;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .btn-icon.btn-drive {
@@ -544,8 +544,8 @@
 
 .pagination button:hover:not(:disabled) {
   background: var(--bg-secondary);
-  border-color: var(--color-primary, #DC2626);
-  color: var(--color-primary, #DC2626);
+  border-color: var(--color-primary, var(--color-primary));
+  color: var(--color-primary, var(--color-primary));
 }
 
 .pagination button:disabled {
@@ -587,13 +587,13 @@
 }
 
 .btn-primary {
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
   border: none;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 .btn-secondary:disabled,
@@ -748,7 +748,7 @@
 }
 
 .form-group label .required {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .form-group input,
@@ -767,9 +767,9 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .form-group textarea {
@@ -824,7 +824,7 @@
 }
 
 .searchable-option strong {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .clear-selection {
@@ -843,7 +843,7 @@
 }
 
 .clear-selection:hover {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 /* Radio group */
@@ -860,7 +860,7 @@
 }
 
 .radio-option input[type="radio"] {
-  accent-color: #DC2626;
+  accent-color: var(--color-primary);
 }
 
 .radio-option span {
@@ -879,7 +879,7 @@
 .checkbox-option input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #DC2626;
+  accent-color: var(--color-primary);
   margin: 0;
   margin-right: 10px;
 }
@@ -906,7 +906,7 @@
 .checkbox-row .checkbox-card input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #DC2626;
+  accent-color: var(--color-primary);
   cursor: pointer;
   margin: 0;
   margin-right: 10px;
@@ -1056,7 +1056,7 @@
   top: 6px;
   width: 8px;
   height: 8px;
-  background: #DC2626;
+  background: var(--color-primary);
   border-radius: 50%;
 }
 
@@ -1161,7 +1161,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #DC2626;
+  color: var(--color-primary);
   font-weight: 500;
 }
 
@@ -1358,7 +1358,7 @@
 }
 
 .wizard-step-header svg {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .wizard-step-header h3 {
@@ -1389,7 +1389,7 @@
   padding: 12px;
   background: var(--bg-secondary);
   border-radius: 6px;
-  border-left: 3px solid #DC2626;
+  border-left: 3px solid var(--color-primary);
 }
 
 /* Radio Cards for Responsable */
@@ -1419,7 +1419,7 @@
 }
 
 .radio-card.selected {
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: #FEF2F2;
 }
 
@@ -1436,7 +1436,7 @@
 }
 
 .radio-card.selected .radio-card-label {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .radio-card-desc {
@@ -1455,7 +1455,7 @@
 }
 
 .checkbox-lesionados span {
-  color: #DC2626;
+  color: var(--color-primary);
   font-weight: 500;
 }
 
@@ -1503,13 +1503,13 @@
 
 /* Form validation */
 .input-error {
-  border-color: #DC2626 !important;
+  border-color: var(--color-primary) !important;
   background: #FEF2F2 !important;
 }
 
 .error-message {
   font-size: 11px;
-  color: #DC2626;
+  color: var(--color-primary);
   margin-top: 2px;
 }
 
@@ -1587,7 +1587,7 @@
 
 .detail-tab.active {
   background: var(--bg-primary);
-  color: #DC2626;
+  color: var(--color-primary);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -1685,7 +1685,7 @@
 }
 
 .reparacion-ticket .form-section-title svg {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .reparacion-dias {

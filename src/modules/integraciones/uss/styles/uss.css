@@ -27,7 +27,7 @@
 }
 
 .uss-header-title {
-  border-left: 4px solid #DC2626;
+  border-left: 4px solid var(--color-primary);
   padding-left: 16px;
 }
 
@@ -51,7 +51,7 @@
 }
 
 .uss-loading {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .uss-controls {
@@ -269,7 +269,7 @@
   background-color: #FEE2E2;
   border: 1px solid #FECACA;
   border-radius: 8px;
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 /* =====================================================
@@ -308,7 +308,7 @@
 }
 
 .uss-stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -524,8 +524,8 @@
 }
 
 .uss-search-input:focus {
-  border-color: #DC2626;
-  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 .uss-search-input::placeholder {
@@ -752,7 +752,7 @@
   width: 32px;
   height: 32px;
   border: 3px solid var(--bg-secondary);
-  border-top-color: #DC2626;
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 12px;

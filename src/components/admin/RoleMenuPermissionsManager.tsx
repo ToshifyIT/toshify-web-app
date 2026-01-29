@@ -968,7 +968,7 @@ export function RoleMenuPermissionsManager() {
         /* Nivel 1: Submenú directo del menú */
         .module-cell.is-submenu.level-1 {
           padding-left: 40px;
-          border-left: 3px solid #E63946;
+          border-left: 3px solid #ff0033;
           background: linear-gradient(90deg, rgba(230, 57, 70, 0.05) 0%, transparent 100%);
         }
 
@@ -1003,7 +1003,7 @@ export function RoleMenuPermissionsManager() {
 
         /* Indicadores por nivel */
         .module-cell.level-1 .submenu-indicator {
-          color: #E63946;
+          color: #ff0033;
           font-weight: 600;
           margin-right: 8px;
           font-family: monospace;
@@ -1024,7 +1024,7 @@ export function RoleMenuPermissionsManager() {
         }
 
         .submenu-indicator {
-          color: #E63946;
+          color: #ff0033;
           font-weight: 600;
           margin-right: 8px;
           font-family: monospace;
@@ -1051,13 +1051,13 @@ export function RoleMenuPermissionsManager() {
         }
 
         .perm-checkbox:hover {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: rgba(230, 57, 70, 0.08);
         }
 
         .perm-checkbox.checked {
-          background: #E63946;
-          border-color: #E63946;
+          background: #ff0033;
+          border-color: #ff0033;
           color: white;
         }
 
@@ -1100,8 +1100,8 @@ export function RoleMenuPermissionsManager() {
 
         .pagination-controls button:hover:not(:disabled) {
           background: var(--bg-hover, var(--bg-secondary));
-          border-color: #E63946;
-          color: #E63946;
+          border-color: #ff0033;
+          color: #ff0033;
         }
 
         .pagination-controls button:disabled {

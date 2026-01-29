@@ -105,7 +105,7 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
           textAlign: 'center',
           padding: '20px'
         }}>
-          <AlertCircle size={48} style={{ color: 'var(--color-error, #DC2626)' }} />
+          <AlertCircle size={48} style={{ color: 'var(--color-error, #ff0033)' }} />
           <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Error al cargar la página</h3>
           <p style={{ margin: 0 }}>Hubo un problema de conexión. Intentá de nuevo.</p>
           <button

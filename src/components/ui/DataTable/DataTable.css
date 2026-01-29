@@ -208,7 +208,7 @@
 }
 
 .dt-column-show-all:hover {
-  background: var(--color-primary-light, rgba(230, 57, 70, 0.1));
+  background: var(--color-primary-light, rgba(255, 0, 51, 0.1));
 }
 
 .dt-column-menu-list {
@@ -420,7 +420,7 @@
 .dt-search-input:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
+  box-shadow: var(--input-focus-shadow);
   background: var(--bg-primary);
 }
 
@@ -650,7 +650,7 @@
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: white;
-  box-shadow: 0 4px 12px rgba(255, 0, 51, 0.25);
+  box-shadow: 0 4px 12px var(--color-primary-shadow);
 }
 
 .dt-pagination-text {
@@ -679,7 +679,7 @@
 .dt-pagination-select:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
+  box-shadow: var(--input-focus-shadow);
 }
 
 /* Action Buttons Container - Toshify Design System */
@@ -809,7 +809,7 @@
 
 .dt-btn-action:hover {
   color: var(--color-primary);
-  background: rgba(255, 0, 51, 0.05);
+  background: var(--color-primary-light);
 }
 
 /* Tooltip para botones de acción - posición a la izquierda */
@@ -1732,7 +1732,7 @@
 }
 
 .dt-filter-clear:hover {
-  background: var(--color-primary-light, rgba(230, 57, 70, 0.1));
+  background: var(--color-primary-light, rgba(255, 0, 51, 0.1));
 }
 
 /* ===== Active Filters Bar ===== */
@@ -1759,7 +1759,7 @@
 }
 
 .dt-active-filters-label svg {
-  color: var(--color-primary, #e63946);
+  color: var(--color-primary, #ff0033);
 }
 
 .dt-active-filters-list {
@@ -1775,7 +1775,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px 4px 12px;
-  background: var(--color-primary, #e63946);
+  background: var(--color-primary, #ff0033);
   color: white;
   border-radius: 16px;
   font-size: 12px;
@@ -1827,9 +1827,9 @@
 }
 
 .dt-clear-all-filters:hover {
-  border-color: var(--color-primary, #e63946);
-  color: var(--color-primary, #e63946);
-  background: var(--color-primary-light, rgba(230, 57, 70, 0.05));
+  border-color: var(--color-primary, #ff0033);
+  color: var(--color-primary, #ff0033);
+  background: var(--color-primary-light, rgba(255, 0, 51, 0.05));
 }
 
 /* ===== Boolean Indicators (for expanded rows) ===== */

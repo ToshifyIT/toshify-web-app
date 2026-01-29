@@ -756,8 +756,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .step-circle.active {
-          background: #E63946;
-          border-color: #E63946;
+          background: #ff0033;
+          border-color: #ff0033;
           color: white;
           box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
           transform: scale(1.05);
@@ -780,7 +780,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .step-label.active {
-          color: #E63946;
+          color: #ff0033;
         }
 
         .step-label.completed {
@@ -865,13 +865,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .btn-primary {
-          background: linear-gradient(to bottom, #E63946 0%, #D62828 100%);
+          background: linear-gradient(to bottom, #ff0033 0%, #e6002e 100%);
           color: white;
-          border: 2px solid #E63946;
+          border: 2px solid #ff0033;
         }
 
         .btn-primary:hover {
-          background: linear-gradient(to bottom, #D62828 0%, #C62020 100%);
+          background: linear-gradient(to bottom, #e6002e 0%, #C62020 100%);
           box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
           transform: translateY(-1px);
         }
@@ -916,22 +916,22 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .modality-card:hover {
-          border-color: #E63946;
+          border-color: #ff0033;
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
         }
 
         .modality-card:hover::before {
-          background: #E63946;
+          background: #ff0033;
         }
 
         .modality-card.selected {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: var(--modal-bg);
           box-shadow: 0 4px 16px rgba(230, 57, 70, 0.15);
         }
 
         .modality-card.selected::before {
-          background: #E63946;
+          background: #ff0033;
         }
 
         .modality-icon {
@@ -945,7 +945,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
         .modality-card:hover .modality-icon,
         .modality-card.selected .modality-icon {
-          color: #E63946;
+          color: #ff0033;
           transform: scale(1.1);
         }
 
@@ -992,14 +992,14 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .vehicle-card:hover {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: var(--modal-bg);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
           transform: translateY(-1px);
         }
 
         .vehicle-card.selected {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: linear-gradient(to right, #FEF2F2 0%, #FFF 100%);
           box-shadow: 0 4px 16px rgba(230, 57, 70, 0.15);
         }
@@ -1033,7 +1033,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .radio-circle.selected {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: #FEF2F2;
         }
 
@@ -1045,7 +1045,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           transform: translate(-50%, -50%);
           width: 12px;
           height: 12px;
-          background: #E63946;
+          background: #ff0033;
           border-radius: 50%;
         }
 
@@ -1198,14 +1198,14 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .conductor-item:hover {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: var(--modal-bg);
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
           transform: translateX(2px);
         }
 
         .conductor-item.selected {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: linear-gradient(to right, #FEF2F2 0%, #FFF 100%);
         }
 
@@ -1310,7 +1310,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         }
 
         .drop-zone.drag-over {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: rgba(230, 57, 70, 0.05);
           transform: scale(1.01);
           box-shadow: 0 2px 8px rgba(230, 57, 70, 0.15);
@@ -1324,7 +1324,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
 
         .assigned-conductor-card {
           width: 100%;
-          border: 2px solid #E63946;
+          border: 2px solid #ff0033;
           border-radius: 10px;
           padding: 12px;
           background: var(--modal-bg);

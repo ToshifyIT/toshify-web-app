@@ -109,7 +109,7 @@ export function PermissionMatrix() {
         .role-name-cell {
           text-transform: capitalize;
           font-weight: 600;
-          color: #E63946;
+          color: #ff0033;
           background: #FEE2E2;
           padding: 6px 12px !important;
           border-radius: 6px;
@@ -136,7 +136,7 @@ export function PermissionMatrix() {
 
         .permission-icon:hover {
           transform: scale(1.1);
-          border-color: #E63946;
+          border-color: #ff0033;
         }
 
         .permission-icon.granted {

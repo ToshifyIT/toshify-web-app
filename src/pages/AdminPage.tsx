@@ -272,8 +272,8 @@ export function AdminPage() {
         .btn-logout {
           padding: 10px 20px;
           background: white;
-          color: #E63946;
-          border: 1px solid #E63946;
+          color: #ff0033;
+          border: 1px solid #ff0033;
           border-radius: 8px;
           font-size: 14px;
           font-weight: 600;
@@ -282,7 +282,7 @@ export function AdminPage() {
         }
 
         .btn-logout:hover {
-          background: #E63946;
+          background: #ff0033;
           color: white;
         }
 
@@ -347,7 +347,7 @@ export function AdminPage() {
             justify-content: center;
             width: 38px;
             height: 38px;
-            background: #DC2626;
+            background: #ff0033;
             border-radius: 6px;
             color: white;
             font-size: 16px;
