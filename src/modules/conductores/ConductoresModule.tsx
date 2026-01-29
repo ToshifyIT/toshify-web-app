@@ -1558,7 +1558,7 @@ export function ConductoresModule() {
       result = result.filter(c => {
         const tieneAsignacion = !!(c as any).vehiculo_asignado;
         const esActivo = c.conductores_estados?.codigo?.toLowerCase() === 'activo';
-        if (asignacionFilter.includes('asignado') && tieneAsignacion) return true;
+        if (asignacionFilter.includes('asignado') && tieneAsignacion && esActivo) return true;
         if (asignacionFilter.includes('disponible') && !tieneAsignacion && esActivo) return true;
         return false;
       });

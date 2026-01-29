@@ -960,12 +960,28 @@ export function AsignacionesModule() {
               }
 
               // Usuario confirmó: finalizar a los conductores actuales que serán reemplazados
+              const reemplazosTraza: string[] = []
               for (const conflicto of conflictos) {
                 console.log('🔄 Reemplazando conductor:', conflicto.conductorActual.nombre)
                 await (supabase as any)
                   .from('asignaciones_conductores')
                   .update({ estado: 'completado', fecha_fin: ahora })
                   .eq('id', conflicto.conductorActual.asignacionConductorId)
+                reemplazosTraza.push(`${conflicto.conductorActual.nombre} reemplazado por ${conflicto.conductorNuevo.nombre} en turno ${conflicto.turno}`)
+              }
+              // Agregar traza de reemplazos a la asignación existente
+              if (reemplazosTraza.length > 0) {
+                const { data: asigExData } = await (supabase as any)
+                  .from('asignaciones')
+                  .select('notas')
+                  .eq('id', asignacionExistente.id)
+                  .single()
+                const notasExistentes = asigExData?.notas || ''
+                const trazaReemplazo = `\n[REEMPLAZO ${new Date().toLocaleDateString('es-AR')}] ${reemplazosTraza.join('; ')}`
+                await (supabase as any)
+                  .from('asignaciones')
+                  .update({ notas: notasExistentes + trazaReemplazo, updated_by: profile?.full_name || 'Sistema' })
+                  .eq('id', asignacionExistente.id)
               }
             }
 
@@ -1034,12 +1050,56 @@ export function AsignacionesModule() {
             }
           }
 
-          // 2. Verificar si alguna asignación quedó sin conductores activos y finalizarla
+          // 2. Cerrar asignaciones activas anteriores del mismo vehículo
+          const { data: asignacionesVehiculo } = await (supabase as any)
+            .from('asignaciones')
+            .select(`id, codigo, notas,
+              asignaciones_conductores(conductor_id, estado, horario,
+                conductores(nombres, apellidos)
+              )
+            `)
+            .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+            .eq('estado', 'activa')
+            .neq('id', selectedAsignacion.id)
+
+          if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
+            const idsACerrar = asignacionesVehiculo.map((a: any) => a.id)
+            // Finalizar conductores de esas asignaciones
+            await (supabase as any)
+              .from('asignaciones_conductores')
+              .update({ estado: 'completado', fecha_fin: ahora })
+              .in('asignacion_id', idsACerrar)
+              .in('estado', ['asignado', 'activo'])
+            // Finalizar las asignaciones con traza de conductores
+            for (const asigAnterior of asignacionesVehiculo as any[]) {
+              const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
+                .filter((ac: any) => ac.estado === 'asignado' || ac.estado === 'activo')
+                .map((ac: any) => {
+                  const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
+                  return `${nombre} (${ac.horario || 'sin turno'})`
+                })
+              const notasAnterior = asigAnterior.notas || ''
+              const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Nuevo turno activado para el mismo vehículo.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
+              await (supabase as any)
+                .from('asignaciones')
+                .update({
+                  estado: 'finalizada',
+                  fecha_fin: ahora,
+                  notas: notasAnterior + traza,
+                  updated_by: profile?.full_name || 'Sistema'
+                })
+                .eq('id', asigAnterior.id)
+            }
+          }
+
+          // 3. Verificar si alguna otra asignación quedó sin conductores activos y finalizarla
           const { data: asignacionesSinConductores } = await (supabase as any)
             .from('asignaciones')
             .select(`
-              id,
-              asignaciones_conductores(id, estado)
+              id, notas,
+              asignaciones_conductores(conductor_id, estado, horario,
+                conductores(nombres, apellidos)
+              )
             `)
             .eq('estado', 'activa')
             .neq('id', selectedAsignacion.id)
@@ -1049,15 +1109,22 @@ export function AsignacionesModule() {
               const conductoresActivos = asig.asignaciones_conductores?.filter(
                 (ac: any) => ac.estado === 'asignado' || ac.estado === 'activo'
               ) || []
-              
+
               if (conductoresActivos.length === 0) {
-                // Esta asignación ya no tiene conductores activos, finalizarla
+                const conductoresCompletados = (asig.asignaciones_conductores || [])
+                  .filter((ac: any) => ac.estado === 'completado' || ac.estado === 'finalizado')
+                  .map((ac: any) => {
+                    const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
+                    return `${nombre} (${ac.horario || 'sin turno'})`
+                  })
+                const notasAnterior = asig.notas || ''
+                const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Sin conductores activos.\nUltimos conductores: ${conductoresCompletados.length > 0 ? conductoresCompletados.join(', ') : 'ninguno'}`
                 await (supabase as any)
                   .from('asignaciones')
-                  .update({ 
-                    estado: 'finalizada', 
-                    fecha_fin: ahora, 
-                    notas: '[AUTO-CERRADA] Sin conductores activos',
+                  .update({
+                    estado: 'finalizada',
+                    fecha_fin: ahora,
+                    notas: notasAnterior + traza,
                     updated_by: profile?.full_name || 'Sistema'
                   })
                   .eq('id', asig.id)
@@ -1825,17 +1892,31 @@ export function AsignacionesModule() {
                       const ahora = new Date().toISOString()
 
                       // Cerrar asignaciones activas anteriores del mismo vehículo
-                      const { data: asignacionesACerrar } = await supabase
+                      const { data: asignacionesACerrar } = await (supabase as any)
                         .from('asignaciones')
-                        .select('id')
+                        .select(`id, codigo, notas,
+                          asignaciones_conductores(conductor_id, estado, horario,
+                            conductores(nombres, apellidos)
+                          )
+                        `)
                         .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
                         .eq('estado', 'activa')
                         .neq('id', selectedAsignacion.id)
 
                       if (asignacionesACerrar && asignacionesACerrar.length > 0) {
-                        await (supabase as any).from('asignaciones')
-                          .update({ estado: 'finalizada', fecha_fin: ahora, notas: '[AUTO-CERRADA]' })
-                          .in('id', asignacionesACerrar.map((a: any) => a.id))
+                        for (const asigAnterior of asignacionesACerrar as any[]) {
+                          const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
+                            .filter((ac: any) => ac.estado === 'asignado' || ac.estado === 'activo')
+                            .map((ac: any) => {
+                              const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
+                              return `${nombre} (${ac.horario || 'sin turno'})`
+                            })
+                          const notasAnterior = asigAnterior.notas || ''
+                          const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Nuevo turno activado para el mismo vehículo.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
+                          await (supabase as any).from('asignaciones')
+                            .update({ estado: 'finalizada', fecha_fin: ahora, notas: notasAnterior + traza })
+                            .eq('id', asigAnterior.id)
+                        }
                       }
 
                       // Cerrar asignaciones anteriores de los CONDUCTORES (cuando cambian de vehículo)
