@@ -231,7 +231,7 @@ export function TicketsFavorTab() {
       showCancelButton: true,
       confirmButtonText: 'Crear',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 450,
       preConfirm: () => {
         const conductorId = (document.getElementById('swal-conductor-id') as HTMLInputElement).value

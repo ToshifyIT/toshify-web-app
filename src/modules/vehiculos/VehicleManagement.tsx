@@ -288,7 +288,7 @@ export function VehicleManagement() {
         icon: 'error',
         title: 'Sin permisos',
         text: 'No tienes permisos para crear vehículos',
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       })
       return
     }
@@ -298,7 +298,7 @@ export function VehicleManagement() {
         icon: 'warning',
         title: 'Campos requeridos',
         text: 'Complete todos los campos requeridos',
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       })
       return
     }
@@ -348,7 +348,7 @@ export function VehicleManagement() {
         icon: 'error',
         title: 'Error',
         text: err.message,
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       })
     } finally {
       setSaving(false)
@@ -361,7 +361,7 @@ export function VehicleManagement() {
         icon: 'error',
         title: 'Sin permisos',
         text: 'No tienes permisos para editar vehículos',
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       })
       return
     }
@@ -411,7 +411,7 @@ export function VehicleManagement() {
             showCancelButton: true,
             confirmButtonText: 'Finalizar y continuar',
             cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#E63946',
+            confirmButtonColor: '#ff0033',
             inputValidator: (value) => {
               if (!value || value.trim().length < 5) {
                 return 'Debe ingresar un motivo (mínimo 5 caracteres)'
@@ -498,7 +498,7 @@ export function VehicleManagement() {
         icon: 'error',
         title: 'Error',
         text: err.message,
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       })
     } finally {
       setSaving(false)
@@ -511,7 +511,7 @@ export function VehicleManagement() {
         icon: 'error',
         title: 'Sin permisos',
         text: 'No tienes permisos para eliminar vehículos',
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       })
       return
     }
@@ -537,7 +537,7 @@ export function VehicleManagement() {
         icon: 'error',
         title: 'Error',
         text: err.message,
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       })
     } finally {
       setSaving(false)
@@ -663,7 +663,7 @@ export function VehicleManagement() {
         icon: 'error',
         title: 'Error',
         text: err.message || 'No se pudo crear la carpeta en Drive',
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       })
     } finally {
       setCreatingDriveFolder(null)
@@ -703,7 +703,7 @@ export function VehicleManagement() {
         icon: 'error',
         title: 'Error',
         text: err.message || 'No se pudieron cargar los archivos',
-        confirmButtonColor: '#E63946'
+        confirmButtonColor: '#ff0033'
       })
     } finally {
       setLoadingDriveFiles(false)
@@ -1749,7 +1749,7 @@ export function VehicleManagement() {
         <div className="modal-overlay" onClick={() => !saving && setShowDeleteModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 style={{ color: '#DC2626' }}>Eliminar Vehículo</h2>
+              <h2 style={{ color: '#ff0033' }}>Eliminar Vehículo</h2>
               <button
                 className="modal-close"
                 onClick={() => !saving && setShowDeleteModal(false)}
@@ -1788,7 +1788,7 @@ export function VehicleManagement() {
                 className="btn-primary"
                 onClick={handleDelete}
                 disabled={saving}
-                style={{ background: '#DC2626' }}
+                style={{ background: '#ff0033' }}
               >
                 {saving ? 'Eliminando...' : 'Sí, Eliminar'}
               </button>

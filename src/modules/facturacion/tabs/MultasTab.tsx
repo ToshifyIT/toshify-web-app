@@ -196,7 +196,7 @@ export function MultasTab() {
       showCancelButton: true,
       confirmButtonText: 'Registrar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 450,
       preConfirm: () => {
         const patente = (document.getElementById('swal-patente') as HTMLSelectElement).value
@@ -298,7 +298,7 @@ export function MultasTab() {
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 450,
       preConfirm: () => {
         const patente = (document.getElementById('swal-patente') as HTMLSelectElement).value
@@ -358,7 +358,7 @@ export function MultasTab() {
       text: `Se eliminara la multa de ${multa.patente} por ${formatImporte(multa.importe)}`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       confirmButtonText: 'Eliminar',
       cancelButtonText: 'Cancelar'
     })
@@ -396,7 +396,7 @@ export function MultasTab() {
             </tr>
             <tr style="background: #FEE2E2;">
               <td style="padding: 8px 6px; font-weight: 600;">Importe:</td>
-              <td style="padding: 8px 6px; font-weight: 700; color: #DC2626; font-size: 16px;">${formatImporte(multa.importe)}</td>
+              <td style="padding: 8px 6px; font-weight: 700; color: #ff0033; font-size: 16px;">${formatImporte(multa.importe)}</td>
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #6B7280;">Infraccion:</td>
@@ -492,7 +492,7 @@ export function MultasTab() {
       accessorKey: 'importe',
       header: 'Importe',
       cell: ({ row }) => (
-        <span className="fact-precio" style={{ fontWeight: 600, color: '#DC2626' }}>
+        <span className="fact-precio" style={{ fontWeight: 600, color: '#ff0033' }}>
           {formatImporte(row.original.importe)}
         </span>
       )

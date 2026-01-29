@@ -11,7 +11,7 @@ export function ReportesModule() {
         padding: '20px',
         border: '1px solid var(--border-primary)'
       }}>
-        <div style={{ borderLeft: '4px solid #DC2626', paddingLeft: '16px' }}>
+        <div style={{ borderLeft: '4px solid #ff0033', paddingLeft: '16px' }}>
           <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
             Generacion de Reportes
           </h1>

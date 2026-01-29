@@ -1511,7 +1511,7 @@ export function ReporteFacturacionTab() {
       semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
 
-    const saldoColor = facturacion.total_a_pagar > 0 ? '#DC2626' : '#16a34a'
+    const saldoColor = facturacion.total_a_pagar > 0 ? '#ff0033' : '#16a34a'
     const saldoLabel = facturacion.total_a_pagar > 0 ? 'Debe' : 'A Favor'
 
     const { value: formValues } = await Swal.fire({
@@ -1537,7 +1537,7 @@ export function ReporteFacturacionTab() {
               ${facturacion.subtotal_descuentos > 0 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; color: #16a34a;">
                 <span>Descuentos:</span><span>-${formatCurrency(facturacion.subtotal_descuentos)}</span>
               </div>` : ''}
-              ${facturacion.saldo_anterior !== 0 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; color: ${facturacion.saldo_anterior > 0 ? '#DC2626' : '#16a34a'};">
+              ${facturacion.saldo_anterior !== 0 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; color: ${facturacion.saldo_anterior > 0 ? '#ff0033' : '#16a34a'};">
                 <span>Saldo Anterior:</span><span>${formatCurrency(facturacion.saldo_anterior)}</span>
               </div>` : ''}
               <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; margin-top: 4px; padding-top: 4px; border-top: 1px solid #E5E7EB; color: ${saldoColor};">
@@ -1685,7 +1685,7 @@ export function ReporteFacturacionTab() {
       let y = 15
 
       // Colores
-      const rojo = '#DC2626'
+      const rojo = '#ff0033'
       const gris = '#6B7280'
       const negro = '#111827'
       const verde = '#059669'
@@ -4040,7 +4040,7 @@ export function ReporteFacturacionTab() {
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       preConfirm: () => {
         return parseFloat((document.getElementById('swal-saldo') as HTMLInputElement).value) || 0
       }
@@ -5075,7 +5075,7 @@ export function ReporteFacturacionTab() {
                       {detalleFacturacion.saldo_anterior > 0 && (
                         <div className="fact-item" style={{ background: '#FEF3C7', padding: '6px 8px', borderRadius: '4px', marginTop: '4px' }}>
                           <span className="fact-item-desc" style={{ color: '#92400E' }}>Saldo Anterior (Deuda)</span>
-                          <span className="fact-item-monto" style={{ color: '#DC2626' }}>{formatCurrency(detalleFacturacion.saldo_anterior)}</span>
+                          <span className="fact-item-monto" style={{ color: '#ff0033' }}>{formatCurrency(detalleFacturacion.saldo_anterior)}</span>
                         </div>
                       )}
 

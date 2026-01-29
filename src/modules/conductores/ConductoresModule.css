@@ -24,7 +24,7 @@
 }
 
 .cond-header-title {
-  border-left: 4px solid #DC2626;
+  border-left: 4px solid var(--color-primary);
   padding-left: 16px;
 }
 
@@ -91,7 +91,7 @@
 
 .cond-date-filter-select:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
 }
 
 .cond-custom-date-inputs {
@@ -112,7 +112,7 @@
 
 .cond-date-input:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
 }
 
 .cond-date-separator {
@@ -136,7 +136,7 @@
 }
 
 .cond-stats .stat-card .stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -172,16 +172,16 @@
 }
 
 .cond-stats .stat-card.stat-card-active {
-  border-color: #DC2626;
-  background: rgba(220, 38, 38, 0.05);
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
 .cond-stats .stat-card.stat-card-active .stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .cond-stats .stat-card.stat-card-active .stat-value {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 /* Responsive Stats */
@@ -464,7 +464,7 @@
 .assignment-item-code {
   font-size: 12px;
   font-weight: 600;
-  color: #DC2626;
+  color: var(--color-primary);
   font-family: monospace;
   min-width: 90px;
 }
@@ -552,7 +552,7 @@
 
 .baja-modal-btn-confirm {
   padding: 10px 20px;
-  background: #DC2626;
+  background: var(--color-primary);
   border: none;
   border-radius: 6px;
   font-size: 14px;
@@ -566,7 +566,7 @@
 }
 
 .baja-modal-btn-confirm:hover:not(:disabled) {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 .baja-modal-btn-confirm:disabled {
@@ -665,7 +665,7 @@
 .vehiculo-codigo {
   font-size: 14px;
   font-weight: 600;
-  color: #DC2626;
+  color: var(--color-primary);
   font-family: monospace;
 }
 
@@ -844,7 +844,7 @@
 }
 
 .conductor-wizard .wizard-step-header svg {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .conductor-wizard .wizard-step-header h3 {
@@ -875,7 +875,7 @@
   padding: 12px;
   background: var(--bg-secondary);
   border-radius: 6px;
-  border-left: 3px solid #DC2626;
+  border-left: 3px solid var(--color-primary);
 }
 
 .conductor-wizard .section-divider {
@@ -898,7 +898,7 @@
   width: 16px;
   height: 16px;
   margin-right: 8px;
-  accent-color: #DC2626;
+  accent-color: var(--color-primary);
 }
 
 .conductor-wizard .checkbox-label {
@@ -915,13 +915,13 @@
 }
 
 .conductor-wizard .input-error {
-  border-color: #DC2626 !important;
+  border-color: var(--color-primary) !important;
   background: #FEF2F2 !important;
 }
 
 .conductor-wizard .error-message {
   font-size: 11px;
-  color: #DC2626;
+  color: var(--color-primary);
   margin-top: 2px;
 }
 

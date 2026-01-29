@@ -46,7 +46,7 @@
 }
 
 .nom-tab.active {
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
 }
 
@@ -131,7 +131,7 @@
 }
 
 .nom-header-title {
-  border-left: 4px solid #DC2626;
+  border-left: 4px solid var(--color-primary);
   padding-left: 16px;
 }
 
@@ -185,12 +185,12 @@
 }
 
 .nom-stats .stat-card.active {
-  background: rgba(220, 38, 38, 0.1);
-  border-color: #DC2626;
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
 }
 
 .nom-stats .stat-card .stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -324,13 +324,13 @@
 }
 
 .nom-btn-primary {
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
   border: none;
 }
 
 .nom-btn-primary:hover:not(:disabled) {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 .nom-btn-secondary:disabled,
@@ -485,7 +485,7 @@
 }
 
 .nom-form-group label .required {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .nom-form-group input,
@@ -504,9 +504,9 @@
 .nom-form-group select:focus,
 .nom-form-group textarea:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .nom-form-group input:disabled,
@@ -527,7 +527,7 @@
 .nom-checkbox-inline input[type="checkbox"] {
   width: 18px;
   height: 18px;
-  accent-color: #DC2626;
+  accent-color: var(--color-primary);
 }
 
 .nom-checkbox-inline span {
@@ -613,7 +613,7 @@
 }
 
 .nom-stats .stat-icon.red {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 /* Celdas de la tabla de nóminas */
@@ -649,7 +649,7 @@
 }
 
 .nom-monto.nom-cargo {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .nom-monto.nom-credito {
@@ -666,7 +666,7 @@
 
 .nom-saldo.debe {
   background: #FEE2E2;
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .nom-saldo.favor {
@@ -695,7 +695,7 @@
 
 .nom-alerta.siniestro {
   background: #FEE2E2;
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 /* =====================================================
@@ -750,7 +750,7 @@
   display: block;
   font-size: 16px;
   font-weight: 600;
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .nom-detalle-fechas {
@@ -802,7 +802,7 @@
 
 .nom-seccion-titulo.cargos {
   background: #FEE2E2;
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .nom-seccion-titulo.creditos {
@@ -904,7 +904,7 @@
 }
 
 .nom-saldo-valor.debe {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .nom-saldo-valor.favor {
@@ -1047,7 +1047,7 @@
 
 .nom-filtro-select:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
 }
 
 .nom-filtro-limpiar {

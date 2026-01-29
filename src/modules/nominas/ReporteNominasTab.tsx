@@ -526,7 +526,7 @@ export function ReporteNominasTab() {
       let y = 15
 
       // Colores
-      const rojo = '#DC2626'
+      const rojo = '#ff0033'
       const gris = '#6B7280'
       const negro = '#111827'
       const verde = '#059669'

@@ -1745,7 +1745,7 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
                 href={siniestro.carpeta_drive_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: '#DC2626', display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{ color: '#ff0033', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
                 Abrir <ExternalLink size={12} />
               </a>

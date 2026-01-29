@@ -45,7 +45,7 @@
 }
 
 .fact-tab.active {
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
 }
 
@@ -145,7 +145,7 @@
 }
 
 .fact-stats .stat-card .stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -173,7 +173,7 @@
 }
 
 .fact-stats .stat-icon.red {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 /* Responsive Stats */
@@ -220,7 +220,7 @@
 }
 
 .fact-monto.fact-cargo {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .fact-monto.fact-credito {
@@ -266,7 +266,7 @@
 
 .fact-alerta.siniestro {
   background: #FEE2E2;
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 /* =====================================================
@@ -288,13 +288,13 @@
 
 /* Botón primario ROJO - Guardar/Confirmar */
 .fact-btn-primary {
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
   border: none;
 }
 
 .fact-btn-primary:hover:not(:disabled) {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 /* Botón secundario GRIS CLARO - Cancelar */
@@ -366,7 +366,7 @@
 
 .fact-filtro-select:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
 }
 
 .fact-filtro-limpiar {
@@ -545,7 +545,7 @@
   display: block;
   font-size: 16px;
   font-weight: 600;
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .fact-detalle-fechas {
@@ -699,7 +699,7 @@
 }
 
 .fact-saldo-valor.debe {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .fact-saldo-valor.favor {
@@ -921,7 +921,7 @@
 
 .fact-select:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
 }
 
 /* =====================================================
@@ -1009,7 +1009,7 @@
 }
 
 .fact-precio-negative {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 /* =====================================================
@@ -1105,7 +1105,7 @@
 
 .fact-table-btn-delete {
   background: #FEE2E2;
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .fact-table-btn-delete:hover {
@@ -1126,7 +1126,7 @@
 }
 
 .fact-stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -1288,9 +1288,9 @@
 .fact-form-input:focus,
 .fact-form-select:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .fact-form-input::placeholder {
@@ -1376,7 +1376,7 @@
 }
 
 .fact-text-danger {
-  color: #DC2626 !important;
+  color: var(--color-primary) !important;
   font-weight: 600 !important;
   font-size: 16px !important;
 }
@@ -1415,7 +1415,7 @@
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: #DC2626;
+  accent-color: var(--color-primary);
   border-radius: 4px;
 }
 
@@ -1473,7 +1473,7 @@
 
 .fact-search-input:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+  box-shadow: var(--input-focus-shadow);
 }
 
 .fact-search-input::placeholder {
@@ -1579,7 +1579,7 @@
 }
 
 .rit-preview-btn.primary {
-  background: #DC2626;
+  background: var(--color-primary);
   border: none;
   color: white;
 }
@@ -1876,7 +1876,7 @@
   display: block;
   font-size: 9px;
   font-weight: 600;
-  color: #DC2626;
+  color: var(--color-primary);
   letter-spacing: 0.5px;
   margin-bottom: 2px;
 }

@@ -40,7 +40,7 @@
 }
 
 .prog-stats .stat-card .stat-icon {
-  color: #DC2626;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -80,9 +80,9 @@
 }
 
 .prog-stats .stat-card-active {
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 1px #DC2626;
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 /* Responsive Stats */
@@ -410,7 +410,7 @@
 
 .prog-estado-select:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
 }
 
 .prog-estado-select:disabled {
@@ -512,7 +512,7 @@
 }
 
 .prog-btn-delete:hover:not(:disabled) {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 /* Link a asignación */
@@ -616,7 +616,7 @@
 }
 
 .prog-modal-section h3 svg {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .prog-modal-grid {
@@ -782,8 +782,8 @@
 
 .prog-modal .form-select:focus {
   outline: none;
-  border-color: #DC2626;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 /* =====================================================
@@ -831,8 +831,8 @@
 
 .prog-input:focus {
   outline: none;
-  border-color: #DC2626;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .prog-input:disabled {
@@ -848,7 +848,7 @@
 /* Botones del modal */
 .prog-btn-primary {
   padding: 10px 20px;
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 6px;
@@ -859,7 +859,7 @@
 }
 
 .prog-btn-primary:hover:not(:disabled) {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 .prog-btn-primary:disabled {
@@ -927,12 +927,12 @@
 }
 
 .prog-searchable-option strong {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .prog-searchable-option.selected {
   background: #FEF2F2;
-  border-left: 3px solid #DC2626;
+  border-left: 3px solid var(--color-primary);
 }
 
 .prog-searchable-no-results {
@@ -979,8 +979,8 @@
 }
 
 .prog-check-btn:hover {
-  border-color: #DC2626;
-  color: #DC2626;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .prog-check-btn.checked {
@@ -1014,8 +1014,8 @@
 
 .prog-inline-select:focus {
   outline: none;
-  border-color: #DC2626;
-  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 /* Estados de confirmación */
@@ -1031,7 +1031,7 @@
 
 .prog-inline-select.confirmacion.no_confirmo {
   background: var(--badge-red-bg, #FEE2E2);
-  color: var(--badge-red-text, #DC2626);
+  color: var(--badge-red-text, var(--color-primary));
 }
 
 .prog-inline-select.confirmacion.reprogramar {
@@ -1065,7 +1065,7 @@
   width: 100%;
   min-width: 120px;
   padding: 4px 8px;
-  border: 1px solid #DC2626;
+  border: 1px solid var(--color-primary);
   border-radius: 4px;
   font-size: 12px;
   font-family: inherit;
@@ -1075,7 +1075,7 @@
 
 .prog-inline-input:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+  box-shadow: 0 0 0 2px var(--color-primary-shadow);
 }
 
 /* Celda de dirección clickable */
@@ -1220,7 +1220,7 @@
 
 .prog-inline-select-mini:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
 }
 
 .prog-inline-select-mini.tipo-asignacion.entrega_auto {
@@ -1367,7 +1367,7 @@
 
 .prog-inline-select-mini.confirmacion.no_confirmo {
   background: var(--badge-red-bg, #FEE2E2);
-  color: var(--badge-red-text, #DC2626);
+  color: var(--badge-red-text, var(--color-primary));
 }
 
 .prog-inline-select-mini.confirmacion.reprogramar {

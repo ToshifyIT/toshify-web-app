@@ -147,9 +147,9 @@
 .multas-form-select:focus,
 .multas-form-textarea:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .multas-form-input::placeholder,
@@ -236,13 +236,13 @@
   border-radius: 8px;
   border: none;
   cursor: pointer;
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
   transition: background 0.15s;
 }
 
 .multas-btn-primary:hover {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 .multas-btn-secondary {

@@ -42,7 +42,7 @@ export const SEVERITY_COLORS = {
   LOW: '#FCD34D',      // Amarillo
   MEDIUM: '#FB923C',   // Naranja
   HIGH: '#F87171',     // Rojo claro
-  CRITICAL: '#DC2626', // Rojo oscuro
+  CRITICAL: '#ff0033', // Rojo oscuro
 } as const
 
 // Límites de paginación

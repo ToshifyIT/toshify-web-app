@@ -331,7 +331,7 @@ export function ExcesosKmTab() {
       showCancelButton: true,
       confirmButtonText: 'Registrar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 450,
       preConfirm: () => {
         const periodoId = (document.getElementById('swal-periodo') as HTMLSelectElement).value
@@ -477,7 +477,7 @@ export function ExcesosKmTab() {
       text: `Se eliminará el exceso de ${exceso.km_exceso} km de ${exceso.conductor_nombre}`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       confirmButtonText: 'Eliminar',
       cancelButtonText: 'Cancelar'
     })
@@ -528,7 +528,7 @@ export function ExcesosKmTab() {
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #6B7280;">KM Exceso:</td>
-              <td style="padding: 6px 0; font-weight: 600; color: #DC2626;">${exceso.km_exceso.toLocaleString()} km</td>
+              <td style="padding: 6px 0; font-weight: 600; color: #ff0033;">${exceso.km_exceso.toLocaleString()} km</td>
             </tr>
             <tr style="border-top: 1px solid #E5E7EB;">
               <td style="padding: 6px 0; color: #6B7280;">Rango:</td>
@@ -552,7 +552,7 @@ export function ExcesosKmTab() {
             </tr>
             <tr style="background: #F3F4F6;">
               <td style="padding: 8px 6px; font-weight: 600;">TOTAL:</td>
-              <td style="padding: 8px 6px; font-weight: 700; color: #DC2626; font-size: 16px;">${formatCurrency(exceso.monto_total)}</td>
+              <td style="padding: 8px 6px; font-weight: 700; color: #ff0033; font-size: 16px;">${formatCurrency(exceso.monto_total)}</td>
             </tr>
           </table>
           <div style="margin-top: 12px; padding: 8px; border-radius: 6px; ${exceso.aplicado ? 'background: #D1FAE5; color: #065F46;' : 'background: #FEF3C7; color: #92400E;'}">
@@ -668,7 +668,7 @@ export function ExcesosKmTab() {
       accessorKey: 'km_exceso',
       header: 'Exceso',
       cell: ({ row }) => (
-        <span style={{ color: '#DC2626', fontWeight: 600 }}>
+        <span style={{ color: '#ff0033', fontWeight: 600 }}>
           +{row.original.km_exceso.toLocaleString()}
         </span>
       )
@@ -707,7 +707,7 @@ export function ExcesosKmTab() {
       accessorKey: 'monto_total',
       header: 'Total',
       cell: ({ row }) => (
-        <span className="fact-precio" style={{ fontWeight: 600, color: '#DC2626' }}>
+        <span className="fact-precio" style={{ fontWeight: 600, color: '#ff0033' }}>
           {formatCurrency(row.original.monto_total)}
         </span>
       )

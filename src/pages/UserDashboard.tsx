@@ -74,7 +74,7 @@ export function UserDashboard() {
         .sidebar-logo-icon {
           width: 40px;
           height: 40px;
-          background: #E63946;
+          background: #ff0033;
           border-radius: 8px;
           display: flex;
           align-items: center;
@@ -129,7 +129,7 @@ export function UserDashboard() {
         }
 
         .nav-menu-button.active {
-          background: #E63946;
+          background: #ff0033;
           color: white;
         }
 
@@ -198,7 +198,7 @@ export function UserDashboard() {
         .logo-icon {
           width: 40px;
           height: 40px;
-          background: #E63946;
+          background: #ff0033;
           border-radius: 8px;
           display: flex;
           align-items: center;
@@ -217,8 +217,8 @@ export function UserDashboard() {
         .btn-logout {
           padding: 10px 20px;
           background: white;
-          color: #E63946;
-          border: 1px solid #E63946;
+          color: #ff0033;
+          border: 1px solid #ff0033;
           border-radius: 8px;
           font-size: 14px;
           font-weight: 600;
@@ -227,7 +227,7 @@ export function UserDashboard() {
         }
 
         .btn-logout:hover {
-          background: #E63946;
+          background: #ff0033;
           color: white;
         }
 
@@ -256,7 +256,7 @@ export function UserDashboard() {
         .user-avatar {
           width: 60px;
           height: 60px;
-          background: #E63946;
+          background: #ff0033;
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -306,7 +306,7 @@ export function UserDashboard() {
         }
 
         .menu-card:hover {
-          border-color: #E63946;
+          border-color: #ff0033;
           box-shadow: 0 4px 12px rgba(230, 57, 70, 0.1);
           transform: translateY(-2px);
         }
