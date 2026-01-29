@@ -246,12 +246,12 @@ export function AsignacionesActivasModule() {
       if (a.horario === 'TURNO') {
         turnoCount++
 
-        // Buscar conductores D y N
+        // Buscar conductores D y N activos (no cancelados)
         const conductorD = conductores.find(ac =>
-          ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D'
+          (ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D') && ac.estado !== 'cancelado'
         )
         const conductorN = conductores.find(ac =>
-          ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N'
+          (ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N') && ac.estado !== 'cancelado'
         )
 
         if (conductorD?.conductor_id) {
@@ -267,14 +267,14 @@ export function AsignacionesActivasModule() {
         }
       } else {
         cargoCount++
-        const tieneConductor = conductores.some(ac => ac.conductor_id)
+        const tieneConductor = conductores.some(ac => ac.conductor_id && ac.estado !== 'cancelado')
         if (tieneConductor) {
           cuposOcupados++
         }
       }
 
-      // Vehículos ocupados (con al menos 1 conductor)
-      const tieneConductor = conductores.some(ac => ac.conductor_id)
+      // Vehículos ocupados (con al menos 1 conductor activo)
+      const tieneConductor = conductores.some(ac => ac.conductor_id && ac.estado !== 'cancelado')
       if (tieneConductor) {
         vehiculosOcupados++
         if (esOperacional) vehiculosOcupadosOperacionales++
@@ -345,12 +345,12 @@ export function AsignacionesActivasModule() {
     if (activeStatFilter) {
       switch (activeStatFilter) {
         case 'vacantes':
-          // Mostrar asignaciones TURNO con al menos 1 vacante
+          // Mostrar asignaciones TURNO con al menos 1 vacante (ignorar conductores cancelados)
           result = result.filter(a => {
             if (a.horario === 'TURNO') {
               const conductores = a.asignaciones_conductores || []
-              const diurno = conductores.find(ac => ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D')
-              const nocturno = conductores.find(ac => ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N')
+              const diurno = conductores.find(ac => (ac.horario === 'diurno' || ac.horario === 'DIURNO' || ac.horario === 'D') && ac.estado !== 'cancelado')
+              const nocturno = conductores.find(ac => (ac.horario === 'nocturno' || ac.horario === 'NOCTURNO' || ac.horario === 'N') && ac.estado !== 'cancelado')
               return !diurno?.conductor_id || !nocturno?.conductor_id
             }
             return false // CARGO no tiene vacantes en el mismo sentido

@@ -1,2 +1,10 @@
+#!/usr/bin/env sh
+
+# Fix PATH for Windows (Git Bash doesn't inherit full PATH)
+if [ -x "$(command -v cygpath 2>/dev/null)" ]; then
+  export PATH="$(cygpath "$LOCALAPPDATA/npm"):$PATH"
+  export PATH="./node_modules/.bin:$PATH"
+fi
+
 echo "Validando build antes de push..."
 npm run build
