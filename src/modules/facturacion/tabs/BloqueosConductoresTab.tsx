@@ -183,7 +183,7 @@ export function BloqueosConductoresTab() {
       `,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       confirmButtonText: 'Bloquear',
       cancelButtonText: 'Cancelar',
       width: 420,
@@ -366,7 +366,7 @@ export function BloqueosConductoresTab() {
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 400,
       customClass: {
         popup: 'fact-modal',
@@ -524,7 +524,7 @@ export function BloqueosConductoresTab() {
       cell: ({ row }) => (
         <span className="fact-precio" style={{
           fontWeight: 600,
-          color: row.original.saldo_actual >= montoLimite ? '#DC2626' : '#374151'
+          color: row.original.saldo_actual >= montoLimite ? '#ff0033' : '#374151'
         }}>
           {formatCurrency(row.original.saldo_actual)}
         </span>
@@ -536,7 +536,7 @@ export function BloqueosConductoresTab() {
       cell: ({ row }) => (
         <span style={{
           fontWeight: 500,
-          color: row.original.dias_mora >= diasMoraLimite ? '#DC2626' : '#374151'
+          color: row.original.dias_mora >= diasMoraLimite ? '#ff0033' : '#374151'
         }}>
           {row.original.dias_mora} días
         </span>
@@ -648,7 +648,7 @@ export function BloqueosConductoresTab() {
             </div>
           </div>
           <div className="fact-stat-card">
-            <Ban size={18} className="fact-stat-icon" style={{ color: '#DC2626' }} />
+            <Ban size={18} className="fact-stat-icon" style={{ color: '#ff0033' }} />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{stats.bloqueados}</span>
               <span className="fact-stat-label">Bloqueados</span>

@@ -120,8 +120,8 @@
 }
 
 .stat-card.active {
-  background: rgba(220, 38, 38, 0.1);
-  border-color: #DC2626;
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
 }
 
 .stat-card .stat-icon {
@@ -366,7 +366,7 @@
 }
 
 .monto-positivo { color: #059669; }
-.monto-negativo { color: #DC2626; }
+.monto-negativo { color: var(--color-primary); }
 
 /* Aplicado badge */
 .aplicado-badge {
@@ -670,7 +670,7 @@
 }
 
 .form-group label .required {
-  color: #DC2626;
+  color: var(--color-primary);
 }
 
 .form-group input,
@@ -689,9 +689,9 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #DC2626;
+  border-color: var(--color-primary);
   background: var(--bg-primary);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .form-group textarea {
@@ -846,7 +846,7 @@
 
 .btn-primary {
   padding: 10px 20px;
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -860,7 +860,7 @@
 }
 
 .btn-primary:hover {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 .btn-primary:disabled {
@@ -889,7 +889,7 @@
 
 .btn-danger {
   padding: 10px 16px;
-  background: #DC2626;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 6px;
@@ -902,7 +902,7 @@
 }
 
 .btn-danger:hover {
-  background: #B91C1C;
+  background: var(--color-primary-hover);
 }
 
 /* =====================================================
@@ -1495,5 +1495,5 @@
 /* Badge rechazado */
 .aplicado-badge.aplicado-rechazado {
   background: #FEE2E2;
-  color: #DC2626;
+  color: var(--color-primary);
 }

@@ -22,7 +22,7 @@
 
 .time-input-display:focus-within,
 .time-input-display.active {
-  border-color: #DC2626;
+  border-color: var(--color-primary, #ff0033);
   outline: none;
 }
 
@@ -115,7 +115,7 @@
 }
 
 .time-option.selected {
-  background: #DC2626;
+  background: var(--color-primary, #ff0033);
   color: white;
   font-weight: 600;
 }
@@ -129,7 +129,7 @@
 .time-confirm-btn {
   width: 100%;
   padding: 8px 16px;
-  background: #DC2626;
+  background: var(--color-primary, #ff0033);
   color: white;
   border: none;
   border-radius: 6px;
@@ -140,7 +140,7 @@
 }
 
 .time-confirm-btn:hover {
-  background: #B91C1C;
+  background: var(--color-primary-hover, #e6002e);
 }
 
 /* Dark mode support */

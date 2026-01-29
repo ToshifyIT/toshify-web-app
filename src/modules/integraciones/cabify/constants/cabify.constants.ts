@@ -44,8 +44,8 @@ export const CHART_COLORS = {
     '#D1FAE5', '#ECFDF5', '#059669', '#10B981', '#34D399'
   ],
   PEORES: [
-    '#DC2626', '#EF4444', '#F87171', '#FCA5A5', '#FECACA',
-    '#FEE2E2', '#FEF2F2', '#DC2626', '#EF4444', '#F87171'
+    '#ff0033', '#EF4444', '#F87171', '#FCA5A5', '#FECACA',
+    '#FEE2E2', '#FEF2F2', '#ff0033', '#EF4444', '#F87171'
   ],
   MODALIDAD: {
     CARGO: '#F59E0B',

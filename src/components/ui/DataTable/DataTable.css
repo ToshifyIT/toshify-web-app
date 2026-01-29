@@ -208,7 +208,7 @@
 }
 
 .dt-column-show-all:hover {
-  background: var(--color-primary-light, rgba(230, 57, 70, 0.1));
+  background: var(--color-primary-light, rgba(255, 0, 51, 0.1));
 }
 
 .dt-column-menu-list {
@@ -420,7 +420,7 @@
 .dt-search-input:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
+  box-shadow: var(--input-focus-shadow);
   background: var(--bg-primary);
 }
 
@@ -650,7 +650,7 @@
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: white;
-  box-shadow: 0 4px 12px rgba(255, 0, 51, 0.25);
+  box-shadow: 0 4px 12px var(--color-primary-shadow);
 }
 
 .dt-pagination-text {
@@ -679,7 +679,7 @@
 .dt-pagination-select:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.1);
+  box-shadow: var(--input-focus-shadow);
 }
 
 /* Action Buttons Container - Toshify Design System */
@@ -809,7 +809,7 @@
 
 .dt-btn-action:hover {
   color: var(--color-primary);
-  background: rgba(255, 0, 51, 0.05);
+  background: var(--color-primary-light);
 }
 
 /* Tooltip para botones de acción - posición a la izquierda */
@@ -920,24 +920,26 @@
 .dt-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 9999px;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   white-space: nowrap;
   letter-spacing: 0.02em;
+  border: none;
 }
 
 /* Badge con punto indicador */
 .dt-badge::before {
   content: '';
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
   flex-shrink: 0;
+  opacity: 0.7;
 }
 
 /* Celda de categorías con límite visible */
@@ -965,65 +967,64 @@
 }
 
 .dt-badge-green {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10B981;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: #D1FAE5;
+  color: #065F46;
 }
 
 .dt-badge-blue {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3B82F6;
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: #DBEAFE;
+  color: #1E40AF;
 }
 
 .dt-badge-yellow {
-  background: rgba(245, 158, 11, 0.1);
-  color: #F59E0B;
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  background: #FEF3C7;
+  color: #92400E;
 }
 
 .dt-badge-red {
-  background: rgba(239, 68, 68, 0.1);
-  color: #EF4444;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: #FEE2E2;
+  color: #991B1B;
 }
 
 .dt-badge-gray {
-  background: var(--badge-gray-bg);
-  color: var(--badge-gray-text);
-  border: 1px solid var(--border-primary);
+  background: #F3F4F6;
+  color: #4B5563;
 }
 
 .dt-badge-orange {
-  background: rgba(249, 115, 22, 0.1);
-  color: #F97316;
-  border: 1px solid rgba(249, 115, 22, 0.2);
+  background: #FFEDD5;
+  color: #9A3412;
 }
 
 /* Dark mode badges */
 [data-theme="dark"] .dt-badge-green {
-  background: rgba(16, 185, 129, 0.15);
-  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.2);
+  color: #34D399;
 }
 
 [data-theme="dark"] .dt-badge-blue {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.2);
+  color: #60A5FA;
 }
 
 [data-theme="dark"] .dt-badge-yellow {
-  background: rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.2);
+  color: #FBBF24;
 }
 
 [data-theme="dark"] .dt-badge-red {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.2);
+  color: #F87171;
 }
 
 [data-theme="dark"] .dt-badge-orange {
-  background: rgba(249, 115, 22, 0.15);
-  border-color: rgba(249, 115, 22, 0.3);
+  background: rgba(249, 115, 22, 0.2);
+  color: #FB923C;
+}
+
+[data-theme="dark"] .dt-badge-gray {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9CA3AF;
 }
 
 .dt-badge-solid-green {
@@ -1732,7 +1733,7 @@
 }
 
 .dt-filter-clear:hover {
-  background: var(--color-primary-light, rgba(230, 57, 70, 0.1));
+  background: var(--color-primary-light, rgba(255, 0, 51, 0.1));
 }
 
 /* ===== Active Filters Bar ===== */
@@ -1759,7 +1760,7 @@
 }
 
 .dt-active-filters-label svg {
-  color: var(--color-primary, #e63946);
+  color: var(--color-primary, #ff0033);
 }
 
 .dt-active-filters-list {
@@ -1775,7 +1776,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px 4px 12px;
-  background: var(--color-primary, #e63946);
+  background: var(--color-primary, #ff0033);
   color: white;
   border-radius: 16px;
   font-size: 12px;
@@ -1827,9 +1828,9 @@
 }
 
 .dt-clear-all-filters:hover {
-  border-color: var(--color-primary, #e63946);
-  color: var(--color-primary, #e63946);
-  background: var(--color-primary-light, rgba(230, 57, 70, 0.05));
+  border-color: var(--color-primary, #ff0033);
+  color: var(--color-primary, #ff0033);
+  background: var(--color-primary-light, rgba(255, 0, 51, 0.05));
 }
 
 /* ===== Boolean Indicators (for expanded rows) ===== */

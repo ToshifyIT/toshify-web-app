@@ -121,7 +121,7 @@ export function ConceptosFacturacionTab() {
       showCancelButton: true,
       confirmButtonText: 'Crear',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       width: 400,
       customClass: {
@@ -227,7 +227,7 @@ export function ConceptosFacturacionTab() {
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       width: 400,
       customClass: {
@@ -499,7 +499,7 @@ pageSize={100}
             alignItems: 'center',
             gap: '6px',
             padding: '8px 14px',
-            background: '#DC2626',
+            background: '#ff0033',
             color: 'white',
             border: 'none',
             borderRadius: '6px',

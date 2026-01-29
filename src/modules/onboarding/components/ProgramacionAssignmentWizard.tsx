@@ -5,13 +5,16 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useMemo } from 'react'
-import { X, Calendar, User, ChevronRight, Check, Sun, Moon } from 'lucide-react'
+import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import type { TipoCandidato, TipoDocumento, TipoAsignacion } from '../../../types/onboarding.types'
+
+// Google Maps API Key
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
 
 // Labels para estados
 const ESTADO_LABELS: Record<string, string> = {
@@ -51,6 +54,9 @@ interface Conductor {
   licencia_vencimiento: string
   estado_id: string
   preferencia_turno?: string
+  direccion?: string | null
+  direccion_lat?: number | null
+  direccion_lng?: number | null
   conductores_estados?: {
     codigo: string
     descripcion: string
@@ -59,6 +65,8 @@ interface Conductor {
   tieneAsignacionProgramada?: boolean
   tieneAsignacionDiurna?: boolean
   tieneAsignacionNocturna?: boolean
+  // Campos calculados para emparejamiento
+  distanciaCalculada?: number | null  // en minutos
 }
 
 // Helper para formatear preferencia de turno
@@ -152,6 +160,16 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const [conductorStatusFilter, setConductorStatusFilter] = useState<string>('')
   const [conductorTurnoFilter, setConductorTurnoFilter] = useState<string>('')
   const [conductoresDelVehiculoActual, setConductoresDelVehiculoActual] = useState<string[]>([])
+
+  // Estado para modo de vista por pares cercanos
+  const [mostrarParesCercanos, setMostrarParesCercanos] = useState(false)
+  const [paresCercanos, setParesCercanos] = useState<Array<{
+    diurno: Conductor
+    nocturno: Conductor
+    distanciaKm: number
+    tiempoMinutos?: number
+  }>>([])
+  const [loadingPares, setLoadingPares] = useState(false)
 
   const [formData, setFormData] = useState<ProgramacionData>(() => {
     // Si hay datos de edición, pre-cargar
@@ -367,6 +385,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             licencia_vencimiento,
             estado_id,
             preferencia_turno,
+            direccion,
+            direccion_lat,
+            direccion_lng,
             conductores_estados (
               codigo,
               descripcion
@@ -425,6 +446,248 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
     loadConductores()
   }, [])
+
+  // Función para cargar Google Maps API si no está disponible
+  const loadGoogleMapsAPI = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (window.google?.maps) {
+        resolve()
+        return
+      }
+
+      // Verificar si ya existe el script
+      const existingScript = document.querySelector('script[src*="maps.googleapis.com"]')
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve())
+        return
+      }
+
+      const script = document.createElement('script')
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`
+      script.async = true
+      script.onload = () => resolve()
+      script.onerror = () => reject(new Error('Error cargando Google Maps'))
+      document.head.appendChild(script)
+    })
+  }
+
+  // Función para geocodificar una dirección usando Google Maps Geocoder
+  const geocodificarDireccion = (direccion: string): Promise<{ lat: number; lng: number } | null> => {
+    return new Promise((resolve) => {
+      const geocoder = new google.maps.Geocoder()
+      geocoder.geocode(
+        { address: direccion, region: 'ar' },
+        (results, status) => {
+          if (status === 'OK' && results && results[0]) {
+            const location = results[0].geometry.location
+            resolve({ lat: location.lat(), lng: location.lng() })
+          } else {
+            resolve(null)
+          }
+        }
+      )
+    })
+  }
+
+  // Función para geocodificar conductores que tienen dirección pero no coordenadas
+  const geocodificarConductoresSinCoordenadas = async (conductoresLista: Conductor[]): Promise<Conductor[]> => {
+    const conductoresActualizados = [...conductoresLista]
+    const conductoresSinCoords = conductoresLista.filter(
+      c => c.direccion && (!c.direccion_lat || !c.direccion_lng)
+    )
+
+    if (conductoresSinCoords.length === 0) return conductoresActualizados
+
+    // Asegurar que Google Maps esté cargado
+    await loadGoogleMapsAPI()
+
+    // Geocodificar cada conductor sin coordenadas
+    for (const conductor of conductoresSinCoords) {
+      try {
+        const coords = await geocodificarDireccion(conductor.direccion || '')
+
+        if (coords) {
+          // Actualizar en la base de datos (campos custom no tipados)
+          await (supabase
+            .from('conductores') as any)
+            .update({ direccion_lat: coords.lat, direccion_lng: coords.lng })
+            .eq('id', conductor.id)
+
+          // Actualizar en el array local
+          const index = conductoresActualizados.findIndex(c => c.id === conductor.id)
+          if (index !== -1) {
+            conductoresActualizados[index] = {
+              ...conductoresActualizados[index],
+              direccion_lat: coords.lat,
+              direccion_lng: coords.lng
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error geocodificando conductor ${conductor.id}:`, error)
+      }
+    }
+
+    return conductoresActualizados
+  }
+
+  // Fórmula de Haversine para calcular distancia en km (muy rápido, sin API)
+  const calcularDistanciaHaversine = (
+    lat1: number, lng1: number,
+    lat2: number, lng2: number
+  ): number => {
+    const R = 6371 // Radio de la Tierra en km
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLng = (lng2 - lng1) * Math.PI / 180
+    const a =
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng/2) * Math.sin(dLng/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    return R * c
+  }
+
+  // Función para obtener distancia y tiempo en auto usando Distance Matrix API
+  const obtenerDistanciaEnAuto = async (
+    origen: { lat: number; lng: number },
+    destino: { lat: number; lng: number }
+  ): Promise<{ distanciaKm: number; tiempoMinutos: number } | null> => {
+    try {
+      await loadGoogleMapsAPI()
+
+      return new Promise((resolve) => {
+        const service = new google.maps.DistanceMatrixService()
+        service.getDistanceMatrix(
+          {
+            origins: [new google.maps.LatLng(origen.lat, origen.lng)],
+            destinations: [new google.maps.LatLng(destino.lat, destino.lng)],
+            travelMode: google.maps.TravelMode.DRIVING,
+            unitSystem: google.maps.UnitSystem.METRIC,
+          },
+          (response, status) => {
+            if (status === 'OK' && response?.rows[0]?.elements[0]?.status === 'OK') {
+              const element = response.rows[0].elements[0]
+              resolve({
+                distanciaKm: Math.round((element.distance.value / 1000) * 10) / 10,
+                tiempoMinutos: Math.round(element.duration.value / 60)
+              })
+            } else {
+              resolve(null)
+            }
+          }
+        )
+      })
+    } catch (error) {
+      console.error('Error obteniendo distancia en auto:', error)
+      return null
+    }
+  }
+
+  // Función para calcular y ordenar pares cercanos
+  const calcularParesCercanos = async () => {
+    setLoadingPares(true)
+
+    try {
+      // Geocodificar conductores sin coordenadas
+      const conductoresActualizados = await geocodificarConductoresSinCoordenadas(conductores)
+      setConductores(conductoresActualizados)
+
+      // Filtrar conductores con coordenadas y disponibles
+      const conductoresConCoords = conductoresActualizados.filter(c =>
+        c.direccion_lat && c.direccion_lng
+      )
+
+      // Separar por preferencia de turno
+      const diurnos = conductoresConCoords.filter(c =>
+        c.preferencia_turno === 'DIURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno
+      )
+      const nocturnos = conductoresConCoords.filter(c =>
+        c.preferencia_turno === 'NOCTURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno
+      )
+
+      if (diurnos.length === 0 || nocturnos.length === 0) {
+        setParesCercanos([])
+        setMostrarParesCercanos(true)
+        setLoadingPares(false)
+        return
+      }
+
+      // Calcular todos los pares posibles con sus distancias (Haversine rápido)
+      const pares: Array<{ diurno: Conductor; nocturno: Conductor; distanciaKm: number; tiempoMinutos?: number }> = []
+
+      for (const diurno of diurnos) {
+        for (const nocturno of nocturnos) {
+          if (diurno.id === nocturno.id) continue
+          // Evitar emparejar conductores con exactamente la misma ubicación (duplicados de datos)
+          if (diurno.direccion_lat === nocturno.direccion_lat && diurno.direccion_lng === nocturno.direccion_lng) continue
+
+          const distanciaKm = calcularDistanciaHaversine(
+            diurno.direccion_lat!,
+            diurno.direccion_lng!,
+            nocturno.direccion_lat!,
+            nocturno.direccion_lng!
+          )
+
+          pares.push({ diurno, nocturno, distanciaKm })
+        }
+      }
+
+      // Ordenar por distancia (más cercanos primero)
+      pares.sort((a, b) => a.distanciaKm - b.distanciaKm)
+
+      // Tomar los mejores pares únicos (cada conductor solo una vez)
+      const usados = new Set<string>()
+      const paresUnicos: typeof pares = []
+
+      for (const par of pares) {
+        if (!usados.has(par.diurno.id) && !usados.has(par.nocturno.id)) {
+          paresUnicos.push(par)
+          usados.add(par.diurno.id)
+          usados.add(par.nocturno.id)
+        }
+      }
+
+      // Top 10 pares
+      const top10 = paresUnicos.slice(0, 10)
+
+      // Obtener distancia y tiempo en auto para los top 10 (llamadas a Distance Matrix API)
+      const paresConTiempo = await Promise.all(
+        top10.map(async (par) => {
+          const resultado = await obtenerDistanciaEnAuto(
+            { lat: par.diurno.direccion_lat!, lng: par.diurno.direccion_lng! },
+            { lat: par.nocturno.direccion_lat!, lng: par.nocturno.direccion_lng! }
+          )
+          return {
+            ...par,
+            distanciaKm: resultado?.distanciaKm || par.distanciaKm,
+            tiempoMinutos: resultado?.tiempoMinutos
+          }
+        })
+      )
+
+      // Reordenar por tiempo en auto si está disponible
+      paresConTiempo.sort((a, b) => {
+        if (a.tiempoMinutos && b.tiempoMinutos) return a.tiempoMinutos - b.tiempoMinutos
+        return a.distanciaKm - b.distanciaKm
+      })
+
+      setParesCercanos(paresConTiempo)
+      setMostrarParesCercanos(true)
+    } catch (error) {
+      console.error('Error calculando pares:', error)
+    } finally {
+      setLoadingPares(false)
+    }
+  }
+
+  // Toggle para activar/desactivar vista de pares
+  const toggleVistaPares = () => {
+    if (!mostrarParesCercanos) {
+      calcularParesCercanos()
+    } else {
+      setMostrarParesCercanos(false)
+    }
+  }
 
   const handleNext = async () => {
     if (step === 1) {
@@ -1110,8 +1373,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .step-circle.active {
-          background: #E63946;
-          border-color: #E63946;
+          background: #ff0033;
+          border-color: #ff0033;
           color: white;
           box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
           transform: scale(1.05);
@@ -1257,22 +1520,22 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .modality-card:hover {
-          border-color: #E63946;
+          border-color: #ff0033;
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
         }
 
         .modality-card:hover::before {
-          background: #E63946;
+          background: #ff0033;
         }
 
         .modality-card.selected {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: var(--modal-bg);
           box-shadow: 0 4px 16px rgba(230, 57, 70, 0.15);
         }
 
         .modality-card.selected::before {
-          background: #E63946;
+          background: #ff0033;
         }
 
         .modality-icon {
@@ -1286,7 +1549,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         .modality-card:hover .modality-icon,
         .modality-card.selected .modality-icon {
-          color: #E63946;
+          color: #ff0033;
           transform: scale(1.1);
         }
 
@@ -1340,14 +1603,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .vehicle-card:hover {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: var(--modal-bg);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
           transform: translateY(-1px);
         }
 
         .vehicle-card.selected {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: linear-gradient(to right, #FEF2F2 0%, #FFF 100%);
           box-shadow: 0 4px 16px rgba(230, 57, 70, 0.15);
         }
@@ -1381,7 +1644,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .radio-circle.selected {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: #FEF2F2;
         }
 
@@ -1393,14 +1656,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           transform: translate(-50%, -50%);
           width: 12px;
           height: 12px;
-          background: #E63946;
+          background: #ff0033;
           border-radius: 50%;
         }
 
         .conductores-layout {
           display: grid;
           grid-template-columns: 1fr 1fr 1fr;
-          gap: 16px;
+          gap: 20px;
           width: 100%;
         }
 
@@ -1411,13 +1674,13 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .conductores-column {
           border: 2px solid var(--border-primary);
           border-radius: 12px;
-          padding: 14px;
+          padding: 16px;
           display: flex;
           flex-direction: column;
           background: var(--modal-bg);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
           min-height: 300px;
-          max-height: 380px;
+          max-height: 400px;
           overflow: hidden;
         }
 
@@ -1483,11 +1746,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .conductores-column h4 {
-          margin: 0 0 10px 0;
-          font-size: clamp(11px, 1vw, 13px);
+          margin: 0 0 12px 0;
+          font-size: clamp(12px, 1vw, 14px);
           font-weight: 700;
           color: var(--text-primary);
-          padding-bottom: 8px;
+          padding-bottom: 10px;
           border-bottom: 2px solid rgba(0, 0, 0, 0.1);
           flex-shrink: 0;
         }
@@ -1506,7 +1769,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .conductor-item:hover {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: var(--modal-bg);
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
         }
@@ -1564,7 +1827,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         .drop-zone.drag-over {
-          border-color: #E63946;
+          border-color: #ff0033;
           background: rgba(230, 57, 70, 0.05);
         }
 
@@ -2140,10 +2403,41 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                 <div className={`conductores-layout ${!isTurnoMode ? 'cargo-mode' : ''}`}>
                   {/* Conductores Disponibles */}
                   <div className="conductores-column">
-                    <h4>Conductores Disponibles</h4>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '2px solid rgba(0,0,0,0.1)' }}>
+                      <h4 style={{ margin: 0, border: 'none', paddingBottom: 0 }}>Conductores Disponibles</h4>
+                      {isTurnoMode && (
+                        <button
+                          type="button"
+                          onClick={toggleVistaPares}
+                          disabled={loadingPares}
+                          title={mostrarParesCercanos ? 'Ver lista normal' : 'Ver pares cercanos'}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            background: mostrarParesCercanos ? '#10B981' : '#F3F4F6',
+                            color: mostrarParesCercanos ? 'white' : '#6B7280',
+                            border: mostrarParesCercanos ? 'none' : '1px solid #E5E7EB',
+                            borderRadius: '6px',
+                            cursor: loadingPares ? 'wait' : 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {loadingPares ? (
+                            <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
+                          ) : (
+                            <MapPin size={10} />
+                          )}
+                          Pares
+                        </button>
+                      )}
+                    </div>
 
                     {/* Filtros */}
-                    <div style={{ marginBottom: '8px', flexShrink: 0, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ marginBottom: '10px', flexShrink: 0, display: 'flex', gap: '6px', alignItems: 'center' }}>
                       <input
                         type="text"
                         placeholder="Buscar..."
@@ -2151,11 +2445,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         onChange={(e) => setConductorSearch(e.target.value)}
                         style={{
                           flex: 1,
-                          minWidth: '80px',
-                          padding: '6px 8px',
+                          minWidth: '60px',
+                          padding: '7px 10px',
                           border: '1px solid #E5E7EB',
                           borderRadius: '6px',
-                          fontSize: '11px',
+                          fontSize: '12px',
                           fontFamily: 'inherit'
                         }}
                       />
@@ -2163,7 +2457,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         value={conductorStatusFilter}
                         onChange={(e) => setConductorStatusFilter(e.target.value)}
                         style={{
-                          padding: '6px 8px',
+                          padding: '7px 6px',
                           border: '1px solid #E5E7EB',
                           borderRadius: '6px',
                           fontSize: '11px',
@@ -2180,7 +2474,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         value={conductorTurnoFilter}
                         onChange={(e) => setConductorTurnoFilter(e.target.value)}
                         style={{
-                          padding: '6px 8px',
+                          padding: '7px 6px',
                           border: '1px solid #E5E7EB',
                           borderRadius: '6px',
                           fontSize: '11px',
@@ -2197,18 +2491,104 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                     </div>
 
                     <div className="conductores-list">
-                      {loadingConductores ? (
+                      {loadingConductores || loadingPares ? (
                         <div className="empty-state" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ 
-                            width: '24px', 
-                            height: '24px', 
-                            border: '2px solid var(--border-primary)', 
-                            borderTopColor: 'var(--color-primary)', 
-                            borderRadius: '50%', 
-                            animation: 'spin 1s linear infinite' 
+                          <div style={{
+                            width: '24px',
+                            height: '24px',
+                            border: '2px solid var(--border-primary)',
+                            borderTopColor: 'var(--color-primary)',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite'
                           }} />
-                          <span style={{ fontSize: '11px' }}>Cargando...</span>
+                          <span style={{ fontSize: '11px' }}>{loadingPares ? 'Calculando pares...' : 'Cargando...'}</span>
                         </div>
+                      ) : mostrarParesCercanos ? (
+                        // Vista de pares cercanos
+                        paresCercanos.length === 0 ? (
+                          <div className="empty-state" style={{ padding: '16px', textAlign: 'center' }}>
+                            <MapPin size={24} style={{ marginBottom: '8px', opacity: 0.5 }} />
+                            <p style={{ margin: 0, fontSize: '11px' }}>No se encontraron pares con coordenadas</p>
+                          </div>
+                        ) : (
+                          paresCercanos.map((par, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                padding: '10px',
+                                background: '#F0FDF4',
+                                border: '1px solid #86EFAC',
+                                borderRadius: '8px',
+                                marginBottom: '8px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <MapPin size={12} style={{ color: '#10B981' }} />
+                                  <span style={{ fontSize: '10px', fontWeight: '600', color: '#059669' }}>
+                                    {par.distanciaKm.toFixed(1)} km
+                                  </span>
+                                </div>
+                                {par.tiempoMinutos !== undefined && par.tiempoMinutos > 0 && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Route size={12} style={{ color: '#3B82F6' }} />
+                                    <span style={{ fontSize: '10px', fontWeight: '600', color: '#2563EB' }}>
+                                      ~{par.tiempoMinutos} min
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              {/* Conductor Diurno */}
+                              <div
+                                className="conductor-item"
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('conductorId', par.diurno.id)
+                                  e.currentTarget.classList.add('dragging')
+                                }}
+                                onDragEnd={(e) => {
+                                  e.currentTarget.classList.remove('dragging')
+                                }}
+                                style={{ marginBottom: '6px', background: '#FFFBEB', borderColor: '#FCD34D' }}
+                              >
+                                <div className="conductor-avatar" style={{ background: '#F59E0B' }}>
+                                  {par.diurno.nombres.charAt(0)}{par.diurno.apellidos.charAt(0)}
+                                </div>
+                                <div className="conductor-info">
+                                  <p className="conductor-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Sun size={10} style={{ color: '#F59E0B' }} />
+                                    {par.diurno.nombres} {par.diurno.apellidos}
+                                  </p>
+                                  <p className="conductor-license">DNI: {par.diurno.numero_dni || '-'}</p>
+                                </div>
+                              </div>
+                              {/* Conductor Nocturno */}
+                              <div
+                                className="conductor-item"
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('conductorId', par.nocturno.id)
+                                  e.currentTarget.classList.add('dragging')
+                                }}
+                                onDragEnd={(e) => {
+                                  e.currentTarget.classList.remove('dragging')
+                                }}
+                                style={{ background: '#EFF6FF', borderColor: '#93C5FD' }}
+                              >
+                                <div className="conductor-avatar" style={{ background: '#3B82F6' }}>
+                                  {par.nocturno.nombres.charAt(0)}{par.nocturno.apellidos.charAt(0)}
+                                </div>
+                                <div className="conductor-info">
+                                  <p className="conductor-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Moon size={10} style={{ color: '#3B82F6' }} />
+                                    {par.nocturno.nombres} {par.nocturno.apellidos}
+                                  </p>
+                                  <p className="conductor-license">DNI: {par.nocturno.numero_dni || '-'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )
                       ) : filteredConductores.length === 0 ? (
                         <div className="empty-state" style={{ padding: '16px' }}>
                           {conductorSearch ? 'Sin resultados' : 'Sin conductores'}

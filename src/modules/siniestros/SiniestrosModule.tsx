@@ -1,4 +1,5 @@
 // src/modules/siniestros/SiniestrosModule.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -293,6 +294,55 @@ export function SiniestrosModule() {
     return filtered
   }, [siniestros, patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter])
 
+  // Filtros externos para mostrar en la barra de filtros del DataTable
+  const externalFilters = useMemo(() => {
+    const filters: Array<{ id: string; label: string; onClear: () => void }> = []
+    if (patenteFilter.length > 0) {
+      filters.push({
+        id: 'patente',
+        label: `Patente: ${patenteFilter.length === 1 ? patenteFilter[0] : `${patenteFilter.length} seleccionados`}`,
+        onClear: () => setPatenteFilter([])
+      })
+    }
+    if (conductorFilter.length > 0) {
+      filters.push({
+        id: 'conductor',
+        label: `Conductor: ${conductorFilter.length === 1 ? conductorFilter[0] : `${conductorFilter.length} seleccionados`}`,
+        onClear: () => setConductorFilter([])
+      })
+    }
+    if (categoriaFilter.length > 0) {
+      filters.push({
+        id: 'categoria',
+        label: `Categoría: ${categoriaFilter.length === 1 ? categoriaFilter[0] : `${categoriaFilter.length} seleccionados`}`,
+        onClear: () => setCategoriaFilter([])
+      })
+    }
+    if (responsableFilter.length > 0) {
+      filters.push({
+        id: 'responsable',
+        label: `Responsable: ${responsableFilter.length === 1 ? responsableFilter[0] : `${responsableFilter.length} seleccionados`}`,
+        onClear: () => setResponsableFilter([])
+      })
+    }
+    if (estadoFilter.length > 0) {
+      filters.push({
+        id: 'estado',
+        label: `Estado: ${estadoFilter.length === 1 ? estadoFilter[0] : `${estadoFilter.length} seleccionados`}`,
+        onClear: () => setEstadoFilter([])
+      })
+    }
+    return filters
+  }, [patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter])
+
+  const handleClearAllFilters = () => {
+    setPatenteFilter([])
+    setConductorFilter([])
+    setCategoriaFilter([])
+    setResponsableFilter([])
+    setEstadoFilter([])
+  }
+
   // Conductores con más siniestros (para alertas)
   const conductoresReincidentes = useMemo(() => {
     const conteo: Record<string, { nombre: string; cantidad: number }> = {}
@@ -556,6 +606,7 @@ export function SiniestrosModule() {
     setSaving(true)
     try {
       // Extraer campos temporales del wizard y campos que no existen en la tabla
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { _finalizarAsignacion, _asignacionId, estado_vehiculo, habilitado_circular, ...formDataClean } = formData as any
 
       const dataToSave = {
@@ -927,6 +978,8 @@ export function SiniestrosModule() {
         emptyTitle="No hay siniestros para mostrar"
         emptyDescription="Los siniestros aparecerán aquí cuando se registren."
         globalFilterFn={customGlobalFilter}
+        externalFilters={externalFilters}
+        onClearAllFilters={handleClearAllFilters}
       />
 
       {/* Modal */}
@@ -1029,9 +1082,11 @@ function SiniestroForm({
   conductores,
   onVehiculoChange,
   disabled,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isEditMode: _isEditMode = false
 }: SiniestroFormProps) {
   // Todos los campos son editables en modo edición
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isFieldDisabled = (_fieldName: string) => {
     return disabled || false
   }
@@ -1690,7 +1745,7 @@ function SiniestroDetailView({ siniestro, onEdit, onReload }: SiniestroDetailVie
                 href={siniestro.carpeta_drive_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: '#DC2626', display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{ color: '#ff0033', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
                 Abrir <ExternalLink size={12} />
               </a>

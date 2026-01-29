@@ -82,7 +82,7 @@ export function UnauthorizedPage() {
             onClick={() => navigate('/dashboard')}
             style={{
               padding: '12px 24px',
-              background: '#E63946',
+              background: '#ff0033',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
@@ -93,12 +93,12 @@ export function UnauthorizedPage() {
               boxShadow: '0 4px 6px rgba(230, 57, 70, 0.2)'
             }}
             onMouseOver={(e) => {
-              e.currentTarget.style.background = '#D62828'
+              e.currentTarget.style.background = '#e6002e'
               e.currentTarget.style.transform = 'translateY(-2px)'
               e.currentTarget.style.boxShadow = '0 6px 12px rgba(230, 57, 70, 0.3)'
             }}
             onMouseOut={(e) => {
-              e.currentTarget.style.background = '#E63946'
+              e.currentTarget.style.background = '#ff0033'
               e.currentTarget.style.transform = 'translateY(0)'
               e.currentTarget.style.boxShadow = '0 4px 6px rgba(230, 57, 70, 0.2)'
             }}

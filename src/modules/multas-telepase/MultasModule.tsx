@@ -360,7 +360,7 @@ export default function MultasModule() {
       showCancelButton: true,
       confirmButtonText: 'Registrar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       width: 480,
       preConfirm: () => {
         const patente = (document.getElementById('swal-patente') as HTMLSelectElement).value
@@ -446,7 +446,7 @@ export default function MultasModule() {
       text: `${multa.patente} - ${formatMoney(multa.importe)}`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#DC2626',
+      confirmButtonColor: '#ff0033',
       confirmButtonText: 'Eliminar',
       cancelButtonText: 'Cancelar'
     })
@@ -878,7 +878,7 @@ export default function MultasModule() {
                   </tr>
                   <tr>
                     <td className="multas-detail-label">Importe</td>
-                    <td className="multas-detail-value" style={{ fontWeight: 700, color: '#DC2626', fontSize: '18px' }}>
+                    <td className="multas-detail-value" style={{ fontWeight: 700, color: '#ff0033', fontSize: '18px' }}>
                       {formatMoney(selectedMulta.importe)}
                     </td>
                   </tr>
@@ -1184,7 +1184,7 @@ export default function MultasModule() {
                           background: '#FEF2F2',
                           border: '1px solid #FECACA',
                           borderRadius: '6px',
-                          color: '#B91C1C',
+                          color: '#e6002e',
                           fontSize: '13px',
                           display: 'flex',
                           alignItems: 'center',

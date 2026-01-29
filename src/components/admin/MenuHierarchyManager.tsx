@@ -140,7 +140,7 @@ export function MenuHierarchyManager() {
       text: `Se eliminará "${menu.label}" y todos sus submenús`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#E63946',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar'
@@ -240,7 +240,7 @@ export function MenuHierarchyManager() {
       text: `Se eliminará "${submenu.label}"`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#E63946',
+      confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
       confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar'

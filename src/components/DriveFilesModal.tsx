@@ -158,7 +158,7 @@ export function DriveFilesModal({ isOpen, onClose, title, driveUrl, files, loadi
       borderTop: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb'
     },
     primaryBtn: {
-      backgroundColor: '#E63946',
+      backgroundColor: '#ff0033',
       color: '#ffffff',
       border: 'none',
       borderRadius: '8px',
@@ -213,7 +213,7 @@ export function DriveFilesModal({ isOpen, onClose, title, driveUrl, files, loadi
         <div style={styles.body}>
           {loading ? (
             <div style={styles.loadingState}>
-              <Loader2 size={24} className="animate-spin" style={{ color: '#E63946' }} />
+              <Loader2 size={24} className="animate-spin" style={{ color: '#ff0033' }} />
               <span>Cargando archivos...</span>
             </div>
           ) : files.length === 0 ? (
