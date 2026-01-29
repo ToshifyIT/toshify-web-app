@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/exhaustive-deps */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -152,6 +152,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
   const [loading, setLoading] = useState(false)
+  const isSubmittingRef = useRef(false)
   const [loadingVehicles, setLoadingVehicles] = useState(true)
   const [loadingConductores, setLoadingConductores] = useState(true)
   const [vehicleSearch, setVehicleSearch] = useState('')
@@ -912,7 +913,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   const handleSubmit = async () => {
-    if (loading) return
+    if (loading || isSubmittingRef.current) return
+    isSubmittingRef.current = true
 
     // Validaciones
     if (!formData.fecha_cita) {
@@ -1145,6 +1147,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       Swal.fire('Error', error.message || 'No se pudo guardar la programacion', 'error')
     } finally {
       setLoading(false)
+      isSubmittingRef.current = false
     }
   }
 
