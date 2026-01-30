@@ -550,7 +550,7 @@ export function ReporteFacturacionTab() {
       // a) Penalidades aplicadas completas en esta semana
       const { data: penalidadesCompletas } = await (supabase
         .from('penalidades') as any)
-        .select('conductor_id, monto, detalle, observaciones')
+        .select('conductor_id, monto, detalle, observaciones, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('aplicado', true)
         .eq('fraccionado', false)
         .eq('semana_aplicacion', semanaDelPeriodo)
@@ -590,7 +590,8 @@ export function ReporteFacturacionTab() {
         penalidadesPadre.map((p: any) => [p.id, p.cantidad_cuotas || 1])
       )
 
-      const penalidadesMap = new Map<string, number>()
+      const penalidadesMap = new Map<string, number>() // P006 + P007 (cargos)
+      const penalidadesDescuentoMap = new Map<string, number>() // P004 (descuentos)
       // Map para guardar el detalle de penalidades por conductor
       const detalleMap = new Map<string, Array<{
         monto: number
@@ -600,11 +601,21 @@ export function ReporteFacturacionTab() {
         totalCuotas?: number
       }>>()
       
-      // Sumar penalidades completas
+      // Sumar penalidades completas - segmentadas por categoría
       ;(penalidadesCompletas || []).forEach((p: any) => {
         if (p.conductor_id) {
-          const actual = penalidadesMap.get(p.conductor_id) || 0
-          penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+          const categoria = p.tipos_cobro_descuento?.categoria
+          // NULL categoria = pendiente, excluir del cálculo
+          if (!categoria) return
+
+          if (categoria === 'P004') {
+            const actual = penalidadesDescuentoMap.get(p.conductor_id) || 0
+            penalidadesDescuentoMap.set(p.conductor_id, actual + (p.monto || 0))
+          } else {
+            // P006, P007 → cargo
+            const actual = penalidadesMap.get(p.conductor_id) || 0
+            penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
+          }
           
           // Guardar detalle
           const detalles = detalleMap.get(p.conductor_id) || []
@@ -711,14 +722,16 @@ export function ReporteFacturacionTab() {
         // Peajes de Cabify (P005)
         const montoPeajes = peajesMap.get(dniConductor) || 0
 
-        // Penalidades (P007)
+        // Penalidades (P006 + P007 como cargos)
         const montoPenalidades = penalidadesMap.get(conductorId) || 0
+        // Penalidades P004 como descuentos
+        const montoPenalidadesDescuento = penalidadesDescuentoMap.get(conductorId) || 0
 
         // Subtotal cargos (incluye P005, P006, P007)
         const subtotalCargos = subtotalAlquiler + subtotalGarantia + montoExcesos + montoPeajes + montoPenalidades
 
-        // Tickets a favor (descuentos)
-        const subtotalDescuentos = ticketsMap.get(conductorId) || 0
+        // Tickets a favor (descuentos) + P004 de penalidades
+        const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento
 
         // Saldo anterior y mora
         // La mora se cobra 5% flat si hay saldo pendiente y NO hizo abono
@@ -943,7 +956,7 @@ export function ReporteFacturacionTab() {
 
       // 5. Obtener datos adicionales en paralelo
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
-        (supabase.from('penalidades') as any).select('*').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false),
+        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('*').in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
@@ -1017,9 +1030,16 @@ export function ReporteFacturacionTab() {
         const cuotaActual = (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.total_cuotas || 16
 
-        // Penalidades
+        // Penalidades - segmentar por categoría de tipo_cobro_descuento
         const pensConductor = (penalidades as any[]).filter((p: any) => p.conductor_id === conductor.conductor_id)
-        const totalPenalidades = pensConductor.reduce((sum: number, p: any) => sum + (p.monto || 0), 0)
+        const pensP004 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P004')
+        const pensP006 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P006')
+        const pensP007 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P007')
+        // NULL categoria = pendiente, se excluye del cálculo
+        const totalPenP004 = pensP004.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // descuento
+        const totalPenP006 = pensP006.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // cargo
+        const totalPenP007 = pensP007.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // cargo
+        const totalPenalidades = totalPenP006 + totalPenP007 // solo cargos
 
         // Tickets (descuentos)
         const ticketsConductor = (tickets as any[]).filter((t: any) => t.conductor_id === conductor.conductor_id)
@@ -1058,7 +1078,7 @@ export function ReporteFacturacionTab() {
 
         // Totales
         const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + montoMultas + totalCobros
-        const subtotalDescuentos = totalTickets
+        const subtotalDescuentos = totalTickets + totalPenP004
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
 
@@ -1133,18 +1153,32 @@ export function ReporteFacturacionTab() {
           subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
         })
 
-        // P007 - Penalidades
-        for (const pen of pensConductor) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P007',
-            concepto_descripcion: `Penalidad: ${(pen as any).detalle || 'Sin detalle'}`,
-            cantidad: 1, precio_unitario: (pen as any).monto,
-            subtotal: (pen as any).monto, total: (pen as any).monto, es_descuento: false,
-            referencia_id: (pen as any).id, referencia_tipo: 'penalidad'
-          })
-          // Marcar como aplicada
-          await (supabase.from('penalidades') as any).update({ aplicado: true }).eq('id', (pen as any).id)
+        // Penalidades segmentadas por categoría (P004 descuento, P006 cargo, P007 cargo)
+        // NULL categoria = pendiente, NO se inserta ni se marca aplicada
+        const gruposPenalidades: { pens: any[]; codigo: string; esDescuento: boolean }[] = [
+          { pens: pensP004, codigo: 'P004', esDescuento: true },
+          { pens: pensP006, codigo: 'P006', esDescuento: false },
+          { pens: pensP007, codigo: 'P007', esDescuento: false },
+        ]
+        for (const grupo of gruposPenalidades) {
+          for (const pen of grupo.pens) {
+            const tipoNombre = (pen as any).tipos_cobro_descuento?.nombre || 'Sin detalle'
+            const descripcion = grupo.codigo === 'P004'
+              ? `Ticket: ${tipoNombre}`
+              : grupo.codigo === 'P006'
+                ? `Exceso KM: ${tipoNombre}`
+                : `Penalidad: ${tipoNombre}`
+            await (supabase.from('facturacion_detalle') as any).insert({
+              facturacion_id: facturacionId,
+              concepto_codigo: grupo.codigo,
+              concepto_descripcion: descripcion,
+              cantidad: 1, precio_unitario: (pen as any).monto,
+              subtotal: (pen as any).monto, total: (pen as any).monto, es_descuento: grupo.esDescuento,
+              referencia_id: (pen as any).id, referencia_tipo: 'penalidad'
+            })
+            // Marcar como aplicada
+            await (supabase.from('penalidades') as any).update({ aplicado: true }).eq('id', (pen as any).id)
+          }
         }
 
         // P004 - Tickets a Favor (descuentos)
@@ -1354,50 +1388,56 @@ export function ReporteFacturacionTab() {
         })
       }
 
-      // P007 - Multas/Penalidades - Consultar directamente de la BD
-      // Consultar TODAS las penalidades del conductor para esta semana
-      const { data: penalidades } = await supabase
-        .from('penalidades')
-        .select('id, monto, observaciones, fraccionado, cantidad_cuotas')
+      // Penalidades - Consultar con categoría para segmentar por producto
+      const { data: penalidades } = await (supabase
+        .from('penalidades') as any)
+        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('conductor_id', facturacion.conductor_id)
         .eq('aplicado', true)
       
-      // Agregar cada penalidad
+      // Agregar cada penalidad con su código correcto según categoría
       ;(penalidades || []).forEach((p: any, idx: number) => {
         if (!p.fraccionado) {
-          // Penalidad completa
+          const categoria = p.tipos_cobro_descuento?.categoria
+          // NULL categoria = pendiente, mostrar como tal
+          if (!categoria) {
+            detallesSimulados.push({
+              id: `det-pen-pendiente-${facturacion.conductor_id}-${idx}`,
+              facturacion_id: facturacion.id,
+              concepto_codigo: 'PEND',
+              concepto_descripcion: `[PENDIENTE] ${p.observaciones || 'Sin tipo asignado'}`,
+              cantidad: 1,
+              precio_unitario: p.monto,
+              subtotal: p.monto,
+              total: p.monto,
+              es_descuento: false,
+              referencia_id: p.id,
+              referencia_tipo: 'penalidad'
+            })
+            return
+          }
+          const tipoNombre = p.tipos_cobro_descuento?.nombre || p.observaciones || 'Sin detalle'
+          const esDescuento = categoria === 'P004'
+          const descripcion = categoria === 'P004'
+            ? `Ticket: ${tipoNombre}`
+            : categoria === 'P006'
+              ? `Exceso KM: ${tipoNombre}`
+              : `Penalidad: ${tipoNombre}`
           detallesSimulados.push({
             id: `det-pen-${facturacion.conductor_id}-${idx}`,
             facturacion_id: facturacion.id,
-            concepto_codigo: 'P007',
-            concepto_descripcion: p.observaciones || 'Multa/Infracción',
+            concepto_codigo: categoria,
+            concepto_descripcion: descripcion,
             cantidad: 1,
             precio_unitario: p.monto,
             subtotal: p.monto,
             total: p.monto,
-            es_descuento: false,
+            es_descuento: esDescuento,
             referencia_id: p.id,
             referencia_tipo: 'penalidad'
           })
         }
       })
-      
-      // Si no hay penalidades pero hay monto, mostrar el total
-      if ((penalidades || []).length === 0 && facturacion.monto_penalidades && facturacion.monto_penalidades > 0) {
-        detallesSimulados.push({
-          id: `det-penalidades-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P007',
-          concepto_descripcion: 'Multas/Infracciones',
-          cantidad: 1,
-          precio_unitario: facturacion.monto_penalidades,
-          subtotal: facturacion.monto_penalidades,
-          total: facturacion.monto_penalidades,
-          es_descuento: false,
-          referencia_id: null,
-          referencia_tipo: null
-        })
-      }
 
       // P010 - Cobros fraccionados (plan de pagos) de esta semana
       {
@@ -1468,32 +1508,44 @@ export function ReporteFacturacionTab() {
 
       if (error) throw error
 
-      // Filtrar el item genérico de MULTAS/INFRACCIONES (P007) y reemplazar con detalle real
-      const detallesSinPenalidades = (detalles || []).filter((d: any) => d.concepto_codigo !== 'P007')
+      // Filtrar items genéricos de penalidades (P004/P006/P007 con referencia_tipo=penalidad) y reemplazar con detalle real
+      const detallesSinPenalidades = (detalles || []).filter((d: any) =>
+        !(d.referencia_tipo === 'penalidad' && ['P004', 'P006', 'P007'].includes(d.concepto_codigo))
+      )
       
-      // Consultar detalle de penalidades del conductor
-      const { data: penalidades } = await supabase
-        .from('penalidades')
-        .select('id, monto, observaciones, fraccionado, cantidad_cuotas')
+      // Consultar detalle de penalidades del conductor con categoría
+      const { data: penalidades } = await (supabase
+        .from('penalidades') as any)
+        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('conductor_id', facturacion.conductor_id)
         .eq('aplicado', true)
       
-      // Crear items de detalle para cada penalidad
+      // Crear items de detalle para cada penalidad con su código correcto
       const detallesPenalidades: FacturacionDetalle[] = (penalidades || [])
         .filter((p: any) => !p.fraccionado)
-        .map((p: any, idx: number) => ({
-          id: `det-pen-${facturacion.conductor_id}-${idx}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'P007',
-          concepto_descripcion: p.observaciones || 'Multa/Infracción',
-          cantidad: 1,
-          precio_unitario: p.monto,
-          subtotal: p.monto,
-          total: p.monto,
-          es_descuento: false,
-          referencia_id: p.id,
-          referencia_tipo: 'penalidad'
-        }))
+        .map((p: any, idx: number) => {
+          const categoria = p.tipos_cobro_descuento?.categoria || 'P007'
+          const tipoNombre = p.tipos_cobro_descuento?.nombre || p.observaciones || 'Sin detalle'
+          const esDescuento = categoria === 'P004'
+          const descripcion = categoria === 'P004'
+            ? `Ticket: ${tipoNombre}`
+            : categoria === 'P006'
+              ? `Exceso KM: ${tipoNombre}`
+              : `Penalidad: ${tipoNombre}`
+          return {
+            id: `det-pen-${facturacion.conductor_id}-${idx}`,
+            facturacion_id: facturacion.id,
+            concepto_codigo: categoria,
+            concepto_descripcion: descripcion,
+            cantidad: 1,
+            precio_unitario: p.monto,
+            subtotal: p.monto,
+            total: p.monto,
+            es_descuento: esDescuento,
+            referencia_id: p.id,
+            referencia_tipo: 'penalidad'
+          }
+        })
       
       // Combinar detalles
       const todosDetalles = [...detallesSinPenalidades, ...detallesPenalidades] as FacturacionDetalle[]
@@ -2482,9 +2534,9 @@ export function ReporteFacturacionTab() {
 
       // 4. Cargar TODAS las penalidades pendientes (para detectar las no incluidas)
       // Penalidades se filtran por el campo 'semana' (número de semana del período)
-      const { data: todasPenalidadesData } = await supabase
-        .from('penalidades')
-        .select('*, tipos_cobro_descuento(nombre), conductor:conductores(nombres, apellidos)')
+      const { data: todasPenalidadesData } = await (supabase
+        .from('penalidades') as any)
+        .select('*, tipos_cobro_descuento(nombre, categoria, es_a_favor), conductor:conductores(nombres, apellidos)')
         .eq('aplicado', false)
         .eq('rechazado', false)
         .eq('fraccionado', false) // Solo NO fraccionadas (las fraccionadas van por penalidades_cuotas)
@@ -2788,19 +2840,34 @@ export function ReporteFacturacionTab() {
           ))
         }
 
-        // P007 - Penalidades (desde penalidades)
+        // Penalidades segmentadas por categoría (P004, P006, P007)
         const penalidades = penalidadesMap.get(fact.conductor_id) || []
         for (const penalidad of penalidades) {
-          const descripcionPenalidad = penalidad.detalle || 
-            penalidad.tipos_cobro_descuento?.nombre || 
-            'Penalidad'
+          const categoria = penalidad.tipos_cobro_descuento?.categoria
+          // NULL categoria = pendiente, mostrar como tal
+          if (!categoria) {
+            filasPreview.push(crearFilaPreview(
+              numeroFactura++,
+              fact,
+              penalidad.monto,
+              'PEND',
+              `[PENDIENTE] ${penalidad.detalle || penalidad.tipos_cobro_descuento?.nombre || 'Sin tipo asignado'}`
+            ))
+            continue
+          }
+          const tipoNombre = penalidad.tipos_cobro_descuento?.nombre || penalidad.detalle || 'Sin detalle'
+          const descripcion = categoria === 'P004'
+            ? `Ticket: ${tipoNombre}`
+            : categoria === 'P006'
+              ? `Exceso KM: ${tipoNombre}`
+              : `Penalidad: ${tipoNombre}`
           
           filasPreview.push(crearFilaPreview(
             numeroFactura++,
             fact,
             penalidad.monto,
-            'P007',
-            descripcionPenalidad
+            categoria,
+            descripcion
           ))
         }
 

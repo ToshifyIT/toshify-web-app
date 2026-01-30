@@ -355,9 +355,9 @@ export function PeriodosTab() {
 
       // 7. Obtener datos adicionales (penalidades, tickets, etc.)
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes] = await Promise.all([
-        supabase
-          .from('penalidades')
-          .select('*')
+        (supabase
+          .from('penalidades') as any)
+          .select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
           .in('conductor_id', conductorIds)
           .gte('fecha', semana.fecha_inicio)
           .lte('fecha', semana.fecha_fin)
@@ -479,9 +479,16 @@ export function PeriodosTab() {
         const cuotaActual = (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.total_cuotas || 16
 
-        // Penalidades del conductor
+        // Penalidades del conductor - segmentar por categoría de tipo_cobro_descuento
         const pensConductor = (penalidades as any[]).filter((p: any) => p.conductor_id === conductor.conductor_id)
-        const totalPenalidades = pensConductor.reduce((sum: number, p: any) => sum + (p.monto || 0), 0)
+        const pensP004 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P004')
+        const pensP006 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P006')
+        const pensP007 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P007')
+        // NULL categoria = pendiente, se excluye del cálculo
+        const totalPenP004 = pensP004.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // descuento
+        const totalPenP006 = pensP006.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // cargo
+        const totalPenP007 = pensP007.reduce((sum: number, p: any) => sum + (p.monto || 0), 0) // cargo
+        const totalPenalidades = totalPenP006 + totalPenP007 // solo cargos
 
         // Tickets del conductor (descuentos)
         const ticketsConductor = (tickets as any[]).filter((t: any) => t.conductor_id === conductor.conductor_id)
@@ -513,7 +520,7 @@ export function PeriodosTab() {
 
         // Totales
         const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + totalCobros
-        const subtotalDescuentos = totalTickets
+        const subtotalDescuentos = totalTickets + totalPenP004
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
 
@@ -590,26 +597,40 @@ export function PeriodosTab() {
           es_descuento: false
         })
 
-        // Insertar penalidades como detalle
-        for (const pen of pensConductor) {
-          await (supabase.from('facturacion_detalle') as any).insert({
-            facturacion_id: facturacionId,
-            concepto_codigo: 'P007',
-            concepto_descripcion: `Penalidad: ${(pen as any).detalle || 'Sin detalle'}`,
-            cantidad: 1,
-            precio_unitario: (pen as any).monto,
-            subtotal: (pen as any).monto,
-            total: (pen as any).monto,
-            es_descuento: false,
-            referencia_id: (pen as any).id,
-            referencia_tipo: 'penalidad'
-          })
+        // Insertar penalidades segmentadas por categoría (P004 descuento, P006 cargo, P007 cargo)
+        // NULL categoria = pendiente, NO se inserta ni se marca aplicada
+        const gruposPenalidades: { pens: any[]; codigo: string; esDescuento: boolean }[] = [
+          { pens: pensP004, codigo: 'P004', esDescuento: true },
+          { pens: pensP006, codigo: 'P006', esDescuento: false },
+          { pens: pensP007, codigo: 'P007', esDescuento: false },
+        ]
+        for (const grupo of gruposPenalidades) {
+          for (const pen of grupo.pens) {
+            const tipoNombre = (pen as any).tipos_cobro_descuento?.nombre || 'Sin detalle'
+            const descripcion = grupo.codigo === 'P004'
+              ? `Ticket: ${tipoNombre}`
+              : grupo.codigo === 'P006'
+                ? `Exceso KM: ${tipoNombre}`
+                : `Penalidad: ${tipoNombre}`
+            await (supabase.from('facturacion_detalle') as any).insert({
+              facturacion_id: facturacionId,
+              concepto_codigo: grupo.codigo,
+              concepto_descripcion: descripcion,
+              cantidad: 1,
+              precio_unitario: (pen as any).monto,
+              subtotal: (pen as any).monto,
+              total: (pen as any).monto,
+              es_descuento: grupo.esDescuento,
+              referencia_id: (pen as any).id,
+              referencia_tipo: 'penalidad'
+            })
 
-          // Marcar penalidad como aplicada
-          await (supabase
-            .from('penalidades') as any)
-            .update({ aplicado: true })
-            .eq('id', (pen as any).id)
+            // Marcar penalidad como aplicada
+            await (supabase
+              .from('penalidades') as any)
+              .update({ aplicado: true })
+              .eq('id', (pen as any).id)
+          }
         }
 
         // Insertar tickets como detalle (descuentos)
