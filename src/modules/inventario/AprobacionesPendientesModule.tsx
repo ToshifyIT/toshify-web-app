@@ -1,4 +1,5 @@
 // src/modules/inventario/AprobacionesPendientesModule.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -630,18 +631,18 @@ export function AprobacionesPendientesModule() {
 
         .tab-btn {
           flex: 1;
-          padding: 10px 16px;
+          padding: 8px 16px;
           border: none;
           background: transparent;
           color: var(--text-secondary);
-          font-size: 14px;
-          font-weight: 600;
+          font-size: 13px;
+          font-weight: 500;
           cursor: pointer;
-          border-radius: 8px;
+          border-radius: 6px;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
+          gap: 6px;
           transition: all 0.2s;
         }
 
@@ -794,7 +795,7 @@ export function AprobacionesPendientesModule() {
             className={`tab-btn ${tabActiva === 'pendientes' ? 'active' : ''}`}
             onClick={() => setTabActiva('pendientes')}
           >
-            <Clock size={18} />
+            <Clock size={16} />
             Pendientes
             {movimientos.length > 0 && (
               <span className="tab-badge">{movimientos.length}</span>
@@ -804,7 +805,7 @@ export function AprobacionesPendientesModule() {
             className={`tab-btn ${tabActiva === 'historico' ? 'active' : ''}`}
             onClick={() => setTabActiva('historico')}
           >
-            <History size={18} />
+            <History size={16} />
             Histórico
           </button>
         </div>

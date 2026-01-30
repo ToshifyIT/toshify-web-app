@@ -230,10 +230,10 @@
 }
 
 .multas-btn-primary {
-  padding: 10px 20px;
-  font-size: 14px;
+  padding: 8px 18px;
+  font-size: 13px;
   font-weight: 500;
-  border-radius: 8px;
+  border-radius: 6px;
   border: none;
   cursor: pointer;
   background: var(--color-primary);
@@ -246,10 +246,10 @@
 }
 
 .multas-btn-secondary {
-  padding: 10px 20px;
-  font-size: 14px;
+  padding: 8px 18px;
+  font-size: 13px;
   font-weight: 500;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #E5E7EB;
   cursor: pointer;
   background: #F3F4F6;

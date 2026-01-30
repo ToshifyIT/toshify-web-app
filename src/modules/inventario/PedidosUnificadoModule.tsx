@@ -1,5 +1,6 @@
 // src/modules/inventario/PedidosUnificadoModule.tsx
 // Módulo unificado que combina Pedidos en Tránsito y Aprobaciones Pendientes
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -930,18 +931,18 @@ export function PedidosUnificadoModule() {
         }
 
         .pedidos-tab {
-          padding: 14px 24px;
+          padding: 8px 16px;
           background: none;
           border: none;
-          font-size: 14px;
-          font-weight: 600;
+          font-size: 13px;
+          font-weight: 500;
           cursor: pointer;
           color: var(--text-secondary);
           border-bottom: 2px solid transparent;
           margin-bottom: -2px;
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           transition: all 0.2s;
           white-space: nowrap;
         }
@@ -1325,7 +1326,7 @@ export function PedidosUnificadoModule() {
             className={`pedidos-tab ${activeTab === 'entradas' ? 'active' : ''}`}
             onClick={() => setActiveTab('entradas')}
           >
-            <ArrowDownCircle size={18} />
+            <ArrowDownCircle size={16} />
             Entradas Simples
             {entradasSimples.length > 0 && (
               <span className="pedidos-tab-badge">{entradasSimples.length}</span>
@@ -1335,7 +1336,7 @@ export function PedidosUnificadoModule() {
             className={`pedidos-tab ${activeTab === 'pedidos' ? 'active' : ''}`}
             onClick={() => setActiveTab('pedidos')}
           >
-            <Package size={18} />
+            <Package size={16} />
             Pedidos por Lote
             {pedidos.length > 0 && (
               <span className="pedidos-tab-badge">{pedidos.length}</span>
@@ -1345,7 +1346,7 @@ export function PedidosUnificadoModule() {
             className={`pedidos-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
             onClick={() => setActiveTab('pendientes')}
           >
-            <Clock size={18} />
+            <Clock size={16} />
             Pendientes
             {movimientos.length > 0 && (
               <span className="pedidos-tab-badge">{movimientos.length}</span>
@@ -1355,7 +1356,7 @@ export function PedidosUnificadoModule() {
             className={`pedidos-tab ${activeTab === 'historico' ? 'active' : ''}`}
             onClick={() => setActiveTab('historico')}
           >
-            <History size={18} />
+            <History size={16} />
             Historico
           </button>
         </div>
