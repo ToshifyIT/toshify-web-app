@@ -2159,6 +2159,9 @@ export function ReporteFacturacionTab() {
         facturacionId?: string,
         detalleId?: string
       ): FacturacionPreviewRow => {
+        // Redondear total a 2 decimales para evitar errores de punto flotante
+        total = Math.round(total * 100) / 100
+
         // Determinar tipo de factura según CUIT
         const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
         const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
@@ -2637,6 +2640,9 @@ export function ReporteFacturacionTab() {
         codigoProducto: string,
         descripcionAdicional: string
       ): FacturacionPreviewRow => {
+        // Redondear total a 2 decimales para evitar errores de punto flotante
+        total = Math.round(total * 100) / 100
+
         const tieneCuit = fact.conductor_cuit && fact.conductor_cuit.length >= 11
         const tipoFactura = tieneCuit ? 'FACTURA_A' : 'FACTURA_B'
         const condicionIva = tieneCuit ? 'RESPONSABLE_INSCRIPTO' : 'CONSUMIDOR_FINAL'
