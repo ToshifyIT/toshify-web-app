@@ -1198,11 +1198,12 @@ export function ReporteFacturacionTab() {
             .maybeSingle()
 
           const conceptoP005 = conceptosMap.get('P005')
+          const descPeaje = `Telepeajes (${format(parseISO(fechaInicio), 'dd/MM', { locale: es })} al ${format(parseISO(fechaFin), 'dd/MM/yyyy', { locale: es })})`
           if (existingPeaje) {
             await (supabase.from('facturacion_detalle') as any)
               .update({
                 concepto_id: conceptoP005?.id || null,
-                concepto_descripcion: conceptoP005?.descripcion || 'Peajes Cabify',
+                concepto_descripcion: descPeaje,
                 precio_unitario: montoPeajes,
                 subtotal: montoPeajes,
                 total: montoPeajes
@@ -1214,7 +1215,7 @@ export function ReporteFacturacionTab() {
                 facturacion_id: fact.id,
                 concepto_id: conceptoP005?.id || null,
                 concepto_codigo: 'P005',
-                concepto_descripcion: conceptoP005?.descripcion || 'Peajes Cabify',
+                concepto_descripcion: descPeaje,
                 cantidad: 1,
                 precio_unitario: montoPeajes,
                 subtotal: montoPeajes,
@@ -1266,28 +1267,38 @@ export function ReporteFacturacionTab() {
         }
 
         // Actualizar/crear detalles de cobros fraccionados (P010)
+        // Cargar todos los P010 existentes para este conductor
+        const { data: existingP010s } = await (supabase
+          .from('facturacion_detalle') as any)
+          .select('id, referencia_id')
+          .eq('facturacion_id', fact.id)
+          .eq('concepto_codigo', 'P010')
+
+        const p010Disponibles = [...(existingP010s || [])]
+
         for (const cobro of cobrosConductor) {
           const descripcionCobro = cobro.descripcion ||
             `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`
 
-          // Buscar si ya existe un detalle P010 para este cobro específico
-          const { data: existingCobro } = await (supabase
-            .from('facturacion_detalle') as any)
-            .select('id')
-            .eq('facturacion_id', fact.id)
-            .eq('concepto_codigo', 'P010')
-            .eq('referencia_id', cobro.id)
-            .maybeSingle()
+          // Buscar P010 existente: primero por referencia_id, luego el primero disponible
+          let matchIdx = p010Disponibles.findIndex((p: any) => p.referencia_id === cobro.id)
+          if (matchIdx === -1 && p010Disponibles.length > 0) {
+            matchIdx = 0
+          }
 
-          if (existingCobro) {
+          if (matchIdx !== -1) {
+            const existing = p010Disponibles[matchIdx]
             await (supabase.from('facturacion_detalle') as any)
               .update({
                 concepto_descripcion: descripcionCobro,
                 precio_unitario: cobro.monto_cuota,
                 subtotal: cobro.monto_cuota,
-                total: cobro.monto_cuota
+                total: cobro.monto_cuota,
+                referencia_id: cobro.id,
+                referencia_tipo: 'cobro_fraccionado'
               })
-              .eq('id', existingCobro.id)
+              .eq('id', existing.id)
+            p010Disponibles.splice(matchIdx, 1)
           } else {
             await (supabase.from('facturacion_detalle') as any)
               .insert({
