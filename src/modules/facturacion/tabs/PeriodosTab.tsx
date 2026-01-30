@@ -177,35 +177,39 @@ export function PeriodosTab() {
               ${format(new Date(semana.fecha_inicio), 'dd/MM/yyyy', { locale: es })} al ${format(new Date(semana.fecha_fin), 'dd/MM/yyyy', { locale: es })}
             </div>
           </div>
-          <div style="color: #374151; font-size: 12px; margin-bottom: 8px;">Este proceso:</div>
+          <div style="color: #374151; font-size: 12px; margin-bottom: 8px;">Este proceso calculará todos los conceptos:</div>
           <div style="display: flex; flex-direction: column; gap: 6px;">
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
               <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
-              Procesará todos los conductores con asignación activa
+              Alquiler Turno/Cargo <span style="color: #9CA3AF;">(P001/P002)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
               <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
-              Calculará alquiler proporcional <span style="color: #9CA3AF;">(P001/P002)</span>
+              Cuota de Garantía <span style="color: #9CA3AF;">(P003)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
+              <span style="width: 6px; height: 6px; background: #10B981; border-radius: 50%; flex-shrink: 0;"></span>
+              Tickets a Favor <span style="color: #9CA3AF;">(P004)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
               <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
-              Calculará cuota de garantía <span style="color: #9CA3AF;">(P003)</span>
+              Peajes <span style="color: #9CA3AF;">(P005)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
               <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
-              Aplicará penalidades pendientes <span style="color: #9CA3AF;">(P007)</span>
+              Exceso de KM <span style="color: #9CA3AF;">(P006)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
               <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
-              Aplicará tickets a favor <span style="color: #9CA3AF;">(P004)</span>
+              Multas/Infracciones <span style="color: #9CA3AF;">(P007)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
               <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
-              Aplicará excesos de kilometraje <span style="color: #9CA3AF;">(P006)</span>
+              Intereses por Mora <span style="color: #9CA3AF;">(P009)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5563;">
               <span style="width: 6px; height: 6px; background: #ff0033; border-radius: 50%; flex-shrink: 0;"></span>
-              Calculará saldos y mora <span style="color: #9CA3AF;">(P009)</span>
+              Cobros Fraccionados <span style="color: #9CA3AF;">(P010)</span>
             </div>
           </div>
         </div>
