@@ -42,7 +42,7 @@
 }
 
 .siniestros-tab {
-  padding: 10px 20px;
+  padding: 8px 16px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -53,7 +53,7 @@
   transition: all 0.15s;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .siniestros-tab:hover {
@@ -568,9 +568,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
@@ -1186,13 +1186,23 @@
   }
 
   .siniestros-tabs {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 4px;
+    gap: 2px;
+  }
+
+  .siniestros-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .siniestros-tab {
-    flex: 1;
-    justify-content: center;
-    min-width: 100px;
+    flex-shrink: 0;
+    padding: 6px 10px;
+    font-size: 12px;
+    gap: 4px;
   }
 
   .stats-grid {

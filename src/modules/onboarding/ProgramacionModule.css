@@ -847,12 +847,12 @@
 
 /* Botones del modal */
 .prog-btn-primary {
-  padding: 10px 20px;
+  padding: 8px 18px;
   background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
@@ -868,12 +868,12 @@
 }
 
 .prog-btn-secondary {
-  padding: 10px 20px;
+  padding: 8px 18px;
   background: #F3F4F6;
   color: #374151;
   border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
