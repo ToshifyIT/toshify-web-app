@@ -32,7 +32,7 @@
 }
 
 .incidencias-tab {
-  padding: 10px 20px;
+  padding: 8px 16px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -43,7 +43,7 @@
   transition: all 0.15s;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   white-space: nowrap;
 }
 
@@ -845,12 +845,12 @@
    ===================================================== */
 
 .btn-primary {
-  padding: 10px 20px;
+  padding: 8px 18px;
   background: var(--color-primary);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   display: flex;
@@ -869,12 +869,12 @@
 }
 
 .btn-secondary {
-  padding: 10px 20px;
+  padding: 8px 18px;
   background: #F3F4F6;
   color: #374151;
   border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   display: flex;
@@ -888,7 +888,7 @@
 }
 
 .btn-danger {
-  padding: 10px 16px;
+  padding: 8px 18px;
   background: var(--color-primary);
   color: white;
   border: none;
@@ -1145,16 +1145,28 @@
   }
 
   .incidencias-tabs {
-    flex-wrap: wrap;
-    justify-content: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 4px;
+    gap: 2px;
+  }
+
+  .incidencias-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .incidencias-tab {
-    flex: 1;
-    justify-content: center;
-    min-width: 90px;
-    padding: 8px 12px;
+    flex-shrink: 0;
+    padding: 6px 10px;
     font-size: 12px;
+    gap: 4px;
+  }
+
+  .tab-badge {
+    padding: 1px 6px;
+    font-size: 10px;
   }
 
   .tabs-actions {

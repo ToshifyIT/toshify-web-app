@@ -768,6 +768,47 @@ export function ProgramacionModule() {
         notasBase = `${notasBase}\n${companeroMeta.join('\n')}`
       }
 
+      // Finalizar asignaciones activas anteriores del mismo vehículo
+      // Esto evita duplicados cuando se hace "pasa turno"
+      const ahora = new Date().toISOString()
+      const { data: asignacionesPrevias } = await (supabase
+        .from('asignaciones') as any)
+        .select(`id, notas,
+          asignaciones_conductores(conductor_id, estado, horario,
+            conductores(nombres, apellidos)
+          )
+        `)
+        .eq('vehiculo_id', prog.vehiculo_entregar_id)
+        .in('estado', ['activa', 'activo'])
+
+      if (asignacionesPrevias && asignacionesPrevias.length > 0) {
+        for (const asigPrevia of asignacionesPrevias as any[]) {
+          // Finalizar conductores de la asignación anterior
+          await (supabase.from('asignaciones_conductores') as any)
+            .update({ estado: 'completado', fecha_fin: ahora })
+            .eq('asignacion_id', asigPrevia.id)
+            .in('estado', ['asignado', 'activo'])
+
+          // Traza de TODOS los conductores al cierre (incluidos completados, para trazabilidad)
+          const conductoresAnteriores = (asigPrevia.asignaciones_conductores || [])
+            .map((ac: any) => {
+              const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
+              return `${nombre} (${ac.horario || 'sin turno'})`
+            })
+          const notasAnterior = asigPrevia.notas || ''
+          const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Pasa turno - nueva programación enviada a entrega.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
+
+          await (supabase.from('asignaciones') as any)
+            .update({
+              estado: 'finalizada',
+              fecha_fin: ahora,
+              notas: notasAnterior + traza,
+              updated_by: profile?.full_name || 'Sistema'
+            })
+            .eq('id', asigPrevia.id)
+        }
+      }
+
       const { data: asignacion, error: asignacionError } = await (supabase
         .from('asignaciones') as any)
         .insert({

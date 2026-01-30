@@ -603,15 +603,33 @@ export function AsignacionesModule() {
       const conductorActivo = conductores.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
       const primerConductor = conductorActivo || (esAsignacionFinalizada ? conductores[conductores.length - 1] : conductores.find(ac => ac.estado === 'cancelado') || conductores[conductores.length - 1])
       
-      return {
-        ...asignacion,
-        conductoresTurno: null,
-        conductorCargo: primerConductor ? {
-          id: primerConductor.id,
+      // Si es finalizada y no hay conductores en el array, intentar extraer de notas
+      let conductorCargoInfo: { id: string; nombre: string; confirmado: boolean; cancelado?: boolean } | null = null
+      if (primerConductor && primerConductor.conductores) {
+        conductorCargoInfo = {
+          id: String(primerConductor.id),
           nombre: `${primerConductor.conductores.nombres} ${primerConductor.conductores.apellidos}`,
           confirmado: primerConductor.confirmado || false,
           cancelado: primerConductor.estado === 'cancelado'
-        } : null
+        }
+      } else if (esAsignacionFinalizada && conductores.length === 0 && asignacion.notas) {
+        // Extraer nombre del conductor de la traza en notas
+        const matchConductores = asignacion.notas.match(/Conductores al cierre:\s*(.+?)(?:\n|$)/)
+          || asignacion.notas.match(/Ultimos conductores:\s*(.+?)(?:\n|$)/)
+        if (matchConductores && matchConductores[1] && matchConductores[1] !== 'ninguno') {
+          conductorCargoInfo = {
+            id: '',
+            nombre: matchConductores[1].split(',')[0].replace(/\s*\(.*?\)\s*$/, '').trim(),
+            confirmado: true,
+            cancelado: false
+          }
+        }
+      }
+
+      return {
+        ...asignacion,
+        conductoresTurno: null,
+        conductorCargo: conductorCargoInfo
       }
     })
 
@@ -833,7 +851,7 @@ export function AsignacionesModule() {
             .from('asignaciones')
             .select('id, fecha_inicio, notas')
             .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-            .eq('estado', 'activa')
+            .in('estado', ['activa', 'activo'])
             .neq('id', selectedAsignacion.id)
             .single()
 
@@ -1059,7 +1077,7 @@ export function AsignacionesModule() {
               )
             `)
             .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-            .eq('estado', 'activa')
+            .in('estado', ['activa', 'activo'])
             .neq('id', selectedAsignacion.id)
 
           if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
@@ -1072,8 +1090,8 @@ export function AsignacionesModule() {
               .in('estado', ['asignado', 'activo'])
             // Finalizar las asignaciones con traza de conductores
             for (const asigAnterior of asignacionesVehiculo as any[]) {
+              // Capturar TODOS los conductores para trazabilidad (no solo activos)
               const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
-                .filter((ac: any) => ac.estado === 'asignado' || ac.estado === 'activo')
                 .map((ac: any) => {
                   const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
                   return `${nombre} (${ac.horario || 'sin turno'})`
@@ -1101,7 +1119,7 @@ export function AsignacionesModule() {
                 conductores(nombres, apellidos)
               )
             `)
-            .eq('estado', 'activa')
+            .in('estado', ['activa', 'activo'])
             .neq('id', selectedAsignacion.id)
 
           if (asignacionesSinConductores) {
@@ -1900,13 +1918,13 @@ export function AsignacionesModule() {
                           )
                         `)
                         .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-                        .eq('estado', 'activa')
+                        .in('estado', ['activa', 'activo'])
                         .neq('id', selectedAsignacion.id)
 
                       if (asignacionesACerrar && asignacionesACerrar.length > 0) {
                         for (const asigAnterior of asignacionesACerrar as any[]) {
+                          // Capturar TODOS los conductores para trazabilidad (no solo activos)
                           const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
-                            .filter((ac: any) => ac.estado === 'asignado' || ac.estado === 'activo')
                             .map((ac: any) => {
                               const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
                               return `${nombre} (${ac.horario || 'sin turno'})`
