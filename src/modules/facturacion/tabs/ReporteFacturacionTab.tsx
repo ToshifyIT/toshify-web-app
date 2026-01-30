@@ -181,6 +181,7 @@ export function ReporteFacturacionTab() {
 
   // Recalcular período abierto
   const [recalculando, setRecalculando] = useState(false)
+  const [recalculandoProgreso, setRecalculandoProgreso] = useState({ actual: 0, total: 0 })
 
   // Exportar SiFactura
   const [exportingSiFactura, setExportingSiFactura] = useState(false)
@@ -919,6 +920,7 @@ export function ReporteFacturacionTab() {
 
       // 3. Para cada conductor: BORRAR detalles dinámicos y REGENERAR
       let actualizados = 0
+      setRecalculandoProgreso({ actual: 0, total: facturaciones.length })
       for (const fact of facturaciones) {
         const conductorId = fact.conductor_id
         const dniConductor = fact.conductor_dni || ''
@@ -1052,6 +1054,7 @@ export function ReporteFacturacionTab() {
           .eq('id', fact.id)
 
         actualizados++
+        setRecalculandoProgreso({ actual: actualizados, total: facturaciones.length })
       }
 
       // 4. Actualizar totales del período
@@ -1089,6 +1092,7 @@ export function ReporteFacturacionTab() {
       Swal.fire('Error', 'No se pudo recalcular el período', 'error')
     } finally {
       setRecalculando(false)
+      setRecalculandoProgreso({ actual: 0, total: 0 })
     }
   }
 
@@ -4428,7 +4432,11 @@ export function ReporteFacturacionTab() {
               title="Recalcular incorporando excesos, tickets y penalidades"
             >
               <Calculator size={14} className={recalculando || periodo?.estado === 'procesando' ? 'spinning' : ''} />
-              {recalculando || periodo?.estado === 'procesando' ? 'Recalculando...' : 'Recalcular'}
+              {recalculando && recalculandoProgreso.total > 0
+                ? `Recalculando ${recalculandoProgreso.actual}/${recalculandoProgreso.total}...`
+                : recalculando || periodo?.estado === 'procesando'
+                  ? 'Recalculando...'
+                  : 'Recalcular'}
             </button>
           )}
         </div>
@@ -4809,7 +4817,7 @@ export function ReporteFacturacionTab() {
 
           {/* DataTable */}
           <div style={{ position: 'relative' }}>
-            {periodo?.estado === 'procesando' && (
+            {(periodo?.estado === 'procesando' || recalculando) && (
               <div style={{
                 position: 'absolute',
                 inset: 0,
@@ -4825,7 +4833,9 @@ export function ReporteFacturacionTab() {
               }}>
                 <Loader2 size={32} className="spinning" style={{ color: 'var(--color-primary)' }} />
                 <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                  Recalculando facturacion... No cierre la pagina.
+                  {recalculandoProgreso.total > 0
+                    ? `Recalculando ${recalculandoProgreso.actual} de ${recalculandoProgreso.total} conductores...`
+                    : 'Recalculando facturacion...'}
                 </span>
               </div>
             )}
