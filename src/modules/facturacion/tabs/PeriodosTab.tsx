@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -157,7 +158,7 @@ export function PeriodosTab() {
       })
 
       setSemanas(semanasConDatos)
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar las semanas', 'error')
     } finally {
       setLoading(false)
@@ -495,7 +496,14 @@ export function PeriodosTab() {
 
         // Cobros fraccionados del conductor (P010)
         const cobrosConductor = (cobros as any[]).filter((c: any) => c.conductor_id === conductor.conductor_id)
-        const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + (c.monto_cuota || 0), 0)
+        // Calcular monto real de cuota (protección contra monto_cuota incorrecto en BD)
+        const calcMontoCuota = (c: any) => {
+          const mt = c.monto_total || 0
+          const mc = c.monto_cuota || 0
+          const tc = c.total_cuotas || 1
+          return (mc > 0 && mc < mt) ? mc : Math.ceil(mt / tc)
+        }
+        const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + calcMontoCuota(c), 0)
 
         // Saldo anterior
         const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
@@ -681,6 +689,7 @@ export function PeriodosTab() {
 
         // Insertar cobros fraccionados como detalle (P010)
         for (const cobro of cobrosConductor) {
+          const montoCuotaReal = calcMontoCuota(cobro)
           const descripcionCobro = (cobro as any).descripcion || 
             `Cuota ${(cobro as any).numero_cuota} de ${(cobro as any).total_cuotas}`
           
@@ -689,9 +698,9 @@ export function PeriodosTab() {
             concepto_codigo: 'P010',
             concepto_descripcion: descripcionCobro,
             cantidad: 1,
-            precio_unitario: (cobro as any).monto_cuota,
-            subtotal: (cobro as any).monto_cuota,
-            total: (cobro as any).monto_cuota,
+            precio_unitario: montoCuotaReal,
+            subtotal: montoCuotaReal,
+            total: montoCuotaReal,
             es_descuento: false,
             referencia_id: (cobro as any).id,
             referencia_tipo: 'cobro_fraccionado'

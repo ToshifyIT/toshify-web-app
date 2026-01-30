@@ -1029,9 +1029,17 @@ export function ReporteFacturacionTab() {
         // Peajes (P005)
         const totalPeajes = conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni)) || 0) : 0
 
-        // Cobros fraccionados (P010)
+        // Cobros fraccionados (P010) - calcular monto real de la cuota
         const cobrosConductor = (cobros as any[]).filter((c: any) => c.conductor_id === conductor.conductor_id)
-        const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + (c.monto_cuota || 0), 0)
+        // Usar monto_cuota solo si es razonable (menor que monto_total), sino calcular desde monto_total/total_cuotas
+        const calcularMontoCuota = (c: any) => {
+          const mt = c.monto_total || 0
+          const mc = c.monto_cuota || 0
+          const tc = c.total_cuotas || 1
+          // Si monto_cuota es mayor o igual a monto_total, está mal — recalcular
+          return (mc > 0 && mc < mt) ? mc : Math.ceil(mt / tc)
+        }
+        const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + calcularMontoCuota(c), 0)
 
         // Multas (P008)
         const patenteNorm = (conductor.vehiculo_patente || '').toUpperCase().replace(/\s+/g, '')
@@ -1199,12 +1207,13 @@ export function ReporteFacturacionTab() {
 
         // P010 - Cobros fraccionados (plan de pagos)
         for (const cobro of cobrosConductor) {
+          const montoCuotaReal = calcularMontoCuota(cobro)
           const descripcionCobro = (cobro as any).descripcion || `Cuota ${(cobro as any).numero_cuota} de ${(cobro as any).total_cuotas}`
           await (supabase.from('facturacion_detalle') as any).insert({
             facturacion_id: facturacionId,
             concepto_codigo: 'P010', concepto_descripcion: descripcionCobro,
-            cantidad: 1, precio_unitario: (cobro as any).monto_cuota,
-            subtotal: (cobro as any).monto_cuota, total: (cobro as any).monto_cuota, es_descuento: false,
+            cantidad: 1, precio_unitario: montoCuotaReal,
+            subtotal: montoCuotaReal, total: montoCuotaReal, es_descuento: false,
             referencia_id: (cobro as any).id, referencia_tipo: 'cobro_fraccionado'
           })
           // Marcar como aplicado
@@ -1375,6 +1384,10 @@ export function ReporteFacturacionTab() {
           .eq('aplicado', false)
 
         ;(cobrosDetalle || []).forEach((cobro: any, idx: number) => {
+          const mt = cobro.monto_total || 0
+          const mc = cobro.monto_cuota || 0
+          const tc = cobro.total_cuotas || 1
+          const montoCuotaReal = (mc > 0 && mc < mt) ? mc : Math.ceil(mt / tc)
           const descripcionCobro = cobro.descripcion ||
             `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`
           detallesSimulados.push({
@@ -1383,9 +1396,9 @@ export function ReporteFacturacionTab() {
             concepto_codigo: 'P010',
             concepto_descripcion: descripcionCobro,
             cantidad: 1,
-            precio_unitario: cobro.monto_cuota,
-            subtotal: cobro.monto_cuota,
-            total: cobro.monto_cuota,
+            precio_unitario: montoCuotaReal,
+            subtotal: montoCuotaReal,
+            total: montoCuotaReal,
             es_descuento: false,
             referencia_id: cobro.id,
             referencia_tipo: 'cobro_fraccionado'
@@ -2049,7 +2062,7 @@ export function ReporteFacturacionTab() {
             conductorNombre: c.conductor?.nombres && c.conductor?.apellidos 
               ? `${c.conductor.nombres} ${c.conductor.apellidos}` 
               : 'Sin nombre',
-            monto: c.monto_cuota,
+            monto: (c.monto_cuota > 0 && c.monto_cuota < c.monto_total) ? c.monto_cuota : Math.ceil((c.monto_total || 0) / (c.total_cuotas || 1)),
             descripcion: c.descripcion || `Cuota ${c.numero_cuota} de ${c.total_cuotas}`,
             tabla: 'cobros_fraccionados',
             fechaCreacion: c.created_at,
@@ -2583,7 +2596,7 @@ export function ReporteFacturacionTab() {
           tipo: 'cobro_fraccionado',
           conductorId: c.conductor_id,
           conductorNombre,
-          monto: c.monto_cuota,
+          monto: (c.monto_cuota > 0 && c.monto_cuota < c.monto_total) ? c.monto_cuota : Math.ceil((c.monto_total || 0) / (c.total_cuotas || 1)),
           descripcion: `[NO EN PREVIEW] Cuota ${c.numero_cuota} de ${c.total_cuotas}`,
           tabla: 'cobros_fraccionados'
         })
@@ -2785,10 +2798,11 @@ export function ReporteFacturacionTab() {
           const descripcionCobro = cobro.descripcion || 
             `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`
           
+          const montoCuotaCabify = (cobro.monto_cuota > 0 && cobro.monto_cuota < cobro.monto_total) ? cobro.monto_cuota : Math.ceil((cobro.monto_total || 0) / (cobro.total_cuotas || 1))
           filasPreview.push(crearFilaPreview(
             numeroFactura++,
             fact,
-            cobro.monto_cuota,
+            montoCuotaCabify,
             'P010',
             descripcionCobro
           ))
