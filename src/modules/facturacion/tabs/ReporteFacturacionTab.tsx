@@ -983,6 +983,9 @@ export function ReporteFacturacionTab() {
       let totalCargosGlobal = 0
       let totalDescuentosGlobal = 0
       let conductoresProcesadosCount = 0
+      let erroresConsecutivos = 0
+      let totalErrores = 0
+      let primerError = ''
       setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length })
 
       for (const conductor of conductoresProcesados) {
@@ -1093,7 +1096,17 @@ export function ReporteFacturacionTab() {
           .select()
           .single()
 
-        if (errFact) continue
+        if (errFact) {
+          totalErrores++
+          erroresConsecutivos++
+          if (!primerError) primerError = errFact.message || 'Error desconocido al insertar conductor'
+          // Si los primeros 3 inserts fallan consecutivamente, es un problema sistémico - abortar
+          if (erroresConsecutivos >= 3 && conductoresProcesadosCount === 0) {
+            throw new Error(`Error sistémico al insertar conductores (${erroresConsecutivos} fallos consecutivos): ${primerError}`)
+          }
+          continue
+        }
+        erroresConsecutivos = 0 // Reset al tener un éxito
 
         const facturacionId = (factConductor as any).id
 
@@ -1226,7 +1239,16 @@ export function ReporteFacturacionTab() {
         setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: conductoresProcesados.length })
       }
 
-      // 7. Actualizar totales del período y volver a 'abierto'
+      // 7. Validar que se procesó al menos un conductor
+      if (conductoresProcesadosCount === 0) {
+        throw new Error(
+          `No se pudo insertar ningún conductor (${totalErrores} errores de ${conductoresProcesados.length} intentos). ` +
+          `Primer error: ${primerError || 'desconocido'}. ` +
+          `Los datos del período fueron eliminados — regenere desde la pestaña Períodos.`
+        )
+      }
+
+      // 8. Actualizar totales del período y volver a 'abierto'
       await (supabase.from('periodos_facturacion') as any)
         .update({
           estado: 'abierto',
@@ -1238,10 +1260,16 @@ export function ReporteFacturacionTab() {
         })
         .eq('id', periodoId)
 
-      // 8. Recargar datos
+      // 9. Recargar datos
       await cargarFacturacion()
 
-      showSuccess('Recálculo completado', `${conductoresProcesadosCount} conductores regenerados desde cero`)
+      if (totalErrores > 0) {
+        Swal.fire('Recálculo parcial',
+          `${conductoresProcesadosCount} conductores procesados, pero ${totalErrores} fallaron. Error: ${primerError}`,
+          'warning')
+      } else {
+        showSuccess('Recálculo completado', `${conductoresProcesadosCount} conductores regenerados desde cero`)
+      }
 
     } catch (error: any) {
       // Recuperar estado en caso de error
