@@ -152,7 +152,9 @@ export function AsignacionesModule() {
   const [vehiculosDisponibles, setVehiculosDisponibles] = useState<any[]>([])
   const [conductoresDisponibles, setConductoresDisponibles] = useState<any[]>([])
   const [loadingRegularizar, setLoadingRegularizar] = useState(false)
-  // Estados para búsqueda de conductores en modal editar
+  // Estados para búsqueda en modal editar (vehículo + conductores)
+  const [searchVehiculo, setSearchVehiculo] = useState('')
+  const [showDropdownVehiculo, setShowDropdownVehiculo] = useState(false)
   const [searchDiurno, setSearchDiurno] = useState('')
   const [searchNocturno, setSearchNocturno] = useState('')
   const [searchCargo, setSearchCargo] = useState('')
@@ -571,12 +573,20 @@ export function AsignacionesModule() {
         const conductoresDiurno = conductores.filter(ac => ac.horario === 'diurno')
         const conductoresNocturno = conductores.filter(ac => ac.horario === 'nocturno')
         
-        // Buscar el conductor activo primero, si no hay, mostrar el último (cancelado o no)
+        // Buscar conductor activo/asignado. Si no hay:
+        // - Finalizada: mostrar último del historial (trazabilidad)
+        // - Activa: mostrar Vacante (null) — conductor cancelado/completado = ya no está
+        // - Programada: mostrar cancelado tachado (para ver que se cayó antes de entregar)
+        const esActiva = asignacion.estado === 'activa' || asignacion.estado === 'activo'
         const diurnoActivo = conductoresDiurno.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
-        const diurno = diurnoActivo || (esAsignacionFinalizada ? conductoresDiurno[conductoresDiurno.length - 1] : conductoresDiurno.find(ac => ac.estado === 'cancelado') || conductoresDiurno[conductoresDiurno.length - 1])
+        const diurno = diurnoActivo || (esAsignacionFinalizada
+          ? conductoresDiurno[conductoresDiurno.length - 1]
+          : esActiva ? null : conductoresDiurno.find(ac => ac.estado === 'cancelado') || null)
         
         const nocturnoActivo = conductoresNocturno.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
-        const nocturno = nocturnoActivo || (esAsignacionFinalizada ? conductoresNocturno[conductoresNocturno.length - 1] : conductoresNocturno.find(ac => ac.estado === 'cancelado') || conductoresNocturno[conductoresNocturno.length - 1])
+        const nocturno = nocturnoActivo || (esAsignacionFinalizada
+          ? conductoresNocturno[conductoresNocturno.length - 1]
+          : esActiva ? null : conductoresNocturno.find(ac => ac.estado === 'cancelado') || null)
 
         return {
           ...asignacion,
@@ -598,10 +608,12 @@ export function AsignacionesModule() {
         }
       }
 
-      // Para modalidad A CARGO: mostrar conductor
-      // Buscar conductor activo primero, si no hay, mostrar el último
+      // Para modalidad A CARGO: misma lógica que TURNO
+      const esActivaCargo = asignacion.estado === 'activa' || asignacion.estado === 'activo'
       const conductorActivo = conductores.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
-      const primerConductor = conductorActivo || (esAsignacionFinalizada ? conductores[conductores.length - 1] : conductores.find(ac => ac.estado === 'cancelado') || conductores[conductores.length - 1])
+      const primerConductor = conductorActivo || (esAsignacionFinalizada
+        ? conductores[conductores.length - 1]
+        : esActivaCargo ? null : conductores.find(ac => ac.estado === 'cancelado') || null)
       
       // Si es finalizada y no hay conductores en el array, intentar extraer de notas
       let conductorCargoInfo: { id: string; nombre: string; confirmado: boolean; cancelado?: boolean } | null = null
@@ -1299,10 +1311,11 @@ export function AsignacionesModule() {
     const esNocturno = (c: any) => c.horario === 'nocturno' || c.horario === 'NOCTURNO' || c.horario === 'N'
     const esCargo = (c: any) => c.horario === 'CARGO' || c.horario === 'cargo' || c.horario === 'A CARGO' || c.horario === 'todo_dia'
     const esActivo = (c: any) => c.estado === 'asignado' || c.estado === 'activo'
-    // Priorizar conductor activo, si no hay, tomar el último (para asignaciones finalizadas)
-    const diurno = conductoresAsig.find(c => esDiurno(c) && esActivo(c)) || conductoresAsig.filter(esDiurno).pop()
-    const nocturno = conductoresAsig.find(c => esNocturno(c) && esActivo(c)) || conductoresAsig.filter(esNocturno).pop()
-    const cargo = conductoresAsig.find(c => esCargo(c) && esActivo(c)) || conductoresAsig.filter(esCargo).pop()
+    const esFinalizada = asignacion.estado === 'finalizada' || asignacion.estado === 'completada'
+    // Priorizar conductor activo; solo en finalizadas usar fallback al último del historial
+    const diurno = conductoresAsig.find(c => esDiurno(c) && esActivo(c)) || (esFinalizada ? conductoresAsig.filter(esDiurno).pop() : null)
+    const nocturno = conductoresAsig.find(c => esNocturno(c) && esActivo(c)) || (esFinalizada ? conductoresAsig.filter(esNocturno).pop() : null)
+    const cargo = conductoresAsig.find(c => esCargo(c) && esActivo(c)) || (esFinalizada ? conductoresAsig.filter(esCargo).pop() : null)
     
     setRegularizarData({
       fecha_inicio: asignacion.fecha_inicio ? asignacion.fecha_inicio.split('T')[0] : '',
@@ -1322,7 +1335,9 @@ export function AsignacionesModule() {
     // Reset search states
     setSearchDiurno('')
     setSearchNocturno('')
+    setSearchVehiculo('')
     setSearchCargo('')
+    setShowDropdownVehiculo(false)
     setShowDropdownDiurno(false)
     setShowDropdownNocturno(false)
     setShowDropdownCargo(false)
@@ -1330,7 +1345,7 @@ export function AsignacionesModule() {
     setLoadingRegularizar(false)
   }
 
-  // Guardar regularización con trazabilidad
+  // Guardar regularización con trazabilidad (optimizado: queries en paralelo)
   const handleSaveRegularizacion = async () => {
     if (!regularizarAsignacion || isSubmitting) return
 
@@ -1341,17 +1356,17 @@ export function AsignacionesModule() {
       const usuario = profile?.full_name || 'Sistema'
 
       // ==========================================
-      // 1. Construir traza de cambios
+      // 1. Construir traza de cambios (sin query extra, usa datos de asignacion_conductores ya cargados)
       // ==========================================
       const cambios: string[] = []
+      const conductoresAsig = (regularizarAsignacion.asignaciones_conductores || []) as any[]
+      const esActivoCond = (c: any) => c.estado === 'asignado' || c.estado === 'activo'
 
       // Detectar cambio de vehículo
       if (regularizarData.vehiculo_id && regularizarData.vehiculo_id !== regularizarAsignacion.vehiculo_id) {
         const vehiculoAnterior = vehiculosDisponibles.find(v => v.id === regularizarAsignacion.vehiculo_id)
         const vehiculoNuevo = vehiculosDisponibles.find(v => v.id === regularizarData.vehiculo_id)
-        const patenteAnterior = vehiculoAnterior ? vehiculoAnterior.patente : 'Desconocido'
-        const patenteNueva = vehiculoNuevo ? vehiculoNuevo.patente : 'Desconocido'
-        cambios.push(`Vehículo: ${patenteAnterior} → ${patenteNueva}`)
+        cambios.push(`Vehículo: ${vehiculoAnterior?.patente || 'Desconocido'} → ${vehiculoNuevo?.patente || 'Desconocido'}`)
       }
 
       // Detectar cambio de modalidad
@@ -1364,46 +1379,29 @@ export function AsignacionesModule() {
         cambios.push(`Estado: ${regularizarAsignacion.estado} → ${regularizarData.estado}`)
       }
 
-      // Detectar cambios de conductores - obtener los actuales de la BD
-      const { data: conductoresActuales } = await (supabase as any)
-        .from('asignaciones_conductores')
-        .select('conductor_id, horario, estado, conductores(nombres, apellidos)')
-        .eq('asignacion_id', regularizarAsignacion.id)
-        .in('estado', ['asignado', 'activo'])
-
-      const conductoresAnteriores = (conductoresActuales || []) as any[]
+      // Detectar cambios de conductores usando datos ya en memoria
       const getNombreConductor = (id: string) => {
         const c = conductoresDisponibles.find((cd: any) => cd.id === id)
         return c ? `${c.apellidos}, ${c.nombres}` : 'Desconocido'
       }
-      const getNombreAnterior = (horarioFiltro: string[]) => {
-        const c = conductoresAnteriores.find((ac: any) => horarioFiltro.includes(ac.horario))
-        return c?.conductores ? `${c.conductores.apellidos || ''}, ${c.conductores.nombres || ''}`.trim() : null
-      }
-      const getIdAnterior = (horarioFiltro: string[]) => {
-        const c = conductoresAnteriores.find((ac: any) => horarioFiltro.includes(ac.horario))
-        return c?.conductor_id || ''
+      const getAnterior = (horarioFiltro: string[]) => {
+        const c = conductoresAsig.find((ac: any) => horarioFiltro.includes(ac.horario) && esActivoCond(ac))
+        return c ? { id: c.conductor_id, nombre: c.conductores ? `${c.conductores.apellidos || ''}, ${c.conductores.nombres || ''}`.trim() : 'Desconocido' } : null
       }
 
       if (regularizarData.horario === 'TURNO') {
-        const diurnoAnteriorId = getIdAnterior(['diurno', 'DIURNO', 'D'])
-        const nocturnoAnteriorId = getIdAnterior(['nocturno', 'NOCTURNO', 'N'])
-        if (regularizarData.conductor_diurno_id !== diurnoAnteriorId) {
-          const nombreAnt = getNombreAnterior(['diurno', 'DIURNO', 'D']) || 'Vacante'
-          const nombreNuevo = regularizarData.conductor_diurno_id ? getNombreConductor(regularizarData.conductor_diurno_id) : 'Vacante'
-          cambios.push(`Diurno: ${nombreAnt} → ${nombreNuevo}`)
+        const diurnoAnt = getAnterior(['diurno', 'DIURNO', 'D'])
+        const nocturnoAnt = getAnterior(['nocturno', 'NOCTURNO', 'N'])
+        if (regularizarData.conductor_diurno_id !== (diurnoAnt?.id || '')) {
+          cambios.push(`Diurno: ${diurnoAnt?.nombre || 'Vacante'} → ${regularizarData.conductor_diurno_id ? getNombreConductor(regularizarData.conductor_diurno_id) : 'Vacante'}`)
         }
-        if (regularizarData.conductor_nocturno_id !== nocturnoAnteriorId) {
-          const nombreAnt = getNombreAnterior(['nocturno', 'NOCTURNO', 'N']) || 'Vacante'
-          const nombreNuevo = regularizarData.conductor_nocturno_id ? getNombreConductor(regularizarData.conductor_nocturno_id) : 'Vacante'
-          cambios.push(`Nocturno: ${nombreAnt} → ${nombreNuevo}`)
+        if (regularizarData.conductor_nocturno_id !== (nocturnoAnt?.id || '')) {
+          cambios.push(`Nocturno: ${nocturnoAnt?.nombre || 'Vacante'} → ${regularizarData.conductor_nocturno_id ? getNombreConductor(regularizarData.conductor_nocturno_id) : 'Vacante'}`)
         }
       } else if (regularizarData.horario === 'CARGO') {
-        const cargoAnteriorId = getIdAnterior(['CARGO', 'cargo', 'A CARGO', 'todo_dia'])
-        if (regularizarData.conductor_cargo_id !== cargoAnteriorId) {
-          const nombreAnt = getNombreAnterior(['CARGO', 'cargo', 'A CARGO', 'todo_dia']) || 'Sin asignar'
-          const nombreNuevo = regularizarData.conductor_cargo_id ? getNombreConductor(regularizarData.conductor_cargo_id) : 'Sin asignar'
-          cambios.push(`Conductor: ${nombreAnt} → ${nombreNuevo}`)
+        const cargoAnt = getAnterior(['CARGO', 'cargo', 'A CARGO', 'todo_dia'])
+        if (regularizarData.conductor_cargo_id !== (cargoAnt?.id || '')) {
+          cambios.push(`Conductor: ${cargoAnt?.nombre || 'Sin asignar'} → ${regularizarData.conductor_cargo_id ? getNombreConductor(regularizarData.conductor_cargo_id) : 'Sin asignar'}`)
         }
       }
 
@@ -1439,28 +1437,13 @@ export function AsignacionesModule() {
         updateData.notas = regularizarData.notas
       }
 
-      const { error } = await (supabase as any)
-        .from('asignaciones')
-        .update(updateData)
-        .eq('id', regularizarAsignacion.id)
-
-      if (error) throw error
-
       // ==========================================
-      // 3. Actualizar conductores con soft-delete
+      // 3. Ejecutar UPDATE asignacion + soft-delete + INSERT conductores EN PARALELO
       // ==========================================
       const estadoConductorNuevo = (regularizarData.estado === 'activa' || regularizarData.estado === 'activo') ? 'activo' : 'asignado'
+      const nuevoConductores: any[] = []
 
       if (regularizarData.horario === 'TURNO') {
-        // Soft-delete: marcar conductores anteriores como completados (no borrar)
-        await (supabase as any)
-          .from('asignaciones_conductores')
-          .update({ estado: 'completado', fecha_fin: ahora })
-          .eq('asignacion_id', regularizarAsignacion.id)
-          .in('estado', ['asignado', 'activo'])
-
-        // Insertar nuevos conductores
-        const nuevoConductores = []
         if (regularizarData.conductor_diurno_id) {
           nuevoConductores.push({
             asignacion_id: regularizarAsignacion.id,
@@ -1479,20 +1462,9 @@ export function AsignacionesModule() {
             documento: regularizarData.documento_nocturno || 'N/A'
           })
         }
-        if (nuevoConductores.length > 0) {
-          await (supabase.from('asignaciones_conductores') as any).insert(nuevoConductores)
-        }
       } else if (regularizarData.horario === 'CARGO') {
-        // Soft-delete: marcar conductores anteriores como completados (no borrar)
-        await (supabase as any)
-          .from('asignaciones_conductores')
-          .update({ estado: 'completado', fecha_fin: ahora })
-          .eq('asignacion_id', regularizarAsignacion.id)
-          .in('estado', ['asignado', 'activo'])
-
-        // Insertar conductor a cargo
         if (regularizarData.conductor_cargo_id) {
-          await (supabase.from('asignaciones_conductores') as any).insert({
+          nuevoConductores.push({
             asignacion_id: regularizarAsignacion.id,
             conductor_id: regularizarData.conductor_cargo_id,
             horario: 'CARGO',
@@ -1500,6 +1472,28 @@ export function AsignacionesModule() {
             documento: regularizarData.documento_cargo || 'N/A'
           })
         }
+      }
+
+      // Soft-delete primero (debe completarse antes del insert para evitar duplicados)
+      const softDeletePromise = (supabase as any)
+        .from('asignaciones_conductores')
+        .update({ estado: 'completado', fecha_fin: ahora })
+        .eq('asignacion_id', regularizarAsignacion.id)
+        .in('estado', ['asignado', 'activo'])
+
+      // UPDATE asignacion y soft-delete en paralelo
+      const [updateResult, softDeleteResult] = await Promise.all([
+        (supabase as any).from('asignaciones').update(updateData).eq('id', regularizarAsignacion.id),
+        softDeletePromise
+      ])
+
+      if (updateResult.error) throw updateResult.error
+      if (softDeleteResult.error) throw softDeleteResult.error
+
+      // INSERT nuevos conductores (después del soft-delete)
+      if (nuevoConductores.length > 0) {
+        const { error: insertError } = await (supabase.from('asignaciones_conductores') as any).insert(nuevoConductores)
+        if (insertError) throw insertError
       }
 
       showSuccess('Regularizado', 'Los datos de la asignación han sido actualizados correctamente.')
@@ -2315,19 +2309,38 @@ export function AsignacionesModule() {
               <div style={{ textAlign: 'center', padding: '40px' }}>Cargando...</div>
             ) : (
               <div className="asig-edit-form">
-                {/* Vehículo - full width */}
+                {/* Vehículo - full width, autocomplete searchable */}
                 <div className="asig-edit-row single">
-                  <div className="asig-edit-field">
+                  <div className="asig-edit-field" style={{ position: 'relative' }}>
                     <label>Vehículo</label>
-                    <select
-                      value={regularizarData.vehiculo_id}
-                      onChange={(e) => setRegularizarData(prev => ({ ...prev, vehiculo_id: e.target.value }))}
-                    >
-                      <option value="">Seleccionar vehículo</option>
-                      {vehiculosDisponibles.map((v: any) => (
-                        <option key={v.id} value={v.id}>{v.patente} - {v.marca} {v.modelo}</option>
-                      ))}
-                    </select>
+                    <input
+                      type="text"
+                      className="asig-autocomplete-input"
+                      value={showDropdownVehiculo ? searchVehiculo : (regularizarData.vehiculo_id ? (() => { const v = vehiculosDisponibles.find((ve: any) => ve.id === regularizarData.vehiculo_id); return v ? `${v.patente} - ${v.marca} ${v.modelo}` : '' })() : '')}
+                      onChange={(e) => { setSearchVehiculo(e.target.value); setShowDropdownVehiculo(true) }}
+                      onFocus={() => { setShowDropdownVehiculo(true); setSearchVehiculo('') }}
+                      onBlur={() => setTimeout(() => setShowDropdownVehiculo(false), 200)}
+                      placeholder={regularizarData.vehiculo_id ? `Actual: ${vehiculosDisponibles.find((v: any) => v.id === regularizarData.vehiculo_id)?.patente || ''}` : 'Buscar vehículo...'}
+                    />
+                    {showDropdownVehiculo && (
+                      <div className="asig-autocomplete-dropdown">
+                        {vehiculosDisponibles
+                          .filter((v: any) => !searchVehiculo || `${v.patente} ${v.marca} ${v.modelo}`.toLowerCase().includes(searchVehiculo.toLowerCase()))
+                          .sort((a: any, b: any) => {
+                            if (a.id === regularizarData.vehiculo_id) return -1
+                            if (b.id === regularizarData.vehiculo_id) return 1
+                            return 0
+                          })
+                          .slice(0, 20)
+                          .map((v: any) => (
+                            <div
+                              key={v.id}
+                              className={`asig-autocomplete-option ${regularizarData.vehiculo_id === v.id ? 'selected' : ''}`}
+                              onMouseDown={() => { setRegularizarData(prev => ({ ...prev, vehiculo_id: v.id })); setSearchVehiculo(''); setShowDropdownVehiculo(false) }}
+                            >{v.patente} - {v.marca} {v.modelo}{regularizarData.vehiculo_id === v.id ? ' (actual)' : ''}</div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2371,22 +2384,27 @@ export function AsignacionesModule() {
                             onChange={(e) => { setSearchDiurno(e.target.value); setShowDropdownDiurno(true) }}
                             onFocus={() => { setShowDropdownDiurno(true); setSearchDiurno('') }}
                             onBlur={() => setTimeout(() => setShowDropdownDiurno(false), 200)}
-                            placeholder="Buscar conductor..."
+                            placeholder={regularizarData.conductor_diurno_id ? `Actual: ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.apellidos || ''}, ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.nombres || ''}` : 'Buscar conductor...'}
                           />
                           {showDropdownDiurno && (
                             <div className="asig-autocomplete-dropdown">
-                              <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: '' })); setSearchDiurno(''); setShowDropdownDiurno(false) }}>
+                              <div className="asig-autocomplete-option" style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }} onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: '' })); setSearchDiurno(''); setShowDropdownDiurno(false) }}>
                                 Sin asignar (Vacante)
                               </div>
                               {conductoresDisponibles
                                 .filter(c => !searchDiurno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchDiurno.toLowerCase()))
+                                .sort((a, b) => {
+                                  if (a.id === regularizarData.conductor_diurno_id) return -1
+                                  if (b.id === regularizarData.conductor_diurno_id) return 1
+                                  return 0
+                                })
                                 .slice(0, 20)
                                 .map((c: any) => (
                                   <div 
                                     key={c.id} 
                                     className={`asig-autocomplete-option ${regularizarData.conductor_diurno_id === c.id ? 'selected' : ''}`}
                                     onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_diurno_id: c.id })); setSearchDiurno(''); setShowDropdownDiurno(false) }}
-                                  >{c.apellidos}, {c.nombres}</div>
+                                  >{c.apellidos}, {c.nombres}{regularizarData.conductor_diurno_id === c.id ? ' (actual)' : ''}</div>
                                 ))}
                             </div>
                           )}
@@ -2416,22 +2434,27 @@ export function AsignacionesModule() {
                             onChange={(e) => { setSearchNocturno(e.target.value); setShowDropdownNocturno(true) }}
                             onFocus={() => { setShowDropdownNocturno(true); setSearchNocturno('') }}
                             onBlur={() => setTimeout(() => setShowDropdownNocturno(false), 200)}
-                            placeholder="Buscar conductor..."
+                            placeholder={regularizarData.conductor_nocturno_id ? `Actual: ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.apellidos || ''}, ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.nombres || ''}` : 'Buscar conductor...'}
                           />
                           {showDropdownNocturno && (
                             <div className="asig-autocomplete-dropdown">
-                              <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: '' })); setSearchNocturno(''); setShowDropdownNocturno(false) }}>
+                              <div className="asig-autocomplete-option" style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }} onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: '' })); setSearchNocturno(''); setShowDropdownNocturno(false) }}>
                                 Sin asignar (Vacante)
                               </div>
                               {conductoresDisponibles
                                 .filter(c => !searchNocturno || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchNocturno.toLowerCase()))
+                                .sort((a, b) => {
+                                  if (a.id === regularizarData.conductor_nocturno_id) return -1
+                                  if (b.id === regularizarData.conductor_nocturno_id) return 1
+                                  return 0
+                                })
                                 .slice(0, 20)
                                 .map((c: any) => (
                                   <div 
                                     key={c.id} 
                                     className={`asig-autocomplete-option ${regularizarData.conductor_nocturno_id === c.id ? 'selected' : ''}`}
                                     onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_nocturno_id: c.id })); setSearchNocturno(''); setShowDropdownNocturno(false) }}
-                                  >{c.apellidos}, {c.nombres}</div>
+                                  >{c.apellidos}, {c.nombres}{regularizarData.conductor_nocturno_id === c.id ? ' (actual)' : ''}</div>
                                 ))}
                             </div>
                           )}
@@ -2462,22 +2485,27 @@ export function AsignacionesModule() {
                           onChange={(e) => { setSearchCargo(e.target.value); setShowDropdownCargo(true) }}
                           onFocus={() => { setShowDropdownCargo(true); setSearchCargo('') }}
                           onBlur={() => setTimeout(() => setShowDropdownCargo(false), 200)}
-                          placeholder="Buscar conductor..."
+                          placeholder={regularizarData.conductor_cargo_id ? `Actual: ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.apellidos || ''}, ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.nombres || ''}` : 'Buscar conductor...'}
                         />
                         {showDropdownCargo && (
                           <div className="asig-autocomplete-dropdown">
-                            <div className="asig-autocomplete-option" onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: '' })); setSearchCargo(''); setShowDropdownCargo(false) }}>
-                              Sin asignar
+                            <div className="asig-autocomplete-option" style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }} onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: '' })); setSearchCargo(''); setShowDropdownCargo(false) }}>
+                              Sin asignar (Vacante)
                             </div>
                             {conductoresDisponibles
                               .filter(c => !searchCargo || `${c.apellidos} ${c.nombres}`.toLowerCase().includes(searchCargo.toLowerCase()))
+                              .sort((a, b) => {
+                                if (a.id === regularizarData.conductor_cargo_id) return -1
+                                if (b.id === regularizarData.conductor_cargo_id) return 1
+                                return 0
+                              })
                               .slice(0, 20)
                               .map((c: any) => (
                                 <div 
                                   key={c.id} 
                                   className={`asig-autocomplete-option ${regularizarData.conductor_cargo_id === c.id ? 'selected' : ''}`}
                                   onMouseDown={() => { setRegularizarData(prev => ({ ...prev, conductor_cargo_id: c.id })); setSearchCargo(''); setShowDropdownCargo(false) }}
-                                >{c.apellidos}, {c.nombres}</div>
+                                >{c.apellidos}, {c.nombres}{regularizarData.conductor_cargo_id === c.id ? ' (actual)' : ''}</div>
                               ))}
                           </div>
                         )}
