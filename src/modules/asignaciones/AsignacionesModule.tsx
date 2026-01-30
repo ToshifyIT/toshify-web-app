@@ -1281,7 +1281,7 @@ export function AsignacionesModule() {
     const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all([
       supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)').order('patente'),
       supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
-      supabase.from('asignaciones_conductores').select('conductor_id, horario').eq('asignacion_id', asignacion.id)
+      supabase.from('asignaciones_conductores').select('conductor_id, horario, estado, documento').eq('asignacion_id', asignacion.id)
     ])
     
     // Filtrar solo vehículos disponibles o el vehículo actual de la asignación
@@ -1293,11 +1293,16 @@ export function AsignacionesModule() {
     setVehiculosDisponibles(vehiculosFiltrados)
     setConductoresDisponibles(conductoresRes.data || [])
     
-    // Obtener conductores actuales de la asignación
+    // Obtener conductores actuales de la asignación (priorizar activos/asignados)
     const conductoresAsig = (asignacionConductoresRes.data || []) as any[]
-    const diurno = conductoresAsig.find(c => c.horario === 'diurno' || c.horario === 'DIURNO' || c.horario === 'D')
-    const nocturno = conductoresAsig.find(c => c.horario === 'nocturno' || c.horario === 'NOCTURNO' || c.horario === 'N')
-    const cargo = conductoresAsig.find(c => c.horario === 'CARGO' || c.horario === 'cargo' || c.horario === 'A CARGO')
+    const esDiurno = (c: any) => c.horario === 'diurno' || c.horario === 'DIURNO' || c.horario === 'D'
+    const esNocturno = (c: any) => c.horario === 'nocturno' || c.horario === 'NOCTURNO' || c.horario === 'N'
+    const esCargo = (c: any) => c.horario === 'CARGO' || c.horario === 'cargo' || c.horario === 'A CARGO' || c.horario === 'todo_dia'
+    const esActivo = (c: any) => c.estado === 'asignado' || c.estado === 'activo'
+    // Priorizar conductor activo, si no hay, tomar el último (para asignaciones finalizadas)
+    const diurno = conductoresAsig.find(c => esDiurno(c) && esActivo(c)) || conductoresAsig.filter(esDiurno).pop()
+    const nocturno = conductoresAsig.find(c => esNocturno(c) && esActivo(c)) || conductoresAsig.filter(esNocturno).pop()
+    const cargo = conductoresAsig.find(c => esCargo(c) && esActivo(c)) || conductoresAsig.filter(esCargo).pop()
     
     setRegularizarData({
       fecha_inicio: asignacion.fecha_inicio ? asignacion.fecha_inicio.split('T')[0] : '',
@@ -1325,27 +1330,96 @@ export function AsignacionesModule() {
     setLoadingRegularizar(false)
   }
 
-  // Guardar regularización
+  // Guardar regularización con trazabilidad
   const handleSaveRegularizacion = async () => {
     if (!regularizarAsignacion || isSubmitting) return
 
     setIsSubmitting(true)
     try {
-      const updateData: Record<string, unknown> = {
-        updated_by: profile?.full_name || 'Sistema'
+      const ahora = new Date().toISOString()
+      const fechaHoy = new Date().toLocaleDateString('es-AR')
+      const usuario = profile?.full_name || 'Sistema'
+
+      // ==========================================
+      // 1. Construir traza de cambios
+      // ==========================================
+      const cambios: string[] = []
+
+      // Detectar cambio de vehículo
+      if (regularizarData.vehiculo_id && regularizarData.vehiculo_id !== regularizarAsignacion.vehiculo_id) {
+        const vehiculoAnterior = vehiculosDisponibles.find(v => v.id === regularizarAsignacion.vehiculo_id)
+        const vehiculoNuevo = vehiculosDisponibles.find(v => v.id === regularizarData.vehiculo_id)
+        const patenteAnterior = vehiculoAnterior ? vehiculoAnterior.patente : 'Desconocido'
+        const patenteNueva = vehiculoNuevo ? vehiculoNuevo.patente : 'Desconocido'
+        cambios.push(`Vehículo: ${patenteAnterior} → ${patenteNueva}`)
       }
 
-      // Actualizar campos de la asignación
+      // Detectar cambio de modalidad
+      if (regularizarData.horario && regularizarData.horario !== regularizarAsignacion.horario) {
+        cambios.push(`Modalidad: ${regularizarAsignacion.horario} → ${regularizarData.horario}`)
+      }
+
+      // Detectar cambio de estado
+      if (regularizarData.estado && regularizarData.estado !== regularizarAsignacion.estado) {
+        cambios.push(`Estado: ${regularizarAsignacion.estado} → ${regularizarData.estado}`)
+      }
+
+      // Detectar cambios de conductores - obtener los actuales de la BD
+      const { data: conductoresActuales } = await (supabase as any)
+        .from('asignaciones_conductores')
+        .select('conductor_id, horario, estado, conductores(nombres, apellidos)')
+        .eq('asignacion_id', regularizarAsignacion.id)
+        .in('estado', ['asignado', 'activo'])
+
+      const conductoresAnteriores = (conductoresActuales || []) as any[]
+      const getNombreConductor = (id: string) => {
+        const c = conductoresDisponibles.find((cd: any) => cd.id === id)
+        return c ? `${c.apellidos}, ${c.nombres}` : 'Desconocido'
+      }
+      const getNombreAnterior = (horarioFiltro: string[]) => {
+        const c = conductoresAnteriores.find((ac: any) => horarioFiltro.includes(ac.horario))
+        return c?.conductores ? `${c.conductores.apellidos || ''}, ${c.conductores.nombres || ''}`.trim() : null
+      }
+      const getIdAnterior = (horarioFiltro: string[]) => {
+        const c = conductoresAnteriores.find((ac: any) => horarioFiltro.includes(ac.horario))
+        return c?.conductor_id || ''
+      }
+
+      if (regularizarData.horario === 'TURNO') {
+        const diurnoAnteriorId = getIdAnterior(['diurno', 'DIURNO', 'D'])
+        const nocturnoAnteriorId = getIdAnterior(['nocturno', 'NOCTURNO', 'N'])
+        if (regularizarData.conductor_diurno_id !== diurnoAnteriorId) {
+          const nombreAnt = getNombreAnterior(['diurno', 'DIURNO', 'D']) || 'Vacante'
+          const nombreNuevo = regularizarData.conductor_diurno_id ? getNombreConductor(regularizarData.conductor_diurno_id) : 'Vacante'
+          cambios.push(`Diurno: ${nombreAnt} → ${nombreNuevo}`)
+        }
+        if (regularizarData.conductor_nocturno_id !== nocturnoAnteriorId) {
+          const nombreAnt = getNombreAnterior(['nocturno', 'NOCTURNO', 'N']) || 'Vacante'
+          const nombreNuevo = regularizarData.conductor_nocturno_id ? getNombreConductor(regularizarData.conductor_nocturno_id) : 'Vacante'
+          cambios.push(`Nocturno: ${nombreAnt} → ${nombreNuevo}`)
+        }
+      } else if (regularizarData.horario === 'CARGO') {
+        const cargoAnteriorId = getIdAnterior(['CARGO', 'cargo', 'A CARGO', 'todo_dia'])
+        if (regularizarData.conductor_cargo_id !== cargoAnteriorId) {
+          const nombreAnt = getNombreAnterior(['CARGO', 'cargo', 'A CARGO', 'todo_dia']) || 'Sin asignar'
+          const nombreNuevo = regularizarData.conductor_cargo_id ? getNombreConductor(regularizarData.conductor_cargo_id) : 'Sin asignar'
+          cambios.push(`Conductor: ${nombreAnt} → ${nombreNuevo}`)
+        }
+      }
+
+      // ==========================================
+      // 2. Construir datos de actualización
+      // ==========================================
+      const updateData: Record<string, unknown> = {
+        updated_by: usuario
+      }
+
       if (regularizarData.fecha_inicio) {
         updateData.fecha_inicio = new Date(regularizarData.fecha_inicio + 'T12:00:00').toISOString()
       }
-      // Fecha fin: si tiene valor lo guarda, si está vacío lo pone en null
       updateData.fecha_fin = regularizarData.fecha_fin 
         ? new Date(regularizarData.fecha_fin + 'T12:00:00').toISOString() 
         : null
-      if (regularizarData.notas !== regularizarAsignacion.notas) {
-        updateData.notas = regularizarData.notas
-      }
       if (regularizarData.vehiculo_id && regularizarData.vehiculo_id !== regularizarAsignacion.vehiculo_id) {
         updateData.vehiculo_id = regularizarData.vehiculo_id
       }
@@ -1356,6 +1430,15 @@ export function AsignacionesModule() {
         updateData.estado = regularizarData.estado
       }
 
+      // Agregar traza de cambios a las notas
+      const notasBase = regularizarData.notas || regularizarAsignacion.notas || ''
+      if (cambios.length > 0) {
+        const traza = `\n[EDITADO ${fechaHoy} por ${usuario}] ${cambios.join(' | ')}`
+        updateData.notas = notasBase + traza
+      } else if (regularizarData.notas !== regularizarAsignacion.notas) {
+        updateData.notas = regularizarData.notas
+      }
+
       const { error } = await (supabase as any)
         .from('asignaciones')
         .update(updateData)
@@ -1363,11 +1446,19 @@ export function AsignacionesModule() {
 
       if (error) throw error
 
-      // Actualizar conductores si es TURNO
+      // ==========================================
+      // 3. Actualizar conductores con soft-delete
+      // ==========================================
+      const estadoConductorNuevo = (regularizarData.estado === 'activa' || regularizarData.estado === 'activo') ? 'activo' : 'asignado'
+
       if (regularizarData.horario === 'TURNO') {
-        // Eliminar conductores existentes
-        await supabase.from('asignaciones_conductores').delete().eq('asignacion_id', regularizarAsignacion.id)
-        
+        // Soft-delete: marcar conductores anteriores como completados (no borrar)
+        await (supabase as any)
+          .from('asignaciones_conductores')
+          .update({ estado: 'completado', fecha_fin: ahora })
+          .eq('asignacion_id', regularizarAsignacion.id)
+          .in('estado', ['asignado', 'activo'])
+
         // Insertar nuevos conductores
         const nuevoConductores = []
         if (regularizarData.conductor_diurno_id) {
@@ -1375,7 +1466,7 @@ export function AsignacionesModule() {
             asignacion_id: regularizarAsignacion.id,
             conductor_id: regularizarData.conductor_diurno_id,
             horario: 'diurno',
-            estado: 'asignado',
+            estado: estadoConductorNuevo,
             documento: regularizarData.documento_diurno || 'N/A'
           })
         }
@@ -1384,7 +1475,7 @@ export function AsignacionesModule() {
             asignacion_id: regularizarAsignacion.id,
             conductor_id: regularizarData.conductor_nocturno_id,
             horario: 'nocturno',
-            estado: 'asignado',
+            estado: estadoConductorNuevo,
             documento: regularizarData.documento_nocturno || 'N/A'
           })
         }
@@ -1392,16 +1483,20 @@ export function AsignacionesModule() {
           await (supabase.from('asignaciones_conductores') as any).insert(nuevoConductores)
         }
       } else if (regularizarData.horario === 'CARGO') {
-        // Eliminar conductores existentes
-        await supabase.from('asignaciones_conductores').delete().eq('asignacion_id', regularizarAsignacion.id)
-        
+        // Soft-delete: marcar conductores anteriores como completados (no borrar)
+        await (supabase as any)
+          .from('asignaciones_conductores')
+          .update({ estado: 'completado', fecha_fin: ahora })
+          .eq('asignacion_id', regularizarAsignacion.id)
+          .in('estado', ['asignado', 'activo'])
+
         // Insertar conductor a cargo
         if (regularizarData.conductor_cargo_id) {
           await (supabase.from('asignaciones_conductores') as any).insert({
             asignacion_id: regularizarAsignacion.id,
             conductor_id: regularizarData.conductor_cargo_id,
             horario: 'CARGO',
-            estado: 'asignado',
+            estado: estadoConductorNuevo,
             documento: regularizarData.documento_cargo || 'N/A'
           })
         }
