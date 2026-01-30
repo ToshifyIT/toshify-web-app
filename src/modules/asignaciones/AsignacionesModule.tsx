@@ -585,13 +585,13 @@ export function AsignacionesModule() {
               id: diurno.id,
               nombre: `${diurno.conductores.nombres} ${diurno.conductores.apellidos}`,
               confirmado: diurno.confirmado || false,
-              cancelado: diurno.estado === 'cancelado'
+              cancelado: !esAsignacionFinalizada && diurno.estado === 'cancelado'
             } : null,
             nocturno: nocturno ? {
               id: nocturno.id,
               nombre: `${nocturno.conductores.nombres} ${nocturno.conductores.apellidos}`,
               confirmado: nocturno.confirmado || false,
-              cancelado: nocturno.estado === 'cancelado'
+              cancelado: !esAsignacionFinalizada && nocturno.estado === 'cancelado'
             } : null
           },
           conductorCargo: null
@@ -610,7 +610,7 @@ export function AsignacionesModule() {
           id: String(primerConductor.id),
           nombre: `${primerConductor.conductores.nombres} ${primerConductor.conductores.apellidos}`,
           confirmado: primerConductor.confirmado || false,
-          cancelado: primerConductor.estado === 'cancelado'
+          cancelado: !esAsignacionFinalizada && primerConductor.estado === 'cancelado'
         }
       } else if (esAsignacionFinalizada && conductores.length === 0 && asignacion.notas) {
         // Extraer nombre del conductor de la traza en notas
