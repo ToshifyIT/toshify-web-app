@@ -967,6 +967,20 @@ export function ReporteFacturacionTab() {
         }
       })
 
+      // 3b. Cargar cobros fraccionados de esta semana (P010)
+      const { data: cobrosRecalc } = await (supabase
+        .from('cobros_fraccionados') as any)
+        .select('*')
+        .eq('semana', semanaDelPeriodoRecalc)
+        .eq('anio', anioDelPeriodoRecalc)
+        .eq('aplicado', false)
+
+      const cobrosMap = new Map<string, any[]>()
+      ;(cobrosRecalc || []).forEach((c: any) => {
+        if (!cobrosMap.has(c.conductor_id)) cobrosMap.set(c.conductor_id, [])
+        cobrosMap.get(c.conductor_id)!.push(c)
+      })
+
       // 4. Cargar peajes de Cabify
       const { data: cabifyData } = await supabase
         .from('cabify_historico')
@@ -1029,8 +1043,12 @@ export function ReporteFacturacionTab() {
         const montoMultas = multasVehiculo?.monto || 0
         const cantidadMultas = multasVehiculo?.cantidad || 0
 
-        // Recalcular cargos totales (incluye multas)
-        const subtotalCargos = fact.subtotal_alquiler + fact.subtotal_garantia + montoExcesos + montoPeajes + montoPenalidades + montoMultas
+        // Cobros fraccionados del conductor (P010) - solo cuota de esta semana
+        const cobrosConductor = cobrosMap.get(conductorId) || []
+        const montoCobros = cobrosConductor.reduce((sum: number, c: any) => sum + (c.monto_cuota || 0), 0)
+
+        // Recalcular cargos totales (incluye multas y cobros fraccionados)
+        const subtotalCargos = fact.subtotal_alquiler + fact.subtotal_garantia + montoExcesos + montoPeajes + montoPenalidades + montoMultas + montoCobros
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + fact.saldo_anterior + fact.monto_mora
 
@@ -1247,6 +1265,48 @@ export function ReporteFacturacionTab() {
           }
         }
 
+        // Actualizar/crear detalles de cobros fraccionados (P010)
+        for (const cobro of cobrosConductor) {
+          const descripcionCobro = cobro.descripcion ||
+            `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`
+
+          // Buscar si ya existe un detalle P010 para este cobro específico
+          const { data: existingCobro } = await (supabase
+            .from('facturacion_detalle') as any)
+            .select('id')
+            .eq('facturacion_id', fact.id)
+            .eq('concepto_codigo', 'P010')
+            .eq('referencia_id', cobro.id)
+            .maybeSingle()
+
+          if (existingCobro) {
+            await (supabase.from('facturacion_detalle') as any)
+              .update({
+                concepto_descripcion: descripcionCobro,
+                precio_unitario: cobro.monto_cuota,
+                subtotal: cobro.monto_cuota,
+                total: cobro.monto_cuota
+              })
+              .eq('id', existingCobro.id)
+          } else {
+            await (supabase.from('facturacion_detalle') as any)
+              .insert({
+                facturacion_id: fact.id,
+                concepto_codigo: 'P010',
+                concepto_descripcion: descripcionCobro,
+                cantidad: 1,
+                precio_unitario: cobro.monto_cuota,
+                subtotal: cobro.monto_cuota,
+                iva_porcentaje: 0,
+                iva_monto: 0,
+                total: cobro.monto_cuota,
+                es_descuento: false,
+                referencia_id: cobro.id,
+                referencia_tipo: 'cobro_fraccionado'
+              })
+          }
+        }
+
         actualizados++
       }
 
@@ -1258,7 +1318,8 @@ export function ReporteFacturacionTab() {
         const montoPenalidades = penalidadesMap.get(f.conductor_id) || 0
         const patenteNorm = (f.vehiculo_patente || '').toUpperCase().replace(/\s+/g, '')
         const montoMultas = multasMap.get(patenteNorm)?.monto || 0
-        return sum + f.subtotal_alquiler + f.subtotal_garantia + montoExcesos + montoPeajes + montoPenalidades + montoMultas
+        const montoCobrosF = (cobrosMap.get(f.conductor_id) || []).reduce((s: number, c: any) => s + (c.monto_cuota || 0), 0)
+        return sum + f.subtotal_alquiler + f.subtotal_garantia + montoExcesos + montoPeajes + montoPenalidades + montoMultas + montoCobrosF
       }, 0)
 
       const totalDescuentos = facturaciones.reduce((sum, f) => {
@@ -1416,6 +1477,37 @@ export function ReporteFacturacionTab() {
           es_descuento: false,
           referencia_id: null,
           referencia_tipo: null
+        })
+      }
+
+      // P010 - Cobros fraccionados (plan de pagos) de esta semana
+      {
+        const semDetalle = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+        const anioDetalle = periodo?.anio || getYear(semanaActual.inicio)
+        const { data: cobrosDetalle } = await (supabase
+          .from('cobros_fraccionados') as any)
+          .select('*')
+          .eq('conductor_id', facturacion.conductor_id)
+          .eq('semana', semDetalle)
+          .eq('anio', anioDetalle)
+          .eq('aplicado', false)
+
+        ;(cobrosDetalle || []).forEach((cobro: any, idx: number) => {
+          const descripcionCobro = cobro.descripcion ||
+            `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`
+          detallesSimulados.push({
+            id: `det-cobro-${facturacion.conductor_id}-${idx}`,
+            facturacion_id: facturacion.id,
+            concepto_codigo: 'P010',
+            concepto_descripcion: descripcionCobro,
+            cantidad: 1,
+            precio_unitario: cobro.monto_cuota,
+            subtotal: cobro.monto_cuota,
+            total: cobro.monto_cuota,
+            es_descuento: false,
+            referencia_id: cobro.id,
+            referencia_tipo: 'cobro_fraccionado'
+          })
         })
       }
 
