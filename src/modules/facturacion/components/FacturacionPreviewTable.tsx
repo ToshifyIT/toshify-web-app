@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatCurrency } from '../../../types/facturacion.types'
+import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 
@@ -97,6 +98,8 @@ export interface FacturacionPreviewRow {
   isNew?: boolean
   // Para eliminar filas
   isDeleted?: boolean
+  // Para tracking de modificaciones a filas existentes
+  isModified?: boolean
 }
 
 // Tipo para conceptos de la BD
@@ -247,13 +250,37 @@ export function FacturacionPreviewTable({
       .map(c => `<option value="${c.codigo}" data-iva="${c.iva_porcentaje}" data-tipo="${c.tipo}">${c.codigo} - ${c.descripcion}</option>`)
       .join('')
 
-    // Crear lista de conductores para búsqueda
-    const conductoresList = conductoresUnicos.map(c => ({
+    // Traer TODOS los conductores de la BD
+    const { data: todosLosConductores } = await supabase
+      .from('conductores')
+      .select('id, nombres, apellidos, numero_dni, numero_cuit, email')
+      .order('apellidos')
+      .limit(2000)
+
+    // Mapear conductores de la BD
+    const conductoresBD = (todosLosConductores || []).map((c: { id: string; nombres: string; apellidos: string; numero_dni: string; numero_cuit: string | null; email: string | null }) => ({
       id: c.id,
-      nombre: c.nombre,
-      dni: c.dni,
-      display: `${c.nombre} (${c.dni})`
+      nombre: `${(c.nombres || '').toUpperCase()} ${(c.apellidos || '').toUpperCase()}`.trim(),
+      dni: c.numero_dni || '',
+      cuit: c.numero_cuit || '',
+      email: c.email || '',
+      display: `${(c.nombres || '').toUpperCase()} ${(c.apellidos || '').toUpperCase()}`.trim() + ` (${c.numero_dni || ''})`
     }))
+
+    // Merge: BD + los del preview que no estén en BD (por si acaso)
+    const idsBD = new Set(conductoresBD.map(c => c.id))
+    const conductoresDelPreview = conductoresUnicos
+      .filter(c => !idsBD.has(c.id))
+      .map(c => ({
+        id: c.id,
+        nombre: c.nombre,
+        dni: c.dni,
+        cuit: c.cuit,
+        email: c.email,
+        display: `${c.nombre} (${c.dni})`
+      }))
+
+    const conductoresList = [...conductoresBD, ...conductoresDelPreview]
 
     const { value: formValues } = await Swal.fire({
       title: 'Agregar Ajuste',
@@ -277,6 +304,22 @@ export function FacturacionPreviewTable({
               <option value="">Seleccionar concepto...</option>
               ${conceptoOptions}
             </select>
+          </div>
+          <div id="swal-exceso-fields" style="display: none;">
+            <div style="display: flex; gap: 8px;">
+              <div style="flex: 1;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Modalidad</label>
+                <select id="swal-modalidad" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+                  <option value="">Seleccionar...</option>
+                  <option value="TURNO">Turno</option>
+                  <option value="CARGO">A Cargo</option>
+                </select>
+              </div>
+              <div style="flex: 1;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">KM Excedidos</label>
+                <input id="swal-km" type="number" min="0" step="1" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;" placeholder="0">
+              </div>
+            </div>
           </div>
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Monto Total</label>
@@ -355,6 +398,40 @@ export function FacturacionPreviewTable({
             listContainer.style.display = 'none'
           }
         })
+
+        // P006 - Exceso KM: mostrar campos de modalidad y KM, auto-calcular monto
+        const conceptoSelect = document.getElementById('swal-concepto') as HTMLSelectElement
+        const excesoFields = document.getElementById('swal-exceso-fields') as HTMLDivElement
+        const modalidadSelect = document.getElementById('swal-modalidad') as HTMLSelectElement
+        const kmInput = document.getElementById('swal-km') as HTMLInputElement
+        const montoInput = document.getElementById('swal-monto') as HTMLInputElement
+
+        const ALQUILER_CARGO = Number(import.meta.env.VITE_ALQUILER_A_CARGO) || 360000
+        const ALQUILER_TURNO = Number(import.meta.env.VITE_ALQUILER_TURNO) || 245000
+
+        const calcularExceso = () => {
+          const km = parseInt(kmInput.value) || 0
+          const modalidad = modalidadSelect.value
+          if (km <= 0 || !modalidad) return
+          const valorAlquiler = modalidad === 'CARGO' ? ALQUILER_CARGO : ALQUILER_TURNO
+          let porcentaje = 15
+          if (km > 150) porcentaje = 35
+          else if (km > 100) porcentaje = 25
+          else if (km > 50) porcentaje = 20
+          const montoBase = valorAlquiler * (porcentaje / 100)
+          const iva = montoBase * 0.21
+          montoInput.value = String(Math.round(montoBase + iva))
+        }
+
+        conceptoSelect.addEventListener('change', () => {
+          excesoFields.style.display = conceptoSelect.value === 'P006' ? 'block' : 'none'
+          if (conceptoSelect.value !== 'P006') {
+            modalidadSelect.value = ''
+            kmInput.value = ''
+          }
+        })
+        modalidadSelect.addEventListener('change', calcularExceso)
+        kmInput.addEventListener('input', calcularExceso)
       },
       preConfirm: () => {
         const conductorId = (document.getElementById('swal-conductor') as HTMLInputElement).value
@@ -392,9 +469,23 @@ export function FacturacionPreviewTable({
 
     if (!formValues) return
 
-    // Buscar datos del conductor seleccionado
-    const conductor = conductoresUnicos.find(c => c.id === formValues.conductorId)
-    if (!conductor) return
+    // Buscar datos del conductor: primero en los existentes, sino en los de la BD
+    let conductor = conductoresUnicos.find(c => c.id === formValues.conductorId)
+    if (!conductor) {
+      // Conductor no existe en el preview — usar datos de la BD
+      const conductorBD = conductoresList.find(c => c.id === formValues.conductorId)
+      if (!conductorBD) return
+      conductor = {
+        id: conductorBD.id,
+        nombre: conductorBD.nombre,
+        cuit: conductorBD.cuit,
+        dni: conductorBD.dni,
+        tipoFactura: conductorBD.cuit ? 'FACTURA_A' : 'FACTURA_B',
+        condicionIva: conductorBD.cuit ? 'RI' : 'CF',
+        email: conductorBD.email,
+        facturacionId: undefined
+      }
+    }
 
     // Calcular valores IVA
     let netoGravado = 0
@@ -528,6 +619,7 @@ export function FacturacionPreviewTable({
       }
     }
 
+    row.isModified = true
     newData[rowIdx] = row
     setData(newData)
     setEditingCell(null)
@@ -564,8 +656,48 @@ export function FacturacionPreviewTable({
     if (!result.isConfirmed) return
 
     setSyncing(true)
+
+    // Mostrar progreso bloqueante
+    Swal.fire({
+      title: 'Sincronizando...',
+      html: '<div id="sync-progress" style="font-size: 14px; color: #666;">Preparando datos...</div><div style="margin-top: 12px; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden;"><div id="sync-bar" style="height: 100%; width: 0%; background: #059669; border-radius: 3px; transition: width 0.3s;"></div></div>',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => { Swal.showLoading() }
+    })
+
     try {
+      const changedRows = data.filter(r => r.isNew || r.isDeleted)
+      const total = changedRows.length || 1
+
+      // Actualizar progreso periódicamente
+      let step = 0
+      const updateProgress = () => {
+        step++
+        const pct = Math.min(Math.round((step / total) * 80), 80)
+        const progressEl = document.getElementById('sync-progress')
+        const barEl = document.getElementById('sync-bar')
+        if (progressEl) progressEl.textContent = `Procesando ${step} de ${total} cambios...`
+        if (barEl) barEl.style.width = `${pct}%`
+      }
+
+      // Simular progreso mientras onSync ejecuta
+      const interval = setInterval(updateProgress, 300)
+
       const success = await onSync(data)
+
+      clearInterval(interval)
+
+      // Completar barra
+      const barEl = document.getElementById('sync-bar')
+      const progressEl = document.getElementById('sync-progress')
+      if (barEl) barEl.style.width = '100%'
+      if (progressEl) progressEl.textContent = 'Finalizando...'
+
+      await new Promise(r => setTimeout(r, 400))
+      Swal.close()
+
       if (success) {
         setHasChanges(false)
         showSuccess('Sincronizado', 'Los cambios se guardaron correctamente')
@@ -665,6 +797,7 @@ export function FacturacionPreviewTable({
                 className="fact-preview-btn add"
                 onClick={agregarAjuste}
                 title="Agregar ajuste manual"
+                disabled={syncing}
               >
                 <Plus size={14} />
                 Agregar Ajuste
@@ -682,6 +815,7 @@ export function FacturacionPreviewTable({
               className="fact-preview-btn secondary"
               onClick={resetChanges}
               title="Descartar cambios"
+              disabled={syncing}
             >
               <RotateCcw size={14} />
               Resetear
@@ -700,7 +834,7 @@ export function FacturacionPreviewTable({
           <button
             className="fact-preview-btn primary"
             onClick={onExport}
-            disabled={exporting}
+            disabled={exporting || syncing}
           >
             {exporting ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
             {exporting ? 'Exportando...' : 'Exportar Excel'}
