@@ -3571,6 +3571,31 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
   // Tipos categorizados memoizados
   const { tiposP006, tiposP004, tiposP007, tiposSinCategoria } = useCategorizedTipos(tiposCobroDescuento)
 
+  // Auto-calcular monto cuando cambian KM excedidos en tipo "Exceso de kilometraje"
+  const esExcesoKm = tiposCobroDescuento.find(t => t.id === formData.tipo_cobro_descuento_id)?.nombre?.toLowerCase().includes('exceso')
+  useEffect(() => {
+    if (!esExcesoKm || !formData.km_exceso || formData.km_exceso <= 0) return
+
+    // Determinar valor de alquiler por modalidad del turno
+    const ALQUILER_CARGO = Number(import.meta.env.VITE_ALQUILER_A_CARGO) || 360000
+    const ALQUILER_TURNO = Number(import.meta.env.VITE_ALQUILER_TURNO) || 245000
+    const esCargo = formData.turno?.toLowerCase() === 'a cargo'
+    const valorAlquiler = esCargo ? ALQUILER_CARGO : ALQUILER_TURNO
+
+    // Calcular según rangos: 1-50=15%, 51-100=20%, 101-150=25%, 151+=35%
+    const km = formData.km_exceso
+    let porcentaje = 15
+    if (km > 150) porcentaje = 35
+    else if (km > 100) porcentaje = 25
+    else if (km > 50) porcentaje = 20
+
+    const montoBase = valorAlquiler * (porcentaje / 100)
+    const iva = montoBase * 0.21
+    const total = Math.round(montoBase + iva)
+
+    setFormData(prev => ({ ...prev, monto: total }))
+  }, [esExcesoKm, formData.km_exceso, formData.turno])
+
   // Buscar conductores asignados al vehículo seleccionado
   async function buscarConductoresAsignados(vehiculoId: string) {
     setLoadingConductores(true)
@@ -3932,8 +3957,8 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                 value={formData.km_exceso || ''}
                 onChange={e => setFormData(prev => ({ ...prev, km_exceso: e.target.value ? parseInt(e.target.value) : undefined }))}
                 placeholder="0"
-                disabled={tiposCobroDescuento.find(t => t.id === formData.tipo_cobro_descuento_id)?.nombre?.toLowerCase().includes('exceso') ? disabled : true}
-                style={{ opacity: tiposCobroDescuento.find(t => t.id === formData.tipo_cobro_descuento_id)?.nombre?.toLowerCase().includes('exceso') ? 1 : 0.5 }}
+                disabled={!(esExcesoKm && formData.turno) || disabled}
+                style={{ opacity: (esExcesoKm && formData.turno) ? 1 : 0.5 }}
               />
             </div>
             <div className="form-group">

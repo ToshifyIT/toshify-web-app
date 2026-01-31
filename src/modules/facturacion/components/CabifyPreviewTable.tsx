@@ -11,9 +11,11 @@ import {
   Search,
   X,
   Save,
-  RotateCcw
+  RotateCcw,
+  UserPlus
 } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
+import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 
@@ -74,7 +76,8 @@ export function CabifyPreviewTable({
   const [syncing, setSyncing] = useState(false)
 
   // Campos editables
-  const editableFields = ['importeContrato', 'excedentes', 'horasConexion', 'importeGenerado', 'importeGeneradoConBonos', 'generadoEfectivo']
+  const editableFields = ['importeContrato', 'excedentes', 'patente']
+  const textFields = ['patente']
 
   // Filtrar datos
   const filteredData = useMemo(() => {
@@ -102,10 +105,14 @@ export function CabifyPreviewTable({
   }, [filteredData])
 
   // Iniciar edición
-  const startEdit = useCallback((rowIdx: number, field: string, currentValue: number) => {
+  const startEdit = useCallback((rowIdx: number, field: string, currentValue: number | string) => {
     if (!editableFields.includes(field)) return
     setEditingCell({ rowIdx, field })
-    setEditValue(String(currentValue))
+    if (textFields.includes(field)) {
+      setEditValue(String(currentValue))
+    } else {
+      setEditValue(String(Math.round((currentValue as number) * 100) / 100))
+    }
   }, [])
 
   // Guardar edición
@@ -115,10 +122,13 @@ export function CabifyPreviewTable({
     const { rowIdx, field } = editingCell
     const newData = [...data]
     const row = { ...newData[rowIdx] }
-    const numValue = parseFloat(editValue) || 0
 
-    // Actualizar el campo
-    ;(row as Record<string, unknown>)[field] = numValue
+    if (textFields.includes(field)) {
+      (row as Record<string, unknown>)[field] = editValue.trim().toUpperCase()
+    } else {
+      const numValue = Math.round((parseFloat(editValue) || 0) * 100) / 100
+      ;(row as Record<string, unknown>)[field] = numValue
+    }
     row.isModified = true
 
     newData[rowIdx] = row
@@ -139,6 +149,176 @@ export function CabifyPreviewTable({
     setData([...originalData])
     setHasChanges(false)
   }, [originalData])
+
+  // Agregar conductor manualmente
+  const agregarConductor = useCallback(async () => {
+    // Traer todos los conductores de la BD
+    const { data: todosLosCondutores } = await supabase
+      .from('conductores')
+      .select('id, nombres, apellidos, numero_dni, email')
+      .order('apellidos')
+
+    // Traer asignaciones activas para obtener patente
+    const { data: asignacionesActivas } = await supabase
+      .from('asignaciones')
+      .select('conductor_id, vehiculos:vehiculo_id(patente)')
+      .eq('estado', 'activa')
+
+    const patenteMap = new Map<string, string>()
+    for (const a of (asignacionesActivas || []) as { conductor_id: string; vehiculos: { patente: string } | null }[]) {
+      const patente = a.vehiculos?.patente
+      if (patente && a.conductor_id) {
+        patenteMap.set(a.conductor_id, patente)
+      }
+    }
+
+    const idsExistentes = new Set(data.map(d => d.conductorId))
+    const disponibles = (todosLosCondutores || []).map((c: { id: string; nombres: string; apellidos: string; numero_dni: string; email: string | null }) => ({
+      id: c.id,
+      nombre: `${(c.nombres || '').toUpperCase()} ${(c.apellidos || '').toUpperCase()}`.trim(),
+      dni: c.numero_dni || '',
+      email: c.email || '',
+      patente: patenteMap.get(c.id) || ''
+    })).filter(c => !idsExistentes.has(c.id))
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Agregar Conductor',
+      html: `
+        <div style="display: flex; flex-direction: column; gap: 12px; text-align: left;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Conductor</label>
+            <input type="hidden" id="swal-conductor-id" value="">
+            <input type="text" id="swal-conductor-search" placeholder="Buscar por nombre o DNI..." autocomplete="off"
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+            <div id="swal-conductor-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; margin-top: 4px; display: none; background: white;"></div>
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Importe Contrato</label>
+            <input id="swal-contrato" type="text" inputmode="decimal" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;" placeholder="0.00">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">Excedentes</label>
+            <input id="swal-excedentes" type="text" inputmode="decimal" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box;" placeholder="0.00">
+          </div>
+        </div>
+      `,
+      width: 420,
+      showCancelButton: true,
+      confirmButtonText: 'Agregar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#7C3AED',
+      focusConfirm: false,
+      didOpen: () => {
+        const searchInput = document.getElementById('swal-conductor-search') as HTMLInputElement
+        const hiddenInput = document.getElementById('swal-conductor-id') as HTMLInputElement
+        const listContainer = document.getElementById('swal-conductor-list') as HTMLDivElement
+
+        const renderList = (filter: string) => {
+          const filtered = filter
+            ? disponibles.filter(c =>
+                c.nombre.toLowerCase().includes(filter.toLowerCase()) ||
+                c.dni.includes(filter)
+              )
+            : disponibles
+
+          if (filtered.length === 0) {
+            listContainer.innerHTML = '<div style="padding: 8px 12px; color: #888; font-size: 12px;">No se encontraron conductores</div>'
+          } else {
+            listContainer.innerHTML = filtered.slice(0, 50).map(c => `
+              <div data-id="${c.id}" data-nombre="${c.nombre}" data-dni="${c.dni}" data-email="${c.email}" data-patente="${c.patente}"
+                style="padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #eee;"
+                class="conductor-option">${c.nombre} (${c.dni})${c.patente ? ' - ' + c.patente : ''}</div>
+            `).join('')
+          }
+          listContainer.style.display = 'block'
+        }
+
+        searchInput.addEventListener('focus', () => renderList(searchInput.value))
+        searchInput.addEventListener('input', () => renderList(searchInput.value))
+
+        listContainer.addEventListener('click', (e) => {
+          const target = e.target as HTMLElement
+          if (target.classList.contains('conductor-option')) {
+            hiddenInput.value = target.dataset.id || ''
+            hiddenInput.dataset.nombre = target.dataset.nombre || ''
+            hiddenInput.dataset.dni = target.dataset.dni || ''
+            hiddenInput.dataset.email = target.dataset.email || ''
+            hiddenInput.dataset.patente = target.dataset.patente || ''
+            searchInput.value = `${target.dataset.nombre} (${target.dataset.dni})`
+            listContainer.style.display = 'none'
+          }
+        })
+
+        listContainer.addEventListener('mouseover', (e) => {
+          const target = e.target as HTMLElement
+          if (target.classList.contains('conductor-option')) target.style.backgroundColor = '#f3f4f6'
+        })
+        listContainer.addEventListener('mouseout', (e) => {
+          const target = e.target as HTMLElement
+          if (target.classList.contains('conductor-option')) target.style.backgroundColor = ''
+        })
+
+        document.addEventListener('click', (e) => {
+          if (!searchInput.contains(e.target as Node) && !listContainer.contains(e.target as Node)) {
+            listContainer.style.display = 'none'
+          }
+        })
+      },
+      preConfirm: () => {
+        const hiddenInput = document.getElementById('swal-conductor-id') as HTMLInputElement
+        const conductorId = hiddenInput.value
+        const importeContrato = Math.round((parseFloat((document.getElementById('swal-contrato') as HTMLInputElement).value) || 0) * 100) / 100
+        const excedentes = Math.round((parseFloat((document.getElementById('swal-excedentes') as HTMLInputElement).value) || 0) * 100) / 100
+
+        if (!conductorId) {
+          Swal.showValidationMessage('Selecciona un conductor')
+          return false
+        }
+        if (importeContrato === 0) {
+          Swal.showValidationMessage('El importe contrato no puede ser 0')
+          return false
+        }
+
+        return {
+          conductorId,
+          nombre: hiddenInput.dataset.nombre || '',
+          dni: hiddenInput.dataset.dni || '',
+          email: hiddenInput.dataset.email || '',
+          patente: hiddenInput.dataset.patente || '',
+          importeContrato,
+          excedentes
+        }
+      }
+    })
+
+    if (!formValues) return
+
+    const fechaInicial = data.length > 0 ? data[0].fechaInicial : new Date()
+    const fechaFinal = data.length > 0 ? data[0].fechaFinal : new Date()
+
+    const newRow: CabifyPreviewRow = {
+      anio: semana > 0 ? anio : new Date().getFullYear(),
+      semana,
+      fechaInicial,
+      fechaFinal,
+      conductor: formValues.nombre,
+      email: formValues.email,
+      patente: formValues.patente,
+      dni: formValues.dni,
+      importeContrato: formValues.importeContrato,
+      excedentes: formValues.excedentes,
+      conductorId: formValues.conductorId,
+      horasConexion: 0,
+      importeGenerado: 0,
+      importeGeneradoConBonos: 0,
+      generadoEfectivo: 0,
+      isModified: true
+    }
+
+    setData(prev => [...prev, newRow].sort((a, b) => a.conductor.localeCompare(b.conductor)))
+    setHasChanges(true)
+    showSuccess('Conductor agregado', `${formValues.nombre} fue agregado al reporte`)
+  }, [data, semana, anio])
 
   // Sincronizar con BD
   const handleSync = useCallback(async () => {
@@ -172,7 +352,40 @@ export function CabifyPreviewTable({
     }
   }, [onSync, hasChanges, data])
 
-  // Render celda editable
+  // Render celda editable de texto
+  const renderEditableTextCell = (row: CabifyPreviewRow, rowIdx: number, field: string, value: string) => {
+    const isEditing = editingCell?.rowIdx === rowIdx && editingCell?.field === field
+    const canEdit = editableFields.includes(field)
+
+    if (isEditing) {
+      return (
+        <input
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={saveEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveEdit()
+            if (e.key === 'Escape') cancelEdit()
+          }}
+          autoFocus
+          className="edit-input edit-input-text"
+        />
+      )
+    }
+
+    return (
+      <span
+        onClick={() => canEdit && startEdit(rowIdx, field, value)}
+        className={`editable-cell ${canEdit ? 'can-edit' : ''} ${row.isModified ? 'modified' : ''}`}
+        title={canEdit ? 'Click para editar' : ''}
+      >
+        {value || '-'}
+      </span>
+    )
+  }
+
+  // Render celda editable numérica
   const renderEditableCell = (row: CabifyPreviewRow, rowIdx: number, field: string, value: number, isHours = false) => {
     const isEditing = editingCell?.rowIdx === rowIdx && editingCell?.field === field
     const canEdit = editableFields.includes(field)
@@ -180,9 +393,13 @@ export function CabifyPreviewTable({
     if (isEditing) {
       return (
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value
+            if (val === '' || val === '-' || /^-?\d{1,10}(\.\d{0,2})?$/.test(val)) setEditValue(val)
+          }}
           onBlur={saveEdit}
           onKeyDown={(e) => {
             if (e.key === 'Enter') saveEdit()
@@ -256,6 +473,15 @@ export function CabifyPreviewTable({
               {syncing ? 'Sincronizando...' : 'Sincronizar BD'}
             </button>
           )}
+          {periodoId && (
+            <button
+              className="fact-preview-btn secondary"
+              onClick={agregarConductor}
+            >
+              <UserPlus size={14} />
+              Agregar Conductor
+            </button>
+          )}
           <button
             className="fact-preview-btn primary"
             onClick={onExport}
@@ -311,10 +537,10 @@ export function CabifyPreviewTable({
               <th className="col-money">Importe Contrato</th>
               <th className="col-money">EXCEDENTES</th>
               <th>#DO</th>
-              <th>Horas Conexión</th>
-              <th className="col-money">Importe Generado</th>
-              <th className="col-money">Generado (con bonos)</th>
-              <th className="col-money">Generado Efectivo</th>
+              <th className="cabify-col-th">Horas Conexión<span className="cabify-tag">Cabify</span></th>
+              <th className="col-money cabify-col-th">Importe Generado<span className="cabify-tag">Cabify</span></th>
+              <th className="col-money cabify-col-th">Generado (con bonos)<span className="cabify-tag">Cabify</span></th>
+              <th className="col-money cabify-col-th">Generado Efectivo<span className="cabify-tag">Cabify</span></th>
             </tr>
           </thead>
           <tbody>
@@ -329,15 +555,15 @@ export function CabifyPreviewTable({
                   <td className="col-center">{row.fechaFinal.toLocaleDateString('es-AR')}</td>
                   <td className="col-nombre">{row.conductor}</td>
                   <td className="col-email">{row.email || '-'}</td>
-                  <td className="col-center">{row.patente || '-'}</td>
+                  <td className="col-center">{renderEditableTextCell(row, realIdx, 'patente', row.patente)}</td>
                   <td className="col-center">{row.dni || '-'}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'importeContrato', row.importeContrato)}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'excedentes', row.excedentes)}</td>
                   <td className="col-center">-</td>
-                  <td className="col-center">{renderEditableCell(row, realIdx, 'horasConexion', row.horasConexion, true)}</td>
-                  <td className="col-money">{renderEditableCell(row, realIdx, 'importeGenerado', row.importeGenerado)}</td>
-                  <td className="col-money">{renderEditableCell(row, realIdx, 'importeGeneradoConBonos', row.importeGeneradoConBonos)}</td>
-                  <td className="col-money">{renderEditableCell(row, realIdx, 'generadoEfectivo', row.generadoEfectivo)}</td>
+                  <td className="col-center cabify-col">-</td>
+                  <td className="col-money cabify-col">-</td>
+                  <td className="col-money cabify-col">-</td>
+                  <td className="col-money cabify-col">-</td>
                 </tr>
               )
             })}
@@ -348,10 +574,10 @@ export function CabifyPreviewTable({
               <td className="col-money"><strong>{formatCurrency(totales.importeContrato)}</strong></td>
               <td className="col-money"><strong>{formatCurrency(totales.excedentes)}</strong></td>
               <td></td>
-              <td className="col-center"><strong>{totales.horasConexion.toFixed(1)}</strong></td>
-              <td className="col-money"><strong>{formatCurrency(totales.importeGenerado)}</strong></td>
-              <td className="col-money"><strong>{formatCurrency(totales.importeGeneradoConBonos)}</strong></td>
-              <td className="col-money"><strong>{formatCurrency(totales.generadoEfectivo)}</strong></td>
+              <td className="col-center cabify-col">-</td>
+              <td className="col-money cabify-col">-</td>
+              <td className="col-money cabify-col">-</td>
+              <td className="col-money cabify-col">-</td>
             </tr>
           </tfoot>
         </table>
@@ -392,6 +618,10 @@ export function CabifyPreviewTable({
         .fact-preview-table-wrapper::-webkit-scrollbar-thumb:hover { background: #6D28D9; }
         .fact-preview-table.cabify-table { width: 100%; min-width: 1800px; border-collapse: collapse; font-size: 12px; }
         .fact-preview-table.cabify-table th { padding: 10px 8px; text-align: left; background: var(--bg-secondary); border-bottom: 2px solid var(--border-color); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; font-size: 10px; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+        .cabify-col-th { background: rgba(124, 58, 237, 0.08) !important; border-left: 2px solid rgba(124, 58, 237, 0.25) !important; }
+        .cabify-tag { display: block; font-size: 8px; font-weight: 700; color: #7C3AED; letter-spacing: 0.5px; margin-top: 2px; text-transform: uppercase; }
+        .cabify-col { background: rgba(124, 58, 237, 0.04); }
+        .cabify-col:first-of-type, td.cabify-col:first-of-type { border-left: 2px solid rgba(124, 58, 237, 0.25); }
         .fact-preview-table.cabify-table td { padding: 8px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); white-space: nowrap; }
         .fact-preview-table.cabify-table tr:hover { background: var(--bg-secondary); }
         .fact-preview-table.cabify-table tr.row-modified { background: rgba(124, 58, 237, 0.08); }
@@ -411,11 +641,15 @@ export function CabifyPreviewTable({
         .editable-cell.modified { background: rgba(124, 58, 237, 0.2) !important; font-weight: 600; }
         .edit-input { width: 90px; padding: 4px 6px; border: 2px solid #7C3AED; border-radius: 4px; font-size: 12px; font-family: monospace; text-align: right; background: var(--bg-primary); color: var(--text-primary); }
         .edit-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.3); }
+        .edit-input-text { width: 80px; text-align: center; text-transform: uppercase; }
         
         .spinning { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         
         /* Dark Mode */
+        [data-theme="dark"] .cabify-col-th { background: rgba(124, 58, 237, 0.15) !important; border-left-color: rgba(124, 58, 237, 0.4) !important; }
+        [data-theme="dark"] .cabify-col { background: rgba(124, 58, 237, 0.08); }
+        [data-theme="dark"] .cabify-tag { color: #a78bfa; }
         [data-theme="dark"] .fact-preview-badge.open { background: rgba(124, 58, 237, 0.2); color: #a78bfa; }
         [data-theme="dark"] .fact-preview-edit-hint { background: rgba(124, 58, 237, 0.15); border-color: rgba(124, 58, 237, 0.4); color: #a78bfa; }
         [data-theme="dark"] .fact-preview-table-wrapper::-webkit-scrollbar-track { background: var(--bg-tertiary); }
