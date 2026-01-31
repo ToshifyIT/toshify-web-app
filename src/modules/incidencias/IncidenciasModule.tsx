@@ -1596,15 +1596,29 @@ export function IncidenciasModule() {
 
   function handleEditarPenalidad(penalidad: PenalidadCompleta) {
     setSelectedPenalidad(penalidad)
+    // Normalizar detalle para que coincida con las opciones del dropdown
+    const detalleOpciones = ['Descuento', 'Cobro', 'A favor']
+    let detalleNormalizado = penalidad.detalle
+    if (detalleNormalizado && !detalleOpciones.includes(detalleNormalizado)) {
+      // Mapear valores de BD que no coinciden exactamente con las opciones
+      if (detalleNormalizado.toLowerCase().includes('cobro')) {
+        detalleNormalizado = 'Cobro'
+      } else if (detalleNormalizado.toLowerCase().includes('descuento')) {
+        detalleNormalizado = 'Descuento'
+      } else if (detalleNormalizado.toLowerCase().includes('favor')) {
+        detalleNormalizado = 'A favor'
+      }
+    }
     setPenalidadForm({
       vehiculo_id: penalidad.vehiculo_id,
       conductor_id: penalidad.conductor_id,
       tipo_penalidad_id: penalidad.tipo_penalidad_id,
+      tipo_cobro_descuento_id: penalidad.tipo_cobro_descuento_id,
       semana: penalidad.semana,
       fecha: penalidad.fecha,
       turno: penalidad.turno,
       area_responsable: penalidad.area_responsable,
-      detalle: penalidad.detalle,
+      detalle: detalleNormalizado,
       monto: penalidad.monto,
       observaciones: penalidad.observaciones,
       aplicado: penalidad.aplicado,
