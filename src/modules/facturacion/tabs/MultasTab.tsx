@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
@@ -132,13 +133,13 @@ export function MultasTab() {
 
   function parseImporte(importe: string): number {
     if (!importe) return 0
-    // Puede venir como "Gs. 1.234.567" o solo numero
+    // Puede venir como "$ 1.234.567" o solo numero
     return parseFloat(String(importe).replace(/[^\d.-]/g, '')) || 0
   }
 
   function formatImporte(importe: string): string {
     const num = parseImporte(importe)
-    return num > 0 ? `Gs. ${num.toLocaleString('es-PY')}` : '-'
+    return num > 0 ? `$ ${num.toLocaleString('es-AR')}` : '-'
   }
 
   function formatFecha(fecha: string | null): string {
@@ -171,7 +172,7 @@ export function MultasTab() {
             <input id="swal-fecha" type="date" style="width: 100%; padding: 8px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
           </div>
           <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Importe (Gs.) *</label>
+            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Importe ($) *</label>
             <input id="swal-importe" type="number" placeholder="Ej: 500000" style="width: 100%; padding: 8px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
           </div>
           <div style="margin-bottom: 12px;">
@@ -241,7 +242,7 @@ export function MultasTab() {
 
       if (error) throw error
 
-      showSuccess('Multa Registrada', `Multa de Gs. ${parseFloat(formValues.importe).toLocaleString()} registrada`)
+      showSuccess('Multa Registrada', `Multa de $ ${parseFloat(formValues.importe).toLocaleString('es-AR')} registrada`)
 
       cargarDatos()
     } catch (error: any) {
@@ -273,7 +274,7 @@ export function MultasTab() {
             <input id="swal-fecha" type="date" value="${fechaValue}" style="width: 100%; padding: 8px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
           </div>
           <div style="margin-bottom: 12px;">
-            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Importe (Gs.) *</label>
+            <label style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #374151; text-transform: uppercase;">Importe ($) *</label>
             <input id="swal-importe" type="number" value="${parseImporte(multa.importe)}" style="width: 100%; padding: 8px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
           </div>
           <div style="margin-bottom: 12px;">
@@ -663,7 +664,7 @@ export function MultasTab() {
           <div className="fact-stat-card">
             <DollarSign size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
-              <span className="fact-stat-value">Gs. {stats.montoTotal.toLocaleString('es-PY')}</span>
+              <span className="fact-stat-value">$ {stats.montoTotal.toLocaleString('es-AR')}</span>
               <span className="fact-stat-label">Monto Total</span>
             </div>
           </div>

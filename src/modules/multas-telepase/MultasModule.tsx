@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 // src/modules/multas-telepase/MultasModule.tsx
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
@@ -36,10 +37,10 @@ interface Vehiculo {
 }
 
 function formatMoney(value: string | number | null | undefined): string {
-  if (!value) return 'Gs. 0'
+  if (!value) return '$ 0'
   const num = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]/g, '')) : value
-  if (isNaN(num)) return 'Gs. 0'
-  return `Gs. ${num.toLocaleString('es-PY', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  if (isNaN(num)) return '$ 0'
+  return `$ ${num.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 function parseImporte(importe: string | number | null | undefined): number {
@@ -335,7 +336,7 @@ export default function MultasModule() {
             <input id="swal-fecha" type="date" class="multas-form-input">
           </div>
           <div class="multas-form-group">
-            <label class="multas-form-label">Importe (Gs.) *</label>
+            <label class="multas-form-label">Importe ($) *</label>
             <input id="swal-importe" type="number" placeholder="Ej: 500000" class="multas-form-input">
           </div>
           <div class="multas-form-group">
@@ -978,7 +979,7 @@ export default function MultasModule() {
 
                 {/* Importe */}
                 <div className="multas-form-group">
-                  <label className="multas-form-label">Importe (Gs.) *</label>
+                  <label className="multas-form-label">Importe ($) *</label>
                   <input 
                     type="number" 
                     className="multas-form-input"

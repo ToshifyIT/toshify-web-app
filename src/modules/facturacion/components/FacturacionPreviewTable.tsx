@@ -448,7 +448,19 @@ export function FacturacionPreviewTable({
       isNew: true
     }
 
-    setData(prev => [...prev, newRow])
+    setData(prev => {
+      const updated = [...prev, newRow]
+      updated.sort((a, b) => {
+        const nameCompare = (a.razonSocial || '').localeCompare(b.razonSocial || '', 'es')
+        if (nameCompare !== 0) return nameCompare
+        return (a.codigoProducto || '').localeCompare(b.codigoProducto || '', 'es')
+      })
+      // Re-numerar filas después de ordenar
+      updated.forEach((row, idx) => {
+        row.numero = idx + 1
+      })
+      return updated
+    })
     setHasChanges(true)
 
     const signo = formValues.esDescuento ? '-' : ''
@@ -605,7 +617,7 @@ export function FacturacionPreviewTable({
         }}
         title={canEdit ? 'Click para editar' : ''}
       >
-        {isNumber ? value : value || '-'}
+        {isNumber ? (typeof value === 'number' ? Math.round(value * 100) / 100 : value) : value || '-'}
       </span>
     )
   }
@@ -935,9 +947,9 @@ export function FacturacionPreviewTable({
                   <td>{row.moneda}</td>
                   <td>{row.tipoCambio}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'netoGravado', row.netoGravado || 0)}</td>
-                  <td className="col-money">{row.ivaAmount || ''}</td>
+                  <td className="col-money">{row.ivaAmount ? Math.round(row.ivaAmount * 100) / 100 : ''}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'exento', row.exento || 0)}</td>
-                  <td className="col-money col-total">{row.total}</td>
+                  <td className="col-money col-total">{Math.round(row.total * 100) / 100}</td>
                   <td><span className={`badge-iva ${row.ivaPorcentaje === 'IVA_21' ? 'iva-21' : 'iva-ex'}`}>{row.ivaPorcentaje === 'IVA_21' ? '21%' : 'EX'}</span></td>
                   <td>{row.generarAsiento}</td>
                   <td className="col-mono">{row.cuentaDebito}</td>
