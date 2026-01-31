@@ -3555,10 +3555,58 @@ export function ReporteFacturacionTab() {
       const newRows = updatedData.filter(row => row.isNew && !row.isDeleted)
       for (const row of newRows) {
         if (!row.facturacionId) {
-          // Si no tiene facturacionId, buscar por conductorId
-          const facturacion = facturacionesFiltradas.find(f => f.conductor_id === row.conductorId)
-          if (!facturacion) continue
-          row.facturacionId = facturacion.id
+          // Buscar en TODAS las facturaciones (no filtradas por UI)
+          const facturacion = facturaciones.find(f => f.conductor_id === row.conductorId)
+          if (facturacion) {
+            row.facturacionId = facturacion.id
+          } else if (periodo && row.conductorId) {
+            // Verificar si ya existe un registro (por si un sync previo creó uno parcialmente)
+            const { data: existente } = await (supabase
+              .from('facturacion_conductores') as any)
+              .select('id')
+              .eq('periodo_id', periodo.id)
+              .eq('conductor_id', row.conductorId)
+              .maybeSingle()
+
+            if (existente) {
+              row.facturacionId = existente.id
+            } else {
+              // Conductor nuevo: crear facturacion_conductores
+              const montoTotal = Math.abs(row.total)
+              const { data: newFact, error: errNewFact } = await (supabase
+                .from('facturacion_conductores') as any)
+                .insert({
+                  periodo_id: periodo.id,
+                  conductor_id: row.conductorId,
+                  conductor_nombre: row.razonSocial,
+                  conductor_dni: row.numeroDni,
+                  conductor_cuit: row.numeroCuil || null,
+                  vehiculo_id: null,
+                  vehiculo_patente: null,
+                  tipo_alquiler: 'CARGO',
+                  turnos_base: 0,
+                  turnos_cobrados: 0,
+                  factor_proporcional: 0,
+                  subtotal_alquiler: 0,
+                  subtotal_garantia: 0,
+                  subtotal_cargos: montoTotal,
+                  subtotal_descuentos: 0,
+                  subtotal_neto: montoTotal,
+                  saldo_anterior: 0,
+                  dias_mora: 0,
+                  monto_mora: 0,
+                  total_a_pagar: montoTotal,
+                  estado: 'calculado'
+                })
+                .select('id')
+                .single()
+
+              if (errNewFact) throw errNewFact
+              row.facturacionId = newFact.id
+            }
+          } else {
+            continue
+          }
         }
 
         // Determinar si es descuento basado en el total negativo
@@ -3587,8 +3635,8 @@ export function ReporteFacturacionTab() {
         if (error) throw error
       }
 
-      // 3. Actualizar filas existentes modificadas
-      const existingRows = updatedData.filter(row => !row.isNew && !row.isDeleted && row.detalleId)
+      // 3. Actualizar filas existentes modificadas (solo las que fueron editadas y tienen detalleId)
+      const existingRows = updatedData.filter(row => !row.isNew && !row.isDeleted && row.detalleId && row.isModified)
       for (const row of existingRows) {
         const { error } = await (supabase
           .from('facturacion_detalle') as any)
@@ -3610,8 +3658,20 @@ export function ReporteFacturacionTab() {
       await prepararSiFacturaPreview()
 
       return true
-    } catch {
-      Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
+    } catch (err: unknown) {
+      let msg = 'Error desconocido'
+      if (err instanceof Error) {
+        msg = err.message
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        msg = String((err as { message: string }).message)
+      } else if (err && typeof err === 'object' && 'details' in err) {
+        msg = String((err as { details: string }).details)
+      } else if (typeof err === 'string') {
+        msg = err
+      } else {
+        try { msg = JSON.stringify(err) } catch { msg = String(err) }
+      }
+      Swal.fire('Error', `No se pudieron guardar los cambios: ${msg}`, 'error')
       return false
     }
   }
@@ -3967,12 +4027,8 @@ export function ReporteFacturacionTab() {
         // Importe Contrato = Monto del alquiler (P001/P002)
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = Todo lo demás: garantía, penalidades, peajes, excesos km, etc.
-        // EXCLUYENDO: descuentos (tickets a favor), saldo anterior y mora
-        const excedentes = (f.subtotal_garantia || 0) + 
-                          (f.monto_penalidades || 0) + 
-                          (f.monto_peajes || 0) + 
-                          (f.monto_excesos || 0)
+        // EXCEDENTES = Todos los cargos - alquiler
+        const excedentes = (f.subtotal_cargos || 0) - importeContrato
 
         return {
           anio,
@@ -4089,11 +4145,8 @@ export function ReporteFacturacionTab() {
         // Importe Contrato = Monto del alquiler
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = garantía + penalidades + peajes + excesos
-        const excedentes = (f.subtotal_garantia || 0) + 
-                          (f.monto_penalidades || 0) + 
-                          (f.monto_peajes || 0) + 
-                          (f.monto_excesos || 0)
+        // EXCEDENTES = Todos los cargos - alquiler
+        const excedentes = (f.subtotal_cargos || 0) - importeContrato
 
         return {
           anio: periodo.anio,
@@ -4113,6 +4166,35 @@ export function ReporteFacturacionTab() {
           generadoEfectivo: cabifyInfo.efectivo
         }
       })
+
+      // Agregar conductores de facturacion_cabify que no están en facturaciones
+      const idsEnPreview = new Set(previewRows.map(r => r.conductorId))
+      const conductoresExtras = (savedCabifyData || [])
+        .filter((record: any) => record.conductor_id && !idsEnPreview.has(record.conductor_id))
+      
+      for (const record of conductoresExtras) {
+        previewRows.push({
+          anio: periodo.anio,
+          semana: periodo.semana,
+          fechaInicial: fechaInicio,
+          fechaFinal: fechaFin,
+          conductor: record.conductor_nombre || '',
+          email: record.conductor_email || '',
+          patente: record.vehiculo_patente || '',
+          dni: record.conductor_dni || '',
+          importeContrato: Number(record.importe_contrato) || 0,
+          excedentes: Number(record.excedentes) || 0,
+          conductorId: record.conductor_id,
+          horasConexion: Number(record.horas_conexion) || 0,
+          importeGenerado: Number(record.importe_generado) || 0,
+          importeGeneradoConBonos: Number(record.importe_generado_bonos) || 0,
+          generadoEfectivo: Number(record.generado_efectivo) || 0,
+          id: record.id
+        })
+      }
+
+      // Ordenar alfabéticamente
+      previewRows.sort((a, b) => a.conductor.localeCompare(b.conductor, 'es'))
 
       setCabifyPreviewData(previewRows)
       setShowCabifyPreview(true)
