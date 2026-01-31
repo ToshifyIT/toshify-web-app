@@ -550,23 +550,36 @@ export function ReporteFacturacionTab() {
       // a) Penalidades aplicadas completas en esta semana
       const { data: penalidadesCompletas } = await (supabase
         .from('penalidades') as any)
-        .select('conductor_id, monto, detalle, observaciones, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
+        .select('id, conductor_id, monto, detalle, observaciones, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('aplicado', true)
         .eq('fraccionado', false)
         .eq('semana_aplicacion', semanaDelPeriodo)
         .eq('anio_aplicacion', anioDelPeriodo)
       
-      // b) Cuotas fraccionadas de esta semana (no aplicadas aún)
-      // Buscar cuotas que coincidan con semana Y (anio correcto O anio null)
-      const { data: cuotasSemana } = await (supabase
-        .from('penalidades_cuotas') as any)
-        .select('id, penalidad_id, monto_cuota, numero_cuota, anio')
-        .eq('semana', semanaDelPeriodo)
-        .eq('aplicado', false)
+      // b) Cuotas fraccionadas hasta esta semana + pagos para cruzar
+      const [cuotasSemanaRes, pagosCuotasPreviewRes, todasCuotasPenIdsPreviewRes] = await Promise.all([
+        (supabase
+          .from('penalidades_cuotas') as any)
+          .select('id, penalidad_id, monto_cuota, numero_cuota, anio, semana')
+          .lte('semana', semanaDelPeriodo),
+        // Pagos registrados en pagos_conductores para cruzar
+        (supabase
+          .from('pagos_conductores') as any)
+          .select('referencia_id')
+          .eq('tipo_cobro', 'penalidad_cuota'),
+        // TODOS los penalidad_id que tienen cuotas — para excluir de penalidades completas
+        (supabase
+          .from('penalidades_cuotas') as any)
+          .select('penalidad_id')
+      ])
+
+      const cuotasPagadasPreviewIds = new Set(
+        (pagosCuotasPreviewRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
+      )
       
-      // Filtrar solo las cuotas del año correcto o sin año definido
-      const cuotasFiltradas = (cuotasSemana || []).filter((c: any) => 
-        !c.anio || c.anio === anioDelPeriodo
+      // Filtrar: año correcto o sin año, y excluir cuotas pagadas (aplicado=true O en pagos_conductores)
+      const cuotasFiltradas = (cuotasSemanaRes.data || []).filter((c: any) => 
+        (!c.anio || c.anio <= anioDelPeriodo) && c.aplicado !== true && !cuotasPagadasPreviewIds.has(c.id)
       )
 
       // Obtener los conductor_id de las penalidades asociadas a las cuotas
@@ -576,11 +589,11 @@ export function ReporteFacturacionTab() {
       if (penalidadIds.length > 0) {
         const { data: penData } = await (supabase
           .from('penalidades') as any)
-          .select('id, conductor_id, cantidad_cuotas, observaciones')
+          .select('id, conductor_id, cantidad_cuotas, observaciones, fraccionado')
           .in('id', penalidadIds)
         penalidadesPadre = penData || []
       }
-      
+
       const penalidadConductorMap = new Map<string, string>(
         penalidadesPadre.map((p: any) => [p.id, p.conductor_id])
       )
@@ -588,6 +601,12 @@ export function ReporteFacturacionTab() {
       // Map para cantidad de cuotas de cada penalidad fraccionada
       const penalidadCuotasMap = new Map<string, number>(
         penalidadesPadre.map((p: any) => [p.id, p.cantidad_cuotas || 1])
+      )
+
+      // TODAS las penalidades que tienen cuotas (pagadas o pendientes) — excluir de penalidades completas
+      // Si una penalidad tiene cuotas, SOLO se cobra por cuotas, NUNCA el monto completo
+      const penIdsConCuotasPreview = new Set(
+        (todasCuotasPenIdsPreviewRes.data || []).map((pc: any) => pc.penalidad_id).filter(Boolean)
       )
 
       const penalidadesMap = new Map<string, number>() // P006 + P007 (cargos)
@@ -602,8 +621,9 @@ export function ReporteFacturacionTab() {
       }>>()
       
       // Sumar penalidades completas - segmentadas por categoría
+      // Excluir fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
       ;(penalidadesCompletas || []).forEach((p: any) => {
-        if (p.conductor_id) {
+        if (p.conductor_id && !penIdsConCuotasPreview.has(p.id) && !(p.cantidad_cuotas && p.cantidad_cuotas > 1)) {
           const categoria = p.tipos_cobro_descuento?.categoria
           // NULL categoria = pendiente, excluir del cálculo
           if (!categoria) return
@@ -628,7 +648,7 @@ export function ReporteFacturacionTab() {
         }
       })
       
-      // Sumar cuotas fraccionadas
+      // Sumar cuotas fraccionadas (solo de penalidades con fraccionado=true)
       ;(cuotasFiltradas || []).forEach((c: any) => {
         const conductorId = penalidadConductorMap.get(c.penalidad_id)
         if (conductorId) {
@@ -869,17 +889,18 @@ export function ReporteFacturacionTab() {
         .update({ aplicado: false, fecha_aplicacion: null })
         .eq('periodo_id', periodoId)
 
-      // Penalidades: por fecha del período
+      // Penalidades: por fecha del período (solo NO fraccionadas — las fraccionadas se manejan por cuotas)
       await (supabase.from('penalidades') as any)
         .update({ aplicado: false })
         .gte('fecha', fechaInicio)
         .lte('fecha', fechaFin)
         .eq('aplicado', true)
+        .eq('fraccionado', false)
 
-      // Cobros fraccionados: por semana/anio
+      // Cobros fraccionados: por semana/anio (todas las cuotas hasta esta semana)
       await (supabase.from('cobros_fraccionados') as any)
         .update({ aplicado: false, fecha_aplicacion: null })
-        .eq('semana', semanaNum)
+        .lte('semana', semanaNum)
         .eq('anio', anioNum)
 
       // 2. BORRAR toda la facturación existente del período
@@ -956,22 +977,59 @@ export function ReporteFacturacionTab() {
 
       // 5. Obtener datos adicionales en paralelo
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
-        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false),
+        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('*').in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
         supabase.from('cabify_historico').select('dni, peajes').gte('fecha_inicio', fechaInicio + 'T00:00:00').lte('fecha_inicio', fechaFin + 'T23:59:59'),
         (supabase.from('garantias_conductores') as any).select('*').in('conductor_id', conductorIds),
-        (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).eq('semana', semanaNum).eq('anio', anioNum).eq('aplicado', false),
+        (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).lte('semana', semanaNum).eq('anio', anioNum),
         (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin),
       ])
+
+      // 5b. Cargar penalidades_cuotas (cuotas de penalidades fraccionadas) hasta esta semana + pagos para cruzar
+      const [penalidadesCuotasResult, pagosCuotasRecalcRes, todasCuotasPenIdsRes] = await Promise.all([
+        (supabase
+          .from('penalidades_cuotas') as any)
+          .select('*, penalidad:penalidades(id, conductor_id, detalle, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre))')
+          .lte('semana', semanaNum),
+        // Pagos registrados para cruzar (penalidad_cuota + cobro_fraccionado)
+        (supabase
+          .from('pagos_conductores') as any)
+          .select('referencia_id')
+          .in('tipo_cobro', ['penalidad_cuota', 'cobro_fraccionado']),
+        // TODOS los penalidad_id que tienen cuotas (pagadas o no) — para excluir de penalidades completas
+        (supabase
+          .from('penalidades_cuotas') as any)
+          .select('penalidad_id')
+      ])
+
+      const cuotasPagadasRecalcIds = new Set(
+        (pagosCuotasRecalcRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
+      )
+
+      // Filtrar por año correcto (o sin año), conductores del período, y excluir cuotas pagadas (aplicado=true O en pagos_conductores)
+      const penalidadesCuotas = (penalidadesCuotasResult.data || []).filter((pc: any) =>
+        (!pc.anio || pc.anio <= anioNum) &&
+        pc.penalidad?.conductor_id &&
+        conductorIds.includes(pc.penalidad.conductor_id) &&
+        pc.aplicado !== true &&
+        !cuotasPagadasRecalcIds.has(pc.id)
+      )
+
+      // TODAS las penalidades que tienen cuotas (pagadas o pendientes) — excluir del cálculo completo
+      // Si una penalidad tiene cuotas, SOLO se cobra por cuotas, NUNCA el monto completo
+      const penIdsConCuotas = new Set(
+        (todasCuotasPenIdsRes.data || []).map((pc: any) => pc.penalidad_id).filter(Boolean)
+      )
 
       const penalidades = penalidadesRes.data || []
       const tickets = ticketsRes.data || []
       const saldos = saldosRes.data || []
       const excesosArr = excesosRes.data || []
       const garantias = garantiasRes.data || []
-      const cobros = cobrosRes.data || []
+      // Filtrar cobros fraccionados: excluir pagados (aplicado=true O en pagos_conductores)
+      const cobros = (cobrosRes.data || []).filter((c: any) => c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id))
 
       // Mapear peajes por DNI
       const peajesMap = new Map<string, number>()
@@ -1031,7 +1089,12 @@ export function ReporteFacturacionTab() {
         const totalCuotas = garantiaConductor?.total_cuotas || 16
 
         // Penalidades - segmentar por categoría de tipo_cobro_descuento
-        const pensConductor = (penalidades as any[]).filter((p: any) => p.conductor_id === conductor.conductor_id)
+        // Excluir penalidades fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
+        const pensConductor = (penalidades as any[]).filter((p: any) =>
+          p.conductor_id === conductor.conductor_id &&
+          !penIdsConCuotas.has(p.id) &&
+          !(p.cantidad_cuotas && p.cantidad_cuotas > 1)
+        )
         const pensP004 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P004')
         const pensP006 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P006')
         const pensP007 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P007')
@@ -1064,6 +1127,10 @@ export function ReporteFacturacionTab() {
         }
         const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + calcularMontoCuota(c), 0)
 
+        // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
+        const cuotasConductor = penalidadesCuotas.filter((pc: any) => pc.penalidad?.conductor_id === conductor.conductor_id)
+        const totalCuotasPenalidades = cuotasConductor.reduce((sum: number, pc: any) => sum + (pc.monto_cuota || 0), 0)
+
         // Multas (P008)
         const patenteNorm = (conductor.vehiculo_patente || '').toUpperCase().replace(/\s+/g, '')
         const multasVehiculo = multasMap.get(patenteNorm)
@@ -1077,7 +1144,7 @@ export function ReporteFacturacionTab() {
         const montoMora = saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0
 
         // Totales
-        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + montoMultas + totalCobros
+        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + montoMultas + totalCobros + totalCuotasPenalidades
         const subtotalDescuentos = totalTickets + totalPenP004
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
@@ -1269,6 +1336,24 @@ export function ReporteFacturacionTab() {
             .eq('id', (cobro as any).id)
         }
 
+        // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
+        for (const cuota of cuotasConductor) {
+          const penPadre = cuota.penalidad
+          const categoria = penPadre?.tipos_cobro_descuento?.categoria || 'P007'
+          const esDescuento = penPadre?.tipos_cobro_descuento?.es_a_favor === true
+          const tipoNombre = penPadre?.tipos_cobro_descuento?.nombre || penPadre?.detalle || 'Penalidad fraccionada'
+          const descripcionCuota = `Cuota ${cuota.numero_cuota} - ${tipoNombre} (Total: ${penPadre?.cantidad_cuotas || '?'} cuotas)`
+          await (supabase.from('facturacion_detalle') as any).insert({
+            facturacion_id: facturacionId,
+            concepto_codigo: esDescuento ? 'P004' : categoria,
+            concepto_descripcion: descripcionCuota,
+            cantidad: 1, precio_unitario: cuota.monto_cuota,
+            subtotal: cuota.monto_cuota, total: cuota.monto_cuota, es_descuento: esDescuento,
+            referencia_id: cuota.id, referencia_tipo: 'penalidad_cuota'
+          })
+          // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
+        }
+
         conductoresProcesadosCount++
         setRecalculandoProgreso({ actual: conductoresProcesadosCount, total: conductoresProcesados.length })
       }
@@ -1447,11 +1532,19 @@ export function ReporteFacturacionTab() {
           .from('cobros_fraccionados') as any)
           .select('*')
           .eq('conductor_id', facturacion.conductor_id)
-          .eq('semana', semDetalle)
+          .lte('semana', semDetalle)
           .eq('anio', anioDetalle)
-          .eq('aplicado', false)
 
-        ;(cobrosDetalle || []).forEach((cobro: any, idx: number) => {
+        // Cruzar con pagos_conductores para excluir cobros ya pagados
+        const { data: pagosCobrosDetalle } = await (supabase
+          .from('pagos_conductores') as any)
+          .select('referencia_id')
+          .eq('tipo_cobro', 'cobro_fraccionado')
+        const cobrosDetallePagadosIds = new Set(
+          (pagosCobrosDetalle || []).map((p: any) => p.referencia_id).filter(Boolean)
+        )
+
+        ;((cobrosDetalle || []).filter((c: any) => c.aplicado !== true && !cobrosDetallePagadosIds.has(c.id))).forEach((cobro: any, idx: number) => {
           const mt = cobro.monto_total || 0
           const mc = cobro.monto_cuota || 0
           const tc = cobro.total_cuotas || 1
@@ -2124,14 +2217,63 @@ export function ReporteFacturacionTab() {
         }
       }
 
-      // 3. Cobros fraccionados pendientes de esta semana
-      const { data: cobrosPendientes } = await (supabase
-        .from('cobros_fraccionados') as any)
-        .select('*, conductor:conductores(nombres, apellidos)')
+      // 2b. Penalidades con categoria NULL (sin tipo asignado) - incluir TODAS, sin importar aplicado
+      // Estas fueron marcadas como aplicado por el código viejo, pero nunca tuvieron categoria asignada
+      const { data: penalidadesSinTipo } = await (supabase
+        .from('penalidades') as any)
+        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento!left(nombre, categoria)')
         .in('conductor_id', conductorIds)
+        .eq('rechazado', false)
+        .eq('fraccionado', false)
         .eq('semana', periodo.semana)
-        .eq('anio', periodo.anio)
-        .eq('aplicado', false)
+
+      for (const p of (penalidadesSinTipo || []) as any[]) {
+        // Solo incluir las que NO tienen categoria (null o el tipo no existe)
+        const categoria = p.tipos_cobro_descuento?.categoria
+        if (categoria) continue
+        // Evitar duplicados con los pendientes ya cargados en sección 2
+        if (pendientes.some(pend => pend.id === p.id)) continue
+        if (!detallesReferencias.has(p.id)) {
+          pendientes.push({
+            id: p.id,
+            tipo: 'penalidad',
+            conductorId: p.conductor_id,
+            conductorNombre: p.conductor?.nombres && p.conductor?.apellidos 
+              ? `${p.conductor.nombres} ${p.conductor.apellidos}` 
+              : p.conductor_nombre || 'Sin nombre',
+            monto: p.monto || 0,
+            descripcion: `[Sin tipo asignado] ${p.detalle || p.tipos_cobro_descuento?.nombre || 'Penalidad'}`,
+            tabla: 'penalidades',
+            fechaCreacion: p.created_at,
+            creadoPor: p.created_by_name,
+            origenDetalle: `Penalidad SIN TIPO ASIGNADO - ${p.tipos_cobro_descuento?.nombre || 'Sin tipo'} - Creado ${p.created_at ? format(parseISO(p.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`,
+            penalidadId: p.id,
+            tipoPenalidad: p.tipos_cobro_descuento?.nombre,
+            motivoPenalidad: p.motivo,
+            notasPenalidad: p.notas,
+            fechaPenalidad: p.fecha,
+            siniestroId: p.siniestro_id
+          })
+        }
+      }
+
+      // 3. Cobros fraccionados hasta esta semana — cruzar con pagos
+      const [cobrosResPend, pagosCobrosResPend] = await Promise.all([
+        (supabase
+          .from('cobros_fraccionados') as any)
+          .select('*, conductor:conductores(nombres, apellidos)')
+          .in('conductor_id', conductorIds)
+          .lte('semana', periodo.semana)
+          .eq('anio', periodo.anio),
+        (supabase
+          .from('pagos_conductores') as any)
+          .select('referencia_id')
+          .eq('tipo_cobro', 'cobro_fraccionado')
+      ])
+      const cobrosPagadosPendIds = new Set(
+        (pagosCobrosResPend.data || []).map((p: any) => p.referencia_id).filter(Boolean)
+      )
+      const cobrosPendientes = (cobrosResPend.data || []).filter((c: any) => c.aplicado !== true && !cobrosPagadosPendIds.has(c.id))
 
       for (const c of (cobrosPendientes || []) as any[]) {
         if (!detallesReferencias.has(c.id)) {
@@ -2155,13 +2297,21 @@ export function ReporteFacturacionTab() {
         }
       }
 
-      // 4. Penalidades cuotas (penalidades fraccionadas) pendientes de esta semana
-      const { data: penalidadesCuotasPendientes } = await (supabase
-        .from('penalidades_cuotas') as any)
-        .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name, conductor:conductores(nombres, apellidos))')
-        .eq('semana', periodo.semana)
-        .eq('anio', periodo.anio)
-        .eq('aplicado', false)
+      // 4. Penalidades cuotas (fraccionadas) hasta esta semana — cruzar con pagos
+      const [penCuotasResPend, pagosPenCuotasResPend] = await Promise.all([
+        (supabase
+          .from('penalidades_cuotas') as any)
+          .select('*, penalidad:penalidades(id, conductor_id, conductor_nombre, detalle, monto, notas, fecha, motivo, siniestro_id, created_at, created_by_name, conductor:conductores(nombres, apellidos))')
+          .lte('semana', periodo.semana),
+        (supabase
+          .from('pagos_conductores') as any)
+          .select('referencia_id')
+          .eq('tipo_cobro', 'penalidad_cuota')
+      ])
+      const penCuotasPagadasPendIds = new Set(
+        (pagosPenCuotasResPend.data || []).map((p: any) => p.referencia_id).filter(Boolean)
+      )
+      const penalidadesCuotasPendientes = (penCuotasResPend.data || []).filter((pc: any) => pc.aplicado !== true && !penCuotasPagadasPendIds.has(pc.id))
 
       for (const pc of (penalidadesCuotasPendientes || []) as any[]) {
         if (!detallesReferencias.has(pc.id) && pc.penalidad?.conductor_id && conductorIds.includes(pc.penalidad.conductor_id)) {
@@ -2555,14 +2705,23 @@ export function ReporteFacturacionTab() {
         penalidadesMap.get(p.conductor_id)!.push(p)
       })
 
-      // 5. Cargar cobros fraccionados para esta semana
-      const { data: cobrosData } = await supabase
-        .from('cobros_fraccionados')
-        .select('*')
-        .in('conductor_id', conductorIds)
-        .eq('semana', semana)
-        .eq('anio', anio)
-        .eq('aplicado', false)
+      // 5. Cargar cobros fraccionados hasta esta semana — cruzar con pagos
+      const [cobrosCloseRes, pagosCloseRes] = await Promise.all([
+        (supabase
+          .from('cobros_fraccionados') as any)
+          .select('*')
+          .in('conductor_id', conductorIds)
+          .lte('semana', semana)
+          .eq('anio', anio),
+        (supabase
+          .from('pagos_conductores') as any)
+          .select('referencia_id')
+          .in('tipo_cobro', ['cobro_fraccionado', 'penalidad_cuota'])
+      ])
+      const pagosFraccionadosIds = new Set(
+        (pagosCloseRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
+      )
+      const cobrosData = (cobrosCloseRes.data || []).filter((c: any) => c.aplicado !== true && !pagosFraccionadosIds.has(c.id))
       
       // Agrupar cobros por conductor
       const cobrosMap = new Map<string, any[]>()
@@ -2579,16 +2738,19 @@ export function ReporteFacturacionTab() {
       
       const saldosMap = new Map((saldosData || []).map((s: any) => [s.conductor_id, s]))
 
-      // 7. Cargar penalidades_cuotas (cobros fraccionados de penalidades)
-      const { data: penalidadesCuotasData } = await supabase
-        .from('penalidades_cuotas')
+      // 7. Cargar penalidades_cuotas hasta esta semana — ya tenemos pagos en pagosFraccionadosIds
+      const { data: penalidadesCuotasData } = await (supabase
+        .from('penalidades_cuotas') as any)
         .select('*, penalidad:penalidades(conductor_id, conductor_nombre, conductor:conductores(nombres, apellidos))')
-        .eq('semana', semana)
-        .eq('anio', anio)
-        .eq('aplicado', false)
+        .lte('semana', semana)
+      
+      // Filtrar por año correcto o sin año, y excluir pagadas (aplicado=true O en pagos_conductores)
+      const penalidadesCuotasFiltradas = (penalidadesCuotasData || []).filter((pc: any) =>
+        (!pc.anio || pc.anio <= anio) && pc.aplicado !== true && !pagosFraccionadosIds.has(pc.id)
+      )
       
       // Identificar penalidades_cuotas no incluidas (de conductores fuera de Vista Previa)
-      const penalidadesCuotasNoIncluidas = (penalidadesCuotasData || []).filter(
+      const penalidadesCuotasNoIncluidas = penalidadesCuotasFiltradas.filter(
         (pc: any) => pc.penalidad?.conductor_id && !conductorIds.includes(pc.penalidad.conductor_id)
       )
 
@@ -2603,17 +2765,16 @@ export function ReporteFacturacionTab() {
         (t: any) => !conductorIds.includes(t.conductor_id)
       )
 
-      // 9. Cargar cobros fraccionados de conductores NO en Vista Previa
-      const { data: todosCobrosData } = await supabase
-        .from('cobros_fraccionados')
+      // 9. Cargar cobros fraccionados de conductores NO en Vista Previa (hasta esta semana) — ya tenemos pagosFraccionadosIds
+      const { data: todosCobrosData } = await (supabase
+        .from('cobros_fraccionados') as any)
         .select('*, conductor:conductores(nombres, apellidos)')
-        .eq('semana', semana)
+        .lte('semana', semana)
         .eq('anio', anio)
-        .eq('aplicado', false)
       
-      const cobrosNoIncluidos = (todosCobrosData || []).filter(
-        (c: any) => !conductorIds.includes(c.conductor_id)
-      )
+      const cobrosNoIncluidos = ((todosCobrosData || []).filter(
+        (c: any) => !conductorIds.includes(c.conductor_id) && c.aplicado !== true && !pagosFraccionadosIds.has(c.id)
+      ))
 
       // Crear lista de conceptos NO incluidos para mostrar en el panel
       const pendientes: ConceptoPendiente[] = []
@@ -2681,6 +2842,35 @@ export function ReporteFacturacionTab() {
           tabla: 'cobros_fraccionados'
         })
       }
+
+      // Penalidades con categoria NULL (sin tipo asignado) - TODAS, sin importar aplicado
+      // Incluye las que el código viejo marcó como aplicado pero nunca tuvieron categoria
+      const { data: penalidadesSinTipoData } = await (supabase
+        .from('penalidades') as any)
+        .select('*, conductor:conductores(nombres, apellidos), tipos_cobro_descuento!left(nombre, categoria)')
+        .eq('rechazado', false)
+        .eq('fraccionado', false)
+        .eq('semana', semana)
+
+      for (const p of (penalidadesSinTipoData || []) as any[]) {
+        const categoria = p.tipos_cobro_descuento?.categoria
+        if (categoria) continue
+        // Evitar duplicados
+        if (pendientes.some(pend => pend.id === p.id)) continue
+        const enPreview = conductorIds.includes(p.conductor_id)
+        const conductorNombre = p.conductor?.nombres && p.conductor?.apellidos
+          ? `${p.conductor.nombres} ${p.conductor.apellidos}`
+          : p.conductor_nombre || 'Sin nombre'
+        pendientes.push({
+          id: p.id,
+          tipo: 'penalidad',
+          conductorId: p.conductor_id,
+          conductorNombre,
+          monto: p.monto || 0,
+          descripcion: `[Sin tipo asignado${!enPreview ? ' - NO EN PREVIEW' : ''}] ${p.detalle || p.tipos_cobro_descuento?.nombre || 'Penalidad'}`,
+          tabla: 'penalidades'
+        })
+      }
       
       // Guardar conceptos pendientes para mostrar en el panel
       setConceptosPendientes(pendientes)
@@ -2695,7 +2885,7 @@ export function ReporteFacturacionTab() {
       penalidadesFiltradas.forEach((p: any) => conductoresConSaldosPendientes.add(p.conductor_id))
       ;(ticketsData || []).forEach((t: any) => conductoresConSaldosPendientes.add(t.conductor_id))
       ;(cobrosData || []).forEach((c: any) => conductoresConSaldosPendientes.add(c.conductor_id))
-      ;(penalidadesCuotasData || []).forEach((pc: any) => {
+      ;penalidadesCuotasFiltradas.forEach((pc: any) => {
         if (pc.penalidad?.conductor_id) conductoresConSaldosPendientes.add(pc.penalidad.conductor_id)
       })
 

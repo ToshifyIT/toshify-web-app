@@ -22,7 +22,7 @@ import {
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import { formatCurrency } from '../../../types/facturacion.types'
-import { format, startOfWeek, endOfWeek, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
+import { format, startOfWeek, endOfWeek, subWeeks, addWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 // Tipo para conductor procesado con sus días por modalidad
@@ -365,7 +365,8 @@ export function PeriodosTab() {
           .in('conductor_id', conductorIds)
           .gte('fecha', semana.fecha_inicio)
           .lte('fecha', semana.fecha_fin)
-          .eq('aplicado', false),
+          .eq('aplicado', false)
+          .eq('fraccionado', false),
         supabase
           .from('tickets_favor')
           .select('*')
@@ -392,14 +393,13 @@ export function PeriodosTab() {
           .from('garantias_conductores')
           .select('*')
           .in('conductor_id', conductorIds),
-        // Cobros fraccionados (P010) para esta semana
-        supabase
-          .from('cobros_fraccionados')
+        // Cobros fraccionados (P010) hasta esta semana
+        (supabase
+          .from('cobros_fraccionados') as any)
           .select('*')
           .in('conductor_id', conductorIds)
-          .eq('semana', semana.semana)
+          .lte('semana', semana.semana)
           .eq('anio', semana.anio)
-          .eq('aplicado', false)
       ])
 
       const penalidades = penalidadesRes.data || []
@@ -407,7 +407,44 @@ export function PeriodosTab() {
       const saldos = saldosRes.data || []
       const excesos = excesosRes.data || []
       const garantias = garantiasRes.data || []
-      const cobros = cobrosRes.data || []
+
+      // Cargar penalidades_cuotas hasta esta semana + pagos para cruzar
+      const [penalidadesCuotasResult, pagosFraccionadosRes, todasCuotasPenIdsRes] = await Promise.all([
+        (supabase
+          .from('penalidades_cuotas') as any)
+          .select('*, penalidad:penalidades(id, conductor_id, detalle, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre))')
+          .lte('semana', semana.semana),
+        // Pagos registrados para cruzar (ambos tipos)
+        (supabase
+          .from('pagos_conductores') as any)
+          .select('referencia_id')
+          .in('tipo_cobro', ['penalidad_cuota', 'cobro_fraccionado']),
+        // TODOS los penalidad_id que tienen cuotas — para excluir de penalidades completas
+        (supabase
+          .from('penalidades_cuotas') as any)
+          .select('penalidad_id')
+      ])
+
+      const pagosFraccionadosIds = new Set(
+        (pagosFraccionadosRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
+      )
+
+      // Filtrar cobros: excluir pagados (aplicado=true O en pagos_conductores)
+      const cobros = (cobrosRes.data || []).filter((c: any) => c.aplicado !== true && !pagosFraccionadosIds.has(c.id))
+
+      const penalidadesCuotas = (penalidadesCuotasResult.data || []).filter((pc: any) =>
+        (!pc.anio || pc.anio <= semana.anio) &&
+        pc.penalidad?.conductor_id &&
+        conductorIds.includes(pc.penalidad.conductor_id) &&
+        pc.aplicado !== true &&
+        !pagosFraccionadosIds.has(pc.id)
+      )
+
+      // TODAS las penalidades que tienen cuotas (pagadas o pendientes) — excluir del cálculo completo
+      // Si una penalidad tiene cuotas, SOLO se cobra por cuotas, NUNCA el monto completo
+      const penIdsConCuotas = new Set(
+        (todasCuotasPenIdsRes.data || []).map((pc: any) => pc.penalidad_id).filter(Boolean)
+      )
 
       // Mapear peajes por DNI
       const peajesMap = new Map<string, number>()
@@ -484,7 +521,12 @@ export function PeriodosTab() {
         const totalCuotas = garantiaConductor?.total_cuotas || 16
 
         // Penalidades del conductor - segmentar por categoría de tipo_cobro_descuento
-        const pensConductor = (penalidades as any[]).filter((p: any) => p.conductor_id === conductor.conductor_id)
+        // Excluir penalidades fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
+        const pensConductor = (penalidades as any[]).filter((p: any) =>
+          p.conductor_id === conductor.conductor_id &&
+          !penIdsConCuotas.has(p.id) &&
+          !(p.cantidad_cuotas && p.cantidad_cuotas > 1)
+        )
         const pensP004 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P004')
         const pensP006 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P006')
         const pensP007 = pensConductor.filter((p: any) => p.tipos_cobro_descuento?.categoria === 'P007')
@@ -516,6 +558,10 @@ export function PeriodosTab() {
         }
         const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + calcMontoCuota(c), 0)
 
+        // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
+        const cuotasConductor = penalidadesCuotas.filter((pc: any) => pc.penalidad?.conductor_id === conductor.conductor_id)
+        const totalCuotasPenalidades = cuotasConductor.reduce((sum: number, pc: any) => sum + (pc.monto_cuota || 0), 0)
+
         // Saldo anterior
         const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
         const saldoAnterior = saldoConductor?.saldo_actual || 0
@@ -523,7 +569,7 @@ export function PeriodosTab() {
         const montoMora = saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0
 
         // Totales
-        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + totalCobros
+        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + totalCobros + totalCuotasPenalidades
         const subtotalDescuentos = totalTickets + totalPenP004
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
@@ -737,6 +783,28 @@ export function PeriodosTab() {
             .update({ aplicado: true, fecha_aplicacion: new Date().toISOString() })
             .eq('id', (cobro as any).id)
         }
+
+        // Insertar cuotas de penalidades fraccionadas como detalle
+        for (const cuota of cuotasConductor) {
+          const penPadre = cuota.penalidad
+          const categoria = penPadre?.tipos_cobro_descuento?.categoria || 'P007'
+          const esDescuento = penPadre?.tipos_cobro_descuento?.es_a_favor === true
+          const tipoNombre = penPadre?.tipos_cobro_descuento?.nombre || penPadre?.detalle || 'Penalidad fraccionada'
+          const descripcionCuota = `Cuota ${cuota.numero_cuota} - ${tipoNombre} (Total: ${penPadre?.cantidad_cuotas || '?'} cuotas)`
+          await (supabase.from('facturacion_detalle') as any).insert({
+            facturacion_id: facturacionId,
+            concepto_codigo: esDescuento ? 'P004' : categoria,
+            concepto_descripcion: descripcionCuota,
+            cantidad: 1,
+            precio_unitario: cuota.monto_cuota,
+            subtotal: cuota.monto_cuota,
+            total: cuota.monto_cuota,
+            es_descuento: esDescuento,
+            referencia_id: cuota.id,
+            referencia_tipo: 'penalidad_cuota'
+          })
+          // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
+        }
       }
 
       // 10. Actualizar totales del período
@@ -792,7 +860,55 @@ export function PeriodosTab() {
 
       if (error) throw error
 
-      showSuccess('Período Cerrado')
+      // Copiar conductores a la semana siguiente para seguimiento
+      const semanaActual = semana.semana
+      const anioActual = semana.anio
+      const fechaInicioActual = parseISO(semana.fecha_inicio)
+      const fechaSiguiente = addWeeks(fechaInicioActual, 1)
+      const semanaSiguiente = getWeek(fechaSiguiente, { weekStartsOn: 1 })
+      const anioSiguiente = getYear(fechaSiguiente)
+
+      // Obtener conductores de la semana que se cierra
+      const { data: conductoresActuales } = await (supabase
+        .from('conductores_semana_facturacion') as any)
+        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
+        .eq('semana', semanaActual)
+        .eq('anio', anioActual)
+
+      if (conductoresActuales && conductoresActuales.length > 0) {
+        // Verificar cuáles ya existen en la semana siguiente
+        const dnis = conductoresActuales.map((c: any) => c.numero_dni)
+        const { data: yaExistentes } = await (supabase
+          .from('conductores_semana_facturacion') as any)
+          .select('numero_dni')
+          .eq('semana', semanaSiguiente)
+          .eq('anio', anioSiguiente)
+          .in('numero_dni', dnis)
+
+        const dnisExistentes = new Set((yaExistentes || []).map((c: any) => c.numero_dni))
+        const nuevos = conductoresActuales.filter((c: any) => !dnisExistentes.has(c.numero_dni))
+
+        if (nuevos.length > 0) {
+          const registros = nuevos.map((c: any) => ({
+            numero_dni: c.numero_dni,
+            semana: semanaSiguiente,
+            anio: anioSiguiente,
+            estado: c.estado,
+            patente: c.patente,
+            modalidad: c.modalidad,
+            valor_alquiler: c.valor_alquiler,
+          }))
+
+          await (supabase
+            .from('conductores_semana_facturacion') as any)
+            .insert(registros)
+        }
+
+        showSuccess('Período Cerrado', `${nuevos.length} conductores copiados a semana ${semanaSiguiente}/${anioSiguiente}`)
+      } else {
+        showSuccess('Período Cerrado')
+      }
+
       cargarSemanas()
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo cerrar el período', 'error')
