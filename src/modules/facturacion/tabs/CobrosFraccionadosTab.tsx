@@ -526,7 +526,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
         <div style={{
           textAlign: 'center',
           padding: '40px',
-          backgroundColor: '#f5f5f5',
+          backgroundColor: 'var(--bg-tertiary, #f5f5f5)',
           borderRadius: '8px'
         }}>
           <p>No hay cobros fraccionados</p>
@@ -552,7 +552,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                       <span className="conductor">
                         {cobro.conductor?.nombre_completo || cobro.conductor_nombre || 'Sin nombre'}
                       </span>
-                      <span className="patente" style={{ marginLeft: '10px', color: '#666' }}>
+                      <span className="patente" style={{ marginLeft: '10px', color: 'var(--text-secondary, #666)' }}>
                         {cobro.vehiculo_patente || ''}
                       </span>
                     </div>
@@ -577,7 +577,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                   </div>
 
                   <div className="desde-semana" style={{ minWidth: '120px', textAlign: 'center' }}>
-                    <span className="label" style={{ display: 'block', fontSize: '11px', color: '#666' }}>Desde Semana</span>
+                    <span className="label" style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary, #666)' }}>Desde Semana</span>
                     <span className="valor" style={{ fontWeight: 'bold', color: '#1976d2' }}>
                       {cobro.semana_inicio && cobro.anio_inicio
                         ? `${cobro.semana_inicio}/${cobro.anio_inicio}`
