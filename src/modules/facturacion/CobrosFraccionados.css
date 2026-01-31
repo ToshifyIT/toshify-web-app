@@ -238,6 +238,30 @@
   }
 }
 
+/* Dark Mode */
+[data-theme="dark"] .tab-header h3 { color: var(--text-primary); }
+[data-theme="dark"] .tab-header p { color: var(--text-secondary); }
+[data-theme="dark"] .cobro-card { background: var(--bg-secondary); border-color: var(--border-color); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+[data-theme="dark"] .cobro-header { background: var(--bg-tertiary); border-bottom-color: var(--border-color); }
+[data-theme="dark"] .cobro-header:hover { background: var(--bg-hover, var(--bg-tertiary)); }
+[data-theme="dark"] .cobro-titulo .id { background: var(--bg-tertiary); color: var(--text-secondary); }
+[data-theme="dark"] .cobro-titulo .conductor { color: var(--text-primary); }
+[data-theme="dark"] .cobro-detalles { color: var(--text-secondary); }
+[data-theme="dark"] .barra-progreso { background: var(--bg-tertiary); }
+[data-theme="dark"] .porcentaje { color: var(--text-primary); }
+[data-theme="dark"] .proxima-cuota { background: var(--bg-secondary); border-color: var(--border-color); }
+[data-theme="dark"] .proxima-cuota .label { color: var(--text-muted); }
+[data-theme="dark"] .proxima-cuota .valor { color: var(--text-primary); }
+[data-theme="dark"] .btn-expandir { color: var(--text-secondary); }
+[data-theme="dark"] .btn-expandir:hover { color: var(--text-primary); }
+[data-theme="dark"] .cobro-detalle { background: var(--bg-secondary); }
+[data-theme="dark"] .cuotas-table thead { background: var(--bg-tertiary); border-bottom-color: var(--border-color); }
+[data-theme="dark"] .cuotas-table th { color: var(--text-primary); }
+[data-theme="dark"] .cuotas-table td { border-bottom-color: var(--border-color); color: var(--text-primary); }
+[data-theme="dark"] .cuotas-table tr.aplicada { background: rgba(76, 175, 80, 0.1); }
+[data-theme="dark"] .cuotas-table tr.pagada { background: rgba(22, 163, 74, 0.1); }
+[data-theme="dark"] .cuotas-table tr.pendiente:hover { background: rgba(255, 193, 7, 0.1); }
+
 @media (max-width: 768px) {
   .cobro-header {
     flex-direction: column;
