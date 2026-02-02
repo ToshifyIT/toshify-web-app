@@ -812,7 +812,7 @@ export function AsignacionesModule() {
     // Buscar conductores activos del vehículo para mostrar selector
     const { data: asignacionesActivas } = await (supabase as any)
       .from('asignaciones')
-      .select('id, horario, asignaciones_conductores(id, conductor_id, turno, conductores(nombre, apellido))')
+      .select(`id, horario, asignaciones_conductores(id, conductor_id, horario, estado, conductores(nombres, apellidos))`)
       .eq('vehiculo_id', asig.vehiculo_id)
       .in('estado', ['activa', 'activo'])
 
@@ -820,9 +820,10 @@ export function AsignacionesModule() {
     if (asignacionesActivas) {
       for (const asigActiva of asignacionesActivas) {
         for (const ac of (asigActiva.asignaciones_conductores || [])) {
-          if (ac.conductores && ac.conductor_id) {
-            const nombre = `${ac.conductores.nombre || ''} ${ac.conductores.apellido || ''}`.trim()
-            const turno = ac.turno === 'nocturno' ? 'Nocturno' : 'Diurno'
+          // Solo conductores activos/asignados (no cancelados/completados)
+          if (ac.conductores && ac.conductor_id && ac.estado !== 'cancelado' && ac.estado !== 'completado') {
+            const nombre = `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim()
+            const turno = ac.horario === 'nocturno' ? 'Nocturno' : 'Diurno'
             // Evitar duplicados
             if (!conductores.find(c => c.id === ac.conductor_id)) {
               conductores.push({ id: ac.conductor_id, nombre, turno })
