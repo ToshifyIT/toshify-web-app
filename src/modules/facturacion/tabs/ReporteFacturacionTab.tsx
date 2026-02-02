@@ -1665,14 +1665,84 @@ export function ReporteFacturacionTab() {
     )
     const anioHoy = hoy.getFullYear()
 
+    // Cargar conceptos individuales de facturacion_detalle
+    const { data: detalles } = await supabase
+      .from('facturacion_detalle')
+      .select('*')
+      .eq('facturacion_id', facturacion.id)
+      .order('es_descuento')
+      .order('concepto_codigo')
+
+    // Labels para códigos de concepto
+    const conceptoLabels: Record<string, string> = {
+      'P001': 'Alquiler a Cargo', 'P002': 'Alquiler Turno', 'P003': 'Cuota de Garantía',
+      'P004': 'Tickets/Descuentos', 'P005': 'Telepeajes', 'P006': 'Exceso KM',
+      'P007': 'Penalidades', 'P008': 'Multas de Tránsito', 'P009': 'Mora', 'P010': 'Plan de Pagos',
+    }
+
+    const formatDesc = (codigo: string, desc: string) => {
+      const label = conceptoLabels[codigo]
+      if (!label) return desc
+      if (desc.includes('Alquiler') || desc.includes('Garantía') || desc.includes('Telepeaje') ||
+          desc.includes('Ticket') || desc.includes('Exceso') || desc.includes('Penalidad') ||
+          desc.includes('Multa') || desc.includes('Mora') || desc.includes('Cuota') ||
+          desc.includes('Comisión') || desc.includes('Descuento')) return desc
+      return desc ? `${label} (${desc})` : label
+    }
+
+    // Construir HTML de conceptos con checkboxes
+    const cargos = (detalles || []).filter((d: { es_descuento: boolean }) => !d.es_descuento)
+    const descuentos = (detalles || []).filter((d: { es_descuento: boolean }) => d.es_descuento)
+
+    let conceptosHtml = ''
+    for (const det of cargos) {
+      const d = det as { id: string; concepto_codigo: string; concepto_descripcion: string; total: number; es_descuento: boolean }
+      conceptosHtml += `
+        <label style="display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer;">
+          <input type="checkbox" class="pago-concepto" data-monto="${d.total}" data-descuento="false" checked style="width: 16px; height: 16px; accent-color: #16a34a;">
+          <span style="flex: 1; font-size: 12px;">${formatDesc(d.concepto_codigo, d.concepto_descripcion)}</span>
+          <span style="font-size: 12px; font-weight: 600;">${formatCurrency(d.total)}</span>
+        </label>`
+    }
+    for (const det of descuentos) {
+      const d = det as { id: string; concepto_codigo: string; concepto_descripcion: string; total: number; es_descuento: boolean }
+      conceptosHtml += `
+        <label style="display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer;">
+          <input type="checkbox" class="pago-concepto" data-monto="${d.total}" data-descuento="true" checked style="width: 16px; height: 16px; accent-color: #16a34a;">
+          <span style="flex: 1; font-size: 12px; color: #16a34a;">${formatDesc(d.concepto_codigo, d.concepto_descripcion)}</span>
+          <span style="font-size: 12px; font-weight: 600; color: #16a34a;">-${formatCurrency(d.total)}</span>
+        </label>`
+    }
+
+    // Saldo anterior
+    let saldoHtml = ''
+    if (facturacion.saldo_anterior !== 0) {
+      const saldoColor = facturacion.saldo_anterior > 0 ? '#ff0033' : '#16a34a'
+      const saldoPrefix = facturacion.saldo_anterior > 0 ? '' : '-'
+      saldoHtml = `
+        <label style="display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer;">
+          <input type="checkbox" class="pago-concepto" data-monto="${Math.abs(facturacion.saldo_anterior)}" data-descuento="${facturacion.saldo_anterior < 0}" checked style="width: 16px; height: 16px; accent-color: #16a34a;">
+          <span style="flex: 1; font-size: 12px; color: ${saldoColor};">Saldo Anterior</span>
+          <span style="font-size: 12px; font-weight: 600; color: ${saldoColor};">${saldoPrefix}${formatCurrency(Math.abs(facturacion.saldo_anterior))}</span>
+        </label>`
+    }
+
+    // Mora
+    let moraHtml = ''
+    if (facturacion.monto_mora > 0) {
+      moraHtml = `
+        <label style="display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer;">
+          <input type="checkbox" class="pago-concepto" data-monto="${facturacion.monto_mora}" data-descuento="false" checked style="width: 16px; height: 16px; accent-color: #16a34a;">
+          <span style="flex: 1; font-size: 12px;">Mora (${facturacion.dias_mora} días)</span>
+          <span style="font-size: 12px; font-weight: 600;">${formatCurrency(facturacion.monto_mora)}</span>
+        </label>`
+    }
+
     let semanaOptionsHtml = ''
     for (let s = 1; s <= 52; s++) {
       const selected = s === semanaHoy ? 'selected' : ''
       semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
-
-    const saldoColor = facturacion.total_a_pagar > 0 ? '#ff0033' : '#16a34a'
-    const saldoLabel = facturacion.total_a_pagar > 0 ? 'Debe' : 'A Favor'
 
     const { value: formValues } = await Swal.fire({
       title: '<span style="font-size: 16px; font-weight: 600;">Registrar Pago Semanal</span>',
@@ -1684,25 +1754,20 @@ export function ReporteFacturacionTab() {
               <span style="color: #6B7280; font-size: 12px;">DNI: <strong style="color: #374151;">${facturacion.conductor_dni || '-'}</strong></span>
               <span style="color: #6B7280; font-size: 12px;">Semana: <strong style="color: #374151;">S${semanaNum}/${anioNum}</strong></span>
             </div>
-            <div style="margin-top: 6px; padding: 6px 8px; background: white; border-radius: 4px; border: 1px solid #E5E7EB;">
-              <div style="display: flex; justify-content: space-between; font-size: 12px;">
-                <span>Alquiler:</span><span>${formatCurrency(facturacion.subtotal_alquiler)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 12px;">
-                <span>Garantía:</span><span>${formatCurrency(facturacion.subtotal_garantia)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 12px;">
-                <span>Cargos:</span><span>${formatCurrency(facturacion.subtotal_cargos)}</span>
-              </div>
-              ${facturacion.subtotal_descuentos > 0 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; color: #16a34a;">
-                <span>Descuentos:</span><span>-${formatCurrency(facturacion.subtotal_descuentos)}</span>
-              </div>` : ''}
-              ${facturacion.saldo_anterior !== 0 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; color: ${facturacion.saldo_anterior > 0 ? '#ff0033' : '#16a34a'};">
-                <span>Saldo Anterior:</span><span>${formatCurrency(facturacion.saldo_anterior)}</span>
-              </div>` : ''}
-              <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; margin-top: 4px; padding-top: 4px; border-top: 1px solid #E5E7EB; color: ${saldoColor};">
-                <span>TOTAL (${saldoLabel}):</span><span>${formatCurrency(Math.abs(facturacion.total_a_pagar))}</span>
-              </div>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="font-size: 12px; font-weight: 600; color: #374151;">Conceptos a cubrir:</label>
+              <button type="button" id="swal-toggle-all" style="font-size: 10px; padding: 2px 8px; background: #E5E7EB; border: none; border-radius: 4px; cursor: pointer; color: #374151;">Marcar/Desmarcar todos</button>
+            </div>
+            <div id="swal-conceptos" style="padding: 6px 8px; background: white; border-radius: 4px; border: 1px solid #E5E7EB; max-height: 200px; overflow-y: auto;">
+              ${conceptosHtml}
+              ${moraHtml}
+              ${saldoHtml}
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; margin-top: 6px; padding: 6px 8px; background: #F3F4F6; border-radius: 4px;">
+              <span>TOTAL SELECCIONADO:</span>
+              <span id="swal-total-seleccionado" style="color: #16a34a;">${formatCurrency(Math.abs(facturacion.total_a_pagar))}</span>
             </div>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
@@ -1722,7 +1787,7 @@ export function ReporteFacturacionTab() {
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a pagar:</label>
-            <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${Math.abs(facturacion.total_a_pagar)}">
+            <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${Math.abs(facturacion.total_a_pagar).toFixed(2)}">
           </div>
           <div>
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
@@ -1735,7 +1800,35 @@ export function ReporteFacturacionTab() {
       confirmButtonText: 'Registrar Pago',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#16a34a',
-      width: 420,
+      width: 480,
+      didOpen: () => {
+        const recalcTotal = () => {
+          const checkboxes = document.querySelectorAll('.pago-concepto') as NodeListOf<HTMLInputElement>
+          let total = 0
+          checkboxes.forEach(cb => {
+            if (cb.checked) {
+              const monto = parseFloat(cb.dataset.monto || '0')
+              const esDescuento = cb.dataset.descuento === 'true'
+              total += esDescuento ? -monto : monto
+            }
+          })
+          const totalEl = document.getElementById('swal-total-seleccionado')
+          const montoInput = document.getElementById('swal-monto') as HTMLInputElement
+          if (totalEl) totalEl.textContent = total < 0 ? `-$${Math.abs(total).toLocaleString('es-AR')}` : `$${total.toLocaleString('es-AR')}`
+          if (montoInput) montoInput.value = Math.abs(total).toFixed(2)
+        }
+
+        document.querySelectorAll('.pago-concepto').forEach(cb => {
+          cb.addEventListener('change', recalcTotal)
+        })
+
+        document.getElementById('swal-toggle-all')?.addEventListener('click', () => {
+          const checkboxes = document.querySelectorAll('.pago-concepto') as NodeListOf<HTMLInputElement>
+          const allChecked = Array.from(checkboxes).every(cb => cb.checked)
+          checkboxes.forEach(cb => { cb.checked = !allChecked })
+          recalcTotal()
+        })
+      },
       preConfirm: () => {
         const semana = parseInt((document.getElementById('swal-semana') as HTMLSelectElement).value)
         const anio = parseInt((document.getElementById('swal-anio') as HTMLSelectElement).value)
@@ -1745,7 +1838,16 @@ export function ReporteFacturacionTab() {
           Swal.showValidationMessage('Ingrese un monto válido')
           return false
         }
-        return { monto: parseFloat(monto), referencia, semana, anio }
+        // Recopilar conceptos seleccionados
+        const checkboxes = document.querySelectorAll('.pago-concepto') as NodeListOf<HTMLInputElement>
+        const conceptosSeleccionados: string[] = []
+        checkboxes.forEach(cb => {
+          if (cb.checked) {
+            const label = cb.parentElement?.querySelector('span')?.textContent?.trim()
+            if (label) conceptosSeleccionados.push(label)
+          }
+        })
+        return { monto: parseFloat(monto), referencia, semana, anio, conceptos: conceptosSeleccionados }
       }
     })
 
