@@ -264,42 +264,51 @@ export function UserManagement() {
       await loadData()
 
       // Modal 2: Resultado con acciones integradas (copiar + enviar correo)
+      const targetEmail = userEmail || ''
+
       await Swal.fire({
-        icon: 'success',
-        title: 'Contraseña Actualizada',
+        iconHtml: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="16 8 10.5 14 8 11.5"/></svg>',
+        customClass: { icon: 'swal-no-border' },
+        title: 'Listo',
         html: `
+          <style>.swal-no-border { border: none !important; }</style>
           <div style="text-align: left;">
-            <p style="color: #374151; margin-bottom: 16px;">Nueva contraseña de <strong>${userName}</strong>:</p>
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
+            <p style="color: #6b7280; font-size: 14px; margin-bottom: 16px;">Nueva contraseña de <strong style="color: #111827;">${userName}</strong></p>
+
+            <div style="position: relative; margin-bottom: 16px;">
               <input type="text" id="swal-pwd" value="${newPassword}" readonly
-                style="flex: 1; background: #f9fafb; padding: 14px 16px; border-radius: 8px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 18px; letter-spacing: 3px; border: 1px solid #e5e7eb; text-align: center; color: #111827; font-weight: 600;" />
+                style="width: 100%; box-sizing: border-box; background: #f9fafb; padding: 14px 16px; border-radius: 8px; font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 20px; letter-spacing: 3px; border: 1px solid #e5e7eb; text-align: center; color: #111827; font-weight: 600;" />
             </div>
-            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+
+            <div style="display: flex; gap: 8px; margin-bottom: ${targetEmail ? '16px' : '0'};">
               <button type="button" id="swal-copy-btn"
-                style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 16px; background: white; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 Copiar
               </button>
-              ${userEmail ? `
               <button type="button" id="swal-email-btn"
-                style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; background: #FF0033; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 16px; background: #FF0033; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; ${!targetEmail ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                 Enviar por Correo
               </button>
-              ` : ''}
             </div>
-            ${userEmail ? `
-            <p style="font-size: 12px; color: #9ca3af; text-align: center;">
-              Se enviará cifrada a <strong style="color: #6b7280;">${userEmail}</strong>
+
+            ${targetEmail ? `
+            <p id="swal-email-hint" style="font-size: 12px; color: #9ca3af; text-align: center; margin: 0;">
+              Se enviara cifrada a <strong style="color: #6b7280;">${targetEmail}</strong>
             </p>
-            ` : ''}
+            ` : `
+            <p style="font-size: 12px; color: #f59e0b; text-align: center; margin-top: 8px;">
+              Este usuario no tiene correo registrado
+            </p>
+            `}
           </div>
         `,
         showConfirmButton: true,
         confirmButtonText: 'Cerrar',
         confirmButtonColor: '#6b7280',
         didOpen: () => {
-          // Botón Copiar
+          // Copiar
           const copyBtn = document.getElementById('swal-copy-btn')
           const pwdInput = document.getElementById('swal-pwd') as HTMLInputElement
           if (copyBtn && pwdInput) {
@@ -311,7 +320,7 @@ export function UserManagement() {
                 document.execCommand('copy')
               }
               copyBtn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 Copiado!
               `
               copyBtn.style.background = '#d1fae5'
@@ -319,22 +328,28 @@ export function UserManagement() {
               copyBtn.style.borderColor = '#6ee7b7'
               setTimeout(() => {
                 copyBtn.innerHTML = `
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                   Copiar
                 `
-                copyBtn.style.background = '#f3f4f6'
+                copyBtn.style.background = 'white'
                 copyBtn.style.color = '#374151'
                 copyBtn.style.borderColor = '#d1d5db'
               }, 2000)
             }
           }
 
-          // Botón Enviar por Correo
+          // Enviar por correo
           const emailBtn = document.getElementById('swal-email-btn')
-          if (emailBtn && userEmail) {
+          if (emailBtn) {
+            if (!targetEmail) {
+              // Sin email: deshabilitado
+              ;(emailBtn as HTMLButtonElement).disabled = true
+              return
+            }
+
             emailBtn.onclick = async () => {
               emailBtn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                 Enviando...
               `
               emailBtn.style.opacity = '0.7'
@@ -344,7 +359,7 @@ export function UserManagement() {
                 const encryptedPwd = encryptPassword(newPassword)
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const { data: emailData, error: emailError } = await (supabase.rpc as any)('send_password_email', {
-                  user_email: userEmail,
+                  user_email: targetEmail,
                   user_name: userName,
                   user_password: encryptedPwd
                 })
@@ -353,27 +368,24 @@ export function UserManagement() {
                 if (emailData && !emailData.success) throw new Error(emailData.error || 'Error desconocido')
 
                 emailBtn.innerHTML = `
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                   Enviado!
                 `
                 emailBtn.style.background = '#059669'
                 emailBtn.style.opacity = '1'
+
+                const hint = document.getElementById('swal-email-hint')
+                if (hint) {
+                  hint.innerHTML = `<strong style="color: #059669;">Correo enviado exitosamente</strong>`
+                }
               } catch {
                 emailBtn.innerHTML = `
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                  Error
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                  Error - Reintentar
                 `
                 emailBtn.style.background = '#dc2626'
                 emailBtn.style.opacity = '1'
                 ;(emailBtn as HTMLButtonElement).disabled = false
-
-                setTimeout(() => {
-                  emailBtn.innerHTML = `
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                    Reintentar
-                  `
-                  emailBtn.style.background = '#FF0033'
-                }, 2000)
               }
             }
           }
