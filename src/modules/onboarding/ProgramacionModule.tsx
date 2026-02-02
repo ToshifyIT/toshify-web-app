@@ -186,25 +186,35 @@ export function ProgramacionModule() {
     return vehiculosDisponibles.find(v => v.id === quickEditData.vehiculo_id)
   }, [vehiculosDisponibles, quickEditData.vehiculo_id])
 
-  // Conductores filtrados por búsqueda (diurno)
+  // Conductores filtrados por búsqueda (diurno) - excluir el nocturno ya seleccionado
   const filteredConductoresDiurno = useMemo(() => {
-    if (!conductorDiurnoSearch.trim()) return conductoresDisponibles
+    let lista = conductoresDisponibles
+    // Excluir conductor ya asignado como nocturno
+    if (quickEditData.conductor_nocturno_id) {
+      lista = lista.filter(c => c.id !== quickEditData.conductor_nocturno_id)
+    }
+    if (!conductorDiurnoSearch.trim()) return lista
     const search = conductorDiurnoSearch.toLowerCase()
-    return conductoresDisponibles.filter(c =>
+    return lista.filter(c =>
       c.nombre.toLowerCase().includes(search) ||
       c.dni.toLowerCase().includes(search)
     )
-  }, [conductoresDisponibles, conductorDiurnoSearch])
+  }, [conductoresDisponibles, conductorDiurnoSearch, quickEditData.conductor_nocturno_id])
 
-  // Conductores filtrados por búsqueda (nocturno)
+  // Conductores filtrados por búsqueda (nocturno) - excluir el diurno ya seleccionado
   const filteredConductoresNocturno = useMemo(() => {
-    if (!conductorNocturnoSearch.trim()) return conductoresDisponibles
+    let lista = conductoresDisponibles
+    // Excluir conductor ya asignado como diurno
+    if (quickEditData.conductor_diurno_id) {
+      lista = lista.filter(c => c.id !== quickEditData.conductor_diurno_id)
+    }
+    if (!conductorNocturnoSearch.trim()) return lista
     const search = conductorNocturnoSearch.toLowerCase()
-    return conductoresDisponibles.filter(c =>
+    return lista.filter(c =>
       c.nombre.toLowerCase().includes(search) ||
       c.dni.toLowerCase().includes(search)
     )
-  }, [conductoresDisponibles, conductorNocturnoSearch])
+  }, [conductoresDisponibles, conductorNocturnoSearch, quickEditData.conductor_diurno_id])
 
   // Conductores filtrados por búsqueda (a cargo - legacy)
   const filteredConductores = useMemo(() => {
@@ -331,11 +341,11 @@ export function ProgramacionModule() {
       vehiculo_entregar_patente: prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '',
       fecha_cita: prog.fecha_cita || '',
       hora_cita: prog.hora_cita?.substring(0, 5) || '10:00',
-      // Conductores (IDs)
+      // Conductores (IDs) - Si son iguales, limpiar nocturno para evitar duplicados
       conductor_diurno_id: prog.conductor_diurno_id || '',
       conductor_diurno_nombre: prog.conductor_diurno_nombre || '',
-      conductor_nocturno_id: prog.conductor_nocturno_id || '',
-      conductor_nocturno_nombre: prog.conductor_nocturno_nombre || '',
+      conductor_nocturno_id: (prog.conductor_nocturno_id && prog.conductor_nocturno_id !== prog.conductor_diurno_id) ? prog.conductor_nocturno_id : '',
+      conductor_nocturno_nombre: (prog.conductor_nocturno_id && prog.conductor_nocturno_id !== prog.conductor_diurno_id) ? (prog.conductor_nocturno_nombre || '') : '',
       conductor_id: prog.conductor_id || '',
       conductor_nombre: prog.conductor_nombre || prog.conductor_display || '',
       // Diurno
@@ -449,6 +459,14 @@ export function ProgramacionModule() {
       }
 
       if (isTurno) {
+        // Validar que no sean el mismo conductor en ambos turnos
+        if (quickEditData.conductor_diurno_id && quickEditData.conductor_nocturno_id &&
+            quickEditData.conductor_diurno_id === quickEditData.conductor_nocturno_id) {
+          Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
+          setSavingQuickEdit(false)
+          return
+        }
+
         // Conductor diurno
         updateData.conductor_diurno_id = quickEditData.conductor_diurno_id || null
         updateData.conductor_diurno_nombre = conductorDiurnoSeleccionado?.nombre || quickEditData.conductor_diurno_nombre || null
@@ -585,8 +603,83 @@ export function ProgramacionModule() {
     }
   }
 
+  // Enviar devolución - Crear registro en tabla devoluciones (sin asignación)
+  // No se pregunta quién devuelve: eso se define al confirmar en Asignaciones
+  const handleEnviarDevolucion = async (prog: ProgramacionOnboardingCompleta) => {
+    if (!prog.vehiculo_entregar_id) {
+      Swal.fire('Error', 'La programación no tiene vehículo asignado', 'error')
+      return
+    }
+
+    // Construir fecha programada
+    let fechaProgramada: string
+    if (prog.fecha_cita) {
+      const soloFecha = prog.fecha_cita.split('T')[0]
+      const hora = prog.hora_cita && prog.hora_cita.trim() !== '' ? prog.hora_cita.substring(0, 5) : '10:00'
+      fechaProgramada = new Date(`${soloFecha}T${hora}:00-03:00`).toISOString()
+    } else {
+      fechaProgramada = new Date().toISOString()
+    }
+
+    const result = await Swal.fire({
+      title: 'Crear Devolución',
+      html: `
+        <div style="text-align: left; font-size: 14px;">
+          <p><strong>Vehículo:</strong> ${prog.vehiculo_entregar_patente || 'N/A'}</p>
+          <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita).toLocaleDateString('es-AR') : 'Hoy'}</p>
+          <p style="margin-top: 10px; color: #6B7280; font-size: 12px;">Se creará un registro de devolución (no se genera asignación).</p>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#10B981',
+      confirmButtonText: 'Crear Devolución',
+      cancelButtonText: 'Cancelar',
+      width: 440,
+    })
+
+    if (!result.isConfirmed) return
+
+    try {
+      const { error: devError } = await (supabase.from('devoluciones') as any)
+        .insert({
+          vehiculo_id: prog.vehiculo_entregar_id,
+          conductor_id: null,
+          conductor_nombre: null,
+          programacion_id: prog.id,
+          programado_por: prog.created_by_name || profile?.full_name || 'Sistema',
+          fecha_programada: fechaProgramada,
+          estado: 'pendiente',
+          observaciones: prog.observaciones || null,
+          created_by: user?.id || null,
+          created_by_name: profile?.full_name || 'Sistema',
+        })
+
+      if (devError) throw devError
+
+      // Marcar programación como completada
+      await (supabase.from('programaciones_onboarding') as any)
+        .update({
+          estado: 'completado',
+          fecha_asignacion_creada: new Date().toISOString(),
+        })
+        .eq('id', prog.id)
+
+      setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
+      showSuccess('Devolución Creada', `${prog.vehiculo_entregar_patente}`)
+    } catch (err: any) {
+      console.error('Error creando devolución:', err)
+      Swal.fire('Error', err.message || 'Error al crear devolución', 'error')
+    }
+  }
+
   // Enviar a entrega - Crear asignacion
   const handleEnviarAEntrega = async (prog: ProgramacionOnboardingCompleta) => {
+    // Si es devolución, usar flujo separado
+    if (prog.tipo_asignacion === 'devolucion_vehiculo') {
+      return handleEnviarDevolucion(prog)
+    }
+
     // Verificar qué conductores son "asignacion_companero" (informativo, no bloquea)
     const diurnoEsCompanero = prog.tipo_asignacion_diurno === 'asignacion_companero'
     const nocturnoEsCompanero = prog.tipo_asignacion_nocturno === 'asignacion_companero'
@@ -1002,8 +1095,10 @@ export function ProgramacionModule() {
                   className={`prog-inline-select-mini tipo-asignacion ${tipoD}`}
                   value={tipoD}
                   onChange={(e) => {
-                    // Guardar en tipo_asignacion_diurno si existe la columna, sino en tipo_asignacion
                     handleUpdateField(prog.id, 'tipo_asignacion_diurno', e.target.value || null)
+                    if (e.target.value === 'devolucion_vehiculo') {
+                      handleUpdateField(prog.id, 'documento_diurno', 'na')
+                    }
                   }}
                   title="Tipo asignación conductor diurno"
                 >
@@ -1022,6 +1117,9 @@ export function ProgramacionModule() {
                   value={tipoN}
                   onChange={(e) => {
                     handleUpdateField(prog.id, 'tipo_asignacion_nocturno', e.target.value || null)
+                    if (e.target.value === 'devolucion_vehiculo') {
+                      handleUpdateField(prog.id, 'documento_nocturno', 'na')
+                    }
                   }}
                   title="Tipo asignación conductor nocturno"
                 >
@@ -1042,7 +1140,12 @@ export function ProgramacionModule() {
           <select
             className={`prog-inline-select tipo-asignacion ${prog.tipo_asignacion || ''}`}
             value={prog.tipo_asignacion || ''}
-            onChange={(e) => handleUpdateField(prog.id, 'tipo_asignacion', e.target.value || null)}
+            onChange={(e) => {
+              handleUpdateField(prog.id, 'tipo_asignacion', e.target.value || null)
+              if (e.target.value === 'devolucion_vehiculo') {
+                handleUpdateField(prog.id, 'tipo_documento', 'na')
+              }
+            }}
             title="Tipo de asignación"
           >
             <option value="">Sin definir</option>
@@ -1405,21 +1508,23 @@ export function ProgramacionModule() {
         }
 
         if (prog.modalidad === 'TURNO') {
-          const tipoD = prog.tipo_asignacion_diurno || prog.tipo_asignacion || ''
-          const tipoN = prog.tipo_asignacion_nocturno || prog.tipo_asignacion || ''
+          const tieneDiurno = !!(prog.conductor_diurno_id || prog.conductor_diurno_nombre)
+          const tieneNocturno = !!(prog.conductor_nocturno_id || prog.conductor_nocturno_nombre)
+          const tipoD = tieneDiurno ? (prog.tipo_asignacion_diurno || prog.tipo_asignacion || '') : ''
+          const tipoN = tieneNocturno ? (prog.tipo_asignacion_nocturno || prog.tipo_asignacion || '') : ''
 
           return (
             <div className="prog-tipo-asig-turno">
               <div className="prog-tipo-asig-row">
                 <span className="prog-tipo-asig-label">D:</span>
                 <span className={`prog-inline-select-mini tipo-asignacion ${tipoD}`} style={{ cursor: 'default', border: 'none' }}>
-                  {tipoLabelsShort[tipoD] || tipoD || '-'}
+                  {tipoD ? (tipoLabelsShort[tipoD] || tipoD) : '-'}
                 </span>
               </div>
               <div className="prog-tipo-asig-row">
                 <span className="prog-tipo-asig-label">N:</span>
                 <span className={`prog-inline-select-mini tipo-asignacion ${tipoN}`} style={{ cursor: 'default', border: 'none' }}>
-                  {tipoLabelsShort[tipoN] || tipoN || '-'}
+                  {tipoN ? (tipoLabelsShort[tipoN] || tipoN) : '-'}
                 </span>
               </div>
             </div>
@@ -1897,7 +2002,10 @@ export function ProgramacionModule() {
                         <label>Tipo Asignación *</label>
                         <select
                           value={quickEditData.tipo_asignacion_diurno || 'entrega_auto'}
-                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_asignacion_diurno: e.target.value as any }))}
+                          onChange={e => {
+                            const val = e.target.value as any
+                            setQuickEditData(prev => ({ ...prev, tipo_asignacion_diurno: val, ...(val === 'devolucion_vehiculo' ? { documento_diurno: 'na' } : {}) }))
+                          }}
                           className="prog-input"
                         >
                           <option value="entrega_auto">Entrega de auto</option>
@@ -2007,7 +2115,10 @@ export function ProgramacionModule() {
                         <label>Tipo Asignación *</label>
                         <select
                           value={quickEditData.tipo_asignacion_nocturno || 'entrega_auto'}
-                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_asignacion_nocturno: e.target.value as any }))}
+                          onChange={e => {
+                            const val = e.target.value as any
+                            setQuickEditData(prev => ({ ...prev, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' } : {}) }))
+                          }}
                           className="prog-input"
                         >
                           <option value="entrega_auto">Entrega de auto</option>
