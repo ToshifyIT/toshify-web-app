@@ -238,19 +238,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     hora_cita: '10:00',
     // Campos A CARGO
     tipo_candidato_cargo: '',
-    tipo_asignacion_cargo: 'entrega_auto',
+    tipo_asignacion_cargo: '',
     documento_cargo: '',
     zona_cargo: '',
     distancia_cargo: '',
     // Campos DIURNO
     tipo_candidato_diurno: '',
-    tipo_asignacion_diurno: 'entrega_auto',
+    tipo_asignacion_diurno: '',
     documento_diurno: '',
     zona_diurno: '',
     distancia_diurno: '',
     // Campos NOCTURNO
     tipo_candidato_nocturno: '',
-    tipo_asignacion_nocturno: 'entrega_auto',
+    tipo_asignacion_nocturno: '',
     documento_nocturno: '',
     zona_nocturno: '',
     distancia_nocturno: '',
@@ -2932,6 +2932,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               setFormData({ ...formData, tipo_asignacion_cargo: val, ...(val === 'devolucion_vehiculo' ? { documento_cargo: 'na' as TipoDocumento } : {}) })
                             }}
                           >
+                            <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
@@ -3006,6 +3007,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               setFormData({ ...formData, tipo_asignacion_diurno: val, ...(val === 'devolucion_vehiculo' ? { documento_diurno: 'na' as TipoDocumento } : {}) })
                             }}
                           >
+                            <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
@@ -3031,7 +3033,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         </div>
                         <div></div>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: conductorNocturno ? '1fr 1fr' : '1fr', gap: '16px' }}>
                         <div>
                           <label>Zona *</label>
                           <input
@@ -3041,6 +3043,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             placeholder="Ej: Norte, CABA..."
                           />
                         </div>
+                        {conductorNocturno && (
                         <div>
                           <label>Distancia (minutos)</label>
                           <input
@@ -3050,6 +3053,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             placeholder="Tiempo estimado"
                           />
                         </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -3080,6 +3084,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
                             }}
                           >
+                            <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
@@ -3105,7 +3110,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         </div>
                         <div></div>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: conductorDiurno ? '1fr 1fr' : '1fr', gap: '16px' }}>
                         <div>
                           <label>Zona *</label>
                           <input
@@ -3115,6 +3120,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             placeholder="Ej: Norte, CABA..."
                           />
                         </div>
+                        {conductorDiurno && (
                         <div>
                           <label>Distancia (minutos)</label>
                           <input
@@ -3124,6 +3130,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             placeholder="Tiempo estimado"
                           />
                         </div>
+                        )}
                       </div>
                     </div>
                   )}
