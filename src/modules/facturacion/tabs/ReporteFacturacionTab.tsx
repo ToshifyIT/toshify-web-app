@@ -5446,19 +5446,33 @@ export function ReporteFacturacionTab() {
                     </div>
                   </div>
 
-                  {/* Sección de Cargos */}
+                   {/* Sección de Cargos */}
                   <div className="fact-detalle-seccion">
                     <h4 className="fact-seccion-titulo cargos">Cargos (A Pagar)</h4>
                     <div className="fact-detalle-items">
-                      {detalleCargos.map(item => (
+                      {detalleCargos.map(item => {
+                        // Asegurar que la descripción incluya el nombre del concepto
+                        const conceptoLabels: Record<string, string> = {
+                          'P001': 'Alquiler a Cargo',
+                          'P002': 'Alquiler Turno',
+                          'P003': 'Cuota de Garantía',
+                          'P005': 'Telepeajes',
+                        }
+                        const label = conceptoLabels[item.concepto_codigo]
+                        let desc = item.concepto_descripcion
+                        if (label && !desc.includes('Alquiler') && !desc.includes('Garantía') && !desc.includes('Telepeaje')) {
+                          desc = desc ? `${label} (${desc})` : label
+                        }
+                        return (
                         <div key={item.id} className="fact-item">
                           <span className="fact-item-desc">
-                            {item.concepto_descripcion}
+                            {desc}
                             {item.cantidad > 1 && <small> x{item.cantidad}</small>}
                           </span>
                           <span className="fact-item-monto">{formatCurrency(item.total)}</span>
                         </div>
-                      ))}
+                        )
+                      })}
 
                       {/* Saldo anterior positivo = debe pagar */}
                       {detalleFacturacion.saldo_anterior > 0 && (
@@ -5489,12 +5503,22 @@ export function ReporteFacturacionTab() {
                     <div className="fact-detalle-seccion">
                       <h4 className="fact-seccion-titulo creditos">Descuentos / Créditos (A Favor)</h4>
                       <div className="fact-detalle-items">
-                        {detalleDescuentos.map(item => (
+                        {detalleDescuentos.map(item => {
+                          const conceptoLabels: Record<string, string> = {
+                            'P004': 'Tickets/Descuentos',
+                          }
+                          const label = conceptoLabels[item.concepto_codigo]
+                          let desc = item.concepto_descripcion
+                          if (label && !desc.includes('Ticket') && !desc.includes('Descuento') && !desc.includes('Comisión')) {
+                            desc = desc ? `${label} (${desc})` : label
+                          }
+                          return (
                           <div key={item.id} className="fact-item">
-                            <span className="fact-item-desc">{item.concepto_descripcion}</span>
+                            <span className="fact-item-desc">{desc}</span>
                             <span className="fact-item-monto credito">-{formatCurrency(item.total)}</span>
                           </div>
-                        ))}
+                          )
+                        })}
 
                         {/* Saldo anterior negativo = crédito a favor */}
                         {detalleFacturacion.saldo_anterior < 0 && (
