@@ -727,6 +727,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
           return
         }
+        // Validar que no sea el mismo conductor en ambos turnos
+        if (formData.conductor_diurno_id && formData.conductor_nocturno_id &&
+            formData.conductor_diurno_id === formData.conductor_nocturno_id) {
+          Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
+          return
+        }
       }
     }
     setStep(step + 1)

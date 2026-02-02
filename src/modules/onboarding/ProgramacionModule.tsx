@@ -449,6 +449,14 @@ export function ProgramacionModule() {
       }
 
       if (isTurno) {
+        // Validar que no sean el mismo conductor en ambos turnos
+        if (quickEditData.conductor_diurno_id && quickEditData.conductor_nocturno_id &&
+            quickEditData.conductor_diurno_id === quickEditData.conductor_nocturno_id) {
+          Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
+          setSavingQuickEdit(false)
+          return
+        }
+
         // Conductor diurno
         updateData.conductor_diurno_id = quickEditData.conductor_diurno_id || null
         updateData.conductor_diurno_nombre = conductorDiurnoSeleccionado?.nombre || quickEditData.conductor_diurno_nombre || null
