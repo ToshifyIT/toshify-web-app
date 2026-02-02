@@ -86,6 +86,7 @@ export function VehicleManagement() {
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]) // Filtro de columna Estado
   const [activeStatCard, setActiveStatCard] = useState<string | null>(null)
   const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]) // Filtro separado para stat cards
+  const [statCardExcludeMode, setStatCardExcludeMode] = useState(false) // true = excluir los estados del filtro en vez de incluir
 
   // Excel filter hook for portal-based dropdowns
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -721,6 +722,7 @@ export function VehicleManagement() {
     if (activeStatCard === cardType) {
       setActiveStatCard(null)
       setStatCardEstadoFilter([]) // Solo limpiar el filtro del stat card, NO el de columna
+      setStatCardExcludeMode(false)
       return
     }
 
@@ -737,28 +739,37 @@ export function VehicleManagement() {
     // Usar statCardEstadoFilter para no interferir con el filtro de columna
     switch (cardType) {
       case 'total':
-        setStatCardEstadoFilter([])
+        // Excluir estados que no son parte de la flota activa
+        setStatCardEstadoFilter(['Robo', 'Destrucción', 'Jubilado', 'Dev. Proveedor'])
+        setStatCardExcludeMode(true)
         break
       case 'enCochera':
         setStatCardEstadoFilter(estadosEnCochera)
+        setStatCardExcludeMode(false)
         break
       case 'enUso':
         setStatCardEstadoFilter(estadosEnUso)
+        setStatCardExcludeMode(false)
         break
       case 'tallerMecanico':
         setStatCardEstadoFilter(estadosTallerMecanico)
+        setStatCardExcludeMode(false)
         break
       case 'chapaPintura':
         setStatCardEstadoFilter(estadosChapaPintura)
+        setStatCardExcludeMode(false)
         break
       case 'corporativos':
         setStatCardEstadoFilter(estadosCorporativos)
+        setStatCardExcludeMode(false)
         break
       case 'devueltos':
         setStatCardEstadoFilter(estadosDevueltos)
+        setStatCardExcludeMode(false)
         break
       default:
         setStatCardEstadoFilter([])
+        setStatCardExcludeMode(false)
     }
   }
 
@@ -894,7 +905,9 @@ export function VehicleManagement() {
       result = result.filter(v => {
         const estadoCodigo = v.vehiculos_estados?.codigo || ''
         const estadoLabel = ESTADO_LABELS[estadoCodigo] || estadoCodigo
-        return statCardEstadoFilter.includes(estadoLabel) || statCardEstadoFilter.includes(estadoCodigo)
+        const matches = statCardEstadoFilter.includes(estadoLabel) || statCardEstadoFilter.includes(estadoCodigo)
+        // En modo exclusión (Total Flota): mostrar los que NO están en la lista
+        return statCardExcludeMode ? !matches : matches
       })
     }
 
@@ -914,7 +927,7 @@ export function VehicleManagement() {
     })
 
     return result
-  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, estadoFilter, statCardEstadoFilter])
+  }, [vehiculos, patenteFilter, marcaFilter, modeloFilter, estadoFilter, statCardEstadoFilter, statCardExcludeMode])
 
 
   // Definir columnas para TanStack Table
