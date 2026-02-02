@@ -664,7 +664,7 @@ export function AsignacionesModule() {
           conductoresTurno: null,
           conductorCargo: {
             id: '',
-            nombre: (asignacion as any)._conductorNombre || 'Sin conductor',
+            nombre: (asignacion as any)._conductorNombre || 'Pendiente de confirmar',
             confirmado: false,
             cancelado: false,
           },
@@ -805,18 +805,59 @@ export function AsignacionesModule() {
     }]
   }, [activeStatCard])
 
-  // Confirmar devolución: cambiar vehículo a PKG_ON_BASE
+  // Confirmar devolución: seleccionar conductor que devuelve, cambiar vehículo a PKG_ON_BASE
   const handleConfirmarDevolucion = async (asig: ExpandedAsignacion) => {
     if (isSubmitting) return
+
+    // Buscar conductores activos del vehículo para mostrar selector
+    const { data: asignacionesActivas } = await (supabase as any)
+      .from('asignaciones')
+      .select('id, horario, asignaciones_conductores(id, conductor_id, turno, conductores(nombre, apellido))')
+      .eq('vehiculo_id', asig.vehiculo_id)
+      .in('estado', ['activa', 'activo'])
+
+    const conductores: Array<{ id: string; nombre: string; turno: string }> = []
+    if (asignacionesActivas) {
+      for (const asigActiva of asignacionesActivas) {
+        for (const ac of (asigActiva.asignaciones_conductores || [])) {
+          if (ac.conductores && ac.conductor_id) {
+            const nombre = `${ac.conductores.nombre || ''} ${ac.conductores.apellido || ''}`.trim()
+            const turno = ac.turno === 'nocturno' ? 'Nocturno' : 'Diurno'
+            // Evitar duplicados
+            if (!conductores.find(c => c.id === ac.conductor_id)) {
+              conductores.push({ id: ac.conductor_id, nombre, turno })
+            }
+          }
+        }
+      }
+    }
+
+    // Construir HTML del selector de conductores
+    let conductoresHtml = ''
+    if (conductores.length > 1) {
+      conductoresHtml = `
+        <div style="margin: 12px 0;">
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px;">¿Quién devuelve el vehículo?</label>
+          ${conductores.map((c, i) => `
+            <label style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid #E5E7EB; border-radius: 6px; margin-bottom: 6px; cursor: pointer;">
+              <input type="radio" name="conductor-devolucion" value="${i}" ${i === 0 ? 'checked' : ''} style="width: 16px; height: 16px;">
+              <span style="font-size: 13px;"><strong>${c.turno}:</strong> ${c.nombre}</span>
+            </label>
+          `).join('')}
+        </div>
+      `
+    } else if (conductores.length === 1) {
+      conductoresHtml = `<p><strong>Conductor:</strong> ${conductores[0].nombre}</p>`
+    }
 
     const result = await Swal.fire({
       title: 'Confirmar Devolución',
       html: `
         <div style="text-align: left; font-size: 14px;">
           <p><strong>Vehículo:</strong> ${asig.vehiculos?.patente || 'N/A'}</p>
-          <p><strong>Conductor:</strong> ${asig.conductorCargo?.nombre || 'N/A'}</p>
+          ${conductoresHtml}
           <p style="margin-top: 10px; color: #6B7280; font-size: 12px;">
-            El vehículo pasará a estado <strong>PKG ON BASE</strong> y se finalizará la asignación activa si existe.
+            El vehículo pasará a estado <strong>PKG ON BASE</strong> y se finalizará la asignación activa.
           </p>
         </div>
       `,
@@ -824,19 +865,36 @@ export function AsignacionesModule() {
       showCancelButton: true,
       confirmButtonColor: '#10B981',
       confirmButtonText: 'Confirmar Devolución',
-      cancelButtonText: 'Cancelar'
+      cancelButtonText: 'Cancelar',
+      width: 440,
+      preConfirm: () => {
+        if (conductores.length > 1) {
+          const selected = document.querySelector('input[name="conductor-devolucion"]:checked') as HTMLInputElement
+          return { conductorIndex: parseInt(selected?.value || '0') }
+        }
+        return { conductorIndex: 0 }
+      }
     })
 
     if (!result.isConfirmed) return
+
+    const selectedConductor = conductores.length > 0
+      ? conductores[result.value?.conductorIndex || 0]
+      : null
 
     setIsSubmitting(true)
     try {
       const ahora = new Date().toISOString()
 
-      // 1. Marcar devolución como completada
+      // 1. Marcar devolución como completada con el conductor seleccionado
       await (supabase as any)
         .from('devoluciones')
-        .update({ estado: 'completado', fecha_devolucion: ahora })
+        .update({
+          estado: 'completado',
+          fecha_devolucion: ahora,
+          conductor_id: selectedConductor?.id || null,
+          conductor_nombre: selectedConductor?.nombre || null,
+        })
         .eq('id', asig.devolucionId)
 
       // 2. Finalizar asignaciones activas del vehículo
