@@ -1,7 +1,7 @@
 // src/modules/asignaciones/AsignacionesModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
-import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil } from 'lucide-react'
+import { Eye, Trash2, CheckCircle, XCircle, FileText, Calendar, UserPlus, UserCheck, Ban, Plus, Pencil, RotateCcw } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
@@ -65,6 +65,8 @@ interface Asignacion {
   notas: string | null
   created_at: string
   created_by?: string | null
+  motivo?: string | null
+  motivoDetalle?: { observaciones?: string; programadoPor?: string } | null
   vehiculos?: {
     patente: string
     marca: string
@@ -99,6 +101,8 @@ interface ConductorTurno {
 interface ExpandedAsignacion extends Asignacion {
   conductoresTurno: ConductorTurno | null
   conductorCargo: { id: string; nombre: string; confirmado: boolean; cancelado?: boolean } | null
+  esDevolucion?: boolean
+  devolucionId?: string
 }
 
 // Helper: Convierte fecha ISO UTC a string YYYY-MM-DD en zona horaria LOCAL
@@ -352,7 +356,7 @@ export function AsignacionesModule() {
       fechaLimite.setDate(fechaLimite.getDate() - 60)
       const fechaLimiteStr = fechaLimite.toISOString()
 
-      const [asignacionesRes, vehiculosRes, conductoresRes] = await Promise.all([
+      const [asignacionesRes, vehiculosRes, conductoresRes, programacionesRes, devolucionesRes] = await Promise.all([
         // Asignaciones: activas/programadas + finalizadas recientes (máx 500)
         supabase
           .from('asignaciones')
@@ -376,11 +380,66 @@ export function AsignacionesModule() {
         supabase
           .from('conductores')
           .select('id, conductores_estados(codigo)')
-          .limit(2000)
+          .limit(2000),
+        // Programaciones: motivo + observaciones por asignacion_id
+        supabase
+          .from('programaciones_onboarding')
+          .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
+          .not('asignacion_id', 'is', null),
+        // Devoluciones pendientes
+        (supabase as any)
+          .from('devoluciones')
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, estado, observaciones, created_at, vehiculos:vehiculo_id(patente, marca, modelo)')
+          .eq('estado', 'pendiente')
+          .order('fecha_programada', { ascending: true })
       ])
 
       if (asignacionesRes.error) throw asignacionesRes.error
-      setAsignaciones(asignacionesRes.data || [])
+
+      // Mapear motivos de programación a asignaciones
+      const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string }>()
+      if (programacionesRes.data) {
+        for (const p of programacionesRes.data as any[]) {
+          if (p.asignacion_id && p.tipo_asignacion) {
+            motivosMap.set(p.asignacion_id, { tipo: p.tipo_asignacion, observaciones: p.observaciones, programadoPor: p.created_by_name })
+          }
+        }
+      }
+      const asignacionesConMotivo = (asignacionesRes.data || []).map((a: any) => {
+        const prog = motivosMap.get(a.id)
+        return {
+          ...a,
+          motivo: prog?.tipo || null,
+          motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor } : null,
+        }
+      })
+
+      // Convertir devoluciones pendientes en filas virtuales
+      const devolucionesVirtuales: Asignacion[] = (devolucionesRes?.data || []).map((d: any) => ({
+        id: d.id,
+        codigo: '',
+        vehiculo_id: d.vehiculo_id,
+        conductor_id: '',
+        fecha_programada: d.fecha_programada,
+        fecha_inicio: '',
+        fecha_fin: null,
+        modalidad: '',
+        horario: 'DEVOLUCION',
+        estado: 'programado',
+        notas: d.observaciones,
+        created_at: d.created_at,
+        created_by: null,
+        motivo: 'devolucion_vehiculo',
+        vehiculos: d.vehiculos || undefined,
+        asignaciones_conductores: [],
+        esDevolucion: true,
+        devolucionId: d.id,
+        _conductorNombre: d.conductor_nombre,
+        _programadoPor: d.programado_por,
+        motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
+      }))
+
+      setAsignaciones([...asignacionesConMotivo, ...devolucionesVirtuales])
 
       // Procesar vehículos
       if (vehiculosRes.data) {
@@ -416,23 +475,56 @@ export function AsignacionesModule() {
       fechaLimite.setDate(fechaLimite.getDate() - 60)
       const fechaLimiteStr = fechaLimite.toISOString()
 
-      const { data, error: queryError } = await supabase
-        .from('asignaciones')
-        .select(`
-          id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at,
-          vehiculos (patente, marca, modelo),
-          asignaciones_conductores (
-            id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
-            conductores (nombres, apellidos, numero_licencia)
-          )
-        `)
-        .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
-        .order('created_at', { ascending: false })
-        .limit(500)
+      const [asigRes, progRes, devRes] = await Promise.all([
+        supabase
+          .from('asignaciones')
+          .select(`
+            id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at,
+            vehiculos (patente, marca, modelo),
+            asignaciones_conductores (
+              id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
+              conductores (nombres, apellidos, numero_licencia)
+            )
+          `)
+          .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
+          .order('created_at', { ascending: false })
+          .limit(500),
+        supabase
+          .from('programaciones_onboarding')
+          .select('asignacion_id, tipo_asignacion, observaciones, created_by_name')
+          .not('asignacion_id', 'is', null),
+        (supabase as any)
+          .from('devoluciones')
+          .select('id, vehiculo_id, conductor_nombre, programado_por, fecha_programada, estado, observaciones, created_at, vehiculos:vehiculo_id(patente, marca, modelo)')
+          .eq('estado', 'pendiente')
+          .order('fecha_programada', { ascending: true })
+      ])
 
-      if (queryError) throw queryError
+      if (asigRes.error) throw asigRes.error
 
-      setAsignaciones(data || [])
+      const motivosMap = new Map<string, { tipo: string; observaciones?: string; programadoPor?: string }>()
+      if (progRes.data) {
+        for (const p of progRes.data as any[]) {
+          if (p.asignacion_id && p.tipo_asignacion) {
+            motivosMap.set(p.asignacion_id, { tipo: p.tipo_asignacion, observaciones: p.observaciones, programadoPor: p.created_by_name })
+          }
+        }
+      }
+      const asignacionesConMotivo = (asigRes.data || []).map((a: any) => {
+        const prog = motivosMap.get(a.id)
+        return { ...a, motivo: prog?.tipo || null, motivoDetalle: prog ? { observaciones: prog.observaciones, programadoPor: prog.programadoPor } : null }
+      })
+
+      const devolucionesVirtuales: Asignacion[] = (devRes?.data || []).map((d: any) => ({
+        id: d.id, codigo: '', vehiculo_id: d.vehiculo_id, conductor_id: '', fecha_programada: d.fecha_programada,
+        fecha_inicio: '', fecha_fin: null, modalidad: '', horario: 'DEVOLUCION', estado: 'programado',
+        notas: d.observaciones, created_at: d.created_at, created_by: null, motivo: 'devolucion_vehiculo',
+        vehiculos: d.vehiculos || undefined, asignaciones_conductores: [],
+        esDevolucion: true, devolucionId: d.id, _conductorNombre: d.conductor_nombre, _programadoPor: d.programado_por,
+        motivoDetalle: { observaciones: d.observaciones, programadoPor: d.programado_por },
+      }))
+
+      setAsignaciones([...asignacionesConMotivo, ...devolucionesVirtuales])
     } catch (err: any) {
       console.error('Error loading asignaciones:', err)
       setError(err.message || 'Error al cargar las asignaciones')
@@ -563,6 +655,22 @@ export function AsignacionesModule() {
 
     // Procesar todas las asignaciones filtradas
     const asignacionesProcesadas = filteredAsignaciones.map((asignacion): ExpandedAsignacion => {
+      // Devoluciones: crear fila virtual simple
+      if ((asignacion as any).esDevolucion) {
+        return {
+          ...asignacion,
+          esDevolucion: true,
+          devolucionId: (asignacion as any).devolucionId,
+          conductoresTurno: null,
+          conductorCargo: {
+            id: '',
+            nombre: (asignacion as any)._conductorNombre || 'Sin conductor',
+            confirmado: false,
+            cancelado: false,
+          },
+        }
+      }
+
       const conductores = asignacion.asignaciones_conductores || []
       const esAsignacionFinalizada = asignacion.estado === 'finalizada' || asignacion.estado === 'completada'
       
@@ -697,6 +805,86 @@ export function AsignacionesModule() {
     }]
   }, [activeStatCard])
 
+  // Confirmar devolución: cambiar vehículo a PKG_ON_BASE
+  const handleConfirmarDevolucion = async (asig: ExpandedAsignacion) => {
+    if (isSubmitting) return
+
+    const result = await Swal.fire({
+      title: 'Confirmar Devolución',
+      html: `
+        <div style="text-align: left; font-size: 14px;">
+          <p><strong>Vehículo:</strong> ${asig.vehiculos?.patente || 'N/A'}</p>
+          <p><strong>Conductor:</strong> ${asig.conductorCargo?.nombre || 'N/A'}</p>
+          <p style="margin-top: 10px; color: #6B7280; font-size: 12px;">
+            El vehículo pasará a estado <strong>PKG ON BASE</strong> y se finalizará la asignación activa si existe.
+          </p>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#10B981',
+      confirmButtonText: 'Confirmar Devolución',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
+
+    setIsSubmitting(true)
+    try {
+      const ahora = new Date().toISOString()
+
+      // 1. Marcar devolución como completada
+      await (supabase as any)
+        .from('devoluciones')
+        .update({ estado: 'completado', fecha_devolucion: ahora })
+        .eq('id', asig.devolucionId)
+
+      // 2. Finalizar asignaciones activas del vehículo
+      const { data: asignacionesPrevias } = await (supabase as any)
+        .from('asignaciones')
+        .select('id')
+        .eq('vehiculo_id', asig.vehiculo_id)
+        .in('estado', ['activa', 'activo'])
+
+      if (asignacionesPrevias && asignacionesPrevias.length > 0) {
+        for (const asigPrevia of asignacionesPrevias) {
+          await (supabase as any)
+            .from('asignaciones_conductores')
+            .update({ estado: 'completado', fecha_fin: ahora })
+            .eq('asignacion_id', asigPrevia.id)
+            .in('estado', ['asignado', 'activo'])
+
+          await (supabase as any)
+            .from('asignaciones')
+            .update({ estado: 'finalizada', fecha_fin: ahora, notas: `Finalizada por devolución de vehículo` })
+            .eq('id', asigPrevia.id)
+        }
+      }
+
+      // 3. Cambiar estado del vehículo a PKG_ON_BASE
+      const { data: estadoPkgOn } = await supabase
+        .from('vehiculos_estados')
+        .select('id')
+        .eq('codigo', 'PKG_ON_BASE')
+        .single() as { data: { id: string } | null }
+
+      if (estadoPkgOn && asig.vehiculo_id) {
+        await (supabase as any)
+          .from('vehiculos')
+          .update({ estado_id: estadoPkgOn.id })
+          .eq('id', asig.vehiculo_id)
+      }
+
+      showSuccess('Devolución Confirmada', `${asig.vehiculos?.patente} ahora está en PKG ON BASE`)
+      loadAsignaciones()
+    } catch (err: any) {
+      console.error('Error confirmando devolución:', err)
+      Swal.fire('Error', err.message || 'Error al confirmar devolución', 'error')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleDelete = async (id: string) => {
     if (isSubmitting || !canDelete) return
 
@@ -772,6 +960,74 @@ export function AsignacionesModule() {
 
   const handleConfirmProgramacion = async () => {
     if (isSubmitting || !selectedAsignacion || conductoresToConfirm.length === 0) return
+
+    // Si es devolución, usar flujo especial
+    if (selectedAsignacion.motivo === 'devolucion_vehiculo') {
+      setIsSubmitting(true)
+      try {
+        const ahora = new Date().toISOString()
+
+        // 1. Confirmar conductores
+        await (supabase as any)
+          .from('asignaciones_conductores')
+          .update({ confirmado: true, fecha_confirmacion: ahora, estado: 'completado', fecha_fin: ahora })
+          .in('id', conductoresToConfirm)
+
+        // 2. Finalizar asignaciones activas del vehículo (incluida esta)
+        const { data: asignacionesVehiculo } = await (supabase as any)
+          .from('asignaciones')
+          .select('id, notas')
+          .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+          .in('estado', ['activa', 'activo', 'programado'])
+
+        if (asignacionesVehiculo) {
+          for (const asig of asignacionesVehiculo as any[]) {
+            await (supabase as any)
+              .from('asignaciones_conductores')
+              .update({ estado: 'completado', fecha_fin: ahora })
+              .eq('asignacion_id', asig.id)
+              .in('estado', ['asignado', 'activo'])
+
+            await (supabase as any)
+              .from('asignaciones')
+              .update({
+                estado: 'finalizada',
+                fecha_inicio: asig.id === selectedAsignacion.id ? ahora : undefined,
+                fecha_fin: ahora,
+                notas: (asig.notas || '') + `\n[DEVOLUCIÓN ${new Date().toLocaleDateString('es-AR')}] Vehículo devuelto a base.`,
+                updated_by: profile?.full_name || 'Sistema'
+              })
+              .eq('id', asig.id)
+          }
+        }
+
+        // 3. Cambiar vehículo a PKG_ON_BASE
+        const { data: estadoPkgOn } = await supabase
+          .from('vehiculos_estados')
+          .select('id')
+          .eq('codigo', 'PKG_ON_BASE')
+          .single() as { data: { id: string } | null }
+
+        if (estadoPkgOn && selectedAsignacion.vehiculo_id) {
+          await (supabase as any)
+            .from('vehiculos')
+            .update({ estado_id: estadoPkgOn.id })
+            .eq('id', selectedAsignacion.vehiculo_id)
+        }
+
+        showSuccess('Devolución Confirmada', `${selectedAsignacion.vehiculos?.patente} ahora está en PKG ON BASE`)
+        setShowConfirmModal(false)
+        setSelectedAsignacion(null)
+        setConductoresToConfirm([])
+        loadAsignaciones()
+      } catch (err: any) {
+        console.error('Error confirmando devolución:', err)
+        Swal.fire('Error', err.message || 'Error al confirmar devolución', 'error')
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
 
     setIsSubmitting(true)
     try {
@@ -1535,11 +1791,6 @@ export function AsignacionesModule() {
   // Columnas para DataTable - headers simples para usar filtros automáticos
   const columns = useMemo<ColumnDef<ExpandedAsignacion, any>[]>(() => [
     {
-      accessorKey: 'codigo',
-      header: 'Número',
-      cell: ({ row }) => <strong>{row.original.codigo || 'N/A'}</strong>
-    },
-    {
       accessorFn: (row) => row.vehiculos?.patente || '',
       id: 'vehiculo',
       header: 'Vehículo',
@@ -1555,16 +1806,76 @@ export function AsignacionesModule() {
     {
       accessorKey: 'horario',
       header: 'Modalidad',
-      cell: ({ row }) => (
-        <span className={getHorarioBadgeClass(row.original.horario)}>
-          {row.original.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
-        </span>
-      )
+      cell: ({ row }) => {
+        if (row.original.esDevolucion) {
+          return <span className="dt-badge" style={{ background: '#F3F4F6', color: '#4B5563' }}>DEVOLUCIÓN</span>
+        }
+        return (
+          <span className={getHorarioBadgeClass(row.original.horario)}>
+            {row.original.horario === 'CARGO' ? 'A CARGO' : 'TURNO'}
+          </span>
+        )
+      }
+    },
+    {
+      id: 'motivo',
+      header: 'Motivo',
+      accessorFn: (row) => {
+        const labels: Record<string, string> = {
+          entrega_auto: 'Entrega de auto',
+          asignacion_companero: 'Asig. compañero',
+          cambio_auto: 'Cambio de auto',
+          asignacion_auto_cargo: 'Asig. auto a cargo',
+          entrega_auto_cargo: 'Entrega a cargo',
+          cambio_turno: 'Cambio de turno',
+          devolucion_vehiculo: 'Devolución',
+        }
+        return row.motivo ? (labels[row.motivo] || row.motivo) : '-'
+      },
+      cell: ({ row }) => {
+        const motivo = row.original.motivo
+        if (!motivo) return <span className="text-muted">-</span>
+        const labels: Record<string, string> = {
+          entrega_auto: 'Entrega de auto',
+          asignacion_companero: 'Asig. compañero',
+          cambio_auto: 'Cambio de auto',
+          asignacion_auto_cargo: 'Asig. auto a cargo',
+          entrega_auto_cargo: 'Entrega a cargo',
+          cambio_turno: 'Cambio de turno',
+          devolucion_vehiculo: 'Devolución',
+        }
+        const detalle = row.original.motivoDetalle
+        const tieneDetalle = detalle && (detalle.observaciones || detalle.programadoPor)
+        return (
+          <span
+            style={{ fontSize: '12px', fontWeight: 500, cursor: tieneDetalle ? 'pointer' : 'default', textDecoration: tieneDetalle ? 'underline dotted' : 'none' }}
+            onClick={() => {
+              if (!tieneDetalle) return
+              Swal.fire({
+                title: labels[motivo] || motivo,
+                html: `
+                  <div style="text-align: left; font-size: 14px;">
+                    ${detalle.programadoPor ? `<p style="margin-bottom: 8px;"><strong>Programado por:</strong> ${detalle.programadoPor}</p>` : ''}
+                    ${detalle.observaciones ? `<p style="margin-bottom: 0;"><strong>Observaciones:</strong><br/>${detalle.observaciones}</p>` : '<p style="color: #9CA3AF;">Sin observaciones</p>'}
+                  </div>
+                `,
+                width: 400,
+                showConfirmButton: true,
+                confirmButtonText: 'Cerrar',
+                confirmButtonColor: '#6B7280',
+              })
+            }}
+          >
+            {labels[motivo] || motivo}
+          </span>
+        )
+      }
     },
     {
       id: 'asignados',
       header: 'Asignados',
       accessorFn: (row) => {
+        if (row.esDevolucion) return row.conductorCargo?.nombre || ''
         if (row.horario === 'CARGO' || !row.horario) {
           return row.conductorCargo?.nombre || ''
         }
@@ -1574,6 +1885,12 @@ export function AsignacionesModule() {
       },
       cell: ({ row }) => {
         const { conductoresTurno, conductorCargo, horario } = row.original
+
+        // Si es DEVOLUCIÓN, mostrar conductor simple
+        if (row.original.esDevolucion) {
+          const nombre = conductorCargo?.nombre || 'Sin conductor'
+          return <span className="asig-conductor-compacto">{nombre}</span>
+        }
 
         // Si es A CARGO, mostrar solo el conductor
         if (horario === 'CARGO' || !horario) {
@@ -1719,17 +2036,57 @@ export function AsignacionesModule() {
     {
       accessorKey: 'estado',
       header: 'Estado',
-      cell: ({ row }) => (
-        <span className={getStatusBadgeClass(row.original.estado)}>
-          {getStatusLabel(row.original.estado)}
-        </span>
-      )
+      cell: ({ row }) => {
+        if (row.original.esDevolucion) {
+          return <span className="dt-badge" style={{ background: '#FEF3C7', color: '#92400E' }}>Pend. Devolución</span>
+        }
+        return (
+          <span className={getStatusBadgeClass(row.original.estado)}>
+            {getStatusLabel(row.original.estado)}
+          </span>
+        )
+      }
     },
     {
       id: 'acciones',
       header: 'Acciones',
       enableSorting: false,
       cell: ({ row }) => {
+        // Acciones especiales para devoluciones
+        if (row.original.esDevolucion) {
+          const devActions = [
+            {
+              icon: <RotateCcw size={15} />,
+              label: 'Confirmar Devolución',
+              onClick: () => handleConfirmarDevolucion(row.original),
+              disabled: !canEdit,
+              variant: 'success' as const,
+            },
+            {
+              icon: <Trash2 size={15} />,
+              label: 'Cancelar',
+              onClick: async () => {
+                const res = await Swal.fire({
+                  title: '¿Cancelar devolución?',
+                  icon: 'warning',
+                  showCancelButton: true,
+                  confirmButtonColor: '#ff0033',
+                  confirmButtonText: 'Sí, cancelar',
+                  cancelButtonText: 'No'
+                })
+                if (res.isConfirmed) {
+                  await (supabase as any).from('devoluciones').update({ estado: 'cancelado' }).eq('id', row.original.devolucionId)
+                  showSuccess('Cancelada', 'Devolución cancelada')
+                  loadAsignaciones()
+                }
+              },
+              disabled: !canEdit,
+              variant: 'danger' as const,
+            },
+          ]
+          return <ActionsMenu actions={devActions} maxVisible={2} />
+        }
+
         const actions = [
           // Acciones de programación (solo si está programado)
           ...(row.original.estado === 'programado' ? [

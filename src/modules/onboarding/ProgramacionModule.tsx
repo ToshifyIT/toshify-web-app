@@ -585,8 +585,121 @@ export function ProgramacionModule() {
     }
   }
 
+  // Enviar devolución - Crear registro en tabla devoluciones (sin asignación)
+  const handleEnviarDevolucion = async (prog: ProgramacionOnboardingCompleta) => {
+    if (!prog.vehiculo_entregar_id) {
+      Swal.fire('Error', 'La programación no tiene vehículo asignado', 'error')
+      return
+    }
+
+    // Construir lista de conductores disponibles
+    const conductores: Array<{ id: string | null; nombre: string; turno: string }> = []
+    if (prog.conductor_diurno_id || prog.conductor_diurno_nombre) {
+      conductores.push({ id: prog.conductor_diurno_id || null, nombre: prog.conductor_diurno_nombre || 'Diurno', turno: 'Diurno' })
+    }
+    if (prog.conductor_nocturno_id || prog.conductor_nocturno_nombre) {
+      conductores.push({ id: prog.conductor_nocturno_id || null, nombre: prog.conductor_nocturno_nombre || 'Nocturno', turno: 'Nocturno' })
+    }
+    if (conductores.length === 0 && (prog.conductor_id || prog.conductor_nombre)) {
+      conductores.push({ id: prog.conductor_id || null, nombre: prog.conductor_nombre || 'Sin nombre', turno: 'A Cargo' })
+    }
+
+    // Construir fecha programada
+    let fechaProgramada: string
+    if (prog.fecha_cita) {
+      const soloFecha = prog.fecha_cita.split('T')[0]
+      const hora = prog.hora_cita && prog.hora_cita.trim() !== '' ? prog.hora_cita.substring(0, 5) : '10:00'
+      fechaProgramada = new Date(`${soloFecha}T${hora}:00-03:00`).toISOString()
+    } else {
+      fechaProgramada = new Date().toISOString()
+    }
+
+    // Si hay múltiples conductores, mostrar selector
+    let conductoresHtml = ''
+    if (conductores.length > 1) {
+      conductoresHtml = `
+        <div style="margin: 12px 0;">
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px;">¿Quién devuelve el vehículo?</label>
+          ${conductores.map((c, i) => `
+            <label style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid #E5E7EB; border-radius: 6px; margin-bottom: 6px; cursor: pointer;">
+              <input type="radio" name="conductor-devolucion" value="${i}" ${i === 0 ? 'checked' : ''} style="width: 16px; height: 16px;">
+              <span style="font-size: 13px;"><strong>${c.turno}:</strong> ${c.nombre}</span>
+            </label>
+          `).join('')}
+        </div>
+      `
+    }
+
+    const result = await Swal.fire({
+      title: 'Confirmar Devolución',
+      html: `
+        <div style="text-align: left; font-size: 14px;">
+          <p><strong>Vehículo:</strong> ${prog.vehiculo_entregar_patente || 'N/A'}</p>
+          ${conductores.length === 1 ? `<p><strong>Conductor:</strong> ${conductores[0].nombre}</p>` : ''}
+          ${conductoresHtml}
+          <p><strong>Fecha:</strong> ${prog.fecha_cita ? new Date(prog.fecha_cita).toLocaleDateString('es-AR') : 'Hoy'}</p>
+          <p style="margin-top: 10px; color: #6B7280; font-size: 12px;">Se creará un registro de devolución (no se genera asignación).</p>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#10B981',
+      confirmButtonText: 'Crear Devolución',
+      cancelButtonText: 'Cancelar',
+      width: 440,
+      preConfirm: () => {
+        if (conductores.length > 1) {
+          const selected = document.querySelector('input[name="conductor-devolucion"]:checked') as HTMLInputElement
+          return { conductorIndex: parseInt(selected?.value || '0') }
+        }
+        return { conductorIndex: 0 }
+      }
+    })
+
+    if (!result.isConfirmed) return
+
+    const selectedConductor = conductores[result.value?.conductorIndex || 0] || conductores[0]
+
+    try {
+      const { error: devError } = await (supabase.from('devoluciones') as any)
+        .insert({
+          vehiculo_id: prog.vehiculo_entregar_id,
+          conductor_id: selectedConductor?.id || null,
+          conductor_nombre: selectedConductor?.nombre || 'Sin conductor',
+          programacion_id: prog.id,
+          programado_por: prog.created_by_name || profile?.full_name || 'Sistema',
+          fecha_programada: fechaProgramada,
+          estado: 'pendiente',
+          observaciones: prog.observaciones || null,
+          created_by: user?.id || null,
+          created_by_name: profile?.full_name || 'Sistema',
+        })
+
+      if (devError) throw devError
+
+      // Marcar programación como completada
+      await (supabase.from('programaciones_onboarding') as any)
+        .update({
+          estado: 'completado',
+          fecha_asignacion_creada: new Date().toISOString(),
+        })
+        .eq('id', prog.id)
+
+      setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
+      showSuccess('Devolución Creada', `${prog.vehiculo_entregar_patente} - ${selectedConductor?.nombre}`)
+    } catch (err: any) {
+      console.error('Error creando devolución:', err)
+      Swal.fire('Error', err.message || 'Error al crear devolución', 'error')
+    }
+  }
+
   // Enviar a entrega - Crear asignacion
   const handleEnviarAEntrega = async (prog: ProgramacionOnboardingCompleta) => {
+    // Si es devolución, usar flujo separado
+    if (prog.tipo_asignacion === 'devolucion_vehiculo') {
+      return handleEnviarDevolucion(prog)
+    }
+
     // Verificar qué conductores son "asignacion_companero" (informativo, no bloquea)
     const diurnoEsCompanero = prog.tipo_asignacion_diurno === 'asignacion_companero'
     const nocturnoEsCompanero = prog.tipo_asignacion_nocturno === 'asignacion_companero'
@@ -1405,21 +1518,23 @@ export function ProgramacionModule() {
         }
 
         if (prog.modalidad === 'TURNO') {
-          const tipoD = prog.tipo_asignacion_diurno || prog.tipo_asignacion || ''
-          const tipoN = prog.tipo_asignacion_nocturno || prog.tipo_asignacion || ''
+          const tieneDiurno = !!(prog.conductor_diurno_id || prog.conductor_diurno_nombre)
+          const tieneNocturno = !!(prog.conductor_nocturno_id || prog.conductor_nocturno_nombre)
+          const tipoD = tieneDiurno ? (prog.tipo_asignacion_diurno || prog.tipo_asignacion || '') : ''
+          const tipoN = tieneNocturno ? (prog.tipo_asignacion_nocturno || prog.tipo_asignacion || '') : ''
 
           return (
             <div className="prog-tipo-asig-turno">
               <div className="prog-tipo-asig-row">
                 <span className="prog-tipo-asig-label">D:</span>
                 <span className={`prog-inline-select-mini tipo-asignacion ${tipoD}`} style={{ cursor: 'default', border: 'none' }}>
-                  {tipoLabelsShort[tipoD] || tipoD || '-'}
+                  {tipoD ? (tipoLabelsShort[tipoD] || tipoD) : '-'}
                 </span>
               </div>
               <div className="prog-tipo-asig-row">
                 <span className="prog-tipo-asig-label">N:</span>
                 <span className={`prog-inline-select-mini tipo-asignacion ${tipoN}`} style={{ cursor: 'default', border: 'none' }}>
-                  {tipoLabelsShort[tipoN] || tipoN || '-'}
+                  {tipoN ? (tipoLabelsShort[tipoN] || tipoN) : '-'}
                 </span>
               </div>
             </div>
