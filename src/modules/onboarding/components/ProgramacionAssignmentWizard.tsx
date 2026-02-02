@@ -870,23 +870,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const handleSelectConductorDiurno = (conductorId: string) => {
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor) {
-      const updates: Partial<ProgramacionData> = {
+      setFormData(prev => ({
+        ...prev,
         conductor_diurno_id: conductorId,
         conductor_diurno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
         conductor_diurno_dni: conductor.numero_dni || ''
-      }
-      // Si ya hay nocturno asignado, buscar si forman un par para auto-rellenar distancia
-      if (formData.conductor_nocturno_id && mostrarParesCercanos) {
-        const par = paresCercanos.find(p =>
-          (p.diurno.id === conductorId && p.nocturno.id === formData.conductor_nocturno_id) ||
-          (p.nocturno.id === conductorId && p.diurno.id === formData.conductor_nocturno_id)
-        )
-        if (par?.tiempoMinutos) {
-          updates.distancia_diurno = par.tiempoMinutos
-          updates.distancia_nocturno = par.tiempoMinutos
-        }
-      }
-      setFormData({ ...formData, ...updates })
+      }))
     }
   }
 
@@ -894,23 +883,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const handleSelectConductorNocturno = (conductorId: string) => {
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor) {
-      const updates: Partial<ProgramacionData> = {
+      setFormData(prev => ({
+        ...prev,
         conductor_nocturno_id: conductorId,
         conductor_nocturno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
         conductor_nocturno_dni: conductor.numero_dni || ''
-      }
-      // Si ya hay diurno asignado, buscar si forman un par para auto-rellenar distancia
-      if (formData.conductor_diurno_id && mostrarParesCercanos) {
-        const par = paresCercanos.find(p =>
-          (p.diurno.id === formData.conductor_diurno_id && p.nocturno.id === conductorId) ||
-          (p.nocturno.id === formData.conductor_diurno_id && p.diurno.id === conductorId)
-        )
-        if (par?.tiempoMinutos) {
-          updates.distancia_diurno = par.tiempoMinutos
-          updates.distancia_nocturno = par.tiempoMinutos
-        }
-      }
-      setFormData({ ...formData, ...updates })
+      }))
     }
   }
 
@@ -939,6 +917,52 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       })
     }
   }
+
+  // Auto-calcular distancia en auto cuando ambos conductores están asignados
+  useEffect(() => {
+    if (!formData.conductor_diurno_id || !formData.conductor_nocturno_id) return
+    // Solo calcular si las distancias están vacías (no sobreescribir valores manuales)
+    if (formData.distancia_diurno && formData.distancia_nocturno) return
+
+    const diurno = conductores.find(c => c.id === formData.conductor_diurno_id)
+    const nocturno = conductores.find(c => c.id === formData.conductor_nocturno_id)
+
+    if (!diurno?.direccion_lat || !diurno?.direccion_lng || !nocturno?.direccion_lat || !nocturno?.direccion_lng) return
+
+    // Primero buscar en pares ya calculados
+    if (mostrarParesCercanos && paresCercanos.length > 0) {
+      const par = paresCercanos.find(p =>
+        (p.diurno.id === formData.conductor_diurno_id && p.nocturno.id === formData.conductor_nocturno_id) ||
+        (p.nocturno.id === formData.conductor_diurno_id && p.diurno.id === formData.conductor_nocturno_id)
+      )
+      if (par?.tiempoMinutos) {
+        setFormData(prev => ({
+          ...prev,
+          distancia_diurno: par.tiempoMinutos!,
+          distancia_nocturno: par.tiempoMinutos!
+        }))
+        return
+      }
+    }
+
+    // Si no hay par, calcular distancia en auto directamente
+    obtenerDistanciaEnAuto(
+      { lat: diurno.direccion_lat, lng: diurno.direccion_lng },
+      { lat: nocturno.direccion_lat, lng: nocturno.direccion_lng }
+    ).then(resultado => {
+      if (resultado?.tiempoMinutos) {
+        setFormData(prev => {
+          // Re-verificar que no se hayan llenado mientras esperábamos
+          if (prev.distancia_diurno && prev.distancia_nocturno) return prev
+          return {
+            ...prev,
+            distancia_diurno: resultado.tiempoMinutos,
+            distancia_nocturno: resultado.tiempoMinutos
+          }
+        })
+      }
+    })
+  }, [formData.conductor_diurno_id, formData.conductor_nocturno_id])
 
   const handleSubmit = async () => {
     if (loading || isSubmittingRef.current) return
