@@ -54,9 +54,10 @@ export function UserManagement() {
 
       setUsers(usersData as UserWithRole[])
       setRoles(rolesData)
-    } catch (err: any) {
-      console.error('❌ Error cargando datos:', err)
-      setError(err.message)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('Error cargando datos:', err)
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -126,11 +127,12 @@ export function UserManagement() {
       setShowCreateModal(false)
       setNewUser({ email: '', password: '', fullName: '', roleId: '', mustChangePassword: true })
       await loadData()
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: err.message
+        text: message
       })
     } finally {
       setCreating(false)
@@ -162,12 +164,13 @@ export function UserManagement() {
       await loadData()
 
       showSuccess('Rol Actualizado', 'El rol se ha actualizado correctamente')
-    } catch (err: any) {
-      console.error('❌ Error completo:', err)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('Error al actualizar rol:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al actualizar rol: ' + err.message
+        text: 'Error al actualizar rol: ' + message
       })
     }
   }
@@ -184,11 +187,12 @@ export function UserManagement() {
 
       await loadData()
       showSuccess('Estado Actualizado', `Usuario ${!currentStatus ? 'activado' : 'desactivado'} correctamente`)
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al cambiar estado: ' + err.message
+        text: 'Error al cambiar estado: ' + message
       })
     }
   }
@@ -215,56 +219,40 @@ export function UserManagement() {
     return password.split('').sort(() => Math.random() - 0.5).join('')
   }
 
+  // Cifrar contraseña con XOR + base64 para no enviarla en texto plano al RPC
+  const encryptPassword = (password: string): string => {
+    const key = 'T0sh1fy-S3cur3-K3y-2025!'
+    let encrypted = ''
+    for (let i = 0; i < password.length; i++) {
+      encrypted += String.fromCharCode(password.charCodeAt(i) ^ key.charCodeAt(i % key.length))
+    }
+    return btoa(encrypted)
+  }
+
   const forcePasswordChange = async (userId: string, userName: string, userEmail?: string) => {
     // Generar contraseña
     const newPassword = generatePassword()
 
+    // Modal 1: Confirmar reset
     const result = await Swal.fire({
-      icon: 'info',
+      icon: 'warning',
       title: 'Resetear Contraseña',
       html: `
-        <p style="margin-bottom: 16px;">Nueva contraseña para <strong>${userName}</strong>:</p>
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-          <input type="text" id="password-display" value="${newPassword}" readonly style="flex: 1; background: #f3f4f6; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 18px; letter-spacing: 2px; border: 1px solid #e5e7eb; text-align: center;" />
-          <button type="button" id="copy-password-btn" style="padding: 12px 16px; background: #FF0033; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
-            Copiar
-          </button>
-        </div>
-        ${userEmail ? `
-        <p style="font-size: 13px; color: #059669; background: #d1fae5; padding: 10px; border-radius: 6px; margin-bottom: 12px;">
-          <strong>Al aplicar el cambio</strong>, se te preguntará si deseas enviar la contraseña al correo: <strong>${userEmail}</strong>
-        </p>
-        ` : ''}
-        <p style="font-size: 12px; color: #666;">
-          El usuario deberá cambiarla en el próximo inicio de sesión.
-        </p>
+        <p style="color: #374151; margin-bottom: 8px;">Se generará una nueva contraseña para:</p>
+        <p style="font-weight: 700; font-size: 16px; color: #111827; margin-bottom: 16px;">${userName}</p>
+        <p style="font-size: 13px; color: #6b7280;">El usuario deberá cambiarla en el próximo inicio de sesión.</p>
       `,
-      didOpen: () => {
-        const copyBtn = document.getElementById('copy-password-btn')
-        const passwordInput = document.getElementById('password-display') as HTMLInputElement
-        if (copyBtn && passwordInput) {
-          copyBtn.onclick = () => {
-            passwordInput.select()
-            document.execCommand('copy')
-            copyBtn.textContent = 'Copiado!'
-            copyBtn.style.background = '#10b981'
-            setTimeout(() => {
-              copyBtn.textContent = 'Copiar'
-              copyBtn.style.background = '#FF0033'
-            }, 1500)
-          }
-        }
-      },
       showCancelButton: true,
-      confirmButtonText: 'Aplicar Cambio',
+      confirmButtonText: 'Resetear',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#FF0033'
+      confirmButtonColor: '#FF0033',
+      reverseButtons: true
     })
 
     if (result.isDismissed) return
 
     try {
-      // Usar función RPC de base de datos (funciona en selfhosted)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase.rpc as any)('admin_reset_user_password', {
         target_user_id: userId,
         new_password: newPassword
@@ -275,57 +263,147 @@ export function UserManagement() {
 
       await loadData()
 
-      // Preguntar si quiere enviar por correo
-      if (userEmail) {
-        const emailResult = await Swal.fire({
-          icon: 'success',
-          title: 'Contraseña Actualizada',
-          html: `
-            <p>La contraseña de <strong>${userName}</strong> ha sido cambiada.</p>
-            <p style="margin-top: 12px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-family: monospace; font-size: 16px;">${newPassword}</p>
-            <p style="margin-top: 12px; font-size: 13px; color: #666;">¿Deseas enviarla por correo a <strong>${userEmail}</strong>?</p>
-          `,
-          showCancelButton: true,
-          confirmButtonText: 'Enviar por Correo',
-          cancelButtonText: 'No, solo copiar',
-          confirmButtonColor: '#FF0033'
-        })
+      // Modal 2: Resultado con acciones integradas (copiar + enviar correo)
+      const targetEmail = userEmail || ''
 
-        if (emailResult.isConfirmed) {
-          try {
-            // Usar función RPC de PostgreSQL con http extension para enviar email
-            const { data: emailData, error: emailError } = await (supabase.rpc as any)('send_password_email', {
-              user_email: userEmail,
-              user_name: userName,
-              user_password: newPassword
-            })
+      await Swal.fire({
+        iconHtml: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="16 8 10.5 14 8 11.5"/></svg>',
+        customClass: { icon: 'swal-no-border' },
+        title: 'Listo',
+        html: `
+          <style>.swal-no-border { border: none !important; }</style>
+          <div style="text-align: left;">
+            <p style="color: #6b7280; font-size: 14px; margin-bottom: 16px;">Nueva contraseña de <strong style="color: #111827;">${userName}</strong></p>
 
-            if (emailError) throw emailError
-            if (emailData && !emailData.success) throw new Error(emailData.error || 'Error desconocido')
+            <div style="position: relative; margin-bottom: 16px;">
+              <input type="text" id="swal-pwd" value="${newPassword}" readonly
+                style="width: 100%; box-sizing: border-box; background: #f9fafb; padding: 14px 16px; border-radius: 8px; font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 20px; letter-spacing: 3px; border: 1px solid #e5e7eb; text-align: center; color: #111827; font-weight: 600;" />
+            </div>
 
-            showSuccess('Correo Enviado', `La contraseña fue enviada a ${userEmail}`)
-          } catch (emailErr: any) {
-            Swal.fire({
-              icon: 'error',
-              title: 'Error enviando correo',
-              text: emailErr.message,
-              confirmButtonColor: '#FF0033'
-            })
+            <div style="display: flex; gap: 8px; margin-bottom: ${targetEmail ? '16px' : '0'};">
+              <button type="button" id="swal-copy-btn"
+                style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 16px; background: white; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar
+              </button>
+              <button type="button" id="swal-email-btn"
+                style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 16px; background: #FF0033; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; ${!targetEmail ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                Enviar por Correo
+              </button>
+            </div>
+
+            ${targetEmail ? `
+            <p id="swal-email-hint" style="font-size: 12px; color: #9ca3af; text-align: center; margin: 0;">
+              Se enviara cifrada a <strong style="color: #6b7280;">${targetEmail}</strong>
+            </p>
+            ` : `
+            <p style="font-size: 12px; color: #f59e0b; text-align: center; margin-top: 8px;">
+              Este usuario no tiene correo registrado
+            </p>
+            `}
+          </div>
+        `,
+        showConfirmButton: true,
+        confirmButtonText: 'Cerrar',
+        confirmButtonColor: '#6b7280',
+        didOpen: () => {
+          // Copiar
+          const copyBtn = document.getElementById('swal-copy-btn')
+          const pwdInput = document.getElementById('swal-pwd') as HTMLInputElement
+          if (copyBtn && pwdInput) {
+            copyBtn.onclick = async () => {
+              try {
+                await navigator.clipboard.writeText(pwdInput.value)
+              } catch {
+                pwdInput.select()
+                document.execCommand('copy')
+              }
+              copyBtn.innerHTML = `
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Copiado!
+              `
+              copyBtn.style.background = '#d1fae5'
+              copyBtn.style.color = '#059669'
+              copyBtn.style.borderColor = '#6ee7b7'
+              setTimeout(() => {
+                copyBtn.innerHTML = `
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  Copiar
+                `
+                copyBtn.style.background = 'white'
+                copyBtn.style.color = '#374151'
+                copyBtn.style.borderColor = '#d1d5db'
+              }, 2000)
+            }
+          }
+
+          // Enviar por correo
+          const emailBtn = document.getElementById('swal-email-btn')
+          if (emailBtn) {
+            if (!targetEmail) {
+              // Sin email: deshabilitado
+              ;(emailBtn as HTMLButtonElement).disabled = true
+              return
+            }
+
+            emailBtn.onclick = async () => {
+              emailBtn.innerHTML = `
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                Enviando...
+              `
+              emailBtn.style.opacity = '0.7'
+              ;(emailBtn as HTMLButtonElement).disabled = true
+
+              try {
+                const encryptedPwd = encryptPassword(newPassword)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const { data: emailData, error: emailError } = await (supabase.rpc as any)('send_password_email', {
+                  user_email: targetEmail,
+                  user_name: userName,
+                  user_password: encryptedPwd
+                })
+
+                if (emailError) throw emailError
+                if (emailData && !emailData.success) throw new Error(emailData.error || 'Error desconocido')
+
+                emailBtn.innerHTML = `
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Enviado!
+                `
+                emailBtn.style.background = '#059669'
+                emailBtn.style.opacity = '1'
+
+                const hint = document.getElementById('swal-email-hint')
+                if (hint) {
+                  hint.innerHTML = `<strong style="color: #059669;">Correo enviado exitosamente</strong>`
+                }
+              } catch {
+                emailBtn.innerHTML = `
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                  Error - Reintentar
+                `
+                emailBtn.style.background = '#dc2626'
+                emailBtn.style.opacity = '1'
+                ;(emailBtn as HTMLButtonElement).disabled = false
+              }
+            }
           }
         }
-      } else {
-        showSuccess('Contraseña Actualizada', `La contraseña de ${userName} ha sido cambiada. Deberá cambiarla en el próximo inicio.`)
-      }
-    } catch (err: any) {
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al cambiar contraseña: ' + err.message
+        text: 'Error al cambiar contraseña: ' + message,
+        confirmButtonColor: '#FF0033'
       })
     }
   }
 
   // Definir columnas para DataTable
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const columns = useMemo<ColumnDef<UserWithRole, any>[]>(
     () => [
       {
