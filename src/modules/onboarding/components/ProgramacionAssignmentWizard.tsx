@@ -867,28 +867,44 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   // Para modo TURNO - Diurno
-  const handleSelectConductorDiurno = (conductorId: string) => {
+  const handleSelectConductorDiurno = (conductorId: string, pairTiempo?: number, pairPartnerId?: string) => {
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor) {
-      setFormData(prev => ({
-        ...prev,
-        conductor_diurno_id: conductorId,
-        conductor_diurno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
-        conductor_diurno_dni: conductor.numero_dni || ''
-      }))
+      setFormData(prev => {
+        const updates: any = {
+          ...prev,
+          conductor_diurno_id: conductorId,
+          conductor_diurno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+          conductor_diurno_dni: conductor.numero_dni || ''
+        }
+        // Si viene de un par y el compañero ya está asignado como nocturno, auto-rellenar distancia
+        if (pairTiempo && pairPartnerId && prev.conductor_nocturno_id === pairPartnerId) {
+          updates.distancia_diurno = pairTiempo
+          updates.distancia_nocturno = pairTiempo
+        }
+        return updates
+      })
     }
   }
 
   // Para modo TURNO - Nocturno
-  const handleSelectConductorNocturno = (conductorId: string) => {
+  const handleSelectConductorNocturno = (conductorId: string, pairTiempo?: number, pairPartnerId?: string) => {
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor) {
-      setFormData(prev => ({
-        ...prev,
-        conductor_nocturno_id: conductorId,
-        conductor_nocturno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
-        conductor_nocturno_dni: conductor.numero_dni || ''
-      }))
+      setFormData(prev => {
+        const updates: any = {
+          ...prev,
+          conductor_nocturno_id: conductorId,
+          conductor_nocturno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+          conductor_nocturno_dni: conductor.numero_dni || ''
+        }
+        // Si viene de un par y el compañero ya está asignado como diurno, auto-rellenar distancia
+        if (pairTiempo && pairPartnerId && prev.conductor_diurno_id === pairPartnerId) {
+          updates.distancia_diurno = pairTiempo
+          updates.distancia_nocturno = pairTiempo
+        }
+        return updates
+      })
     }
   }
 
@@ -919,9 +935,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   // Auto-calcular distancia en auto cuando ambos conductores están asignados
+  // (solo si no se auto-rellenó desde un par arrastrado)
   useEffect(() => {
     if (!formData.conductor_diurno_id || !formData.conductor_nocturno_id) return
-    // Solo calcular si las distancias están vacías (no sobreescribir valores manuales)
+    // No sobreescribir valores ya presentes (de par o manuales)
     if (formData.distancia_diurno && formData.distancia_nocturno) return
 
     const diurno = conductores.find(c => c.id === formData.conductor_diurno_id)
@@ -929,23 +946,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
     if (!diurno?.direccion_lat || !diurno?.direccion_lng || !nocturno?.direccion_lat || !nocturno?.direccion_lng) return
 
-    // Primero buscar en pares ya calculados
-    if (mostrarParesCercanos && paresCercanos.length > 0) {
-      const par = paresCercanos.find(p =>
-        (p.diurno.id === formData.conductor_diurno_id && p.nocturno.id === formData.conductor_nocturno_id) ||
-        (p.nocturno.id === formData.conductor_diurno_id && p.diurno.id === formData.conductor_nocturno_id)
-      )
-      if (par?.tiempoMinutos) {
-        setFormData(prev => ({
-          ...prev,
-          distancia_diurno: par.tiempoMinutos!,
-          distancia_nocturno: par.tiempoMinutos!
-        }))
-        return
-      }
-    }
-
-    // Si no hay par, calcular distancia en auto directamente
+    // Calcular distancia en auto entre los conductores
     obtenerDistanciaEnAuto(
       { lat: diurno.direccion_lat, lng: diurno.direccion_lng },
       { lat: nocturno.direccion_lat, lng: nocturno.direccion_lng }
@@ -2608,6 +2609,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 draggable
                                 onDragStart={(e) => {
                                   e.dataTransfer.setData('conductorId', par.diurno.id)
+                                  e.dataTransfer.setData('pairPartnerId', par.nocturno.id)
+                                  if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
                                   e.currentTarget.classList.add('dragging')
                                 }}
                                 onDragEnd={(e) => {
@@ -2632,6 +2635,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 draggable
                                 onDragStart={(e) => {
                                   e.dataTransfer.setData('conductorId', par.nocturno.id)
+                                  e.dataTransfer.setData('pairPartnerId', par.diurno.id)
+                                  if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
                                   e.currentTarget.classList.add('dragging')
                                 }}
                                 onDragEnd={(e) => {
@@ -2749,6 +2754,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             e.preventDefault()
                             e.currentTarget.classList.remove('drag-over')
                             const conductorId = e.dataTransfer.getData('conductorId')
+                            const pairTiempo = e.dataTransfer.getData('pairTiempo')
+                            const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
                             if (conductorId) {
                               const conductor = conductores.find(c => c.id === conductorId)
                               if (conductor?.tieneAsignacionDiurna) {
@@ -2760,7 +2767,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   confirmButtonColor: '#3085d6'
                                 })
                               }
-                              handleSelectConductorDiurno(conductorId)
+                              handleSelectConductorDiurno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
                             }
                           }}
                         >
@@ -2811,6 +2818,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             e.preventDefault()
                             e.currentTarget.classList.remove('drag-over')
                             const conductorId = e.dataTransfer.getData('conductorId')
+                            const pairTiempo = e.dataTransfer.getData('pairTiempo')
+                            const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
                             if (conductorId) {
                               const conductor = conductores.find(c => c.id === conductorId)
                               if (conductor?.tieneAsignacionNocturna) {
@@ -2822,7 +2831,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   confirmButtonColor: '#3085d6'
                                 })
                               }
-                              handleSelectConductorNocturno(conductorId)
+                              handleSelectConductorNocturno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
                             }
                           }}
                         >
