@@ -870,12 +870,23 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const handleSelectConductorDiurno = (conductorId: string) => {
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor) {
-      setFormData({
-        ...formData,
+      const updates: Partial<ProgramacionData> = {
         conductor_diurno_id: conductorId,
         conductor_diurno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
         conductor_diurno_dni: conductor.numero_dni || ''
-      })
+      }
+      // Si ya hay nocturno asignado, buscar si forman un par para auto-rellenar distancia
+      if (formData.conductor_nocturno_id && mostrarParesCercanos) {
+        const par = paresCercanos.find(p =>
+          (p.diurno.id === conductorId && p.nocturno.id === formData.conductor_nocturno_id) ||
+          (p.nocturno.id === conductorId && p.diurno.id === formData.conductor_nocturno_id)
+        )
+        if (par?.tiempoMinutos) {
+          updates.distancia_diurno = par.tiempoMinutos
+          updates.distancia_nocturno = par.tiempoMinutos
+        }
+      }
+      setFormData({ ...formData, ...updates })
     }
   }
 
@@ -883,12 +894,23 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   const handleSelectConductorNocturno = (conductorId: string) => {
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor) {
-      setFormData({
-        ...formData,
+      const updates: Partial<ProgramacionData> = {
         conductor_nocturno_id: conductorId,
         conductor_nocturno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
         conductor_nocturno_dni: conductor.numero_dni || ''
-      })
+      }
+      // Si ya hay diurno asignado, buscar si forman un par para auto-rellenar distancia
+      if (formData.conductor_diurno_id && mostrarParesCercanos) {
+        const par = paresCercanos.find(p =>
+          (p.diurno.id === formData.conductor_diurno_id && p.nocturno.id === conductorId) ||
+          (p.nocturno.id === formData.conductor_diurno_id && p.diurno.id === conductorId)
+        )
+        if (par?.tiempoMinutos) {
+          updates.distancia_diurno = par.tiempoMinutos
+          updates.distancia_nocturno = par.tiempoMinutos
+        }
+      }
+      setFormData({ ...formData, ...updates })
     }
   }
 
