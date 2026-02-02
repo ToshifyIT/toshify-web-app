@@ -1095,8 +1095,10 @@ export function ProgramacionModule() {
                   className={`prog-inline-select-mini tipo-asignacion ${tipoD}`}
                   value={tipoD}
                   onChange={(e) => {
-                    // Guardar en tipo_asignacion_diurno si existe la columna, sino en tipo_asignacion
                     handleUpdateField(prog.id, 'tipo_asignacion_diurno', e.target.value || null)
+                    if (e.target.value === 'devolucion_vehiculo') {
+                      handleUpdateField(prog.id, 'documento_diurno', 'na')
+                    }
                   }}
                   title="Tipo asignación conductor diurno"
                 >
@@ -1115,6 +1117,9 @@ export function ProgramacionModule() {
                   value={tipoN}
                   onChange={(e) => {
                     handleUpdateField(prog.id, 'tipo_asignacion_nocturno', e.target.value || null)
+                    if (e.target.value === 'devolucion_vehiculo') {
+                      handleUpdateField(prog.id, 'documento_nocturno', 'na')
+                    }
                   }}
                   title="Tipo asignación conductor nocturno"
                 >
@@ -1135,7 +1140,12 @@ export function ProgramacionModule() {
           <select
             className={`prog-inline-select tipo-asignacion ${prog.tipo_asignacion || ''}`}
             value={prog.tipo_asignacion || ''}
-            onChange={(e) => handleUpdateField(prog.id, 'tipo_asignacion', e.target.value || null)}
+            onChange={(e) => {
+              handleUpdateField(prog.id, 'tipo_asignacion', e.target.value || null)
+              if (e.target.value === 'devolucion_vehiculo') {
+                handleUpdateField(prog.id, 'tipo_documento', 'na')
+              }
+            }}
             title="Tipo de asignación"
           >
             <option value="">Sin definir</option>
@@ -1992,7 +2002,10 @@ export function ProgramacionModule() {
                         <label>Tipo Asignación *</label>
                         <select
                           value={quickEditData.tipo_asignacion_diurno || 'entrega_auto'}
-                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_asignacion_diurno: e.target.value as any }))}
+                          onChange={e => {
+                            const val = e.target.value as any
+                            setQuickEditData(prev => ({ ...prev, tipo_asignacion_diurno: val, ...(val === 'devolucion_vehiculo' ? { documento_diurno: 'na' } : {}) }))
+                          }}
                           className="prog-input"
                         >
                           <option value="entrega_auto">Entrega de auto</option>
@@ -2102,7 +2115,10 @@ export function ProgramacionModule() {
                         <label>Tipo Asignación *</label>
                         <select
                           value={quickEditData.tipo_asignacion_nocturno || 'entrega_auto'}
-                          onChange={e => setQuickEditData(prev => ({ ...prev, tipo_asignacion_nocturno: e.target.value as any }))}
+                          onChange={e => {
+                            const val = e.target.value as any
+                            setQuickEditData(prev => ({ ...prev, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' } : {}) }))
+                          }}
                           className="prog-input"
                         >
                           <option value="entrega_auto">Entrega de auto</option>

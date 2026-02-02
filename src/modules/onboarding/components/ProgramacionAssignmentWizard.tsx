@@ -2927,7 +2927,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_cargo}
-                            onChange={(e) => setFormData({ ...formData, tipo_asignacion_cargo: e.target.value as TipoAsignacion })}
+                            onChange={(e) => {
+                              const val = e.target.value as TipoAsignacion
+                              setFormData({ ...formData, tipo_asignacion_cargo: val, ...(val === 'devolucion_vehiculo' ? { documento_cargo: 'na' as TipoDocumento } : {}) })
+                            }}
                           >
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
@@ -2998,7 +3001,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_diurno}
-                            onChange={(e) => setFormData({ ...formData, tipo_asignacion_diurno: e.target.value as TipoAsignacion })}
+                            onChange={(e) => {
+                              const val = e.target.value as TipoAsignacion
+                              setFormData({ ...formData, tipo_asignacion_diurno: val, ...(val === 'devolucion_vehiculo' ? { documento_diurno: 'na' as TipoDocumento } : {}) })
+                            }}
                           >
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
@@ -3069,7 +3075,10 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_nocturno}
-                            onChange={(e) => setFormData({ ...formData, tipo_asignacion_nocturno: e.target.value as TipoAsignacion })}
+                            onChange={(e) => {
+                              const val = e.target.value as TipoAsignacion
+                              setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
+                            }}
                           >
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
