@@ -48,7 +48,8 @@ interface AsignacionActiva {
 const ESTADOS_EXCLUIDOS = [
   'ROBO',
   'DESTRUCCION_TOTAL',
-  'JUBILADO'
+  'JUBILADO',
+  'DEVUELTO_PROVEEDOR'
 ]
 
 export function AsignacionesActivasModule() {
