@@ -186,25 +186,35 @@ export function ProgramacionModule() {
     return vehiculosDisponibles.find(v => v.id === quickEditData.vehiculo_id)
   }, [vehiculosDisponibles, quickEditData.vehiculo_id])
 
-  // Conductores filtrados por búsqueda (diurno)
+  // Conductores filtrados por búsqueda (diurno) - excluir el nocturno ya seleccionado
   const filteredConductoresDiurno = useMemo(() => {
-    if (!conductorDiurnoSearch.trim()) return conductoresDisponibles
+    let lista = conductoresDisponibles
+    // Excluir conductor ya asignado como nocturno
+    if (quickEditData.conductor_nocturno_id) {
+      lista = lista.filter(c => c.id !== quickEditData.conductor_nocturno_id)
+    }
+    if (!conductorDiurnoSearch.trim()) return lista
     const search = conductorDiurnoSearch.toLowerCase()
-    return conductoresDisponibles.filter(c =>
+    return lista.filter(c =>
       c.nombre.toLowerCase().includes(search) ||
       c.dni.toLowerCase().includes(search)
     )
-  }, [conductoresDisponibles, conductorDiurnoSearch])
+  }, [conductoresDisponibles, conductorDiurnoSearch, quickEditData.conductor_nocturno_id])
 
-  // Conductores filtrados por búsqueda (nocturno)
+  // Conductores filtrados por búsqueda (nocturno) - excluir el diurno ya seleccionado
   const filteredConductoresNocturno = useMemo(() => {
-    if (!conductorNocturnoSearch.trim()) return conductoresDisponibles
+    let lista = conductoresDisponibles
+    // Excluir conductor ya asignado como diurno
+    if (quickEditData.conductor_diurno_id) {
+      lista = lista.filter(c => c.id !== quickEditData.conductor_diurno_id)
+    }
+    if (!conductorNocturnoSearch.trim()) return lista
     const search = conductorNocturnoSearch.toLowerCase()
-    return conductoresDisponibles.filter(c =>
+    return lista.filter(c =>
       c.nombre.toLowerCase().includes(search) ||
       c.dni.toLowerCase().includes(search)
     )
-  }, [conductoresDisponibles, conductorNocturnoSearch])
+  }, [conductoresDisponibles, conductorNocturnoSearch, quickEditData.conductor_diurno_id])
 
   // Conductores filtrados por búsqueda (a cargo - legacy)
   const filteredConductores = useMemo(() => {
@@ -331,11 +341,11 @@ export function ProgramacionModule() {
       vehiculo_entregar_patente: prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema || '',
       fecha_cita: prog.fecha_cita || '',
       hora_cita: prog.hora_cita?.substring(0, 5) || '10:00',
-      // Conductores (IDs)
+      // Conductores (IDs) - Si son iguales, limpiar nocturno para evitar duplicados
       conductor_diurno_id: prog.conductor_diurno_id || '',
       conductor_diurno_nombre: prog.conductor_diurno_nombre || '',
-      conductor_nocturno_id: prog.conductor_nocturno_id || '',
-      conductor_nocturno_nombre: prog.conductor_nocturno_nombre || '',
+      conductor_nocturno_id: (prog.conductor_nocturno_id && prog.conductor_nocturno_id !== prog.conductor_diurno_id) ? prog.conductor_nocturno_id : '',
+      conductor_nocturno_nombre: (prog.conductor_nocturno_id && prog.conductor_nocturno_id !== prog.conductor_diurno_id) ? (prog.conductor_nocturno_nombre || '') : '',
       conductor_id: prog.conductor_id || '',
       conductor_nombre: prog.conductor_nombre || prog.conductor_display || '',
       // Diurno
