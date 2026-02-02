@@ -238,19 +238,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     hora_cita: '10:00',
     // Campos A CARGO
     tipo_candidato_cargo: '',
-    tipo_asignacion_cargo: 'entrega_auto',
+    tipo_asignacion_cargo: '',
     documento_cargo: '',
     zona_cargo: '',
     distancia_cargo: '',
     // Campos DIURNO
     tipo_candidato_diurno: '',
-    tipo_asignacion_diurno: 'entrega_auto',
+    tipo_asignacion_diurno: '',
     documento_diurno: '',
     zona_diurno: '',
     distancia_diurno: '',
     // Campos NOCTURNO
     tipo_candidato_nocturno: '',
-    tipo_asignacion_nocturno: 'entrega_auto',
+    tipo_asignacion_nocturno: '',
     documento_nocturno: '',
     zona_nocturno: '',
     distancia_nocturno: '',
@@ -727,6 +727,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
           return
         }
+        // Validar que no sea el mismo conductor en ambos turnos
+        if (formData.conductor_diurno_id && formData.conductor_nocturno_id &&
+            formData.conductor_diurno_id === formData.conductor_nocturno_id) {
+          Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
+          return
+        }
       }
     }
     setStep(step + 1)
@@ -861,27 +867,43 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   // Para modo TURNO - Diurno
-  const handleSelectConductorDiurno = (conductorId: string) => {
+  const handleSelectConductorDiurno = (conductorId: string, pairTiempo?: number, pairPartnerId?: string) => {
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor) {
-      setFormData({
-        ...formData,
-        conductor_diurno_id: conductorId,
-        conductor_diurno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
-        conductor_diurno_dni: conductor.numero_dni || ''
+      setFormData(prev => {
+        const updates: any = {
+          ...prev,
+          conductor_diurno_id: conductorId,
+          conductor_diurno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+          conductor_diurno_dni: conductor.numero_dni || ''
+        }
+        // Si viene de un par y el compañero ya está asignado como nocturno, auto-rellenar distancia
+        if (pairTiempo && pairPartnerId && prev.conductor_nocturno_id === pairPartnerId) {
+          updates.distancia_diurno = pairTiempo
+          updates.distancia_nocturno = pairTiempo
+        }
+        return updates
       })
     }
   }
 
   // Para modo TURNO - Nocturno
-  const handleSelectConductorNocturno = (conductorId: string) => {
+  const handleSelectConductorNocturno = (conductorId: string, pairTiempo?: number, pairPartnerId?: string) => {
     const conductor = conductores.find(c => c.id === conductorId)
     if (conductor) {
-      setFormData({
-        ...formData,
-        conductor_nocturno_id: conductorId,
-        conductor_nocturno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
-        conductor_nocturno_dni: conductor.numero_dni || ''
+      setFormData(prev => {
+        const updates: any = {
+          ...prev,
+          conductor_nocturno_id: conductorId,
+          conductor_nocturno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
+          conductor_nocturno_dni: conductor.numero_dni || ''
+        }
+        // Si viene de un par y el compañero ya está asignado como diurno, auto-rellenar distancia
+        if (pairTiempo && pairPartnerId && prev.conductor_diurno_id === pairPartnerId) {
+          updates.distancia_diurno = pairTiempo
+          updates.distancia_nocturno = pairTiempo
+        }
+        return updates
       })
     }
   }
@@ -911,6 +933,37 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       })
     }
   }
+
+  // Auto-calcular distancia en auto cuando ambos conductores están asignados
+  // (solo si no se auto-rellenó desde un par arrastrado)
+  useEffect(() => {
+    if (!formData.conductor_diurno_id || !formData.conductor_nocturno_id) return
+    // No sobreescribir valores ya presentes (de par o manuales)
+    if (formData.distancia_diurno && formData.distancia_nocturno) return
+
+    const diurno = conductores.find(c => c.id === formData.conductor_diurno_id)
+    const nocturno = conductores.find(c => c.id === formData.conductor_nocturno_id)
+
+    if (!diurno?.direccion_lat || !diurno?.direccion_lng || !nocturno?.direccion_lat || !nocturno?.direccion_lng) return
+
+    // Calcular distancia en auto entre los conductores
+    obtenerDistanciaEnAuto(
+      { lat: diurno.direccion_lat, lng: diurno.direccion_lng },
+      { lat: nocturno.direccion_lat, lng: nocturno.direccion_lng }
+    ).then(resultado => {
+      if (resultado?.tiempoMinutos) {
+        setFormData(prev => {
+          // Re-verificar que no se hayan llenado mientras esperábamos
+          if (prev.distancia_diurno && prev.distancia_nocturno) return prev
+          return {
+            ...prev,
+            distancia_diurno: resultado.tiempoMinutos,
+            distancia_nocturno: resultado.tiempoMinutos
+          }
+        })
+      }
+    })
+  }, [formData.conductor_diurno_id, formData.conductor_nocturno_id])
 
   const handleSubmit = async () => {
     if (loading || isSubmittingRef.current) return
@@ -2556,6 +2609,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 draggable
                                 onDragStart={(e) => {
                                   e.dataTransfer.setData('conductorId', par.diurno.id)
+                                  e.dataTransfer.setData('pairPartnerId', par.nocturno.id)
+                                  if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
                                   e.currentTarget.classList.add('dragging')
                                 }}
                                 onDragEnd={(e) => {
@@ -2580,6 +2635,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 draggable
                                 onDragStart={(e) => {
                                   e.dataTransfer.setData('conductorId', par.nocturno.id)
+                                  e.dataTransfer.setData('pairPartnerId', par.diurno.id)
+                                  if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
                                   e.currentTarget.classList.add('dragging')
                                 }}
                                 onDragEnd={(e) => {
@@ -2697,6 +2754,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             e.preventDefault()
                             e.currentTarget.classList.remove('drag-over')
                             const conductorId = e.dataTransfer.getData('conductorId')
+                            const pairTiempo = e.dataTransfer.getData('pairTiempo')
+                            const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
                             if (conductorId) {
                               const conductor = conductores.find(c => c.id === conductorId)
                               if (conductor?.tieneAsignacionDiurna) {
@@ -2708,7 +2767,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   confirmButtonColor: '#3085d6'
                                 })
                               }
-                              handleSelectConductorDiurno(conductorId)
+                              handleSelectConductorDiurno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
                             }
                           }}
                         >
@@ -2759,6 +2818,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             e.preventDefault()
                             e.currentTarget.classList.remove('drag-over')
                             const conductorId = e.dataTransfer.getData('conductorId')
+                            const pairTiempo = e.dataTransfer.getData('pairTiempo')
+                            const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
                             if (conductorId) {
                               const conductor = conductores.find(c => c.id === conductorId)
                               if (conductor?.tieneAsignacionNocturna) {
@@ -2770,7 +2831,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   confirmButtonColor: '#3085d6'
                                 })
                               }
-                              handleSelectConductorNocturno(conductorId)
+                              handleSelectConductorNocturno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
                             }
                           }}
                         >
@@ -2921,8 +2982,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_cargo}
-                            onChange={(e) => setFormData({ ...formData, tipo_asignacion_cargo: e.target.value as TipoAsignacion })}
+                            onChange={(e) => {
+                              const val = e.target.value as TipoAsignacion
+                              setFormData({ ...formData, tipo_asignacion_cargo: val, ...(val === 'devolucion_vehiculo' ? { documento_cargo: 'na' as TipoDocumento } : {}) })
+                            }}
                           >
+                            <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
@@ -2992,8 +3057,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_diurno}
-                            onChange={(e) => setFormData({ ...formData, tipo_asignacion_diurno: e.target.value as TipoAsignacion })}
+                            onChange={(e) => {
+                              const val = e.target.value as TipoAsignacion
+                              setFormData({ ...formData, tipo_asignacion_diurno: val, ...(val === 'devolucion_vehiculo' ? { documento_diurno: 'na' as TipoDocumento } : {}) })
+                            }}
                           >
+                            <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
@@ -3019,7 +3088,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         </div>
                         <div></div>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: conductorNocturno ? '1fr 1fr' : '1fr', gap: '16px' }}>
                         <div>
                           <label>Zona *</label>
                           <input
@@ -3029,6 +3098,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             placeholder="Ej: Norte, CABA..."
                           />
                         </div>
+                        {conductorNocturno && (
                         <div>
                           <label>Distancia (minutos)</label>
                           <input
@@ -3038,6 +3108,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             placeholder="Tiempo estimado"
                           />
                         </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -3063,8 +3134,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_nocturno}
-                            onChange={(e) => setFormData({ ...formData, tipo_asignacion_nocturno: e.target.value as TipoAsignacion })}
+                            onChange={(e) => {
+                              const val = e.target.value as TipoAsignacion
+                              setFormData({ ...formData, tipo_asignacion_nocturno: val, ...(val === 'devolucion_vehiculo' ? { documento_nocturno: 'na' as TipoDocumento } : {}) })
+                            }}
                           >
+                            <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
@@ -3090,7 +3165,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         </div>
                         <div></div>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: conductorDiurno ? '1fr 1fr' : '1fr', gap: '16px' }}>
                         <div>
                           <label>Zona *</label>
                           <input
@@ -3100,6 +3175,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             placeholder="Ej: Norte, CABA..."
                           />
                         </div>
+                        {conductorDiurno && (
                         <div>
                           <label>Distancia (minutos)</label>
                           <input
@@ -3109,6 +3185,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             placeholder="Tiempo estimado"
                           />
                         </div>
+                        )}
                       </div>
                     </div>
                   )}
