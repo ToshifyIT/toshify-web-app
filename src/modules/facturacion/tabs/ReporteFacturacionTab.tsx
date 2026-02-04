@@ -82,6 +82,9 @@ interface FacturacionConductor {
     cuotaNum?: number
     totalCuotas?: number
   }>
+  // Datos de pago registrado
+  monto_cobrado?: number
+  fecha_pago?: string | null
 }
 
 interface FacturacionDetalle {
@@ -357,6 +360,39 @@ export function ReporteFacturacionTab() {
         }
       })
       
+      // 2.6 Cargar pagos registrados para este período
+      const facIds = facturacionesTransformadas.map((f: any) => f.id)
+      const { data: pagosData } = await (supabase
+        .from('pagos_conductores') as any)
+        .select('referencia_id, monto, fecha_pago')
+        .eq('tipo_cobro', 'facturacion_semanal')
+        .in('referencia_id', facIds)
+
+      // Agrupar pagos por referencia_id (puede haber pagos parciales)
+      const pagosMap = new Map<string, { monto: number; fecha_pago: string | null }>()
+      ;(pagosData || []).forEach((p: any) => {
+        const existing = pagosMap.get(p.referencia_id)
+        if (existing) {
+          existing.monto += parseFloat(p.monto) || 0
+          if (p.fecha_pago) existing.fecha_pago = p.fecha_pago
+        } else {
+          pagosMap.set(p.referencia_id, {
+            monto: parseFloat(p.monto) || 0,
+            fecha_pago: p.fecha_pago || null,
+          })
+        }
+      })
+
+      // Agregar monto_cobrado a cada facturación
+      facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
+        const pago = pagosMap.get(f.id)
+        return {
+          ...f,
+          monto_cobrado: pago?.monto || 0,
+          fecha_pago: pago?.fecha_pago || null,
+        }
+      })
+
       // Ordenar por nombre
       facturacionesTransformadas.sort((a: any, b: any) => 
         (a.conductor_nombre || '').localeCompare(b.conductor_nombre || '')
@@ -4813,6 +4849,41 @@ export function ReporteFacturacionTab() {
               <span>{cuotaNum && `${cuotaNum}`}</span>
               {cubreGarantia && <span style={{ color: '#10b981', fontWeight: 600 }}>✓</span>}
             </div>
+          </div>
+        )
+      }
+    },
+    {
+      id: 'monto_cobrado',
+      accessorFn: (row) => row.monto_cobrado || 0,
+      header: 'Cobrado',
+      enableSorting: true,
+      cell: ({ row }) => {
+        const cobrado = row.original.monto_cobrado || 0
+        const total = Math.abs(row.original.total_a_pagar || 0)
+
+        if (modoVistaPrevia) {
+          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+        }
+
+        if (cobrado === 0) {
+          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+        }
+
+        const esPagoCompleto = cobrado >= total
+        return (
+          <div style={{ fontSize: '12px' }}>
+            <span style={{
+              fontWeight: 600,
+              color: esPagoCompleto ? '#10b981' : '#f59e0b'
+            }}>
+              {formatCurrency(cobrado)}
+            </span>
+            {!esPagoCompleto && total > 0 && (
+              <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px' }}>
+                {Math.round((cobrado / total) * 100)}% del total
+              </div>
+            )}
           </div>
         )
       }
