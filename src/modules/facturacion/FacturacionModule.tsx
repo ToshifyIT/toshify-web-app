@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import {
   FileText,
-  Calendar,
+  // Calendar, // Oculto - Períodos movido al tab Reporte
   Shield,
   DollarSign,
-  Settings,
+  // Settings, // Movido a menú Parámetros
   // Ticket, // Oculto - se maneja desde Incidencias
   // Gauge, // Oculto temporalmente
   // Ban, // Oculto temporalmente
@@ -13,11 +13,11 @@ import {
   CreditCard
 } from 'lucide-react'
 import { ReporteFacturacionTab } from './tabs/ReporteFacturacionTab'
-import { PeriodosTab } from './tabs/PeriodosTab'
+// import { PeriodosTab } from './tabs/PeriodosTab' // Funcionalidad movida al tab Reporte
 import { GarantiasTab } from './tabs/GarantiasTab'
 import { SaldosAbonosTab } from './tabs/SaldosAbonosTab'
 import { TicketsFavorTab } from './tabs/TicketsFavorTab'
-import { ConceptosFacturacionTab } from './tabs/ConceptosFacturacionTab'
+// import { ConceptosFacturacionTab } from './tabs/ConceptosFacturacionTab' // Movido a menú Parámetros
 import { ExcesosKmTab } from './tabs/ExcesosKmTab'
 import { BloqueosConductoresTab } from './tabs/BloqueosConductoresTab'
 // import { LiquidacionConductoresTab } from './tabs/LiquidacionConductoresTab' // Sin tabla en BD
@@ -29,7 +29,7 @@ type TabType = 'reporte' | 'periodos' | 'garantias' | 'saldos' | 'tickets' | 'ex
 
 const TABS = [
   { id: 'reporte' as TabType, label: 'Reporte', icon: FileText },
-  { id: 'periodos' as TabType, label: 'Períodos', icon: Calendar },
+  // { id: 'periodos' as TabType, label: 'Períodos', icon: Calendar }, // Funcionalidad movida al tab Reporte
   { id: 'garantias' as TabType, label: 'Garantías', icon: Shield },
   { id: 'saldos' as TabType, label: 'Saldos', icon: DollarSign },
   // { id: 'tickets' as TabType, label: 'Tickets', icon: Ticket }, // Oculto - se maneja desde Incidencias
@@ -38,7 +38,7 @@ const TABS = [
   // { id: 'bloqueos' as TabType, label: 'Bloqueos', icon: Ban }, // Oculto temporalmente
   // { id: 'liquidacion' as TabType, label: 'Liquidacion', icon: UserMinus }, // Sin tabla en BD
   { id: 'cobros_fraccionados' as TabType, label: 'Cobros Fraccionados', icon: CreditCard },
-  { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings }
+  // { id: 'conceptos' as TabType, label: 'Conceptos', icon: Settings } // Movido a menú Parámetros
 ]
 
 export function FacturacionModule() {
@@ -66,7 +66,7 @@ export function FacturacionModule() {
        {/* Contenido */}
        <div className="fact-tab-content">
          {activeTab === 'reporte' && <ReporteFacturacionTab />}
-         {activeTab === 'periodos' && <PeriodosTab />}
+         {/* {activeTab === 'periodos' && <PeriodosTab />} */}{/* Funcionalidad movida al tab Reporte */}
          {activeTab === 'garantias' && <GarantiasTab />}
          {activeTab === 'saldos' && <SaldosAbonosTab />}
          {activeTab === 'tickets' && <TicketsFavorTab />}
@@ -75,7 +75,7 @@ export function FacturacionModule() {
          {activeTab === 'bloqueos' && <BloqueosConductoresTab />}
          {/* Liquidacion - sin tabla en BD */}
          {activeTab === 'cobros_fraccionados' && <CobrosFraccionadosTab />}
-         {activeTab === 'conceptos' && <ConceptosFacturacionTab />}
+         {/* {activeTab === 'conceptos' && <ConceptosFacturacionTab />} */}{/* Movido a menú Parámetros */}
        </div>
     </div>
   )

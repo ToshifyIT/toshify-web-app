@@ -784,7 +784,7 @@ export function SaldosAbonosTab() {
       showSuccess('Eliminado')
 
       cargarSaldos()
-    } catch (error) {
+    } catch {
       Swal.fire('Error', 'No se pudo eliminar el saldo', 'error')
     }
   }
@@ -1393,6 +1393,7 @@ export function SaldosAbonosTab() {
           style={{
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '6px',
             padding: '10px 16px',
             border: 'none',
@@ -1402,7 +1403,8 @@ export function SaldosAbonosTab() {
             cursor: 'pointer',
             fontWeight: 500,
             fontSize: '13px',
-            transition: 'all 0.15s'
+            transition: 'all 0.15s',
+            flex: 1
           }}
         >
           <Wallet size={16} />
@@ -1422,6 +1424,7 @@ export function SaldosAbonosTab() {
           style={{
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '6px',
             padding: '10px 16px',
             border: 'none',
@@ -1431,7 +1434,8 @@ export function SaldosAbonosTab() {
             cursor: 'pointer',
             fontWeight: 500,
             fontSize: '13px',
-            transition: 'all 0.15s'
+            transition: 'all 0.15s',
+            flex: 1
           }}
         >
           <Receipt size={16} />
