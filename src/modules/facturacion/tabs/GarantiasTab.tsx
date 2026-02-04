@@ -45,8 +45,8 @@ interface PagoGarantiaRow {
 }
 
 export function GarantiasTab() {
-  // Sub-tab activo
-  const [activeSubTab, setActiveSubTab] = useState<'garantias' | 'movimientos'>('garantias')
+  // Sub-tab activo (Movimientos removido - no se usa)
+  const [activeSubTab] = useState<'garantias' | 'movimientos'>('garantias')
   
   const [garantias, setGarantias] = useState<GarantiaConductor[]>([])
   const [todosLosPagos, setTodosLosPagos] = useState<PagoGarantiaRow[]>([])
@@ -1050,74 +1050,7 @@ export function GarantiasTab() {
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando garantias..." size="lg" />
 
-      {/* Sub-tabs de navegación */}
-      <div className="fact-subtabs" style={{ 
-        display: 'flex', 
-        gap: '4px', 
-        marginBottom: '16px',
-        borderBottom: '1px solid #E5E7EB',
-        paddingBottom: '0'
-      }}>
-        <button
-          className={`fact-subtab ${activeSubTab === 'garantias' ? 'fact-subtab-active' : ''}`}
-          onClick={() => setActiveSubTab('garantias')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '10px 16px',
-            border: 'none',
-            background: activeSubTab === 'garantias' ? '#ff0033' : 'transparent',
-            color: activeSubTab === 'garantias' ? 'white' : '#6B7280',
-            borderRadius: '6px 6px 0 0',
-            cursor: 'pointer',
-            fontWeight: 500,
-            fontSize: '13px',
-            transition: 'all 0.15s'
-          }}
-        >
-          <Shield size={16} />
-          Garantías
-          <span style={{
-            background: activeSubTab === 'garantias' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
-            padding: '2px 6px',
-            borderRadius: '10px',
-            fontSize: '11px'
-          }}>
-            {garantias.length}
-          </span>
-        </button>
-        <button
-          className={`fact-subtab ${activeSubTab === 'movimientos' ? 'fact-subtab-active' : ''}`}
-          onClick={() => setActiveSubTab('movimientos')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '10px 16px',
-            border: 'none',
-            background: activeSubTab === 'movimientos' ? '#ff0033' : 'transparent',
-            color: activeSubTab === 'movimientos' ? 'white' : '#6B7280',
-            borderRadius: '6px 6px 0 0',
-            cursor: 'pointer',
-            fontWeight: 500,
-            fontSize: '13px',
-            transition: 'all 0.15s'
-          }}
-        >
-          <Receipt size={16} />
-          Movimientos
-          <span style={{
-            background: activeSubTab === 'movimientos' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
-            padding: '2px 6px',
-            borderRadius: '10px',
-            fontSize: '11px'
-          }}>
-            {todosLosPagos.length}
-          </span>
-        </button>
-      </div>
-
+      {/* Contenido Garantías (sub-tab Movimientos removido - no se usa) */}
       {activeSubTab === 'garantias' && (
         <>
           {/* Header con filtro y botón agregar */}

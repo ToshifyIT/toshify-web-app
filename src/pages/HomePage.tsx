@@ -5,7 +5,8 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History
+  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History,
+  SlidersHorizontal
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -54,6 +55,8 @@ const menuIcons: Record<string, LucideIcon> = {
   'inventario-historial': History,
   'inventario-pedidos': ClipboardList,
   'zonas-peligrosas': MapPin,
+  'parametros': SlidersHorizontal,
+  'conceptos-facturacion': Receipt,
 }
 
 // Función para obtener icono de un menú
@@ -180,6 +183,8 @@ import { ProfilePage } from './profile/ProfilePage'
 // Multas/Telepase
 import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
 import { MultasPage } from './multas-telepase/MultasPage'
+// Parámetros
+import { ConceptosFacturacionPage } from './parametros/ConceptosFacturacionPage'
 
 // Tipo para submenús con jerarquía
 interface SubmenuWithHierarchy {
@@ -1496,6 +1501,13 @@ export function HomePage() {
               <Route path="/multas" element={
                 <ProtectedRoute submenuName="multas" action="view">
                   <MultasPage />
+                </ProtectedRoute>
+              } />
+
+              {/* Parámetros */}
+              <Route path="/conceptos-facturacion" element={
+                <ProtectedRoute submenuName="conceptos-facturacion" action="view">
+                  <ConceptosFacturacionPage />
                 </ProtectedRoute>
               } />
 
