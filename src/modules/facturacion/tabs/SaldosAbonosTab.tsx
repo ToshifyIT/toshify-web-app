@@ -5,18 +5,14 @@ import { showSuccess } from '../../../utils/toast'
 import {
   Wallet,
   Users,
-  TrendingUp,
-  TrendingDown,
   AlertTriangle,
   Eye,
   Plus,
-  DollarSign,
-  Clock,
+  // DollarSign,
   Filter,
   Edit3,
   UserPlus,
   Trash2,
-  Layers,
   Receipt,
   ArrowUpCircle,
   ArrowDownCircle
@@ -1362,8 +1358,8 @@ export function SaldosAbonosTab() {
     }
   ], [])
 
-  // Stats para sub-tab Abonos
-  const statsAbonos = useMemo(() => {
+  // Stats para sub-tab Abonos (comentado - simplificado a solo total)
+  /* const statsAbonos = useMemo(() => {
     const totalAbonos = todosLosAbonos.filter(a => a.tipo === 'abono')
     const totalCargos = todosLosAbonos.filter(a => a.tipo === 'cargo')
     return {
@@ -1372,7 +1368,7 @@ export function SaldosAbonosTab() {
       montoAbonos: totalAbonos.reduce((sum, a) => sum + a.monto, 0),
       montoCargos: totalCargos.reduce((sum, a) => sum + a.monto, 0)
     }
-  }, [todosLosAbonos])
+  }, [todosLosAbonos]) */
 
   return (
     <>
@@ -1478,91 +1474,21 @@ export function SaldosAbonosTab() {
             </div>
           </div>
 
-          {/* Stats - Clickeables como filtros */}
+           {/* Stats */}
           <div className="fact-stats">
             <div className="fact-stats-grid">
-              <div 
-                className={`fact-stat-card ${filtroSaldo === 'todos' ? 'fact-stat-card-active' : ''}`}
-                onClick={() => setFiltroSaldo('todos')}
-                style={{ cursor: 'pointer' }}
-                title="Ver todos"
-              >
+              <div className="fact-stat-card">
                 <Users size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{stats.total}</span>
                   <span className="fact-stat-label">Conductores</span>
                 </div>
               </div>
-              <div 
-                className={`fact-stat-card ${filtroSaldo === 'favor' ? 'fact-stat-card-active' : ''}`}
-                onClick={() => setFiltroSaldo('favor')}
-                style={{ cursor: 'pointer' }}
-                title="Filtrar por saldo a favor"
-              >
-                <TrendingUp size={18} className="fact-stat-icon" />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value">{stats.conFavor}</span>
-                  <span className="fact-stat-label">Con Saldo a Favor</span>
-                </div>
-              </div>
-              <div 
-                className={`fact-stat-card ${filtroSaldo === 'deuda' ? 'fact-stat-card-active' : ''}`}
-                onClick={() => setFiltroSaldo('deuda')}
-                style={{ cursor: 'pointer' }}
-                title="Filtrar por deuda"
-              >
-                <TrendingDown size={18} className="fact-stat-icon" />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value">{stats.conDeuda}</span>
-                  <span className="fact-stat-label">Con Deuda</span>
-                </div>
-              </div>
-              <div 
-                className={`fact-stat-card ${filtroSaldo === 'mora' ? 'fact-stat-card-active' : ''}`}
-                onClick={() => setFiltroSaldo('mora')}
-                style={{ cursor: 'pointer' }}
-                title="Filtrar por mora"
-              >
-                <Clock size={18} className="fact-stat-icon" />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value">{stats.enMora}</span>
-                  <span className="fact-stat-label">En Mora</span>
-                </div>
-              </div>
-              <div 
-                className={`fact-stat-card ${filtroSaldo === 'favor' ? 'fact-stat-card-active' : ''}`}
-                onClick={() => setFiltroSaldo('favor')}
-                style={{ cursor: 'pointer' }}
-                title="Filtrar por saldo a favor"
-              >
-                <DollarSign size={18} className="fact-stat-icon" />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value">{formatCurrency(stats.totalFavor)}</span>
-                  <span className="fact-stat-label">Total a Favor</span>
-                </div>
-              </div>
-              <div 
-                className={`fact-stat-card ${filtroSaldo === 'deuda' ? 'fact-stat-card-active' : ''}`}
-                onClick={() => setFiltroSaldo('deuda')}
-                style={{ cursor: 'pointer' }}
-                title="Filtrar por deuda"
-              >
+              <div className="fact-stat-card">
                 <AlertTriangle size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{formatCurrency(stats.totalDeuda)}</span>
                   <span className="fact-stat-label">Total Deuda</span>
-                </div>
-              </div>
-              <div 
-                className={`fact-stat-card ${filtroSaldo === 'fraccionado' ? 'fact-stat-card-active' : ''}`}
-                onClick={() => setFiltroSaldo('fraccionado')}
-                style={{ cursor: 'pointer', borderLeft: '3px solid #8B5CF6' }}
-                title="Filtrar por fraccionado"
-              >
-                <Layers size={18} className="fact-stat-icon" style={{ color: '#8B5CF6' }} />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value" style={{ color: '#8B5CF6' }}>{formatCurrency(stats.totalFraccionado)}</span>
-                  <span className="fact-stat-label">Fraccionado ({stats.cuotasPendientes} cuotas)</span>
                 </div>
               </div>
             </div>
@@ -1588,37 +1514,12 @@ export function SaldosAbonosTab() {
         <>
           {/* Stats de Movimientos */}
           <div className="fact-stats" style={{ marginBottom: '16px' }}>
-            <div className="fact-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+            <div className="fact-stats-grid">
               <div className="fact-stat-card">
                 <Receipt size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{todosLosAbonos.length}</span>
                   <span className="fact-stat-label">Total Movimientos</span>
-                </div>
-              </div>
-              <div className="fact-stat-card" style={{ borderLeft: '3px solid #16a34a' }}>
-                <ArrowUpCircle size={18} className="fact-stat-icon" style={{ color: '#16a34a' }} />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value" style={{ color: '#16a34a' }}>{statsAbonos.cantidadAbonos}</span>
-                  <span className="fact-stat-label">Abonos</span>
-                </div>
-              </div>
-              <div className="fact-stat-card" style={{ borderLeft: '3px solid #dc2626' }}>
-                <ArrowDownCircle size={18} className="fact-stat-icon" style={{ color: '#dc2626' }} />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value" style={{ color: '#dc2626' }}>{statsAbonos.cantidadCargos}</span>
-                  <span className="fact-stat-label">Cargos</span>
-                </div>
-              </div>
-              <div className="fact-stat-card">
-                <DollarSign size={18} className="fact-stat-icon" />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value">
-                    <span style={{ color: '#16a34a' }}>+{formatCurrency(statsAbonos.montoAbonos)}</span>
-                    {' / '}
-                    <span style={{ color: '#dc2626' }}>-{formatCurrency(statsAbonos.montoCargos)}</span>
-                  </span>
-                  <span className="fact-stat-label">Abonos / Cargos</span>
                 </div>
               </div>
             </div>
