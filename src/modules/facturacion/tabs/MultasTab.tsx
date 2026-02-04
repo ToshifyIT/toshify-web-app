@@ -139,7 +139,7 @@ export function MultasTab() {
 
   function formatImporte(importe: string): string {
     const num = parseImporte(importe)
-    return num > 0 ? `$ ${num.toLocaleString('es-AR')}` : '-'
+    return num > 0 ? `$ ${num.toLocaleString('en-US')}` : '-'
   }
 
   function formatFecha(fecha: string | null): string {
@@ -242,7 +242,7 @@ export function MultasTab() {
 
       if (error) throw error
 
-      showSuccess('Multa Registrada', `Multa de $ ${parseFloat(formValues.importe).toLocaleString('es-AR')} registrada`)
+      showSuccess('Multa Registrada', `Multa de $ ${parseFloat(formValues.importe).toLocaleString('en-US')} registrada`)
 
       cargarDatos()
     } catch (error: any) {
@@ -664,7 +664,7 @@ export function MultasTab() {
           <div className="fact-stat-card">
             <DollarSign size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
-              <span className="fact-stat-value">$ {stats.montoTotal.toLocaleString('es-AR')}</span>
+              <span className="fact-stat-value">$ {stats.montoTotal.toLocaleString('en-US')}</span>
               <span className="fact-stat-label">Monto Total</span>
             </div>
           </div>
