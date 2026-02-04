@@ -34,7 +34,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { useAuth } from '../../../contexts/AuthContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG, calcularMora } from '../../../types/facturacion.types'
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, differenceInDays, isAfter, isBefore } from 'date-fns'
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
 import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
@@ -380,43 +380,6 @@ export function ReporteFacturacionTab() {
     }
   }
 
-  // Función auxiliar para calcular días trabajados (prorrateo)
-  function calcularDiasTrabajados(
-    fechaInicioAsig: string | null,
-    fechaFinAsig: string | null,
-    fechaInicioPeriodo: string,
-    fechaFinPeriodo: string
-  ): number {
-    const periodoInicio = parseISO(fechaInicioPeriodo)
-    const periodoFin = parseISO(fechaFinPeriodo)
-
-    // Si no hay fecha de inicio de asignación, asumimos semana completa
-    if (!fechaInicioAsig) {
-      return 7
-    }
-
-    const asigInicio = parseISO(fechaInicioAsig)
-    const asigFin = fechaFinAsig ? parseISO(fechaFinAsig) : null
-
-    // Fecha efectiva de inicio: el máximo entre inicio asignación e inicio período
-    const fechaEfectivaInicio = isAfter(asigInicio, periodoInicio) ? asigInicio : periodoInicio
-
-    // Fecha efectiva de fin: el mínimo entre fin asignación (si existe) y fin período
-    let fechaEfectivaFin = periodoFin
-    if (asigFin && isBefore(asigFin, periodoFin)) {
-      fechaEfectivaFin = asigFin
-    }
-
-    // Si la fecha de fin es antes de la de inicio, no hay días trabajados
-    if (isBefore(fechaEfectivaFin, fechaEfectivaInicio)) {
-      return 0
-    }
-
-    // Calcular días incluyendo ambos extremos
-    const dias = differenceInDays(fechaEfectivaFin, fechaEfectivaInicio) + 1
-    return Math.max(0, Math.min(7, dias))
-  }
-
   // VISTA PREVIA: Calcular facturación on-the-fly sin guardar en BD
   async function cargarVistaPreviaInterno(showError = false) {
     setLoadingVistaPrevia(true)
@@ -429,26 +392,27 @@ export function ReporteFacturacionTab() {
       const esSemanaActual = hoy >= semanaActual.inicio && hoy <= semanaActual.fin
       const fechaFinEfectiva = esSemanaActual ? hoy : semanaActual.fin
       const fechaFin = format(fechaFinEfectiva, 'yyyy-MM-dd')
-      // Días disponibles en el período (ej: si hoy es miércoles = 3 días: lun, mar, mie)
-      const diasDisponibles = differenceInDays(fechaFinEfectiva, semanaActual.inicio) + 1
+      // Semana y año del período (para queries)
+      const semanaDelPeriodo = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
+      const anioDelPeriodo = getYear(parseISO(fechaInicio))
 
-      // 1. Cargar asignaciones activas que apliquen a esta semana
-      const { data: asignaciones, error: errAsig } = await supabase
-        .from('asignaciones')
-        .select(`
-          id,
-          conductor_id,
-          vehiculo_id,
-          horario,
-          fecha_inicio,
-          fecha_fin,
-          estado,
-          conductores:conductor_id(id, nombres, apellidos, numero_dni, numero_cuit),
-          vehiculos:vehiculo_id(id, patente)
-        `)
-        .or(`estado.eq.activa,and(fecha_fin.gte.${fechaInicio},fecha_fin.lte.${fechaFin})`)
+      // 1. Cargar conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
+      const { data: conductoresControl, error: errControl } = await (supabase
+        .from('conductores_semana_facturacion') as any)
+        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
+        .eq('semana', semanaDelPeriodo)
+        .eq('anio', anioDelPeriodo)
 
-      if (errAsig) throw errAsig
+      if (errControl) throw errControl
+
+      // Obtener datos de conductores desde tabla conductores
+      const dnisControl = (conductoresControl || []).map((c: any) => c.numero_dni)
+      const { data: conductoresData } = await supabase
+        .from('conductores')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit')
+        .in('numero_dni', dnisControl)
+
+      const conductoresDataMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
 
       // 2. Cargar saldos de conductores
       const { data: saldos } = await (supabase
@@ -531,9 +495,6 @@ export function ReporteFacturacionTab() {
       // Incluye: 
       //   a) Penalidades aplicadas completas (no fraccionadas) para esta semana
       //   b) Cuotas de penalidades fraccionadas que corresponden a esta semana
-      
-      const semanaDelPeriodo = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
-      const anioDelPeriodo = getYear(parseISO(fechaInicio))
       
       // a) Penalidades aplicadas completas en esta semana
       const { data: penalidadesCompletas } = await (supabase
@@ -660,39 +621,29 @@ export function ReporteFacturacionTab() {
       // 6. Calcular facturación proyectada para cada conductor
       const facturacionesProyectadas: FacturacionConductor[] = []
 
-      for (const asig of (asignaciones || [])) {
-        const conductor = (asig as any).conductores
-        const vehiculo = (asig as any).vehiculos
+      // Deduplicar por DNI (en caso de duplicados en la tabla de control)
+      const dnisYaProcesados = new Set<string>()
 
+      for (const control of (conductoresControl || [])) {
+        if (dnisYaProcesados.has(control.numero_dni)) continue
+        dnisYaProcesados.add(control.numero_dni)
+
+        const conductor = conductoresDataMap.get(control.numero_dni)
         if (!conductor) continue
 
         const conductorId = conductor.id
-        const tipoAlquiler = (asig as any).horario === 'CARGO' ? 'CARGO' : 'TURNO'
+        const tipoAlquiler: 'CARGO' | 'TURNO' = control.modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
+        const subtotalAlquiler = Math.round(parseFloat(control.valor_alquiler) || 0)
 
-        // Calcular días trabajados (prorrateo)
-        const diasTrabajados = calcularDiasTrabajados(
-          (asig as any).fecha_inicio,
-          (asig as any).fecha_fin,
-          fechaInicio,
-          fechaFin
-        )
-
-        if (diasTrabajados === 0) continue
-
-        // Factor proporcional basado en días disponibles del período, no siempre 7
-        // Ej: Si estamos en miércoles (3 días disponibles) y trabajó 3, factor = 3/7 = 0.43
-        const factorProporcional = diasTrabajados / 7
-
-        // Alquiler con prorrateo
+        // Factor proporcional derivado del valor_alquiler vs valor base
         const alquilerBase = tipoAlquiler === 'CARGO'
           ? FACTURACION_CONFIG.ALQUILER_CARGO
           : FACTURACION_CONFIG.ALQUILER_TURNO
-        const subtotalAlquiler = Math.round(alquilerBase * factorProporcional)
+        const factorProporcional = alquilerBase > 0 && subtotalAlquiler > 0
+          ? Math.min(1, subtotalAlquiler / alquilerBase)
+          : (subtotalAlquiler > 0 ? 1 : 0)
 
-        // Garantía con prorrateo
-        // REGLA: TODO conductor con asignación activa DEBE pagar garantía desde el día 1
-        // La garantía es $50,000 semanal (prorrateado) hasta completar 20 cuotas (CARGO) o 16 cuotas (TURNO)
-        // Buscar garantía por nombre (conductor_id puede ser NULL en garantías importadas del histórico)
+        // Garantía
         const conductorNombreCompleto = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.toLowerCase().trim()
         const garantia = garantiasMap.get(conductorNombreCompleto)
         let subtotalGarantia = 0
@@ -702,19 +653,15 @@ export function ReporteFacturacionTab() {
           : FACTURACION_CONFIG.GARANTIA_CUOTAS_TURNO
 
         if (garantia) {
-          // Si tiene registro de garantía, verificar si ya completó todas las cuotas
           if (garantia.estado === 'completada' || garantia.cuotas_pagadas >= garantia.cuotas_totales) {
-            // Ya completó la garantía - no cobra más
             subtotalGarantia = 0
-            cuotaGarantiaNumero = 'NA' // Completada
+            cuotaGarantiaNumero = 'NA'
           } else {
-            // Tiene garantía activa en curso - mostrar siguiente cuota a pagar
             subtotalGarantia = Math.round(FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL * factorProporcional)
             const cuotaActual = garantia.cuotas_pagadas + 1
             cuotaGarantiaNumero = `${cuotaActual} de ${garantia.cuotas_totales}`
           }
         } else {
-          // Sin registro de garantía = conductor nuevo, empieza cuota 1
           subtotalGarantia = Math.round(FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL * factorProporcional)
           cuotaGarantiaNumero = `1 de ${cuotasTotales}`
         }
@@ -742,9 +689,6 @@ export function ReporteFacturacionTab() {
         const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento
 
         // Saldo anterior y mora
-        // La mora se cobra 5% flat si hay saldo pendiente y NO hizo abono
-        // diasMora = 0 significa que hizo abono (sin mora)
-        // diasMora > 0 significa que no hizo abono (con mora)
         const saldo = saldosMap.get(conductorId)
         const saldoAnterior = saldo?.saldo_actual || 0
         const diasMora = saldo?.dias_mora || 0
@@ -757,7 +701,6 @@ export function ReporteFacturacionTab() {
 
         // Datos de Cabify - ganancia semanal del conductor
         const gananciaCabify = cabifyMap.get(dniConductor) || 0
-        // El conductor cubre su cuota semanal si su ganancia >= alquiler + garantía
         const cuotaFijaSemanal = subtotalAlquiler + subtotalGarantia
         const cubreCuota = gananciaCabify >= cuotaFijaSemanal
 
@@ -768,11 +711,11 @@ export function ReporteFacturacionTab() {
           conductor_nombre: `${(conductor.apellidos || '').toUpperCase()}, ${(conductor.nombres || '').toUpperCase()}`,
           conductor_dni: dniConductor,
           conductor_cuit: conductor.numero_cuit || null,
-          vehiculo_id: vehiculo?.id || null,
-          vehiculo_patente: vehiculo?.patente || null,
+          vehiculo_id: null,
+          vehiculo_patente: control.patente || null,
           tipo_alquiler: tipoAlquiler,
-          turnos_base: diasDisponibles, // Días disponibles hasta hoy (o 7 si semana pasada)
-          turnos_cobrados: diasTrabajados,
+          turnos_base: 7,
+          turnos_cobrados: Math.round(factorProporcional * 7),
           factor_proporcional: factorProporcional,
           subtotal_alquiler: subtotalAlquiler,
           subtotal_garantia: subtotalGarantia,
@@ -5152,7 +5095,7 @@ export function ReporteFacturacionTab() {
                   VISTA PREVIA - Liquidación Proyectada
                 </span>
                 <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Cálculo en tiempo real desde asignaciones activas. No guardado en BD.
+                   Cálculo en tiempo real desde conductores de la semana. No guardado en BD.
                 </p>
               </div>
             </div>
@@ -5329,8 +5272,8 @@ export function ReporteFacturacionTab() {
             loading={loadingVistaPrevia}
             searchPlaceholder="Buscar..."
             emptyIcon={<Calculator size={48} />}
-            emptyTitle="Sin asignaciones activas"
-            emptyDescription="No hay conductores con asignaciones activas para esta semana"
+             emptyTitle="Sin conductores registrados"
+             emptyDescription="No hay conductores en la tabla de control para esta semana"
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
             onTableReady={setTableInstance}
