@@ -26,7 +26,8 @@ import {
   Gauge,
   Edit2,
   Search,
-  Play
+  Play,
+  Banknote
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -4714,7 +4715,9 @@ export function ReporteFacturacionTab() {
     },
     {
       id: 'alquiler_desglose',
+      accessorFn: (row) => row.subtotal_alquiler,
       header: 'Alquiler',
+      enableSorting: true,
       cell: ({ row }) => {
         const alquiler = row.original.subtotal_alquiler
         const ganancia = row.original.ganancia_cabify || 0
@@ -4762,7 +4765,9 @@ export function ReporteFacturacionTab() {
     },
     {
       id: 'garantia_desglose',
+      accessorFn: (row) => row.subtotal_garantia,
       header: 'Garantía',
+      enableSorting: true,
       cell: ({ row }) => {
         const garantia = row.original.subtotal_garantia
         const cuotaNum = row.original.cuota_garantia_numero || ''
@@ -4981,7 +4986,7 @@ export function ReporteFacturacionTab() {
               data-tooltip="Registrar pago"
               style={{ padding: '6px', color: '#16a34a' }}
             >
-              <DollarSign size={14} />
+              <Banknote size={14} />
             </button>
           )}
         </div>
@@ -5671,7 +5676,7 @@ export function ReporteFacturacionTab() {
                   onClick={() => { setShowDetalle(false); registrarPagoFacturacion(detalleFacturacion) }}
                   style={{ background: '#16a34a', borderColor: '#16a34a' }}
                 >
-                  <DollarSign size={16} />
+                  <Banknote size={16} />
                   Registrar Pago
                 </button>
               )}
