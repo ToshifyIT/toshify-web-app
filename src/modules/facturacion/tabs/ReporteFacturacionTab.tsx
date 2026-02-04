@@ -4836,79 +4836,82 @@ export function ReporteFacturacionTab() {
         )
       }
     },
-    {
-      id: 'excesos_km',
-      header: () => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <Gauge size={12} />
-          <span>Excesos</span>
-        </div>
-      ),
-      cell: ({ row }) => {
-        const excesosCond = getExcesosConductor(row.original.conductor_id)
-        const totalExcesos = excesosCond.reduce((sum, e) => sum + e.monto_total, 0)
-        const kmTotal = excesosCond.reduce((sum, e) => sum + e.km_exceso, 0)
-
-        if (excesosCond.length === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
-        }
-
-        return (
-          <div style={{ fontSize: '12px' }}>
-            <div style={{ fontWeight: 600, color: 'var(--badge-red-text)' }}>
-              {formatCurrency(totalExcesos)}
-            </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-              +{kmTotal} km
-            </div>
+    // Columnas solo visibles con período generado (en Vista Previa siempre están vacías)
+    ...(!modoVistaPrevia ? [
+      {
+        id: 'excesos_km',
+        header: () => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Gauge size={12} />
+            <span>Excesos</span>
           </div>
-        )
-      }
-    },
-    {
-      accessorKey: 'saldo_anterior',
-      header: 'Saldo Ant.',
-      cell: ({ row }) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        ),
+        cell: ({ row }: { row: { original: FacturacionConductor } }) => {
+          const excesosCond = getExcesosConductor(row.original.conductor_id)
+          const totalExcesos = excesosCond.reduce((sum, e) => sum + e.monto_total, 0)
+          const kmTotal = excesosCond.reduce((sum, e) => sum + e.km_exceso, 0)
+
+          if (excesosCond.length === 0) {
+            return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+          }
+
+          return (
+            <div style={{ fontSize: '12px' }}>
+              <div style={{ fontWeight: 600, color: 'var(--badge-red-text)' }}>
+                {formatCurrency(totalExcesos)}
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                +{kmTotal} km
+              </div>
+            </div>
+          )
+        }
+      },
+      {
+        accessorKey: 'saldo_anterior' as const,
+        header: 'Saldo Ant.',
+        cell: ({ row }: { row: { original: FacturacionConductor } }) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{
+              fontSize: '12px',
+              fontWeight: row.original.saldo_anterior !== 0 ? 600 : 400,
+              color: row.original.saldo_anterior > 0 ? 'var(--badge-red-text)' : row.original.saldo_anterior < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
+            }}>
+              {row.original.saldo_anterior !== 0 ? formatCurrency(row.original.saldo_anterior) : '-'}
+            </span>
+            <button
+              onClick={(e: React.MouseEvent) => { e.stopPropagation(); editarSaldo(row.original) }}
+              style={{
+                padding: '2px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                opacity: 0.6
+              }}
+              title="Ajustar saldo"
+            >
+              <Edit2 size={12} />
+            </button>
+          </div>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'subtotal_descuentos' as const,
+        header: 'Tickets',
+        cell: ({ row }: { row: { original: FacturacionConductor } }) => (
           <span style={{
             fontSize: '12px',
-            fontWeight: row.original.saldo_anterior !== 0 ? 600 : 400,
-            color: row.original.saldo_anterior > 0 ? 'var(--badge-red-text)' : row.original.saldo_anterior < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
+            fontWeight: row.original.subtotal_descuentos > 0 ? 600 : 400,
+            color: row.original.subtotal_descuentos > 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
           }}>
-            {row.original.saldo_anterior !== 0 ? formatCurrency(row.original.saldo_anterior) : '-'}
+            {row.original.subtotal_descuentos > 0 ? `-${formatCurrency(row.original.subtotal_descuentos)}` : '-'}
           </span>
-          <button
-            onClick={(e) => { e.stopPropagation(); editarSaldo(row.original) }}
-            style={{
-              padding: '2px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-muted)',
-              opacity: 0.6
-            }}
-            title="Ajustar saldo"
-          >
-            <Edit2 size={12} />
-          </button>
-        </div>
-      ),
-      enableSorting: true,
-    },
-    {
-      accessorKey: 'subtotal_descuentos',
-      header: 'Tickets',
-      cell: ({ row }) => (
-        <span style={{
-          fontSize: '12px',
-          fontWeight: row.original.subtotal_descuentos > 0 ? 600 : 400,
-          color: row.original.subtotal_descuentos > 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
-        }}>
-          {row.original.subtotal_descuentos > 0 ? `-${formatCurrency(row.original.subtotal_descuentos)}` : '-'}
-        </span>
-      ),
-      enableSorting: true,
-    },
+        ),
+        enableSorting: true,
+      },
+    ] as ColumnDef<FacturacionConductor>[] : []),
     {
       accessorKey: 'total_a_pagar',
       header: 'TOTAL',
