@@ -8,7 +8,7 @@ import {
   AlertTriangle,
   Eye,
   Plus,
-  DollarSign,
+  // DollarSign,
   Filter,
   Edit3,
   UserPlus,
@@ -1358,8 +1358,8 @@ export function SaldosAbonosTab() {
     }
   ], [])
 
-  // Stats para sub-tab Abonos
-  const statsAbonos = useMemo(() => {
+  // Stats para sub-tab Abonos (comentado - simplificado a solo total)
+  /* const statsAbonos = useMemo(() => {
     const totalAbonos = todosLosAbonos.filter(a => a.tipo === 'abono')
     const totalCargos = todosLosAbonos.filter(a => a.tipo === 'cargo')
     return {
@@ -1368,7 +1368,7 @@ export function SaldosAbonosTab() {
       montoAbonos: totalAbonos.reduce((sum, a) => sum + a.monto, 0),
       montoCargos: totalCargos.reduce((sum, a) => sum + a.monto, 0)
     }
-  }, [todosLosAbonos])
+  }, [todosLosAbonos]) */
 
   return (
     <>
@@ -1514,37 +1514,12 @@ export function SaldosAbonosTab() {
         <>
           {/* Stats de Movimientos */}
           <div className="fact-stats" style={{ marginBottom: '16px' }}>
-            <div className="fact-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+            <div className="fact-stats-grid">
               <div className="fact-stat-card">
                 <Receipt size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
                   <span className="fact-stat-value">{todosLosAbonos.length}</span>
                   <span className="fact-stat-label">Total Movimientos</span>
-                </div>
-              </div>
-              <div className="fact-stat-card" style={{ borderLeft: '3px solid #16a34a' }}>
-                <ArrowUpCircle size={18} className="fact-stat-icon" style={{ color: '#16a34a' }} />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value" style={{ color: '#16a34a' }}>{statsAbonos.cantidadAbonos}</span>
-                  <span className="fact-stat-label">Abonos</span>
-                </div>
-              </div>
-              <div className="fact-stat-card" style={{ borderLeft: '3px solid #dc2626' }}>
-                <ArrowDownCircle size={18} className="fact-stat-icon" style={{ color: '#dc2626' }} />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value" style={{ color: '#dc2626' }}>{statsAbonos.cantidadCargos}</span>
-                  <span className="fact-stat-label">Cargos</span>
-                </div>
-              </div>
-              <div className="fact-stat-card">
-                <DollarSign size={18} className="fact-stat-icon" />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value">
-                    <span style={{ color: '#16a34a' }}>+{formatCurrency(statsAbonos.montoAbonos)}</span>
-                    {' / '}
-                    <span style={{ color: '#dc2626' }}>-{formatCurrency(statsAbonos.montoCargos)}</span>
-                  </span>
-                  <span className="fact-stat-label">Abonos / Cargos</span>
                 </div>
               </div>
             </div>
