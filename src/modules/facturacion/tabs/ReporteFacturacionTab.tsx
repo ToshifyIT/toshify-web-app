@@ -1942,31 +1942,38 @@ export function ReporteFacturacionTab() {
       if (errorPago) throw errorPago
 
       // 2. Actualizar saldo_actual en saldos_conductores
-      // El nuevo saldo = monto pagado - total adeudado (negativo = deuda, positivo = favor)
-      const nuevoSaldo = formValues.monto - totalAbsoluto
+      // Diferencia de este pago = monto pagado - total adeudado (negativo = deuda, positivo = favor)
+      const diferenciaPago = formValues.monto - totalAbsoluto
 
       const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
         .select('id, saldo_actual')
         .eq('conductor_id', facturacion.conductor_id)
-        .single()
+        .maybeSingle()
 
       if (saldoExistente) {
-        await (supabase.from('saldos_conductores') as any)
+        // Acumular al saldo existente
+        const saldoAcumulado = (saldoExistente.saldo_actual || 0) + diferenciaPago
+        const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
           .update({
-            saldo_actual: nuevoSaldo,
+            saldo_actual: saldoAcumulado,
             dias_mora: 0,
             ultima_actualizacion: new Date().toISOString()
           })
           .eq('id', saldoExistente.id)
+        if (errorSaldo) throw errorSaldo
       } else {
         // Crear entrada de saldo si no existe
-        await (supabase.from('saldos_conductores') as any)
+        const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
           .insert({
             conductor_id: facturacion.conductor_id,
-            saldo_actual: nuevoSaldo,
+            conductor_nombre: facturacion.conductor_nombre,
+            conductor_dni: facturacion.conductor_dni,
+            conductor_cuit: facturacion.conductor_cuit || null,
+            saldo_actual: diferenciaPago,
             dias_mora: 0,
             ultima_actualizacion: new Date().toISOString()
           })
+        if (errorSaldo) throw errorSaldo
       }
 
       // 3. Registrar en abonos_conductores como audit trail
