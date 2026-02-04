@@ -19,7 +19,7 @@ import {
   FileText,
   Loader2,
   RefreshCw,
-  FileSpreadsheet,
+  // FileSpreadsheet,
   Filter,
   AlertCircle,
   Calculator,
@@ -3852,8 +3852,8 @@ export function ReporteFacturacionTab() {
     }
   }
 
-  // Exportar Vista Previa a Excel - Formato RIT (cada fila es un producto/concepto)
-  async function exportarVistaPreviaExcel() {
+  // Exportar Vista Previa a Excel - Formato RIT (deshabilitado en Vista Previa)
+  /* async function exportarVistaPreviaExcel() {
     if (vistaPreviaData.length === 0) {
       Swal.fire('Sin datos', 'No hay datos para exportar', 'warning')
       return
@@ -4062,7 +4062,7 @@ export function ReporteFacturacionTab() {
     } finally {
       setExportingExcel(false)
     }
-  }
+  } */
 
   // Preparar Preview Facturación Cabify
   async function prepararCabifyPreview() {
@@ -5233,14 +5233,6 @@ export function ReporteFacturacionTab() {
               >
                 {loadingSiFacturaPreview ? <Loader2 size={14} className="spinning" /> : <Eye size={14} />}
                 {loadingSiFacturaPreview ? 'Cargando...' : 'Preview Facturación'}
-              </button>
-              <button
-                className="fact-btn-export"
-                onClick={exportarVistaPreviaExcel}
-                disabled={exportingExcel || vistaPreviaData.length === 0}
-              >
-                {exportingExcel ? <Loader2 size={14} className="spinning" /> : <FileSpreadsheet size={14} />}
-                {exportingExcel ? 'Exportando...' : 'Exportar Excel RIT'}
               </button>
               <button
                 className="fact-btn-export"
