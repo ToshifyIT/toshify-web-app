@@ -1786,6 +1786,8 @@ export function ReporteFacturacionTab() {
     }
 
     const totalAbsoluto = Math.abs(facturacion.total_a_pagar)
+    const yaCobrado = facturacion.monto_cobrado || 0
+    const montoPendiente = Math.max(0, totalAbsoluto - yaCobrado)
 
     let semanaOptionsHtml = ''
     for (let s = 1; s <= 52; s++) {
@@ -1812,13 +1814,22 @@ export function ReporteFacturacionTab() {
               ${saldoHtml}
             </div>
             <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; margin-top: 6px; padding: 6px 8px; background: #F3F4F6; border-radius: 4px;">
-              <span>TOTAL:</span>
-              <span>${formatCurrency(totalAbsoluto)}</span>
+               <span>TOTAL:</span>
+               <span>${formatCurrency(totalAbsoluto)}</span>
             </div>
-          </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a pagar:</label>
-            <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${totalAbsoluto.toFixed(2)}">
+            ${yaCobrado > 0 ? `
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px; padding: 6px 8px; background: #F0FDF4; border-radius: 4px; border: 1px solid #BBF7D0;">
+              <span style="color: #166534; font-weight: 600;">Ya cobrado:</span>
+              <span style="color: #16a34a; font-weight: 700;">${formatCurrency(yaCobrado)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px; padding: 6px 8px; background: #FEF2F2; border-radius: 4px; border: 1px solid #FECACA;">
+              <span style="color: #991B1B; font-weight: 600;">Resta cobrar:</span>
+              <span style="color: #dc2626; font-weight: 700;">${formatCurrency(montoPendiente)}</span>
+            </div>` : ''}
+           </div>
+           <div style="margin-bottom: 12px;">
+             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a pagar:</label>
+             <input id="swal-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${montoPendiente.toFixed(2)}">
           </div>
           <div id="swal-saldo-pendiente-row" style="display: none; padding: 6px 8px; background: #FEF2F2; border-radius: 4px; margin-bottom: 12px; border: 1px solid #FECACA;">
             <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 12px;">
@@ -1857,7 +1868,7 @@ export function ReporteFacturacionTab() {
         const montoInput = document.getElementById('swal-monto') as HTMLInputElement
         const saldoRow = document.getElementById('swal-saldo-pendiente-row') as HTMLElement
         const saldoEl = document.getElementById('swal-saldo-pendiente') as HTMLElement
-        const totalFull = totalAbsoluto
+        const totalFull = montoPendiente
 
         const updateIndicators = () => {
           const montoVal = parseFloat(montoInput?.value) || 0
@@ -1942,8 +1953,11 @@ export function ReporteFacturacionTab() {
       if (errorPago) throw errorPago
 
       // 2. Actualizar saldo_actual en saldos_conductores
-      // Diferencia de este pago = monto pagado - total adeudado (negativo = deuda, positivo = favor)
-      const diferenciaPago = formValues.monto - totalAbsoluto
+      // Si ya hay cobros previos, la deuda ya fue contabilizada → solo sumar este pago
+      // Si es el primer pago, contabilizar deuda + pago
+      const diferenciaPago = yaCobrado > 0
+        ? formValues.monto
+        : formValues.monto - totalAbsoluto
 
       const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
         .select('id, saldo_actual')
@@ -1988,8 +2002,8 @@ export function ReporteFacturacionTab() {
         fecha_abono: new Date().toISOString()
       })
 
-      // 4. Si el pago cubre el total, marcar facturación como pagada
-      if (formValues.monto >= Math.abs(facturacion.total_a_pagar) && !facturacion.id.startsWith('preview-')) {
+      // 4. Si el total cobrado (previo + este pago) cubre el total, marcar como pagada
+      if ((yaCobrado + formValues.monto) >= totalAbsoluto && !facturacion.id.startsWith('preview-')) {
         await (supabase.from('facturacion_conductores') as any)
           .update({ estado: 'pagado' })
           .eq('id', facturacion.id)
