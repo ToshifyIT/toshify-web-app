@@ -558,7 +558,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                     </div>
                     <div className="cobro-detalles">
                       <span className="monto">
-                        ${(cobro.monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        ${(cobro.monto || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </span>
                       <span className="cuotas">
                         {cuotasAplicadas} de {totalCuotas} cuotas
@@ -591,7 +591,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                       <div>
                         <span className="label">Próxima Cuota:</span>
                         <span className="valor">
-                          Semana {proxima.semana}/{proxima.anio || '?'} - ${proxima.monto_cuota.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                          Semana {proxima.semana}/{proxima.anio || '?'} - ${proxima.monto_cuota.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     ) : (
@@ -638,7 +638,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
                             <td>#{cuota.numero_cuota}</td>
                             <td>Semana {cuota.semana} - {cuota.anio || '?'}</td>
                             <td>
-                              ${cuota.monto_cuota.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                              ${cuota.monto_cuota.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
                             <td>
                               <span style={{
