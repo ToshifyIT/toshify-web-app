@@ -170,9 +170,7 @@ export function ReporteFacturacionTab() {
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
   const [exportingExcel, setExportingExcel] = useState(false)
-  // Filtros para Vista Previa (dropdown simple)
-  const [filtroTipo, setFiltroTipo] = useState<string>('todos')
-  const [filtroEstado, setFiltroEstado] = useState<string>('todos')
+  // Filtros de tipo/estado removidos - no agregaban valor
 
   // Filtros Excel por columna
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
@@ -209,26 +207,7 @@ export function ReporteFacturacionTab() {
   const [conceptosPendientes, setConceptosPendientes] = useState<ConceptoPendiente[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<ConceptoNomina[]>([])
 
-  // Al montar: buscar última semana generada y navegar a ella
-  useEffect(() => {
-    async function irAUltimaSemanaGenerada() {
-      const { data: ultimoPeriodo } = await (supabase
-        .from('periodos_facturacion') as any)
-        .select('fecha_inicio, fecha_fin')
-        .in('estado', ['abierto', 'cerrado'])
-        .order('anio', { ascending: false })
-        .order('semana', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (ultimoPeriodo) {
-        const inicio = parseISO(ultimoPeriodo.fecha_inicio)
-        const fin = parseISO(ultimoPeriodo.fecha_fin)
-        setSemanaActual({ inicio, fin })
-      }
-    }
-    irAUltimaSemanaGenerada()
-  }, [])
+  // Default: semana actual (inicializada en useState)
 
   // Cargar facturaciones cuando cambia la semana
   useEffect(() => {
@@ -3948,9 +3927,6 @@ export function ReporteFacturacionTab() {
             return false
           }
         }
-        if (filtroTipo !== 'todos' && f.tipo_alquiler !== filtroTipo) return false
-        if (filtroEstado === 'deuda' && f.total_a_pagar <= 0) return false
-        if (filtroEstado === 'favor' && f.total_a_pagar > 0) return false
         return true
       })
 
@@ -4163,9 +4139,6 @@ export function ReporteFacturacionTab() {
             return false
           }
         }
-        if (filtroTipo !== 'todos' && f.tipo_alquiler !== filtroTipo) return false
-        if (filtroEstado === 'deuda' && f.total_a_pagar <= 0) return false
-        if (filtroEstado === 'favor' && f.total_a_pagar > 0) return false
         return true
       })
 
@@ -5327,35 +5300,10 @@ export function ReporteFacturacionTab() {
           {/* Filtros para Vista Previa */}
           <div className="fact-filtros-columna">
             <div className="fact-filtros-grupo">
-              <Filter size={14} />
-              <span className="fact-filtros-label">Filtros:</span>
-
-              <select
-                className="fact-filtro-select"
-                value={filtroTipo}
-                onChange={(e) => setFiltroTipo(e.target.value)}
-              >
-                <option value="todos">Todos los tipos</option>
-                <option value="TURNO">Solo TURNO</option>
-                <option value="CARGO">Solo CARGO</option>
-              </select>
-
-              <select
-                className="fact-filtro-select"
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
-              >
-                <option value="todos">Todos</option>
-                <option value="deuda">Con deuda</option>
-                <option value="favor">A favor</option>
-              </select>
-
-              {(filtroTipo !== 'todos' || filtroEstado !== 'todos' || buscarConductor) && (
+              {buscarConductor && (
                 <button
                   className="fact-filtro-limpiar"
                   onClick={() => {
-                    setFiltroTipo('todos')
-                    setFiltroEstado('todos')
                     setBuscarConductor('')
                   }}
                 >
@@ -5406,10 +5354,6 @@ export function ReporteFacturacionTab() {
                   return false
                 }
               }
-              // Filtros existentes
-              if (filtroTipo !== 'todos' && f.tipo_alquiler !== filtroTipo) return false
-              if (filtroEstado === 'deuda' && f.total_a_pagar <= 0) return false
-              if (filtroEstado === 'favor' && f.total_a_pagar > 0) return false
               return true
             })}
             columns={columns}
@@ -5478,43 +5422,9 @@ export function ReporteFacturacionTab() {
             </div>
           )}
 
-          {/* Filtros */}
+          {/* Acciones */}
           <div className="fact-filtros-columna">
             <div className="fact-filtros-grupo">
-              <Filter size={14} />
-              <span className="fact-filtros-label">Filtros:</span>
-
-              <select
-                className="fact-filtro-select"
-                value={filtroTipo}
-                onChange={(e) => setFiltroTipo(e.target.value)}
-              >
-                <option value="todos">Todos los tipos</option>
-                <option value="TURNO">Solo TURNO</option>
-                <option value="CARGO">Solo CARGO</option>
-              </select>
-
-              <select
-                className="fact-filtro-select"
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
-              >
-                <option value="todos">Todos</option>
-                <option value="deuda">Con deuda</option>
-                <option value="favor">A favor</option>
-              </select>
-
-              {(filtroTipo !== 'todos' || filtroEstado !== 'todos') && (
-                <button
-                  className="fact-filtro-limpiar"
-                  onClick={() => {
-                    setFiltroTipo('todos')
-                    setFiltroEstado('todos')
-                  }}
-                >
-                  Limpiar filtros
-                </button>
-              )}
             </div>
 
             <div className="fact-export-btn-group">
