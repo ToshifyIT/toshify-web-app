@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
@@ -10,7 +10,7 @@ import {
   DollarSign,
   TrendingUp,
   TrendingDown,
-  Calendar,
+  // Calendar,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -25,11 +25,13 @@ import {
   Calculator,
   Gauge,
   Edit2,
-  Search
+  Search,
+  Play
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
+import { useAuth } from '../../../contexts/AuthContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG, calcularMora } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO, differenceInDays, isAfter, isBefore } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -128,6 +130,12 @@ function getSemanaArgentina(date: Date) {
 
 
 export function ReporteFacturacionTab() {
+  const { profile } = useAuth()
+  
+  // Ref para auto-recalcular después de crear un nuevo período
+  const autoRecalcularRef = useRef(false)
+  const [generando, setGenerando] = useState(false)
+
   // Estados principales
   const [facturaciones, setFacturaciones] = useState<FacturacionConductor[]>([])
   const [periodo, setPeriodo] = useState<PeriodoFacturacion | null>(null)
@@ -831,38 +839,114 @@ export function ReporteFacturacionTab() {
     cargarVistaPreviaInterno(true)
   }
 
+  // Generar nuevo período (crea el registro en BD y luego recalcula automáticamente)
+  async function generarNuevoPeriodo() {
+    if (periodo) return // Ya existe un período
+
+    const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+    const anio = getYear(semanaActual.inicio)
+    const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
+    const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
+
+    const result = await Swal.fire({
+      title: `<span style="font-size: 18px; font-weight: 600;">Generar Facturación</span>`,
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">Semana ${semana} - ${anio}</div>
+            <div style="color: #6B7280; font-size: 12px; margin-top: 2px;">
+              ${format(semanaActual.inicio, 'dd/MM/yyyy', { locale: es })} al ${format(semanaActual.fin, 'dd/MM/yyyy', { locale: es })}
+            </div>
+          </div>
+          <div style="color: #374151; font-size: 12px;">Este proceso creará el período y calculará todos los conceptos de facturación.</div>
+        </div>
+      `,
+      icon: 'question',
+      iconColor: '#ff0033',
+      showCancelButton: true,
+      confirmButtonText: 'Generar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ff0033',
+      cancelButtonColor: '#6B7280',
+      width: 380,
+    })
+
+    if (!result.isConfirmed) return
+
+    setGenerando(true)
+    try {
+      // 1. Crear el período en BD con estado 'procesando'
+      const { data: nuevoPeriodo, error: errPeriodo } = await (supabase
+        .from('periodos_facturacion') as any)
+        .insert({
+          semana,
+          anio,
+          fecha_inicio: fechaInicio,
+          fecha_fin: fechaFin,
+          estado: 'procesando',
+          created_by_name: profile?.full_name || 'Sistema'
+        })
+        .select()
+        .single()
+
+      if (errPeriodo) throw errPeriodo
+
+      // 2. Setear el período en state y marcar flag para auto-recalcular
+      setPeriodo(nuevoPeriodo as PeriodoFacturacion)
+      setModoVistaPrevia(false)
+      autoRecalcularRef.current = true
+      // El useEffect de abajo detectará el cambio y llamará recalcularPeriodoAbierto()
+    } catch (error) {
+      console.error('Error generando período:', error)
+      Swal.fire('Error', 'No se pudo crear el período de facturación', 'error')
+      setGenerando(false)
+    }
+  }
+
+  // Auto-recalcular después de crear un nuevo período
+  useEffect(() => {
+    if (autoRecalcularRef.current && periodo && periodo.estado === 'procesando') {
+      autoRecalcularRef.current = false
+      setGenerando(false)
+      // Llamar recalcularPeriodoAbierto sin confirmación (ya se confirmó en generarNuevoPeriodo)
+      recalcularPeriodoAbierto(true)
+    }
+  }, [periodo])
+
   // Recalcular período abierto - REGENERACIÓN COMPLETA desde cero (misma lógica que PeriodosTab)
-  async function recalcularPeriodoAbierto() {
+  async function recalcularPeriodoAbierto(skipConfirm = false) {
     if (!periodo || (periodo.estado !== 'abierto' && periodo.estado !== 'procesando')) {
       Swal.fire('Error', 'Solo se puede recalcular un período abierto', 'error')
       return
     }
 
-    const confirmResult = await Swal.fire({
-      title: '¿Recalcular facturación?',
-      html: `
-        <p>Esto <strong>eliminará y regenerará TODA la facturación</strong> del período:</p>
-        <ul style="text-align:left; margin-top:10px;">
-          <li>Alquiler (P001/P002)</li>
-          <li>Garantía (P003)</li>
-          <li>Tickets a favor (P004)</li>
-          <li>Peajes Cabify (P005)</li>
-          <li>Excesos de KM (P006)</li>
-          <li>Penalidades (P007)</li>
-          <li>Multas de Tránsito (P008)</li>
-          <li>Mora (P009)</li>
-          <li>Cobros Fraccionados (P010)</li>
-        </ul>
-        <p style="margin-top:10px; color:#b91c1c;"><small>No cierre ni refresque la página durante el proceso.</small></p>
-      `,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, recalcular',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: 'var(--color-primary)'
-    })
+    if (!skipConfirm) {
+      const confirmResult = await Swal.fire({
+        title: '¿Recalcular facturación?',
+        html: `
+          <p>Esto <strong>eliminará y regenerará TODA la facturación</strong> del período:</p>
+          <ul style="text-align:left; margin-top:10px;">
+            <li>Alquiler (P001/P002)</li>
+            <li>Garantía (P003)</li>
+            <li>Tickets a favor (P004)</li>
+            <li>Peajes Cabify (P005)</li>
+            <li>Excesos de KM (P006)</li>
+            <li>Penalidades (P007)</li>
+            <li>Multas de Tránsito (P008)</li>
+            <li>Mora (P009)</li>
+            <li>Cobros Fraccionados (P010)</li>
+          </ul>
+          <p style="margin-top:10px; color:#b91c1c;"><small>No cierre ni refresque la página durante el proceso.</small></p>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, recalcular',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: 'var(--color-primary)'
+      })
 
-    if (!confirmResult.isConfirmed) return
+      if (!confirmResult.isConfirmed) return
+    }
 
     setRecalculando(true)
     try {
@@ -1925,9 +2009,9 @@ export function ReporteFacturacionTab() {
     setSemanaActual(getSemanaArgentina(nuevaFecha))
   }
 
-  function irASemanaActual() {
-    setSemanaActual(getSemanaArgentina(new Date()))
-  }
+  // function irASemanaActual() {
+  //   setSemanaActual(getSemanaArgentina(new Date()))
+  // }
 
   // Exportar a PDF
   async function exportarPDF() {
@@ -5050,18 +5134,27 @@ export function ReporteFacturacionTab() {
           </button>
         </div>
         <div className="fact-semana-actions">
-          <button className="fact-btn-secondary" onClick={irASemanaActual}>
-            <Calendar size={14} />
-            Semana Actual
-          </button>
-          <button className="fact-btn-secondary" onClick={cargarFacturacion} disabled={loading}>
-            <RefreshCw size={14} className={loading ? 'spinning' : ''} />
-            Actualizar
-          </button>
+          {/* Botón Generar - solo cuando NO existe período */}
+          {!periodo && !loading && (
+            <button
+              className="fact-btn-primary"
+              onClick={generarNuevoPeriodo}
+              disabled={generando || recalculando}
+              title="Generar facturación para esta semana"
+            >
+              {generando ? (
+                <Loader2 size={14} className="spinning" />
+              ) : (
+                <Play size={14} />
+              )}
+              {generando ? 'Generando...' : 'Generar'}
+            </button>
+          )}
+          {/* Botón Recalcular - solo cuando período está abierto/procesando */}
           {(periodo?.estado === 'abierto' || periodo?.estado === 'procesando') && (
             <button
               className="fact-btn-primary"
-              onClick={recalcularPeriodoAbierto}
+              onClick={() => recalcularPeriodoAbierto()}
               disabled={recalculando || loading || periodo?.estado === 'procesando'}
               title="Recalcular incorporando excesos, tickets y penalidades"
             >
