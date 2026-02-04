@@ -4979,7 +4979,7 @@ export function ReporteFacturacionTab() {
           >
             <Eye size={14} />
           </button>
-          {row.original.total_a_pagar > 0 && (
+          {!modoVistaPrevia && row.original.total_a_pagar > 0 && (
             <button
               className="dt-btn-action"
               onClick={(e) => { e.stopPropagation(); registrarPagoFacturacion(row.original) }}
