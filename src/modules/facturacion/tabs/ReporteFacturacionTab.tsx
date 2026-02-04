@@ -1909,7 +1909,7 @@ export function ReporteFacturacionTab() {
           const pendiente = totalFull - montoVal
           if (pendiente > 0) {
             saldoRow.style.display = 'block'
-            saldoEl.textContent = '$' + Math.round(pendiente).toLocaleString('es-AR')
+            saldoEl.textContent = '$ ' + Math.round(pendiente).toLocaleString('en-US')
           } else {
             saldoRow.style.display = 'none'
           }

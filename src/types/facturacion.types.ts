@@ -484,12 +484,11 @@ export function calcularGarantiaProporcional(turnosCobrados: number): number {
 }
 
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
+  const formatted = new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   }).format(value)
+  return `$ ${formatted}`
 }
 
 export function formatDate(dateString: string): string {
