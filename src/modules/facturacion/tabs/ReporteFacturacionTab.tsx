@@ -26,7 +26,8 @@ import {
   Gauge,
   Edit2,
   Search,
-  Play
+  Play,
+  Banknote
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -170,9 +171,7 @@ export function ReporteFacturacionTab() {
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
   const [exportingExcel, setExportingExcel] = useState(false)
-  // Filtros para Vista Previa (dropdown simple)
-  const [filtroTipo, setFiltroTipo] = useState<string>('todos')
-  const [filtroEstado, setFiltroEstado] = useState<string>('todos')
+  // Filtros de tipo/estado removidos - no agregaban valor
 
   // Filtros Excel por columna
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
@@ -209,26 +208,7 @@ export function ReporteFacturacionTab() {
   const [conceptosPendientes, setConceptosPendientes] = useState<ConceptoPendiente[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<ConceptoNomina[]>([])
 
-  // Al montar: buscar última semana generada y navegar a ella
-  useEffect(() => {
-    async function irAUltimaSemanaGenerada() {
-      const { data: ultimoPeriodo } = await (supabase
-        .from('periodos_facturacion') as any)
-        .select('fecha_inicio, fecha_fin')
-        .in('estado', ['abierto', 'cerrado'])
-        .order('anio', { ascending: false })
-        .order('semana', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (ultimoPeriodo) {
-        const inicio = parseISO(ultimoPeriodo.fecha_inicio)
-        const fin = parseISO(ultimoPeriodo.fecha_fin)
-        setSemanaActual({ inicio, fin })
-      }
-    }
-    irAUltimaSemanaGenerada()
-  }, [])
+  // Default: semana actual (inicializada en useState)
 
   // Cargar facturaciones cuando cambia la semana
   useEffect(() => {
@@ -3948,9 +3928,6 @@ export function ReporteFacturacionTab() {
             return false
           }
         }
-        if (filtroTipo !== 'todos' && f.tipo_alquiler !== filtroTipo) return false
-        if (filtroEstado === 'deuda' && f.total_a_pagar <= 0) return false
-        if (filtroEstado === 'favor' && f.total_a_pagar > 0) return false
         return true
       })
 
@@ -4163,9 +4140,6 @@ export function ReporteFacturacionTab() {
             return false
           }
         }
-        if (filtroTipo !== 'todos' && f.tipo_alquiler !== filtroTipo) return false
-        if (filtroEstado === 'deuda' && f.total_a_pagar <= 0) return false
-        if (filtroEstado === 'favor' && f.total_a_pagar > 0) return false
         return true
       })
 
@@ -4741,7 +4715,9 @@ export function ReporteFacturacionTab() {
     },
     {
       id: 'alquiler_desglose',
+      accessorFn: (row) => row.subtotal_alquiler,
       header: 'Alquiler',
+      enableSorting: true,
       cell: ({ row }) => {
         const alquiler = row.original.subtotal_alquiler
         const ganancia = row.original.ganancia_cabify || 0
@@ -4789,7 +4765,9 @@ export function ReporteFacturacionTab() {
     },
     {
       id: 'garantia_desglose',
+      accessorFn: (row) => row.subtotal_garantia,
       header: 'Garantía',
+      enableSorting: true,
       cell: ({ row }) => {
         const garantia = row.original.subtotal_garantia
         const cuotaNum = row.original.cuota_garantia_numero || ''
@@ -4951,43 +4929,7 @@ export function ReporteFacturacionTab() {
       },
       enableSorting: true,
     },
-    // Columna de Ganancia Cabify (solo visible en Vista Previa)
-    ...(modoVistaPrevia ? [{
-      id: 'ganancia_cabify',
-      header: () => (
-        <div style={{ textAlign: 'center' }}>
-          <span>Cabify</span>
-          <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Ganancia</div>
-        </div>
-      ),
-      cell: ({ row }: { row: any }) => {
-        const ganancia = row.original.ganancia_cabify || 0
-        const cubreCuota = row.original.cubre_cuota
-        const cuotaFija = row.original.subtotal_alquiler + row.original.subtotal_garantia
-
-        return (
-          <div style={{ fontSize: '12px', textAlign: 'center' }}>
-            <div style={{
-              fontWeight: 600,
-              color: cubreCuota ? 'var(--badge-green-text)' : 'var(--badge-red-text)',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              background: cubreCuota ? 'var(--badge-green-bg)' : 'var(--badge-red-bg)'
-            }}>
-              {formatCurrency(ganancia)}
-            </div>
-            <div style={{
-              fontSize: '9px',
-              marginTop: '2px',
-              color: cubreCuota ? 'var(--badge-green-text)' : 'var(--badge-red-text)'
-            }}>
-              {cubreCuota ? '✓ Cubre' : `Faltan ${formatCurrency(cuotaFija - ganancia)}`}
-            </div>
-          </div>
-        )
-      },
-      enableSorting: true
-    }] as ColumnDef<FacturacionConductor>[] : []),
+    // Columna Cabify Ganancia removida - generaba confusión
     {
       id: 'acciones',
       header: '',
@@ -5001,14 +4943,14 @@ export function ReporteFacturacionTab() {
           >
             <Eye size={14} />
           </button>
-          {row.original.total_a_pagar > 0 && (
+          {!modoVistaPrevia && row.original.total_a_pagar > 0 && (
             <button
               className="dt-btn-action"
               onClick={(e) => { e.stopPropagation(); registrarPagoFacturacion(row.original) }}
               data-tooltip="Registrar pago"
               style={{ padding: '6px', color: '#16a34a' }}
             >
-              <DollarSign size={14} />
+              <Banknote size={14} />
             </button>
           )}
         </div>
@@ -5327,35 +5269,10 @@ export function ReporteFacturacionTab() {
           {/* Filtros para Vista Previa */}
           <div className="fact-filtros-columna">
             <div className="fact-filtros-grupo">
-              <Filter size={14} />
-              <span className="fact-filtros-label">Filtros:</span>
-
-              <select
-                className="fact-filtro-select"
-                value={filtroTipo}
-                onChange={(e) => setFiltroTipo(e.target.value)}
-              >
-                <option value="todos">Todos los tipos</option>
-                <option value="TURNO">Solo TURNO</option>
-                <option value="CARGO">Solo CARGO</option>
-              </select>
-
-              <select
-                className="fact-filtro-select"
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
-              >
-                <option value="todos">Todos</option>
-                <option value="deuda">Con deuda</option>
-                <option value="favor">A favor</option>
-              </select>
-
-              {(filtroTipo !== 'todos' || filtroEstado !== 'todos' || buscarConductor) && (
+              {buscarConductor && (
                 <button
                   className="fact-filtro-limpiar"
                   onClick={() => {
-                    setFiltroTipo('todos')
-                    setFiltroEstado('todos')
                     setBuscarConductor('')
                   }}
                 >
@@ -5406,10 +5323,6 @@ export function ReporteFacturacionTab() {
                   return false
                 }
               }
-              // Filtros existentes
-              if (filtroTipo !== 'todos' && f.tipo_alquiler !== filtroTipo) return false
-              if (filtroEstado === 'deuda' && f.total_a_pagar <= 0) return false
-              if (filtroEstado === 'favor' && f.total_a_pagar > 0) return false
               return true
             })}
             columns={columns}
@@ -5478,43 +5391,9 @@ export function ReporteFacturacionTab() {
             </div>
           )}
 
-          {/* Filtros */}
+          {/* Acciones */}
           <div className="fact-filtros-columna">
             <div className="fact-filtros-grupo">
-              <Filter size={14} />
-              <span className="fact-filtros-label">Filtros:</span>
-
-              <select
-                className="fact-filtro-select"
-                value={filtroTipo}
-                onChange={(e) => setFiltroTipo(e.target.value)}
-              >
-                <option value="todos">Todos los tipos</option>
-                <option value="TURNO">Solo TURNO</option>
-                <option value="CARGO">Solo CARGO</option>
-              </select>
-
-              <select
-                className="fact-filtro-select"
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
-              >
-                <option value="todos">Todos</option>
-                <option value="deuda">Con deuda</option>
-                <option value="favor">A favor</option>
-              </select>
-
-              {(filtroTipo !== 'todos' || filtroEstado !== 'todos') && (
-                <button
-                  className="fact-filtro-limpiar"
-                  onClick={() => {
-                    setFiltroTipo('todos')
-                    setFiltroEstado('todos')
-                  }}
-                >
-                  Limpiar filtros
-                </button>
-              )}
             </div>
 
             <div className="fact-export-btn-group">
@@ -5761,7 +5640,7 @@ export function ReporteFacturacionTab() {
                   onClick={() => { setShowDetalle(false); registrarPagoFacturacion(detalleFacturacion) }}
                   style={{ background: '#16a34a', borderColor: '#16a34a' }}
                 >
-                  <DollarSign size={16} />
+                  <Banknote size={16} />
                   Registrar Pago
                 </button>
               )}
