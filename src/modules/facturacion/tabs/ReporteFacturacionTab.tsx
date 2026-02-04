@@ -2009,6 +2009,50 @@ export function ReporteFacturacionTab() {
           .eq('id', facturacion.id)
       }
 
+      // 5. Registrar pagos individuales para cobros_fraccionados y penalidades_cuotas
+      // Recorrer conceptos en orden y marcar como pagados los que cubre el monto
+      const todosDetalles = detalles || []
+      let restantePago = formValues.monto
+      for (const det of todosDetalles) {
+        const d = det as { referencia_id: string | null; referencia_tipo: string | null; total: number; es_descuento: boolean; concepto_descripcion: string }
+        if (!d.referencia_id) continue
+        if (d.referencia_tipo !== 'cobro_fraccionado' && d.referencia_tipo !== 'penalidad_cuota') continue
+
+        if (d.es_descuento) {
+          restantePago += d.total
+          continue
+        }
+
+        if (restantePago >= d.total) {
+          restantePago -= d.total
+          const tipoCobro = d.referencia_tipo === 'cobro_fraccionado' ? 'cobro_fraccionado' : 'penalidad_cuota'
+          const refTabla = d.referencia_tipo === 'cobro_fraccionado' ? 'cobros_fraccionados' : 'penalidades_cuotas'
+
+          // Registrar pago individual
+          await (supabase.from('pagos_conductores') as any)
+            .insert({
+              conductor_id: facturacion.conductor_id,
+              tipo_cobro: tipoCobro,
+              referencia_id: d.referencia_id,
+              referencia_tabla: refTabla,
+              numero_cuota: null,
+              monto: d.total,
+              fecha_pago: new Date().toISOString(),
+              referencia: `Pago via facturación S${semanaNum}/${anioNum}`,
+              semana: formValues.semana,
+              anio: formValues.anio,
+              conductor_nombre: facturacion.conductor_nombre
+            })
+
+          // Marcar como aplicado en la tabla origen
+          await (supabase.from(refTabla) as any)
+            .update({ aplicado: true })
+            .eq('id', d.referencia_id)
+        } else {
+          break
+        }
+      }
+
       showSuccess('Pago Registrado', `${facturacion.conductor_nombre} - ${formatCurrency(formValues.monto)}`)
     } catch (error: any) {
       console.error('Error registrando pago:', error)
