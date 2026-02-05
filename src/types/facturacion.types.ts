@@ -387,9 +387,9 @@ export const FACTURACION_CONFIG = {
   GARANTIA_CUOTAS_CARGO: 20,
   GARANTIA_CUOTAS_TURNO: 14,  // 14 cuotas según Bruno
 
-  // Mora (según Bruno: 5% flat, no diario)
-  MORA_PORCENTAJE: 5,  // 5% flat si hay saldo y no hay abono
-  MORA_DIAS_MAXIMOS: 7,  // Máximo 7 días de mora (o hasta fecha de baja)
+  // Mora: 1% diario sobre saldo pendiente, máximo 7 días
+  MORA_PORCENTAJE_DIARIO: 1,  // 1% diario sobre saldo pendiente
+  MORA_DIAS_MAXIMOS: 7,  // Máximo 7 días de mora
 
   // Kilometraje
   KM_BASE_SEMANAL: 1800,
@@ -450,22 +450,20 @@ export function calcularExcesoKm(
 }
 
 /**
- * Calcula la mora según las reglas de la reunión:
- * - Si conductor tiene saldo adeudado y NO hizo abono: 5% flat
- * - Si conductor hizo abono (aunque sea parcial): no hay mora
- * - Si conductor tiene baja con deuda: mora hasta fecha de baja
+ * Calcula la mora: 1% diario sobre saldo pendiente
+ * - Máximo 7 días de mora
+ * - Solo aplica si hay saldo positivo (deuda)
  */
 export function calcularMora(
   saldoPendiente: number,
-  hizoAbono: boolean = false
+  diasMora: number = 0
 ): number {
-  // Si hizo abono, no se cobra mora
-  if (hizoAbono || saldoPendiente <= 0) {
+  if (saldoPendiente <= 0 || diasMora <= 0) {
     return 0
   }
 
-  // Mora flat del 5% sobre el saldo pendiente
-  return saldoPendiente * (FACTURACION_CONFIG.MORA_PORCENTAJE / 100)
+  const dias = Math.min(diasMora, FACTURACION_CONFIG.MORA_DIAS_MAXIMOS)
+  return Math.round(saldoPendiente * (FACTURACION_CONFIG.MORA_PORCENTAJE_DIARIO / 100) * dias)
 }
 
 export function calcularAlquilerProporcional(
