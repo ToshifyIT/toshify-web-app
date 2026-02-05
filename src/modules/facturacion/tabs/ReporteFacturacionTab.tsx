@@ -724,12 +724,11 @@ export function ReporteFacturacionTab() {
         // Tickets a favor (descuentos) + P004 de penalidades
         const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento
 
-        // Saldo anterior y mora
+        // Saldo anterior y mora (1% diario, max 7 días)
         const saldo = saldosMap.get(conductorId)
         const saldoAnterior = saldo?.saldo_actual || 0
         const diasMora = saldo?.dias_mora || 0
-        const hizoAbono = diasMora === 0
-        const montoMora = calcularMora(saldoAnterior, hizoAbono)
+        const montoMora = calcularMora(saldoAnterior, diasMora)
 
         // Total a pagar
         const subtotalNeto = subtotalCargos - subtotalDescuentos
