@@ -165,6 +165,15 @@ export function ReporteFacturacionTab() {
   const [detalleFacturacion, setDetalleFacturacion] = useState<FacturacionConductor | null>(null)
   const [detalleItems, setDetalleItems] = useState<FacturacionDetalle[]>([])
   const [exportingPdf, setExportingPdf] = useState(false)
+  const [detallePagos, setDetallePagos] = useState<{
+    id: string
+    monto: number
+    referencia: string | null
+    semana: number
+    anio: number
+    fecha_pago: string
+    tipo_cobro: string
+  }[]>([])
 
   
 
@@ -1706,12 +1715,158 @@ export function ReporteFacturacionTab() {
       // Combinar detalles
       const todosDetalles = [...detallesSinPenalidades, ...detallesPenalidades] as FacturacionDetalle[]
       setDetalleItems(todosDetalles)
-    } catch (error) {
-      console.error('Error cargando detalle:', error)
+
+      // Cargar pagos registrados para esta facturación
+      const { data: pagos } = await (supabase.from('pagos_conductores') as any)
+        .select('id, monto, referencia, semana, anio, fecha_pago, tipo_cobro')
+        .eq('referencia_id', facturacion.id)
+        .eq('tipo_cobro', 'facturacion_semanal')
+        .order('fecha_pago', { ascending: false })
+      setDetallePagos(pagos || [])
+    } catch {
       Swal.fire('Error', 'No se pudo cargar el detalle', 'error')
       setShowDetalle(false)
     } finally {
       setLoadingDetalle(false)
+    }
+  }
+
+  // ==========================================
+  // ELIMINAR PAGO REGISTRADO
+  // ==========================================
+  async function eliminarPago(pagoId: string, monto: number, conductorId: string, facturacionId: string) {
+    const confirm = await Swal.fire({
+      title: 'Eliminar Pago',
+      html: `<p style="font-size:13px;">Se eliminará el pago de <strong>${formatCurrency(monto)}</strong> y se revertirá el saldo.</p>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc2626',
+    })
+    if (!confirm.isConfirmed) return
+
+    try {
+      // 1. Eliminar el pago
+      const { error: errPago } = await (supabase.from('pagos_conductores') as any)
+        .delete().eq('id', pagoId)
+      if (errPago) throw errPago
+
+      // 2. Revertir saldo (restar el monto del pago)
+      const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+        .select('id, saldo_actual').eq('conductor_id', conductorId).maybeSingle()
+      if (saldoExistente) {
+        await (supabase.from('saldos_conductores') as any)
+          .update({
+            saldo_actual: (saldoExistente.saldo_actual || 0) - monto,
+            ultima_actualizacion: new Date().toISOString()
+          }).eq('id', saldoExistente.id)
+      }
+
+      // 3. Eliminar abono correspondiente (mismo monto, misma fecha aprox)
+      const { data: abonos } = await (supabase.from('abonos_conductores') as any)
+        .select('id').eq('conductor_id', conductorId).eq('tipo', 'abono').eq('monto', monto)
+        .limit(1)
+      if (abonos && abonos.length > 0) {
+        await (supabase.from('abonos_conductores') as any).delete().eq('id', abonos[0].id)
+      }
+
+      // 4. Recalcular estado: verificar si queda algún pago que cubra el total
+      const { data: pagosRestantes } = await (supabase.from('pagos_conductores') as any)
+        .select('monto').eq('referencia_id', facturacionId).eq('tipo_cobro', 'facturacion_semanal')
+      const totalCobrado = (pagosRestantes || []).reduce((s: number, p: { monto: number }) => s + p.monto, 0)
+      const { data: factData } = await (supabase.from('facturacion_conductores') as any)
+        .select('total_a_pagar').eq('id', facturacionId).single()
+      const totalAPagar = Math.abs(factData?.total_a_pagar || 0)
+
+      const nuevoEstado = totalCobrado >= totalAPagar ? 'pagado' : 'cerrado'
+      await (supabase.from('facturacion_conductores') as any)
+        .update({ estado: nuevoEstado }).eq('id', facturacionId)
+
+      showSuccess('Pago Eliminado', `Se eliminó el pago de ${formatCurrency(monto)}`)
+      // Recargar datos
+      await cargarFacturacion()
+      setShowDetalle(false)
+      setDetalleFacturacion(null)
+      setDetalleItems([])
+      setDetallePagos([])
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo eliminar el pago', 'error')
+    }
+  }
+
+  // ==========================================
+  // EDITAR MONTO DE PAGO REGISTRADO
+  // ==========================================
+  async function editarMontoPago(pagoId: string, montoActual: number, conductorId: string, facturacionId: string) {
+    const { value: nuevoMonto } = await Swal.fire({
+      title: 'Editar Monto',
+      input: 'number',
+      inputValue: montoActual,
+      inputLabel: `Monto actual: ${formatCurrency(montoActual)}`,
+      inputAttributes: { step: '0.01', min: '0.01' },
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#7C3AED',
+      preConfirm: (val) => {
+        if (!val || parseFloat(val) <= 0) {
+          Swal.showValidationMessage('Ingrese un monto válido')
+          return false
+        }
+        return parseFloat(val)
+      }
+    })
+    if (!nuevoMonto) return
+
+    const diferencia = nuevoMonto - montoActual
+
+    try {
+      // 1. Actualizar monto del pago
+      const { error: errPago } = await (supabase.from('pagos_conductores') as any)
+        .update({ monto: nuevoMonto }).eq('id', pagoId)
+      if (errPago) throw errPago
+
+      // 2. Ajustar saldo (sumar la diferencia)
+      const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+        .select('id, saldo_actual').eq('conductor_id', conductorId).maybeSingle()
+      if (saldoExistente) {
+        await (supabase.from('saldos_conductores') as any)
+          .update({
+            saldo_actual: (saldoExistente.saldo_actual || 0) + diferencia,
+            ultima_actualizacion: new Date().toISOString()
+          }).eq('id', saldoExistente.id)
+      }
+
+      // 3. Actualizar abono correspondiente
+      const { data: abonos } = await (supabase.from('abonos_conductores') as any)
+        .select('id').eq('conductor_id', conductorId).eq('tipo', 'abono').eq('monto', montoActual)
+        .limit(1)
+      if (abonos && abonos.length > 0) {
+        await (supabase.from('abonos_conductores') as any)
+          .update({ monto: nuevoMonto }).eq('id', abonos[0].id)
+      }
+
+      // 4. Recalcular estado
+      const { data: pagosRestantes } = await (supabase.from('pagos_conductores') as any)
+        .select('monto').eq('referencia_id', facturacionId).eq('tipo_cobro', 'facturacion_semanal')
+      const totalCobrado = (pagosRestantes || []).reduce((s: number, p: { monto: number }) => s + p.monto, 0)
+      const { data: factData } = await (supabase.from('facturacion_conductores') as any)
+        .select('total_a_pagar').eq('id', facturacionId).single()
+      const totalAPagar = Math.abs(factData?.total_a_pagar || 0)
+
+      const nuevoEstado = totalCobrado >= totalAPagar ? 'pagado' : 'cerrado'
+      await (supabase.from('facturacion_conductores') as any)
+        .update({ estado: nuevoEstado }).eq('id', facturacionId)
+
+      showSuccess('Pago Editado', `Monto actualizado a ${formatCurrency(nuevoMonto)}`)
+      await cargarFacturacion()
+      setShowDetalle(false)
+      setDetalleFacturacion(null)
+      setDetalleItems([])
+      setDetallePagos([])
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo editar el pago', 'error')
     }
   }
 
@@ -1794,9 +1949,10 @@ export function ReporteFacturacionTab() {
         </div>`
     }
 
-    // Mora
+    // Mora - solo mostrar si no existe P009 en los detalles (evitar duplicado)
+    const tieneP009Detalle = cargos.some((d: { concepto_codigo: string }) => d.concepto_codigo === 'P009')
     let moraHtml = ''
-    if (facturacion.monto_mora > 0) {
+    if (facturacion.monto_mora > 0 && !tieneP009Detalle) {
       moraHtml = `
         <div class="pago-row" data-monto="${facturacion.monto_mora}" data-type="cargo" style="display:flex;align-items:center;gap:8px;padding:4px 0;">
           <span class="pago-ind" style="${indStyle}background:#16a34a;color:white;">✓</span>
@@ -2500,7 +2656,8 @@ export function ReporteFacturacionTab() {
         y += 5
       }
 
-      if (detalleFacturacion.monto_mora > 0) {
+      const tieneP009 = detalleItems.some(d => d.concepto_codigo === 'P009' && !d.es_descuento)
+      if (detalleFacturacion.monto_mora > 0 && !tieneP009) {
         pdf.text(`Mora (${detalleFacturacion.dias_mora} días)`, margin, y)
         pdf.text(formatCurrency(detalleFacturacion.monto_mora), pageWidth - margin, y, { align: 'right' })
         y += 5
@@ -2509,7 +2666,8 @@ export function ReporteFacturacionTab() {
       y += 3
       pdf.setFont('helvetica', 'bold')
       pdf.text('SUBTOTAL CARGOS', margin, y)
-      pdf.text(formatCurrency(detalleFacturacion.subtotal_cargos + detalleFacturacion.saldo_anterior + detalleFacturacion.monto_mora), pageWidth - margin, y, { align: 'right' })
+      const moraExtra = tieneP009 ? 0 : detalleFacturacion.monto_mora
+      pdf.text(formatCurrency(detalleFacturacion.subtotal_cargos + detalleFacturacion.saldo_anterior + moraExtra), pageWidth - margin, y, { align: 'right' })
       y += 10
 
       // DESCUENTOS
@@ -6060,11 +6218,11 @@ export function ReporteFacturacionTab() {
 
       {/* Modal de detalle */}
       {showDetalle && (
-        <div className="fact-modal-overlay" onClick={() => setShowDetalle(false)}>
+        <div className="fact-modal-overlay" onClick={() => { setShowDetalle(false); setDetallePagos([]) }}>
           <div className="fact-modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="fact-modal-header">
               <h2>Detalle de Facturación</h2>
-              <button className="fact-modal-close" onClick={() => setShowDetalle(false)}>
+              <button className="fact-modal-close" onClick={() => { setShowDetalle(false); setDetallePagos([]) }}>
                 <X size={20} />
               </button>
             </div>
@@ -6153,7 +6311,8 @@ export function ReporteFacturacionTab() {
                         </div>
                       )}
 
-                      {detalleFacturacion.monto_mora > 0 && (
+                      {/* Mora: solo mostrar como línea separada si NO existe P009 en los detalles (evitar duplicado) */}
+                      {detalleFacturacion.monto_mora > 0 && !detalleCargos.some(d => d.concepto_codigo === 'P009') && (
                         <div className="fact-item">
                           <span className="fact-item-desc">Mora ({detalleFacturacion.dias_mora} días al 1%)</span>
                           <span className="fact-item-monto">{formatCurrency(detalleFacturacion.monto_mora)}</span>
@@ -6163,7 +6322,11 @@ export function ReporteFacturacionTab() {
                       <div className="fact-item total">
                         <span className="fact-item-desc">SUBTOTAL CARGOS</span>
                         <span className="fact-item-monto">
-                          {formatCurrency(detalleFacturacion.subtotal_cargos + Math.max(0, detalleFacturacion.saldo_anterior) + detalleFacturacion.monto_mora)}
+                          {formatCurrency(
+                            detalleFacturacion.subtotal_cargos
+                            + Math.max(0, detalleFacturacion.saldo_anterior)
+                            + (detalleCargos.some(d => d.concepto_codigo === 'P009') ? 0 : detalleFacturacion.monto_mora)
+                          )}
                         </span>
                       </div>
                     </div>
@@ -6251,6 +6414,63 @@ export function ReporteFacturacionTab() {
                       )}
                     </div>
                   )}
+
+                  {/* Detalle de pagos registrados - editar/eliminar */}
+                  {!modoVistaPrevia && detallePagos.length > 0 && (
+                    <div style={{
+                      marginTop: '12px',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-primary)'
+                    }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                        Pagos Registrados ({detallePagos.length})
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {detallePagos.map((pago) => (
+                          <div key={pago.id} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 8px',
+                            background: 'var(--bg-primary)',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-primary)'
+                          }}>
+                            <div style={{ flex: 1, fontSize: '12px' }}>
+                              <span style={{ fontWeight: 600, color: '#16a34a' }}>{formatCurrency(pago.monto)}</span>
+                              <span style={{ color: 'var(--text-muted)', marginLeft: '8px' }}>
+                                S{pago.semana}/{pago.anio}
+                              </span>
+                              <span style={{ color: 'var(--text-muted)', marginLeft: '8px', fontSize: '11px' }}>
+                                {formatDate(pago.fecha_pago)}
+                              </span>
+                              {pago.referencia && (
+                                <span style={{ color: 'var(--text-secondary)', marginLeft: '8px', fontSize: '11px', fontStyle: 'italic' }}>
+                                  {pago.referencia}
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              className="fact-table-btn fact-table-btn-edit"
+                              title="Editar monto"
+                              onClick={() => editarMontoPago(pago.id, pago.monto, detalleFacturacion.conductor_id, detalleFacturacion.id)}
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              className="fact-table-btn fact-table-btn-delete"
+                              title="Eliminar pago"
+                              onClick={() => eliminarPago(pago.id, pago.monto, detalleFacturacion.conductor_id, detalleFacturacion.id)}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="fact-no-data">No se encontró información</div>
@@ -6258,7 +6478,7 @@ export function ReporteFacturacionTab() {
             </div>
 
             <div className="fact-modal-footer">
-              <button className="fact-btn-secondary" onClick={() => setShowDetalle(false)}>
+              <button className="fact-btn-secondary" onClick={() => { setShowDetalle(false); setDetallePagos([]) }}>
                 Cerrar
               </button>
               {detalleFacturacion && detalleFacturacion.total_a_pagar > 0 && (
