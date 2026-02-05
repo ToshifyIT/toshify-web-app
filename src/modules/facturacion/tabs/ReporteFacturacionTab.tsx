@@ -2074,8 +2074,14 @@ export function ReporteFacturacionTab() {
       }
 
       showSuccess('Pago Registrado', `${facturacion.conductor_nombre} - ${formatCurrency(formValues.monto)}`)
+
+      // Recargar datos para reflejar el pago en la tabla principal
+      await cargarFacturacion()
+      // Cerrar modal de detalle si está abierto
+      setShowDetalle(false)
+      setDetalleFacturacion(null)
+      setDetalleItems([])
     } catch (error: any) {
-      console.error('Error registrando pago:', error)
       Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
     }
   }
