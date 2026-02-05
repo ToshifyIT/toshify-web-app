@@ -5732,6 +5732,36 @@ export function ReporteFacturacionTab() {
                       {detalleFacturacion.total_a_pagar > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
                     </span>
                   </div>
+
+                  {/* Pago registrado (solo visual, no se exporta en PDF) */}
+                  {!modoVistaPrevia && (detalleFacturacion.monto_cobrado || 0) > 0 && (
+                    <div style={{
+                      marginTop: '12px',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      background: (detalleFacturacion.monto_cobrado || 0) >= Math.abs(detalleFacturacion.total_a_pagar) ? '#F0FDF4' : '#FEF3C7',
+                      border: `1px solid ${(detalleFacturacion.monto_cobrado || 0) >= Math.abs(detalleFacturacion.total_a_pagar) ? '#BBF7D0' : '#FDE68A'}`
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>COBRADO</span>
+                        <span style={{
+                          fontSize: '16px',
+                          fontWeight: 700,
+                          color: (detalleFacturacion.monto_cobrado || 0) >= Math.abs(detalleFacturacion.total_a_pagar) ? '#16a34a' : '#d97706'
+                        }}>
+                          {formatCurrency(detalleFacturacion.monto_cobrado || 0)}
+                        </span>
+                      </div>
+                      {(detalleFacturacion.monto_cobrado || 0) < Math.abs(detalleFacturacion.total_a_pagar) && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                          <span style={{ fontSize: '11px', color: '#991B1B' }}>Saldo pendiente</span>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#dc2626' }}>
+                            {formatCurrency(Math.abs(detalleFacturacion.total_a_pagar) - (detalleFacturacion.monto_cobrado || 0))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="fact-no-data">No se encontró información</div>
