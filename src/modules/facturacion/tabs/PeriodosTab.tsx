@@ -513,12 +513,16 @@ export function PeriodosTab() {
 
         // Garantía prorrateada según días totales
         const factorProporcional = conductor.total_dias / 7
-        const cuotaGarantiaProporcional = Math.round(cuotaGarantia * factorProporcional)
 
-        // Obtener número de cuota de garantía
+        // Obtener número de cuota de garantía y verificar si ya está completada
         const garantiaConductor = (garantias as any[]).find((g: any) => g.conductor_id === conductor.conductor_id)
-        const cuotaActual = (garantiaConductor?.cuotas_pagadas || 0) + 1
-        const totalCuotas = garantiaConductor?.total_cuotas || 16
+        const garantiaCompletada = garantiaConductor?.estado === 'completada' || 
+          (garantiaConductor?.cuotas_pagadas >= garantiaConductor?.cuotas_totales)
+        
+        // Si la garantía está completada, no cobrar más cuotas
+        const cuotaGarantiaProporcional = garantiaCompletada ? 0 : Math.round(cuotaGarantia * factorProporcional)
+        const cuotaActual = garantiaCompletada ? garantiaConductor?.cuotas_totales : (garantiaConductor?.cuotas_pagadas || 0) + 1
+        const totalCuotas = garantiaConductor?.cuotas_totales || 16
 
         // Penalidades del conductor - segmentar por categoría de tipo_cobro_descuento
         // Excluir penalidades fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
@@ -631,21 +635,23 @@ export function PeriodosTab() {
           })
         }
 
-        // Insertar detalle de garantía
-        const descripcionGarantia = conductor.total_dias < 7
-          ? `Cuota de Garantía ${cuotaActual} de ${totalCuotas} (${conductor.total_dias}/7 días)`
-          : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
+        // Insertar detalle de garantía (solo si no está completada)
+        if (cuotaGarantiaProporcional > 0) {
+          const descripcionGarantia = conductor.total_dias < 7
+            ? `Cuota de Garantía ${cuotaActual} de ${totalCuotas} (${conductor.total_dias}/7 días)`
+            : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
 
-        await (supabase.from('facturacion_detalle') as any).insert({
-          facturacion_id: facturacionId,
-          concepto_codigo: 'P003',
-          concepto_descripcion: descripcionGarantia,
-          cantidad: conductor.total_dias,
-          precio_unitario: cuotaGarantia / 7,
-          subtotal: cuotaGarantiaProporcional,
-          total: cuotaGarantiaProporcional,
-          es_descuento: false
-        })
+          await (supabase.from('facturacion_detalle') as any).insert({
+            facturacion_id: facturacionId,
+            concepto_codigo: 'P003',
+            concepto_descripcion: descripcionGarantia,
+            cantidad: conductor.total_dias,
+            precio_unitario: cuotaGarantia / 7,
+            subtotal: cuotaGarantiaProporcional,
+            total: cuotaGarantiaProporcional,
+            es_descuento: false
+          })
+        }
 
         // Insertar penalidades segmentadas por categoría (P004 descuento, P006 cargo, P007 cargo)
         // NULL categoria = pendiente, NO se inserta ni se marca aplicada
