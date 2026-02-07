@@ -1546,11 +1546,16 @@ export function ReporteFacturacionTab() {
       }
 
       // Penalidades - Consultar con categoría para segmentar por producto
+      // Filtrar por rango de fechas del periodo actual (no traer penalidades de otras semanas)
+      const fechaInicioDetalle = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
+      const fechaFinDetalle = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
       const { data: penalidades } = await (supabase
         .from('penalidades') as any)
         .select('id, monto, observaciones, fraccionado, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('conductor_id', facturacion.conductor_id)
-        .eq('aplicado', true)
+        .gte('fecha', fechaInicioDetalle)
+        .lte('fecha', fechaFinDetalle)
+        .eq('fraccionado', false)
       
       // Agregar cada penalidad con su código correcto según categoría
       ;(penalidades || []).forEach((p: any, idx: number) => {
