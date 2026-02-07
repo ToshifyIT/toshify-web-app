@@ -1678,48 +1678,9 @@ export function ReporteFacturacionTab() {
 
       if (error) throw error
 
-      // Filtrar items genéricos de penalidades (P004/P006/P007 con referencia_tipo=penalidad) y reemplazar con detalle real
-      const detallesSinPenalidades = (detalles || []).filter((d: any) =>
-        !(d.referencia_tipo === 'penalidad' && ['P004', 'P006', 'P007'].includes(d.concepto_codigo))
-      )
-      
-      // Consultar detalle de penalidades del conductor con categoría
-      const { data: penalidades } = await (supabase
-        .from('penalidades') as any)
-        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
-        .eq('conductor_id', facturacion.conductor_id)
-        .eq('aplicado', true)
-      
-      // Crear items de detalle para cada penalidad con su código correcto
-      const detallesPenalidades: FacturacionDetalle[] = (penalidades || [])
-        .filter((p: any) => !p.fraccionado)
-        .map((p: any, idx: number) => {
-          const categoria = p.tipos_cobro_descuento?.categoria || 'P007'
-          const tipoNombre = p.tipos_cobro_descuento?.nombre || p.observaciones || 'Sin detalle'
-          const esDescuento = categoria === 'P004'
-          const descripcion = categoria === 'P004'
-            ? `Ticket: ${tipoNombre}`
-            : categoria === 'P006'
-              ? `Exceso KM: ${tipoNombre}`
-              : `Penalidad: ${tipoNombre}`
-          return {
-            id: `det-pen-${facturacion.conductor_id}-${idx}`,
-            facturacion_id: facturacion.id,
-            concepto_codigo: categoria,
-            concepto_descripcion: descripcion,
-            cantidad: 1,
-            precio_unitario: p.monto,
-            subtotal: p.monto,
-            total: p.monto,
-            es_descuento: esDescuento,
-            referencia_id: p.id,
-            referencia_tipo: 'penalidad'
-          }
-        })
-      
-      // Combinar detalles
-      const todosDetalles = [...detallesSinPenalidades, ...detallesPenalidades] as FacturacionDetalle[]
-      setDetalleItems(todosDetalles)
+      // Usar directamente los detalles de facturacion_detalle sin modificar
+      // Las penalidades ya están guardadas correctamente en facturacion_detalle cuando se generó el periodo
+      setDetalleItems((detalles || []) as FacturacionDetalle[])
 
       // Cargar pagos registrados para esta facturación
       const { data: pagos } = await (supabase.from('pagos_conductores') as any)
