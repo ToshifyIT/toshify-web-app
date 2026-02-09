@@ -28,7 +28,8 @@ import {
   Search,
   Play,
   Banknote,
-  Upload
+  Upload,
+  Lock
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -202,6 +203,9 @@ export function ReporteFacturacionTab() {
   // Recalcular período abierto
   const [recalculando, setRecalculando] = useState(false)
   const [recalculandoProgreso, setRecalculandoProgreso] = useState({ actual: 0, total: 0 })
+
+  // Cerrar período
+  const [cerrando, setCerrando] = useState(false)
 
   // Exportar SiFactura
   const [exportingSiFactura, setExportingSiFactura] = useState(false)
@@ -755,8 +759,10 @@ export function ReporteFacturacionTab() {
         const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento
 
         // Saldo anterior y mora (1% diario, max 7 días)
+        // NOTA: En saldos_conductores, saldo_actual > 0 = A FAVOR, < 0 = DEUDA
+        // Para facturación, invertimos: saldoAnterior > 0 = DEUDA (se suma), < 0 = A FAVOR (se resta)
         const saldo = saldosMap.get(conductorId)
-        const saldoAnterior = saldo?.saldo_actual || 0
+        const saldoAnterior = -(saldo?.saldo_actual || 0)
         const diasMora = saldo?.dias_mora || 0
         const montoMora = calcularMora(saldoAnterior, diasMora)
 
@@ -1210,8 +1216,10 @@ export function ReporteFacturacionTab() {
         const cantidadMultas = multasVehiculo?.cantidad || 0
 
         // Saldo anterior y mora
+        // NOTA: En saldos_conductores, saldo_actual > 0 = A FAVOR, < 0 = DEUDA
+        // Para facturación, invertimos: saldoAnterior > 0 = DEUDA (se suma), < 0 = A FAVOR (se resta)
         const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
-        const saldoAnterior = saldoConductor?.saldo_actual || 0
+        const saldoAnterior = -(saldoConductor?.saldo_actual || 0)
         const diasMora = saldoAnterior > 0 ? Math.min(saldoConductor?.dias_mora || 0, 7) : 0
         const montoMora = saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0
 
@@ -1472,6 +1480,113 @@ export function ReporteFacturacionTab() {
     } finally {
       setRecalculando(false)
       setRecalculandoProgreso({ actual: 0, total: 0 })
+    }
+  }
+
+  // Cerrar período - copia conductores a la semana siguiente
+  async function cerrarPeriodo() {
+    if (!periodo || periodo.estado !== 'abierto') {
+      Swal.fire('Error', 'Solo se puede cerrar un período abierto', 'error')
+      return
+    }
+
+    const result = await Swal.fire({
+      title: 'Cerrar Período',
+      html: `
+        <p>¿Cerrar el período <strong>Semana ${periodo.semana} - ${periodo.anio}</strong>?</p>
+        <p style="margin-top: 10px;">Los conductores del reporte serán copiados a la semana siguiente.</p>
+        <p style="color: #ff0033; margin-top: 10px;">Esta acción bloqueará las ediciones del período.</p>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ff0033',
+      confirmButtonText: 'Sí, cerrar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
+
+    setCerrando(true)
+    try {
+      // 1. Cambiar estado del período a cerrado
+      const { error } = await (supabase
+        .from('periodos_facturacion') as any)
+        .update({
+          estado: 'cerrado',
+          fecha_cierre: new Date().toISOString(),
+          cerrado_por_name: profile?.full_name || 'Sistema'
+        })
+        .eq('id', periodo.id)
+
+      if (error) throw error
+
+      // 2. Calcular semana siguiente
+      const fechaInicioActual = parseISO(periodo.fecha_inicio)
+      const fechaSiguiente = addWeeks(fechaInicioActual, 1)
+      const semanaSiguiente = getWeek(fechaSiguiente, { weekStartsOn: 1 })
+      const anioSiguiente = getYear(fechaSiguiente)
+
+      // 3. Obtener conductores de la semana que se cierra
+      const { data: conductoresActuales } = await (supabase
+        .from('conductores_semana_facturacion') as any)
+        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
+        .eq('semana', periodo.semana)
+        .eq('anio', periodo.anio)
+
+      let conductoresCopiados = 0
+      if (conductoresActuales && conductoresActuales.length > 0) {
+        // 4. Verificar cuáles ya existen en la semana siguiente
+        const dnis = conductoresActuales.map((c: any) => c.numero_dni)
+        const { data: yaExistentes } = await (supabase
+          .from('conductores_semana_facturacion') as any)
+          .select('numero_dni')
+          .eq('semana', semanaSiguiente)
+          .eq('anio', anioSiguiente)
+          .in('numero_dni', dnis)
+
+        const dnisExistentes = new Set((yaExistentes || []).map((c: any) => c.numero_dni))
+        const nuevos = conductoresActuales.filter((c: any) => !dnisExistentes.has(c.numero_dni))
+
+        // 5. Insertar conductores nuevos en la semana siguiente
+        if (nuevos.length > 0) {
+          const registros = nuevos.map((c: any) => ({
+            numero_dni: c.numero_dni,
+            semana: semanaSiguiente,
+            anio: anioSiguiente,
+            estado: c.estado,
+            patente: c.patente,
+            modalidad: c.modalidad,
+            valor_alquiler: c.valor_alquiler,
+          }))
+
+          const { error: insertError } = await (supabase
+            .from('conductores_semana_facturacion') as any)
+            .insert(registros)
+          
+          if (insertError) {
+            throw new Error(`Error copiando conductores: ${insertError.message}`)
+          }
+          
+          conductoresCopiados = nuevos.length
+        }
+
+        showSuccess('Período Cerrado', `${conductoresCopiados} conductores copiados a semana ${semanaSiguiente}/${anioSiguiente}`)
+      } else {
+        showSuccess('Período Cerrado', 'No había conductores para copiar')
+      }
+
+      // 6. Actualizar estado local
+      setPeriodo(prev => prev ? { 
+        ...prev, 
+        estado: 'cerrado' as const, 
+        fecha_cierre: new Date().toISOString(),
+        cerrado_por_name: profile?.full_name || 'Sistema'
+      } : prev)
+
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo cerrar el período', 'error')
+    } finally {
+      setCerrando(false)
     }
   }
 
@@ -4710,8 +4825,8 @@ export function ReporteFacturacionTab() {
         // Importe Contrato = Monto del alquiler (P001/P002)
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = Todos los cargos - alquiler
-        const excedentes = (f.subtotal_cargos || 0) - importeContrato
+        // EXCEDENTES = (Todos los cargos - descuentos P004) - alquiler
+        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato
 
         return {
           anio,
@@ -4828,8 +4943,8 @@ export function ReporteFacturacionTab() {
         // Importe Contrato = Monto del alquiler
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = Todos los cargos - alquiler
-        const excedentes = (f.subtotal_cargos || 0) - importeContrato
+        // EXCEDENTES = (Todos los cargos - descuentos P004) - alquiler
+        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato
 
         return {
           anio: periodo.anio,
@@ -5806,7 +5921,7 @@ export function ReporteFacturacionTab() {
             <button
               className="fact-btn-primary"
               onClick={() => recalcularPeriodoAbierto()}
-              disabled={recalculando || loading || periodo?.estado === 'procesando'}
+              disabled={recalculando || loading || periodo?.estado === 'procesando' || cerrando}
               title="Recalcular incorporando excesos, tickets y penalidades"
             >
               <Calculator size={14} className={recalculando || periodo?.estado === 'procesando' ? 'spinning' : ''} />
@@ -5815,6 +5930,19 @@ export function ReporteFacturacionTab() {
                 : recalculando || periodo?.estado === 'procesando'
                   ? 'Recalculando...'
                   : 'Recalcular'}
+            </button>
+          )}
+          {/* Botón Cerrar Período - SOLO cuando hay período abierto */}
+          {periodo?.estado === 'abierto' && (
+            <button
+              className="fact-btn-primary"
+              onClick={cerrarPeriodo}
+              disabled={recalculando || loading || cerrando}
+              title="Cerrar período y copiar conductores a la siguiente semana"
+              style={{ background: '#dc2626', borderColor: '#dc2626' }}
+            >
+              <Lock size={14} className={cerrando ? 'spinning' : ''} />
+              {cerrando ? 'Cerrando...' : 'Cerrar Período'}
             </button>
           )}
         </div>
