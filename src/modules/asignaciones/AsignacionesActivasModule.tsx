@@ -450,11 +450,10 @@ export function AsignacionesActivasModule() {
         }
       }
 
-      // Mostrar conductores de la asignación activa
-      // Si la asignación está activa, mostrar los conductores aunque estén 'completado'
-      // Solo excluir 'cancelado' porque significa que el conductor fue removido
+      // Filtrar solo conductores activos (no completados/finalizados/cancelados)
+      // Conductores con estado 'completado' = dados de baja, no mostrar
       const conductoresActivos = (asignacion.asignaciones_conductores || [])
-        .filter((ac: any) => ac.estado !== 'cancelado')
+        .filter((ac: any) => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
 
       // Para TURNO, organizar conductores por turno
       if (asignacion.horario === 'TURNO') {

@@ -644,14 +644,13 @@ export function AsignacionesModule() {
 
   // Procesar asignaciones - UNA fila por asignación (solo asignaciones reales)
   const expandedAsignaciones = useMemo<ExpandedAsignacion[]>(() => {
-    // Asignaciones activas con vacantes (TURNO con menos de 2 conductores NO-cancelados) van primero
-    // Solo consideramos 'cancelado' como vacante real porque el conductor fue removido
+    // Asignaciones activas con vacantes (TURNO con menos de 2 conductores ACTIVOS) van primero
     const asignacionesConVacante = filteredAsignaciones
       .filter(a => (a.estado === 'activa' || a.estado === 'activo') && a.horario === 'TURNO')
       .filter(a => {
-        const conductoresNoCancelados = (a.asignaciones_conductores || [])
-          .filter(ac => ac.estado !== 'cancelado')
-        return conductoresNoCancelados.length < 2
+        const conductoresActivos = (a.asignaciones_conductores || [])
+          .filter(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
+        return conductoresActivos.length < 2
       })
 
     // Procesar todas las asignaciones filtradas
@@ -683,14 +682,19 @@ export function AsignacionesModule() {
         const conductoresNocturno = conductores.filter(ac => ac.horario === 'nocturno')
         
         // Buscar conductor activo/asignado. Si no hay:
-        // - Finalizada/Activa: mostrar último del historial (para trazabilidad y consistencia con Programaciones)
+        // - Finalizada: mostrar último del historial (trazabilidad)
+        // - Activa: mostrar Vacante (null) — conductor completado/dado de baja = ya no está
         // - Programada: mostrar cancelado tachado (para ver que se cayó antes de entregar)
-        // NOTA: Solo excluimos 'cancelado' porque significa que el conductor fue removido intencionalmente
-        const diurnoActivo = conductoresDiurno.find(ac => ac.estado !== 'cancelado')
-        const diurno = diurnoActivo || conductoresDiurno.find(ac => ac.estado === 'cancelado') || null
+        const esActiva = asignacion.estado === 'activa' || asignacion.estado === 'activo'
+        const diurnoActivo = conductoresDiurno.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
+        const diurno = diurnoActivo || (esAsignacionFinalizada
+          ? conductoresDiurno[conductoresDiurno.length - 1]
+          : esActiva ? null : conductoresDiurno.find(ac => ac.estado === 'cancelado') || null)
         
-        const nocturnoActivo = conductoresNocturno.find(ac => ac.estado !== 'cancelado')
-        const nocturno = nocturnoActivo || conductoresNocturno.find(ac => ac.estado === 'cancelado') || null
+        const nocturnoActivo = conductoresNocturno.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
+        const nocturno = nocturnoActivo || (esAsignacionFinalizada
+          ? conductoresNocturno[conductoresNocturno.length - 1]
+          : esActiva ? null : conductoresNocturno.find(ac => ac.estado === 'cancelado') || null)
 
         return {
           ...asignacion,
@@ -713,9 +717,11 @@ export function AsignacionesModule() {
       }
 
       // Para modalidad A CARGO: misma lógica que TURNO
-      // Solo excluimos 'cancelado' porque significa que el conductor fue removido intencionalmente
-      const conductorActivo = conductores.find(ac => ac.estado !== 'cancelado')
-      const primerConductor = conductorActivo || conductores.find(ac => ac.estado === 'cancelado') || null
+      const esActivaCargo = asignacion.estado === 'activa' || asignacion.estado === 'activo'
+      const conductorActivo = conductores.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
+      const primerConductor = conductorActivo || (esAsignacionFinalizada
+        ? conductores[conductores.length - 1]
+        : esActivaCargo ? null : conductores.find(ac => ac.estado === 'cancelado') || null)
       
       // Si es finalizada y no hay conductores en el array, intentar extraer de notas
       let conductorCargoInfo: { id: string; nombre: string; confirmado: boolean; cancelado?: boolean } | null = null
