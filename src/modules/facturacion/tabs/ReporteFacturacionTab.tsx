@@ -257,16 +257,27 @@ export function ReporteFacturacionTab() {
   }, [semanaActual])
 
   // Cargar conceptos de nómina al montar (para agregar ajustes manuales)
+  // Mapa de precios de alquiler por código de concepto
+  const [preciosAlquiler, setPreciosAlquiler] = useState<Map<string, number>>(new Map())
+  
   useEffect(() => {
     async function cargarConceptos() {
       const { data } = await supabase
         .from('conceptos_nomina')
-        .select('id, codigo, descripcion, tipo, es_variable, iva_porcentaje')
+        .select('id, codigo, descripcion, tipo, es_variable, iva_porcentaje, precio_final')
         .eq('activo', true)
         .order('codigo')
       
       if (data) {
         setConceptosNomina(data as ConceptoNomina[])
+        // Crear mapa de precios por código para alquileres
+        const precios = new Map<string, number>()
+        data.forEach((c: any) => {
+          if (c.precio_final) {
+            precios.set(c.codigo, c.precio_final)
+          }
+        })
+        setPreciosAlquiler(precios)
       }
     }
     cargarConceptos()
@@ -483,6 +494,144 @@ export function ReporteFacturacionTab() {
         .in('numero_dni', dnisControl)
 
       const conductoresDataMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
+
+      // 1.1 Cargar asignaciones_conductores para calcular prorrateo por días/modalidad/horario
+      const conductorIds = (conductoresData || []).map((c: any) => c.id)
+      const { data: asignacionesConductores } = await (supabase
+        .from('asignaciones_conductores') as any)
+        .select(`
+          id,
+          conductor_id,
+          horario,
+          fecha_inicio,
+          fecha_fin,
+          estado,
+          asignacion_id,
+          asignaciones!inner(id, horario, estado)
+        `)
+        .in('conductor_id', conductorIds)
+        .in('estado', ['asignado', 'activo', 'completado'])
+
+      // Crear mapa de prorrateo con días y montos para precios históricos
+      interface ProrrateoVistaPrevia {
+        CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
+        monto_CARGO: number; monto_TURNO_DIURNO: number; monto_TURNO_NOCTURNO: number;
+      }
+      const prorrateoMap = new Map<string, ProrrateoVistaPrevia>()
+      
+      // Inicializar todos los conductores con 0 días
+      conductorIds.forEach((id: string) => {
+        prorrateoMap.set(id, { 
+          CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
+          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
+        })
+      })
+
+      // Calcular días por modalidad/horario para cada conductor
+      const fechaInicioSemana = semanaActual.inicio
+      const fechaFinSemana = semanaActual.fin
+      
+      // Guardar asignaciones por conductor para cálculo de montos con precios históricos
+      const asignacionesPorConductorVP = new Map<string, Array<{
+        modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO';
+        fechaInicio: Date;
+        fechaFin: Date;
+      }>>()
+      conductorIds.forEach((id: string) => asignacionesPorConductorVP.set(id, []))
+      
+      ;(asignacionesConductores || []).forEach((ac: any) => {
+        const asignacion = ac.asignaciones
+        if (!asignacion) return
+        
+        const modalidadAsignacion = asignacion.horario // 'TURNO' o 'CARGO'
+        const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
+        
+        // Calcular días que este registro se solapa con la semana
+        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) : fechaInicioSemana
+        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) : fechaFinSemana
+        
+        // Rango efectivo dentro de la semana
+        const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
+        const efectivoFin = acFin > fechaFinSemana ? fechaFinSemana : acFin
+        
+        // Calcular días (diferencia en milisegundos / ms por día)
+        const dias = Math.max(0, Math.ceil((efectivoFin.getTime() - efectivoInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+        
+        if (dias <= 0) return
+        
+        const prorrateo = prorrateoMap.get(ac.conductor_id)
+        if (!prorrateo) return
+        
+        // Determinar modalidad
+        let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
+        if (modalidadAsignacion === 'CARGO' || horarioConductor === 'todo_dia') {
+          modalidad = 'CARGO'
+          prorrateo.CARGO += dias
+        } else if (modalidadAsignacion === 'TURNO') {
+          if (horarioConductor === 'diurno' || horarioConductor === 'DIURNO' || horarioConductor === 'D') {
+            modalidad = 'TURNO_DIURNO'
+            prorrateo.TURNO_DIURNO += dias
+          } else if (horarioConductor === 'nocturno' || horarioConductor === 'NOCTURNO' || horarioConductor === 'N') {
+            modalidad = 'TURNO_NOCTURNO'
+            prorrateo.TURNO_NOCTURNO += dias
+          }
+        }
+        
+        // Guardar asignación para cálculo de montos
+        const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
+        if (asigs) {
+          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin })
+        }
+      })
+      
+      // Cargar historial de precios para la semana
+      const { data: historialPreciosVP } = await (supabase
+        .from('conceptos_facturacion_historial') as any)
+        .select('codigo, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
+        .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+        .lte('fecha_vigencia_desde', fechaFin)
+        .gte('fecha_vigencia_hasta', fechaInicio)
+      
+      // Función helper para obtener precio en una fecha específica
+      const getPrecioEnFechaVP = (codigo: string, fecha: Date): number => {
+        const fechaStr = fecha.toISOString().split('T')[0]
+        const historial = (historialPreciosVP || []).find((h: any) => 
+          h.codigo === codigo && 
+          h.fecha_vigencia_desde <= fechaStr && 
+          h.fecha_vigencia_hasta >= fechaStr
+        )
+        if (historial) return historial.precio_final
+        return preciosAlquiler.get(codigo) || 0
+      }
+      
+      // Mapa de código de concepto por modalidad
+      const codigosPorModalidadVP: Record<string, string> = {
+        'CARGO': 'P002',
+        'TURNO_DIURNO': 'P001', 
+        'TURNO_NOCTURNO': 'P013'
+      }
+      
+      // Calcular montos por día usando precios históricos
+      for (const [conductorId, asignaciones] of asignacionesPorConductorVP.entries()) {
+        const prorrateo = prorrateoMap.get(conductorId)
+        if (!prorrateo) continue
+        
+        for (const asig of asignaciones) {
+          const codigo = codigosPorModalidadVP[asig.modalidad]
+          const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoVistaPrevia
+          
+          const currentDate = new Date(asig.fechaInicio)
+          while (currentDate <= asig.fechaFin) {
+            const precioDiario = getPrecioEnFechaVP(codigo, currentDate) / 7
+            ;(prorrateo as any)[montoKey] += precioDiario
+            currentDate.setDate(currentDate.getDate() + 1)
+          }
+        }
+        
+        prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO)
+        prorrateo.monto_TURNO_DIURNO = Math.round(prorrateo.monto_TURNO_DIURNO)
+        prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO)
+      }
 
       // 2. Cargar saldos de conductores
       const { data: saldos } = await (supabase
@@ -702,16 +851,31 @@ export function ReporteFacturacionTab() {
         if (!conductor) continue
 
         const conductorId = conductor.id
-        const tipoAlquiler: 'CARGO' | 'TURNO' = control.modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
-        const subtotalAlquiler = Math.round(parseFloat(control.valor_alquiler) || 0)
+        
+        // Obtener prorrateo de días y montos por modalidad/horario (con precios históricos)
+        const prorrateo = prorrateoMap.get(conductorId) || { 
+          CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
+          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
+        }
+        const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
+        
+        // Calcular alquiler usando montos pre-calculados con precios históricos
+        let subtotalAlquiler = 0
+        if (diasTotales > 0) {
+          // Usar montos calculados día a día con precios históricos
+          subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
+        } else {
+          // Fallback: usar valor de conductores_semana_facturacion si no hay asignaciones
+          subtotalAlquiler = Math.round(parseFloat(control.valor_alquiler) || 0)
+        }
+        
+        // Determinar tipo de alquiler predominante para garantía
+        const tipoAlquiler: 'CARGO' | 'TURNO' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO) 
+          ? 'CARGO' 
+          : 'TURNO'
 
-        // Factor proporcional derivado del valor_alquiler vs valor base
-        const alquilerBase = tipoAlquiler === 'CARGO'
-          ? FACTURACION_CONFIG.ALQUILER_CARGO
-          : FACTURACION_CONFIG.ALQUILER_TURNO
-        const factorProporcional = alquilerBase > 0 && subtotalAlquiler > 0
-          ? Math.min(1, subtotalAlquiler / alquilerBase)
-          : (subtotalAlquiler > 0 ? 1 : 0)
+        // Factor proporcional para garantía (basado en días trabajados)
+        const factorProporcional = diasTotales > 0 ? Math.min(1, diasTotales / 7) : 0
 
         // Garantía
         const conductorNombreCompleto = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.toLowerCase().trim()
@@ -1017,41 +1181,195 @@ export function ReporteFacturacionTab() {
         .in('numero_dni', dnisControl)
 
       const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
+      const conductorIdsTemp = (conductoresData || []).map((c: any) => c.id)
+
+      // Cargar asignaciones_conductores para calcular prorrateo por días/modalidad/horario
+      const { data: asignacionesConductoresRecalc } = await (supabase
+        .from('asignaciones_conductores') as any)
+        .select(`
+          id,
+          conductor_id,
+          horario,
+          fecha_inicio,
+          fecha_fin,
+          estado,
+          asignacion_id,
+          asignaciones!inner(id, horario, estado)
+        `)
+        .in('conductor_id', conductorIdsTemp)
+        .in('estado', ['asignado', 'activo', 'completado'])
+
+      // Crear mapa de prorrateo: conductor_id -> { días y montos por modalidad }
+      // Los montos se calculan día a día para considerar cambios de precio históricos
+      interface ProrrateoData {
+        CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
+        monto_CARGO: number; monto_TURNO_DIURNO: number; monto_TURNO_NOCTURNO: number;
+      }
+      const prorrateoRecalcMap = new Map<string, ProrrateoData>()
+      conductorIdsTemp.forEach((id: string) => {
+        prorrateoRecalcMap.set(id, { 
+          CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
+          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
+        })
+      })
+
+      // Calcular días por modalidad/horario para cada conductor
+      const fechaInicioSemanaRecalc = parseISO(fechaInicio)
+      const fechaFinSemanaRecalc = parseISO(fechaFin)
+      
+      // NOTE: Los precios históricos se cargarán después (sección 4), por ahora solo contamos días
+      // Los montos se calcularán en la sección 4 después de cargar precios
+      const asignacionesPorConductor = new Map<string, Array<{
+        modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO';
+        fechaInicio: Date;
+        fechaFin: Date;
+      }>>()
+      conductorIdsTemp.forEach((id: string) => asignacionesPorConductor.set(id, []))
+      
+      ;(asignacionesConductoresRecalc || []).forEach((ac: any) => {
+        const asignacion = ac.asignaciones
+        if (!asignacion) return
+        
+        const modalidadAsignacion = asignacion.horario // 'TURNO' o 'CARGO'
+        const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
+        
+        // Calcular días que este registro se solapa con la semana
+        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) : fechaInicioSemanaRecalc
+        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) : fechaFinSemanaRecalc
+        
+        // Rango efectivo dentro de la semana
+        const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
+        const efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
+        
+        // Calcular días
+        const dias = Math.max(0, Math.ceil((efectivoFin.getTime() - efectivoInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+        
+        if (dias <= 0) return
+        
+        const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
+        if (!prorrateo) return
+        
+        // Determinar modalidad
+        let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
+        if (modalidadAsignacion === 'CARGO' || horarioConductor === 'todo_dia') {
+          modalidad = 'CARGO'
+          prorrateo.CARGO += dias
+        } else if (modalidadAsignacion === 'TURNO') {
+          if (horarioConductor === 'diurno' || horarioConductor === 'DIURNO' || horarioConductor === 'D') {
+            modalidad = 'TURNO_DIURNO'
+            prorrateo.TURNO_DIURNO += dias
+          } else if (horarioConductor === 'nocturno' || horarioConductor === 'NOCTURNO' || horarioConductor === 'N') {
+            modalidad = 'TURNO_NOCTURNO'
+            prorrateo.TURNO_NOCTURNO += dias
+          }
+        }
+        
+        // Guardar asignación para cálculo de montos con precios históricos
+        const asigs = asignacionesPorConductor.get(ac.conductor_id)
+        if (asigs) {
+          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin })
+        }
+      })
 
       // Procesar conductores desde tabla de control
       const conductoresProcesados: {
         conductor_id: string; conductor_nombre: string; conductor_dni: string | null;
         conductor_cuit: string | null; vehiculo_patente: string | null;
-        dias_turno: number; dias_cargo: number; total_dias: number;
+        dias_turno_diurno: number; dias_turno_nocturno: number; dias_cargo: number; total_dias: number;
       }[] = []
 
       for (const control of conductoresControl) {
         const conductorData = conductoresMap.get(control.numero_dni)
         if (!conductorData) continue
 
-        const modalidad = control.modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
+        const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
+        const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
+        
         conductoresProcesados.push({
           conductor_id: conductorData.id,
           conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
           conductor_dni: conductorData.numero_dni,
           conductor_cuit: conductorData.numero_cuit,
           vehiculo_patente: control.patente || null,
-          dias_turno: modalidad === 'TURNO' ? 7 : 0,
-          dias_cargo: modalidad === 'CARGO' ? 7 : 0,
-          total_dias: 7,
+          dias_turno_diurno: prorrateo.TURNO_DIURNO,
+          dias_turno_nocturno: prorrateo.TURNO_NOCTURNO,
+          dias_cargo: prorrateo.CARGO,
+          total_dias: totalDias > 0 ? totalDias : 7, // Fallback a 7 si no hay asignaciones
         })
       }
 
       const conductorIds = conductoresProcesados.map(c => c.conductor_id)
 
-      // 4. Obtener conceptos (precios)
+      // 4. Obtener conceptos (precios actuales) e historial de precios
       const { data: conceptos } = await supabase.from('conceptos_nomina').select('*').eq('activo', true)
-      const precioTurnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 35000
-      const precioCargoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 51428.57
-      const cuotaGarantiaDiaria = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 7142.86
-      const precioTurno = precioTurnoDiario * 7
-      const precioCargo = precioCargoDiario * 7
-      const cuotaGarantia = cuotaGarantiaDiaria * 7
+      
+      // Cargar historial de precios para la semana (si hubo cambios)
+      const { data: historialPrecios } = await (supabase
+        .from('conceptos_facturacion_historial') as any)
+        .select('codigo, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
+        .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+        .lte('fecha_vigencia_desde', fechaFin)
+        .gte('fecha_vigencia_hasta', fechaInicio)
+      
+      // Precios actuales como fallback
+      const preciosActuales: Record<string, number> = {
+        'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 349690,
+        'P002': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 51429,
+        'P003': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 50000,
+        'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_final || 350900
+      }
+      
+      // Función helper para obtener precio en una fecha específica
+      const getPrecioEnFecha = (codigo: string, fecha: Date): number => {
+        // Buscar en historial primero
+        const fechaStr = fecha.toISOString().split('T')[0]
+        const historial = (historialPrecios || []).find((h: any) => 
+          h.codigo === codigo && 
+          h.fecha_vigencia_desde <= fechaStr && 
+          h.fecha_vigencia_hasta >= fechaStr
+        )
+        if (historial) return historial.precio_final
+        // Si no hay historial, usar precio actual
+        return preciosActuales[codigo] || 0
+      }
+      
+      // Variables de compatibilidad con código existente
+      const precioTurnoDiurno = preciosActuales['P001']
+      const precioCargo = preciosActuales['P002']
+      const cuotaGarantia = preciosActuales['P003']
+      const precioTurnoNocturno = preciosActuales['P013']
+      
+      // Mapa de código de concepto por modalidad
+      const codigosPorModalidad: Record<string, string> = {
+        'CARGO': 'P002',
+        'TURNO_DIURNO': 'P001', 
+        'TURNO_NOCTURNO': 'P013'
+      }
+      
+      // Calcular montos por día usando precios históricos
+      // Iteramos cada asignación y sumamos el precio diario correspondiente a cada día
+      for (const [conductorId, asignaciones] of asignacionesPorConductor.entries()) {
+        const prorrateo = prorrateoRecalcMap.get(conductorId)
+        if (!prorrateo) continue
+        
+        for (const asig of asignaciones) {
+          const codigo = codigosPorModalidad[asig.modalidad]
+          const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoData
+          
+          // Iterar día por día y sumar el precio correspondiente
+          const currentDate = new Date(asig.fechaInicio)
+          while (currentDate <= asig.fechaFin) {
+            const precioDiario = getPrecioEnFecha(codigo, currentDate) / 7
+            ;(prorrateo as any)[montoKey] += precioDiario
+            currentDate.setDate(currentDate.getDate() + 1)
+          }
+        }
+        
+        // Redondear los montos
+        prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO)
+        prorrateo.monto_TURNO_DIURNO = Math.round(prorrateo.monto_TURNO_DIURNO)
+        prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO)
+      }
 
       // 5. Obtener datos adicionales en paralelo
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
@@ -1138,23 +1456,43 @@ export function ReporteFacturacionTab() {
       setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length })
 
       for (const conductor of conductoresProcesados) {
-        // Calcular alquiler
+        // Obtener montos pre-calculados con precios históricos
+        const prorrateo = prorrateoRecalcMap.get(conductor.conductor_id) || {
+          CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
+          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
+        }
+        
+        // Calcular alquiler con prorrateo por modalidad/horario (usando montos históricos)
         let alquilerTotal = 0
         const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
 
-        if (conductor.dias_turno > 0) {
-          const montoTurno = Math.round((precioTurno / 7) * conductor.dias_turno)
-          alquilerTotal += montoTurno
+        // P001: Turno Diurno (usando monto pre-calculado con precios históricos)
+        if (conductor.dias_turno_diurno > 0) {
+          const montoDiurno = prorrateo.monto_TURNO_DIURNO
+          alquilerTotal += montoDiurno
           detallesAlquiler.push({
-            codigo: 'P002', descripcion: conductor.dias_turno < 7 ? `Alquiler Turno (${conductor.dias_turno}/7 días)` : 'Alquiler Turno',
-            dias: conductor.dias_turno, monto: montoTurno
+            codigo: 'P001', 
+            descripcion: conductor.dias_turno_diurno < 7 ? `Alquiler Turno Diurno (${conductor.dias_turno_diurno}/7 días)` : 'Alquiler Turno Diurno',
+            dias: conductor.dias_turno_diurno, monto: montoDiurno
           })
         }
+        // P013: Turno Nocturno (usando monto pre-calculado con precios históricos)
+        if (conductor.dias_turno_nocturno > 0) {
+          const montoNocturno = prorrateo.monto_TURNO_NOCTURNO
+          alquilerTotal += montoNocturno
+          detallesAlquiler.push({
+            codigo: 'P013', 
+            descripcion: conductor.dias_turno_nocturno < 7 ? `Alquiler Turno Nocturno (${conductor.dias_turno_nocturno}/7 días)` : 'Alquiler Turno Nocturno',
+            dias: conductor.dias_turno_nocturno, monto: montoNocturno
+          })
+        }
+        // P002: A Cargo (usando monto pre-calculado con precios históricos)
         if (conductor.dias_cargo > 0) {
-          const montoCargo = Math.round((precioCargo / 7) * conductor.dias_cargo)
+          const montoCargo = prorrateo.monto_CARGO
           alquilerTotal += montoCargo
           detallesAlquiler.push({
-            codigo: 'P001', descripcion: conductor.dias_cargo < 7 ? `Alquiler a Cargo (${conductor.dias_cargo}/7 días)` : 'Alquiler a Cargo',
+            codigo: 'P002', 
+            descripcion: conductor.dias_cargo < 7 ? `Alquiler a Cargo (${conductor.dias_cargo}/7 días)` : 'Alquiler a Cargo',
             dias: conductor.dias_cargo, monto: montoCargo
           })
         }
@@ -1232,7 +1570,8 @@ export function ReporteFacturacionTab() {
         totalCargosGlobal += subtotalCargos
         totalDescuentosGlobal += subtotalDescuentos
 
-        const tipoAlquilerPrincipal = conductor.dias_cargo >= conductor.dias_turno ? 'CARGO' : 'TURNO'
+        const diasTurnoTotal = conductor.dias_turno_diurno + conductor.dias_turno_nocturno
+        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'CARGO' : 'TURNO'
 
         // INSERT facturacion_conductores
         const { data: factConductor, error: errFact } = await (supabase
@@ -1277,14 +1616,20 @@ export function ReporteFacturacionTab() {
 
         const facturacionId = (factConductor as any).id
 
-        // INSERT detalles de alquiler (P001/P002)
+        // INSERT detalles de alquiler (P001/P002/P013)
         for (const detalle of detallesAlquiler) {
+          // Determinar precio unitario según código
+          let precioUnitario = 0
+          if (detalle.codigo === 'P001') precioUnitario = precioTurnoDiurno / 7
+          else if (detalle.codigo === 'P013') precioUnitario = precioTurnoNocturno / 7
+          else if (detalle.codigo === 'P002') precioUnitario = precioCargo / 7
+          
           await (supabase.from('facturacion_detalle') as any).insert({
             facturacion_id: facturacionId,
             concepto_codigo: detalle.codigo,
             concepto_descripcion: detalle.descripcion,
             cantidad: detalle.dias,
-            precio_unitario: detalle.codigo === 'P001' ? precioCargo / 7 : precioTurno / 7,
+            precio_unitario: precioUnitario,
             subtotal: detalle.monto, total: detalle.monto, es_descuento: false
           })
         }
