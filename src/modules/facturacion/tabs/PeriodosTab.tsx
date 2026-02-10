@@ -567,8 +567,10 @@ export function PeriodosTab() {
         const totalCuotasPenalidades = cuotasConductor.reduce((sum: number, pc: any) => sum + (pc.monto_cuota || 0), 0)
 
         // Saldo anterior
+        // NOTA: En saldos_conductores, saldo_actual > 0 = A FAVOR, < 0 = DEUDA
+        // Para facturación, invertimos: saldoAnterior > 0 = DEUDA (se suma), < 0 = A FAVOR (se resta)
         const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
-        const saldoAnterior = saldoConductor?.saldo_actual || 0
+        const saldoAnterior = -(saldoConductor?.saldo_actual || 0)
         const diasMora = saldoAnterior > 0 ? Math.min(saldoConductor?.dias_mora || 0, 7) : 0
         const montoMora = saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0
 
@@ -1174,6 +1176,7 @@ export function PeriodosTab() {
         )
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [generando])
 
   // Stats
