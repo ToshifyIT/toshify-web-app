@@ -683,7 +683,7 @@ export function AsignacionesModule() {
         
         // Buscar conductor activo/asignado. Si no hay:
         // - Finalizada: mostrar último del historial (trazabilidad)
-        // - Activa: mostrar Vacante (null) — conductor cancelado/completado = ya no está
+        // - Activa: mostrar Vacante (null) — conductor completado/dado de baja = ya no está
         // - Programada: mostrar cancelado tachado (para ver que se cayó antes de entregar)
         const esActiva = asignacion.estado === 'activa' || asignacion.estado === 'activo'
         const diurnoActivo = conductoresDiurno.find(ac => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')

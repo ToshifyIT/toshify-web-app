@@ -451,7 +451,7 @@ export function AsignacionesActivasModule() {
       }
 
       // Filtrar solo conductores activos (no completados/finalizados/cancelados)
-      // Esto es consistente con AsignacionesModule
+      // Conductores con estado 'completado' = dados de baja, no mostrar
       const conductoresActivos = (asignacion.asignaciones_conductores || [])
         .filter((ac: any) => ac.estado !== 'completado' && ac.estado !== 'finalizado' && ac.estado !== 'cancelado')
 

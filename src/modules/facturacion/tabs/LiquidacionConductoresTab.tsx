@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
@@ -375,13 +376,15 @@ export function LiquidacionConductoresTab() {
       const garantiaProporcional = (diasTrabajados / 7) * FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL
 
       // Obtener saldo anterior
+      // NOTA: En saldos_conductores, saldo_actual > 0 = A FAVOR, < 0 = DEUDA
+      // Para facturación, invertimos: saldoAnterior > 0 = DEUDA (se suma), < 0 = A FAVOR (se resta)
       const { data: saldo } = await supabase
         .from('saldos_conductores')
         .select('saldo_actual, monto_mora_acumulada')
         .eq('conductor_id', conductorId)
         .single()
 
-      const saldoAnterior = (saldo as any)?.saldo_actual || 0
+      const saldoAnterior = -((saldo as any)?.saldo_actual || 0)
       const moraAcumulada = (saldo as any)?.monto_mora_acumulada || 0
 
       // Obtener garantía acumulada
@@ -925,6 +928,7 @@ export function LiquidacionConductoresTab() {
         </div>
       )
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [conductorFilter, conductorSearch, conductoresFiltrados, openColumnFilter])
 
   return (
