@@ -254,8 +254,8 @@ export function WeekSelector({ selectedWeek, onWeekChange, onSchoolTrackingClick
         )}
       </div>
 
-      {/* School Tracking Action */}
-      <div className="week-extra-actions">
+      {/* School Tracking Action - HIDDEN PER USER REQUEST */}
+      {/* <div className="week-extra-actions">
         <button 
           className="week-refresh-btn" 
           onClick={onSchoolTrackingClick} 
@@ -264,7 +264,7 @@ export function WeekSelector({ selectedWeek, onWeekChange, onSchoolTrackingClick
           <GraduationCap size={16} />
           <span>Escuela Conductores</span>
         </button>
-      </div>
+      </div> */}
     </div>
   );
 }

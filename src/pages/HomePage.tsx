@@ -1331,6 +1331,15 @@ export function HomePage() {
                             <span>{guia.full_name}</span>
                           </button>
                         ))}
+
+                        {/* Escuela Conductores */}
+                        <button
+                          className={`nav-flyout-item ${isActiveRoute('/escuela-conductores') ? 'active' : ''}`}
+                          onClick={() => navigate('/escuela-conductores')}
+                        >
+                          <span className="nav-flyout-icon"><GraduationCap size={16} /></span>
+                          <span>Escuela Conductores</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1348,22 +1357,19 @@ export function HomePage() {
                     <span className="nav-label">{guia.full_name}</span>
                   </button>
                 ))}
+
+                {/* Escuela Conductores */}
+                <button
+                  className={`nav-item ${isActiveRoute('/escuela-conductores') ? 'active' : ''}`}
+                  onClick={() => navigate('/escuela-conductores')}
+                >
+                  <span className="nav-icon"><GraduationCap size={16} /></span>
+                  <span className="nav-label">Escuela Conductores</span>
+                </button>
               </div>
             </div>
 
-            {/* Menú Escuela Conductores */}
-            <div className="nav-item-wrapper">
-              <button
-                className={`nav-item ${isActiveRoute('/escuela-conductores') ? 'active' : ''}`}
-                onClick={() => navigate('/escuela-conductores')}
-              >
-                <span className="nav-icon"><GraduationCap size={18} /></span>
-                <span className="nav-label">Escuela Conductores</span>
-              </button>
-              {sidebarCollapsed && (
-                <div className="nav-tooltip">Escuela Conductores</div>
-              )}
-            </div>
+
           </nav>
 
           <div className="sidebar-footer">

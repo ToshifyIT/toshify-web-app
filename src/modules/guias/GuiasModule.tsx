@@ -15,7 +15,13 @@ import {
   Pencil,
   ArrowLeftRight,
   Search,
-  History
+  History,
+  Book,
+  Heart,
+  Star,
+  Target,
+  Award,
+  GraduationCap
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -1566,6 +1572,28 @@ export function GuiasModule() {
             return false;
           });
           break;
+        case 'conductoresEscuela':
+          result = result.filter(d => !!d.fecha_escuela);
+          break;
+        case 'capacitacionCabify':
+        case 'capacitacionToshify':
+        case 'seguimientoControl':
+        case 'motivacional':
+        case 'fidelizacion':
+          result = result.filter(d => {
+            if (!d.id_accion_imp) return false;
+            const accion = accionesImplementadas.find(a => a.id === d.id_accion_imp);
+            if (!accion) return false;
+            const nombre = accion.nombre?.toLowerCase() || '';
+            
+            if (activeStatFilter === 'capacitacionCabify') return nombre.includes('capacitacion cabify') || nombre.includes('capacitación cabify');
+            if (activeStatFilter === 'capacitacionToshify') return nombre.includes('capacitacion toshify') || nombre.includes('capacitación toshify');
+            if (activeStatFilter === 'seguimientoControl') return nombre.includes('seguimiento y control');
+            if (activeStatFilter === 'motivacional') return nombre.includes('motivacional');
+            if (activeStatFilter === 'fidelizacion') return nombre.includes('fidelizacion') || nombre.includes('fidelización');
+            return false;
+          });
+          break;
       }
     }
 
@@ -2220,10 +2248,12 @@ export function GuiasModule() {
                   const totalFacturado = currentWeekDrivers.reduce((acc, d) => acc + (Number(d.facturacion_total) || 0), 0);
                   const totalEfectivo = currentWeekDrivers.reduce((acc, d) => acc + (Number(d.facturacion_efectivo) || 0), 0);
                   const totalApp = currentWeekDrivers.reduce((acc, d) => acc + (Number(d.facturacion_app) || 0), 0);
+                  
+                  // Métrica Conductores en Escuela
+                  const conductoresEscuelaCount = currentWeekDrivers.filter(d => !!d.fecha_escuela).length;
 
                   const llamadasRealizadas = currentWeekDrivers.filter(d => !!d.fecha_llamada).length;
                   const llamadasPendientes = currentWeekDrivers.filter(d => !d.fecha_llamada).length;
-                  const porcentajeCompletadas = totalConductores > 0 ? ((llamadasRealizadas / totalConductores) * 100).toFixed(0) : '0';
 
                   // Conteo de seguimiento
                   let seguimientoDiario = 0;
@@ -2256,13 +2286,26 @@ export function GuiasModule() {
                     }
                   });
 
+                  // Conteo de acciones implementadas (5 nuevas métricas)
+                  const getActionCount = (name: string) => {
+                    const action = accionesImplementadas.find(a => a.nombre?.toLowerCase().includes(name.toLowerCase()));
+                    if (!action) return 0;
+                    return currentWeekDrivers.filter(d => d.id_accion_imp === action.id).length;
+                  };
+
+                  const capacitacionCabifyCount = getActionCount('capacitacion cabify') || getActionCount('capacitación cabify');
+                  const capacitacionToshifyCount = getActionCount('capacitacion toshify') || getActionCount('capacitación toshify');
+                  const seguimientoControlCount = getActionCount('seguimiento y control');
+                  const motivacionalCount = getActionCount('motivacional');
+                  const fidelizacionCount = getActionCount('fidelizacion') || getActionCount('fidelización');
+
                   // Formateador de moneda
                   const formatCurrency = (val: number) => {
                     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val);
                   };
 
                   return (
-                    <div className="guias-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                    <div className="guias-stats-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                       {/* Fila 1 */}
                       <div 
                         className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
@@ -2304,11 +2347,14 @@ export function GuiasModule() {
                           <span className="stat-label">FACTURACIÓN APP</span>
                         </div>
                       </div>
-                      <div className="stat-card">
-                        <CheckCircle className="stat-icon" size={18} />
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'conductoresEscuela' ? null : 'conductoresEscuela')}
+                      >
+                        <GraduationCap className="stat-icon text-purple-600" size={18} />
                         <div className="stat-content">
-                          <span className="stat-value">{porcentajeCompletadas}%</span>
-                          <span className="stat-label">% LLAMADAS COMPLETADAS</span>
+                          <span className="stat-value">{conductoresEscuelaCount}</span>
+                          <span className="stat-label">CONDUCTORES EN ESCUELA</span>
                         </div>
                       </div>
 
@@ -2363,23 +2409,77 @@ export function GuiasModule() {
                           <span className="stat-label">SEGUIMIENTO SEMANAL</span>
                         </div>
                       </div>
+
+                      {/* Fila 3 - Nuevas Métricas */}
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'capacitacionCabify' ? null : 'capacitacionCabify')}
+                      >
+                        <Book className="stat-icon text-blue-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{capacitacionCabifyCount}</span>
+                          <span className="stat-label">CAPACITACION CABIFY</span>
+                        </div>
+                      </div>
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'capacitacionToshify' ? null : 'capacitacionToshify')}
+                      >
+                        <Book className="stat-icon text-indigo-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{capacitacionToshifyCount}</span>
+                          <span className="stat-label">CAPACITACION TOSHIFY</span>
+                        </div>
+                      </div>
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoControl' ? null : 'seguimientoControl')}
+                      >
+                        <Target className="stat-icon text-red-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{seguimientoControlCount}</span>
+                          <span className="stat-label">SEGUIMIENTO Y CONTROL</span>
+                        </div>
+                      </div>
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'motivacional' ? null : 'motivacional')}
+                      >
+                        <Star className="stat-icon text-yellow-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{motivacionalCount}</span>
+                          <span className="stat-label">ACCION MOTIVACIONAL</span>
+                        </div>
+                      </div>
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'fidelizacion' ? null : 'fidelizacion')}
+                      >
+                        <Heart className="stat-icon text-pink-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{fidelizacionCount}</span>
+                          <span className="stat-label">ACCION DE FIDELIZACION</span>
+                        </div>
+                      </div>
                     </div>
                   );
                 })()}
               </div>
 
               {/* Filters & Table Container */}
-              <div className="guias-filters-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="guias-filters-container flex flex-col gap-4">
                 {/* Filters Row: Week Selector + Search */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', backgroundColor: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <div className="flex flex-col md:flex-row items-stretch md:items-stretch gap-4 bg-white p-3 rounded-lg shadow-sm">
                   
-                  {/* External Search Input - 80% width */}
-                  <div className="dt-search-wrapper" style={{ flex: '0 0 80%', height: '36px', background: '#f9fafb', borderRadius: '6px' }}>
+                  {/* External Search Input */}
+                  <div 
+                    className="dt-search-wrapper w-full md:w-auto md:flex-1 bg-gray-50 rounded-md"
+                    style={{ padding: '10px' }}
+                  >
                     <Search className="dt-search-icon" size={20} />
                     <input
                       type="text"
-                      className="dt-search-input"
-                      style={{ paddingBottom: '5px', paddingTop: '10px' }}
+                      className="dt-search-input h-full"
                       placeholder="Buscar en esta lista..."
                       value={globalSearch}
                       onChange={(e) => setGlobalSearch(e.target.value)}
@@ -2387,11 +2487,10 @@ export function GuiasModule() {
                   </div>
 
                   {/* Week Selector - Remaining width */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="w-full md:w-auto">
                     <WeekSelector 
                       selectedWeek={selectedWeek} 
                       onWeekChange={setSelectedWeek} 
-                      onSchoolTrackingClick={handleOpenSchoolReport} 
                     />
                   </div>
                 </div>
@@ -2405,6 +2504,7 @@ export function GuiasModule() {
                     showSearch={false}
                     globalFilter={globalSearch}
                     onGlobalFilterChange={setGlobalSearch}
+                    enableHorizontalScroll={true}
                     emptyIcon={<Users size={64} />}
                     emptyTitle="No hay conductores asignados"
                     emptyDescription="Este guía no tiene conductores asignados o no cumplen con los filtros."

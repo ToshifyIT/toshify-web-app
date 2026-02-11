@@ -4,6 +4,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  height: 100%;
 }
 
 /* =====================================================
@@ -12,13 +13,15 @@
 
 .week-calendar-selector {
   position: relative;
+  height: 100%;
 }
 
 .week-calendar-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  height: 100%;
+  padding: 0 14px;
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -52,7 +55,8 @@
 .week-calendar-dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  right: 0;
+  left: auto;
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 12px;

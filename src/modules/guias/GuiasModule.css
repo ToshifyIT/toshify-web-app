@@ -52,10 +52,13 @@
   border: 1px solid var(--border-primary);
 }
 
-.guias-stats-grid {
+/* .guias-stats-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 12px;
+} */
+.guias-stats-grid {
+  /* gap: 12px; */ /* Handled by Tailwind gap-4 */
 }
 
 .guias-stats .stat-card {

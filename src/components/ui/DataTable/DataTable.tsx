@@ -247,6 +247,8 @@ export interface DataTableProps<T> {
   globalFilter?: string;
   /** Callback al cambiar el filtro global (modo controlado) */
   onGlobalFilterChange?: (value: string) => void;
+  /** Habilita el scroll horizontal en lugar de ocultar columnas @default false */
+  enableHorizontalScroll?: boolean;
 }
 
 export function DataTable<T>({
@@ -273,6 +275,7 @@ export function DataTable<T>({
   globalFilterFn: customGlobalFilterFn,
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
+  enableHorizontalScroll = false,
 }: DataTableProps<T>) {
   const [internalGlobalFilter, setInternalGlobalFilter] = useState("");
   const isControlled = controlledGlobalFilter !== undefined;
@@ -512,6 +515,12 @@ export function DataTable<T>({
   // Adjust visible columns based on container width
   useEffect(() => {
     function handleResize() {
+      // If horizontal scroll is enabled, show all columns
+      if (enableHorizontalScroll) {
+        setVisibleColumnCount(1000); // Large enough number to show all
+        return;
+      }
+
       if (!tableWrapperRef.current) return;
       const width = tableWrapperRef.current.offsetWidth;
 
@@ -544,7 +553,7 @@ export function DataTable<T>({
       clearTimeout(timer);
       window.removeEventListener("resize", handleResize);
     };
-  }, [maxVisibleColumns, columns, alwaysVisibleColumns]);
+  }, [maxVisibleColumns, columns, alwaysVisibleColumns, enableHorizontalScroll]);
 
   // Separate columns into visible and hidden - memoized to prevent unnecessary re-renders
   const { regularColumns, actionsColumn } = useMemo(() => {
