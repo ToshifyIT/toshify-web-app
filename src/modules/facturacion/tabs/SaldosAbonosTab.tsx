@@ -157,7 +157,7 @@ export function SaldosAbonosTab() {
 
       if (errorFrac) throw errorFrac
       
-      const fraccionadosConNombre = ((fraccionados || []) as CobroFraccionadoRow[]).map((f) => ({
+      const fraccionadosConNombre = ((fraccionados || []) as unknown as CobroFraccionadoRow[]).map((f) => ({
         conductor_id: f.conductor_id,
         conductor_nombre: f.conductor ? `${f.conductor.apellidos}, ${f.conductor.nombres}` : 'N/A',
         monto_cuota: f.monto_cuota,

@@ -380,7 +380,6 @@ export function UserMenuPermissionsManager() {
         // Actualizar permiso existente
         const { error } = await supabase
           .from('user_menu_permissions')
-          // @ts-expect-error - Tipo generado incorrectamente
           .update({ [validatedField]: newValue })
           .eq('user_id', validatedUserId)
           .eq('menu_id', validatedMenuId)
@@ -400,7 +399,6 @@ export function UserMenuPermissionsManager() {
 
         const { error } = await supabase
           .from('user_menu_permissions')
-          // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
             user_id: validatedUserId,
             menu_id: validatedMenuId,
@@ -500,7 +498,6 @@ export function UserMenuPermissionsManager() {
         // Actualizar permiso existente
         const { error } = await supabase
           .from('user_submenu_permissions')
-          // @ts-expect-error - Tipo generado incorrectamente
           .update({ [validatedField]: newValue })
           .eq('user_id', validatedUserId)
           .eq('submenu_id', validatedSubmenuId)
@@ -520,7 +517,6 @@ export function UserMenuPermissionsManager() {
 
         const { error } = await supabase
           .from('user_submenu_permissions')
-          // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
             user_id: validatedUserId,
             submenu_id: validatedSubmenuId,

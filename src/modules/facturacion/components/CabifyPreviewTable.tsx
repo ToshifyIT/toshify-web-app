@@ -165,7 +165,7 @@ export function CabifyPreviewTable({
       .eq('estado', 'activa')
 
     const patenteMap = new Map<string, string>()
-    for (const a of (asignacionesActivas || []) as { conductor_id: string; vehiculos: { patente: string } | null }[]) {
+    for (const a of (asignacionesActivas || []) as unknown as { conductor_id: string; vehiculos: { patente: string } | null }[]) {
       const patente = a.vehiculos?.patente
       if (patente && a.conductor_id) {
         patenteMap.set(a.conductor_id, patente)

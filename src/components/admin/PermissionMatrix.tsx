@@ -44,7 +44,6 @@ export function PermissionMatrix() {
     try {
       const { error } = await supabase
         .from('permissions')
-        // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .update({ [field]: !currentValue })
         .eq('id', permissionId)
 

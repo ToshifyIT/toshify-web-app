@@ -410,7 +410,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         // Filtrar conductores activos
         const conductoresActivos = (data || []).filter((c: any) =>
           c.conductores_estados?.codigo?.toLowerCase().includes('activo')
-        ) as Conductor[]
+        ) as unknown as Conductor[]
 
         // Verificar asignaciones activas o programadas
         const [asignacionesActivasRes, asignacionesProgramadasRes] = await Promise.all([
