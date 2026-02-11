@@ -1,0 +1,279 @@
+/* src/modules/escuela/EscuelaModule.css */
+/* Estilos para el módulo de Escuela de Conductores - Diseño Bitácora */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.escuela-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   HEADER
+   ===================================================== */
+
+.escuela-header {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.escuela-header-title {
+  border-left: 4px solid var(--color-primary);
+  padding-left: 16px;
+}
+
+.escuela-header-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.escuela-header-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}
+
+/* =====================================================
+   STATS - Estilo Bitácora
+   ===================================================== */
+
+.escuela-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
+}
+
+.escuela-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.escuela-stats .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.escuela-stats .stat-card .stat-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.escuela-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.escuela-stats .stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.escuela-stats .stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* Responsive Stats */
+@media (max-width: 1200px) {
+  .escuela-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .escuela-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* =====================================================
+   FILTERS
+   ===================================================== */
+
+.escuela-filters-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.escuela-filters-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background-color: white;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.escuela-search-wrapper {
+  flex: 1;
+  height: 36px;
+  background: #f9fafb;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--border-primary);
+}
+
+.escuela-search-icon {
+  color: var(--text-tertiary);
+  margin-right: 8px;
+}
+
+.escuela-search-input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.escuela-search-input:focus {
+  outline: none;
+}
+
+.escuela-filter-select {
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: white;
+  font-size: 14px;
+  color: var(--text-primary);
+  min-width: 200px;
+  cursor: pointer;
+}
+
+/* =====================================================
+   BADGES (Reused from ReporteEscuelaModal)
+   ===================================================== */
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+  min-width: 45px;
+  text-align: center;
+}
+
+.badge-muy-alta {
+  background-color: #d1fae5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-alta {
+  background-color: #dbeafe;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.badge-media {
+  background-color: #fef3c7;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.badge-baja {
+  background-color: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+/* Nuevos estados para columna ESTADO */
+.badge-estado-activo {
+  background-color: #10B981; /* Green 500 */
+  color: white;
+  border: none;
+  padding: 4px 12px; /* Más padding como en la imagen */
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-estado-baja {
+  background-color: #9CA3AF; /* Gray 400 */
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Table overrides */
+.td-money {
+  font-family: 'Geist Mono', monospace;
+  font-weight: 500;
+  text-align: right;
+  color: #111827;
+}
+
+.td-porcentaje {
+  font-weight: 600;
+  text-align: center;
+}
+
+/* =====================================================
+   DATE FILTER PILL (Custom Styles)
+   ===================================================== */
+
+.filtro-fecha-container { 
+  display: inline-flex; 
+  align-items: center; 
+  border: 1.5px solid #d1d5db; 
+  border-radius: 6px; 
+  background-color: #ffffff; 
+  overflow: hidden; 
+  height: 38px; 
+} 
+
+.filtro-fecha-select { 
+  border: none; 
+  outline: none; 
+  background-color: transparent; 
+  color: #374151; 
+  font-size: 14px; 
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; 
+  font-weight: 400; 
+  padding: 8px 12px; 
+  cursor: pointer; 
+  appearance: auto; /* mantiene la flecha nativa del navegador */ 
+  -webkit-appearance: auto; 
+  -moz-appearance: auto; 
+} 
+
+.filtro-fecha-select:focus { 
+  outline: none; 
+} 
+
+.filtro-fecha-select:hover { 
+  background-color: #f9fafb; 
+} 
+
+.filtro-fecha-divider { 
+  width: 1px; 
+  height: 60%; 
+  background-color: #d1d5db; 
+}

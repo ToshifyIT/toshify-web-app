@@ -1,0 +1,207 @@
+.driver-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(33, 37, 41, 0.7); /* Backdrop más oscuro como en la imagen */
+  backdrop-filter: blur(2px);
+  padding: 1rem;
+}
+
+.driver-modal-content {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  max-width: 1200px; /* Ancho aumentado para acomodar nuevas columnas */
+  overflow: hidden;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.driver-modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f3f4f6;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.driver-modal-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.driver-modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.driver-modal-subtitle {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 0.2rem;
+}
+
+.driver-modal-close {
+  color: #9ca3af;
+  transition: color 0.2s;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.driver-modal-close:hover {
+  color: #4b5563;
+}
+
+.driver-modal-body {
+  padding: 1.5rem;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* Sección Headers */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.section-indicator {
+  width: 20px;
+  height: 3px;
+  background-color: #ef4444; /* Rojo */
+  border-radius: 2px;
+}
+
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Info Card */
+.info-card {
+  background-color: #f8fafc; /* Gris muy claro */
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+/* Ensure SweetAlert2 is always above the driver modal */
+.swal2-container {
+  z-index: 20000 !important;
+}
+
+/* Form Styles */
+.info-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.info-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Footer & Buttons */
+.driver-modal-footer {
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  background-color: #f9fafb;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.save-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.save-button:hover {
+  background-color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.save-button:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.close-button {
+  padding: 0.625rem 1.25rem;
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.close-button:hover {
+  background-color: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Botón Agregar Nota - Minimalista */
+.btn-agregar-nota {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #3b82f6;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-agregar-nota:hover {
+  background-color: #eff6ff;
+  color: #2563eb;
+}

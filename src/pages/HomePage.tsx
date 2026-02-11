@@ -1,12 +1,11 @@
 // src/pages/HomePage.tsx
-import { useState, lazy, Suspense, Component } from 'react'
+import { useState, useEffect, lazy, Suspense, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { 
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History,
-  SlidersHorizontal
+  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -55,8 +54,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'inventario-historial': History,
   'inventario-pedidos': ClipboardList,
   'zonas-peligrosas': MapPin,
-  'parametros': SlidersHorizontal,
-  'conceptos-facturacion': Receipt,
+  'escuela': GraduationCap,
 }
 
 // Función para obtener icono de un menú
@@ -183,8 +181,9 @@ import { ProfilePage } from './profile/ProfilePage'
 // Multas/Telepase
 import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
 import { MultasPage } from './multas-telepase/MultasPage'
-// Parámetros
-import { ConceptosFacturacionPage } from './parametros/ConceptosFacturacionPage'
+import { GuiasPage } from './GuiasPage'
+import { EscuelaPage } from './EscuelaPage'
+import { fetchGuias, distributeDriversService, type Guia } from '../modules/guias/guiasService'
 
 // Tipo para submenús con jerarquía
 interface SubmenuWithHierarchy {
@@ -208,6 +207,17 @@ export function HomePage() {
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [guias, setGuias] = useState<Guia[]>([])
+
+  useEffect(() => {
+    fetchGuias().then(setGuias)
+  }, [])
+
+  const distributeDrivers = async () => {
+    if (guias.length > 0) {
+      await distributeDriversService(guias)
+    }
+  }
 
   const toggleSidebarCollapse = () => {
     setSidebarCollapsed(!sidebarCollapsed)
@@ -1289,6 +1299,71 @@ export function HomePage() {
                 No tienes menús disponibles
               </div>
             )}
+
+            {/* Menú Guias (Dynamic) */}
+            <div className="nav-section">
+              <div className="nav-section-wrapper">
+                <button
+                  className="nav-section-header"
+                  onClick={() => {
+                    if (!sidebarCollapsed) toggleMenu('guias');
+                    distributeDrivers();
+                  }}
+                >
+                  <span className="nav-section-icon"><Compass size={18} /></span>
+                  <div className="nav-section-title">Seguimiento de conductores</div>
+                  <span className={`nav-section-arrow ${openMenus['guias'] ? 'open' : ''}`}>▸</span>
+                </button>
+              
+                {/* Flyout for collapsed state */}
+                {sidebarCollapsed && (
+                  <div className="nav-flyout">
+                    <div className="nav-flyout-content">
+                      <div className="nav-flyout-header">Guias</div>
+                      <div className="nav-flyout-items">
+                        {guias.map(guia => (
+                          <button
+                            key={guia.id}
+                            className={`nav-flyout-item ${isActiveRoute(`/guias/${guia.id}`) ? 'active' : ''}`}
+                            onClick={() => navigate(`/guias/${guia.id}`)}
+                          >
+                            <span className="nav-flyout-icon"><Users size={16} /></span>
+                            <span>{guia.full_name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={`nav-section-items ${!openMenus['guias'] ? 'collapsed' : ''}`}>
+                {guias.map(guia => (
+                  <button
+                    key={guia.id}
+                    className={`nav-item ${isActiveRoute(`/guias/${guia.id}`) ? 'active' : ''}`}
+                    onClick={() => navigate(`/guias/${guia.id}`)}
+                  >
+                    <span className="nav-icon"><Users size={16} /></span>
+                    <span className="nav-label">{guia.full_name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Menú Escuela Conductores */}
+            <div className="nav-item-wrapper">
+              <button
+                className={`nav-item ${isActiveRoute('/escuela-conductores') ? 'active' : ''}`}
+                onClick={() => navigate('/escuela-conductores')}
+              >
+                <span className="nav-icon"><GraduationCap size={18} /></span>
+                <span className="nav-label">Escuela Conductores</span>
+              </button>
+              {sidebarCollapsed && (
+                <div className="nav-tooltip">Escuela Conductores</div>
+              )}
+            </div>
           </nav>
 
           <div className="sidebar-footer">
@@ -1504,10 +1579,27 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
 
-              {/* Parámetros */}
-              <Route path="/conceptos-facturacion" element={
-                <ProtectedRoute submenuName="conceptos-facturacion" action="view">
-                  <ConceptosFacturacionPage />
+              {/* Guias */}
+              <Route path="/guias" element={
+                <ProtectedRoute>
+                  <GuiasPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/guias/:id" element={
+                <ProtectedRoute>
+                  <GuiasPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/guias/:id" element={
+                <ProtectedRoute>
+                  <GuiasPage />
+                </ProtectedRoute>
+              } />
+
+              {/* Escuela */}
+              <Route path="/escuela-conductores" element={
+                <ProtectedRoute menuName="escuela" action="view">
+                  <EscuelaPage />
                 </ProtectedRoute>
               } />
 
