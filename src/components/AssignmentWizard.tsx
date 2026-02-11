@@ -284,7 +284,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         // Filtrar conductores activos (cualquier variante del código)
         const conductoresActivos = (data || []).filter((c: any) =>
           c.conductores_estados?.codigo?.toLowerCase().includes('activo')
-        ) as Conductor[]
+        ) as unknown as Conductor[]
 
         // Verificar qué conductores tienen asignaciones activas o programadas (con horario)
         const [asignacionesActivasRes, asignacionesProgramadasRes] = await Promise.all([

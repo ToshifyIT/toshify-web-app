@@ -130,12 +130,12 @@ export function AsignacionesActivasModule() {
 
       // Procesar asignaciones
       if (asignacionesResult.error) throw asignacionesResult.error
-      setAsignaciones(asignacionesResult.data || [])
+      setAsignaciones((asignacionesResult.data || []) as unknown as AsignacionActiva[])
 
       // Procesar estadísticas de vehículos en una sola pasada
       if (vehiculosResult.data) {
         const vehiculos = vehiculosResult.data as any[]
-        const asignacionesData = (asignacionesResult.data || []) as AsignacionActiva[]
+        const asignacionesData = (asignacionesResult.data || []) as unknown as AsignacionActiva[]
 
         // Set de vehículos que tienen asignación activa
         const vehiculosConAsignacion = new Set(asignacionesData.map(a => a.vehiculo_id))

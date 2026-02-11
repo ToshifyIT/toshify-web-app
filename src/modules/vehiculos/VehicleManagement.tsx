@@ -314,7 +314,6 @@ export function VehicleManagement() {
 
       const { error: insertError} = await supabase
         .from('vehiculos')
-        // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .insert([{
           patente: formData.patente.toUpperCase(),
           marca: formData.marca || null,
@@ -462,7 +461,6 @@ export function VehicleManagement() {
 
       const { error: updateError } = await supabase
         .from('vehiculos')
-        // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .update({
           patente: formData.patente.toUpperCase(),
           marca: formData.marca || null,

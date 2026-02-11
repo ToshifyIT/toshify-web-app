@@ -304,7 +304,6 @@ export function RoleMenuPermissionsManager() {
         devLog.info('🔧 Actualizando permiso existente')
         const { error } = await supabase
           .from('role_menu_permissions')
-          // @ts-expect-error - Tipo generado incorrectamente
           .update({ [validatedField]: newValue })
           .eq('role_id', validatedRoleId)
           .eq('menu_id', validatedMenuId)
@@ -315,7 +314,6 @@ export function RoleMenuPermissionsManager() {
         devLog.info('➕ Creando nuevo permiso')
         const { error } = await supabase
           .from('role_menu_permissions')
-          // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
             role_id: validatedRoleId,
             menu_id: validatedMenuId,
@@ -429,7 +427,6 @@ export function RoleMenuPermissionsManager() {
         devLog.info('🔧 Actualizando permiso existente')
         const { error } = await supabase
           .from('role_submenu_permissions')
-          // @ts-expect-error - Tipo generado incorrectamente
           .update({ [validatedField]: newValue })
           .eq('role_id', validatedRoleId)
           .eq('submenu_id', validatedSubmenuId)
@@ -440,7 +437,6 @@ export function RoleMenuPermissionsManager() {
         devLog.info('➕ Creando nuevo permiso')
         const { error } = await supabase
           .from('role_submenu_permissions')
-          // @ts-expect-error - Tipo generado incorrectamente
           .insert([{
             role_id: validatedRoleId,
             submenu_id: validatedSubmenuId,

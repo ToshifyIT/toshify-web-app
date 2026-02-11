@@ -214,7 +214,6 @@ class CabifyIntegrationService {
     // Si no se especifica período, usar la semana actual
     const { startDate, endDate } = this.getDefaultPeriod(fechaInicio, fechaFin)
 
-    // @ts-expect-error - RPC function not in generated types
     const { data, error } = await supabase.rpc('get_cabify_top_mejores', {
       p_fecha_inicio: startDate,
       p_fecha_fin: endDate
@@ -239,7 +238,6 @@ class CabifyIntegrationService {
     // Si no se especifica período, usar la semana actual
     const { startDate, endDate } = this.getDefaultPeriod(fechaInicio, fechaFin)
 
-    // @ts-expect-error - RPC function not in generated types
     const { data, error } = await supabase.rpc('get_cabify_top_peores', {
       p_fecha_inicio: startDate,
       p_fecha_fin: endDate

@@ -93,7 +93,6 @@ export function MenuHierarchyManager() {
     try {
       const { error } = await supabase
         .from('menus')
-        // @ts-expect-error - Tipo generado incorrectamente
         .insert([menuForm])
 
       if (error) throw error
@@ -116,7 +115,6 @@ export function MenuHierarchyManager() {
     try {
       const { error } = await supabase
         .from('menus')
-        // @ts-expect-error - Tipo generado incorrectamente
         .update(menuForm)
         .eq('id', editingMenu.id)
 
@@ -180,7 +178,6 @@ export function MenuHierarchyManager() {
 
       const { error } = await supabase
         .from('submenus')
-        // @ts-expect-error - Tipo generado incorrectamente
         .insert([{
           name: submenuForm.name,
           label: submenuForm.label,
@@ -211,7 +208,6 @@ export function MenuHierarchyManager() {
     try {
       const { error } = await supabase
         .from('submenus')
-        // @ts-expect-error - Tipo generado incorrectamente
         .update({
           name: submenuForm.name,
           label: submenuForm.label,

@@ -302,7 +302,6 @@ export const wialonBitacoraService = {
   ): Promise<void> {
     const { error } = await supabase
       .from('wialon_bitacora')
-      // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
       .update({
         ...updates,
         updated_at: new Date().toISOString(),
@@ -322,7 +321,6 @@ export const wialonBitacoraService = {
   async updateEstado(id: string, estado: string): Promise<void> {
     const { error } = await supabase
       .from('wialon_bitacora')
-      // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
       .update({
         estado,
         updated_at: new Date().toISOString(),

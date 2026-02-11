@@ -152,7 +152,6 @@ export function UserManagement() {
 
       const { error } = await supabase
         .from('user_profiles')
-        // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .update({ role_id: newRoleId })
         .eq('id', userId)
         .select()
@@ -179,7 +178,6 @@ export function UserManagement() {
     try {
       const { error } = await supabase
         .from('user_profiles')
-        // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .update({ is_active: !currentStatus })
         .eq('id', userId)
 

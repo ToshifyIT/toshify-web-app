@@ -67,7 +67,6 @@ export function RoleManagement() {
       // Crear el rol
       const { error: roleError } = await supabase
         .from('roles')
-        // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .insert([{
           name: newRole.name.toLowerCase().trim(),
           description: newRole.description.trim() || null
@@ -110,7 +109,6 @@ export function RoleManagement() {
     try {
       const { error } = await supabase
         .from('roles')
-        // @ts-expect-error - Tipo generado incorrectamente por Supabase CLI
         .update({
           name: editRole.name.toLowerCase().trim(),
           description: editRole.description.trim() || null
