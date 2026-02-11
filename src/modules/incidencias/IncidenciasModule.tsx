@@ -114,6 +114,10 @@ export function IncidenciasModule() {
   const canCreate = canCreateInMenu('incidencias')
   const canEdit = canEditInMenu('incidencias')
   const canDelete = canDeleteInMenu('incidencias')
+  
+  // Solo Admin y Administrativo pueden ver las pestañas de penalidades (Por Aplicar, Aplicadas, Rechazados)
+  const userRoleName = profile?.roles?.name?.toLowerCase() || ''
+  const canViewPenalidadesTabs = userRoleName === 'admin' || userRoleName === 'administrativo'
 
   const [activeTab, setActiveTab] = useState<TabType>('logistica')
   const [loading, setLoading] = useState(true)
@@ -1111,21 +1115,25 @@ export function IncidenciasModule() {
       cell: ({ row }) => row.original.area || '-'
     },
     {
-      accessorKey: 'estado_nombre',
-      header: () => (
-        <ExcelColumnFilter
-          label="Estado"
-          options={estadosUnicos}
-          selectedValues={estadoFilter}
-          onSelectionChange={setEstadoFilter}
-          filterId="inc_cobro_estado"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
+      id: 'estado_facturacion',
+      header: 'Estado Fact.',
       cell: ({ row }) => {
-        const color = row.original.estado_color || 'gray'
-        return <span className={`dt-badge dt-badge-${color}`}>{row.original.estado_nombre}</span>
+        // Buscar penalidad asociada para mostrar el estado de facturación
+        const penalidad = penalidades.find(p => p.incidencia_id === row.original.id)
+        
+        if (!penalidad) {
+          return <span className="dt-badge dt-badge-gray">Sin enviar</span>
+        }
+        
+        if (penalidad.rechazado) {
+          return <span className="dt-badge dt-badge-red"><XCircle size={12} /> Rechazado</span>
+        }
+        
+        if (penalidad.aplicado) {
+          return <span className="dt-badge dt-badge-green"><CheckCircle size={12} /> Aplicado</span>
+        }
+        
+        return <span className="dt-badge dt-badge-yellow"><Clock size={12} /> Por Aplicar</span>
       }
     },
     {
@@ -1269,11 +1277,15 @@ export function IncidenciasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => (
-        <span className={`dt-badge ${row.original.aplicado ? 'dt-badge-green' : 'dt-badge-red'}`}>
-          {row.original.aplicado ? <><CheckCircle size={12} /> Sí</> : <><XCircle size={12} /> No</>}
-        </span>
-      )
+      cell: ({ row }) => {
+        // Si está rechazado, siempre mostrar "No" (rechazado = no aplicado)
+        const estaAplicado = row.original.rechazado ? false : row.original.aplicado
+        return (
+          <span className={`dt-badge ${estaAplicado ? 'dt-badge-green' : 'dt-badge-red'}`}>
+            {estaAplicado ? <><CheckCircle size={12} /> Sí</> : <><XCircle size={12} /> No</>}
+          </span>
+        )
+      }
     },
     {
       id: 'fraccionado',
@@ -1872,13 +1884,45 @@ export function IncidenciasModule() {
         if (error) throw error
         showSuccess('Guardado', 'Incidencia actualizada correctamente')
       } else {
-        // Insertar incidencia (NO crear penalidad automáticamente - se crea al "Enviar a facturación")
-        const { error } = await (supabase.from('incidencias' as any) as any)
+        // Insertar incidencia
+        const { data: incidenciaCreada, error } = await (supabase.from('incidencias' as any) as any)
           .insert({ ...dataToSave, created_by_name: profile?.full_name || 'Sistema' })
+          .select('id')
+          .single()
         if (error) throw error
         
+        // Si es incidencia de cobro, crear automáticamente la penalidad (enviar a "Por Aplicar")
+        if (esCobro && incidenciaCreada?.id) {
+          const vehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
+          const conductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
+          
+          const { error: penError } = await (supabase.from('penalidades' as any) as any)
+            .insert({
+              incidencia_id: incidenciaCreada.id,
+              vehiculo_id: incidenciaForm.vehiculo_id || null,
+              conductor_id: incidenciaForm.conductor_id || null,
+              tipo_cobro_descuento_id: incidenciaForm.tipo_cobro_descuento_id || null,
+              semana: semanaCalculada,
+              fecha: incidenciaForm.fecha,
+              turno: incidenciaForm.turno || null,
+              area_responsable: getAreaResponsablePorRol(profile?.roles?.name) || 'ADMINISTRACION',
+              detalle: 'Cobro por incidencia',
+              monto: incidenciaForm.monto || 0,
+              observaciones: incidenciaForm.descripcion || '',
+              aplicado: false,
+              conductor_nombre: conductor ? `${conductor.nombres} ${conductor.apellidos}` : null,
+              vehiculo_patente: vehiculo?.patente || null,
+              created_by: user?.id,
+              created_by_name: profile?.full_name || 'Sistema'
+            })
+          if (penError) {
+            console.error('Error creando penalidad:', penError)
+            // No fallar, la incidencia ya se creó
+          }
+        }
+        
         showSuccess('Guardado', esCobro 
-          ? 'Incidencia de cobro registrada. Use botón $ para enviar a facturación.' 
+          ? 'Incidencia registrada y enviada a Por Aplicar' 
           : 'Incidencia registrada correctamente')
       }
 
@@ -2445,39 +2489,45 @@ export function IncidenciasModule() {
             Incidencia (Cobro)
             <span className="tab-badge">{incidenciasCobro.length}</span>
           </button>
-          {/* Tab Por Aplicar - muestra penalidades pendientes */}
-          <button
-            className={`incidencias-tab ${activeTab === 'por_aplicar' ? 'active' : ''}`}
-            onClick={() => setActiveTab('por_aplicar')}
-          >
-            <Clock size={16} />
-            Por Aplicar
-            {countPorAplicar > 0 && (
-              <span className={`tab-badge ${activeTab !== 'por_aplicar' ? 'pending' : ''}`}>
-                {countPorAplicar}
-              </span>
-            )}
-          </button>
-          {/* Tab Aplicadas - muestra penalidades ya aplicadas */}
-          <button
-            className={`incidencias-tab ${activeTab === 'aplicadas' ? 'active' : ''}`}
-            onClick={() => setActiveTab('aplicadas')}
-          >
-            <CheckCircle size={16} />
-            Aplicadas
-            <span className="tab-badge">{countAplicadas}</span>
-          </button>
-          {/* Tab Rechazados */}
-          <button
-            className={`incidencias-tab ${activeTab === 'rechazados' ? 'active' : ''}`}
-            onClick={() => setActiveTab('rechazados')}
-          >
-            <XCircle size={16} />
-            Rechazados
-            {countRechazados > 0 && (
-              <span className="tab-badge pending">{countRechazados}</span>
-            )}
-          </button>
+          {/* Tab Por Aplicar - muestra penalidades pendientes (solo Admin y Administrativo) */}
+          {canViewPenalidadesTabs && (
+            <button
+              className={`incidencias-tab ${activeTab === 'por_aplicar' ? 'active' : ''}`}
+              onClick={() => setActiveTab('por_aplicar')}
+            >
+              <Clock size={16} />
+              Por Aplicar
+              {countPorAplicar > 0 && (
+                <span className={`tab-badge ${activeTab !== 'por_aplicar' ? 'pending' : ''}`}>
+                  {countPorAplicar}
+                </span>
+              )}
+            </button>
+          )}
+          {/* Tab Aplicadas - muestra penalidades ya aplicadas (solo Admin y Administrativo) */}
+          {canViewPenalidadesTabs && (
+            <button
+              className={`incidencias-tab ${activeTab === 'aplicadas' ? 'active' : ''}`}
+              onClick={() => setActiveTab('aplicadas')}
+            >
+              <CheckCircle size={16} />
+              Aplicadas
+              <span className="tab-badge">{countAplicadas}</span>
+            </button>
+          )}
+          {/* Tab Rechazados (solo Admin y Administrativo) */}
+          {canViewPenalidadesTabs && (
+            <button
+              className={`incidencias-tab ${activeTab === 'rechazados' ? 'active' : ''}`}
+              onClick={() => setActiveTab('rechazados')}
+            >
+              <XCircle size={16} />
+              Rechazados
+              {countRechazados > 0 && (
+                <span className="tab-badge pending">{countRechazados}</span>
+              )}
+            </button>
+          )}
         </div>
         <div className="tabs-actions">
           {/* Selector de fecha para tab Logística */}
@@ -2517,7 +2567,7 @@ export function IncidenciasModule() {
             <Download size={16} />
             Exportar
           </button>
-          {activeTab !== 'por_aplicar' && activeTab !== 'aplicadas' && (
+          {activeTab !== 'por_aplicar' && activeTab !== 'aplicadas' && activeTab !== 'rechazados' && (
             <button
               className="btn-primary"
               onClick={handleNuevaIncidencia}
