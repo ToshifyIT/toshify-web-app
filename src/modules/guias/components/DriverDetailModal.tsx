@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, User, Sun, Moon, Briefcase, Calendar, CheckCircle2, AlertTriangle, ShieldAlert, Save, MessageSquarePlus } from 'lucide-react';
+import { useState } from 'react';
+import { X, User, Sun, Moon, Briefcase, Calendar, CheckCircle2, AlertTriangle, ShieldAlert, Save } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import type { ConductorWithRelations } from '../../../types/database.types';
 import './DriverDetailModal.css';
@@ -297,7 +297,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
     }
   };
 
-  const handleEditNote = (nota: Nota, index: number) => {
+  const handleEditNote = (_nota: Nota, index: number) => {
     setEditingNoteIndex(index);
     setShowAnotaciones(true);
   };

@@ -5,28 +5,20 @@ import { format, startOfISOWeek, endOfISOWeek, setISOWeek, addHours, previousSun
 import { WeekSelector } from './components/WeekSelector'
 import { 
   AlertTriangle, 
-  Car, 
   Users, 
   DollarSign, 
   Filter, 
   Eye, 
-  FolderOpen, 
-  FolderPlus,
   PhoneCall,
   Phone,
   CheckCircle,
-  MessageSquare,
-  MessageSquarePlus,
   Pencil,
   ArrowLeftRight,
   Search,
-  History,
-  Clock,
-  ClipboardList
+  History
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
-import { ExcelColumnFilter } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { type ColumnDef } from '@tanstack/react-table'
 import type { ConductorWithRelations } from '../../types/database.types'
 import Swal from 'sweetalert2'
@@ -77,7 +69,7 @@ export function GuiasModule() {
   const [drivers, setDrivers] = useState<any[]>([])
   const [currentWeekDrivers, setCurrentWeekDrivers] = useState<any[]>([])
   const [loadingDrivers, setLoadingDrivers] = useState(false)
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const { id: paramId } = useParams()
   const { profile } = useAuth()
   const urlGuiaId = paramId || searchParams.get('id')
@@ -88,10 +80,10 @@ export function GuiasModule() {
   // Estados para filtros (replicados de ConductoresModule)
   const [nombreFilter, setNombreFilter] = useState<string[]>([])
   const [dniFilter, setDniFilter] = useState<string[]>([])
-  const [cbuFilter, setCbuFilter] = useState<string[]>([]) // Reutilizado para CUIL
+  const [cbuFilter] = useState<string[]>([]) // Reutilizado para CUIL
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
-  const [categoriaFilter, setCategoriaFilter] = useState<string[]>([])
+  const [categoriaFilter] = useState<string[]>([])
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   
@@ -99,7 +91,7 @@ export function GuiasModule() {
   const [nombreSearch, setNombreSearch] = useState('')
   const [dniSearch, setDniSearch] = useState('')
   const [globalSearch, setGlobalSearch] = useState('')
-  const [cbuSearch, setCbuSearch] = useState('')
+  const [cbuSearch] = useState('')
 
   // Estados para modal de detalles
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -120,7 +112,7 @@ export function GuiasModule() {
   
   // Estados para modal de anotaciones (Editor - Semana Actual)
   const [anotacionesModalOpen, setAnotacionesModalOpen] = useState(false)
-  const [selectedRowForAnotaciones, setSelectedRowForAnotaciones] = useState<{ id: string, anotaciones: Nota[], conductorName: string } | null>(null)
+  const [selectedRowForAnotaciones] = useState<{ id: string, anotaciones: Nota[], conductorName: string } | null>(null)
 
   // Estados para modal de Historial de Notas (Viewer - Todas las semanas)
   const [historyNotesModalOpen, setHistoryNotesModalOpen] = useState(false);
@@ -189,7 +181,7 @@ export function GuiasModule() {
                 let metrics = null;
 
                 // 1. Búsqueda optimizada por DNI (Rango completo)
-                let { data: dataDni, error: errorDni } = await supabase
+                let { data: dataDni } = await supabase
                     .from('cabify_historico')
                     .select('ganancia_total, horas_conectadas, tasa_ocupacion, tasa_aceptacion, fecha_inicio')
                     .eq('dni', dniOriginal)
@@ -333,19 +325,19 @@ export function GuiasModule() {
 
 
   // Función para abrir el modal de EDICIÓN (Semana Actual) - Se mantiene por compatibilidad si se usa desde otros lados
-  const handleOpenAnotacionesEditor = (row: any) => {
-    if (!row.original.historial_id) {
-      Swal.fire('Error', 'Este registro no tiene historial asociado aún.', 'warning');
-      return;
-    }
-
-    setSelectedRowForAnotaciones({
-      id: row.original.historial_id,
-      anotaciones: row.original.anotaciones_extra || [],
-      conductorName: `${row.original.nombres} ${row.original.apellidos}`
-    });
-    setAnotacionesModalOpen(true);
-  };
+  // const handleOpenAnotacionesEditor = (row: any) => {
+  //   if (!row.original.historial_id) {
+  //     Swal.fire('Error', 'Este registro no tiene historial asociado aún.', 'warning');
+  //     return;
+  //   }
+  //
+  //   setSelectedRowForAnotaciones({
+  //     id: row.original.historial_id,
+  //     anotaciones: row.original.anotaciones_extra || [],
+  //     conductorName: `${row.original.nombres} ${row.original.apellidos}`
+  //   });
+  //   setAnotacionesModalOpen(true);
+  // };
 
   // Función para abrir el modal de HISTORIAL (Todas las semanas)
   const handleViewHistoryNotes = async (row: any) => {
@@ -500,7 +492,7 @@ export function GuiasModule() {
       if (historyError) throw historyError;
 
       // 2. Get Cabify data for cross-referencing (to fill 0s)
-      let cabifyByWeek: Record<string, { app: number, efectivo: number }> = {};
+      const cabifyByWeek: Record<string, { app: number, efectivo: number }> = {};
       
       // Ensure we have a clean DNI for matching
       const cleanDni = driver.numero_dni ? driver.numero_dni.replace(/\./g, '').trim() : '';
@@ -730,8 +722,8 @@ export function GuiasModule() {
       if (historialError) throw historialError;
 
       // Cargar datos de Cabify para cruce de facturación
-      let cabifyDriversMapByDni = new Map();
-      let cabifyDriversMapByName = new Map();
+      const cabifyDriversMapByDni = new Map();
+      const cabifyDriversMapByName = new Map();
       
       try {
         const [yearStr, weekStr] = targetWeek.split('-W');
@@ -1403,11 +1395,6 @@ export function GuiasModule() {
 
   const selectedGuia = guias.find(g => g.id === selectedGuiaId)
 
-  const handleGuiaSelect = (id: string) => {
-    setSelectedGuiaId(id)
-    setSearchParams({ id })
-  }
-
   // Valores únicos para filtros
   const nombresUnicos = useMemo(() => {
     const nombres = drivers.map(c => `${c.nombres} ${c.apellidos}`).filter(Boolean);
@@ -1457,12 +1444,6 @@ export function GuiasModule() {
   const toggleDniFilter = (dni: string) => {
     setDniFilter(prev =>
       prev.includes(dni) ? prev.filter(d => d !== dni) : [...prev, dni]
-    );
-  };
-
-  const toggleCbuFilter = (cbu: string) => {
-    setCbuFilter(prev =>
-      prev.includes(cbu) ? prev.filter(c => c !== cbu) : [...prev, cbu]
     );
   };
 
@@ -1773,7 +1754,7 @@ export function GuiasModule() {
             )}
           </div>
         ),
-        accessorFn: (row) => {
+        accessorFn: (row: any) => {
           // 1. Priorizar turno real de la asignación actual
           const asignacionInfo = (row as any).asignacion_info;
           if (asignacionInfo) {
@@ -1786,7 +1767,7 @@ export function GuiasModule() {
           // 2. Fallback a preferencia de turno si no hay asignación
           return (row as any).preferencia_turno || 'SIN_PREFERENCIA'
         },
-        cell: ({ row }) => {
+        cell: ({ row }: any) => {
           const asignacionInfo = (row.original as any).asignacion_info;
           
           // Si tiene asignación activa, mostrar el turno real
@@ -1847,7 +1828,7 @@ export function GuiasModule() {
             </span>
           );
         },
-        filterFn: (row, id, filterValue) => {
+        filterFn: (row: any, id: string, filterValue: any) => {
           if (!filterValue.length) return true
           const val = row.getValue(id) as string
           return filterValue.includes(val)
@@ -2168,7 +2149,6 @@ export function GuiasModule() {
         id: "acciones",
         header: "Acciones",
         cell: ({ row }) => {
-          const driveUrl = (row.original as any).drive_folder_url;
           const isCurrent = selectedWeek === getCurrentWeek();
           
           return (

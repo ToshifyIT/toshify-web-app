@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight, GraduationCap } from 'lucide-react';
 import { startOfISOWeek, endOfISOWeek, format, setISOWeek, isSameDay, isWithinInterval, subWeeks } from 'date-fns';
-import { es } from 'date-fns/locale';
+// import { es } from 'date-fns/locale';
 import './WeekSelector.css';
 
 interface WeekSelectorProps {

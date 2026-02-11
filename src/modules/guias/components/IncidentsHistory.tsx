@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, MessageSquarePlus, Pencil, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Pencil, Trash2, MessageSquarePlus } from 'lucide-react';
 import './IncidentsHistory.css';
-import type { Nota } from './AnotacionesModal';
+import type { Nota } from './AnotacionesEditorModal';
 
 interface IncidentsHistoryProps {
   notas: Nota[];

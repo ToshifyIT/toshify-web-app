@@ -1,5 +1,4 @@
-import React from 'react';
-import { X, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import './ReporteEscuelaModal.css';
 
 interface MetricData {
