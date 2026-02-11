@@ -4,7 +4,7 @@
  * Usa React Portal (createPortal) para renderizar fuera de la tabla y evitar clipping
  */
 
-import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 
 // Icono de filtro estilo Excel - dropdown arrow pequeño y sutil
@@ -23,7 +23,7 @@ interface ExcelColumnFilterProps {
   /** Nombre de la columna para mostrar en el header */
   label: string
   /** Array de valores únicos para mostrar en el filtro */
-  options: string[]
+  options: (string | { value: string; label: string })[]
   /** Array de valores seleccionados actualmente */
   selectedValues: string[]
   /** Callback cuando cambia la selección */
@@ -65,10 +65,17 @@ export function ExcelColumnFilter({
     }
   }, [isOpen])
 
+  // Normalizar opciones
+  const normalizedOptions = useMemo(() => {
+    return options.map(opt => 
+      typeof opt === 'string' ? { label: opt, value: opt } : opt
+    )
+  }, [options])
+
   // Filtrar opciones por búsqueda
   const filteredOptions = searchTerm
-    ? options.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
-    : options
+    ? normalizedOptions.filter(opt => opt.label.toLowerCase().includes(searchTerm.toLowerCase()))
+    : normalizedOptions
 
   // Calcular posición del dropdown cuando se abre
   const calculatePosition = useCallback(() => {
@@ -96,31 +103,13 @@ export function ExcelColumnFilter({
   useLayoutEffect(() => {
     if (!isOpen || !dropdownRef.current || !buttonRef.current) return
 
-    const dropdown = dropdownRef.current
-    const rect = dropdown.getBoundingClientRect()
-    const buttonRect = buttonRef.current.getBoundingClientRect()
-    const viewportWidth = window.innerWidth
-    const viewportHeight = window.innerHeight
-
-    let newLeft = buttonRect.left
-    let newTop = buttonRect.bottom + 4
-
-    // Si se sale por la derecha
-    if (newLeft + rect.width > viewportWidth - 16) {
-      newLeft = viewportWidth - rect.width - 16
-    }
-
-    // Si se sale por la izquierda
-    if (newLeft < 16) {
-      newLeft = 16
-    }
-
-    // Si se sale por abajo, mostrar arriba del botón
-    if (newTop + rect.height > viewportHeight - 16) {
-      newTop = buttonRect.top - rect.height - 4
-    }
-
-    setPosition({ top: newTop, left: newLeft })
+    // Usuario solicitó que el filtro SIEMPRE aparezca abajo y no se mueva
+    // Se mantiene la lógica original de posicionamiento estricto
+    const rect = buttonRef.current.getBoundingClientRect()
+    setPosition({
+      top: rect.bottom + 4,
+      left: rect.left
+    })
   }, [isOpen])
 
   // Cerrar al hacer click fuera
@@ -221,15 +210,15 @@ export function ExcelColumnFilter({
             ) : (
               filteredOptions.map(option => (
                 <label
-                  key={option}
-                  className={`dt-column-filter-checkbox ${selectedValues.includes(option) ? 'selected' : ''}`}
+                  key={option.value}
+                  className={`dt-column-filter-checkbox ${selectedValues.includes(option.value) ? 'selected' : ''}`}
                 >
                   <input
                     type="checkbox"
-                    checked={selectedValues.includes(option)}
-                    onChange={() => toggleValue(option)}
+                    checked={selectedValues.includes(option.value)}
+                    onChange={() => toggleValue(option.value)}
                   />
-                  <span>{option}</span>
+                  <span>{option.label}</span>
                 </label>
               ))
             )}

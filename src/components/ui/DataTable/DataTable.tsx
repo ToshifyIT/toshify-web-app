@@ -243,6 +243,10 @@ export interface DataTableProps<T> {
   onClearAllFilters?: () => void;
   /** Función de filtrado global personalizada */
   globalFilterFn?: FilterFn<T>;
+  /** Valor del filtro global (modo controlado) */
+  globalFilter?: string;
+  /** Callback al cambiar el filtro global (modo controlado) */
+  onGlobalFilterChange?: (value: string) => void;
 }
 
 export function DataTable<T>({
@@ -267,8 +271,14 @@ export function DataTable<T>({
   externalFilters = [],
   onClearAllFilters,
   globalFilterFn: customGlobalFilterFn,
+  globalFilter: controlledGlobalFilter,
+  onGlobalFilterChange: setControlledGlobalFilter,
 }: DataTableProps<T>) {
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [internalGlobalFilter, setInternalGlobalFilter] = useState("");
+  const isControlled = controlledGlobalFilter !== undefined;
+  const globalFilter = isControlled ? controlledGlobalFilter : internalGlobalFilter;
+  const setGlobalFilter = isControlled ? (setControlledGlobalFilter || (() => {})) : setInternalGlobalFilter;
+
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});

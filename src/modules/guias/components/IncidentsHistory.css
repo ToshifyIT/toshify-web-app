@@ -1,0 +1,111 @@
+.incidents-container {
+  margin-top: 1.5rem;
+  width: 100%;
+}
+
+.incidents-title {
+  font-size: 0.75rem; /* text-xs */
+  font-weight: 700;
+  color: #9CA3AF; /* text-gray-400 */
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+  padding-left: 0.25rem;
+}
+
+.incidents-card {
+  background-color: white;
+  border-radius: 10px;
+  border: 1px solid #E5E7EB; /* border-gray-200 */
+  overflow: hidden;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.incidents-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.incidents-table thead tr {
+  border-bottom: 1px solid #F3F4F6; /* border-gray-100 */
+}
+
+.incidents-table thead {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.incidents-table thead:hover th {
+  background-color: #F3F4F6;
+}
+
+.incidents-table th {
+  padding: 16px 24px;
+  font-size: 0.75rem; /* text-xs */
+  font-weight: 700;
+  color: #9CA3AF; /* text-gray-400 */
+  text-transform: uppercase;
+  letter-spacing: 0.05em; /* tracking-wider */
+  background-color: #FAFAFA; /* Very light gray, almost white */
+}
+
+.incidents-table th:nth-child(2) {
+  text-align: right;
+}
+
+.incidents-table th:last-child {
+  text-align: center;
+  width: 80px;
+}
+
+.incidents-table tbody tr {
+  border-bottom: 1px solid #F9FAFB; /* Very subtle separator */
+}
+
+.incidents-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.incidents-table td {
+  padding: 18px 24px; /* Generous vertical padding */
+  font-size: 0.875rem; /* text-sm */
+}
+
+.incidents-description {
+  color: #374151; /* text-gray-700 */
+  font-weight: 500;
+}
+
+.incidents-date {
+  color: #6B7280; /* text-gray-500 */
+  text-align: right;
+  white-space: nowrap;
+}
+
+.incidents-actions {
+  text-align: center;
+}
+
+.action-button {
+  color: #9CA3AF;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-button:hover {
+  background-color: #F3F4F6;
+  color: #374151;
+}
+
+.incidents-empty, .incidents-loading {
+  padding: 24px;
+  text-align: center;
+  color: #9CA3AF;
+  font-style: italic;
+}

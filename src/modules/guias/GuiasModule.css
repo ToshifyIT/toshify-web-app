@@ -1,0 +1,155 @@
+/* src/modules/guias/GuiasModule.css */
+/* Estilos para el módulo de Guias - Basado en ConductoresModule */
+
+/* =====================================================
+   MODULE CONTAINER
+   ===================================================== */
+
+.guias-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   HEADER
+   ===================================================== */
+
+.guias-header {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.guias-header-title {
+  border-left: 4px solid var(--color-primary);
+  padding-left: 16px;
+}
+
+.guias-header-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.guias-header-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}
+
+/* =====================================================
+   STATS - Estilo Bitácora (Igual a Vehículos)
+   ===================================================== */
+
+.guias-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
+}
+
+.guias-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.guias-stats .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.guias-stats .stat-card .stat-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.guias-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.guias-stats .stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.guias-stats .stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* Responsive Stats */
+@media (max-width: 1200px) {
+  .guias-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .guias-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .guias-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .guias-stats .stat-card {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .guias-stats .stat-value {
+    font-size: 14px;
+  }
+
+  .guias-stats .stat-label {
+    font-size: 10px;
+  }
+}
+
+/* =====================================================
+   TABLE CUSTOMIZATION
+   ===================================================== */
+
+/* Vehiculo Cell */
+.vehiculo-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.vehiculo-cell-patente {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.vehiculo-cell-info {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.vehiculo-cell-na {
+  color: var(--text-quaternary);
+  font-size: 12px;
+}
+
+/* Custom Badges */
+.badge-no-dot::before {
+  display: none !important;
+}
