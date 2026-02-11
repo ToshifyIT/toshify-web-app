@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { 
   Users, 
-  Calendar, 
   TrendingUp, 
   TrendingDown,
   CheckCircle, 
@@ -187,7 +186,7 @@ export function EscuelaModule() {
           id: d.id,
           nombre: `${d.nombres} ${d.apellidos}`,
           dni: d.numero_dni || '-',
-          estado: d.conductores_estados?.descripcion || '-',
+          estado: Array.isArray(d.conductores_estados) ? d.conductores_estados[0]?.descripcion : ((d.conductores_estados as any)?.descripcion || '-'),
           fechaCap: format(fechaEscuelaDate, 'dd/MM/yyyy'),
           fechaCapRaw: fechaEscuela,
           previo: metricsPrev,

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, User, Calendar, MessageSquare } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Send, MessageSquare } from 'lucide-react';
 
 export interface Nota {
   texto: string;
@@ -26,10 +26,10 @@ export function AnotacionesEditorModal({
   title = "Anotaciones Extra",
   editingNoteIndex
 }: AnotacionesEditorModalProps) {
-  const [anotaciones, setAnotaciones] = useState<Nota[]>([]);
+  // const [anotaciones] = useState<Nota[]>([]);
   const [nuevoTexto, setNuevoTexto] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {

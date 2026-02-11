@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Calendar, ChevronLeft, ChevronRight, FileText, CalendarDays } from 'lucide-react';
+import { useState } from 'react';
+import { X, Calendar, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import './AnotacionesModal.css';
 
 export interface Anotacion {
