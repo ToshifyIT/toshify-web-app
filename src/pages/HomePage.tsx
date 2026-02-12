@@ -55,6 +55,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'inventario-pedidos': ClipboardList,
   'zonas-peligrosas': MapPin,
   'escuela': GraduationCap,
+  'conceptos-facturacion': Receipt,
 }
 
 // Función para obtener icono de un menú
@@ -181,6 +182,7 @@ import { ProfilePage } from './profile/ProfilePage'
 // Multas/Telepase
 import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
 import { MultasPage } from './multas-telepase/MultasPage'
+import { ConceptosFacturacionPage } from './parametros/ConceptosFacturacionPage'
 import { GuiasPage } from './GuiasPage'
 import { EscuelaPage } from './EscuelaPage'
 import { fetchGuias, distributeDriversService, type Guia } from '../modules/guias/guiasService'
@@ -1576,6 +1578,13 @@ export function HomePage() {
               <Route path="/multas" element={
                 <ProtectedRoute submenuName="multas" action="view">
                   <MultasPage />
+                </ProtectedRoute>
+              } />
+
+              {/* Parámetros */}
+              <Route path="/conceptos-facturacion" element={
+                <ProtectedRoute submenuName="conceptos-facturacion" action="view">
+                  <ConceptosFacturacionPage />
                 </ProtectedRoute>
               } />
 
