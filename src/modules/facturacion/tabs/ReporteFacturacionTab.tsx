@@ -145,6 +145,7 @@ export function ReporteFacturacionTab() {
   // Estados principales
   const [facturaciones, setFacturaciones] = useState<FacturacionConductor[]>([])
   const [periodo, setPeriodo] = useState<PeriodoFacturacion | null>(null)
+  const [periodoAnteriorCerrado, setPeriodoAnteriorCerrado] = useState(true) // Si la semana anterior está cerrada
   const [excesos, setExcesos] = useState<ExcesoKm[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingDetalle, setLoadingDetalle] = useState(false)
@@ -331,6 +332,20 @@ export function ReporteFacturacionTab() {
     try {
       const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
       const anio = getYear(semanaActual.inicio)
+
+      // 0. Verificar si la semana ANTERIOR tiene período cerrado
+      const semanaAnt = getWeek(subWeeks(semanaActual.inicio, 1), { weekStartsOn: 1 })
+      const anioAnt = getYear(subWeeks(semanaActual.inicio, 1))
+      const { data: periodoAnt } = await supabase
+        .from('periodos_facturacion')
+        .select('id, estado')
+        .eq('semana', semanaAnt)
+        .eq('anio', anioAnt)
+        .single()
+      
+      // La semana anterior está cerrada si: tiene período con estado 'cerrado', o es semana 1 (no hay anterior)
+      const anteriorCerrado = semana === 1 || (periodoAnt?.estado === 'cerrado')
+      setPeriodoAnteriorCerrado(anteriorCerrado)
 
       // 1. Buscar el período para esta semana
       const { data: periodoData, error: errPeriodo } = await supabase
@@ -6245,8 +6260,8 @@ export function ReporteFacturacionTab() {
           </button>
         </div>
         <div className="fact-semana-actions">
-          {/* Botón Generar - solo cuando NO existe período */}
-          {!periodo && !loading && (
+          {/* Botón Generar - solo cuando NO existe período Y la semana anterior está cerrada */}
+          {!periodo && !loading && periodoAnteriorCerrado && (
             <button
               className="fact-btn-primary"
               onClick={generarNuevoPeriodo}
@@ -6260,6 +6275,12 @@ export function ReporteFacturacionTab() {
               )}
               {generando ? 'Generando...' : 'Generar'}
             </button>
+          )}
+          {/* Mensaje si la semana anterior no está cerrada */}
+          {!periodo && !loading && !periodoAnteriorCerrado && (
+            <span style={{ fontSize: '12px', color: '#EF4444', fontWeight: 500 }}>
+              Cierre la semana anterior primero
+            </span>
           )}
           {/* Botón Recalcular - solo cuando período está abierto/procesando */}
           {(periodo?.estado === 'abierto' || periodo?.estado === 'procesando') && (
