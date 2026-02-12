@@ -23,7 +23,6 @@ import {
   Filter,
   AlertCircle,
   Calculator,
-  Gauge,
   Edit2,
   Search,
   Play,
@@ -427,13 +426,40 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Agregar monto_cobrado a cada facturación
+      // 2.7 Cargar detalles de facturación para peajes y penalidades
+      const { data: detallesData } = await (supabase
+        .from('facturacion_detalle') as any)
+        .select('facturacion_id, concepto_codigo, concepto_descripcion, total')
+        .in('facturacion_id', facIds)
+        .in('concepto_codigo', ['P005', 'P007'])
+
+      // Agrupar por facturacion_id
+      const detallesMap = new Map<string, { monto_peajes: number; monto_penalidades: number; penalidades_count: number; penalidades_detalle: Array<{ monto: number; detalle: string }> }>()
+      ;(detallesData || []).forEach((d: any) => {
+        if (!detallesMap.has(d.facturacion_id)) {
+          detallesMap.set(d.facturacion_id, { monto_peajes: 0, monto_penalidades: 0, penalidades_count: 0, penalidades_detalle: [] })
+        }
+        const entry = detallesMap.get(d.facturacion_id)!
+        if (d.concepto_codigo === 'P005') {
+          entry.monto_peajes += parseFloat(d.total) || 0
+        } else if (d.concepto_codigo === 'P007') {
+          entry.monto_penalidades += parseFloat(d.total) || 0
+          entry.penalidades_count += 1
+          entry.penalidades_detalle.push({ monto: parseFloat(d.total) || 0, detalle: d.concepto_descripcion || 'Penalidad' })
+        }
+      })
+
+      // Agregar monto_cobrado + detalles a cada facturación
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pago = pagosMap.get(f.id)
+        const detalle = detallesMap.get(f.id)
         return {
           ...f,
           monto_cobrado: pago?.monto || 0,
           fecha_pago: pago?.fecha_pago || null,
+          monto_peajes: detalle?.monto_peajes || 0,
+          monto_penalidades: detalle?.monto_penalidades || 0,
+          penalidades_detalle: detalle?.penalidades_detalle || [],
         }
       })
 
@@ -5782,33 +5808,84 @@ export function ReporteFacturacionTab() {
       }
     },
     {
-      id: 'excesos_km',
-      header: () => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <Gauge size={12} />
-          <span>Excesos</span>
-        </div>
-      ),
+      id: 'peajes',
+      header: 'Peajes',
       cell: ({ row }) => {
-        const excesosCond = getExcesosConductor(row.original.conductor_id)
-        const totalExcesos = excesosCond.reduce((sum, e) => sum + e.monto_total, 0)
-        const kmTotal = excesosCond.reduce((sum, e) => sum + e.km_exceso, 0)
+        const peajes = row.original.monto_peajes || 0
+        if (peajes === 0) {
+          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+        }
+        return (
+          <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            {formatCurrency(peajes)}
+          </span>
+        )
+      },
+      enableSorting: false,
+    },
+    {
+      id: 'incidencias',
+      header: 'Incidencias',
+      cell: ({ row }) => {
+        const penalidades = row.original.penalidades_detalle || []
+        const montoPen = row.original.monto_penalidades || 0
 
-        if (excesosCond.length === 0) {
+        if (penalidades.length === 0 && montoPen === 0) {
           return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
         }
 
+        const count = penalidades.length || (montoPen > 0 ? 1 : 0)
+
         return (
-          <div style={{ fontSize: '12px' }}>
-            <div style={{ fontWeight: 600, color: 'var(--badge-red-text)' }}>
-              {formatCurrency(totalExcesos)}
-            </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-              +{kmTotal} km
-            </div>
-          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              const html = penalidades.length > 0
+                ? `<table style="width:100%;text-align:left;font-size:13px;border-collapse:collapse;">
+                    <thead><tr style="border-bottom:2px solid var(--border-primary);">
+                      <th style="padding:8px;">Detalle</th>
+                      <th style="padding:8px;text-align:right;">Monto</th>
+                    </tr></thead>
+                    <tbody>${penalidades.map((p: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${p.detalle}</td><td style="padding:8px;text-align:right;font-weight:600;">${formatCurrency(p.monto)}</td></tr>`).join('')}</tbody>
+                    <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
+                      <td style="padding:8px;">Total</td>
+                      <td style="padding:8px;text-align:right;">${formatCurrency(montoPen)}</td>
+                    </tr></tfoot>
+                  </table>`
+                : `<p>Total penalidades: <strong>${formatCurrency(montoPen)}</strong></p>`
+
+              Swal.fire({
+                title: `Incidencias - ${row.original.conductor_nombre}`,
+                html,
+                width: 500,
+                confirmButtonText: 'Cerrar',
+                confirmButtonColor: '#6B7280',
+                customClass: { popup: 'fact-modal' }
+              })
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '12px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 600,
+              background: 'var(--color-danger-light)',
+              color: 'var(--color-danger)',
+            }}
+            title="Ver detalle de incidencias"
+          >
+            {count}
+            <span style={{ fontSize: '10px', fontWeight: 400 }}>
+              ({formatCurrency(montoPen)})
+            </span>
+          </button>
         )
-      }
+      },
+      enableSorting: false,
     },
     {
       accessorKey: 'saldo_anterior',
@@ -5840,20 +5917,7 @@ export function ReporteFacturacionTab() {
       ),
       enableSorting: true,
     },
-    {
-      accessorKey: 'subtotal_descuentos',
-      header: 'Tickets',
-      cell: ({ row }) => (
-        <span style={{
-          fontSize: '12px',
-          fontWeight: row.original.subtotal_descuentos > 0 ? 600 : 400,
-          color: row.original.subtotal_descuentos > 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
-        }}>
-          {row.original.subtotal_descuentos > 0 ? `-${formatCurrency(row.original.subtotal_descuentos)}` : '-'}
-        </span>
-      ),
-      enableSorting: true,
-    },
+
     {
       accessorKey: 'total_a_pagar',
       header: 'TOTAL',
