@@ -179,6 +179,18 @@ export function ConceptosFacturacionTab() {
       `<option value="${t.value}" ${concepto.tipo === t.value ? 'selected' : ''}>${t.label}</option>`
     ).join('')
 
+    // Cargar períodos para el selector de vigencia
+    const { data: periodos } = await supabase
+      .from('periodos_facturacion')
+      .select('semana, anio, fecha_inicio, fecha_fin')
+      .order('anio', { ascending: false })
+      .order('semana', { ascending: false })
+      .limit(20)
+
+    const periodosOptions = (periodos || []).map(p =>
+      `<option value="${p.fecha_inicio}|${p.fecha_fin}">S${p.semana}/${p.anio} (${p.fecha_inicio} al ${p.fecha_fin})</option>`
+    ).join('')
+
     const { value: formValues } = await Swal.fire({
       title: 'Editar Concepto',
       html: `
@@ -207,6 +219,13 @@ export function ConceptosFacturacionTab() {
               <input id="swal-iva" type="number" class="fact-form-input" value="${concepto.iva_porcentaje || 0}" step="0.01">
             </div>
           </div>
+          <div class="fact-form-group" id="swal-vigencia-group" style="display:none; margin-top: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-primary);">
+            <label class="fact-form-label" style="color: var(--color-primary); font-weight: 600;">Nuevo precio aplica desde período:</label>
+            <select id="swal-vigencia" class="fact-form-select">
+              ${periodosOptions}
+            </select>
+            <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 4px; display: block;">El precio anterior se guardará en el historial hasta el día antes del período seleccionado.</small>
+          </div>
           <div class="fact-form-checkboxes">
             <label class="fact-checkbox-label">
               <input id="swal-variable" type="checkbox" class="fact-checkbox" ${concepto.es_variable ? 'checked' : ''}> Es monto variable
@@ -229,13 +248,28 @@ export function ConceptosFacturacionTab() {
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#ff0033',
       cancelButtonColor: '#6B7280',
-      width: 400,
+      width: 450,
       customClass: {
         popup: 'fact-modal',
         title: 'fact-modal-title',
         htmlContainer: 'fact-modal-content',
         confirmButton: 'fact-btn-confirm',
         cancelButton: 'fact-btn-cancel'
+      },
+      didOpen: () => {
+        // Mostrar selector de vigencia solo cuando el precio cambia
+        const precioInput = document.getElementById('swal-precio') as HTMLInputElement
+        const ivaInput = document.getElementById('swal-iva') as HTMLInputElement
+        const vigenciaGroup = document.getElementById('swal-vigencia-group') as HTMLDivElement
+        const checkPriceChange = () => {
+          const newBase = parseFloat(precioInput.value) || 0
+          const newIva = parseFloat(ivaInput.value) || 0
+          const newFinal = newBase * (1 + newIva / 100)
+          const oldFinal = concepto.precio_final || 0
+          vigenciaGroup.style.display = Math.abs(newFinal - oldFinal) > 0.01 ? 'block' : 'none'
+        }
+        precioInput.addEventListener('input', checkPriceChange)
+        ivaInput.addEventListener('input', checkPriceChange)
       },
       preConfirm: () => {
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value
@@ -246,9 +280,19 @@ export function ConceptosFacturacionTab() {
         const aplicaTurno = (document.getElementById('swal-turno') as HTMLInputElement).checked
         const aplicaCargo = (document.getElementById('swal-cargo') as HTMLInputElement).checked
         const activo = (document.getElementById('swal-activo') as HTMLInputElement).checked
+        const vigenciaSelect = document.getElementById('swal-vigencia') as HTMLSelectElement
+        const vigenciaValue = vigenciaSelect?.value || ''
 
         if (!descripcion) {
           Swal.showValidationMessage('La descripción es requerida')
+          return false
+        }
+
+        const newFinal = precioBase * (1 + ivaPorcentaje / 100)
+        const priceChanged = Math.abs(newFinal - (concepto.precio_final || 0)) > 0.01
+
+        if (priceChanged && !vigenciaValue) {
+          Swal.showValidationMessage('Seleccioná desde qué período aplica el nuevo precio')
           return false
         }
 
@@ -257,11 +301,13 @@ export function ConceptosFacturacionTab() {
           tipo,
           precio_base: precioBase,
           iva_porcentaje: ivaPorcentaje,
-          precio_final: precioBase * (1 + ivaPorcentaje / 100),
+          precio_final: newFinal,
           es_variable: esVariable,
           aplica_turno: aplicaTurno,
           aplica_cargo: aplicaCargo,
-          activo
+          activo,
+          _priceChanged: priceChanged,
+          _vigencia: vigenciaValue,
         }
       }
     })
@@ -269,6 +315,41 @@ export function ConceptosFacturacionTab() {
     if (!formValues) return
 
     try {
+      const priceChanged = formValues._priceChanged as boolean
+      const vigencia = formValues._vigencia as string
+      // Remove internal fields before sending to DB
+      delete (formValues as any)._priceChanged
+      delete (formValues as any)._vigencia
+
+      // If price changed, save old price to historial first
+      if (priceChanged && vigencia) {
+        const [nuevaDesde] = vigencia.split('|')
+        // Historial: precio anterior vigente desde su última actualización hasta un día antes del nuevo período
+        const hastaDate = new Date(nuevaDesde + 'T00:00:00')
+        hastaDate.setDate(hastaDate.getDate() - 1)
+        const hasta = hastaDate.toISOString().split('T')[0]
+
+        const desde = concepto.updated_at
+          ? concepto.updated_at.split('T')[0]
+          : concepto.created_at?.split('T')[0] || nuevaDesde
+
+        // Ensure desde <= hasta
+        const desdeDate = new Date(desde + 'T00:00:00')
+        const finalDesde = desdeDate <= hastaDate ? desde : hasta
+
+        const { error: histError } = await (supabase.from('conceptos_facturacion_historial') as any).insert({
+          concepto_id: concepto.id,
+          codigo: concepto.codigo,
+          descripcion: concepto.descripcion,
+          precio_base: concepto.precio_base,
+          iva_porcentaje: concepto.iva_porcentaje,
+          precio_final: concepto.precio_final,
+          fecha_vigencia_desde: finalDesde,
+          fecha_vigencia_hasta: hasta,
+        })
+        if (histError) throw histError
+      }
+
       const { error } = await (supabase.from('conceptos_nomina') as any).update(formValues).eq('id', concepto.id)
       if (error) throw error
       showSuccess('Concepto actualizado')
