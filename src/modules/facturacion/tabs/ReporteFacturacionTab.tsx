@@ -191,9 +191,8 @@ export function ReporteFacturacionTab() {
   // Filtros Excel por columna
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
   const [conductorSearch, setConductorSearch] = useState('')
-  const [tipoFilter, setTipoFilter] = useState<string[]>([])
-  const [patenteFilter, setPatenteFilter] = useState<string[]>([])
-  const [patenteSearch, setPatenteSearch] = useState('')
+  const [tipoFilter] = useState<string[]>([])
+  const [patenteFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   // RIT Preview mode
@@ -301,29 +300,14 @@ export function ReporteFacturacionTab() {
     [...new Set(datosParaFiltros.map(f => f.conductor_nombre).filter(Boolean))].sort() as string[]
   , [datosParaFiltros])
 
-  const patentesUnicas = useMemo(() =>
-    [...new Set(datosParaFiltros.map(f => f.vehiculo_patente).filter(Boolean))].sort() as string[]
-  , [datosParaFiltros])
-
   // Listas filtradas por búsqueda
   const conductoresFiltrados = useMemo(() => {
     if (!conductorSearch) return conductoresUnicos
     return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
   }, [conductoresUnicos, conductorSearch])
 
-  const patentesFiltradas = useMemo(() => {
-    if (!patenteSearch) return patentesUnicas
-    return patentesUnicas.filter(p => p.toLowerCase().includes(patenteSearch.toLowerCase()))
-  }, [patentesUnicas, patenteSearch])
-
   // Toggle functions
   const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleTipoFilter = (val: string) => setTipoFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const togglePatenteFilter = (val: string) => setPatenteFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
 
@@ -5625,89 +5609,17 @@ export function ReporteFacturacionTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <strong style={{ fontSize: '13px', textTransform: 'uppercase' }}>{row.original.conductor_nombre}</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+              {row.original.vehiculo_patente || '-'}
+            </span>
+            <span className={`dt-badge ${row.original.tipo_alquiler === 'CARGO' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
+              {row.original.tipo_alquiler}
+            </span>
+          </div>
         </div>
-      ),
-      enableSorting: true,
-    },
-    {
-      accessorKey: 'vehiculo_patente',
-      header: () => (
-        <div className="dt-column-filter">
-          <span>Patente {patenteFilter.length > 0 && `(${patenteFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${patenteFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'patente' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar patente..."
-                value={patenteSearch}
-                onChange={(e) => setPatenteSearch(e.target.value)}
-              />
-              <div className="dt-excel-filter-list">
-                {patentesFiltradas.map(p => (
-                  <label key={p} className={`dt-column-filter-checkbox ${patenteFilter.includes(p) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={patenteFilter.includes(p)} onChange={() => togglePatenteFilter(p)} />
-                    <span>{p}</span>
-                  </label>
-                ))}
-              </div>
-              {patenteFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setPatenteFilter([]); setPatenteSearch('') }}>
-                  Limpiar ({patenteFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      cell: ({ row }) => (
-        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-          {row.original.vehiculo_patente || '-'}
-        </span>
-      ),
-      enableSorting: true,
-    },
-    {
-      accessorKey: 'tipo_alquiler',
-      header: () => (
-        <div className="dt-column-filter">
-          <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'tipo' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {['CARGO', 'TURNO'].map(t => (
-                  <label key={t} className={`dt-column-filter-checkbox ${tipoFilter.includes(t) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={tipoFilter.includes(t)} onChange={() => toggleTipoFilter(t)} />
-                    <span>{t}</span>
-                  </label>
-                ))}
-              </div>
-              {tipoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setTipoFilter([])}>
-                  Limpiar ({tipoFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      cell: ({ row }) => (
-        <span className={`dt-badge ${row.original.tipo_alquiler === 'CARGO' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`} style={{ fontSize: '10px' }}>
-          {row.original.tipo_alquiler}
-        </span>
       ),
       enableSorting: true,
     },
@@ -5989,7 +5901,7 @@ export function ReporteFacturacionTab() {
         </div>
       )
     }
-  ], [excesos, modoVistaPrevia, conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, patenteFilter, patenteSearch, patentesFiltradas, openColumnFilter])
+  ], [excesos, modoVistaPrevia, conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, patenteFilter, openColumnFilter])
 
   // Info de la semana
   const infoSemana = useMemo(() => {
