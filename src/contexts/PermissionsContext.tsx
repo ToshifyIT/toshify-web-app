@@ -44,6 +44,22 @@ interface SubmenuPermission {
   permission_source: 'user_override' | 'role_inherited'
 }
 
+interface TabPermission {
+  id: string
+  name: string
+  label: string
+  menu_id?: string | null
+  submenu_id?: string | null
+  order_index: number
+  permissions: {
+    can_view: boolean
+    can_create: boolean
+    can_edit: boolean
+    can_delete: boolean
+  }
+  permission_source: 'user_override' | 'role_inherited'
+}
+
 interface UserPermissionsResponse {
   user_id: string
   email: string
@@ -54,6 +70,7 @@ interface UserPermissionsResponse {
   } | null
   menus: MenuPermission[]
   submenus: SubmenuPermission[]
+  tabs: TabPermission[]
 }
 
 interface PermissionsContextType {
@@ -69,6 +86,12 @@ interface PermissionsContextType {
   canCreateInSubmenu: (submenuName: string) => boolean
   canEditInSubmenu: (submenuName: string) => boolean
   canDeleteInSubmenu: (submenuName: string) => boolean
+  // Funciones para tabs
+  canViewTab: (tabName: string) => boolean
+  canCreateInTab: (tabName: string) => boolean
+  canEditInTab: (tabName: string) => boolean
+  canDeleteInTab: (tabName: string) => boolean
+  getVisibleTabs: (modulePrefix: string) => TabPermission[]
   // Función general para verificar permisos
   canAccess: (menuOrSubmenuName: string, action?: 'view' | 'create' | 'edit' | 'delete') => boolean
   isAdmin: () => boolean
@@ -164,6 +187,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
       let menusData: MenuPermission[] = []
       let submenusData: SubmenuPermission[] = []
+      let tabsData: TabPermission[] = []
 
       if (isUserAdmin) {
         // Si es admin, cargar TODOS los menús de la base de datos
@@ -176,6 +200,12 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         const { data: allSubmenus } = await supabase
           .from('submenus')
           .select('*, parent_id, level')
+          .eq('is_active', true)
+          .order('order_index')
+
+        const { data: allTabs } = await supabase
+          .from('tabs')
+          .select('*')
           .eq('is_active', true)
           .order('order_index')
 
@@ -212,6 +242,22 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           },
           permission_source: 'role_inherited' as const
         }))
+
+        tabsData = (allTabs || []).map((tab: any) => ({
+          id: tab.id,
+          name: tab.name,
+          label: tab.label,
+          menu_id: tab.menu_id,
+          submenu_id: tab.submenu_id,
+          order_index: tab.order_index || 0,
+          permissions: {
+            can_view: true,
+            can_create: true,
+            can_edit: true,
+            can_delete: true
+          },
+          permission_source: 'role_inherited' as const
+        }))
       } else {
         // Para usuarios NO admin, cargar permisos combinando:
         // 1. Permisos específicos del usuario (tienen prioridad)
@@ -219,9 +265,10 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         const roleId = (profileData as any).role_id
         const userId = user!.id
 
-        // Maps para indexar permisos por menu_id/submenu_id
+        // Maps para indexar permisos por menu_id/submenu_id/tab_id
         const menuPermsMap = new Map<string, any>()
         const submenuPermsMap = new Map<string, any>()
+        const tabPermsMap = new Map<string, any>()
 
         // 1. Cargar permisos del ROL primero (base)
         if (roleId) {
@@ -265,6 +312,29 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
                 can_edit: p.can_edit,
                 can_delete: p.can_delete,
                 submenus: p.submenus,
+                permission_source: 'role_inherited'
+              })
+            }
+          }
+
+          // Cargar permisos de TABS del rol
+          const { data: roleTabPerms } = await supabase
+            .from('role_tab_permissions')
+            .select(`
+              can_view, can_create, can_edit, can_delete,
+              tabs (id, name, label, menu_id, submenu_id, order_index, is_active)
+            `)
+            .eq('role_id', roleId)
+            .eq('can_view', true)
+
+          for (const p of (roleTabPerms || []) as any[]) {
+            if (p.tabs?.is_active) {
+              tabPermsMap.set(p.tabs.id, {
+                can_view: p.can_view,
+                can_create: p.can_create,
+                can_edit: p.can_edit,
+                can_delete: p.can_delete,
+                tabs: p.tabs,
                 permission_source: 'role_inherited'
               })
             }
@@ -315,6 +385,28 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           }
         }
 
+        // 2b. Cargar permisos de TABS del usuario (sobrescriben rol)
+        const { data: userTabPerms } = await supabase
+          .from('user_tab_permissions')
+          .select(`
+            can_view, can_create, can_edit, can_delete,
+            tabs (id, name, label, menu_id, submenu_id, order_index, is_active)
+          `)
+          .eq('user_id', userId)
+
+        for (const p of (userTabPerms || []) as any[]) {
+          if (p.tabs?.is_active) {
+            tabPermsMap.set(p.tabs.id, {
+              can_view: p.can_view,
+              can_create: p.can_create,
+              can_edit: p.can_edit,
+              can_delete: p.can_delete,
+              tabs: p.tabs,
+              permission_source: 'user_override'
+            })
+          }
+        }
+
         // 3. Convertir maps a arrays finales
         menusData = Array.from(menuPermsMap.values())
           .filter((p: any) => p.can_view)
@@ -353,6 +445,24 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
             permission_source: p.permission_source as 'user_override' | 'role_inherited'
           }))
 
+        tabsData = Array.from(tabPermsMap.values())
+          .filter((p: any) => p.can_view)
+          .map((p: any) => ({
+            id: p.tabs.id,
+            name: p.tabs.name,
+            label: p.tabs.label,
+            menu_id: p.tabs.menu_id,
+            submenu_id: p.tabs.submenu_id,
+            order_index: p.tabs.order_index || 0,
+            permissions: {
+              can_view: p.can_view || false,
+              can_create: p.can_create || false,
+              can_edit: p.can_edit || false,
+              can_delete: p.can_delete || false
+            },
+            permission_source: p.permission_source as 'user_override' | 'role_inherited'
+          }))
+
       }
 
       // DEBUG: Ver permisos cargados
@@ -375,7 +485,8 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           description: (profileData as any).roles?.description || 'Sin descripción'
         },
         menus: menusData,
-        submenus: submenusData
+        submenus: submenusData,
+        tabs: tabsData
       })
     } catch (error) {
       console.error('Error en fallback:', error)
@@ -415,6 +526,12 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       .filter(s => s.permissions.can_view)
       .sort((a, b) => a.order_index - b.order_index)
   }, [userPermissions?.submenus])
+
+  /** Map de tabs indexado por nombre (lowercase) - O(1) lookup */
+  const tabsByName = useMemo<Map<string, TabPermission>>(() => {
+    if (!userPermissions?.tabs) return new Map()
+    return new Map(userPermissions.tabs.map(t => [t.name.toLowerCase(), t]))
+  }, [userPermissions?.tabs])
 
   /** Permisos globales pre-calculados (para funciones deprecadas) */
   const globalPermissions = useMemo(() => {
@@ -480,6 +597,41 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     return submenusByName.get(submenuName.toLowerCase())?.permissions.can_delete ?? false
   }, [submenusByName, userPermissions?.role?.name])
 
+  // Funciones para tabs - O(1) con Map (case-insensitive)
+  // Admin siempre tiene todos los permisos
+  const canViewTab = useCallback((tabName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
+    return tabsByName.get(tabName.toLowerCase())?.permissions.can_view ?? false
+  }, [tabsByName, userPermissions?.role?.name])
+
+  const canCreateInTab = useCallback((tabName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
+    return tabsByName.get(tabName.toLowerCase())?.permissions.can_create ?? false
+  }, [tabsByName, userPermissions?.role?.name])
+
+  const canEditInTab = useCallback((tabName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
+    return tabsByName.get(tabName.toLowerCase())?.permissions.can_edit ?? false
+  }, [tabsByName, userPermissions?.role?.name])
+
+  const canDeleteInTab = useCallback((tabName: string): boolean => {
+    if (userPermissions?.role?.name === 'admin') return true
+    return tabsByName.get(tabName.toLowerCase())?.permissions.can_delete ?? false
+  }, [tabsByName, userPermissions?.role?.name])
+
+  /** Obtener tabs visibles filtrados por prefijo de módulo (e.g., 'facturacion', 'incidencias') */
+  const getVisibleTabs = useCallback((modulePrefix: string): TabPermission[] => {
+    if (!userPermissions?.tabs) return []
+    if (userPermissions.role?.name === 'admin') {
+      return userPermissions.tabs
+        .filter(t => t.name.toLowerCase().startsWith(modulePrefix.toLowerCase() + ':'))
+        .sort((a, b) => a.order_index - b.order_index)
+    }
+    return userPermissions.tabs
+      .filter(t => t.permissions.can_view && t.name.toLowerCase().startsWith(modulePrefix.toLowerCase() + ':'))
+      .sort((a, b) => a.order_index - b.order_index)
+  }, [userPermissions?.tabs, userPermissions?.role?.name])
+
   // Función general que busca en menús y submenús - O(1) con Maps (case-insensitive)
   // Admin siempre tiene todos los permisos
   const canAccess = useCallback((
@@ -500,8 +652,12 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     const submenu = submenusByName.get(nameLower)
     if (submenu) return submenu.permissions[permKey] ?? false
 
+    // Buscar en tabs - O(1)
+    const tab = tabsByName.get(nameLower)
+    if (tab) return tab.permissions[permKey] ?? false
+
     return false
-  }, [menusByName, submenusByName, userPermissions?.role?.name])
+  }, [menusByName, submenusByName, tabsByName, userPermissions?.role?.name])
 
   const isAdmin = useCallback((): boolean => {
     return userPermissions?.role?.name === 'admin'
@@ -540,6 +696,11 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     canCreateInSubmenu,
     canEditInSubmenu,
     canDeleteInSubmenu,
+    canViewTab,
+    canCreateInTab,
+    canEditInTab,
+    canDeleteInTab,
+    getVisibleTabs,
     canAccess,
     isAdmin,
     getVisibleMenus,

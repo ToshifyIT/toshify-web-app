@@ -107,17 +107,13 @@ function getAreaResponsablePorRol(roleName: string | undefined | null): string {
 
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
-  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab } = usePermissions()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Permisos específicos para el menú de incidencias
   const canCreate = canCreateInMenu('incidencias')
   const canEdit = canEditInMenu('incidencias')
   const canDelete = canDeleteInMenu('incidencias')
-  
-  // Solo Admin y Administrativo pueden ver las pestañas de penalidades (Por Aplicar, Aplicadas, Rechazados)
-  const userRoleName = profile?.roles?.name?.toLowerCase() || ''
-  const canViewPenalidadesTabs = userRoleName === 'admin' || userRoleName === 'administrativo'
 
   const [activeTab, setActiveTab] = useState<TabType>('logistica')
   const [loading, setLoading] = useState(true)
@@ -2473,24 +2469,28 @@ export function IncidenciasModule() {
       {/* Tabs + Action Button (igual que Siniestros) */}
       <div className="incidencias-tabs-row">
         <div className="incidencias-tabs">
-          <button
-            className={`incidencias-tab ${activeTab === 'logistica' ? 'active' : ''}`}
-            onClick={() => setActiveTab('logistica')}
-          >
-            <FileText size={16} />
-            Incidencia Logística
-            <span className="tab-badge">{incidenciasLogisticas.length}</span>
-          </button>
-          <button
-            className={`incidencias-tab ${activeTab === 'cobro' ? 'active' : ''}`}
-            onClick={() => setActiveTab('cobro')}
-          >
-            <DollarSign size={16} />
-            Incidencia (Cobro)
-            <span className="tab-badge">{incidenciasCobro.length}</span>
-          </button>
-          {/* Tab Por Aplicar - muestra penalidades pendientes (solo Admin y Administrativo) */}
-          {canViewPenalidadesTabs && (
+          {canViewTab('incidencias:logistica') && (
+            <button
+              className={`incidencias-tab ${activeTab === 'logistica' ? 'active' : ''}`}
+              onClick={() => setActiveTab('logistica')}
+            >
+              <FileText size={16} />
+              Incidencia Logística
+              <span className="tab-badge">{incidenciasLogisticas.length}</span>
+            </button>
+          )}
+          {canViewTab('incidencias:cobro') && (
+            <button
+              className={`incidencias-tab ${activeTab === 'cobro' ? 'active' : ''}`}
+              onClick={() => setActiveTab('cobro')}
+            >
+              <DollarSign size={16} />
+              Incidencia (Cobro)
+              <span className="tab-badge">{incidenciasCobro.length}</span>
+            </button>
+          )}
+          {/* Tab Por Aplicar - muestra penalidades pendientes (controlado por permisos de tab) */}
+          {canViewTab('incidencias:por_aplicar') && (
             <button
               className={`incidencias-tab ${activeTab === 'por_aplicar' ? 'active' : ''}`}
               onClick={() => setActiveTab('por_aplicar')}
@@ -2504,8 +2504,8 @@ export function IncidenciasModule() {
               )}
             </button>
           )}
-          {/* Tab Aplicadas - muestra penalidades ya aplicadas (solo Admin y Administrativo) */}
-          {canViewPenalidadesTabs && (
+          {/* Tab Aplicadas - muestra penalidades ya aplicadas (controlado por permisos de tab) */}
+          {canViewTab('incidencias:aplicadas') && (
             <button
               className={`incidencias-tab ${activeTab === 'aplicadas' ? 'active' : ''}`}
               onClick={() => setActiveTab('aplicadas')}
@@ -2515,8 +2515,8 @@ export function IncidenciasModule() {
               <span className="tab-badge">{countAplicadas}</span>
             </button>
           )}
-          {/* Tab Rechazados (solo Admin y Administrativo) */}
-          {canViewPenalidadesTabs && (
+          {/* Tab Rechazados (controlado por permisos de tab) */}
+          {canViewTab('incidencias:rechazados') && (
             <button
               className={`incidencias-tab ${activeTab === 'rechazados' ? 'active' : ''}`}
               onClick={() => setActiveTab('rechazados')}

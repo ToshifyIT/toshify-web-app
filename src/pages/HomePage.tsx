@@ -531,8 +531,9 @@ export function HomePage() {
         }
 
         .nav-item.active {
-          background: var(--color-gray-800);
-          color: var(--text-inverse);
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          font-weight: 600;
         }
 
         .nav-item:disabled {

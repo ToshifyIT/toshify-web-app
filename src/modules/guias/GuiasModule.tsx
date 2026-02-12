@@ -2371,10 +2371,10 @@ export function GuiasModule() {
               {/* Filters & Table Container */}
               <div className="guias-filters-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Filters Row: Week Selector + Search */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', backgroundColor: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', backgroundColor: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
                   
                   {/* External Search Input - 80% width */}
-                  <div className="dt-search-wrapper" style={{ flex: '0 0 80%', height: '36px', background: '#f9fafb', borderRadius: '6px' }}>
+                  <div className="dt-search-wrapper" style={{ flex: '1 1 0%', minWidth: '200px', height: '36px', background: 'var(--input-bg)', borderRadius: '6px' }}>
                     <Search className="dt-search-icon" size={20} />
                     <input
                       type="text"
@@ -2387,7 +2387,7 @@ export function GuiasModule() {
                   </div>
 
                   {/* Week Selector - Remaining width */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: '0 0 auto' }}>
                     <WeekSelector 
                       selectedWeek={selectedWeek} 
                       onWeekChange={setSelectedWeek} 

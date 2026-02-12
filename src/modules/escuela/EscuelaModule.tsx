@@ -286,7 +286,7 @@ export function EscuelaModule() {
         cell: ({ row }) => (
           <div className="flex flex-col items-center justify-center w-full">
             <span style={{ fontWeight: 600 }}>{row.original.nombre}</span>
-            <span style={{ fontSize: '11px', color: '#6b7280' }}>{row.original.dni}</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{row.original.dni}</span>
           </div>
         ),
       },

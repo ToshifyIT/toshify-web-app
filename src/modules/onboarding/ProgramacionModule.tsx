@@ -128,7 +128,7 @@ ${turnoEmoji}${turnoEmoji ? ' ' : ''}Turno: ${turnoLabel}
 }
 
 export function ProgramacionModule() {
-  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab } = usePermissions()
   const { user, profile } = useAuth()
   const canCreate = canCreateInMenu('programacion-entregas')
   const canEdit = canEditInMenu('programacion-entregas')
@@ -1735,58 +1735,62 @@ export function ProgramacionModule() {
       </div>
       */}
 
-      {/* Tabs */}
+      {/* Tabs - controlados por permisos de tab */}
       <div className="prog-tabs" style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
-        <button
-          className={`prog-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
-          onClick={() => setActiveTab('pendientes')}
-          style={{
-            padding: '6px 14px',
-            borderRadius: '6px',
-            border: activeTab === 'pendientes' ? '2px solid #ef4444' : '1px solid #e5e7eb',
-            background: activeTab === 'pendientes' ? 'rgba(239, 68, 68, 0.05)' : 'white',
-            color: activeTab === 'pendientes' ? '#ef4444' : '#6b7280',
-            fontWeight: activeTab === 'pendientes' ? 600 : 500,
-            fontSize: '13px',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-        >
-          <Calendar size={14} />
-          Pendientes
-          <span style={{ padding: '1px 6px', borderRadius: '10px', background: activeTab === 'pendientes' ? '#ef4444' : '#e5e7eb', color: activeTab === 'pendientes' ? 'white' : '#6b7280', fontSize: '11px', fontWeight: 600 }}>
-            {programaciones.length}
-          </span>
-        </button>
-        <button
-          className={`prog-tab ${activeTab === 'historico' ? 'active' : ''}`}
-          onClick={() => setActiveTab('historico')}
-          style={{
-            padding: '6px 14px',
-            borderRadius: '6px',
-            border: activeTab === 'historico' ? '2px solid #10b981' : '1px solid #e5e7eb',
-            background: activeTab === 'historico' ? 'rgba(16, 185, 129, 0.05)' : 'white',
-            color: activeTab === 'historico' ? '#10b981' : '#6b7280',
-            fontWeight: activeTab === 'historico' ? 600 : 500,
-            fontSize: '13px',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-        >
-          <Send size={14} />
-          Enviados
-          {programacionesHistorico.length > 0 && (
-            <span style={{ padding: '1px 6px', borderRadius: '10px', background: activeTab === 'historico' ? '#10b981' : '#e5e7eb', color: activeTab === 'historico' ? 'white' : '#6b7280', fontSize: '11px', fontWeight: 600 }}>
-              {programacionesHistorico.length}
+        {canViewTab('programacion:pendientes') && (
+          <button
+            className={`prog-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('pendientes')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '6px',
+              border: activeTab === 'pendientes' ? '2px solid #ef4444' : '1px solid #e5e7eb',
+              background: activeTab === 'pendientes' ? 'rgba(239, 68, 68, 0.05)' : 'white',
+              color: activeTab === 'pendientes' ? '#ef4444' : '#6b7280',
+              fontWeight: activeTab === 'pendientes' ? 600 : 500,
+              fontSize: '13px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Calendar size={14} />
+            Pendientes
+            <span style={{ padding: '1px 6px', borderRadius: '10px', background: activeTab === 'pendientes' ? '#ef4444' : '#e5e7eb', color: activeTab === 'pendientes' ? 'white' : '#6b7280', fontSize: '11px', fontWeight: 600 }}>
+              {programaciones.length}
             </span>
-          )}
-        </button>
+          </button>
+        )}
+        {canViewTab('programacion:historico') && (
+          <button
+            className={`prog-tab ${activeTab === 'historico' ? 'active' : ''}`}
+            onClick={() => setActiveTab('historico')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '6px',
+              border: activeTab === 'historico' ? '2px solid #10b981' : '1px solid #e5e7eb',
+              background: activeTab === 'historico' ? 'rgba(16, 185, 129, 0.05)' : 'white',
+              color: activeTab === 'historico' ? '#10b981' : '#6b7280',
+              fontWeight: activeTab === 'historico' ? 600 : 500,
+              fontSize: '13px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Send size={14} />
+            Enviados
+            {programacionesHistorico.length > 0 && (
+              <span style={{ padding: '1px 6px', borderRadius: '10px', background: activeTab === 'historico' ? '#10b981' : '#e5e7eb', color: activeTab === 'historico' ? 'white' : '#6b7280', fontSize: '11px', fontWeight: 600 }}>
+                {programacionesHistorico.length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* DataTable - Pendientes */}
