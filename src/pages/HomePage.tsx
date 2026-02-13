@@ -5,7 +5,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2
+  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -209,6 +209,7 @@ export function HomePage() {
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
   useTheme() // Para mantener el contexto del tema activo
+  const [sedeDropdownOpen, setSedeDropdownOpen] = useState(false)
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -1225,64 +1226,6 @@ export function HomePage() {
             </div>
           </div>
 
-          {/* Selector de sede */}
-          {sedes.length > 1 && !sidebarCollapsed && (
-            <div style={{
-              padding: '8px 16px',
-              borderBottom: '1px solid var(--border-primary)',
-            }}>
-              {puedeVerTodasSedes ? (
-                <select
-                  value={sedeActual?.id || ''}
-                  onChange={(e) => cambiarSede(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-primary)',
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    outline: 'none',
-                  }}
-                >
-                  {sedes.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.nombre}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
-                  color: 'var(--text-secondary)',
-                  fontWeight: 500,
-                }}>
-                  <Building2 size={14} />
-                  <span>{sedeActual?.nombre || 'Sin sede'}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {sedes.length > 1 && sidebarCollapsed && (
-            <div style={{
-              padding: '8px 0',
-              display: 'flex',
-              justifyContent: 'center',
-              borderBottom: '1px solid var(--border-primary)',
-            }}
-              title={sedeActual?.nombre || 'Sede'}
-            >
-              <Building2 size={18} style={{ color: 'var(--text-secondary)' }} />
-            </div>
-          )}
-
           <nav className="sidebar-nav">
             {visibleMenus.length > 0 ? (
               visibleMenus.map((menu) => {
@@ -1462,9 +1405,160 @@ export function HomePage() {
             <button className="menu-toggle" onClick={toggleSidebar}>
               <Menu size={24} />
             </button>
-            <button className="btn-logout" onClick={handleSignOut}>
-              Cerrar Sesión
-            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
+              {/* Selector de Sede */}
+              {sedes.length > 0 && (
+                <div style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => puedeVerTodasSedes && sedes.length > 1 ? setSedeDropdownOpen(!sedeDropdownOpen) : undefined}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-primary)',
+                      background: 'var(--bg-secondary)',
+                      cursor: puedeVerTodasSedes && sedes.length > 1 ? 'pointer' : 'default',
+                      color: 'var(--text-primary)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <Building2 size={16} style={{ color: 'var(--color-primary)' }} />
+                    <span>{sedeActual?.nombre || 'Sin sede'}</span>
+                    <span style={{
+                      fontSize: '10px',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      background: 'var(--color-primary)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      letterSpacing: '0.5px',
+                    }}>
+                      {sedeActual?.codigo || ''}
+                    </span>
+                    {puedeVerTodasSedes && sedes.length > 1 && (
+                      <ChevronRight size={14} style={{
+                        color: 'var(--text-secondary)',
+                        transform: sedeDropdownOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.15s',
+                      }} />
+                    )}
+                  </button>
+
+                  {/* Dropdown */}
+                  {sedeDropdownOpen && puedeVerTodasSedes && (
+                    <>
+                      <div
+                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
+                        onClick={() => setSedeDropdownOpen(false)}
+                      />
+                      <div style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 6px)',
+                        right: 0,
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '12px',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+                        zIndex: 999,
+                        minWidth: '260px',
+                        padding: '8px',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          padding: '8px 12px 10px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: 'var(--text-secondary)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                        }}>
+                          Cambiar Sede
+                        </div>
+                        {sedes.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => { cambiarSede(s.id); setSedeDropdownOpen(false) }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              width: '100%',
+                              padding: '10px 12px',
+                              border: 'none',
+                              borderRadius: '8px',
+                              background: sedeActual?.id === s.id ? 'var(--bg-secondary)' : 'transparent',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              transition: 'background 0.1s',
+                            }}
+                            onMouseEnter={(e) => { if (sedeActual?.id !== s.id) e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                            onMouseLeave={(e) => { if (sedeActual?.id !== s.id) e.currentTarget.style.background = 'transparent' }}
+                          >
+                            <div style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: sedeActual?.id === s.id ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                              color: sedeActual?.id === s.id ? '#fff' : 'var(--text-secondary)',
+                              flexShrink: 0,
+                            }}>
+                              <Building2 size={16} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{
+                                fontSize: '13px',
+                                fontWeight: 600,
+                                color: 'var(--text-primary)',
+                              }}>
+                                {s.nombre}
+                              </div>
+                              <div style={{
+                                fontSize: '11px',
+                                color: 'var(--text-secondary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                              }}>
+                                <span style={{ fontFamily: 'monospace' }}>@ {s.codigo}</span>
+                                {s.es_principal && (
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '1px 5px',
+                                    borderRadius: '3px',
+                                    background: '#F59E0B22',
+                                    color: '#D97706',
+                                    fontWeight: 700,
+                                  }}>
+                                    Predeterminada
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {sedeActual?.id === s.id && (
+                              <div style={{ color: 'var(--color-primary)' }}>
+                                <Check size={18} />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <button className="btn-logout" onClick={handleSignOut}>
+                Cerrar Sesión
+              </button>
+            </div>
           </div>
 
           <div className="content-area">
