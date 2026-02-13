@@ -136,111 +136,197 @@ export const distributeDriversService = async (guias: Guia[]) => {
 
     if (unassignedDrivers.length === 0) {
       console.log('GuiasService: No unassigned drivers to distribute.');
-      return
-    }
+    } else {
+      const guideLoad = new Map<string, number>()
+      guias.forEach(g => guideLoad.set(g.id, 0))
 
-    const guideLoad = new Map<string, number>()
-    guias.forEach(g => guideLoad.set(g.id, 0))
-
-    assignedDrivers?.forEach((d: any) => {
-      if (d.id_guia && guideLoad.has(d.id_guia)) {
-        guideLoad.set(d.id_guia, guideLoad.get(d.id_guia)! + 1)
-      }
-    })
-    
-    console.log('GuiasService: Current guide loads:', Object.fromEntries(guideLoad));
-
-    const updates: any[] = []
-    const guideIds = guias.map(g => g.id)
-    
-    for (const driver of unassignedDrivers) {
-      let minLoad = Infinity
-      guideIds.forEach(id => {
-        const load = guideLoad.get(id) || 0
-        if (load < minLoad) minLoad = load
+      assignedDrivers?.forEach((d: any) => {
+        if (d.id_guia && guideLoad.has(d.id_guia)) {
+          guideLoad.set(d.id_guia, guideLoad.get(d.id_guia)! + 1)
+        }
       })
-
-      const candidates = guideIds.filter(id => (guideLoad.get(id) || 0) === minLoad)
       
-      if (candidates.length === 0) continue
+      console.log('GuiasService: Current guide loads:', Object.fromEntries(guideLoad));
 
-      const selectedGuideId = candidates[Math.floor(Math.random() * candidates.length)]
+      const updates: any[] = []
+      const guideIds = guias.map(g => g.id)
       
-      guideLoad.set(selectedGuideId, (guideLoad.get(selectedGuideId) || 0) + 1)
-      
-      updates.push({
-        id: driver.id,
-        guia_asignado: true,
-        id_guia: selectedGuideId
-      })
-    }
+      for (const driver of unassignedDrivers) {
+        let minLoad = Infinity
+        guideIds.forEach(id => {
+          const load = guideLoad.get(id) || 0
+          if (load < minLoad) minLoad = load
+        })
 
-    console.log('GuiasService: Updates prepared:', updates.length);
-
-    if (updates.length > 0) {
-      console.log('GuiasService: Performing updates to conductores...');
-      
-      const updatePromises = updates.map(update => 
-        supabase
-          .from('conductores')
-          .update({ 
-            guia_asignado: update.guia_asignado, 
-            id_guia: update.id_guia 
-          })
-          .eq('id', update.id)
-      );
-
-      const results = await Promise.all(updatePromises);
-      
-      const errors = results.filter(r => r.error).map(r => r.error);
-      if (errors.length > 0) {
-        console.error('Errores actualizando conductores:', errors);
-        throw errors[0];
-      }
-
-      console.log(`Asignados ${updates.length} conductores a guías.`);
-
-      const currentWeek = getCurrentWeek()
-      console.log('GuiasService: Preparing history inserts for week:', currentWeek);
-      
-      // Verificar historial existente para esta semana para evitar duplicados
-      const { data: existingHistory } = await supabase
-        .from('guias_historial_semanal')
-        .select('id_conductor')
-        .eq('semana', currentWeek);
+        const candidates = guideIds.filter(id => (guideLoad.get(id) || 0) === minLoad)
         
-      const existingHistoryIds = new Set(existingHistory?.map((h: any) => h.id_conductor));
-      const historyInserts: any[] = [];
+        if (candidates.length === 0) continue
 
-      updates.forEach(u => {
-        if (!existingHistoryIds.has(u.id)) {
-          historyInserts.push({
-            id_conductor: u.id,
-            id_guia: u.id_guia,
-            semana: currentWeek
-          });
-          existingHistoryIds.add(u.id);
-        }
-      });
-
-      if (historyInserts.length > 0) {
-        console.log('GuiasService: Performing bulk insert to guias_historial_semanal...');
-        const { error: historyError } = await supabase
-          .from('guias_historial_semanal')
-          .insert(historyInserts)
-
-        if (historyError) {
-          console.error('Error creando historial semanal:', historyError)
-        } else {
-          console.log(`Creados ${historyInserts.length} registros en historial semanal.`)
-        }
-      } else {
-         console.log('GuiasService: No new history records needed.');
+        const selectedGuideId = candidates[Math.floor(Math.random() * candidates.length)]
+        
+        guideLoad.set(selectedGuideId, (guideLoad.get(selectedGuideId) || 0) + 1)
+        
+        updates.push({
+          id: driver.id,
+          guia_asignado: true,
+          id_guia: selectedGuideId
+        })
       }
-      
-      return true; // Indicates updates were made
+
+      console.log('GuiasService: Updates prepared:', updates.length);
+
+      if (updates.length > 0) {
+        console.log('GuiasService: Performing updates to conductores...');
+        
+        const updatePromises = updates.map(update => 
+          supabase
+            .from('conductores')
+            .update({ 
+              guia_asignado: update.guia_asignado, 
+              id_guia: update.id_guia 
+            })
+            .eq('id', update.id)
+        );
+
+        const results = await Promise.all(updatePromises);
+        
+        const errors = results.filter(r => r.error).map(r => r.error);
+        if (errors.length > 0) {
+          console.error('Errores actualizando conductores:', errors);
+          throw errors[0];
+        }
+
+        console.log(`Asignados ${updates.length} conductores a guías.`);
+
+        const currentWeek = getCurrentWeek()
+        console.log('GuiasService: Preparing history inserts for week:', currentWeek);
+        
+        // Verificar historial existente para esta semana para evitar duplicados
+        const { data: existingHistory } = await supabase
+          .from('guias_historial_semanal')
+          .select('id_conductor')
+          .eq('semana', currentWeek);
+          
+        const existingHistoryIds = new Set(existingHistory?.map((h: any) => h.id_conductor));
+        const historyInserts: any[] = [];
+
+        updates.forEach(u => {
+          if (!existingHistoryIds.has(u.id)) {
+            historyInserts.push({
+              id_conductor: u.id,
+              id_guia: u.id_guia,
+              semana: currentWeek
+            });
+            existingHistoryIds.add(u.id);
+          }
+        });
+
+        if (historyInserts.length > 0) {
+          console.log('GuiasService: Performing bulk insert to guias_historial_semanal...');
+          const { error: historyError } = await supabase
+            .from('guias_historial_semanal')
+            .insert(historyInserts)
+
+          if (historyError) {
+            console.error('Error creando historial semanal:', historyError)
+          } else {
+            console.log(`Creados ${historyInserts.length} registros en historial semanal.`)
+          }
+        } else {
+           console.log('GuiasService: No new history records needed.');
+        }
+      }
     }
-    return false; // No updates made
+
+    // --- SAFETY NET SYNC (Rescate de conductores activos con guía pero sin historial) ---
+    // Esta lógica busca conductores que:
+    // 1. Están Activos y tienen Vehículo.
+    // 2. YA tienen guía asignado (id_guia NOT NULL).
+    // 3. NO tienen registro en guias_historial_semanal para la semana actual.
+    
+    console.log('GuiasService: Executing Safety Net Sync...');
+    const currentWeek = getCurrentWeek();
+
+    // A. Obtener IDs que ya están en el historial de esta semana
+    const { data: currentHistory, error: historyError } = await supabase
+      .from('guias_historial_semanal')
+      .select('id_conductor')
+      .eq('semana', currentWeek);
+
+    if (historyError) {
+      console.error('GuiasService: Error fetching current history for safety net:', historyError);
+    } else {
+      const existingHistoryIds = new Set(currentHistory?.map((h: any) => h.id_conductor));
+      
+      // B. Buscar candidatos a rescate
+      const { data: rawRescueCandidates, error: rescueError } = await supabase
+        .from('conductores')
+        .select(`
+          id,
+          id_guia,
+          asignaciones_conductores!inner (
+            asignaciones!inner (
+              estado,
+              vehiculo_id,
+              vehiculos!inner (
+                id,
+                patente
+              )
+            )
+          )
+        `)
+        .eq('estado_id', '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2') // Activo
+        .neq('id_guia', null) // Tienen guía
+        .in('asignaciones_conductores.asignaciones.estado', ['activo', 'activa']);
+
+      if (rescueError) {
+         console.error('GuiasService: Error fetching rescue candidates:', rescueError);
+      } else {
+         // C. Filtrar candidatos válidos (con vehículo activo real) y que NO estén en historial
+         const rescueInserts: any[] = [];
+         
+         rawRescueCandidates?.forEach((d: any) => {
+             // 1. Verificar si ya está en historial
+             if (existingHistoryIds.has(d.id)) return;
+
+             // 2. Verificar vehículo activo (doble check similar al anterior)
+             const tieneVehiculoActivo = d.asignaciones_conductores?.some((ac: any) => {
+               const asignacion = ac.asignaciones;
+               if (!asignacion) return false;
+               const estado = asignacion.estado?.toLowerCase();
+               const esActivo = estado === 'activo' || estado === 'activa';
+               const tienePatente = !!asignacion.vehiculos?.patente;
+               return esActivo && tienePatente;
+             });
+
+             if (tieneVehiculoActivo) {
+               rescueInserts.push({
+                 id_conductor: d.id,
+                 id_guia: d.id_guia, // Usamos su guía existente
+                 semana: currentWeek,
+                 id_accion_imp: 1 // Default action
+               });
+             }
+         });
+
+         if (rescueInserts.length > 0) {
+            console.log(`GuiasService: SAFETY NET ACTIVATED. Rescuing ${rescueInserts.length} drivers...`);
+            const { error: insertRescueError } = await supabase
+              .from('guias_historial_semanal')
+              .insert(rescueInserts);
+              
+            if (insertRescueError) {
+               console.error('GuiasService: Error inserting rescue records:', insertRescueError);
+            } else {
+               console.log(`GuiasService: Successfully rescued ${rescueInserts.length} drivers into current week.`);
+            }
+         } else {
+            console.log('GuiasService: Safety net found no missing drivers.');
+         }
+      }
+    }
+
+    return true; // Always return true to indicate process completed
   } catch (error) {
     console.error('Error distribuyendo conductores:', error)
     return false;

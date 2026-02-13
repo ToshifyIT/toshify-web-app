@@ -49,16 +49,6 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
   const [anotaciones, setAnotaciones] = useState<Nota[]>(driver.anotaciones_extra || []);
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
 
-  const formatCurrency = (amount: number | string | undefined) => {
-    if (amount === undefined || amount === null) return "-";
-    return new Intl.NumberFormat("es-AR", { 
-      style: "currency", 
-      currency: "ARS",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2 
-    }).format(Number(amount));
-  };
-
   // Estado para los campos editables
   // Normalizamos meta_sem_cumplida para que coincida con las opciones del select
   const getInitialMeta = (val: boolean | string | null | undefined) => {
@@ -155,6 +145,17 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
   };
 
   const estadoInfo = getEstadoInfo();
+
+  // Función helper para formato de moneda (local para asegurar consistencia)
+  const formatCurrency = (amount: number | undefined | null) => {
+    if (amount === undefined || amount === null) return '$ 0,00';
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -377,7 +378,7 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
           <div className="flex flex-col h-full">
             <div className="section-header">
               <div className="section-indicator"></div>
-              <span className="section-title">GUIAS</span>
+              <span className="section-title">Nuestros Programas Educativos</span>
             </div>
 
             <div className="bg-gray-50/80 rounded-2xl border border-gray-100 flex-1" style={{ padding: '20px' }}>

@@ -15,7 +15,14 @@ import {
   Pencil,
   ArrowLeftRight,
   Search,
-  History
+  History,
+  Book,
+  Heart,
+  Star,
+  Target,
+  GraduationCap,
+  X,
+  Triangle
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -28,8 +35,10 @@ import { AnotacionesEditorModal, type Nota } from './components/AnotacionesEdito
 import { AnotacionesModal, type Anotacion } from './components/AnotacionesModal'
 import { ReporteEscuelaModal, type ConductorEscuela } from './components/ReporteEscuelaModal'
 import { ReasignacionModal } from './components/ReasignacionModal'
+import GestionConductores from './components/GestionConductores'
 import { useAuth } from '../../contexts/AuthContext'
 import './GuiasModule.css'
+import './GuiasToolbar.css'
 import iconNotas from './Iconos/notas.png'
 
 // Helpers copiados de ConductoresModule para consistencia visual
@@ -85,6 +94,9 @@ export function GuiasModule() {
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [categoriaFilter] = useState<string[]>([])
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([])
+  const [efectivoFilter, setEfectivoFilter] = useState<string[]>([])
+  const [appFilter, setAppFilter] = useState<string[]>([])
+  const [totalFilter, setTotalFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   
   // Estados para búsqueda dentro de filtros
@@ -92,6 +104,9 @@ export function GuiasModule() {
   const [dniSearch, setDniSearch] = useState('')
   const [globalSearch, setGlobalSearch] = useState('')
   const [cbuSearch] = useState('')
+  const [efectivoSearch, setEfectivoSearch] = useState('')
+  const [appSearch, setAppSearch] = useState('')
+  const [totalSearch, setTotalSearch] = useState('')
 
   // Estados para modal de detalles
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -126,6 +141,9 @@ export function GuiasModule() {
   const [schoolReportPage, setSchoolReportPage] = useState(1);
   const [precalculatedSchoolReport, setPrecalculatedSchoolReport] = useState<ConductorEscuela[]>([]);
   const [isSchoolReportCalculated, setIsSchoolReportCalculated] = useState(false);
+
+  // Estado para el modal de Gestión de Conductores
+  const [gestionConductoresModalOpen, setGestionConductoresModalOpen] = useState(false);
 
   // Efecto para precargar reporte de escuela en segundo plano
   useEffect(() => {
@@ -293,7 +311,7 @@ export function GuiasModule() {
   }, [openColumnFilter]);
 
   // Función para abrir el modal de Reporte Escuela
-  const handleOpenSchoolReport = () => {
+  /* const handleOpenSchoolReport = () => {
     // Si ya se calculó, usar los datos precargados
     if (isSchoolReportCalculated) {
         setSchoolReportData(precalculatedSchoolReport);
@@ -314,7 +332,7 @@ export function GuiasModule() {
     
     setSchoolReportData(initialData);
     setSchoolReportModalOpen(true);
-  };
+  }; */
 
   // Efecto para actualizar el modal si se abre antes de terminar el cálculo
   useEffect(() => {
@@ -806,6 +824,10 @@ export function GuiasModule() {
             ...conductor,
             // Mantener campos del historial en el nivel superior para la tabla
             ...historial,
+            // Fix: Asegurar explícitamente que los campos clave del historial tengan prioridad
+            fecha_llamada: historial.fecha_llamada,
+            id_accion_imp: historial.id_accion_imp,
+            meta_sem_cumplida: historial.meta_sem_cumplida,
             // Restaurar ID del conductor como ID principal (para que funcionen los modales y acciones)
             id: conductor.id,
             // Guardar ID del historial por si se necesita
@@ -1025,6 +1047,7 @@ export function GuiasModule() {
         .select(`
           id_conductor,
           id_guia,
+          fecha_llamada,
           conductores!inner (
             id,
             estado_id,
@@ -1058,7 +1081,8 @@ export function GuiasModule() {
           id_conductor: item.id_conductor,
           id_guia: item.id_guia, // Mantenemos el mismo guía
           semana: currentWeek,
-          id_accion_imp: 1, // Por defecto (ej. CAPACITACION CABIFY) o null según regla de negocio
+          id_accion_imp: item.id_accion_imp || 1, // Persistir acción o usar default
+          fecha_llamada: item.fecha_llamada,
           
           created_at: new Date().toISOString()
         }));
@@ -1311,18 +1335,57 @@ export function GuiasModule() {
         const existingHistoryIds = new Set(existingHistory?.map((h: any) => h.id_conductor));
         const historyInserts: any[] = [];
 
-        updates.forEach(u => {
-          if (!existingHistoryIds.has(u.id)) {
-            historyInserts.push({
-              id_conductor: u.id,
-              id_guia: u.id_guia,
-              semana: currentWeek,
-              id_accion_imp: 1 // Default action: "CAPACITACION CABIFY"
-            });
-            // Añadir al set local para evitar duplicados en el mismo lote
-            existingHistoryIds.add(u.id);
-          }
-        });
+        // 1. Identify drivers needing history
+        const driversToInsert = updates.filter(u => !existingHistoryIds.has(u.id));
+        
+        if (driversToInsert.length > 0) {
+          console.log(`GuiasModule: Found ${driversToInsert.length} drivers needing history. Checking for previous call dates...`);
+          
+          // 2. Fetch latest history for these drivers to preserve fecha_llamada and id_accion_imp
+           const driverIds = driversToInsert.map(u => u.id);
+           const lastHistoryMap = new Map();
+
+           try {
+             const { data: latestHistory } = await supabase
+               .from('guias_historial_semanal')
+               .select('id_conductor, fecha_llamada, id_accion_imp, semana')
+               .in('id_conductor', driverIds)
+               .or('fecha_llamada.not.is.null,id_accion_imp.not.is.null') 
+               .order('semana', { ascending: false });
+
+             // Map: id_conductor -> { fecha_llamada, id_accion_imp }
+             if (latestHistory) {
+               latestHistory.forEach((h: any) => {
+                 if (!lastHistoryMap.has(h.id_conductor)) {
+                   lastHistoryMap.set(h.id_conductor, {
+                     fecha_llamada: h.fecha_llamada,
+                     id_accion_imp: h.id_accion_imp
+                   });
+                 }
+               });
+             }
+           } catch (err) {
+             console.error('GuiasModule: Error fetching previous history, proceeding without it:', err);
+           }
+
+           // 3. Prepare inserts
+           driversToInsert.forEach(u => {
+             const preservedData = lastHistoryMap.get(u.id);
+             if (preservedData) {
+                console.log(`GuiasModule: Preserving history for driver ${u.id}:`, preservedData);
+             }
+             
+             historyInserts.push({
+               id_conductor: u.id,
+               id_guia: u.id_guia,
+               semana: currentWeek,
+               id_accion_imp: preservedData?.id_accion_imp || 1, // Default action: "CAPACITACION CABIFY"
+               fecha_llamada: preservedData?.fecha_llamada || null
+             });
+             // Add to set just in case
+             existingHistoryIds.add(u.id);
+           });
+        }
 
         if (historyInserts.length > 0) {
           console.log(`GuiasModule: Performing bulk insert of ${historyInserts.length} records to guias_historial_semanal...`, historyInserts);
@@ -1465,6 +1528,24 @@ export function GuiasModule() {
     );
   };
 
+  const toggleEfectivoFilter = (val: string) => {
+    setEfectivoFilter(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
+
+  const toggleAppFilter = (val: string) => {
+    setAppFilter(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
+
+  const toggleTotalFilter = (val: string) => {
+    setTotalFilter(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
+
   const filteredDrivers = useMemo(() => {
     let result = drivers;
 
@@ -1517,6 +1598,42 @@ export function GuiasModule() {
       });
     }
 
+    const formatCurrencyForFilter = (val: number | undefined | null) => {
+      // Misma lógica que en cell para consistencia
+      if (val && val > 0) {
+        return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+      }
+      if (selectedWeek === getCurrentWeek() && !(activeStatFilter)) { // Simplificación, revisar contexto
+         // Aquí hay un detalle: en cell usamos row.original.cabifyData para decidir si mostrar N/A
+         // Pero en filter no tenemos row fácilmente accesible si no lo pasamos.
+         // Sin embargo, filteredDrivers itera sobre drivers (que es la data).
+         // Vamos a usar una lógica simplificada: formatear el valor numérico.
+      }
+      if (val === undefined || val === null) return "-";
+      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+    };
+
+    if (efectivoFilter.length > 0) {
+      result = result.filter(c => {
+         const val = formatCurrencyForFilter((c as any).facturacion_efectivo);
+         return efectivoFilter.includes(val);
+      });
+    }
+
+    if (appFilter.length > 0) {
+      result = result.filter(c => {
+         const val = formatCurrencyForFilter((c as any).facturacion_app);
+         return appFilter.includes(val);
+      });
+    }
+
+    if (totalFilter.length > 0) {
+      result = result.filter(c => {
+         const val = formatCurrencyForFilter((c as any).facturacion_total);
+         return totalFilter.includes(val);
+      });
+    }
+
     // Filtro por métricas (solo semana actual)
     if (activeStatFilter && selectedWeek === getCurrentWeek()) {
       switch (activeStatFilter) {
@@ -1566,11 +1683,33 @@ export function GuiasModule() {
             return false;
           });
           break;
+        case 'conductoresEscuela':
+          result = result.filter(d => !!d.fecha_escuela);
+          break;
+        case 'capacitacionCabify':
+        case 'capacitacionToshify':
+        case 'seguimientoControl':
+        case 'motivacional':
+        case 'fidelizacion':
+          result = result.filter(d => {
+            if (!d.id_accion_imp) return false;
+            const accion = accionesImplementadas.find(a => a.id === d.id_accion_imp);
+            if (!accion) return false;
+            const nombre = accion.nombre?.toLowerCase() || '';
+            
+            if (activeStatFilter === 'capacitacionCabify') return nombre.includes('capacitacion cabify') || nombre.includes('capacitación cabify');
+            if (activeStatFilter === 'capacitacionToshify') return nombre.includes('capacitacion toshify') || nombre.includes('capacitación toshify');
+            if (activeStatFilter === 'seguimientoControl') return nombre.includes('seguimiento y control');
+            if (activeStatFilter === 'motivacional') return nombre.includes('motivacional');
+            if (activeStatFilter === 'fidelizacion') return nombre.includes('fidelizacion') || nombre.includes('fidelización');
+            return false;
+          });
+          break;
       }
     }
 
     return result;
-  }, [drivers, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules]);
+  }, [drivers, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter]);
 
   const uniqueEstados = useMemo(() => {
     const estados = new Map<string, string>();
@@ -1595,6 +1734,41 @@ export function GuiasModule() {
     });
     return Array.from(categorias.keys()).sort();
   }, [drivers]);
+
+  const formatCurrencyValue = (val: number | undefined | null) => {
+      if (val === undefined || val === null) return "-";
+      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+  };
+
+  const uniqueEfectivo = useMemo(() => {
+    const values = drivers.map(c => formatCurrencyValue(c.facturacion_efectivo));
+    return [...new Set(values)].sort();
+  }, [drivers]);
+
+  const uniqueApp = useMemo(() => {
+    const values = drivers.map(c => formatCurrencyValue(c.facturacion_app));
+    return [...new Set(values)].sort();
+  }, [drivers]);
+
+  const uniqueTotal = useMemo(() => {
+    const values = drivers.map(c => formatCurrencyValue(c.facturacion_total));
+    return [...new Set(values)].sort();
+  }, [drivers]);
+
+  const efectivoFiltrados = useMemo(() => {
+    if (!efectivoSearch) return uniqueEfectivo;
+    return uniqueEfectivo.filter(v => v.toLowerCase().includes(efectivoSearch.toLowerCase()));
+  }, [uniqueEfectivo, efectivoSearch]);
+
+  const appFiltrados = useMemo(() => {
+    if (!appSearch) return uniqueApp;
+    return uniqueApp.filter(v => v.toLowerCase().includes(appSearch.toLowerCase()));
+  }, [uniqueApp, appSearch]);
+
+  const totalFiltrados = useMemo(() => {
+    if (!totalSearch) return uniqueTotal;
+    return uniqueTotal.filter(v => v.toLowerCase().includes(totalSearch.toLowerCase()));
+  }, [uniqueTotal, totalSearch]);
 
   const columns = useMemo<ColumnDef<any>[]>(
     () => [
@@ -1982,7 +2156,57 @@ export function GuiasModule() {
       },
       {
         accessorKey: "facturacion_efectivo",
-        header: "EFECTIVO",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Efectivo {efectivoFilter.length > 0 && `(${efectivoFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${efectivoFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'efectivo' ? null : 'efectivo');
+              }}
+              title="Filtrar por efectivo"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'efectivo' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={efectivoSearch}
+                  onChange={(e) => setEfectivoSearch(e.target.value)}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                <div className="dt-excel-filter-list">
+                  {efectivoFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    efectivoFiltrados.slice(0, 50).map(val => (
+                      <label key={val} className={`dt-column-filter-checkbox ${efectivoFilter.includes(val) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={efectivoFilter.includes(val)}
+                          onChange={() => toggleEfectivoFilter(val)}
+                        />
+                        <span>{val}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {efectivoFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => { setEfectivoFilter([]); setEfectivoSearch(''); }}
+                  >
+                    Limpiar ({efectivoFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row, getValue }) => {
           const val = getValue() as number;
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
@@ -2001,7 +2225,57 @@ export function GuiasModule() {
       },
       {
         accessorKey: "facturacion_app",
-        header: "APP",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>APP {appFilter.length > 0 && `(${appFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${appFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'app' ? null : 'app');
+              }}
+              title="Filtrar por APP"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'app' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={appSearch}
+                  onChange={(e) => setAppSearch(e.target.value)}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                <div className="dt-excel-filter-list">
+                  {appFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    appFiltrados.slice(0, 50).map(val => (
+                      <label key={val} className={`dt-column-filter-checkbox ${appFilter.includes(val) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={appFilter.includes(val)}
+                          onChange={() => toggleAppFilter(val)}
+                        />
+                        <span>{val}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {appFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => { setAppFilter([]); setAppSearch(''); }}
+                  >
+                    Limpiar ({appFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row, getValue }) => {
           const val = getValue() as number;
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
@@ -2019,7 +2293,57 @@ export function GuiasModule() {
       },
       {
         accessorKey: "facturacion_total",
-        header: "TOTAL",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>TOTAL {totalFilter.length > 0 && `(${totalFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${totalFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'total' ? null : 'total');
+              }}
+              title="Filtrar por Total"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'total' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={totalSearch}
+                  onChange={(e) => setTotalSearch(e.target.value)}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                <div className="dt-excel-filter-list">
+                  {totalFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    totalFiltrados.slice(0, 50).map(val => (
+                      <label key={val} className={`dt-column-filter-checkbox ${totalFilter.includes(val) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={totalFilter.includes(val)}
+                          onChange={() => toggleTotalFilter(val)}
+                        />
+                        <span>{val}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {totalFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => { setTotalFilter([]); setTotalSearch(''); }}
+                  >
+                    Limpiar ({totalFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row, getValue }) => {
           const val = getValue() as number;
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
@@ -2220,10 +2544,12 @@ export function GuiasModule() {
                   const totalFacturado = currentWeekDrivers.reduce((acc, d) => acc + (Number(d.facturacion_total) || 0), 0);
                   const totalEfectivo = currentWeekDrivers.reduce((acc, d) => acc + (Number(d.facturacion_efectivo) || 0), 0);
                   const totalApp = currentWeekDrivers.reduce((acc, d) => acc + (Number(d.facturacion_app) || 0), 0);
+                  
+                  // Métrica Conductores en Escuela
+                  const conductoresEscuelaCount = currentWeekDrivers.filter(d => !!d.fecha_escuela).length;
 
                   const llamadasRealizadas = currentWeekDrivers.filter(d => !!d.fecha_llamada).length;
                   const llamadasPendientes = currentWeekDrivers.filter(d => !d.fecha_llamada).length;
-                  const porcentajeCompletadas = totalConductores > 0 ? ((llamadasRealizadas / totalConductores) * 100).toFixed(0) : '0';
 
                   // Conteo de seguimiento
                   let seguimientoDiario = 0;
@@ -2256,13 +2582,26 @@ export function GuiasModule() {
                     }
                   });
 
+                  // Conteo de acciones implementadas (5 nuevas métricas)
+                  const getActionCount = (name: string) => {
+                    const action = accionesImplementadas.find(a => a.nombre?.toLowerCase().includes(name.toLowerCase()));
+                    if (!action) return 0;
+                    return currentWeekDrivers.filter(d => d.id_accion_imp === action.id).length;
+                  };
+
+                  const capacitacionCabifyCount = getActionCount('capacitacion cabify') || getActionCount('capacitación cabify');
+                  const capacitacionToshifyCount = getActionCount('capacitacion toshify') || getActionCount('capacitación toshify');
+                  const seguimientoControlCount = getActionCount('seguimiento y control');
+                  const motivacionalCount = getActionCount('motivacional');
+                  const fidelizacionCount = getActionCount('fidelizacion') || getActionCount('fidelización');
+
                   // Formateador de moneda
                   const formatCurrency = (val: number) => {
                     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val);
                   };
 
                   return (
-                    <div className="guias-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                    <div className="guias-stats-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                       {/* Fila 1 */}
                       <div 
                         className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
@@ -2304,11 +2643,14 @@ export function GuiasModule() {
                           <span className="stat-label">FACTURACIÓN APP</span>
                         </div>
                       </div>
-                      <div className="stat-card">
-                        <CheckCircle className="stat-icon" size={18} />
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'conductoresEscuela' ? null : 'conductoresEscuela')}
+                      >
+                        <GraduationCap className="stat-icon text-purple-600" size={18} />
                         <div className="stat-content">
-                          <span className="stat-value">{porcentajeCompletadas}%</span>
-                          <span className="stat-label">% LLAMADAS COMPLETADAS</span>
+                          <span className="stat-value">{conductoresEscuelaCount}</span>
+                          <span className="stat-label">CONDUCTORES EN ESCUELA</span>
                         </div>
                       </div>
 
@@ -2363,38 +2705,206 @@ export function GuiasModule() {
                           <span className="stat-label">SEGUIMIENTO SEMANAL</span>
                         </div>
                       </div>
+
+                      {/* Fila 3 - Nuevas Métricas */}
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'capacitacionCabify' ? null : 'capacitacionCabify')}
+                      >
+                        <Book className="stat-icon text-blue-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{capacitacionCabifyCount}</span>
+                          <span className="stat-label">CAPACITACION CABIFY</span>
+                        </div>
+                      </div>
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'capacitacionToshify' ? null : 'capacitacionToshify')}
+                      >
+                        <Book className="stat-icon text-indigo-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{capacitacionToshifyCount}</span>
+                          <span className="stat-label">CAPACITACION TOSHIFY</span>
+                        </div>
+                      </div>
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoControl' ? null : 'seguimientoControl')}
+                      >
+                        <Target className="stat-icon text-red-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{seguimientoControlCount}</span>
+                          <span className="stat-label">SEGUIMIENTO Y CONTROL</span>
+                        </div>
+                      </div>
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'motivacional' ? null : 'motivacional')}
+                      >
+                        <Star className="stat-icon text-yellow-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{motivacionalCount}</span>
+                          <span className="stat-label">ACCION MOTIVACIONAL</span>
+                        </div>
+                      </div>
+                      <div 
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'fidelizacion' ? null : 'fidelizacion')}
+                      >
+                        <Heart className="stat-icon text-pink-500" size={18} />
+                        <div className="stat-content">
+                          <span className="stat-value">{fidelizacionCount}</span>
+                          <span className="stat-label">ACCION DE FIDELIZACION</span>
+                        </div>
+                      </div>
                     </div>
                   );
                 })()}
               </div>
 
               {/* Filters & Table Container */}
-              <div className="guias-filters-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="guias-filters-container flex flex-col gap-4">
                 {/* Filters Row: Week Selector + Search */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', backgroundColor: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                  
-                  {/* External Search Input - 80% width */}
-                  <div className="dt-search-wrapper" style={{ flex: '1 1 0%', minWidth: '200px', height: '36px', background: 'var(--input-bg)', borderRadius: '6px' }}>
-                    <Search className="dt-search-icon" size={20} />
+                <div className="guias-toolbar">
+                  {/* Search Input (Flex Grow) */}
+                  <div className="guias-search-wrapper">
+                    <Search className="guias-search-icon" size={20} />
                     <input
                       type="text"
-                      className="dt-search-input"
-                      style={{ paddingBottom: '5px', paddingTop: '10px' }}
+                      className="guias-search-input"
                       placeholder="Buscar en esta lista..."
                       value={globalSearch}
                       onChange={(e) => setGlobalSearch(e.target.value)}
                     />
                   </div>
 
-                  {/* Week Selector - Remaining width */}
-                  <div style={{ flex: '0 0 auto' }}>
+                  {/* Actions (Right Aligned) */}
+                  <div className="guias-actions">
+                    {/* Week Selector */}
                     <WeekSelector 
                       selectedWeek={selectedWeek} 
                       onWeekChange={setSelectedWeek} 
-                      onSchoolTrackingClick={handleOpenSchoolReport} 
                     />
+
+                    {/* Botón Gestión de Conductores */}
+                    <button 
+                      onClick={() => setGestionConductoresModalOpen(true)}
+                      className="guias-btn"
+                    >
+                      <Users size={16} />
+                      <span>Gestión de Conductores</span>
+                    </button>
                   </div>
                 </div>
+
+                {/* Filtros Activos */}
+                {(nombreFilter.length > 0 || dniFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || efectivoFilter.length > 0 || appFilter.length > 0 || totalFilter.length > 0 || activeStatFilter) && (
+                  <div className="active-filters-container">
+                    <div className="active-filters-label">
+                      <Triangle size={8} fill="#dc3545" stroke="#dc3545" style={{ transform: 'rotate(180deg)' }} />
+                      Filtros activos:
+                    </div>
+                    
+                    {nombreFilter.map(f => (
+                      <span key={`nom-${f}`} className="active-filter-tag">
+                        Nombre: {f}
+                        <button onClick={() => toggleNombreFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+                    
+                    {dniFilter.map(f => (
+                      <span key={`dni-${f}`} className="active-filter-tag">
+                        DNI: {f}
+                        <button onClick={() => toggleDniFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {estadoFilter.map(f => (
+                      <span key={`est-${f}`} className="active-filter-tag">
+                        Estado: {getEstadoConductorDisplay({ codigo: f })}
+                        <button onClick={() => toggleEstadoFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {turnoFilter.map(f => (
+                      <span key={`tur-${f}`} className="active-filter-tag">
+                        Turno: {turnoLabels[f] || f}
+                        <button onClick={() => toggleTurnoFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {asignacionFilter.map(f => (
+                      <span key={`asig-${f}`} className="active-filter-tag">
+                        Asignación: {f === 'asignado' ? 'Asignado' : 'Disponible'}
+                        <button onClick={() => toggleAsignacionFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {efectivoFilter.map(f => (
+                      <span key={`efec-${f}`} className="active-filter-tag">
+                        Efectivo: {f}
+                        <button onClick={() => toggleEfectivoFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {appFilter.map(f => (
+                      <span key={`app-${f}`} className="active-filter-tag">
+                        App: {f}
+                        <button onClick={() => toggleAppFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {totalFilter.map(f => (
+                      <span key={`tot-${f}`} className="active-filter-tag">
+                        Total: {f}
+                        <button onClick={() => toggleTotalFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {activeStatFilter && (
+                      <span className="active-filter-tag">
+                        Métrica: {
+                          {
+                            'totalConductores': 'Total Conductores',
+                            'totalFacturado': 'Total Facturado',
+                            'totalEfectivo': 'Facturación Efectivo',
+                            'totalApp': 'Facturación App',
+                            'conductoresEscuela': 'Conductores en Escuela',
+                            'llamadasRealizadas': 'Llamadas Realizadas',
+                            'llamadasPendientes': 'Llamadas Pendientes',
+                            'seguimientoDiario': 'Seguimiento Diario',
+                            'seguimientoCercano': 'Seguimiento Cercano',
+                            'seguimientoSemanal': 'Seguimiento Semanal',
+                            'capacitacionCabify': 'Capacitación Cabify',
+                            'capacitacionToshify': 'Capacitación Toshify',
+                            'seguimientoControl': 'Seguimiento y Control',
+                            'motivacional': 'Acción Motivacional',
+                            'fidelizacion': 'Acción de Fidelización'
+                          }[activeStatFilter] || activeStatFilter
+                        }
+                        <button onClick={() => setActiveStatFilter(null)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    )}
+
+                    <button 
+                      onClick={() => {
+                        setNombreFilter([]);
+                        setDniFilter([]);
+                        setEstadoFilter([]);
+                        setTurnoFilter([]);
+                        setAsignacionFilter([]);
+                        setEfectivoFilter([]);
+                        setAppFilter([]);
+                        setTotalFilter([]);
+                        setActiveStatFilter(null);
+                        setGlobalSearch('');
+                      }}
+                      className="active-filters-clear"
+                    >
+                      Limpiar todos
+                    </button>
+                  </div>
+                )}
 
                 {/* Table */}
                 <div className="guias-table-container">
@@ -2405,6 +2915,7 @@ export function GuiasModule() {
                     showSearch={false}
                     globalFilter={globalSearch}
                     onGlobalFilterChange={setGlobalSearch}
+                    enableHorizontalScroll={true}
                     emptyIcon={<Users size={64} />}
                     emptyTitle="No hay conductores asignados"
                     emptyDescription="Este guía no tiene conductores asignados o no cumplen con los filtros."
@@ -2487,6 +2998,14 @@ export function GuiasModule() {
         guides={guias}
         onConfirm={handleConfirmReasignacion}
       />
+
+      {/* Modal de Gestión de Conductores */}
+      {gestionConductoresModalOpen && (
+        <GestionConductores
+          isOpen={gestionConductoresModalOpen}
+          onClose={() => setGestionConductoresModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

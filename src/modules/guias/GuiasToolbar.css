@@ -1,0 +1,103 @@
+/* Toolbar Styles */
+.guias-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  width: 100%;
+}
+
+/* Search Wrapper - Occupies available space */
+.guias-search-wrapper {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  background: #f9fafb; /* gray-50 */
+  border-radius: 6px;
+  padding: 0 12px;
+  gap: 10px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  height: 40px; /* Match button height */
+}
+
+.guias-search-wrapper:focus-within {
+  background: white;
+  border-color: #e5e7eb;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.guias-search-icon {
+  color: #9ca3af; /* gray-400 */
+  min-width: 20px;
+}
+
+.guias-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: #111827; /* gray-900 */
+  width: 100%;
+  height: 100%;
+}
+
+.guias-search-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Actions Container (Buttons) */
+.guias-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Override WeekSelector container to match layout */
+.guias-actions .week-selector-container {
+  height: 40px;
+  gap: 0; /* Remove internal gap if any, we control gap in actions */
+}
+
+/* Force WeekSelector button to match our buttons if not already */
+.guias-actions .week-calendar-btn {
+  height: 40px;
+  box-sizing: border-box;
+}
+
+/* Unified Button Styles */
+.guias-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px; /* Match WeekSelector padding */
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  white-space: nowrap;
+}
+
+.guias-btn:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.guias-btn:active {
+  background: #f3f4f6;
+}
+
+.guias-btn svg {
+  color: #6b7280;
+}
