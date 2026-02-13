@@ -58,6 +58,8 @@ const menuIcons: Record<string, LucideIcon> = {
   'escuela': GraduationCap,
   'conceptos-facturacion': Receipt,
   'sedes': Building2,
+  'seguimiento-conductores': Compass,
+  'escuela-conductores': GraduationCap,
 }
 
 // Función para obtener icono de un menú
@@ -1230,8 +1232,9 @@ export function HomePage() {
             {visibleMenus.length > 0 ? (
               visibleMenus.map((menu) => {
                 const submenus = getVisibleSubmenusForMenu(menu.menu_id)
-                const hasSubmenus = submenus.length > 0
                 const isMenuOpen = openMenus[menu.menu_name] || false
+                const isSeguimiento = menu.menu_name === 'seguimiento-conductores'
+                const hasSubmenus = submenus.length > 0 || isSeguimiento
 
                 if (hasSubmenus) {
                   // Menú con submenús
@@ -1241,7 +1244,10 @@ export function HomePage() {
                       <div className="nav-section-wrapper">
                         <button
                           className="nav-section-header"
-                          onClick={() => !sidebarCollapsed && toggleMenu(menu.menu_name)}
+                          onClick={() => {
+                            if (!sidebarCollapsed) toggleMenu(menu.menu_name);
+                            if (isSeguimiento) distributeDrivers();
+                          }}
                         >
                           <span className="nav-section-icon"><MenuIcon size={18} /></span>
                           <div className="nav-section-title">
@@ -1256,6 +1262,18 @@ export function HomePage() {
                             <div className="nav-flyout-content">
                               <div className="nav-flyout-header">{menu.menu_label}</div>
                               <div className="nav-flyout-items">
+                                {/* Guías dinámicas (solo para seguimiento-conductores) */}
+                                {isSeguimiento && guias.map(guia => (
+                                  <button
+                                    key={guia.id}
+                                    className={`nav-flyout-item ${isActiveRoute(`/guias/${guia.id}`) ? 'active' : ''}`}
+                                    onClick={() => navigate(`/guias/${guia.id}`)}
+                                  >
+                                    <span className="nav-flyout-icon"><Users size={16} /></span>
+                                    <span>{guia.full_name}</span>
+                                  </button>
+                                ))}
+                                {/* Submenús estáticos del menú */}
                                 {(submenus as SubmenuWithHierarchy[])
                                   .filter(sub => sub.parent_id === null)
                                   .sort((a, b) => a.order_index - b.order_index)
@@ -1279,6 +1297,18 @@ export function HomePage() {
                       </div>
 
                       <div className={`nav-section-items ${!isMenuOpen ? 'collapsed' : ''}`}>
+                        {/* Guías dinámicas (solo para seguimiento-conductores) */}
+                        {isSeguimiento && guias.map(guia => (
+                          <button
+                            key={guia.id}
+                            className={`nav-item ${isActiveRoute(`/guias/${guia.id}`) ? 'active' : ''}`}
+                            onClick={() => navigate(`/guias/${guia.id}`)}
+                          >
+                            <span className="nav-icon"><Users size={16} /></span>
+                            <span className="nav-label">{guia.full_name}</span>
+                          </button>
+                        ))}
+                        {/* Submenús estáticos */}
                         {renderSubmenus(submenus as SubmenuWithHierarchy[], null, 0)}
                       </div>
                     </div>
@@ -1307,75 +1337,6 @@ export function HomePage() {
                 No tienes menús disponibles
               </div>
             )}
-
-            {/* Menú Guias (Dynamic) */}
-            <div className="nav-section">
-              <div className="nav-section-wrapper">
-                <button
-                  className="nav-section-header"
-                  onClick={() => {
-                    if (!sidebarCollapsed) toggleMenu('guias');
-                    distributeDrivers();
-                  }}
-                >
-                  <span className="nav-section-icon"><Compass size={18} /></span>
-                  <div className="nav-section-title">Seguimiento de conductores</div>
-                  <span className={`nav-section-arrow ${openMenus['guias'] ? 'open' : ''}`}>▸</span>
-                </button>
-              
-                {/* Flyout for collapsed state */}
-                {sidebarCollapsed && (
-                  <div className="nav-flyout">
-                    <div className="nav-flyout-content">
-                      <div className="nav-flyout-header">Guias</div>
-                      <div className="nav-flyout-items">
-                        {guias.map(guia => (
-                          <button
-                            key={guia.id}
-                            className={`nav-flyout-item ${isActiveRoute(`/guias/${guia.id}`) ? 'active' : ''}`}
-                            onClick={() => navigate(`/guias/${guia.id}`)}
-                          >
-                            <span className="nav-flyout-icon"><Users size={16} /></span>
-                            <span>{guia.full_name}</span>
-                          </button>
-                        ))}
-
-                        {/* Escuela Conductores */}
-                        <button
-                          className={`nav-flyout-item ${isActiveRoute('/escuela-conductores') ? 'active' : ''}`}
-                          onClick={() => navigate('/escuela-conductores')}
-                        >
-                          <span className="nav-flyout-icon"><GraduationCap size={16} /></span>
-                          <span>Escuela Conductores</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className={`nav-section-items ${!openMenus['guias'] ? 'collapsed' : ''}`}>
-                {guias.map(guia => (
-                  <button
-                    key={guia.id}
-                    className={`nav-item ${isActiveRoute(`/guias/${guia.id}`) ? 'active' : ''}`}
-                    onClick={() => navigate(`/guias/${guia.id}`)}
-                  >
-                    <span className="nav-icon"><Users size={16} /></span>
-                    <span className="nav-label">{guia.full_name}</span>
-                  </button>
-                ))}
-
-                {/* Escuela Conductores */}
-                <button
-                  className={`nav-item ${isActiveRoute('/escuela-conductores') ? 'active' : ''}`}
-                  onClick={() => navigate('/escuela-conductores')}
-                >
-                  <span className="nav-icon"><GraduationCap size={16} /></span>
-                  <span className="nav-label">Escuela Conductores</span>
-                </button>
-              </div>
-            </div>
 
 
           </nav>
