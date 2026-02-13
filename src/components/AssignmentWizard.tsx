@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Calendar, User, ChevronRight, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useSede } from '../contexts/SedeContext'
 import { TimeInput24h } from './ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../utils/toast'
@@ -99,6 +100,7 @@ interface Props {
 
 export function AssignmentWizard({ onClose, onSuccess }: Props) {
   const { profile } = useAuth()
+  const { sedeActualId } = useSede()
   const [step, setStep] = useState(1)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
@@ -147,6 +149,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
               descripcion
             )
           `)
+          .eq('sede_id', sedeActualId)
           .order('patente')
 
         if (vehiculosError) throw vehiculosError
@@ -277,6 +280,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
               descripcion
             )
           `)
+          .eq('sede_id', sedeActualId)
           .order('apellidos')
 
         if (error) throw error
@@ -504,7 +508,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           notas: formData.notas.trim() || null,  // Solo guardar si hay contenido
           codigo: codigoAsignacion,
           created_by: user?.id,
-          created_by_name: profile?.full_name || 'Sistema'
+          created_by_name: profile?.full_name || 'Sistema',
+          sede_id: sedeActualId,
         } as any)
         .select()
         .single()

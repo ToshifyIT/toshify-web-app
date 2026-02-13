@@ -34,6 +34,7 @@ import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG, calcularMora } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -136,6 +137,7 @@ function getSemanaArgentina(date: Date) {
 
 export function ReporteFacturacionTab() {
   const { profile } = useAuth()
+  const { sedeActualId } = useSede()
   
   // Ref para auto-recalcular después de crear un nuevo período
   const autoRecalcularRef = useRef(false)
@@ -253,7 +255,7 @@ export function ReporteFacturacionTab() {
     setVistaPreviaData([])
     setBuscarConductor('')
     cargarFacturacion()
-  }, [semanaActual])
+  }, [semanaActual, sedeActualId])
 
   // Cargar conceptos de nómina al montar (para agregar ajustes manuales)
   // Mapa de precios de alquiler por código de concepto
@@ -324,6 +326,7 @@ export function ReporteFacturacionTab() {
         .select('id, estado')
         .eq('semana', semanaAnt)
         .eq('anio', anioAnt)
+        .eq('sede_id', sedeActualId)
         .single()
       
       // La semana anterior está cerrada si: tiene período con estado 'cerrado', o es semana 1 (no hay anterior)
@@ -336,6 +339,7 @@ export function ReporteFacturacionTab() {
         .select('*')
         .eq('semana', semana)
         .eq('anio', anio)
+        .eq('sede_id', sedeActualId)
         .single()
 
       if (errPeriodo && errPeriodo.code !== 'PGRST116') {
@@ -503,11 +507,14 @@ export function ReporteFacturacionTab() {
       const anioDelPeriodo = getYear(parseISO(fechaInicio))
 
       // 1. Cargar conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
+      // Excluir conductores con estado 'De baja'
       const { data: conductoresControl, error: errControl } = await (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaDelPeriodo)
         .eq('anio', anioDelPeriodo)
+        .eq('sede_id', sedeActualId)
+        .not('estado', 'eq', 'De baja')
 
       if (errControl) throw errControl
 
@@ -884,15 +891,11 @@ export function ReporteFacturacionTab() {
         }
         const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
+        // Si el conductor no tiene asignaciones activas durante la semana, excluirlo
+        if (diasTotales === 0) continue
+        
         // Calcular alquiler usando montos pre-calculados con precios históricos
-        let subtotalAlquiler = 0
-        if (diasTotales > 0) {
-          // Usar montos calculados día a día con precios históricos
-          subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
-        } else {
-          // Fallback: usar valor de conductores_semana_facturacion si no hay asignaciones
-          subtotalAlquiler = Math.round(parseFloat(control.valor_alquiler) || 0)
-        }
+        const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
         
         // Determinar tipo de alquiler predominante para garantía
         const tipoAlquiler: 'CARGO' | 'TURNO' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO) 
@@ -1067,7 +1070,8 @@ export function ReporteFacturacionTab() {
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
           estado: 'procesando',
-          created_by_name: profile?.full_name || 'Sistema'
+          created_by_name: profile?.full_name || 'Sistema',
+          sede_id: sedeActualId,
         })
         .select()
         .single()
@@ -1183,11 +1187,14 @@ export function ReporteFacturacionTab() {
       await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
       // 3. Obtener conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
+      // Excluir conductores con estado 'De baja'
       const { data: conductoresControl } = await (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaNum)
         .eq('anio', anioNum)
+        .eq('sede_id', sedeActualId)
+        .not('estado', 'eq', 'De baja')
 
       if (!conductoresControl || conductoresControl.length === 0) {
         await (supabase.from('periodos_facturacion') as any)
@@ -1310,6 +1317,9 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
+        // Si el conductor no tiene asignaciones activas durante la semana, excluirlo
+        if (totalDias === 0) continue
+        
         conductoresProcesados.push({
           conductor_id: conductorData.id,
           conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
@@ -1319,7 +1329,7 @@ export function ReporteFacturacionTab() {
           dias_turno_diurno: prorrateo.TURNO_DIURNO,
           dias_turno_nocturno: prorrateo.TURNO_NOCTURNO,
           dias_cargo: prorrateo.CARGO,
-          total_dias: totalDias > 0 ? totalDias : 7, // Fallback a 7 si no hay asignaciones
+          total_dias: totalDias,
         })
       }
 
@@ -1902,6 +1912,7 @@ export function ReporteFacturacionTab() {
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
+        .eq('sede_id', sedeActualId)
 
       let conductoresCopiados = 0
       if (conductoresActuales && conductoresActuales.length > 0) {
@@ -1912,6 +1923,7 @@ export function ReporteFacturacionTab() {
           .select('numero_dni')
           .eq('semana', semanaSiguiente)
           .eq('anio', anioSiguiente)
+          .eq('sede_id', sedeActualId)
           .in('numero_dni', dnis)
 
         const dnisExistentes = new Set((yaExistentes || []).map((c: any) => c.numero_dni))
@@ -1927,6 +1939,7 @@ export function ReporteFacturacionTab() {
             patente: c.patente,
             modalidad: c.modalidad,
             valor_alquiler: c.valor_alquiler,
+            sede_id: sedeActualId,
           }))
 
           const { error: insertError } = await (supabase
@@ -5899,20 +5912,22 @@ export function ReporteFacturacionTab() {
           }}>
             {row.original.saldo_anterior !== 0 ? formatCurrency(row.original.saldo_anterior) : '-'}
           </span>
-          <button
-            onClick={(e) => { e.stopPropagation(); editarSaldo(row.original) }}
-            style={{
-              padding: '2px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-muted)',
-              opacity: 0.6
-            }}
-            title="Ajustar saldo"
-          >
-            <Edit2 size={12} />
-          </button>
+          {!modoVistaPrevia && (
+            <button
+              onClick={(e) => { e.stopPropagation(); editarSaldo(row.original) }}
+              style={{
+                padding: '2px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                opacity: 0.6
+              }}
+              title="Ajustar saldo"
+            >
+              <Edit2 size={12} />
+            </button>
+          )}
         </div>
       ),
       enableSorting: true,

@@ -179,17 +179,8 @@ export function ConceptosFacturacionTab() {
       `<option value="${t.value}" ${concepto.tipo === t.value ? 'selected' : ''}>${t.label}</option>`
     ).join('')
 
-    // Cargar períodos para el selector de vigencia
-    const { data: periodos } = await supabase
-      .from('periodos_facturacion')
-      .select('semana, anio, fecha_inicio, fecha_fin')
-      .order('anio', { ascending: false })
-      .order('semana', { ascending: false })
-      .limit(20)
-
-    const periodosOptions = (periodos || []).map(p =>
-      `<option value="${p.fecha_inicio}|${p.fecha_fin}">S${p.semana}/${p.anio} (${p.fecha_inicio} al ${p.fecha_fin})</option>`
-    ).join('')
+    // Fecha por defecto para vigencia: hoy
+    const hoyStr = new Date().toISOString().split('T')[0]
 
     const { value: formValues } = await Swal.fire({
       title: 'Editar Concepto',
@@ -220,11 +211,9 @@ export function ConceptosFacturacionTab() {
             </div>
           </div>
           <div class="fact-form-group" id="swal-vigencia-group" style="display:none; margin-top: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-primary);">
-            <label class="fact-form-label" style="color: var(--color-primary); font-weight: 600;">Nuevo precio aplica desde período:</label>
-            <select id="swal-vigencia" class="fact-form-select">
-              ${periodosOptions}
-            </select>
-            <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 4px; display: block;">El precio anterior se guardará en el historial hasta el día antes del período seleccionado.</small>
+            <label class="fact-form-label" style="color: var(--color-primary); font-weight: 600;">Nuevo precio aplica desde:</label>
+            <input id="swal-vigencia" type="date" class="fact-form-input" value="${hoyStr}">
+            <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 4px; display: block;">El precio anterior se guardará en el historial hasta el día anterior a la fecha seleccionada.</small>
           </div>
           <div class="fact-form-checkboxes">
             <label class="fact-checkbox-label">
@@ -280,8 +269,8 @@ export function ConceptosFacturacionTab() {
         const aplicaTurno = (document.getElementById('swal-turno') as HTMLInputElement).checked
         const aplicaCargo = (document.getElementById('swal-cargo') as HTMLInputElement).checked
         const activo = (document.getElementById('swal-activo') as HTMLInputElement).checked
-        const vigenciaSelect = document.getElementById('swal-vigencia') as HTMLSelectElement
-        const vigenciaValue = vigenciaSelect?.value || ''
+        const vigenciaInput = document.getElementById('swal-vigencia') as HTMLInputElement
+        const vigenciaValue = vigenciaInput?.value || ''
 
         if (!descripcion) {
           Swal.showValidationMessage('La descripción es requerida')
@@ -292,7 +281,7 @@ export function ConceptosFacturacionTab() {
         const priceChanged = Math.abs(newFinal - (concepto.precio_final || 0)) > 0.01
 
         if (priceChanged && !vigenciaValue) {
-          Swal.showValidationMessage('Seleccioná desde qué período aplica el nuevo precio')
+          Swal.showValidationMessage('Seleccioná desde qué fecha aplica el nuevo precio')
           return false
         }
 
@@ -323,15 +312,14 @@ export function ConceptosFacturacionTab() {
 
       // If price changed, save old price to historial first
       if (priceChanged && vigencia) {
-        const [nuevaDesde] = vigencia.split('|')
-        // Historial: precio anterior vigente desde su última actualización hasta un día antes del nuevo período
-        const hastaDate = new Date(nuevaDesde + 'T00:00:00')
+        // vigencia = fecha exacta desde la que aplica el nuevo precio (YYYY-MM-DD)
+        const hastaDate = new Date(vigencia + 'T00:00:00')
         hastaDate.setDate(hastaDate.getDate() - 1)
         const hasta = hastaDate.toISOString().split('T')[0]
 
         const desde = concepto.updated_at
           ? concepto.updated_at.split('T')[0]
-          : concepto.created_at?.split('T')[0] || nuevaDesde
+          : concepto.created_at?.split('T')[0] || vigencia
 
         // Ensure desde <= hasta
         const desdeDate = new Date(desde + 'T00:00:00')

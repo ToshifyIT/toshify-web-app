@@ -693,6 +693,35 @@ export function LiquidacionConductoresTab() {
         .eq('conductor_id', liquidacion.conductor_id)
         .eq('estado', 'activa')
 
+      // Cancelar garantía en curso
+      await (supabase
+        .from('garantias_conductores') as any)
+        .update({
+          estado: 'cancelada',
+          updated_at: new Date().toISOString()
+        })
+        .eq('conductor_id', liquidacion.conductor_id)
+        .eq('estado', 'en_curso')
+
+      // Crear ticket a favor por devolución de garantía
+      if (liquidacion.garantia_a_devolver > 0) {
+        await (supabase
+          .from('tickets_favor') as any)
+          .insert({
+            conductor_id: liquidacion.conductor_id,
+            conductor_nombre: liquidacion.conductor_nombre,
+            conductor_dni: liquidacion.conductor_dni,
+            tipo: 'DEVOLUCION_GARANTIA',
+            descripcion: `Devolución de garantía por baja. Cuotas pagadas: ${liquidacion.garantia_cuotas_pagadas}. Total pagado: $${liquidacion.garantia_total_pagada.toLocaleString()}`,
+            monto: liquidacion.garantia_a_devolver,
+            estado: 'aprobado',
+            fecha_solicitud: new Date().toISOString(),
+            fecha_aprobacion: new Date().toISOString(),
+            created_by: userData.user?.id,
+            created_by_name: userData.user?.email
+          })
+      }
+
       showSuccess('Liquidación Aprobada', 'El conductor ha sido dado de baja')
 
       cargarLiquidaciones()

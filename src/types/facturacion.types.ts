@@ -206,6 +206,7 @@ export type TipoTicketFavor =
   | 'TICKET_PEAJE'
   | 'COMISION_REFERIDO'
   | 'REPARACION_CONDUCTOR'
+  | 'DEVOLUCION_GARANTIA'
 
 export type EstadoTicketFavor = 'pendiente' | 'aprobado' | 'rechazado' | 'aplicado'
 
@@ -243,7 +244,8 @@ export const TIPOS_TICKET_FAVOR = [
   { codigo: 'BONO_EVENTO', nombre: 'Bono por Evento Toshify', color: '#8B5CF6' },
   { codigo: 'TICKET_PEAJE', nombre: 'Ticket de Peaje', color: '#3B82F6' },
   { codigo: 'COMISION_REFERIDO', nombre: 'Comisión Referidos', color: '#F59E0B' },
-  { codigo: 'REPARACION_CONDUCTOR', nombre: 'Reparación por Conductor', color: '#EF4444' }
+  { codigo: 'REPARACION_CONDUCTOR', nombre: 'Reparación por Conductor', color: '#EF4444' },
+  { codigo: 'DEVOLUCION_GARANTIA', nombre: 'Devolución de Garantía', color: '#06B6D4' }
 ] as const
 
 // =====================================================

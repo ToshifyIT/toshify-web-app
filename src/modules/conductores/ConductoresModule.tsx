@@ -7,6 +7,7 @@ import { DriveFilesModal } from "../../components/DriveFilesModal";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
+import { useSede } from "../../contexts/SedeContext";
 import Swal from "sweetalert2";
 import { showSuccess } from "../../utils/toast";
 import { getWeek, getYear } from "date-fns";
@@ -81,6 +82,7 @@ const getEstadoConductorBadgeStyle = (estado: { codigo?: string } | null | undef
 
 
 export function ConductoresModule() {
+  const { sedeActualId } = useSede()
   const [conductores, setConductores] = useState<ConductorWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -196,10 +198,10 @@ export function ConductoresModule() {
     numero_ibutton: "",
   });
 
-  // ✅ OPTIMIZADO: Carga inicial unificada en paralelo
+  // ✅ OPTIMIZADO: Carga inicial unificada en paralelo (recarga al cambiar sede)
   useEffect(() => {
-    loadAllData();
-  }, []);
+    if (sedeActualId) loadAllData();
+  }, [sedeActualId]);
 
   // Cerrar dropdown de filtro al hacer click fuera
   useEffect(() => {
@@ -472,6 +474,7 @@ export function ConductoresModule() {
               licencias_categorias (id, codigo, descripcion)
             )
           `)
+          .eq("sede_id", sedeActualId)
           .order("created_at", { ascending: false }),
         supabase
           .from("asignaciones_conductores")
@@ -482,6 +485,7 @@ export function ConductoresModule() {
               vehiculos (id, patente, marca, modelo)
             )
           `)
+          .eq("asignaciones.sede_id", sedeActualId)
           .in("asignaciones.estado", ["activo", "activa"]),
         supabase.from("estados_civiles").select("id, codigo, descripcion").order("descripcion"),
         supabase.from("nacionalidades").select("id, codigo, descripcion").order("descripcion"),
@@ -720,6 +724,7 @@ export function ConductoresModule() {
               licencias_categorias (id, codigo, descripcion)
             )
           `)
+          .eq("sede_id", sedeActualId)
           .order("created_at", { ascending: false }),
         supabase
           .from("asignaciones_conductores")
@@ -730,6 +735,7 @@ export function ConductoresModule() {
               vehiculos (id, patente, marca, modelo)
             )
           `)
+          .eq("asignaciones.sede_id", sedeActualId)
           .in("asignaciones.estado", ["activo", "activa"])
       ]);
 
@@ -843,6 +849,7 @@ export function ConductoresModule() {
             numero_ibutton: formData.numero_ibutton || null,
             created_by: user?.id,
             created_by_name: profile?.full_name || "Sistema",
+            sede_id: sedeActualId,
           },
         ])
         .select();

@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
+import { SedeProvider } from './contexts/SedeContext'
 import { LoginPage } from './pages/LoginPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { HomePage } from './pages/HomePage'
@@ -67,6 +68,7 @@ function App() {
           <AuthProvider>
             <ForcePasswordChangeWrapper>
               <PermissionsProvider>
+              <SedeProvider>
                 <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -92,6 +94,7 @@ function App() {
                   }
                 />
               </Routes>
+              </SedeProvider>
             </PermissionsProvider>
           </ForcePasswordChangeWrapper>
         </AuthProvider>

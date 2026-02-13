@@ -9,6 +9,7 @@ import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSede } from '../../contexts/SedeContext'
 import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
@@ -115,6 +116,7 @@ function getLocalDateStr(isoString: string): string {
 export function AsignacionesModule() {
   const { canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
+  const { sedeActualId } = useSede()
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
   
@@ -368,6 +370,7 @@ export function AsignacionesModule() {
               conductores (nombres, apellidos, numero_licencia)
             )
           `)
+          .eq('sede_id', sedeActualId)
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
           .order('created_at', { ascending: false })
           .limit(500),
@@ -375,11 +378,13 @@ export function AsignacionesModule() {
         supabase
           .from('vehiculos')
           .select('id, estado_id, vehiculos_estados(codigo)')
+          .eq('sede_id', sedeActualId)
           .limit(1000),
         // Conductores con estado - solo activos
         supabase
           .from('conductores')
           .select('id, conductores_estados(codigo)')
+          .eq('sede_id', sedeActualId)
           .limit(2000),
         // Programaciones: motivo + observaciones por asignacion_id
         supabase
@@ -486,6 +491,7 @@ export function AsignacionesModule() {
               conductores (nombres, apellidos, numero_licencia)
             )
           `)
+          .eq('sede_id', sedeActualId)
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
           .order('created_at', { ascending: false })
           .limit(500),
@@ -533,10 +539,10 @@ export function AsignacionesModule() {
     }
   }
 
-  // ✅ OPTIMIZADO: Carga unificada en paralelo
+  // ✅ OPTIMIZADO: Carga unificada en paralelo (recarga al cambiar sede)
   useEffect(() => {
-    loadAllData()
-  }, [])
+    if (sedeActualId) loadAllData()
+  }, [sedeActualId])
 
   // Programacion de entregas movida a /onboarding/programacion
 
@@ -1606,8 +1612,8 @@ export function AsignacionesModule() {
     
     // Cargar vehículos, conductores disponibles Y conductores de esta asignación
     const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all([
-      supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)').order('patente'),
-      supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
+      supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)').eq('sede_id', sedeActualId).order('patente'),
+      supabase.from('conductores').select('id, nombres, apellidos').eq('sede_id', sedeActualId).order('apellidos'),
       supabase.from('asignaciones_conductores').select('conductor_id, horario, estado, documento').eq('asignacion_id', asignacion.id)
     ])
     

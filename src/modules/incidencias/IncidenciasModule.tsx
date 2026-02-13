@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useSede } from '../../contexts/SedeContext'
 import { useCategorizedTipos } from '../../hooks/useCategorizedTipos'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
@@ -108,6 +109,7 @@ function getAreaResponsablePorRol(roleName: string | undefined | null): string {
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab } = usePermissions()
+  const { sedeActualId } = useSede()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Permisos específicos para el menú de incidencias
@@ -208,6 +210,11 @@ export function IncidenciasModule() {
   const [periodosDisponibles, setPeriodosDisponibles] = useState<Array<{semana: number, anio: number, label: string}>>([])
   const [aplicandoCobro, setAplicandoCobro] = useState(false)
   
+  // Selección masiva para Por Aplicar (aplicar/rechazar en lote)
+  const [modoSeleccionPorAplicar, setModoSeleccionPorAplicar] = useState(false)
+  const [penalidadesSeleccionadas, setPenalidadesSeleccionadas] = useState<Set<string>>(new Set())
+  const [procesandoMasivoPenalidades, setProcesandoMasivoPenalidades] = useState(false)
+
   // Modal de rechazo
   const [showRechazoModal, setShowRechazoModal] = useState(false)
   const [penalidadRechazar, setPenalidadRechazar] = useState<PenalidadCompleta | null>(null)
@@ -246,10 +253,10 @@ export function IncidenciasModule() {
   })
   const [saving, setSaving] = useState(false)
 
-  // Cargar datos
+  // Cargar datos (recarga al cambiar sede)
   useEffect(() => {
-    cargarDatos()
-  }, [])
+    if (sedeActualId) cargarDatos()
+  }, [sedeActualId])
 
   // Verificar si hay datos precargados desde siniestros
   useEffect(() => {
@@ -364,10 +371,10 @@ export function IncidenciasModule() {
         (supabase.from('incidencias_estados' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_cobro_descuento' as any) as any).select('*').eq('is_active', true).order('orden'),
-        supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
-        supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
-        (supabase.from('v_incidencias_completas' as any) as any).select('*').order('fecha', { ascending: false }),
-        (supabase.from('v_penalidades_completas' as any) as any).select('*').order('fecha', { ascending: false }),
+        supabase.from('vehiculos').select('id, patente, marca, modelo').eq('sede_id', sedeActualId).order('patente'),
+        supabase.from('conductores').select('id, nombres, apellidos').eq('sede_id', sedeActualId).order('apellidos'),
+        (supabase.from('v_incidencias_completas' as any) as any).select('*').eq('sede_id', sedeActualId).order('fecha', { ascending: false }),
+        (supabase.from('v_penalidades_completas' as any) as any).select('*').eq('sede_id', sedeActualId).order('fecha', { ascending: false }),
         // Obtener campos adicionales de la tabla incidencias (tipo, monto)
         (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id, monto'),
         // Obtener campos frescos de la tabla penalidades (aplicado, rechazado, incidencia_id)
@@ -623,6 +630,209 @@ export function IncidenciasModule() {
 
   const handleDeseleccionarTodas = () => {
     setIncidenciasSeleccionadas(new Set())
+  }
+
+  // Penalidades seleccionables en "Por Aplicar" (deben tener conductor)
+  const penalidadesPorAplicar = useMemo(() => {
+    return penalidades.filter(p => !p.aplicado && !p.rechazado && (p.conductor_id || p.conductor_nombre))
+  }, [penalidades])
+
+  const handleToggleSeleccionPenalidad = (id: string) => {
+    setPenalidadesSeleccionadas(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) { newSet.delete(id) } else { newSet.add(id) }
+      return newSet
+    })
+  }
+
+  const handleSeleccionarTodasPenalidades = () => {
+    setPenalidadesSeleccionadas(new Set(penalidadesPorAplicar.map(p => p.id)))
+  }
+
+  const handleDeseleccionarTodasPenalidades = () => {
+    setPenalidadesSeleccionadas(new Set())
+  }
+
+  // Aplicar masivo - aplica todas las seleccionadas en la semana elegida (sin fraccionamiento)
+  async function handleAplicarMasivo() {
+    if (penalidadesSeleccionadas.size === 0) return
+    if (!canEdit) {
+      Swal.fire('Sin permiso', 'No tenés permisos para aplicar cobros/descuentos', 'error')
+      return
+    }
+
+    const seleccionadas = penalidades.filter(p => penalidadesSeleccionadas.has(p.id))
+    const sinConductor = seleccionadas.filter(p => !p.conductor_id && !p.conductor_nombre)
+    if (sinConductor.length > 0) {
+      Swal.fire('Error', `Hay ${sinConductor.length} penalidad(es) sin conductor asignado.`, 'error')
+      return
+    }
+
+    // Calcular semana por defecto (semana anterior)
+    const hoy = new Date()
+    const semActual = getWeekNumber(hoy.toISOString().split('T')[0])
+    const anioActual = hoy.getFullYear()
+    let semDefault = semActual - 1
+    let anioDefault = anioActual
+    if (semDefault < 1) { semDefault = 52; anioDefault-- }
+
+    // Generar opciones de períodos
+    let sem = semActual - 4
+    let anio = anioActual
+    if (sem < 1) { sem = 52 + sem; anio-- }
+    const opcionesPeriodos: string[] = []
+    for (let i = 0; i < 25; i++) {
+      opcionesPeriodos.push(`Semana ${sem} - ${anio}`)
+      sem++
+      if (sem > 52) { sem = 1; anio++ }
+    }
+
+    const { value: semanaSeleccionada } = await Swal.fire({
+      title: 'Aplicar en lote',
+      html: `
+        <p style="margin-bottom:8px;">Se aplicarán <strong>${seleccionadas.length}</strong> cobros/descuentos.</p>
+        <p style="margin-bottom:12px;"><strong>Monto total:</strong> $${seleccionadas.reduce((s, p) => s + (p.monto || 0), 0).toLocaleString('es-AR')}</p>
+        <label style="display:block; text-align:left; font-size:13px; font-weight:600; margin-bottom:4px;">Semana de aplicación:</label>
+        <select id="swal-semana-masiva" class="swal2-select" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+          ${opcionesPeriodos.map((op, i) => `<option value="${i}" ${i === 3 ? 'selected' : ''}>${op}</option>`).join('')}
+        </select>
+      `,
+      showCancelButton: true,
+      confirmButtonText: `Aplicar ${seleccionadas.length}`,
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#10b981',
+      preConfirm: () => {
+        const sel = document.getElementById('swal-semana-masiva') as HTMLSelectElement
+        return parseInt(sel.value)
+      }
+    })
+
+    if (semanaSeleccionada === undefined) return
+
+    // Calcular semana/año desde el índice
+    let semFinal = semActual - 4 + semanaSeleccionada
+    let anioFinal = anioActual
+    if (semActual - 4 < 1) {
+      semFinal = 52 + (semActual - 4) + semanaSeleccionada
+      anioFinal = semFinal > 52 ? anioActual : anioActual - 1
+      if (semFinal > 52) semFinal -= 52
+    }
+    // Recalcular correctamente
+    sem = semActual - 4
+    anio = anioActual
+    if (sem < 1) { sem = 52 + sem; anio-- }
+    for (let i = 0; i < semanaSeleccionada; i++) {
+      sem++
+      if (sem > 52) { sem = 1; anio++ }
+    }
+    semFinal = sem
+    anioFinal = anio
+
+    setProcesandoMasivoPenalidades(true)
+    let aplicados = 0
+    let errores = 0
+
+    for (const pen of seleccionadas) {
+      try {
+        const { error } = await (supabase.from('penalidades' as any) as any)
+          .update({
+            aplicado: true,
+            fraccionado: false,
+            semana_aplicacion: semFinal,
+            anio_aplicacion: anioFinal,
+            fecha_aplicacion: new Date().toISOString().split('T')[0],
+            updated_by: profile?.full_name || 'Sistema'
+          })
+          .eq('id', pen.id)
+        if (error) throw error
+        aplicados++
+      } catch {
+        errores++
+      }
+    }
+
+    setProcesandoMasivoPenalidades(false)
+    setModoSeleccionPorAplicar(false)
+    setPenalidadesSeleccionadas(new Set())
+
+    if (errores > 0) {
+      Swal.fire('Resultado', `Aplicados: ${aplicados}, Errores: ${errores}`, 'warning')
+    } else {
+      showSuccess('Aplicados', `${aplicados} cobros/descuentos aplicados en Semana ${semFinal}-${anioFinal}`)
+    }
+    cargarDatos(true)
+  }
+
+  // Rechazar masivo - rechaza todas las seleccionadas con un motivo
+  async function handleRechazarMasivo() {
+    if (penalidadesSeleccionadas.size === 0) return
+    if (!canEdit) {
+      Swal.fire('Sin permiso', 'No tenés permisos para rechazar cobros/descuentos', 'error')
+      return
+    }
+
+    const seleccionadas = penalidades.filter(p => penalidadesSeleccionadas.has(p.id))
+
+    const { value: motivo } = await Swal.fire({
+      title: 'Rechazar en lote',
+      html: `<p style="margin-bottom:12px;">Se rechazarán <strong>${seleccionadas.length}</strong> cobros/descuentos.</p>`,
+      input: 'textarea',
+      inputLabel: 'Motivo del rechazo',
+      inputPlaceholder: 'Ingrese el motivo...',
+      inputAttributes: { 'aria-label': 'Motivo del rechazo' },
+      showCancelButton: true,
+      confirmButtonText: `Rechazar ${seleccionadas.length}`,
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ef4444',
+      inputValidator: (value) => {
+        if (!value?.trim()) return 'Debes ingresar un motivo'
+        return null
+      }
+    })
+
+    if (!motivo) return
+
+    setProcesandoMasivoPenalidades(true)
+    let rechazados = 0
+    let errores = 0
+
+    for (const pen of seleccionadas) {
+      try {
+        // 1. Historial de rechazo
+        await (supabase.from('penalidades_rechazos' as any) as any)
+          .insert({
+            penalidad_id: pen.id,
+            motivo: motivo.trim(),
+            rechazado_por: user?.id,
+            rechazado_por_nombre: profile?.full_name || 'Sistema',
+            monto_al_rechazo: pen.monto,
+            detalle_al_rechazo: pen.detalle || ''
+          })
+        // 2. Marcar como rechazada
+        const { error } = await (supabase.from('penalidades' as any) as any)
+          .update({
+            rechazado: true,
+            fecha_rechazo: new Date().toISOString(),
+            motivo_rechazo: motivo.trim()
+          })
+          .eq('id', pen.id)
+        if (error) throw error
+        rechazados++
+      } catch {
+        errores++
+      }
+    }
+
+    setProcesandoMasivoPenalidades(false)
+    setModoSeleccionPorAplicar(false)
+    setPenalidadesSeleccionadas(new Set())
+
+    if (errores > 0) {
+      Swal.fire('Resultado', `Rechazados: ${rechazados}, Errores: ${errores}`, 'warning')
+    } else {
+      showSuccess('Rechazados', `${rechazados} cobros/descuentos rechazados`)
+    }
+    cargarDatos(true)
   }
 
   // Enviar seleccionadas a facturación
@@ -1199,8 +1409,33 @@ export function IncidenciasModule() {
   }, [patentesUnicas, patenteFilter, conductoresUnicos, conductorFilter, turnosUnicos, turnoFilter, areasUnicas, areaFilter, estadosUnicos, estadoFilter, openFilterId, canDelete, modoSeleccionMasiva, incidenciasSeleccionadas, incidenciasEnviables, penalidades, tiposCobroDescuento])
 
   // Columnas para tabla de penalidades
-  const penalidadesColumns = useMemo<ColumnDef<PenalidadCompleta>[]>(() => [
-    {
+  const penalidadesColumns = useMemo<ColumnDef<PenalidadCompleta>[]>(() => {
+    const cols: ColumnDef<PenalidadCompleta>[] = []
+
+    // Columna de checkbox solo en modo selección masiva de "Por Aplicar"
+    if (modoSeleccionPorAplicar) {
+      cols.push({
+        id: 'seleccion_penalidad',
+        header: '',
+        size: 40,
+        cell: ({ row }) => {
+          const puedeSeleccionar = penalidadesPorAplicar.some(p => p.id === row.original.id)
+          if (!puedeSeleccionar) return <span style={{ opacity: 0.3 }}><Square size={16} /></span>
+
+          const seleccionada = penalidadesSeleccionadas.has(row.original.id)
+          return (
+            <button
+              onClick={() => handleToggleSeleccionPenalidad(row.original.id)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+            >
+              {seleccionada ? <CheckSquare size={18} color="#10b981" /> : <Square size={18} color="#9ca3af" />}
+            </button>
+          )
+        }
+      })
+    }
+
+    cols.push({
       accessorKey: 'fecha',
       header: 'Fecha',
       cell: ({ row }) => formatDate(row.original.fecha)
@@ -1335,14 +1570,14 @@ export function IncidenciasModule() {
         
         return (
           <div className="dt-actions">
-            {/* Botón aplicar solo en Por Aplicar (no aplicado, no rechazado) */}
-            {!esAplicado && !esRechazado && (
+            {/* Botón aplicar solo en Por Aplicar (requiere permiso editar) */}
+            {!esAplicado && !esRechazado && canEdit && (
               <button className="dt-btn-action dt-btn-success" data-tooltip="Aplicar a facturación" onClick={() => handleMarcarAplicado(row.original)}>
                 <CheckCircle size={14} />
               </button>
             )}
-            {/* Botón rechazar solo en Por Aplicar */}
-            {!esAplicado && !esRechazado && (
+            {/* Botón rechazar solo en Por Aplicar (requiere permiso editar) */}
+            {!esAplicado && !esRechazado && canEdit && (
               <button 
                 className="dt-btn-action dt-btn-danger" 
                 data-tooltip="Rechazar" 
@@ -1355,8 +1590,8 @@ export function IncidenciasModule() {
                 <Ban size={14} />
               </button>
             )}
-            {/* Botones de aplicadas */}
-            {esAplicado && !esRechazado && (
+            {/* Botones de aplicadas (requiere permiso editar) */}
+            {esAplicado && !esRechazado && canEdit && (
               <>
                 <button className="dt-btn-action dt-btn-info" data-tooltip="Reasignar semana" onClick={() => handleReasignarSemana(row.original)}>
                   <Calendar size={14} />
@@ -1386,8 +1621,10 @@ export function IncidenciasModule() {
           </div>
         )
       }
-    }
-  ], [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId, canDelete, fraccionamientoMap])
+    })
+
+    return cols
+  }, [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId, canDelete, canEdit, fraccionamientoMap, modoSeleccionPorAplicar, penalidadesSeleccionadas, penalidadesPorAplicar])
 
   function handleNuevaIncidencia() {
     const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')
@@ -1725,6 +1962,10 @@ export function IncidenciasModule() {
 
   // Rechazar penalidad - guarda en historial y marca para reenvío
   async function handleRechazarPenalidad() {
+    if (!canEdit) {
+      Swal.fire('Sin permiso', 'No tenés permisos para rechazar cobros/descuentos', 'error')
+      return
+    }
     if (!penalidadRechazar || !motivoRechazo.trim()) {
       Swal.fire('Error', 'Debes ingresar un motivo de rechazo', 'error')
       return
@@ -1869,8 +2110,9 @@ export function IncidenciasModule() {
         created_by: user?.id,
         tipo: esCobro ? 'cobro' : 'logistica',
         tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
-        monto: esCobro ? (incidenciaForm.monto || 0) : null, // Guardar monto solo para incidencias de cobro
-        km_exceso: esCobro ? (incidenciaForm.km_exceso || null) : null // Guardar km excedidos solo para cobro
+        monto: esCobro ? (incidenciaForm.monto || 0) : null,
+        km_exceso: esCobro ? (incidenciaForm.km_exceso || null) : null,
+        sede_id: sedeActualId,
       }
 
       if (modalMode === 'edit' && selectedIncidencia) {
@@ -1909,7 +2151,8 @@ export function IncidenciasModule() {
               conductor_nombre: conductor ? `${conductor.nombres} ${conductor.apellidos}` : null,
               vehiculo_patente: vehiculo?.patente || null,
               created_by: user?.id,
-              created_by_name: profile?.full_name || 'Sistema'
+              created_by_name: profile?.full_name || 'Sistema',
+              sede_id: sedeActualId,
             })
           if (penError) {
             console.error('Error creando penalidad:', penError)
@@ -1969,7 +2212,8 @@ export function IncidenciasModule() {
         observaciones: penalidadForm.observaciones || null,
         aplicado: penalidadForm.aplicado || false,
         nota_administrativa: penalidadForm.nota_administrativa || null,
-        created_by: user?.id
+        created_by: user?.id,
+        sede_id: sedeActualId,
       }
 
       if (modalMode === 'edit' && selectedPenalidad) {
@@ -1997,6 +2241,10 @@ export function IncidenciasModule() {
 
   // Abrir modal de aplicación
   async function handleMarcarAplicado(penalidad: PenalidadCompleta) {
+    if (!canEdit) {
+      Swal.fire('Sin permiso', 'No tenés permisos para aplicar cobros/descuentos', 'error')
+      return
+    }
     // Validar que tenga conductor asignado
     if (!penalidad.conductor_id && !penalidad.conductor_nombre) {
       Swal.fire({
@@ -2871,7 +3119,7 @@ export function IncidenciasModule() {
       {/* Por Aplicar Tab - Cobros/Descuentos pendientes */}
       {activeTab === 'por_aplicar' && (
         <>
-          {/* Stats - pendientes */}
+          {/* Stats + botón selección masiva */}
           <div className="incidencias-stats">
             <div className="stats-grid">
               <div className="stat-card active">
@@ -2889,7 +3137,64 @@ export function IncidenciasModule() {
                 </div>
               </div>
             </div>
+            {canEdit && penalidadesPorAplicar.length > 0 && !modoSeleccionPorAplicar && (
+              <button className="btn-primary" onClick={() => setModoSeleccionPorAplicar(true)}>
+                <CheckSquare size={16} />
+                Selección masiva
+              </button>
+            )}
+            {modoSeleccionPorAplicar && (
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setModoSeleccionPorAplicar(false)
+                  setPenalidadesSeleccionadas(new Set())
+                }}
+              >
+                <X size={16} />
+                Cancelar
+              </button>
+            )}
           </div>
+
+          {/* Barra de selección masiva */}
+          {modoSeleccionPorAplicar && (
+            <div className="incidencias-selection-bar">
+              <button
+                className="btn-select-all"
+                onClick={() => {
+                  if (penalidadesSeleccionadas.size === penalidadesPorAplicar.length) {
+                    handleDeseleccionarTodasPenalidades()
+                  } else {
+                    handleSeleccionarTodasPenalidades()
+                  }
+                }}
+              >
+                {penalidadesSeleccionadas.size === penalidadesPorAplicar.length && penalidadesPorAplicar.length > 0 ? (
+                  <><CheckSquare size={16} color="#10b981" /> Deseleccionar todas</>
+                ) : (
+                  <><Square size={16} /> Seleccionar todas ({penalidadesPorAplicar.length})</>
+                )}
+              </button>
+
+              <span className="selection-count">
+                <strong>{penalidadesSeleccionadas.size}</strong> de {penalidadesPorAplicar.length} seleccionadas
+              </span>
+
+              {penalidadesSeleccionadas.size > 0 && (
+                <>
+                  <button className="btn-send" onClick={handleAplicarMasivo} disabled={procesandoMasivoPenalidades} style={{ background: '#10b981' }}>
+                    <CheckCircle size={16} />
+                    {procesandoMasivoPenalidades ? 'Procesando...' : `Aplicar ${penalidadesSeleccionadas.size}`}
+                  </button>
+                  <button className="btn-send" onClick={handleRechazarMasivo} disabled={procesandoMasivoPenalidades} style={{ background: '#ef4444' }}>
+                    <Ban size={16} />
+                    {procesandoMasivoPenalidades ? 'Procesando...' : `Rechazar ${penalidadesSeleccionadas.size}`}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Barra de filtros activos con estilo de chips */}
           {hayFiltrosPenalidadesActivos && (
