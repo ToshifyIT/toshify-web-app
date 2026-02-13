@@ -488,11 +488,12 @@
 
 /* Sticky column for actions */
 .dt-sticky-col {
-  position: sticky;
+  /* position: sticky; */
+  position: static;
   right: 0;
-  background: var(--bg-primary);
+  background: transparent;
   z-index: 2;
-  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05);
+  box-shadow: none;
 }
 
 .dt-table thead .dt-sticky-col {

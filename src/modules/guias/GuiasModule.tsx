@@ -20,9 +20,8 @@ import {
   Heart,
   Star,
   Target,
-  GraduationCap,
-  X,
-  Triangle
+  Award,
+  GraduationCap
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
@@ -2765,22 +2764,25 @@ export function GuiasModule() {
               {/* Filters & Table Container */}
               <div className="guias-filters-container flex flex-col gap-4">
                 {/* Filters Row: Week Selector + Search */}
-                <div className="guias-toolbar">
-                  {/* Search Input (Flex Grow) */}
-                  <div className="guias-search-wrapper">
-                    <Search className="guias-search-icon" size={20} />
+                <div className="flex flex-col md:flex-row items-stretch md:items-stretch gap-4 bg-white p-3 rounded-lg shadow-sm">
+                  
+                  {/* External Search Input */}
+                  <div 
+                    className="dt-search-wrapper w-full md:w-auto md:flex-1 bg-gray-50 rounded-md"
+                    style={{ padding: '10px' }}
+                  >
+                    <Search className="dt-search-icon" size={20} />
                     <input
                       type="text"
-                      className="guias-search-input"
+                      className="dt-search-input h-full"
                       placeholder="Buscar en esta lista..."
                       value={globalSearch}
                       onChange={(e) => setGlobalSearch(e.target.value)}
                     />
                   </div>
 
-                  {/* Actions (Right Aligned) */}
-                  <div className="guias-actions">
-                    {/* Week Selector */}
+                  {/* Week Selector - Remaining width */}
+                  <div className="w-full md:w-auto">
                     <WeekSelector 
                       selectedWeek={selectedWeek} 
                       onWeekChange={setSelectedWeek} 
@@ -2915,6 +2917,7 @@ export function GuiasModule() {
                     showSearch={false}
                     globalFilter={globalSearch}
                     onGlobalFilterChange={setGlobalSearch}
+                    enableHorizontalScroll={true}
                     emptyIcon={<Users size={64} />}
                     emptyTitle="No hay conductores asignados"
                     emptyDescription="Este guía no tiene conductores asignados o no cumplen con los filtros."
