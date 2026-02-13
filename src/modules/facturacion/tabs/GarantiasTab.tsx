@@ -494,6 +494,8 @@ export function GarantiasTab() {
       semanaOptionsHtml += `<option value="${s}" ${selected}>${s}</option>`
     }
 
+    const porcentajeRegistrar = Math.round((garantia.monto_pagado / garantia.monto_total) * 100)
+
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Registrar Pago de Garantía</span>`,
       html: `
@@ -503,9 +505,14 @@ export function GarantiasTab() {
             <div style="display: flex; gap: 12px; margin-top: 4px;">
               <span style="color: #6B7280; font-size: 12px;">Cuota: <strong style="color: #374151;">${siguienteCuota}/${garantia.cuotas_totales}</strong></span>
             </div>
-            <div style="color: #ff0033; font-size: 12px; margin-top: 4px;">
-              Pendiente: <strong>${formatCurrency(pendiente)}</strong>
+            <div style="display: flex; gap: 12px; margin-top: 4px;">
+              <span style="color: #16a34a; font-size: 12px;">Pagado: <strong>${formatCurrency(garantia.monto_pagado)}</strong></span>
+              <span style="color: #ff0033; font-size: 12px;">Pendiente: <strong>${formatCurrency(pendiente)}</strong></span>
             </div>
+            <div style="background: #E5E7EB; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+              <div style="background: #16a34a; height: 100%; width: ${porcentajeRegistrar}%;"></div>
+            </div>
+            <div style="text-align: center; font-size: 11px; color: #6B7280; margin-top: 2px;">${porcentajeRegistrar}%</div>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
             <div>

@@ -191,7 +191,7 @@
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #dc3545; /* Red color for "Filtros activos" */
+  color: var(--color-primary);
   margin-right: 8px;
 }
 
@@ -200,11 +200,11 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background-color: #f8f9fa;
-  border: 1px solid #e9ecef;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 20px;
   font-size: 12px;
-  color: #495057;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -215,23 +215,23 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background-color: #e9ecef;
+  background-color: var(--bg-tertiary);
   border: none;
   cursor: pointer;
-  color: #6c757d;
+  color: var(--text-tertiary);
   padding: 0;
   transition: all 0.2s ease;
 }
 
 .active-filter-close:hover {
-  background-color: #dc3545;
+  background-color: var(--color-primary);
   color: white;
 }
 
 .active-filters-clear {
-  margin-left: auto; /* Push to the right */
+  margin-left: auto;
   font-size: 12px;
-  color: #6c757d;
+  color: var(--text-tertiary);
   background: none;
   border: none;
   cursor: pointer;
@@ -240,5 +240,5 @@
 }
 
 .active-filters-clear:hover {
-  color: #dc3545;
+  color: var(--color-primary);
 }

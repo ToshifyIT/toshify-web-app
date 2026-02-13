@@ -18,18 +18,11 @@ export const IncidentsHistory: React.FC<IncidentsHistoryProps> = ({ notas, loadi
   return (
     <div className="incidents-container">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Bitácora de Notas</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Bitácora de Notas</h3>
         {!readOnly && (
           <button
             onClick={onAddNote}
-            className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:bg-gray-50 transition-all duration-200 text-sm font-bold"
-            style={{
-              paddingTop: '8px',
-              paddingLeft: '8px',
-              paddingBottom: '8px',
-              paddingRight: '8px',
-              marginBottom: '10px'
-            }}
+            className="btn-agregar-nota"
           >
             <MessageSquarePlus size={18} strokeWidth={2.5} />
             Agregar Nota
@@ -79,7 +72,7 @@ export const IncidentsHistory: React.FC<IncidentsHistoryProps> = ({ notas, loadi
                   <td className="incidents-date">
                     {nota.fecha}
                   </td>
-                  <td className="incidents-actions" style={{ textAlign: 'left', color: '#666', fontSize: '0.85rem' }}>
+                  <td className="incidents-actions" style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                     {nota.usuario || 'Desconocido'}
                   </td>
                   <td className="text-right pr-4">
@@ -87,14 +80,16 @@ export const IncidentsHistory: React.FC<IncidentsHistoryProps> = ({ notas, loadi
                       <div className="flex items-center justify-end gap-2">
                         <button 
                           onClick={(e) => { e.stopPropagation(); onEditNote?.(nota, index); }}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="p-1.5 rounded-lg transition-colors"
+                          style={{ color: 'var(--color-primary)' }}
                           title="Editar"
                         >
                           <Pencil size={16} />
                         </button>
                         <button 
                           onClick={(e) => { e.stopPropagation(); onDeleteNote?.(index); }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-1.5 rounded-lg transition-colors"
+                          style={{ color: 'var(--color-danger)' }}
                           title="Eliminar"
                         >
                           <Trash2 size={16} />

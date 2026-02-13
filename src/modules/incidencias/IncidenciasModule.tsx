@@ -126,6 +126,7 @@ export function IncidenciasModule() {
   const [estados, setEstados] = useState<IncidenciaEstado[]>([])
   const [tiposPenalidad, setTiposPenalidad] = useState<TipoPenalidad[]>([])
   const [tiposCobroDescuento, setTiposCobroDescuento] = useState<TipoCobroDescuento[]>([])
+  const [conceptosNomina, setConceptosNomina] = useState<{ id: string; codigo: string; descripcion: string; precio_final: number }[]>([])
   const [vehiculos, setVehiculos] = useState<VehiculoSimple[]>([])
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   // Mapa de penalidades fraccionadas: penalidad_id -> { total_cuotas, cuotas_pendientes }
@@ -366,7 +367,8 @@ export function IncidenciasModule() {
         penalidadesRes,
         incidenciasTipoRes,
         penalidadesTableRes,
-        rechazosRes
+        rechazosRes,
+        conceptosRes
       ] = await Promise.all([
         (supabase.from('incidencias_estados' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('*').eq('is_active', true).order('orden'),
@@ -380,12 +382,17 @@ export function IncidenciasModule() {
         // Obtener campos frescos de la tabla penalidades (aplicado, rechazado, incidencia_id)
         (supabase.from('penalidades' as any) as any).select('id, incidencia_id, aplicado, rechazado, fecha_rechazo, motivo_rechazo'),
         // Obtener historial de rechazos
-        (supabase.from('penalidades_rechazos' as any) as any).select('penalidad_id, motivo, rechazado_por, created_at').order('created_at', { ascending: false })
+        (supabase.from('penalidades_rechazos' as any) as any).select('penalidad_id, motivo, rechazado_por, created_at').order('created_at', { ascending: false }),
+        // Conceptos de facturación (para dropdown de incidencias, excluir alquileres P001/P002/P013)
+        supabase.from('conceptos_nomina').select('id, codigo, descripcion, precio_final').eq('activo', true).not('codigo', 'in', '("P001","P002","P003","P013")').order('orden')
       ])
 
       setEstados(estadosRes.data || [])
       setTiposPenalidad(tiposRes.data || [])
       setTiposCobroDescuento(tiposCobroRes.data || [])
+      // Conceptos para dropdown: excluir los que ya están cubiertos por tipos_cobro_descuento (P004, P006, P007)
+      const conceptosFiltrados = (conceptosRes.data || []).filter((c: any) => !['P004', 'P006', 'P007'].includes(c.codigo))
+      setConceptosNomina(conceptosFiltrados)
       setVehiculos(vehiculosRes.data || [])
       setConductores((conductoresRes.data || []).map((c: any) => ({
         id: c.id,
@@ -3446,6 +3453,7 @@ export function IncidenciasModule() {
                   vehiculos={vehiculos}
                   conductores={conductores}
                   tiposCobroDescuento={tiposCobroDescuento}
+                  conceptosNomina={conceptosNomina}
                   disabled={saving}
                   esCobro={activeTab === 'cobro'}
                 />
@@ -3898,6 +3906,7 @@ interface IncidenciaFormProps {
   vehiculos: VehiculoSimple[]
   conductores: ConductorSimple[]
   tiposCobroDescuento: TipoCobroDescuento[]
+  conceptosNomina?: { id: string; codigo: string; descripcion: string; precio_final: number }[]
   disabled?: boolean
   esCobro?: boolean  // Indica si es incidencia de cobro (muestra campo monto)
 }
@@ -3909,7 +3918,7 @@ interface ConductorAsignado {
   turno: string // diurno, nocturno, todo_dia (de asignaciones_conductores)
 }
 
-function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, disabled, esCobro = false }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], disabled, esCobro = false }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -4207,7 +4216,19 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
             <label>Tipo de Incidencia <span className="required">*</span></label>
             <select 
               value={formData.tipo_cobro_descuento_id || ''} 
-              onChange={e => setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: e.target.value || undefined }))} 
+              onChange={e => {
+                const val = e.target.value || undefined
+                // Si seleccionó un concepto de facturación, precargar el monto (precio_final x 7 = semanal)
+                if (val?.startsWith('__CONCEPTO__')) {
+                  const codigo = val.replace('__CONCEPTO__', '')
+                  const concepto = conceptosNomina.find(c => c.codigo === codigo)
+                  if (concepto) {
+                    setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: val, monto: Math.round(Number(concepto.precio_final) * 7) }))
+                    return
+                  }
+                }
+                setFormData(prev => ({ ...prev, tipo_cobro_descuento_id: val }))
+              }} 
               disabled={disabled}
             >
               <option value="">Seleccionar</option>
@@ -4241,6 +4262,10 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
                   {/* Sin categoría */}
                   {tiposSinCategoria.map(tipo => (
                     <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                  ))}
+                  {/* Conceptos adicionales de facturación */}
+                  {conceptosNomina.map(c => (
+                    <option key={`cn-${c.id}`} value={`__CONCEPTO__${c.codigo}`}>{c.codigo} - {c.descripcion.charAt(0).toUpperCase() + c.descripcion.slice(1).toLowerCase()}</option>
                   ))}
                 </>
               ) : (

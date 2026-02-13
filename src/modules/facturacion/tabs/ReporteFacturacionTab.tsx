@@ -379,20 +379,23 @@ export function ReporteFacturacionTab() {
           : f.conductor_nombre || ''
       }))
 
-      // 2.5 Cargar ganancias de Cabify para el período
+      // 2.5 Cargar ganancias y peajes de Cabify para el período
       const { data: cabifyData } = await supabase
         .from('cabify_historico')
-        .select('dni, ganancia_total')
+        .select('dni, ganancia_total, peajes')
         .gte('fecha_inicio', (periodoData as any).fecha_inicio + 'T00:00:00')
         .lte('fecha_inicio', (periodoData as any).fecha_fin + 'T23:59:59')
 
-      // Agrupar ganancias por DNI
+      // Agrupar ganancias y peajes por DNI
       const gananciasPorDni = new Map<string, number>()
+      const peajesPorDni = new Map<string, number>()
       ;(cabifyData || []).forEach((c: any) => {
         if (c.dni) {
           const dniStr = String(c.dni)
           const actual = gananciasPorDni.get(dniStr) || 0
           gananciasPorDni.set(dniStr, actual + (parseFloat(c.ganancia_total) || 0))
+          const actualPeajes = peajesPorDni.get(dniStr) || 0
+          peajesPorDni.set(dniStr, actualPeajes + (parseFloat(String(c.peajes)) || 0))
         }
       })
 
@@ -453,17 +456,72 @@ export function ReporteFacturacionTab() {
         }
       })
 
+      // 2.8 Calcular días reales de asignación para cada conductor
+      // Primero obtener asignaciones activas (vehículos), luego sus conductores
+      const conductorIds = facturacionesTransformadas.map((f: any) => f.conductor_id).filter(Boolean)
+      const { data: asignacionesActivasData } = await (supabase
+        .from('asignaciones') as any)
+        .select('id')
+        .in('estado', ['activo', 'activa'])
+      const asignacionActivaIds = (asignacionesActivasData || []).map((a: any) => a.id)
+
+      const { data: asignacionesData } = asignacionActivaIds.length > 0
+        ? await (supabase
+            .from('asignaciones_conductores') as any)
+            .select('conductor_id, fecha_inicio, fecha_fin')
+            .in('conductor_id', conductorIds)
+            .in('asignacion_id', asignacionActivaIds)
+        : { data: [] }
+
+      // Usar strings yyyy-MM-dd para evitar problemas de timezone
+      const periodoInicioStr = (periodoData as any).fecha_inicio as string // 'yyyy-MM-dd'
+      const periodoFinStr = (periodoData as any).fecha_fin as string
+      // Hoy como string yyyy-MM-dd
+      const hoyDate = new Date()
+      const hoyStr = `${hoyDate.getFullYear()}-${String(hoyDate.getMonth() + 1).padStart(2, '0')}-${String(hoyDate.getDate()).padStart(2, '0')}`
+      // Para período abierto, contar días solo hasta hoy
+      const topeStr = hoyStr < periodoFinStr ? hoyStr : periodoFinStr
+
+      // Función para contar días entre dos fechas string inclusive
+      const contarDias = (inicio: string, fin: string) => {
+        const d1 = new Date(inicio + 'T00:00:00')
+        const d2 = new Date(fin + 'T00:00:00')
+        return Math.max(0, Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+      }
+
+      const diasRealesMap = new Map<string, number>()
+      ;(asignacionesData || []).forEach((ac: any) => {
+        const acInicioStr = ac.fecha_inicio ? ac.fecha_inicio.substring(0, 10) : periodoInicioStr
+        const acFinStr = ac.fecha_fin ? ac.fecha_fin.substring(0, 10) : topeStr
+        // Si terminó antes del período, ignorar
+        if (acFinStr < periodoInicioStr) return
+        // Rango efectivo dentro del período y hasta hoy
+        const efectivoInicio = acInicioStr > periodoInicioStr ? acInicioStr : periodoInicioStr
+        const efectivoFin = acFinStr < topeStr ? acFinStr : topeStr
+        const dias = contarDias(efectivoInicio, efectivoFin)
+        if (dias > 0) {
+          diasRealesMap.set(ac.conductor_id, Math.min((diasRealesMap.get(ac.conductor_id) || 0) + dias, 7))
+        }
+      })
+
       // Agregar monto_cobrado + detalles a cada facturación
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pago = pagosMap.get(f.id)
         const detalle = detallesMap.get(f.id)
+        const peajesDetalle = detalle?.monto_peajes || 0
+        // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI
+        const peajesCabify = f.conductor_dni ? (peajesPorDni.get(String(f.conductor_dni)) || 0) : 0
+        // Días reales de asignación (override del turnos_cobrados guardado)
+        // Si no tiene asignación activa, son 0 días
+        const diasReales = diasRealesMap.get(f.conductor_id) || 0
         return {
           ...f,
           monto_cobrado: pago?.monto || 0,
           fecha_pago: pago?.fecha_pago || null,
-          monto_peajes: detalle?.monto_peajes || 0,
+          monto_peajes: peajesDetalle > 0 ? peajesDetalle : peajesCabify,
           monto_penalidades: detalle?.monto_penalidades || 0,
           penalidades_detalle: detalle?.penalidades_detalle || [],
+          turnos_cobrados: diasReales,
         }
       })
 
@@ -543,7 +601,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado)
         `)
         .in('conductor_id', conductorIds)
-        .in('estado', ['asignado', 'activo', 'completado'])
+        .in('estado', ['asignado', 'activo', 'activa'])
 
       // Crear mapa de prorrateo con días y montos para precios históricos
       interface ProrrateoVistaPrevia {
@@ -1114,7 +1172,7 @@ export function ReporteFacturacionTab() {
         html: `
           <p>Esto <strong>eliminará y regenerará TODA la facturación</strong> del período:</p>
           <ul style="text-align:left; margin-top:10px;">
-            <li>Alquiler (P001/P002)</li>
+            <li>Alquiler (P001/P002/P013)</li>
             <li>Garantía (P003)</li>
             <li>Tickets a favor (P004)</li>
             <li>Peajes Cabify (P005)</li>
@@ -1231,7 +1289,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado)
         `)
         .in('conductor_id', conductorIdsTemp)
-        .in('estado', ['asignado', 'activo', 'completado'])
+        .in('estado', ['asignado', 'activo', 'activa'])
 
       // Crear mapa de prorrateo: conductor_id -> { días y montos por modalidad }
       // Los montos se calculan día a día para considerar cambios de precio históricos
@@ -5665,6 +5723,20 @@ export function ReporteFacturacionTab() {
         </div>
       ),
       enableSorting: true,
+    },
+    {
+      id: 'dias_trabajados',
+      accessorFn: (row) => row.turnos_cobrados,
+      header: 'Días',
+      enableSorting: true,
+      cell: ({ row }) => {
+        const cobrados = row.original.turnos_cobrados ?? 0
+        return (
+          <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            {cobrados}
+          </span>
+        )
+      }
     },
     {
       id: 'alquiler_desglose',

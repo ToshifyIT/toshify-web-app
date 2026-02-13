@@ -1751,6 +1751,7 @@ export function GuiasModule() {
           <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
         ),
         enableSorting: true,
+        size: 150,
       },
       {
         accessorKey: "numero_dni",
@@ -1807,6 +1808,7 @@ export function GuiasModule() {
         ),
         cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
+        size: 85,
       },
 
       ...(selectedWeek === getCurrentWeek() ? [{
@@ -1929,6 +1931,7 @@ export function GuiasModule() {
           const val = row.getValue(id) as string
           return filterValue.includes(val)
         },
+        size: 90,
       }] : []),
 
       {
@@ -1987,6 +1990,7 @@ export function GuiasModule() {
           return <span className={badgeClass}>{getEstadoConductorDisplay(estado)}</span>;
         },
         enableSorting: true,
+        size: 80,
       },
       {
         id: "vehiculo_asignado",
@@ -2061,6 +2065,7 @@ export function GuiasModule() {
           return <span className="vehiculo-cell-na">-</span>;
         },
         enableSorting: false,
+        size: 120,
       },
       {
         id: "escuela",
@@ -2075,6 +2080,7 @@ export function GuiasModule() {
           );
         },
         enableSorting: true,
+        size: 65,
       },
       {
         accessorKey: "facturacion_efectivo",
@@ -2137,13 +2143,14 @@ export function GuiasModule() {
           }
           // Si es 0 y no hay datos de Cabify en semana actual, mostramos N/A
           if (selectedWeek === getCurrentWeek() && !(row.original as any).cabifyData) {
-            return <span className="text-gray-400 italic" title="Sin datos de Cabify">N/A</span>;
+            return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
           }
           // Si es 0 pero hay datos (o semana pasada), mostramos $0
           if (val === undefined || val === null) return "-";
           return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
         },
         enableSorting: true,
+        size: 110,
       },
       {
         accessorKey: "facturacion_app",
@@ -2206,12 +2213,13 @@ export function GuiasModule() {
           }
           // Si es 0 y no hay datos de Cabify en semana actual, mostramos N/A
           if (selectedWeek === getCurrentWeek() && !(row.original as any).cabifyData) {
-            return <span className="text-gray-400 italic" title="Sin datos de Cabify">N/A</span>;
+            return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
           }
           if (val === undefined || val === null) return "-";
           return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
         },
         enableSorting: true,
+        size: 110,
       },
       {
         accessorKey: "facturacion_total",
@@ -2274,12 +2282,13 @@ export function GuiasModule() {
           }
           // Si es 0 y no hay datos de Cabify en semana actual, mostramos N/A
           if (selectedWeek === getCurrentWeek() && !(row.original as any).cabifyData) {
-            return <span className="text-gray-400 italic" title="Sin datos de Cabify">N/A</span>;
+            return <span className="italic" style={{ color: 'var(--text-tertiary)' }} title="Sin datos de Cabify">N/A</span>;
           }
           if (val === undefined || val === null) return "-";
           return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
         },
         enableSorting: true,
+        size: 110,
       },
 
       {
@@ -2295,6 +2304,7 @@ export function GuiasModule() {
           );
         },
         enableSorting: true,
+        size: 95,
       },
       {
         accessorKey: "fecha_llamada",
@@ -2305,6 +2315,7 @@ export function GuiasModule() {
           return new Date(fecha).toLocaleDateString("es-AR");
         },
         enableSorting: true,
+        size: 105,
       },
       {
         accessorKey: "id_accion_imp",
@@ -2318,6 +2329,7 @@ export function GuiasModule() {
            return accion ? accion.nombre : (idAccion || "-");
         },
         enableSorting: true,
+        size: 160,
       },
       {
         id: "seguimiento",
@@ -2374,12 +2386,13 @@ export function GuiasModule() {
                   {ruleMatch.rango_nombre}
                 </span>
               ) : (
-                <span className="text-gray-400">-</span>
+                <span style={{ color: 'var(--text-tertiary)' }}>-</span>
               )}
             </div>
           );
         },
         enableSorting: true,
+        size: 105,
       },
       {
         id: "acciones",
@@ -2421,6 +2434,7 @@ export function GuiasModule() {
             />
           );
         },
+        size: 120,
       },
     ],
     [
@@ -2516,7 +2530,7 @@ export function GuiasModule() {
                     <div className="guias-stats-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                       {/* Fila 1 */}
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'totalConductores' ? null : 'totalConductores')}
                       >
                         <Users className="stat-icon" size={18} />
@@ -2526,7 +2540,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'totalFacturado' ? null : 'totalFacturado')}
                       >
                         <DollarSign className="stat-icon" size={18} />
@@ -2536,7 +2550,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'totalEfectivo' ? null : 'totalEfectivo')}
                       >
                         <DollarSign className="stat-icon text-green-600" size={18} />
@@ -2546,7 +2560,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'totalApp' ? null : 'totalApp')}
                       >
                         <DollarSign className="stat-icon text-blue-600" size={18} />
@@ -2556,7 +2570,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'conductoresEscuela' ? null : 'conductoresEscuela')}
                       >
                         <GraduationCap className="stat-icon text-purple-600" size={18} />
@@ -2568,7 +2582,7 @@ export function GuiasModule() {
 
                       {/* Fila 2 */}
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'llamadasRealizadas' ? null : 'llamadasRealizadas')}
                       >
                         <Phone className="stat-icon text-green-500" size={18} />
@@ -2578,7 +2592,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'llamadasPendientes' ? null : 'llamadasPendientes')}
                       >
                         <PhoneCall className="stat-icon text-orange-500" size={18} />
@@ -2588,7 +2602,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoDiario' ? null : 'seguimientoDiario')}
                       >
                         <AlertTriangle className="stat-icon text-red-500" size={18} />
@@ -2598,7 +2612,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoCercano' ? null : 'seguimientoCercano')}
                       >
                         <AlertTriangle className="stat-icon text-yellow-500" size={18} />
@@ -2608,7 +2622,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoSemanal' ? null : 'seguimientoSemanal')}
                       >
                         <CheckCircle className="stat-icon text-green-500" size={18} />
@@ -2620,7 +2634,7 @@ export function GuiasModule() {
 
                       {/* Fila 3 - Nuevas Métricas */}
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'capacitacionCabify' ? null : 'capacitacionCabify')}
                       >
                         <Book className="stat-icon text-blue-500" size={18} />
@@ -2630,7 +2644,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'capacitacionToshify' ? null : 'capacitacionToshify')}
                       >
                         <Book className="stat-icon text-indigo-500" size={18} />
@@ -2640,7 +2654,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoControl' ? null : 'seguimientoControl')}
                       >
                         <Target className="stat-icon text-red-500" size={18} />
@@ -2650,7 +2664,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'motivacional' ? null : 'motivacional')}
                       >
                         <Star className="stat-icon text-yellow-500" size={18} />
@@ -2660,7 +2674,7 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
                         onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'fidelizacion' ? null : 'fidelizacion')}
                       >
                         <Heart className="stat-icon text-pink-500" size={18} />
@@ -2734,7 +2748,7 @@ export function GuiasModule() {
                 {(nombreFilter.length > 0 || dniFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || efectivoFilter.length > 0 || appFilter.length > 0 || totalFilter.length > 0 || activeStatFilter) && (
                   <div className="active-filters-container">
                     <div className="active-filters-label">
-                      <Triangle size={8} fill="#dc3545" stroke="#dc3545" style={{ transform: 'rotate(180deg)' }} />
+                      <Triangle size={8} fill="var(--color-primary)" stroke="var(--color-primary)" style={{ transform: 'rotate(180deg)' }} />
                       Filtros activos:
                     </div>
                     

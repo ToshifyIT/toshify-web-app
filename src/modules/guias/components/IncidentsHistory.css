@@ -4,18 +4,18 @@
 }
 
 .incidents-title {
-  font-size: 0.75rem; /* text-xs */
+  font-size: 0.75rem;
   font-weight: 700;
-  color: #9CA3AF; /* text-gray-400 */
+  color: var(--text-tertiary);
   text-transform: uppercase;
   margin-bottom: 0.75rem;
   padding-left: 0.25rem;
 }
 
 .incidents-card {
-  background-color: white;
+  background-color: var(--card-bg);
   border-radius: 10px;
-  border: 1px solid #E5E7EB; /* border-gray-200 */
+  border: 1px solid var(--border-primary);
   overflow: hidden;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
@@ -26,7 +26,7 @@
 }
 
 .incidents-table thead tr {
-  border-bottom: 1px solid #F3F4F6; /* border-gray-100 */
+  border-bottom: 1px solid var(--border-secondary);
 }
 
 .incidents-table thead {
@@ -35,17 +35,17 @@
 }
 
 .incidents-table thead:hover th {
-  background-color: #F3F4F6;
+  background-color: var(--bg-hover);
 }
 
 .incidents-table th {
   padding: 16px 24px;
-  font-size: 0.75rem; /* text-xs */
+  font-size: 0.75rem;
   font-weight: 700;
-  color: #9CA3AF; /* text-gray-400 */
+  color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.05em; /* tracking-wider */
-  background-color: #FAFAFA; /* Very light gray, almost white */
+  letter-spacing: 0.05em;
+  background-color: var(--bg-secondary);
 }
 
 .incidents-table th:nth-child(2) {
@@ -58,7 +58,7 @@
 }
 
 .incidents-table tbody tr {
-  border-bottom: 1px solid #F9FAFB; /* Very subtle separator */
+  border-bottom: 1px solid var(--border-secondary);
 }
 
 .incidents-table tbody tr:last-child {
@@ -66,17 +66,17 @@
 }
 
 .incidents-table td {
-  padding: 18px 24px; /* Generous vertical padding */
-  font-size: 0.875rem; /* text-sm */
+  padding: 18px 24px;
+  font-size: 0.875rem;
 }
 
 .incidents-description {
-  color: #374151; /* text-gray-700 */
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .incidents-date {
-  color: #6B7280; /* text-gray-500 */
+  color: var(--text-secondary);
   text-align: right;
   white-space: nowrap;
 }
@@ -86,7 +86,7 @@
 }
 
 .action-button {
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   background: transparent;
   border: none;
   padding: 4px;
@@ -99,13 +99,13 @@
 }
 
 .action-button:hover {
-  background-color: #F3F4F6;
-  color: #374151;
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .incidents-empty, .incidents-loading {
   padding: 24px;
   text-align: center;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   font-style: italic;
 }
