@@ -8,6 +8,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useSede } from '../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
@@ -147,6 +148,7 @@ interface Props {
 
 export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: Props) {
   const { user, profile } = useAuth()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const isEditMode = !!editData
   const [step, setStep] = useState(1)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
@@ -265,19 +267,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       try {
         // Hacer los 3 queries en PARALELO - solo campos minimos necesarios
         const [vehiculosRes, asignacionesRes, programacionesRes] = await Promise.all([
-          supabase
+          aplicarFiltroSede(supabase
             .from('vehiculos')
             .select('id, patente, marca, modelo, anio, color, vehiculos_estados!inner(codigo)')
-            .in('vehiculos_estados.codigo', ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE'])
+            .in('vehiculos_estados.codigo', ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE']))
             .order('patente'),
-          supabase
+          aplicarFiltroSede(supabase
             .from('asignaciones')
             .select('vehiculo_id, horario, estado, asignaciones_conductores(horario)')
-            .in('estado', ['activa', 'programado']),
-          supabase
+            .in('estado', ['activa', 'programado'])),
+          aplicarFiltroSede(supabase
             .from('programaciones_onboarding')
             .select('vehiculo_entregar_id, id')
-            .in('estado', ['por_agendar', 'agendado', 'en_curso'])
+            .in('estado', ['por_agendar', 'agendado', 'en_curso']))
         ])
 
         if (vehiculosRes.error) throw vehiculosRes.error
@@ -377,14 +379,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
 
     loadVehicles()
-  }, [editData?.id])
+  }, [editData?.id, sedeActualId])
 
   // Cargar conductores disponibles
   useEffect(() => {
     const loadConductores = async () => {
       setLoadingConductores(true)
       try {
-        const { data, error } = await supabase
+        const { data, error } = await aplicarFiltroSede(supabase
           .from('conductores')
           .select(`
             id,
@@ -402,7 +404,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
               codigo,
               descripcion
             )
-          `)
+          `))
           .order('apellidos')
 
         if (error) throw error
@@ -455,7 +457,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
 
     loadConductores()
-  }, [])
+  }, [sedeActualId])
 
   // Función para cargar Google Maps API si no está disponible
   const loadGoogleMapsAPI = (): Promise<void> => {
@@ -1028,11 +1030,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         const estadosActivos = ['por_agendar', 'agendado', 'en_curso']
 
         // Verificar si el vehículo ya está programado
-        const { data: vehiculosProgramados } = await supabase
+        const { data: vehiculosProgramados } = await aplicarFiltroSede(supabase
           .from('programaciones_onboarding')
           .select('id, vehiculo_entregar_patente, estado')
           .eq('vehiculo_entregar_id', formData.vehiculo_id)
-          .in('estado', estadosActivos)
+          .in('estado', estadosActivos))
           .limit(1) as { data: Array<{ id: string; vehiculo_entregar_patente: string; estado: string }> | null }
 
         const vehiculoProgramado = vehiculosProgramados?.[0]
@@ -1062,11 +1064,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         for (const conductor of conductoresToCheck) {
           // Buscar en todos los campos posibles de conductor
-          const { data: conductoresProgramados } = await supabase
+          const { data: conductoresProgramados } = await aplicarFiltroSede(supabase
             .from('programaciones_onboarding')
             .select('id, vehiculo_entregar_patente, estado')
             .in('estado', estadosActivos)
-            .or(`conductor_id.eq.${conductor.id},conductor_diurno_id.eq.${conductor.id},conductor_nocturno_id.eq.${conductor.id}`)
+            .or(`conductor_id.eq.${conductor.id},conductor_diurno_id.eq.${conductor.id},conductor_nocturno_id.eq.${conductor.id}`))
             .limit(1) as { data: Array<{ id: string; vehiculo_entregar_patente: string; estado: string }> | null }
 
           const conductorProgramado = conductoresProgramados?.[0]
@@ -1182,6 +1184,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         saveData.citado_ypf = false
         saveData.created_by = user?.id
         saveData.created_by_name = profile?.full_name || 'Sistema'
+        saveData.sede_id = sedeActualId || sedeUsuario?.id
         
         const result = await (supabase
           .from('programaciones_onboarding') as any)

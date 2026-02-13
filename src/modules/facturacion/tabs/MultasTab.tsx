@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -45,6 +46,7 @@ interface Vehiculo {
 }
 
 export function MultasTab() {
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [multas, setMultas] = useState<Multa[]>([])
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
   const [loading, setLoading] = useState(true)
@@ -60,7 +62,7 @@ export function MultasTab() {
 
   useEffect(() => {
     cargarDatos()
-  }, [])
+  }, [sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -96,17 +98,17 @@ export function MultasTab() {
     setLoading(true)
     try {
       // Cargar multas
-      const { data: multasData, error: multasError } = await (supabase
+      const { data: multasData, error: multasError } = await aplicarFiltroSede((supabase
         .from('multas_historico') as any)
-        .select('*')
+        .select('*'))
         .order('fecha_infraccion', { ascending: false })
 
       if (multasError) throw multasError
 
       // Cargar vehiculos para mapear patentes
-      const { data: vehiculosData } = await supabase
+      const { data: vehiculosData } = await aplicarFiltroSede(supabase
         .from('vehiculos')
-        .select('id, patente')
+        .select('id, patente'))
 
       const vehiculosList = (vehiculosData || []) as Vehiculo[]
       setVehiculos(vehiculosList)

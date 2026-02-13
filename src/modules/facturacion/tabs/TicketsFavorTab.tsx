@@ -18,7 +18,7 @@ import { formatCurrency, formatDate, TIPOS_TICKET_FAVOR } from '../../../types/f
 import { useSede } from '../../../contexts/SedeContext'
 
 export function TicketsFavorTab() {
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [tickets, setTickets] = useState<TicketFavor[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState<string>('todos')
@@ -32,7 +32,7 @@ export function TicketsFavorTab() {
   const [estadoFilterExcel, setEstadoFilterExcel] = useState<string[]>([])
 
   useEffect(() => {
-    if (sedeActualId) cargarTickets()
+    cargarTickets()
   }, [sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
@@ -72,10 +72,9 @@ export function TicketsFavorTab() {
   async function cargarTickets() {
     setLoading(true)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('tickets_favor')
-        .select('*')
-        .eq('sede_id', sedeActualId)
+        .select('*'))
         .order('fecha_solicitud', { ascending: false })
 
       if (error) throw error

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -69,6 +70,7 @@ interface ConductorActivo {
 }
 
 export function LiquidacionConductoresTab() {
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [liquidaciones, setLiquidaciones] = useState<Liquidacion[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState<string>('todos')
@@ -80,7 +82,7 @@ export function LiquidacionConductoresTab() {
 
   useEffect(() => {
     cargarLiquidaciones()
-  }, [])
+  }, [sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -114,9 +116,9 @@ export function LiquidacionConductoresTab() {
 
   async function nuevaLiquidacion() {
     // Cargar todos los conductores - EXACTAMENTE igual que TicketsFavorTab
-    const { data: conductores, error } = await supabase
+    const { data: conductores, error } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos, numero_dni')
+      .select('id, nombres, apellidos, numero_dni'))
       .order('apellidos')
 
     // Guardar en variable global para el modal - EXACTAMENTE como Tickets

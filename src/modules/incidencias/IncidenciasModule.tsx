@@ -109,7 +109,7 @@ function getAreaResponsablePorRol(roleName: string | undefined | null): string {
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab } = usePermissions()
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Permisos específicos para el menú de incidencias
@@ -255,7 +255,7 @@ export function IncidenciasModule() {
 
   // Cargar datos (recarga al cambiar sede)
   useEffect(() => {
-    if (sedeActualId) cargarDatos()
+    cargarDatos()
   }, [sedeActualId])
 
   // Verificar si hay datos precargados desde siniestros
@@ -371,10 +371,10 @@ export function IncidenciasModule() {
         (supabase.from('incidencias_estados' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_cobro_descuento' as any) as any).select('*').eq('is_active', true).order('orden'),
-        supabase.from('vehiculos').select('id, patente, marca, modelo').eq('sede_id', sedeActualId).order('patente'),
-        supabase.from('conductores').select('id, nombres, apellidos').eq('sede_id', sedeActualId).order('apellidos'),
-        (supabase.from('v_incidencias_completas' as any) as any).select('*').eq('sede_id', sedeActualId).order('fecha', { ascending: false }),
-        (supabase.from('v_penalidades_completas' as any) as any).select('*').eq('sede_id', sedeActualId).order('fecha', { ascending: false }),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo')).order('patente'),
+        aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
+        aplicarFiltroSede((supabase.from('v_incidencias_completas' as any) as any).select('*')).order('fecha', { ascending: false }),
+        aplicarFiltroSede((supabase.from('v_penalidades_completas' as any) as any).select('*')).order('fecha', { ascending: false }),
         // Obtener campos adicionales de la tabla incidencias (tipo, monto)
         (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id, monto'),
         // Obtener campos frescos de la tabla penalidades (aplicado, rechazado, incidencia_id)
@@ -2112,7 +2112,7 @@ export function IncidenciasModule() {
         tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
         monto: esCobro ? (incidenciaForm.monto || 0) : null,
         km_exceso: esCobro ? (incidenciaForm.km_exceso || null) : null,
-        sede_id: sedeActualId,
+        sede_id: sedeActualId || sedeUsuario?.id,
       }
 
       if (modalMode === 'edit' && selectedIncidencia) {
@@ -2152,7 +2152,7 @@ export function IncidenciasModule() {
               vehiculo_patente: vehiculo?.patente || null,
               created_by: user?.id,
               created_by_name: profile?.full_name || 'Sistema',
-              sede_id: sedeActualId,
+              sede_id: sedeActualId || sedeUsuario?.id,
             })
           if (penError) {
             console.error('Error creando penalidad:', penError)
@@ -2213,7 +2213,7 @@ export function IncidenciasModule() {
         aplicado: penalidadForm.aplicado || false,
         nota_administrativa: penalidadForm.nota_administrativa || null,
         created_by: user?.id,
-        sede_id: sedeActualId,
+        sede_id: sedeActualId || sedeUsuario?.id,
       }
 
       if (modalMode === 'edit' && selectedPenalidad) {

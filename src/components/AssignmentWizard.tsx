@@ -100,7 +100,7 @@ interface Props {
 
 export function AssignmentWizard({ onClose, onSuccess }: Props) {
   const { profile } = useAuth()
-  const { sedeActualId } = useSede()
+  const { sedeActualId, sedeUsuario } = useSede()
   const [step, setStep] = useState(1)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
@@ -135,7 +135,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     const loadVehicles = async () => {
       try {
         // 1. Obtener todos los vehículos (excepto reparación/mantenimiento)
-        const { data: vehiculosData, error: vehiculosError } = await supabase
+        let vehiculosQuery = supabase
           .from('vehiculos')
           .select(`
             id,
@@ -149,8 +149,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
               descripcion
             )
           `)
-          .eq('sede_id', sedeActualId)
-          .order('patente')
+        if (sedeActualId) vehiculosQuery = vehiculosQuery.eq('sede_id', sedeActualId)
+        const { data: vehiculosData, error: vehiculosError } = await vehiculosQuery.order('patente')
 
         if (vehiculosError) throw vehiculosError
 
@@ -264,7 +264,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   useEffect(() => {
     const loadConductores = async () => {
       try {
-        const { data, error } = await supabase
+        let conductoresQuery = supabase
           .from('conductores')
           .select(`
             id,
@@ -280,8 +280,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
               descripcion
             )
           `)
-          .eq('sede_id', sedeActualId)
-          .order('apellidos')
+        if (sedeActualId) conductoresQuery = conductoresQuery.eq('sede_id', sedeActualId)
+        const { data, error } = await conductoresQuery.order('apellidos')
 
         if (error) throw error
 
@@ -509,7 +509,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
           codigo: codigoAsignacion,
           created_by: user?.id,
           created_by_name: profile?.full_name || 'Sistema',
-          sede_id: sedeActualId,
+          sede_id: sedeActualId || sedeUsuario?.id,
         } as any)
         .select()
         .single()

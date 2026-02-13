@@ -46,7 +46,7 @@ const ESTADO_LABELS: Record<string, string> = {
 
 
 export function VehicleManagement() {
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -128,7 +128,7 @@ export function VehicleManagement() {
 
   // ✅ OPTIMIZADO: Carga unificada en paralelo (recarga al cambiar sede)
   useEffect(() => {
-    if (sedeActualId) loadAllData()
+    loadAllData()
   }, [sedeActualId])
 
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (elimina 6+ queries)
@@ -189,14 +189,13 @@ export function VehicleManagement() {
 
     try {
       const [vehiculosRes, estadosRes] = await Promise.all([
-        supabase
+        aplicarFiltroSede(supabase
           .from('vehiculos')
           .select(`
             id, patente, marca, modelo, anio, color, kilometraje_actual, estado_id, created_at,
             drive_folder_id, drive_folder_url,
             vehiculos_estados (id, codigo, descripcion)
-          `)
-          .eq('sede_id', sedeActualId)
+          `))
           .order('created_at', { ascending: false }),
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').order('descripcion')
       ])
@@ -250,7 +249,7 @@ export function VehicleManagement() {
 
     try {
       // ✅ OPTIMIZADO: Una sola query con JOIN (51 queries → 1 query)
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await aplicarFiltroSede(supabase
         .from('vehiculos')
         .select(`
           *,
@@ -259,8 +258,7 @@ export function VehicleManagement() {
             codigo,
             descripcion
           )
-        `)
-        .eq('sede_id', sedeActualId)
+        `))
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
@@ -342,7 +340,7 @@ export function VehicleManagement() {
           notas: formData.notas || null,
           created_by: user?.id,
           created_by_name: profile?.full_name || 'Sistema',
-          sede_id: sedeActualId,
+          sede_id: sedeActualId || sedeUsuario?.id,
         }])
 
       if (insertError) throw insertError

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -55,6 +56,7 @@ interface AbonoRow {
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 
 export function SaldosAbonosTab() {
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   // Sub-tab activo
   const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
   
@@ -80,7 +82,7 @@ export function SaldosAbonosTab() {
 
   useEffect(() => {
     cargarSaldos()
-  }, [])
+  }, [sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -117,14 +119,14 @@ export function SaldosAbonosTab() {
     setLoading(true)
     try {
       // Cargar saldos con estado del conductor
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('saldos_conductores')
         .select(`
           *,
           conductor:conductores(
             estado:conductores_estados(codigo)
           )
-        `)
+        `))
         .order('conductor_nombre')
 
       if (error) throw error
@@ -139,7 +141,7 @@ export function SaldosAbonosTab() {
       setSaldos(saldosConEstado)
 
       // Cargar cobros fraccionados pendientes (solo de saldos iniciales)
-      const { data: fraccionados, error: errorFrac } = await supabase
+      const { data: fraccionados, error: errorFrac } = await aplicarFiltroSede(supabase
         .from('cobros_fraccionados')
         .select(`
           id,
@@ -151,7 +153,7 @@ export function SaldosAbonosTab() {
           anio,
           aplicado,
           conductor:conductores(nombres, apellidos)
-        `)
+        `))
         .eq('aplicado', false)
         .order('semana')
 
@@ -169,16 +171,14 @@ export function SaldosAbonosTab() {
       setCobrosFraccionados(fraccionadosConNombre)
 
       // Cargar todos los abonos para el sub-tab "Abonos"
-      const { data: abonos, error: errorAbonos } = await supabase
+      const { data: abonos, error: errorAbonos } = await aplicarFiltroSede(supabase
         .from('abonos_conductores')
-        .select('*')
+        .select('*'))
         .order('fecha_abono', { ascending: false })
         .limit(500)
 
       if (errorAbonos) {
         console.error('Error cargando abonos:', errorAbonos)
-      } else {
-        console.log('Abonos cargados:', abonos?.length || 0, abonos)
       }
 
       // Obtener nombres de conductores desde saldos ya cargados
@@ -207,9 +207,9 @@ export function SaldosAbonosTab() {
   // Función para agregar saldo inicial a un conductor
   async function agregarSaldoInicial() {
     // Cargar conductores disponibles al momento de abrir el modal
-    const { data: todosLosConductores } = await supabase
+    const { data: todosLosConductores } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos')
+      .select('id, nombres, apellidos'))
       .order('apellidos')
 
     const conductoresParaModal = ((todosLosConductores || []) as ConductorBasico[])

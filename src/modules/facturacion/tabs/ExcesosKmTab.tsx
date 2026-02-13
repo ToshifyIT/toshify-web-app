@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -35,6 +36,7 @@ interface ExcesoConRelaciones extends ExcesoKilometraje {
 }
 
 export function ExcesosKmTab() {
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [excesos, setExcesos] = useState<ExcesoConRelaciones[]>([])
   const [periodos, setPeriodos] = useState<PeriodoFacturacion[]>([])
   const [, setConductores] = useState<any[]>([]) // Solo usamos setConductores
@@ -51,7 +53,7 @@ export function ExcesosKmTab() {
 
   useEffect(() => {
     cargarDatos()
-  }, [])
+  }, [sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -95,14 +97,14 @@ export function ExcesosKmTab() {
     setLoading(true)
     try {
       // Cargar excesos con relaciones
-      const { data: excesosData, error: excesosError } = await supabase
+      const { data: excesosData, error: excesosError } = await aplicarFiltroSede(supabase
         .from('excesos_kilometraje')
         .select(`
           *,
           conductores:conductor_id(id, nombres, apellidos, dni),
           vehiculos:vehiculo_id(id, patente),
           periodos_facturacion:periodo_id(id, semana, anio)
-        `)
+        `))
         .order('created_at', { ascending: false })
 
       if (excesosError) throw excesosError
@@ -121,9 +123,9 @@ export function ExcesosKmTab() {
       setExcesos(excesosMapeados)
 
       // Cargar períodos para selector
-      const { data: periodosData } = await supabase
+      const { data: periodosData } = await aplicarFiltroSede(supabase
         .from('periodos_facturacion')
-        .select('*')
+        .select('*'))
         .order('anio', { ascending: false })
         .order('semana', { ascending: false })
         .limit(20)
@@ -131,9 +133,9 @@ export function ExcesosKmTab() {
       setPeriodos(periodosData || [])
 
       // Cargar conductores activos para crear excesos
-      const { data: conductoresData } = await supabase
+      const { data: conductoresData } = await aplicarFiltroSede(supabase
         .from('conductores')
-        .select('id, nombres, apellidos, dni')
+        .select('id, nombres, apellidos, dni'))
         .eq('estado', 'ACTIVO')
         .order('apellidos')
 

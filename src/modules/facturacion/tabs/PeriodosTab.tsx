@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -77,13 +78,14 @@ function generarSemanasDelAnio(cantidadSemanas: number = 12): { semana: number; 
 
 export function PeriodosTab() {
   const { profile } = useAuth()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [semanas, setSemanas] = useState<SemanaFacturacion[]>([])
   const [loading, setLoading] = useState(true)
   const [generando, setGenerando] = useState<string | null>(null) // ID de semana generándose
 
   useEffect(() => {
     cargarSemanas()
-  }, [])
+  }, [sedeActualId])
 
   async function cargarSemanas() {
     setLoading(true)
@@ -92,9 +94,9 @@ export function PeriodosTab() {
       const semanasBase = generarSemanasDelAnio(4) // Solo las últimas 4 semanas para nuevas
 
       // Cargar TODOS los períodos existentes de la BD
-      const { data: periodos, error } = await supabase
+      const { data: periodos, error } = await aplicarFiltroSede(supabase
         .from('periodos_facturacion')
-        .select('*')
+        .select('*'))
         .order('anio', { ascending: false })
         .order('semana', { ascending: false })
 
@@ -266,9 +268,9 @@ export function PeriodosTab() {
       const semanaNum = getWeek(parseISO(semana.fecha_inicio), { weekStartsOn: 1 })
       const anioNum = getYear(parseISO(semana.fecha_inicio))
       
-      const { data: conductoresControl, error: errControl } = await (supabase
+      const { data: conductoresControl, error: errControl } = await aplicarFiltroSede((supabase
         .from('conductores_semana_facturacion') as any)
-        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
+        .select('numero_dni, estado, patente, modalidad, valor_alquiler'))
         .eq('semana', semanaNum)
         .eq('anio', anioNum)
 
@@ -288,9 +290,9 @@ export function PeriodosTab() {
       // 3. Obtener datos de conductores desde tabla conductores
       const dnisControl = conductoresControl.map((c: any) => c.numero_dni)
       
-      const { data: conductoresData } = await supabase
+      const { data: conductoresData } = await aplicarFiltroSede(supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit'))
         .in('numero_dni', dnisControl)
 
       // Crear mapa de conductores por DNI
@@ -877,9 +879,9 @@ export function PeriodosTab() {
       const anioSiguiente = getYear(fechaSiguiente)
 
       // Obtener conductores de la semana que se cierra
-      const { data: conductoresActuales } = await (supabase
+      const { data: conductoresActuales } = await aplicarFiltroSede((supabase
         .from('conductores_semana_facturacion') as any)
-        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
+        .select('numero_dni, estado, patente, modalidad, valor_alquiler'))
         .eq('semana', semanaActual)
         .eq('anio', anioActual)
 
@@ -956,9 +958,9 @@ export function PeriodosTab() {
     if (!semana.periodo_id) return
 
     // Cargar facturaciones del período
-    const { data: facturaciones, error } = await supabase
+    const { data: facturaciones, error } = await aplicarFiltroSede(supabase
       .from('facturacion_conductores')
-      .select('*')
+      .select('*'))
       .eq('periodo_id', semana.periodo_id)
       .order('conductor_nombre')
 

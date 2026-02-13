@@ -24,6 +24,7 @@ import {
 import { format } from 'date-fns'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 
@@ -143,6 +144,7 @@ export function FacturacionPreviewTable({
   exporting,
   onSync
 }: FacturacionPreviewTableProps) {
+  const { aplicarFiltroSede } = useSede()
   const [data, setData] = useState<FacturacionPreviewRow[]>(initialData)
   const [originalData] = useState<FacturacionPreviewRow[]>(initialData)
   const [searchTerm, setSearchTerm] = useState('')
@@ -251,9 +253,9 @@ export function FacturacionPreviewTable({
       .join('')
 
     // Traer TODOS los conductores de la BD
-    const { data: todosLosConductores } = await supabase
+    const { data: todosLosConductores } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos, numero_dni, numero_cuit, email')
+      .select('id, nombres, apellidos, numero_dni, numero_cuit, email'))
       .order('apellidos')
       .limit(2000)
 

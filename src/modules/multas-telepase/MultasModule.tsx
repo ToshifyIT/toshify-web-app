@@ -11,6 +11,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
+import { useSede } from '../../contexts/SedeContext'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import './MultasTelepase.css'
@@ -85,6 +86,7 @@ function getWeekNumber(dateStr: string): number {
 }
 
 export default function MultasModule() {
+  const { aplicarFiltroSede, sedeActualId, sedeUsuario } = useSede()
   const [loading, setLoading] = useState(true)
   const [multas, setMultas] = useState<Multa[]>([])
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
@@ -118,14 +120,14 @@ export default function MultasModule() {
   useEffect(() => {
     cargarDatos()
     fetchConductores()
-  }, [])
+  }, [sedeActualId])
 
   async function fetchConductores() {
     try {
       // Consulta de referencia: SELECT DISTINCT CONCAT(nombres, ' ', apellidos) AS conductor FROM conductores
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('conductores')
-        .select('nombres, apellidos, estado_facturacion')
+        .select('nombres, apellidos, estado_facturacion'))
         .order('nombres', { ascending: true })
         .limit(5000)
       
@@ -159,8 +161,8 @@ export default function MultasModule() {
     setLoading(true)
     try {
       const [multasRes, vehiculosRes] = await Promise.all([
-        supabase.from('multas_historico').select('*').order('fecha_infraccion', { ascending: false }),
-        supabase.from('vehiculos').select('id, patente')
+        aplicarFiltroSede(supabase.from('multas_historico').select('*')).order('fecha_infraccion', { ascending: false }),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente'))
       ])
 
       if (multasRes.error) throw multasRes.error
@@ -392,7 +394,8 @@ export default function MultasModule() {
         conductor_responsable: formValues.conductor || null,
         detalle: formValues.detalle || null,
         observaciones: formValues.detalle || null,
-        fecha_anotacion: new Date().toISOString()
+        fecha_anotacion: new Date().toISOString(),
+        sede_id: sedeActualId || sedeUsuario?.id
       })
 
       if (error) throw error

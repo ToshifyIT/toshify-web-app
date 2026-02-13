@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -45,6 +46,7 @@ interface PagoGarantiaRow {
 }
 
 export function GarantiasTab() {
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   // Sub-tab activo (Movimientos removido - no se usa)
   const [activeSubTab] = useState<'garantias' | 'movimientos'>('garantias')
   
@@ -66,7 +68,7 @@ export function GarantiasTab() {
 
   useEffect(() => {
     cargarGarantias()
-  }, [])
+  }, [sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -119,9 +121,9 @@ export function GarantiasTab() {
     setLoading(true)
     try {
       // Cargar garantías
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('garantias_conductores')
-        .select('*')
+        .select('*'))
         .order('conductor_nombre')
 
       if (error) throw error
@@ -157,9 +159,9 @@ export function GarantiasTab() {
 
   async function agregarGarantia() {
     // Cargar todos los conductores
-    const { data: conductores } = await supabase
+    const { data: conductores } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos')
+      .select('id, nombres, apellidos'))
       .order('apellidos')
 
     const conductoresDisponibles = ((conductores || []) as ConductorBasico[]).filter((c) => 

@@ -8,6 +8,7 @@ import { DataTable } from '../../components/ui/DataTable'
 import { Download, FileText, AlertCircle, CheckCircle, Eye, Edit2, X, Car, Users, DollarSign } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
+import { useSede } from '../../contexts/SedeContext'
 import { type ColumnDef } from '@tanstack/react-table'
 import * as XLSX from 'xlsx'
 import './MultasTelepase.css'
@@ -73,6 +74,7 @@ function getWeekNumber(dateStr: string): number {
 }
 
 export default function TelepaseHistoricoModule() {
+  const { aplicarFiltroSede, sedeActualId } = useSede()
   const [loading, setLoading] = useState(true)
   const [registros, setRegistros] = useState<TelepaseRegistro[]>([])
   const [selectedRegistro, setSelectedRegistro] = useState<TelepaseRegistro | null>(null)
@@ -101,14 +103,14 @@ export default function TelepaseHistoricoModule() {
   useEffect(() => {
     cargarDatos()
     fetchConductores()
-  }, [])
+  }, [sedeActualId])
 
   async function fetchConductores() {
     try {
       // Consulta de referencia: SELECT DISTINCT CONCAT(nombres, ' ', apellidos) AS conductor FROM conductores
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('conductores')
-        .select('nombres, apellidos, estado_facturacion')
+        .select('nombres, apellidos, estado_facturacion'))
         .order('nombres', { ascending: true })
         .limit(5000)
       
@@ -143,10 +145,10 @@ export default function TelepaseHistoricoModule() {
   async function cargarDatos() {
     setLoading(true)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('telepase_historico')
         .select('*')
-        .gte('fecha', '2026-01-01')
+        .gte('fecha', '2026-01-01'))
         .order('fecha', { ascending: false })
         .order('hora', { ascending: false })
 

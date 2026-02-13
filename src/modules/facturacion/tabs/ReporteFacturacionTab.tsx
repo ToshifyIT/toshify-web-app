@@ -137,7 +137,7 @@ function getSemanaArgentina(date: Date) {
 
 export function ReporteFacturacionTab() {
   const { profile } = useAuth()
-  const { sedeActualId } = useSede()
+  const { sedeActualId, sedeUsuario } = useSede()
   
   // Ref para auto-recalcular después de crear un nuevo período
   const autoRecalcularRef = useRef(false)
@@ -321,26 +321,26 @@ export function ReporteFacturacionTab() {
       // 0. Verificar si la semana ANTERIOR tiene período cerrado
       const semanaAnt = getWeek(subWeeks(semanaActual.inicio, 1), { weekStartsOn: 1 })
       const anioAnt = getYear(subWeeks(semanaActual.inicio, 1))
-      const { data: periodoAnt } = await supabase
+      let qAnt = supabase
         .from('periodos_facturacion')
         .select('id, estado')
         .eq('semana', semanaAnt)
         .eq('anio', anioAnt)
-        .eq('sede_id', sedeActualId)
-        .single()
+      if (sedeActualId) qAnt = qAnt.eq('sede_id', sedeActualId)
+      const { data: periodoAnt } = await qAnt.single()
       
       // La semana anterior está cerrada si: tiene período con estado 'cerrado', o es semana 1 (no hay anterior)
       const anteriorCerrado = semana === 1 || (periodoAnt?.estado === 'cerrado')
       setPeriodoAnteriorCerrado(anteriorCerrado)
 
       // 1. Buscar el período para esta semana
-      const { data: periodoData, error: errPeriodo } = await supabase
+      let qPeriodo = supabase
         .from('periodos_facturacion')
         .select('*')
         .eq('semana', semana)
         .eq('anio', anio)
-        .eq('sede_id', sedeActualId)
-        .single()
+      if (sedeActualId) qPeriodo = qPeriodo.eq('sede_id', sedeActualId)
+      const { data: periodoData, error: errPeriodo } = await qPeriodo.single()
 
       if (errPeriodo && errPeriodo.code !== 'PGRST116') {
         throw errPeriodo
@@ -508,12 +508,13 @@ export function ReporteFacturacionTab() {
 
       // 1. Cargar conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
       // Excluir conductores con estado 'De baja'
-      const { data: conductoresControl, error: errControl } = await (supabase
+      let qControl = (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaDelPeriodo)
         .eq('anio', anioDelPeriodo)
-        .eq('sede_id', sedeActualId)
+      if (sedeActualId) qControl = qControl.eq('sede_id', sedeActualId)
+      const { data: conductoresControl, error: errControl } = await qControl
         .not('estado', 'eq', 'De baja')
 
       if (errControl) throw errControl
@@ -1071,7 +1072,7 @@ export function ReporteFacturacionTab() {
           fecha_fin: fechaFin,
           estado: 'procesando',
           created_by_name: profile?.full_name || 'Sistema',
-          sede_id: sedeActualId,
+          sede_id: sedeActualId || sedeUsuario?.id,
         })
         .select()
         .single()
@@ -1188,12 +1189,13 @@ export function ReporteFacturacionTab() {
 
       // 3. Obtener conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
       // Excluir conductores con estado 'De baja'
-      const { data: conductoresControl } = await (supabase
+      let qRecalc = (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaNum)
         .eq('anio', anioNum)
-        .eq('sede_id', sedeActualId)
+      if (sedeActualId) qRecalc = qRecalc.eq('sede_id', sedeActualId)
+      const { data: conductoresControl } = await qRecalc
         .not('estado', 'eq', 'De baja')
 
       if (!conductoresControl || conductoresControl.length === 0) {
@@ -1907,23 +1909,25 @@ export function ReporteFacturacionTab() {
       const anioSiguiente = getYear(fechaSiguiente)
 
       // 3. Obtener conductores de la semana que se cierra
-      const { data: conductoresActuales } = await (supabase
+      let qCopy = (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
-        .eq('sede_id', sedeActualId)
+      if (sedeActualId) qCopy = qCopy.eq('sede_id', sedeActualId)
+      const { data: conductoresActuales } = await qCopy
 
       let conductoresCopiados = 0
       if (conductoresActuales && conductoresActuales.length > 0) {
         // 4. Verificar cuáles ya existen en la semana siguiente
         const dnis = conductoresActuales.map((c: any) => c.numero_dni)
-        const { data: yaExistentes } = await (supabase
+        let qExist = (supabase
           .from('conductores_semana_facturacion') as any)
           .select('numero_dni')
           .eq('semana', semanaSiguiente)
           .eq('anio', anioSiguiente)
-          .eq('sede_id', sedeActualId)
+        if (sedeActualId) qExist = qExist.eq('sede_id', sedeActualId)
+        const { data: yaExistentes } = await qExist
           .in('numero_dni', dnis)
 
         const dnisExistentes = new Set((yaExistentes || []).map((c: any) => c.numero_dni))
@@ -1939,7 +1943,7 @@ export function ReporteFacturacionTab() {
             patente: c.patente,
             modalidad: c.modalidad,
             valor_alquiler: c.valor_alquiler,
-            sede_id: sedeActualId,
+            sede_id: sedeActualId || sedeUsuario?.id,
           }))
 
           const { error: insertError } = await (supabase

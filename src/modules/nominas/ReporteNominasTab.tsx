@@ -34,6 +34,7 @@ import type {
   PenalidadNomina,
   SiniestroNomina
 } from '../../types/nominas.types'
+import { useSede } from '../../contexts/SedeContext'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, eachDayOfInterval, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -89,6 +90,8 @@ function getSemanaArgentina(date: Date) {
 const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
 export function ReporteNominasTab() {
+  const { aplicarFiltroSede, sedeActualId } = useSede()
+
   // Estados principales
   const [nominas, setNominas] = useState<NominaResumen[]>([])
   const [stats, setStats] = useState<ReporteNominasStats | null>(null)
@@ -129,10 +132,10 @@ export function ReporteNominasTab() {
     cargarConceptos()
   }, [])
 
-  // Cargar nóminas cuando cambia la semana
+  // Cargar nóminas cuando cambia la semana o sede
   useEffect(() => {
     cargarNominas()
-  }, [semanaActual])
+  }, [semanaActual, sedeActualId])
 
   async function cargarConceptos() {
     try {
@@ -156,7 +159,7 @@ export function ReporteNominasTab() {
       const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
 
       // 1. Obtener asignaciones activas con sus conductores
-      const { data: asignacionesRaw, error: errAsig } = await supabase
+      const { data: asignacionesRaw, error: errAsig } = await aplicarFiltroSede(supabase
         .from('asignaciones')
         .select(`
           id,
@@ -168,7 +171,7 @@ export function ReporteNominasTab() {
           conductores:conductor_id(id, nombres, apellidos, numero_dni, numero_cuit, email),
           vehiculos:vehiculo_id(id, patente)
         `)
-        .eq('estado', 'activa')
+        .eq('estado', 'activa'))
 
       if (errAsig) throw errAsig
       const asignaciones = asignacionesRaw as unknown as AsignacionDB[]

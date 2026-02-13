@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Check, X, Car, AlertTriangle, FileText, Users, Briefcase } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import type { SiniestroFormData, SiniestroCategoria, SiniestroEstado, VehiculoSimple, ConductorSimple } from '../../../types/siniestros.types'
 import type { VehiculoEstado } from '../../../types/database.types'
@@ -283,6 +284,7 @@ interface Step1Props {
 }
 
 function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculoChange, errors }: Step1Props) {
+  const { aplicarFiltroSede } = useSede()
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -301,7 +303,7 @@ function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculo
     setLoadingConductores(true)
     try {
       // Consultar asignaciones activas del vehículo con sus conductores
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('asignaciones')
         .select(`
           id,
@@ -316,7 +318,7 @@ function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculo
           )
         `)
         .eq('vehiculo_id', vehiculoId)
-        .eq('estado', 'activa')
+        .eq('estado', 'activa'))
 
       if (error) throw error
 
@@ -792,6 +794,7 @@ interface AsignacionActiva {
 }
 
 function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
+  const { aplicarFiltroSede } = useSede()
   const [asignacionActiva, setAsignacionActiva] = useState<AsignacionActiva | null>(null)
   const [loadingAsignacion, setLoadingAsignacion] = useState(false)
   const [finalizarAsignacion, setFinalizarAsignacion] = useState(false)
@@ -822,7 +825,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
     if (!formData.vehiculo_id) return
     setLoadingAsignacion(true)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await aplicarFiltroSede(supabase
         .from('asignaciones')
         .select(`
           id,
@@ -836,7 +839,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
           )
         `)
         .eq('vehiculo_id', formData.vehiculo_id)
-        .eq('estado', 'activa')
+        .eq('estado', 'activa'))
         .single()
 
       if (error && error.code !== 'PGRST116') throw error

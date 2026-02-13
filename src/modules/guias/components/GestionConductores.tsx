@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../../lib/supabase";
 import { format } from "date-fns";
 import Swal from "sweetalert2";
+import { useSede } from '../../../contexts/SedeContext';
 import "./GestionConductores.css";
 
 // Interfaces
@@ -70,6 +71,8 @@ interface Props {
 const fmt = (n: number) => `$ ${n.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
 
 const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
+  const { aplicarFiltroSede, sedeActualId } = useSede();
+
   // State for search
   const [allDrivers, setAllDrivers] = useState<SearchableDriver[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,7 +99,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
     if (isOpen) {
       loadInitialData();
     }
-  }, [isOpen]);
+  }, [isOpen, sedeActualId]);
 
   const handleRefresh = () => {
     loadInitialData();
@@ -131,7 +134,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
       }
 
       // Fetch Drivers with Guide
-      const { data: drivers, error } = await supabase
+      const { data: drivers, error } = await aplicarFiltroSede(supabase
         .from('conductores')
         .select(`
           id, 
@@ -148,7 +151,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
             )
           )
         `)
-        .not('id_guia', 'is', null) // Only those with guide
+        .not('id_guia', 'is', null))
         .order('apellidos');
 
       if (error) throw error;

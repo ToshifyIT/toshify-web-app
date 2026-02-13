@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -41,6 +42,7 @@ interface ConductorConDeuda {
 }
 
 export function BloqueosConductoresTab() {
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [conductores, setConductores] = useState<ConductorConDeuda[]>([])
   const [loading, setLoading] = useState(true)
   const [montoLimite, setMontoLimite] = useState(500000)
@@ -60,7 +62,7 @@ export function BloqueosConductoresTab() {
     if (montoLimite > 0) {
       cargarConductores()
     }
-  }, [montoLimite, diasMoraLimite])
+  }, [montoLimite, diasMoraLimite, sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -98,20 +100,20 @@ export function BloqueosConductoresTab() {
     setLoading(true)
     try {
       // Cargar conductores activos con sus saldos
-      const { data: conductoresData, error } = await supabase
+      const { data: conductoresData, error } = await aplicarFiltroSede(supabase
         .from('conductores')
         .select(`
           id, nombres, apellidos, dni, cuit, telefono, email, estado,
           bloqueado, motivo_bloqueo, fecha_bloqueo
-        `)
+        `))
         .in('estado', ['ACTIVO', 'activo'])
 
       if (error) throw error
 
       // Cargar saldos
-      const { data: saldosData } = await supabase
+      const { data: saldosData } = await aplicarFiltroSede(supabase
         .from('saldos_conductores')
-        .select('conductor_id, saldo_actual, dias_mora, monto_mora_acumulada')
+        .select('conductor_id, saldo_actual, dias_mora, monto_mora_acumulada'))
 
       // Cargar asignaciones activas a través de asignaciones_conductores
       const { data: asignacionesData } = await supabase

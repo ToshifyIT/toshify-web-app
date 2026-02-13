@@ -12,6 +12,7 @@
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, DollarSign, Eye } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import { showSuccess } from '../../../utils/toast'
 import { formatCurrency } from '../../../types/facturacion.types'
 import Swal from 'sweetalert2'
@@ -105,6 +106,7 @@ interface CobrosFraccionadosTabProps {
 
 export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabProps) {
   void periodoActual
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [cobros, setCobros] = useState<PenalidadFraccionada[]>([])
   const [loading, setLoading] = useState(true)
   const [expandidos, setExpandidos] = useState<Record<string, boolean>>({})
@@ -112,13 +114,13 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
 
   useEffect(() => {
     cargarCobrosFraccionados()
-  }, [])
+  }, [sedeActualId])
 
   const cargarCobrosFraccionados = async () => {
     setLoading(true)
     try {
       // 1. Obtener penalidades fraccionadas con sus cuotas
-      const { data: penalidades, error: penError } = await supabase
+      const { data: penalidades, error: penError } = await aplicarFiltroSede(supabase
         .from('penalidades')
         .select(`
           id,
@@ -131,7 +133,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           fecha,
           observaciones,
           conductor:conductores(id, nombres, apellidos)
-        `)
+        `))
         .eq('fraccionado', true)
         .order('fecha', { ascending: false })
 
@@ -146,7 +148,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
       if (cuotasError) throw cuotasError
 
       // 2. Obtener cobros fraccionados de saldos iniciales
-      const { data: cobrosSaldos, error: saldosError } = await supabase
+      const { data: cobrosSaldos, error: saldosError } = await aplicarFiltroSede(supabase
         .from('cobros_fraccionados')
         .select(`
           id,
@@ -162,15 +164,15 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
           total_cuotas,
           created_at,
           conductor:conductores(id, nombres, apellidos)
-        `)
+        `))
         .order('created_at', { ascending: false })
 
       if (saldosError) throw saldosError
 
       // 3. Cargar pagos registrados
-      const { data: pagos } = await (supabase
+      const { data: pagos } = await aplicarFiltroSede((supabase
         .from('pagos_conductores') as any)
-        .select('*')
+        .select('*'))
         .in('tipo_cobro', ['cobro_fraccionado', 'penalidad_cuota'])
         .order('fecha_pago', { ascending: false })
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useSede } from '../../contexts/SedeContext'
 import { TimeInput24h } from '../../components/ui/TimeInput24h'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import Swal from 'sweetalert2'
@@ -49,6 +50,7 @@ import { SiniestroSeguimiento } from './components/SiniestroSeguimiento'
 export function SiniestrosModule() {
   const { user, profile } = useAuth()
   const { canCreateInSubmenu, canEditInSubmenu, isAdmin } = usePermissions()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
 
   // Permisos específicos para el submenú de siniestros
   // Admin siempre tiene acceso completo
@@ -99,7 +101,7 @@ export function SiniestrosModule() {
   // Cargar datos iniciales
   useEffect(() => {
     cargarDatos()
-  }, [])
+  }, [sedeActualId])
 
   async function cargarDatos() {
     setLoading(true)
@@ -123,11 +125,11 @@ export function SiniestrosModule() {
         supabase.from('siniestros_categorias' as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('siniestros_estados' as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('seguros' as any).select('*').eq('is_active', true).order('nombre'),
-        supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo')).order('patente'),
         estadoActivoId
-          ? supabase.from('conductores').select('id, nombres, apellidos').eq('estado_id', estadoActivoId).order('apellidos')
-          : supabase.from('conductores').select('id, nombres, apellidos').order('apellidos'),
-        supabase.from('v_siniestros_completos' as any).select('*').order('fecha_siniestro', { ascending: false }),
+          ? aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos').eq('estado_id', estadoActivoId)).order('apellidos')
+          : aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
+        aplicarFiltroSede(supabase.from('v_siniestros_completos' as any).select('*')).order('fecha_siniestro', { ascending: false }),
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').eq('activo', true).order('descripcion')
       ])
 
@@ -618,6 +620,7 @@ export function SiniestrosModule() {
       if (modalMode === 'create') {
         const { error } = await (supabase.from('siniestros' as any) as any).insert({
           ...dataToSave,
+          sede_id: sedeActualId || sedeUsuario?.id,
           created_by_name: profile?.full_name || 'Sistema'
         })
         if (error) throw error

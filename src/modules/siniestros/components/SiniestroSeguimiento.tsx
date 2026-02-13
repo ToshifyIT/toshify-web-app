@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import { Plus, Clock, FileText, DollarSign, AlertTriangle, X, ExternalLink } from 'lucide-react'
@@ -82,6 +83,7 @@ function getWeekNumber(dateStr: string): number {
 
 export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimientoProps) {
   const { user, profile } = useAuth()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const navigate = useNavigate()
   const [seguimientos, setSeguimientos] = useState<SiniestroSeguimientoConEstados[]>([])
   const [loading, setLoading] = useState(true)
@@ -156,9 +158,9 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
       }
 
       // Cargar vehiculos
-      const { data: vehData } = await supabase
+      const { data: vehData } = await aplicarFiltroSede(supabase
         .from('vehiculos')
-        .select('id, patente, marca, modelo')
+        .select('id, patente, marca, modelo'))
         .order('patente')
 
       let vehiculosList: VehiculoSimple[] = (vehData || []) as VehiculoSimple[]
@@ -173,9 +175,9 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
       setVehiculos(vehiculosList)
 
       // Cargar conductores
-      const { data: condData } = await supabase
+      const { data: condData } = await aplicarFiltroSede(supabase
         .from('conductores')
-        .select('id, nombres, apellidos')
+        .select('id, nombres, apellidos'))
         .order('apellidos')
 
       let conductoresFormatted: ConductorSimple[] = (condData || []).map((c: any) => ({
@@ -316,6 +318,7 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
           vehiculo_id: incidenciaForm.vehiculo_id || null,
           conductor_id: incidenciaForm.conductor_id,
           estado_id: incidenciaForm.estado_id,
+          sede_id: sedeActualId || sedeUsuario?.id,
           semana: semana,
           fecha: incidenciaForm.fecha,
           turno: incidenciaForm.turno || null,

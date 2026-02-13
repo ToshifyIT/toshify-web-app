@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { X, ChevronRight, ChevronLeft, Check, Car } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import type {
@@ -43,6 +44,7 @@ interface Props {
 export function ProgramacionWizard({ onClose, onSuccess, initialData, editingData }: Props) {
   const isEditing = !!editingData
   const { user, profile } = useAuth()
+  const { aplicarFiltroSede, sedeActualId, sedeUsuario } = useSede()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -126,8 +128,8 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
     setLoading(true)
     try {
       const [vehiculosRes, conductoresRes] = await Promise.all([
-        supabase.from('vehiculos').select('id, patente, marca, modelo, color').order('patente'),
-        supabase.from('conductores').select('id, nombres, apellidos, numero_dni').order('apellidos')
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, color')).order('patente'),
+        aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos, numero_dni')).order('apellidos')
       ])
 
       setVehiculos(vehiculosRes.data || [])
@@ -237,7 +239,8 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
           ...dataToSave,
           estado: 'por_agendar',
           created_by: user?.id,
-          created_by_name: profile?.full_name || 'Sistema'
+          created_by_name: profile?.full_name || 'Sistema',
+          sede_id: sedeActualId || sedeUsuario?.id
         })
 
         if (error) throw error

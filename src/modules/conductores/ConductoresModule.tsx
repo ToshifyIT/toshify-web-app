@@ -82,7 +82,7 @@ const getEstadoConductorBadgeStyle = (estado: { codigo?: string } | null | undef
 
 
 export function ConductoresModule() {
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const [conductores, setConductores] = useState<ConductorWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -200,7 +200,7 @@ export function ConductoresModule() {
 
   // ✅ OPTIMIZADO: Carga inicial unificada en paralelo (recarga al cambiar sede)
   useEffect(() => {
-    if (sedeActualId) loadAllData();
+    loadAllData();
   }, [sedeActualId]);
 
   // Cerrar dropdown de filtro al hacer click fuera
@@ -451,7 +451,7 @@ export function ConductoresModule() {
         estadosLicenciaRes,
         tiposLicenciaRes,
       ] = await Promise.all([
-        supabase
+        aplicarFiltroSede(supabase
           .from("conductores")
           .select(`
             id,
@@ -473,20 +473,21 @@ export function ConductoresModule() {
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
             )
-          `)
-          .eq("sede_id", sedeActualId)
+          `))
           .order("created_at", { ascending: false }),
-        supabase
-          .from("asignaciones_conductores")
-          .select(`
-            conductor_id,
-            asignaciones!inner (
-              estado,
-              vehiculos (id, patente, marca, modelo)
-            )
-          `)
-          .eq("asignaciones.sede_id", sedeActualId)
-          .in("asignaciones.estado", ["activo", "activa"]),
+        (() => {
+          const q = supabase
+            .from("asignaciones_conductores")
+            .select(`
+              conductor_id,
+              asignaciones!inner (
+                estado,
+                vehiculos (id, patente, marca, modelo)
+              )
+            `)
+          if (sedeActualId) q.eq("asignaciones.sede_id", sedeActualId)
+          return q.in("asignaciones.estado", ["activo", "activa"])
+        })(),
         supabase.from("estados_civiles").select("id, codigo, descripcion").order("descripcion"),
         supabase.from("nacionalidades").select("id, codigo, descripcion").order("descripcion"),
         supabase.from("licencias_categorias").select("id, codigo, descripcion").order("descripcion"),
@@ -704,7 +705,7 @@ export function ConductoresModule() {
     try {
       // ✅ OPTIMIZADO: Query paralela con campos mínimos
       const [conductoresRes, asignacionesRes] = await Promise.all([
-        supabase
+        aplicarFiltroSede(supabase
           .from("conductores")
           .select(`
             id,
@@ -723,20 +724,21 @@ export function ConductoresModule() {
             conductores_licencias_categorias (
               licencias_categorias (id, codigo, descripcion)
             )
-          `)
-          .eq("sede_id", sedeActualId)
+          `))
           .order("created_at", { ascending: false }),
-        supabase
-          .from("asignaciones_conductores")
-          .select(`
-            conductor_id,
-            asignaciones!inner (
-              estado,
-              vehiculos (id, patente, marca, modelo)
-            )
-          `)
-          .eq("asignaciones.sede_id", sedeActualId)
-          .in("asignaciones.estado", ["activo", "activa"])
+        (() => {
+          const q = supabase
+            .from("asignaciones_conductores")
+            .select(`
+              conductor_id,
+              asignaciones!inner (
+                estado,
+                vehiculos (id, patente, marca, modelo)
+              )
+            `)
+          if (sedeActualId) q.eq("asignaciones.sede_id", sedeActualId)
+          return q.in("asignaciones.estado", ["activo", "activa"])
+        })()
       ]);
 
       if (conductoresRes.error) throw conductoresRes.error;
@@ -849,7 +851,7 @@ export function ConductoresModule() {
             numero_ibutton: formData.numero_ibutton || null,
             created_by: user?.id,
             created_by_name: profile?.full_name || "Sistema",
-            sede_id: sedeActualId,
+            sede_id: sedeActualId || sedeUsuario?.id,
           },
         ])
         .select();

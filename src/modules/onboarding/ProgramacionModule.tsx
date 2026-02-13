@@ -14,6 +14,7 @@ import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { supabase } from '../../lib/supabase'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSede } from '../../contexts/SedeContext'
 
 import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
 import type { ProgramacionOnboardingCompleta } from '../../types/onboarding.types'
@@ -130,6 +131,7 @@ ${turnoEmoji}${turnoEmoji ? ' ' : ''}Turno: ${turnoLabel}
 export function ProgramacionModule() {
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab } = usePermissions()
   const { user, profile } = useAuth()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const canCreate = canCreateInMenu('programacion-entregas')
   const canEdit = canEditInMenu('programacion-entregas')
   const canDelete = canDeleteInMenu('programacion-entregas')
@@ -253,11 +255,11 @@ export function ProgramacionModule() {
   const loadProgramaciones = async () => {
     setLoading(true)
     try {
-      const { data, error: queryError } = await supabase
+      const { data, error: queryError } = await aplicarFiltroSede(supabase
         .from('v_programaciones_onboarding')
         .select('*')
         .neq('estado', 'completado') // Excluir las completadas (ya enviadas)
-        .or('eliminado.is.null,eliminado.eq.false') // Excluir las eliminadas
+        .or('eliminado.is.null,eliminado.eq.false')) // Excluir las eliminadas
         .order('created_at', { ascending: false })
 
       if (queryError) throw queryError
@@ -291,17 +293,17 @@ export function ProgramacionModule() {
   useEffect(() => {
     loadProgramaciones()
     loadEspecialistas()
-  }, [])
+  }, [sedeActualId])
 
   // Cargar histórico de programaciones (completadas)
   const loadHistorico = async () => {
     setLoadingHistorico(true)
     try {
-      const { data, error: queryError } = await supabase
+      const { data, error: queryError } = await aplicarFiltroSede(supabase
         .from('v_programaciones_onboarding')
         .select('*')
         .eq('estado', 'completado')
-        .or('eliminado.is.null,eliminado.eq.false')
+        .or('eliminado.is.null,eliminado.eq.false'))
         .order('created_at', { ascending: false })
         .limit(500)
 
@@ -314,12 +316,12 @@ export function ProgramacionModule() {
     }
   }
 
-  // Cargar histórico cuando se cambia al tab
+  // Cargar histórico cuando se cambia al tab o sede
   useEffect(() => {
-    if (activeTab === 'historico' && programacionesHistorico.length === 0) {
+    if (activeTab === 'historico') {
       loadHistorico()
     }
-  }, [activeTab])
+  }, [activeTab, sedeActualId])
 
   // Handlers
   const handleCreate = () => {
@@ -377,17 +379,17 @@ export function ProgramacionModule() {
     try {
       // Obtener vehiculos que no estan en reparacion/mantenimiento
       const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO', 'TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO']
-      const { data: vehiculosData } = await supabase
+      const { data: vehiculosData } = await aplicarFiltroSede(supabase
         .from('vehiculos')
-        .select('id, patente, marca, modelo, vehiculos_estados(codigo)')
+        .select('id, patente, marca, modelo, vehiculos_estados(codigo)'))
         .order('patente')
 
       // Obtener vehiculos ya programados (excepto el actual)
-      const { data: programacionesData } = await supabase
+      const { data: programacionesData } = await aplicarFiltroSede(supabase
         .from('programaciones_onboarding')
         .select('vehiculo_entregar_id')
         .in('estado', ['por_agendar', 'agendado', 'en_curso'])
-        .neq('id', prog.id)
+        .neq('id', prog.id))
 
       const vehiculosProgramados = new Set((programacionesData || []).map((p: any) => p.vehiculo_entregar_id))
 
@@ -410,9 +412,9 @@ export function ProgramacionModule() {
 
     // Cargar TODOS los conductores (sin filtro de programados para simplicidad)
     try {
-      const { data: conductoresData, error: conductoresError } = await supabase
+      const { data: conductoresData, error: conductoresError } = await aplicarFiltroSede(supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni')
+        .select('id, nombres, apellidos, numero_dni'))
         .order('apellidos')
         .limit(1000)
 
@@ -653,6 +655,7 @@ export function ProgramacionModule() {
           observaciones: prog.observaciones || null,
           created_by: user?.id || null,
           created_by_name: profile?.full_name || 'Sistema',
+          sede_id: sedeActualId || sedeUsuario?.id,
         })
 
       if (devError) throw devError
@@ -913,7 +916,8 @@ export function ProgramacionModule() {
           estado: 'programado',
           notas: notasBase,
           created_by: user?.id || null,
-          created_by_name: profile?.full_name || 'Sistema'
+          created_by_name: profile?.full_name || 'Sistema',
+          sede_id: sedeActualId || sedeUsuario?.id,
         })
         .select()
         .single()

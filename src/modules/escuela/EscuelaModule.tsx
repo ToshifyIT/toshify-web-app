@@ -11,6 +11,7 @@ import {
 import { format, addHours, previousSunday, subWeeks, nextSunday, addWeeks, startOfDay, endOfDay } from 'date-fns';
 import { DataTable } from '../../components/ui/DataTable';
 import { type ColumnDef } from '@tanstack/react-table';
+import { useSede } from '../../contexts/SedeContext';
 import { DateFilterPill } from './DateFilterPill';
 import './EscuelaModule.css';
 
@@ -33,6 +34,7 @@ interface ConductorEscuelaRow {
 }
 
 export function EscuelaModule() {
+  const { aplicarFiltroSede, sedeActualId } = useSede();
   const [conductores, setConductores] = useState<ConductorEscuelaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [globalSearch, setGlobalSearch] = useState('');
@@ -49,13 +51,13 @@ export function EscuelaModule() {
 
   useEffect(() => {
     loadEscuelaData();
-  }, []);
+  }, [sedeActualId]);
 
   const loadEscuelaData = async () => {
     setLoading(true);
     try {
       // 1. Fetch drivers with school date
-      const { data: drivers, error } = await supabase
+      const { data: drivers, error } = await aplicarFiltroSede(supabase
         .from('conductores')
         .select(`
           id,
@@ -67,7 +69,7 @@ export function EscuelaModule() {
             descripcion
           )
         `)
-        .not('fecha_escuela', 'is', null)
+        .not('fecha_escuela', 'is', null))
         .order('fecha_escuela', { ascending: false });
 
       if (error) throw error;

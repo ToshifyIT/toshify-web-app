@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 
 interface Incidencia {
   id: string;
@@ -13,6 +14,7 @@ interface IncidentsSubRowProps {
 }
 
 export function IncidentsSubRow({ driverId }: IncidentsSubRowProps) {
+  const { aplicarFiltroSede } = useSede()
   const [incidents, setIncidents] = useState<Incidencia[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -20,10 +22,10 @@ export function IncidentsSubRow({ driverId }: IncidentsSubRowProps) {
     async function loadIncidents() {
       try {
         setLoading(true)
-        const { data, error } = await supabase
+        const { data, error } = await aplicarFiltroSede(supabase
           .from('incidencias')
           .select('*')
-          .eq('conductor_id', driverId)
+          .eq('conductor_id', driverId))
           .order('fecha', { ascending: false })
 
         if (error) throw error

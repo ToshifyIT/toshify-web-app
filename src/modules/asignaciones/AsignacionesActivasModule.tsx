@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Eye, User, Car, Calendar, Clock, Info, ClipboardList, TrendingUp, X, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useSede } from '../../contexts/SedeContext'
 import { type ColumnDef } from '@tanstack/react-table'
 import Swal from 'sweetalert2'
 import { DataTable } from '../../components/ui/DataTable'
@@ -53,6 +54,7 @@ const ESTADOS_EXCLUIDOS = [
 ]
 
 export function AsignacionesActivasModule() {
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [asignaciones, setAsignaciones] = useState<AsignacionActiva[]>([])
   const [totalVehiculosFlota, setTotalVehiculosFlota] = useState(0)
   const [vehiculosOperativos, setVehiculosOperativos] = useState(0) // PKG_ON_BASE + EN_USO
@@ -68,7 +70,7 @@ export function AsignacionesActivasModule() {
 
   useEffect(() => {
     loadAllData()
-  }, [])
+  }, [sedeActualId])
 
   // ✅ OPTIMIZADO: Una sola función que carga todo en paralelo
   const loadAllData = async () => {
@@ -77,7 +79,7 @@ export function AsignacionesActivasModule() {
       // Ejecutar ambas queries en paralelo con Promise.all
       const [asignacionesResult, vehiculosResult] = await Promise.all([
         // Query 1: Asignaciones activas con relaciones
-        supabase
+        aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
             id,
@@ -118,14 +120,14 @@ export function AsignacionesActivasModule() {
                 telefono_contacto
               )
             )
-          `)
+          `))
           .in('estado', ['activo', 'activa'])
           .order('created_at', { ascending: false }),
 
         // Query 2: Vehículos con estado y datos completos para PKG_ON_BASE
-        supabase
+        aplicarFiltroSede(supabase
           .from('vehiculos')
-          .select('id, patente, marca, modelo, anio, estado_id, vehiculos_estados(codigo, descripcion), vehiculos_tipos(descripcion)')
+          .select('id, patente, marca, modelo, anio, estado_id, vehiculos_estados(codigo, descripcion), vehiculos_tipos(descripcion)'))
       ])
 
       // Procesar asignaciones

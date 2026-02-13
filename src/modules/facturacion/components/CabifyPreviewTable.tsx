@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 
@@ -67,6 +68,7 @@ export function CabifyPreviewTable({
   exporting,
   onSync
 }: CabifyPreviewTableProps) {
+  const { aplicarFiltroSede } = useSede()
   const [data, setData] = useState<CabifyPreviewRow[]>(initialData)
   const [originalData] = useState<CabifyPreviewRow[]>(initialData)
   const [searchTerm, setSearchTerm] = useState('')
@@ -153,16 +155,16 @@ export function CabifyPreviewTable({
   // Agregar conductor manualmente
   const agregarConductor = useCallback(async () => {
     // Traer todos los conductores de la BD
-    const { data: todosLosCondutores } = await supabase
+    const { data: todosLosCondutores } = await aplicarFiltroSede(supabase
       .from('conductores')
-      .select('id, nombres, apellidos, numero_dni, email')
+      .select('id, nombres, apellidos, numero_dni, email'))
       .order('apellidos')
 
     // Traer asignaciones activas para obtener patente
-    const { data: asignacionesActivas } = await supabase
+    const { data: asignacionesActivas } = await aplicarFiltroSede(supabase
       .from('asignaciones')
       .select('conductor_id, vehiculos:vehiculo_id(patente)')
-      .eq('estado', 'activa')
+      .eq('estado', 'activa'))
 
     const patenteMap = new Map<string, string>()
     for (const a of (asignacionesActivas || []) as unknown as { conductor_id: string; vehiculos: { patente: string } | null }[]) {

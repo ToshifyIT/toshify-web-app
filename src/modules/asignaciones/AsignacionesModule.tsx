@@ -116,7 +116,7 @@ function getLocalDateStr(isoString: string): string {
 export function AsignacionesModule() {
   const { canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
-  const { sedeActualId } = useSede()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
   
@@ -360,7 +360,7 @@ export function AsignacionesModule() {
 
       const [asignacionesRes, vehiculosRes, conductoresRes, programacionesRes, devolucionesRes] = await Promise.all([
         // Asignaciones: activas/programadas + finalizadas recientes (máx 500)
-        supabase
+        aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
             id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at,
@@ -369,22 +369,19 @@ export function AsignacionesModule() {
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
               conductores (nombres, apellidos, numero_licencia)
             )
-          `)
-          .eq('sede_id', sedeActualId)
+          `))
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
           .order('created_at', { ascending: false })
           .limit(500),
         // Vehículos con estado - solo activos
-        supabase
+        aplicarFiltroSede(supabase
           .from('vehiculos')
-          .select('id, estado_id, vehiculos_estados(codigo)')
-          .eq('sede_id', sedeActualId)
+          .select('id, estado_id, vehiculos_estados(codigo)'))
           .limit(1000),
         // Conductores con estado - solo activos
-        supabase
+        aplicarFiltroSede(supabase
           .from('conductores')
-          .select('id, conductores_estados(codigo)')
-          .eq('sede_id', sedeActualId)
+          .select('id, conductores_estados(codigo)'))
           .limit(2000),
         // Programaciones: motivo + observaciones por asignacion_id
         supabase
@@ -481,7 +478,7 @@ export function AsignacionesModule() {
       const fechaLimiteStr = fechaLimite.toISOString()
 
       const [asigRes, progRes, devRes] = await Promise.all([
-        supabase
+        aplicarFiltroSede(supabase
           .from('asignaciones')
           .select(`
             id, codigo, vehiculo_id, horario, fecha_programada, fecha_inicio, fecha_fin, estado, created_at,
@@ -490,8 +487,7 @@ export function AsignacionesModule() {
               id, conductor_id, estado, horario, confirmado, fecha_confirmacion, documento,
               conductores (nombres, apellidos, numero_licencia)
             )
-          `)
-          .eq('sede_id', sedeActualId)
+          `))
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
           .order('created_at', { ascending: false })
           .limit(500),
@@ -541,7 +537,7 @@ export function AsignacionesModule() {
 
   // ✅ OPTIMIZADO: Carga unificada en paralelo (recarga al cambiar sede)
   useEffect(() => {
-    if (sedeActualId) loadAllData()
+    loadAllData()
   }, [sedeActualId])
 
   // Programacion de entregas movida a /onboarding/programacion
@@ -1612,8 +1608,8 @@ export function AsignacionesModule() {
     
     // Cargar vehículos, conductores disponibles Y conductores de esta asignación
     const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all([
-      supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)').eq('sede_id', sedeActualId).order('patente'),
-      supabase.from('conductores').select('id, nombres, apellidos').eq('sede_id', sedeActualId).order('apellidos'),
+      aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)')).order('patente'),
+      aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
       supabase.from('asignaciones_conductores').select('conductor_id, horario, estado, documento').eq('asignacion_id', asignacion.id)
     ])
     

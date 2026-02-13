@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import {
@@ -104,6 +105,7 @@ interface ProductoLoteSalida {
 // COMPONENTE PRINCIPAL
 // =====================================================
 export function MovimientosModule() {
+  const { aplicarFiltroSede, sedeActualId } = useSede()
   const { canCreateInSubmenu } = usePermissions()
 
   // Permisos específicos para el submenú de movimientos
@@ -157,7 +159,7 @@ export function MovimientosModule() {
   // =====================================================
   useEffect(() => {
     loadData()
-  }, [])
+  }, [sedeActualId])
 
   useEffect(() => {
     // Cargar stock por proveedor cuando se selecciona producto (solo para salida y asignación)
@@ -231,9 +233,9 @@ export function MovimientosModule() {
           .select('id, razon_social, numero_documento')
           .eq('activo', true)
           .order('razon_social'),
-        supabase
+        aplicarFiltroSede(supabase
           .from('vehiculos')
-          .select('id, patente, marca, modelo')
+          .select('id, patente, marca, modelo'))
           .order('patente'),
         // Cargar stock disponible por producto
         supabase

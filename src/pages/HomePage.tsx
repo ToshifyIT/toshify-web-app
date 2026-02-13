@@ -5,7 +5,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check
+  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -204,7 +204,7 @@ interface SubmenuWithHierarchy {
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
-  const { sedes, sedeActual, cambiarSede, puedeVerTodasSedes } = useSede()
+  const { sedes, sedeActual, verTodas, cambiarSede, puedeVerTodasSedes } = useSede()
   const navigate = useNavigate()
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
@@ -1427,19 +1427,25 @@ export function HomePage() {
                       transition: 'all 0.15s',
                     }}
                   >
-                    <Building2 size={16} style={{ color: 'var(--color-primary)' }} />
-                    <span>{sedeActual?.nombre || 'Sin sede'}</span>
-                    <span style={{
-                      fontSize: '10px',
-                      padding: '1px 6px',
-                      borderRadius: '4px',
-                      background: 'var(--color-primary)',
-                      color: '#fff',
-                      fontWeight: 700,
-                      letterSpacing: '0.5px',
-                    }}>
-                      {sedeActual?.codigo || ''}
-                    </span>
+                    {verTodas ? (
+                      <Globe size={16} style={{ color: 'var(--color-primary)' }} />
+                    ) : (
+                      <Building2 size={16} style={{ color: 'var(--color-primary)' }} />
+                    )}
+                    <span>{verTodas ? 'Todas las sedes' : (sedeActual?.nombre || 'Sin sede')}</span>
+                    {!verTodas && sedeActual?.codigo && (
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        background: 'var(--color-primary)',
+                        color: '#fff',
+                        fontWeight: 700,
+                        letterSpacing: '0.5px',
+                      }}>
+                        {sedeActual.codigo}
+                      </span>
+                    )}
                     {puedeVerTodasSedes && sedes.length > 1 && (
                       <ChevronRight size={14} style={{
                         color: 'var(--text-secondary)',
@@ -1479,6 +1485,65 @@ export function HomePage() {
                         }}>
                           Cambiar Sede
                         </div>
+                        {/* Opción: Todas las sedes */}
+                        <button
+                          onClick={() => { cambiarSede('todas'); setSedeDropdownOpen(false) }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            width: '100%',
+                            padding: '10px 12px',
+                            border: 'none',
+                            borderRadius: '8px',
+                            background: verTodas ? 'var(--bg-secondary)' : 'transparent',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'background 0.1s',
+                          }}
+                          onMouseEnter={(e) => { if (!verTodas) e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                          onMouseLeave={(e) => { if (!verTodas) e.currentTarget.style.background = 'transparent' }}
+                        >
+                          <div style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: verTodas ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                            color: verTodas ? '#fff' : 'var(--text-secondary)',
+                            flexShrink: 0,
+                          }}>
+                            <Globe size={16} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{
+                              fontSize: '13px',
+                              fontWeight: 600,
+                              color: 'var(--text-primary)',
+                            }}>
+                              Todas las sedes
+                            </div>
+                            <div style={{
+                              fontSize: '11px',
+                              color: 'var(--text-secondary)',
+                            }}>
+                              Ver datos de todas las sedes
+                            </div>
+                          </div>
+                          {verTodas && (
+                            <div style={{ color: 'var(--color-primary)' }}>
+                              <Check size={18} />
+                            </div>
+                          )}
+                        </button>
+                        {/* Separador */}
+                        <div style={{
+                          height: '1px',
+                          background: 'var(--border-primary)',
+                          margin: '4px 12px',
+                        }} />
                         {sedes.map(s => (
                           <button
                             key={s.id}
@@ -1491,13 +1556,13 @@ export function HomePage() {
                               padding: '10px 12px',
                               border: 'none',
                               borderRadius: '8px',
-                              background: sedeActual?.id === s.id ? 'var(--bg-secondary)' : 'transparent',
+                              background: !verTodas && sedeActual?.id === s.id ? 'var(--bg-secondary)' : 'transparent',
                               cursor: 'pointer',
                               textAlign: 'left',
                               transition: 'background 0.1s',
                             }}
-                            onMouseEnter={(e) => { if (sedeActual?.id !== s.id) e.currentTarget.style.background = 'var(--bg-secondary)' }}
-                            onMouseLeave={(e) => { if (sedeActual?.id !== s.id) e.currentTarget.style.background = 'transparent' }}
+                            onMouseEnter={(e) => { if (verTodas || sedeActual?.id !== s.id) e.currentTarget.style.background = 'var(--bg-secondary)' }}
+                            onMouseLeave={(e) => { if (verTodas || sedeActual?.id !== s.id) e.currentTarget.style.background = 'transparent' }}
                           >
                             <div style={{
                               width: '32px',
@@ -1506,8 +1571,8 @@ export function HomePage() {
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              background: sedeActual?.id === s.id ? 'var(--color-primary)' : 'var(--bg-secondary)',
-                              color: sedeActual?.id === s.id ? '#fff' : 'var(--text-secondary)',
+                              background: !verTodas && sedeActual?.id === s.id ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                              color: !verTodas && sedeActual?.id === s.id ? '#fff' : 'var(--text-secondary)',
                               flexShrink: 0,
                             }}>
                               <Building2 size={16} />
@@ -1542,7 +1607,7 @@ export function HomePage() {
                                 )}
                               </div>
                             </div>
-                            {sedeActual?.id === s.id && (
+                            {!verTodas && sedeActual?.id === s.id && (
                               <div style={{ color: 'var(--color-primary)' }}>
                                 <Check size={18} />
                               </div>
