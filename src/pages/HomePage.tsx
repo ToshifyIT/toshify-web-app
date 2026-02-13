@@ -5,7 +5,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe
+  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -60,6 +60,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'sedes': Building2,
   'seguimiento-conductores': Compass,
   'escuela-conductores': GraduationCap,
+  'rango-seguimiento-guias': Target,
 }
 
 // Función para obtener icono de un menú
@@ -188,6 +189,7 @@ import { ProfilePage } from './profile/ProfilePage'
 import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
 import { MultasPage } from './multas-telepase/MultasPage'
 import { ConceptosFacturacionPage } from './parametros/ConceptosFacturacionPage'
+import { RangoSeguimientoPage } from './parametros/RangoSeguimientoPage'
 import { GuiasPage } from './GuiasPage'
 import { EscuelaPage } from './EscuelaPage'
 import { fetchGuias, distributeDriversService, type Guia } from '../modules/guias/guiasService'
@@ -1779,6 +1781,11 @@ export function HomePage() {
               <Route path="/conceptos-facturacion" element={
                 <ProtectedRoute submenuName="conceptos-facturacion" action="view">
                   <ConceptosFacturacionPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/rango-seguimiento-guias" element={
+                <ProtectedRoute submenuName="rango-seguimiento-guias" action="view">
+                  <RangoSeguimientoPage />
                 </ProtectedRoute>
               } />
 
