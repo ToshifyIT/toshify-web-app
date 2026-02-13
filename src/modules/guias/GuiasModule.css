@@ -100,59 +100,145 @@
   }
 }
 
-@media (max-width: 768px) {
-  .guias-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 480px) {
-  .guias-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
-
-  .guias-stats .stat-card {
-    padding: 10px;
-    gap: 8px;
-  }
-
-  .guias-stats .stat-value {
-    font-size: 14px;
-  }
-
-  .guias-stats .stat-label {
-    font-size: 10px;
-  }
-}
-
 /* =====================================================
-   TABLE CUSTOMIZATION
+   TOOLBAR - Estilo Bitácora
    ===================================================== */
 
-/* Vehiculo Cell */
-.vehiculo-cell {
+.guias-toolbar {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-primary);
 }
 
-.vehiculo-cell-patente {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 12px;
+.guias-search-wrapper {
+  flex: 1;
+  position: relative;
+  max-width: 400px;
 }
 
-.vehiculo-cell-info {
-  font-size: 11px;
+.guias-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--text-tertiary);
 }
 
-.vehiculo-cell-na {
-  color: var(--text-quaternary);
-  font-size: 12px;
+.guias-search-input {
+  width: 100%;
+  padding: 10px 10px 10px 36px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s;
 }
 
-/* Custom Badges */
-.badge-no-dot::before {
-  display: none !important;
+.guias-search-input:focus {
+  border-color: var(--color-primary);
+  background: var(--bg-primary);
+}
+
+.guias-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.guias-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+  cursor: pointer;
+  border: 1px solid var(--border-secondary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.guias-btn:hover {
+  background: var(--bg-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* Active Filters */
+.active-filters-container {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 15px;
+  background-color: transparent;
+  border: none;
+  border-radius: 6px;
+}
+
+.active-filters-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #dc3545; /* Red color for "Filtros activos" */
+  margin-right: 8px;
+}
+
+.active-filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #495057;
+  font-weight: 500;
+}
+
+.active-filter-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #e9ecef;
+  border: none;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.active-filter-close:hover {
+  background-color: #dc3545;
+  color: white;
+}
+
+.active-filters-clear {
+  margin-left: auto; /* Push to the right */
+  font-size: 12px;
+  color: #6c757d;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 8px;
+}
+
+.active-filters-clear:hover {
+  color: #dc3545;
 }

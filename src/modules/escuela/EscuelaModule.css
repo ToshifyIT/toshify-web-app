@@ -118,16 +118,16 @@
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  background-color: white;
+  background-color: var(--bg-secondary);
   padding: 12px;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .escuela-search-wrapper {
   flex: 1;
   height: 36px;
-  background: #f9fafb;
+  background: var(--input-bg);
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -156,7 +156,7 @@
   padding: 8px 12px;
   border: 1px solid var(--border-primary);
   border-radius: 6px;
-  background: white;
+  background: var(--input-bg);
   font-size: 14px;
   color: var(--text-primary);
   min-width: 200px;
@@ -178,43 +178,43 @@
 }
 
 .badge-muy-alta {
-  background-color: #d1fae5;
-  color: #059669;
-  border: 1px solid #a7f3d0;
+  background-color: var(--color-success-light);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
 }
 
 .badge-alta {
-  background-color: #dbeafe;
-  color: #2563eb;
-  border: 1px solid #bfdbfe;
+  background-color: var(--color-info-light);
+  color: var(--color-info);
+  border: 1px solid var(--color-info);
 }
 
 .badge-media {
-  background-color: #fef3c7;
-  color: #d97706;
-  border: 1px solid #fde68a;
+  background-color: var(--color-warning-light);
+  color: var(--color-warning-hover);
+  border: 1px solid var(--color-warning);
 }
 
 .badge-baja {
-  background-color: #fee2e2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background-color: var(--color-danger-light);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
 }
 
 /* Nuevos estados para columna ESTADO */
 .badge-estado-activo {
-  background-color: #10B981; /* Green 500 */
-  color: white;
+  background-color: var(--color-success);
+  color: var(--text-inverse);
   border: none;
-  padding: 4px 12px; /* Más padding como en la imagen */
+  padding: 4px 12px;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .badge-estado-baja {
-  background-color: #9CA3AF; /* Gray 400 */
-  color: white;
+  background-color: var(--color-gray-400);
+  color: var(--text-inverse);
   border: none;
   padding: 4px 12px;
   font-size: 10px;
@@ -227,7 +227,7 @@
   font-family: 'Geist Mono', monospace;
   font-weight: 500;
   text-align: right;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .td-porcentaje {
@@ -242,9 +242,9 @@
 .filtro-fecha-container { 
   display: inline-flex; 
   align-items: center; 
-  border: 1.5px solid #d1d5db; 
+  border: 1.5px solid var(--border-primary); 
   border-radius: 6px; 
-  background-color: #ffffff; 
+  background-color: var(--input-bg); 
   overflow: hidden; 
   height: 38px; 
 } 
@@ -253,13 +253,13 @@
   border: none; 
   outline: none; 
   background-color: transparent; 
-  color: #374151; 
+  color: var(--text-primary); 
   font-size: 14px; 
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; 
   font-weight: 400; 
   padding: 8px 12px; 
   cursor: pointer; 
-  appearance: auto; /* mantiene la flecha nativa del navegador */ 
+  appearance: auto;
   -webkit-appearance: auto; 
   -moz-appearance: auto; 
 } 
@@ -269,11 +269,11 @@
 } 
 
 .filtro-fecha-select:hover { 
-  background-color: #f9fafb; 
+  background-color: var(--bg-hover); 
 } 
 
 .filtro-fecha-divider { 
   width: 1px; 
   height: 60%; 
-  background-color: #d1d5db; 
+  background-color: var(--border-primary); 
 }

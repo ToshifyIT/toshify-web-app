@@ -12,6 +12,7 @@ import {
   // AlertTriangle, // Multas movido a modulo Multas/Telepase
   CreditCard
 } from 'lucide-react'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { ReporteFacturacionTab } from './tabs/ReporteFacturacionTab'
 // import { PeriodosTab } from './tabs/PeriodosTab' // Funcionalidad movida al tab Reporte
 import { GarantiasTab } from './tabs/GarantiasTab'
@@ -43,12 +44,16 @@ const TABS = [
 
 export function FacturacionModule() {
   const [activeTab, setActiveTab] = useState<TabType>('reporte')
+  const { canViewTab } = usePermissions()
+
+  // Filtrar tabs según permisos
+  const visibleTabs = TABS.filter(tab => canViewTab(`facturacion:${tab.id}`))
 
   return (
     <div className="fact-module">
       {/* Tabs */}
       <div className="fact-tabs">
-        {TABS.map(tab => {
+        {visibleTabs.map(tab => {
           const Icon = tab.icon
           return (
             <button

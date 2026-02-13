@@ -51,9 +51,29 @@ interface RoleSubmenuPermission {
   can_delete: boolean
 }
 
+interface RoleTabPermission {
+  role_id: string
+  tab_id: string
+  tab_name: string
+  tab_label: string
+  can_view: boolean
+  can_create: boolean
+  can_edit: boolean
+  can_delete: boolean
+}
+
+interface TabRecord {
+  id: string
+  name: string
+  label: string
+  menu_id: string | null
+  submenu_id: string | null
+  order_index: number
+}
+
 interface PermissionRow {
   id: string
-  type: 'menu' | 'submenu'
+  type: 'menu' | 'submenu' | 'tab'
   name: string
   label: string
   parentLabel?: string
@@ -63,9 +83,10 @@ interface PermissionRow {
   can_delete: boolean
   menu_id?: string
   submenu_id?: string
+  tab_id?: string
   submenuCount?: number
   parentMenuId?: string
-  level?: number // 0 = menu, 1 = submenu nivel 1, 2 = sub-submenu, etc.
+  level?: number // 0 = menu, 1 = submenu nivel 1, 2 = sub-submenu, 3 = tab, etc.
 }
 
 export function RoleMenuPermissionsManager() {
@@ -80,8 +101,10 @@ export function RoleMenuPermissionsManager() {
   const [menus, setMenus] = useState<Menu[]>([])
   const [submenus, setSubmenus] = useState<Submenu[]>([])
   const [selectedRole, setSelectedRole] = useState<string>('')
+  const [tabs, setTabs] = useState<TabRecord[]>([])
   const [menuPermissions, setMenuPermissions] = useState<RoleMenuPermission[]>([])
   const [submenuPermissions, setSubmenuPermissions] = useState<RoleSubmenuPermission[]>([])
+  const [tabPermissions, setTabPermissions] = useState<RoleTabPermission[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [globalFilter, setGlobalFilter] = useState('')
@@ -143,10 +166,20 @@ export function RoleMenuPermissionsManager() {
 
       if (submenusError) throw submenusError
 
+      // Cargar tabs
+      const { data: tabsData, error: tabsError } = await supabase
+        .from('tabs')
+        .select('id, name, label, menu_id, submenu_id, order_index')
+        .eq('is_active', true)
+        .order('order_index')
+
+      if (tabsError) throw tabsError
+
       // Sanitizar datos antes de guardar en estado
       setRoles((rolesData || []).map(role => sanitizeObject(role)))
       setMenus((menusData || []).map(menu => sanitizeObject(menu)))
       setSubmenus((submenusData || []).map(submenu => sanitizeObject(submenu)))
+      setTabs((tabsData || []).map(tab => sanitizeObject(tab)))
 
       devLog.info('✅ Datos cargados correctamente')
     } catch (err) {
@@ -230,13 +263,46 @@ export function RoleMenuPermissionsManager() {
         can_delete: p.can_delete
       }))
 
+      // Cargar permisos de tabs del rol
+      const { data: tabPermsData, error: tabError } = await supabase
+        .from('role_tab_permissions')
+        .select(`
+          role_id,
+          tab_id,
+          can_view,
+          can_create,
+          can_edit,
+          can_delete,
+          tabs (
+            id,
+            name,
+            label
+          )
+        `)
+        .eq('role_id', validatedRoleId)
+
+      if (tabError) throw tabError
+
+      const formattedTabPerms = (tabPermsData || []).map((p: any) => sanitizeObject({
+        role_id: p.role_id,
+        tab_id: p.tab_id,
+        tab_name: p.tabs?.name || '',
+        tab_label: p.tabs?.label || '',
+        can_view: p.can_view,
+        can_create: p.can_create,
+        can_edit: p.can_edit,
+        can_delete: p.can_delete
+      }))
+
       devLog.info('✅ Permisos cargados:', {
         menus: formattedMenuPerms.length,
-        submenus: formattedSubmenuPerms.length
+        submenus: formattedSubmenuPerms.length,
+        tabs: formattedTabPerms.length
       })
 
       setMenuPermissions(formattedMenuPerms)
       setSubmenuPermissions(formattedSubmenuPerms)
+      setTabPermissions(formattedTabPerms)
     } catch (err) {
       if (err instanceof z.ZodError) {
         devLog.error('❌ ID de rol inválido:', err.issues)
@@ -511,6 +577,89 @@ export function RoleMenuPermissionsManager() {
     return perm ? perm[field] : false
   }
 
+  const getTabPermission = (tabId: string, field: keyof RoleTabPermission) => {
+    const perm = tabPermissions.find(p => p.tab_id === tabId)
+    return perm ? perm[field] : false
+  }
+
+  const toggleTabPermission = async (
+    tabId: string,
+    field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete'
+  ) => {
+    if (!selectedRole) return
+
+    const rateLimitKey = `toggle_tab_${user?.id}_${selectedRole}`
+    if (!rateLimiter.check(rateLimitKey)) {
+      setNotification({ type: 'error', message: 'Demasiados cambios. Por favor, espera un momento.' })
+      return
+    }
+
+    setSaving(true)
+    try {
+      const validatedRoleId = UUIDSchema.parse(selectedRole)
+      const validatedTabId = UUIDSchema.parse(tabId)
+      const validatedField = PermissionFieldSchema.parse(field)
+
+      const existingPerm = tabPermissions.find(p => p.tab_id === validatedTabId)
+      const newValue = existingPerm ? !existingPerm[validatedField] : true
+
+      if (existingPerm) {
+        const { error } = await supabase
+          .from('role_tab_permissions')
+          .update({ [validatedField]: newValue })
+          .eq('role_id', validatedRoleId)
+          .eq('tab_id', validatedTabId)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('role_tab_permissions')
+          .insert([{
+            role_id: validatedRoleId,
+            tab_id: validatedTabId,
+            can_view: validatedField === 'can_view',
+            can_create: validatedField === 'can_create',
+            can_edit: validatedField === 'can_edit',
+            can_delete: validatedField === 'can_delete'
+          }])
+        if (error) throw error
+      }
+
+      setTabPermissions(prev => {
+        const index = prev.findIndex(p => p.tab_id === validatedTabId)
+        if (index >= 0) {
+          const updated = [...prev]
+          updated[index] = { ...updated[index], [validatedField]: newValue }
+          return updated
+        } else {
+          const tab = tabs.find(t => t.id === validatedTabId)
+          return [...prev, {
+            role_id: validatedRoleId,
+            tab_id: validatedTabId,
+            tab_name: tab?.name || '',
+            tab_label: tab?.label || '',
+            can_view: validatedField === 'can_view' ? newValue : false,
+            can_create: validatedField === 'can_create' ? newValue : false,
+            can_edit: validatedField === 'can_edit' ? newValue : false,
+            can_delete: validatedField === 'can_delete' ? newValue : false
+          }]
+        }
+      })
+
+      setNotification({ type: 'success', message: 'Permiso de tab actualizado' })
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        setNotification({ type: 'error', message: 'Datos inválidos.' })
+      } else {
+        const safeError = handleDatabaseError(err)
+        devLog.error('Error actualizando permiso de tab:', safeError.logMessage)
+        setNotification({ type: 'error', message: safeError.userMessage })
+      }
+    } finally {
+      setSaving(false)
+      setTimeout(() => setNotification(null), 3000)
+    }
+  }
+
   // Función recursiva para agregar submenús en orden jerárquico
   const addSubmenusHierarchically = (
     parentId: string | null,
@@ -544,8 +693,41 @@ export function RoleMenuPermissionsManager() {
         level: level
       })
 
+      // Agregar tabs de este submenú
+      addTabsForParent('submenu', submenu.id, submenu.label, rows, level + 1)
+
       // Recursivamente agregar los hijos de este submenú
       addSubmenusHierarchically(submenu.id, menuSubmenus, menu, rows, level + 1)
+    })
+  }
+
+  // Helper: agregar tabs de un parent (menu o submenu) como filas
+  const addTabsForParent = (
+    parentType: 'menu' | 'submenu',
+    parentId: string,
+    parentLabel: string,
+    rows: PermissionRow[],
+    level: number
+  ) => {
+    const parentTabs = parentType === 'menu'
+      ? tabs.filter(t => t.menu_id === parentId)
+      : tabs.filter(t => t.submenu_id === parentId)
+
+    parentTabs.forEach(tab => {
+      rows.push({
+        id: tab.id,
+        type: 'tab',
+        name: tab.name,
+        label: tab.label,
+        parentLabel: parentLabel,
+        can_view: getTabPermission(tab.id, 'can_view') as boolean,
+        can_create: getTabPermission(tab.id, 'can_create') as boolean,
+        can_edit: getTabPermission(tab.id, 'can_edit') as boolean,
+        can_delete: getTabPermission(tab.id, 'can_delete') as boolean,
+        tab_id: tab.id,
+        parentMenuId: parentType === 'menu' ? parentId : undefined,
+        level: level
+      })
     })
   }
 
@@ -573,10 +755,13 @@ export function RoleMenuPermissionsManager() {
 
       // Agregar submenús jerárquicamente (nivel 1, 2, 3...)
       addSubmenusHierarchically(null, menuSubmenus, menu, rows, 1)
+
+      // Agregar tabs directamente del menú (si no tiene submenús como padre)
+      addTabsForParent('menu', menu.id, menu.label, rows, 1)
     })
 
     return rows
-  }, [menus, submenus, menuPermissions, submenuPermissions])
+  }, [menus, submenus, tabs, menuPermissions, submenuPermissions, tabPermissions])
 
   // Definir columnas
   const columns = useMemo<ColumnDef<PermissionRow>[]>(
@@ -586,10 +771,12 @@ export function RoleMenuPermissionsManager() {
         header: 'Módulo',
         cell: ({ row }) => {
           const isSubmenu = row.original.type === 'submenu'
+          const isTab = row.original.type === 'tab'
           const level = row.original.level || 0
 
           return (
-            <div className={`module-cell ${isSubmenu ? 'is-submenu' : 'is-menu'} level-${level}`}>
+            <div className={`module-cell ${isTab ? 'is-tab' : isSubmenu ? 'is-submenu' : 'is-menu'} level-${level}`}>
+              {isTab && <span className="tab-indicator">⊟</span>}
               {isSubmenu && <span className="submenu-indicator">└─</span>}
               <span className="module-name">
                 {row.original.label}
@@ -611,6 +798,8 @@ export function RoleMenuPermissionsManager() {
                 toggleMenuPermission(row.original.menu_id, 'can_view')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
                 toggleSubmenuPermission(row.original.submenu_id, 'can_view')
+              } else if (row.original.type === 'tab' && row.original.tab_id) {
+                toggleTabPermission(row.original.tab_id, 'can_view')
               }
             }}
           >
@@ -631,6 +820,8 @@ export function RoleMenuPermissionsManager() {
                 toggleMenuPermission(row.original.menu_id, 'can_create')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
                 toggleSubmenuPermission(row.original.submenu_id, 'can_create')
+              } else if (row.original.type === 'tab' && row.original.tab_id) {
+                toggleTabPermission(row.original.tab_id, 'can_create')
               }
             }}
           >
@@ -651,6 +842,8 @@ export function RoleMenuPermissionsManager() {
                 toggleMenuPermission(row.original.menu_id, 'can_edit')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
                 toggleSubmenuPermission(row.original.submenu_id, 'can_edit')
+              } else if (row.original.type === 'tab' && row.original.tab_id) {
+                toggleTabPermission(row.original.tab_id, 'can_edit')
               }
             }}
           >
@@ -671,6 +864,8 @@ export function RoleMenuPermissionsManager() {
                 toggleMenuPermission(row.original.menu_id, 'can_delete')
               } else if (row.original.type === 'submenu' && row.original.submenu_id) {
                 toggleSubmenuPermission(row.original.submenu_id, 'can_delete')
+              } else if (row.original.type === 'tab' && row.original.tab_id) {
+                toggleTabPermission(row.original.tab_id, 'can_delete')
               }
             }}
           >
@@ -680,7 +875,7 @@ export function RoleMenuPermissionsManager() {
         enableSorting: true,
       },
     ],
-    [menuPermissions, submenuPermissions, saving]
+    [menuPermissions, submenuPermissions, tabPermissions, saving]
   )
 
   // Configurar TanStack Table
@@ -700,7 +895,7 @@ export function RoleMenuPermissionsManager() {
     autoResetPageIndex: false, // Evitar que la paginación se reinicie al actualizar datos
     initialState: {
       pagination: {
-        pageSize: 10,
+        pageSize: 50,
       },
     },
   })
@@ -949,6 +1144,15 @@ export function RoleMenuPermissionsManager() {
           background: rgba(234, 179, 8, 0.08);
         }
 
+        /* Tab Row */
+        .data-table tbody tr.tab-row {
+          background: var(--bg-secondary);
+        }
+
+        .data-table tbody tr.tab-row:hover {
+          background: var(--bg-tertiary, var(--bg-secondary));
+        }
+
         /* Module Cell */
         .module-cell {
           display: flex;
@@ -1024,6 +1228,37 @@ export function RoleMenuPermissionsManager() {
           font-weight: 600;
           margin-right: 8px;
           font-family: monospace;
+        }
+
+        /* Tab styling */
+        .module-cell.is-tab {
+          border-left: 3px solid var(--color-primary, #ff0033);
+          background: linear-gradient(90deg, rgba(230, 57, 70, 0.03) 0%, transparent 100%);
+        }
+
+        .module-cell.is-tab.level-1 {
+          padding-left: 40px;
+        }
+
+        .module-cell.is-tab.level-2 {
+          padding-left: 70px;
+        }
+
+        .module-cell.is-tab.level-3 {
+          padding-left: 100px;
+        }
+
+        .module-cell.is-tab .module-name {
+          font-weight: 400;
+          color: var(--text-secondary);
+          font-size: 13px;
+        }
+
+        .tab-indicator {
+          color: var(--color-primary, #ff0033);
+          font-weight: 600;
+          margin-right: 8px;
+          font-size: 12px;
         }
 
         .sort-indicator {
@@ -1327,7 +1562,9 @@ export function RoleMenuPermissionsManager() {
                   ) : (
                     table.getRowModel().rows.map(row => {
                       const level = row.original.level || 0
-                      const rowClass = row.original.type === 'submenu'
+                      const rowClass = row.original.type === 'tab'
+                        ? `tab-row level-${level}`
+                        : row.original.type === 'submenu'
                         ? `submenu-row level-${level}`
                         : 'menu-row'
                       return (
@@ -1375,7 +1612,7 @@ export function RoleMenuPermissionsManager() {
                       value={table.getState().pagination.pageSize}
                       onChange={e => table.setPageSize(Number(e.target.value))}
                     >
-                      {[10, 20, 30, 50].map(pageSize => (
+                      {[10, 20, 50, 100].map(pageSize => (
                         <option key={pageSize} value={pageSize}>
                           {pageSize} por página
                         </option>

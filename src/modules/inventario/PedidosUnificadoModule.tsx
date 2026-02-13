@@ -120,7 +120,7 @@ type FiltroTipo = 'todos' | 'entrada' | 'salida' | 'asignacion' | 'devolucion'
 
 export function PedidosUnificadoModule() {
   const { user, profile } = useAuth()
-  const { canEditInSubmenu } = usePermissions()
+  const { canEditInSubmenu, canViewTab } = usePermissions()
 
   // Permisos específicos para el submenú de pedidos
   const canEdit = canEditInSubmenu('pedidos')
@@ -1320,45 +1320,53 @@ export function PedidosUnificadoModule() {
       `}</style>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-        {/* Tabs principales */}
+        {/* Tabs principales - controlados por permisos de tab */}
         <div className="pedidos-tabs">
-          <button
-            className={`pedidos-tab ${activeTab === 'entradas' ? 'active' : ''}`}
-            onClick={() => setActiveTab('entradas')}
-          >
-            <ArrowDownCircle size={16} />
-            Entradas Simples
-            {entradasSimples.length > 0 && (
-              <span className="pedidos-tab-badge">{entradasSimples.length}</span>
-            )}
-          </button>
-          <button
-            className={`pedidos-tab ${activeTab === 'pedidos' ? 'active' : ''}`}
-            onClick={() => setActiveTab('pedidos')}
-          >
-            <Package size={16} />
-            Pedidos por Lote
-            {pedidos.length > 0 && (
-              <span className="pedidos-tab-badge">{pedidos.length}</span>
-            )}
-          </button>
-          <button
-            className={`pedidos-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
-            onClick={() => setActiveTab('pendientes')}
-          >
-            <Clock size={16} />
-            Pendientes
-            {movimientos.length > 0 && (
-              <span className="pedidos-tab-badge">{movimientos.length}</span>
-            )}
-          </button>
-          <button
-            className={`pedidos-tab ${activeTab === 'historico' ? 'active' : ''}`}
-            onClick={() => setActiveTab('historico')}
-          >
-            <History size={16} />
-            Historico
-          </button>
+          {canViewTab('inventario-pedidos:entradas') && (
+            <button
+              className={`pedidos-tab ${activeTab === 'entradas' ? 'active' : ''}`}
+              onClick={() => setActiveTab('entradas')}
+            >
+              <ArrowDownCircle size={16} />
+              Entradas Simples
+              {entradasSimples.length > 0 && (
+                <span className="pedidos-tab-badge">{entradasSimples.length}</span>
+              )}
+            </button>
+          )}
+          {canViewTab('inventario-pedidos:pedidos') && (
+            <button
+              className={`pedidos-tab ${activeTab === 'pedidos' ? 'active' : ''}`}
+              onClick={() => setActiveTab('pedidos')}
+            >
+              <Package size={16} />
+              Pedidos por Lote
+              {pedidos.length > 0 && (
+                <span className="pedidos-tab-badge">{pedidos.length}</span>
+              )}
+            </button>
+          )}
+          {canViewTab('inventario-pedidos:pendientes') && (
+            <button
+              className={`pedidos-tab ${activeTab === 'pendientes' ? 'active' : ''}`}
+              onClick={() => setActiveTab('pendientes')}
+            >
+              <Clock size={16} />
+              Pendientes
+              {movimientos.length > 0 && (
+                <span className="pedidos-tab-badge">{movimientos.length}</span>
+              )}
+            </button>
+          )}
+          {canViewTab('inventario-pedidos:historico') && (
+            <button
+              className={`pedidos-tab ${activeTab === 'historico' ? 'active' : ''}`}
+              onClick={() => setActiveTab('historico')}
+            >
+              <History size={16} />
+              Historico
+            </button>
+          )}
         </div>
 
         {/* ==================== TAB: ENTRADAS SIMPLES ==================== */}

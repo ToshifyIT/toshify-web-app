@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import type {
@@ -45,6 +46,7 @@ const ESTADO_LABELS: Record<string, string> = {
 
 
 export function VehicleManagement() {
+  const { sedeActualId } = useSede()
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -124,10 +126,10 @@ export function VehicleManagement() {
     url_documentacion: ''
   })
 
-  // ✅ OPTIMIZADO: Carga unificada en paralelo
+  // ✅ OPTIMIZADO: Carga unificada en paralelo (recarga al cambiar sede)
   useEffect(() => {
-    loadAllData()
-  }, [])
+    if (sedeActualId) loadAllData()
+  }, [sedeActualId])
 
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (elimina 6+ queries)
   const calculatedStats = useMemo(() => {
@@ -194,6 +196,7 @@ export function VehicleManagement() {
             drive_folder_id, drive_folder_url,
             vehiculos_estados (id, codigo, descripcion)
           `)
+          .eq('sede_id', sedeActualId)
           .order('created_at', { ascending: false }),
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').order('descripcion')
       ])
@@ -257,6 +260,7 @@ export function VehicleManagement() {
             descripcion
           )
         `)
+        .eq('sede_id', sedeActualId)
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
@@ -337,7 +341,8 @@ export function VehicleManagement() {
           titular: formData.titular || null,
           notas: formData.notas || null,
           created_by: user?.id,
-          created_by_name: profile?.full_name || 'Sistema'
+          created_by_name: profile?.full_name || 'Sistema',
+          sede_id: sedeActualId,
         }])
 
       if (insertError) throw insertError

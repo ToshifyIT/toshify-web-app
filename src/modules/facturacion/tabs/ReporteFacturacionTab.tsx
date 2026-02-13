@@ -23,7 +23,6 @@ import {
   Filter,
   AlertCircle,
   Calculator,
-  Gauge,
   Edit2,
   Search,
   Play,
@@ -35,6 +34,7 @@ import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { useAuth } from '../../../contexts/AuthContext'
+import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG, calcularMora } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -137,6 +137,7 @@ function getSemanaArgentina(date: Date) {
 
 export function ReporteFacturacionTab() {
   const { profile } = useAuth()
+  const { sedeActualId } = useSede()
   
   // Ref para auto-recalcular después de crear un nuevo período
   const autoRecalcularRef = useRef(false)
@@ -145,6 +146,7 @@ export function ReporteFacturacionTab() {
   // Estados principales
   const [facturaciones, setFacturaciones] = useState<FacturacionConductor[]>([])
   const [periodo, setPeriodo] = useState<PeriodoFacturacion | null>(null)
+  const [periodoAnteriorCerrado, setPeriodoAnteriorCerrado] = useState(true) // Si la semana anterior está cerrada
   const [excesos, setExcesos] = useState<ExcesoKm[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingDetalle, setLoadingDetalle] = useState(false)
@@ -190,9 +192,8 @@ export function ReporteFacturacionTab() {
   // Filtros Excel por columna
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
   const [conductorSearch, setConductorSearch] = useState('')
-  const [tipoFilter, setTipoFilter] = useState<string[]>([])
-  const [patenteFilter, setPatenteFilter] = useState<string[]>([])
-  const [patenteSearch, setPatenteSearch] = useState('')
+  const [tipoFilter] = useState<string[]>([])
+  const [patenteFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
 
   // RIT Preview mode
@@ -254,7 +255,7 @@ export function ReporteFacturacionTab() {
     setVistaPreviaData([])
     setBuscarConductor('')
     cargarFacturacion()
-  }, [semanaActual])
+  }, [semanaActual, sedeActualId])
 
   // Cargar conceptos de nómina al montar (para agregar ajustes manuales)
   // Mapa de precios de alquiler por código de concepto
@@ -300,29 +301,14 @@ export function ReporteFacturacionTab() {
     [...new Set(datosParaFiltros.map(f => f.conductor_nombre).filter(Boolean))].sort() as string[]
   , [datosParaFiltros])
 
-  const patentesUnicas = useMemo(() =>
-    [...new Set(datosParaFiltros.map(f => f.vehiculo_patente).filter(Boolean))].sort() as string[]
-  , [datosParaFiltros])
-
   // Listas filtradas por búsqueda
   const conductoresFiltrados = useMemo(() => {
     if (!conductorSearch) return conductoresUnicos
     return conductoresUnicos.filter(c => c.toLowerCase().includes(conductorSearch.toLowerCase()))
   }, [conductoresUnicos, conductorSearch])
 
-  const patentesFiltradas = useMemo(() => {
-    if (!patenteSearch) return patentesUnicas
-    return patentesUnicas.filter(p => p.toLowerCase().includes(patenteSearch.toLowerCase()))
-  }, [patentesUnicas, patenteSearch])
-
   // Toggle functions
   const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const toggleTipoFilter = (val: string) => setTipoFilter(prev =>
-    prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-  )
-  const togglePatenteFilter = (val: string) => setPatenteFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
 
@@ -332,12 +318,28 @@ export function ReporteFacturacionTab() {
       const semana = getWeek(semanaActual.inicio, { weekStartsOn: 1 })
       const anio = getYear(semanaActual.inicio)
 
+      // 0. Verificar si la semana ANTERIOR tiene período cerrado
+      const semanaAnt = getWeek(subWeeks(semanaActual.inicio, 1), { weekStartsOn: 1 })
+      const anioAnt = getYear(subWeeks(semanaActual.inicio, 1))
+      const { data: periodoAnt } = await supabase
+        .from('periodos_facturacion')
+        .select('id, estado')
+        .eq('semana', semanaAnt)
+        .eq('anio', anioAnt)
+        .eq('sede_id', sedeActualId)
+        .single()
+      
+      // La semana anterior está cerrada si: tiene período con estado 'cerrado', o es semana 1 (no hay anterior)
+      const anteriorCerrado = semana === 1 || (periodoAnt?.estado === 'cerrado')
+      setPeriodoAnteriorCerrado(anteriorCerrado)
+
       // 1. Buscar el período para esta semana
       const { data: periodoData, error: errPeriodo } = await supabase
         .from('periodos_facturacion')
         .select('*')
         .eq('semana', semana)
         .eq('anio', anio)
+        .eq('sede_id', sedeActualId)
         .single()
 
       if (errPeriodo && errPeriodo.code !== 'PGRST116') {
@@ -428,13 +430,40 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Agregar monto_cobrado a cada facturación
+      // 2.7 Cargar detalles de facturación para peajes y penalidades
+      const { data: detallesData } = await (supabase
+        .from('facturacion_detalle') as any)
+        .select('facturacion_id, concepto_codigo, concepto_descripcion, total')
+        .in('facturacion_id', facIds)
+        .in('concepto_codigo', ['P005', 'P007'])
+
+      // Agrupar por facturacion_id
+      const detallesMap = new Map<string, { monto_peajes: number; monto_penalidades: number; penalidades_count: number; penalidades_detalle: Array<{ monto: number; detalle: string }> }>()
+      ;(detallesData || []).forEach((d: any) => {
+        if (!detallesMap.has(d.facturacion_id)) {
+          detallesMap.set(d.facturacion_id, { monto_peajes: 0, monto_penalidades: 0, penalidades_count: 0, penalidades_detalle: [] })
+        }
+        const entry = detallesMap.get(d.facturacion_id)!
+        if (d.concepto_codigo === 'P005') {
+          entry.monto_peajes += parseFloat(d.total) || 0
+        } else if (d.concepto_codigo === 'P007') {
+          entry.monto_penalidades += parseFloat(d.total) || 0
+          entry.penalidades_count += 1
+          entry.penalidades_detalle.push({ monto: parseFloat(d.total) || 0, detalle: d.concepto_descripcion || 'Penalidad' })
+        }
+      })
+
+      // Agregar monto_cobrado + detalles a cada facturación
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pago = pagosMap.get(f.id)
+        const detalle = detallesMap.get(f.id)
         return {
           ...f,
           monto_cobrado: pago?.monto || 0,
           fecha_pago: pago?.fecha_pago || null,
+          monto_peajes: detalle?.monto_peajes || 0,
+          monto_penalidades: detalle?.monto_penalidades || 0,
+          penalidades_detalle: detalle?.penalidades_detalle || [],
         }
       })
 
@@ -478,11 +507,14 @@ export function ReporteFacturacionTab() {
       const anioDelPeriodo = getYear(parseISO(fechaInicio))
 
       // 1. Cargar conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
+      // Excluir conductores con estado 'De baja'
       const { data: conductoresControl, error: errControl } = await (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaDelPeriodo)
         .eq('anio', anioDelPeriodo)
+        .eq('sede_id', sedeActualId)
+        .not('estado', 'eq', 'De baja')
 
       if (errControl) throw errControl
 
@@ -859,15 +891,11 @@ export function ReporteFacturacionTab() {
         }
         const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
+        // Si el conductor no tiene asignaciones activas durante la semana, excluirlo
+        if (diasTotales === 0) continue
+        
         // Calcular alquiler usando montos pre-calculados con precios históricos
-        let subtotalAlquiler = 0
-        if (diasTotales > 0) {
-          // Usar montos calculados día a día con precios históricos
-          subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
-        } else {
-          // Fallback: usar valor de conductores_semana_facturacion si no hay asignaciones
-          subtotalAlquiler = Math.round(parseFloat(control.valor_alquiler) || 0)
-        }
+        const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
         
         // Determinar tipo de alquiler predominante para garantía
         const tipoAlquiler: 'CARGO' | 'TURNO' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO) 
@@ -1042,7 +1070,8 @@ export function ReporteFacturacionTab() {
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
           estado: 'procesando',
-          created_by_name: profile?.full_name || 'Sistema'
+          created_by_name: profile?.full_name || 'Sistema',
+          sede_id: sedeActualId,
         })
         .select()
         .single()
@@ -1158,11 +1187,14 @@ export function ReporteFacturacionTab() {
       await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
       // 3. Obtener conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
+      // Excluir conductores con estado 'De baja'
       const { data: conductoresControl } = await (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaNum)
         .eq('anio', anioNum)
+        .eq('sede_id', sedeActualId)
+        .not('estado', 'eq', 'De baja')
 
       if (!conductoresControl || conductoresControl.length === 0) {
         await (supabase.from('periodos_facturacion') as any)
@@ -1285,6 +1317,9 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
+        // Si el conductor no tiene asignaciones activas durante la semana, excluirlo
+        if (totalDias === 0) continue
+        
         conductoresProcesados.push({
           conductor_id: conductorData.id,
           conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
@@ -1294,7 +1329,7 @@ export function ReporteFacturacionTab() {
           dias_turno_diurno: prorrateo.TURNO_DIURNO,
           dias_turno_nocturno: prorrateo.TURNO_NOCTURNO,
           dias_cargo: prorrateo.CARGO,
-          total_dias: totalDias > 0 ? totalDias : 7, // Fallback a 7 si no hay asignaciones
+          total_dias: totalDias,
         })
       }
 
@@ -1877,6 +1912,7 @@ export function ReporteFacturacionTab() {
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
+        .eq('sede_id', sedeActualId)
 
       let conductoresCopiados = 0
       if (conductoresActuales && conductoresActuales.length > 0) {
@@ -1887,6 +1923,7 @@ export function ReporteFacturacionTab() {
           .select('numero_dni')
           .eq('semana', semanaSiguiente)
           .eq('anio', anioSiguiente)
+          .eq('sede_id', sedeActualId)
           .in('numero_dni', dnis)
 
         const dnisExistentes = new Set((yaExistentes || []).map((c: any) => c.numero_dni))
@@ -1902,6 +1939,7 @@ export function ReporteFacturacionTab() {
             patente: c.patente,
             modalidad: c.modalidad,
             valor_alquiler: c.valor_alquiler,
+            sede_id: sedeActualId,
           }))
 
           const { error: insertError } = await (supabase
@@ -5610,89 +5648,17 @@ export function ReporteFacturacionTab() {
         </div>
       ),
       cell: ({ row }) => (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <strong style={{ fontSize: '13px', textTransform: 'uppercase' }}>{row.original.conductor_nombre}</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+              {row.original.vehiculo_patente || '-'}
+            </span>
+            <span className={`dt-badge ${row.original.tipo_alquiler === 'CARGO' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
+              {row.original.tipo_alquiler}
+            </span>
+          </div>
         </div>
-      ),
-      enableSorting: true,
-    },
-    {
-      accessorKey: 'vehiculo_patente',
-      header: () => (
-        <div className="dt-column-filter">
-          <span>Patente {patenteFilter.length > 0 && `(${patenteFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${patenteFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'patente' ? null : 'patente') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'patente' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                placeholder="Buscar patente..."
-                value={patenteSearch}
-                onChange={(e) => setPatenteSearch(e.target.value)}
-              />
-              <div className="dt-excel-filter-list">
-                {patentesFiltradas.map(p => (
-                  <label key={p} className={`dt-column-filter-checkbox ${patenteFilter.includes(p) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={patenteFilter.includes(p)} onChange={() => togglePatenteFilter(p)} />
-                    <span>{p}</span>
-                  </label>
-                ))}
-              </div>
-              {patenteFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => { setPatenteFilter([]); setPatenteSearch('') }}>
-                  Limpiar ({patenteFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      cell: ({ row }) => (
-        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-          {row.original.vehiculo_patente || '-'}
-        </span>
-      ),
-      enableSorting: true,
-    },
-    {
-      accessorKey: 'tipo_alquiler',
-      header: () => (
-        <div className="dt-column-filter">
-          <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'tipo' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {['CARGO', 'TURNO'].map(t => (
-                  <label key={t} className={`dt-column-filter-checkbox ${tipoFilter.includes(t) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={tipoFilter.includes(t)} onChange={() => toggleTipoFilter(t)} />
-                    <span>{t}</span>
-                  </label>
-                ))}
-              </div>
-              {tipoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setTipoFilter([])}>
-                  Limpiar ({tipoFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      cell: ({ row }) => (
-        <span className={`dt-badge ${row.original.tipo_alquiler === 'CARGO' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`} style={{ fontSize: '10px' }}>
-          {row.original.tipo_alquiler}
-        </span>
       ),
       enableSorting: true,
     },
@@ -5855,33 +5821,84 @@ export function ReporteFacturacionTab() {
       }
     },
     {
-      id: 'excesos_km',
-      header: () => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <Gauge size={12} />
-          <span>Excesos</span>
-        </div>
-      ),
+      id: 'peajes',
+      header: 'Peajes',
       cell: ({ row }) => {
-        const excesosCond = getExcesosConductor(row.original.conductor_id)
-        const totalExcesos = excesosCond.reduce((sum, e) => sum + e.monto_total, 0)
-        const kmTotal = excesosCond.reduce((sum, e) => sum + e.km_exceso, 0)
+        const peajes = row.original.monto_peajes || 0
+        if (peajes === 0) {
+          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+        }
+        return (
+          <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            {formatCurrency(peajes)}
+          </span>
+        )
+      },
+      enableSorting: false,
+    },
+    {
+      id: 'incidencias',
+      header: 'Incidencias',
+      cell: ({ row }) => {
+        const penalidades = row.original.penalidades_detalle || []
+        const montoPen = row.original.monto_penalidades || 0
 
-        if (excesosCond.length === 0) {
+        if (penalidades.length === 0 && montoPen === 0) {
           return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
         }
 
+        const count = penalidades.length || (montoPen > 0 ? 1 : 0)
+
         return (
-          <div style={{ fontSize: '12px' }}>
-            <div style={{ fontWeight: 600, color: 'var(--badge-red-text)' }}>
-              {formatCurrency(totalExcesos)}
-            </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-              +{kmTotal} km
-            </div>
-          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              const html = penalidades.length > 0
+                ? `<table style="width:100%;text-align:left;font-size:13px;border-collapse:collapse;">
+                    <thead><tr style="border-bottom:2px solid var(--border-primary);">
+                      <th style="padding:8px;">Detalle</th>
+                      <th style="padding:8px;text-align:right;">Monto</th>
+                    </tr></thead>
+                    <tbody>${penalidades.map((p: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${p.detalle}</td><td style="padding:8px;text-align:right;font-weight:600;">${formatCurrency(p.monto)}</td></tr>`).join('')}</tbody>
+                    <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
+                      <td style="padding:8px;">Total</td>
+                      <td style="padding:8px;text-align:right;">${formatCurrency(montoPen)}</td>
+                    </tr></tfoot>
+                  </table>`
+                : `<p>Total penalidades: <strong>${formatCurrency(montoPen)}</strong></p>`
+
+              Swal.fire({
+                title: `Incidencias - ${row.original.conductor_nombre}`,
+                html,
+                width: 500,
+                confirmButtonText: 'Cerrar',
+                confirmButtonColor: '#6B7280',
+                customClass: { popup: 'fact-modal' }
+              })
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '12px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 600,
+              background: 'var(--color-danger-light)',
+              color: 'var(--color-danger)',
+            }}
+            title="Ver detalle de incidencias"
+          >
+            {count}
+            <span style={{ fontSize: '10px', fontWeight: 400 }}>
+              ({formatCurrency(montoPen)})
+            </span>
+          </button>
         )
-      }
+      },
+      enableSorting: false,
     },
     {
       accessorKey: 'saldo_anterior',
@@ -5895,38 +5912,27 @@ export function ReporteFacturacionTab() {
           }}>
             {row.original.saldo_anterior !== 0 ? formatCurrency(row.original.saldo_anterior) : '-'}
           </span>
-          <button
-            onClick={(e) => { e.stopPropagation(); editarSaldo(row.original) }}
-            style={{
-              padding: '2px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-muted)',
-              opacity: 0.6
-            }}
-            title="Ajustar saldo"
-          >
-            <Edit2 size={12} />
-          </button>
+          {!modoVistaPrevia && (
+            <button
+              onClick={(e) => { e.stopPropagation(); editarSaldo(row.original) }}
+              style={{
+                padding: '2px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                opacity: 0.6
+              }}
+              title="Ajustar saldo"
+            >
+              <Edit2 size={12} />
+            </button>
+          )}
         </div>
       ),
       enableSorting: true,
     },
-    {
-      accessorKey: 'subtotal_descuentos',
-      header: 'Tickets',
-      cell: ({ row }) => (
-        <span style={{
-          fontSize: '12px',
-          fontWeight: row.original.subtotal_descuentos > 0 ? 600 : 400,
-          color: row.original.subtotal_descuentos > 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
-        }}>
-          {row.original.subtotal_descuentos > 0 ? `-${formatCurrency(row.original.subtotal_descuentos)}` : '-'}
-        </span>
-      ),
-      enableSorting: true,
-    },
+
     {
       accessorKey: 'total_a_pagar',
       header: 'TOTAL',
@@ -5974,7 +5980,7 @@ export function ReporteFacturacionTab() {
         </div>
       )
     }
-  ], [excesos, modoVistaPrevia, conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, patenteFilter, patenteSearch, patentesFiltradas, openColumnFilter])
+  ], [excesos, modoVistaPrevia, conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, patenteFilter, openColumnFilter])
 
   // Info de la semana
   const infoSemana = useMemo(() => {
@@ -6245,8 +6251,8 @@ export function ReporteFacturacionTab() {
           </button>
         </div>
         <div className="fact-semana-actions">
-          {/* Botón Generar - solo cuando NO existe período */}
-          {!periodo && !loading && (
+          {/* Botón Generar - solo cuando NO existe período Y la semana anterior está cerrada */}
+          {!periodo && !loading && periodoAnteriorCerrado && (
             <button
               className="fact-btn-primary"
               onClick={generarNuevoPeriodo}
@@ -6260,6 +6266,12 @@ export function ReporteFacturacionTab() {
               )}
               {generando ? 'Generando...' : 'Generar'}
             </button>
+          )}
+          {/* Mensaje si la semana anterior no está cerrada */}
+          {!periodo && !loading && !periodoAnteriorCerrado && (
+            <span style={{ fontSize: '12px', color: '#EF4444', fontWeight: 500 }}>
+              Cierre la semana anterior primero
+            </span>
           )}
           {/* Botón Recalcular - solo cuando período está abierto/procesando */}
           {(periodo?.estado === 'abierto' || periodo?.estado === 'procesando') && (

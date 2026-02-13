@@ -34,8 +34,10 @@ import { AnotacionesEditorModal, type Nota } from './components/AnotacionesEdito
 import { AnotacionesModal, type Anotacion } from './components/AnotacionesModal'
 import { ReporteEscuelaModal, type ConductorEscuela } from './components/ReporteEscuelaModal'
 import { ReasignacionModal } from './components/ReasignacionModal'
+import GestionConductores from './components/GestionConductores'
 import { useAuth } from '../../contexts/AuthContext'
 import './GuiasModule.css'
+import './GuiasToolbar.css'
 import iconNotas from './Iconos/notas.png'
 
 // Helpers copiados de ConductoresModule para consistencia visual
@@ -91,6 +93,9 @@ export function GuiasModule() {
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
   const [categoriaFilter] = useState<string[]>([])
   const [asignacionFilter, setAsignacionFilter] = useState<string[]>([])
+  const [efectivoFilter, setEfectivoFilter] = useState<string[]>([])
+  const [appFilter, setAppFilter] = useState<string[]>([])
+  const [totalFilter, setTotalFilter] = useState<string[]>([])
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
   
   // Estados para búsqueda dentro de filtros
@@ -98,6 +103,9 @@ export function GuiasModule() {
   const [dniSearch, setDniSearch] = useState('')
   const [globalSearch, setGlobalSearch] = useState('')
   const [cbuSearch] = useState('')
+  const [efectivoSearch, setEfectivoSearch] = useState('')
+  const [appSearch, setAppSearch] = useState('')
+  const [totalSearch, setTotalSearch] = useState('')
 
   // Estados para modal de detalles
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -132,6 +140,9 @@ export function GuiasModule() {
   const [schoolReportPage, setSchoolReportPage] = useState(1);
   const [precalculatedSchoolReport, setPrecalculatedSchoolReport] = useState<ConductorEscuela[]>([]);
   const [isSchoolReportCalculated, setIsSchoolReportCalculated] = useState(false);
+
+  // Estado para el modal de Gestión de Conductores
+  const [gestionConductoresModalOpen, setGestionConductoresModalOpen] = useState(false);
 
   // Efecto para precargar reporte de escuela en segundo plano
   useEffect(() => {
@@ -299,7 +310,7 @@ export function GuiasModule() {
   }, [openColumnFilter]);
 
   // Función para abrir el modal de Reporte Escuela
-  const handleOpenSchoolReport = () => {
+  /* const handleOpenSchoolReport = () => {
     // Si ya se calculó, usar los datos precargados
     if (isSchoolReportCalculated) {
         setSchoolReportData(precalculatedSchoolReport);
@@ -320,7 +331,7 @@ export function GuiasModule() {
     
     setSchoolReportData(initialData);
     setSchoolReportModalOpen(true);
-  };
+  }; */
 
   // Efecto para actualizar el modal si se abre antes de terminar el cálculo
   useEffect(() => {
@@ -812,6 +823,10 @@ export function GuiasModule() {
             ...conductor,
             // Mantener campos del historial en el nivel superior para la tabla
             ...historial,
+            // Fix: Asegurar explícitamente que los campos clave del historial tengan prioridad
+            fecha_llamada: historial.fecha_llamada,
+            id_accion_imp: historial.id_accion_imp,
+            meta_sem_cumplida: historial.meta_sem_cumplida,
             // Restaurar ID del conductor como ID principal (para que funcionen los modales y acciones)
             id: conductor.id,
             // Guardar ID del historial por si se necesita
@@ -1031,6 +1046,7 @@ export function GuiasModule() {
         .select(`
           id_conductor,
           id_guia,
+          fecha_llamada,
           conductores!inner (
             id,
             estado_id,
@@ -1064,7 +1080,8 @@ export function GuiasModule() {
           id_conductor: item.id_conductor,
           id_guia: item.id_guia, // Mantenemos el mismo guía
           semana: currentWeek,
-          id_accion_imp: 1, // Por defecto (ej. CAPACITACION CABIFY) o null según regla de negocio
+          id_accion_imp: item.id_accion_imp || 1, // Persistir acción o usar default
+          fecha_llamada: item.fecha_llamada,
           
           created_at: new Date().toISOString()
         }));
@@ -1317,18 +1334,57 @@ export function GuiasModule() {
         const existingHistoryIds = new Set(existingHistory?.map((h: any) => h.id_conductor));
         const historyInserts: any[] = [];
 
-        updates.forEach(u => {
-          if (!existingHistoryIds.has(u.id)) {
-            historyInserts.push({
-              id_conductor: u.id,
-              id_guia: u.id_guia,
-              semana: currentWeek,
-              id_accion_imp: 1 // Default action: "CAPACITACION CABIFY"
-            });
-            // Añadir al set local para evitar duplicados en el mismo lote
-            existingHistoryIds.add(u.id);
-          }
-        });
+        // 1. Identify drivers needing history
+        const driversToInsert = updates.filter(u => !existingHistoryIds.has(u.id));
+        
+        if (driversToInsert.length > 0) {
+          console.log(`GuiasModule: Found ${driversToInsert.length} drivers needing history. Checking for previous call dates...`);
+          
+          // 2. Fetch latest history for these drivers to preserve fecha_llamada and id_accion_imp
+           const driverIds = driversToInsert.map(u => u.id);
+           const lastHistoryMap = new Map();
+
+           try {
+             const { data: latestHistory } = await supabase
+               .from('guias_historial_semanal')
+               .select('id_conductor, fecha_llamada, id_accion_imp, semana')
+               .in('id_conductor', driverIds)
+               .or('fecha_llamada.not.is.null,id_accion_imp.not.is.null') 
+               .order('semana', { ascending: false });
+
+             // Map: id_conductor -> { fecha_llamada, id_accion_imp }
+             if (latestHistory) {
+               latestHistory.forEach((h: any) => {
+                 if (!lastHistoryMap.has(h.id_conductor)) {
+                   lastHistoryMap.set(h.id_conductor, {
+                     fecha_llamada: h.fecha_llamada,
+                     id_accion_imp: h.id_accion_imp
+                   });
+                 }
+               });
+             }
+           } catch (err) {
+             console.error('GuiasModule: Error fetching previous history, proceeding without it:', err);
+           }
+
+           // 3. Prepare inserts
+           driversToInsert.forEach(u => {
+             const preservedData = lastHistoryMap.get(u.id);
+             if (preservedData) {
+                console.log(`GuiasModule: Preserving history for driver ${u.id}:`, preservedData);
+             }
+             
+             historyInserts.push({
+               id_conductor: u.id,
+               id_guia: u.id_guia,
+               semana: currentWeek,
+               id_accion_imp: preservedData?.id_accion_imp || 1, // Default action: "CAPACITACION CABIFY"
+               fecha_llamada: preservedData?.fecha_llamada || null
+             });
+             // Add to set just in case
+             existingHistoryIds.add(u.id);
+           });
+        }
 
         if (historyInserts.length > 0) {
           console.log(`GuiasModule: Performing bulk insert of ${historyInserts.length} records to guias_historial_semanal...`, historyInserts);
@@ -1471,6 +1527,24 @@ export function GuiasModule() {
     );
   };
 
+  const toggleEfectivoFilter = (val: string) => {
+    setEfectivoFilter(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
+
+  const toggleAppFilter = (val: string) => {
+    setAppFilter(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
+
+  const toggleTotalFilter = (val: string) => {
+    setTotalFilter(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
+
   const filteredDrivers = useMemo(() => {
     let result = drivers;
 
@@ -1520,6 +1594,42 @@ export function GuiasModule() {
         if (asignacionFilter.includes('asignado') && tieneAsignacion) return true;
         if (asignacionFilter.includes('disponible') && !tieneAsignacion && esActivo) return true;
         return false;
+      });
+    }
+
+    const formatCurrencyForFilter = (val: number | undefined | null) => {
+      // Misma lógica que en cell para consistencia
+      if (val && val > 0) {
+        return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+      }
+      if (selectedWeek === getCurrentWeek() && !(activeStatFilter)) { // Simplificación, revisar contexto
+         // Aquí hay un detalle: en cell usamos row.original.cabifyData para decidir si mostrar N/A
+         // Pero en filter no tenemos row fácilmente accesible si no lo pasamos.
+         // Sin embargo, filteredDrivers itera sobre drivers (que es la data).
+         // Vamos a usar una lógica simplificada: formatear el valor numérico.
+      }
+      if (val === undefined || val === null) return "-";
+      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+    };
+
+    if (efectivoFilter.length > 0) {
+      result = result.filter(c => {
+         const val = formatCurrencyForFilter((c as any).facturacion_efectivo);
+         return efectivoFilter.includes(val);
+      });
+    }
+
+    if (appFilter.length > 0) {
+      result = result.filter(c => {
+         const val = formatCurrencyForFilter((c as any).facturacion_app);
+         return appFilter.includes(val);
+      });
+    }
+
+    if (totalFilter.length > 0) {
+      result = result.filter(c => {
+         const val = formatCurrencyForFilter((c as any).facturacion_total);
+         return totalFilter.includes(val);
       });
     }
 
@@ -1598,7 +1708,7 @@ export function GuiasModule() {
     }
 
     return result;
-  }, [drivers, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules]);
+  }, [drivers, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter]);
 
   const uniqueEstados = useMemo(() => {
     const estados = new Map<string, string>();
@@ -1623,6 +1733,41 @@ export function GuiasModule() {
     });
     return Array.from(categorias.keys()).sort();
   }, [drivers]);
+
+  const formatCurrencyValue = (val: number | undefined | null) => {
+      if (val === undefined || val === null) return "-";
+      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+  };
+
+  const uniqueEfectivo = useMemo(() => {
+    const values = drivers.map(c => formatCurrencyValue(c.facturacion_efectivo));
+    return [...new Set(values)].sort();
+  }, [drivers]);
+
+  const uniqueApp = useMemo(() => {
+    const values = drivers.map(c => formatCurrencyValue(c.facturacion_app));
+    return [...new Set(values)].sort();
+  }, [drivers]);
+
+  const uniqueTotal = useMemo(() => {
+    const values = drivers.map(c => formatCurrencyValue(c.facturacion_total));
+    return [...new Set(values)].sort();
+  }, [drivers]);
+
+  const efectivoFiltrados = useMemo(() => {
+    if (!efectivoSearch) return uniqueEfectivo;
+    return uniqueEfectivo.filter(v => v.toLowerCase().includes(efectivoSearch.toLowerCase()));
+  }, [uniqueEfectivo, efectivoSearch]);
+
+  const appFiltrados = useMemo(() => {
+    if (!appSearch) return uniqueApp;
+    return uniqueApp.filter(v => v.toLowerCase().includes(appSearch.toLowerCase()));
+  }, [uniqueApp, appSearch]);
+
+  const totalFiltrados = useMemo(() => {
+    if (!totalSearch) return uniqueTotal;
+    return uniqueTotal.filter(v => v.toLowerCase().includes(totalSearch.toLowerCase()));
+  }, [uniqueTotal, totalSearch]);
 
   const columns = useMemo<ColumnDef<any>[]>(
     () => [
@@ -2010,7 +2155,57 @@ export function GuiasModule() {
       },
       {
         accessorKey: "facturacion_efectivo",
-        header: "EFECTIVO",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>Efectivo {efectivoFilter.length > 0 && `(${efectivoFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${efectivoFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'efectivo' ? null : 'efectivo');
+              }}
+              title="Filtrar por efectivo"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'efectivo' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={efectivoSearch}
+                  onChange={(e) => setEfectivoSearch(e.target.value)}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                <div className="dt-excel-filter-list">
+                  {efectivoFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    efectivoFiltrados.slice(0, 50).map(val => (
+                      <label key={val} className={`dt-column-filter-checkbox ${efectivoFilter.includes(val) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={efectivoFilter.includes(val)}
+                          onChange={() => toggleEfectivoFilter(val)}
+                        />
+                        <span>{val}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {efectivoFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => { setEfectivoFilter([]); setEfectivoSearch(''); }}
+                  >
+                    Limpiar ({efectivoFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row, getValue }) => {
           const val = getValue() as number;
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
@@ -2029,7 +2224,57 @@ export function GuiasModule() {
       },
       {
         accessorKey: "facturacion_app",
-        header: "APP",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>APP {appFilter.length > 0 && `(${appFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${appFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'app' ? null : 'app');
+              }}
+              title="Filtrar por APP"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'app' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={appSearch}
+                  onChange={(e) => setAppSearch(e.target.value)}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                <div className="dt-excel-filter-list">
+                  {appFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    appFiltrados.slice(0, 50).map(val => (
+                      <label key={val} className={`dt-column-filter-checkbox ${appFilter.includes(val) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={appFilter.includes(val)}
+                          onChange={() => toggleAppFilter(val)}
+                        />
+                        <span>{val}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {appFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => { setAppFilter([]); setAppSearch(''); }}
+                  >
+                    Limpiar ({appFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row, getValue }) => {
           const val = getValue() as number;
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
@@ -2047,7 +2292,57 @@ export function GuiasModule() {
       },
       {
         accessorKey: "facturacion_total",
-        header: "TOTAL",
+        header: () => (
+          <div className="dt-column-filter">
+            <span>TOTAL {totalFilter.length > 0 && `(${totalFilter.length})`}</span>
+            <button
+              className={`dt-column-filter-btn ${totalFilter.length > 0 ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenColumnFilter(openColumnFilter === 'total' ? null : 'total');
+              }}
+              title="Filtrar por Total"
+            >
+              <Filter size={12} />
+            </button>
+            {openColumnFilter === 'total' && (
+              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={totalSearch}
+                  onChange={(e) => setTotalSearch(e.target.value)}
+                  className="dt-column-filter-input"
+                  autoFocus
+                />
+                <div className="dt-excel-filter-list">
+                  {totalFiltrados.length === 0 ? (
+                    <div className="dt-excel-filter-empty">Sin resultados</div>
+                  ) : (
+                    totalFiltrados.slice(0, 50).map(val => (
+                      <label key={val} className={`dt-column-filter-checkbox ${totalFilter.includes(val) ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={totalFilter.includes(val)}
+                          onChange={() => toggleTotalFilter(val)}
+                        />
+                        <span>{val}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {totalFilter.length > 0 && (
+                  <button
+                    className="dt-column-filter-clear"
+                    onClick={() => { setTotalFilter([]); setTotalSearch(''); }}
+                  >
+                    Limpiar ({totalFilter.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ),
         cell: ({ row, getValue }) => {
           const val = getValue() as number;
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
@@ -2492,8 +2787,126 @@ export function GuiasModule() {
                       selectedWeek={selectedWeek} 
                       onWeekChange={setSelectedWeek} 
                     />
+
+                    {/* Botón Gestión de Conductores */}
+                    <button 
+                      onClick={() => setGestionConductoresModalOpen(true)}
+                      className="guias-btn"
+                    >
+                      <Users size={16} />
+                      <span>Gestión de Conductores</span>
+                    </button>
                   </div>
                 </div>
+
+                {/* Filtros Activos */}
+                {(nombreFilter.length > 0 || dniFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || efectivoFilter.length > 0 || appFilter.length > 0 || totalFilter.length > 0 || activeStatFilter) && (
+                  <div className="active-filters-container">
+                    <div className="active-filters-label">
+                      <Triangle size={8} fill="#dc3545" stroke="#dc3545" style={{ transform: 'rotate(180deg)' }} />
+                      Filtros activos:
+                    </div>
+                    
+                    {nombreFilter.map(f => (
+                      <span key={`nom-${f}`} className="active-filter-tag">
+                        Nombre: {f}
+                        <button onClick={() => toggleNombreFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+                    
+                    {dniFilter.map(f => (
+                      <span key={`dni-${f}`} className="active-filter-tag">
+                        DNI: {f}
+                        <button onClick={() => toggleDniFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {estadoFilter.map(f => (
+                      <span key={`est-${f}`} className="active-filter-tag">
+                        Estado: {getEstadoConductorDisplay({ codigo: f })}
+                        <button onClick={() => toggleEstadoFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {turnoFilter.map(f => (
+                      <span key={`tur-${f}`} className="active-filter-tag">
+                        Turno: {turnoLabels[f] || f}
+                        <button onClick={() => toggleTurnoFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {asignacionFilter.map(f => (
+                      <span key={`asig-${f}`} className="active-filter-tag">
+                        Asignación: {f === 'asignado' ? 'Asignado' : 'Disponible'}
+                        <button onClick={() => toggleAsignacionFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {efectivoFilter.map(f => (
+                      <span key={`efec-${f}`} className="active-filter-tag">
+                        Efectivo: {f}
+                        <button onClick={() => toggleEfectivoFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {appFilter.map(f => (
+                      <span key={`app-${f}`} className="active-filter-tag">
+                        App: {f}
+                        <button onClick={() => toggleAppFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {totalFilter.map(f => (
+                      <span key={`tot-${f}`} className="active-filter-tag">
+                        Total: {f}
+                        <button onClick={() => toggleTotalFilter(f)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    ))}
+
+                    {activeStatFilter && (
+                      <span className="active-filter-tag">
+                        Métrica: {
+                          {
+                            'totalConductores': 'Total Conductores',
+                            'totalFacturado': 'Total Facturado',
+                            'totalEfectivo': 'Facturación Efectivo',
+                            'totalApp': 'Facturación App',
+                            'conductoresEscuela': 'Conductores en Escuela',
+                            'llamadasRealizadas': 'Llamadas Realizadas',
+                            'llamadasPendientes': 'Llamadas Pendientes',
+                            'seguimientoDiario': 'Seguimiento Diario',
+                            'seguimientoCercano': 'Seguimiento Cercano',
+                            'seguimientoSemanal': 'Seguimiento Semanal',
+                            'capacitacionCabify': 'Capacitación Cabify',
+                            'capacitacionToshify': 'Capacitación Toshify',
+                            'seguimientoControl': 'Seguimiento y Control',
+                            'motivacional': 'Acción Motivacional',
+                            'fidelizacion': 'Acción de Fidelización'
+                          }[activeStatFilter] || activeStatFilter
+                        }
+                        <button onClick={() => setActiveStatFilter(null)} className="active-filter-close"><X size={10} /></button>
+                      </span>
+                    )}
+
+                    <button 
+                      onClick={() => {
+                        setNombreFilter([]);
+                        setDniFilter([]);
+                        setEstadoFilter([]);
+                        setTurnoFilter([]);
+                        setAsignacionFilter([]);
+                        setEfectivoFilter([]);
+                        setAppFilter([]);
+                        setTotalFilter([]);
+                        setActiveStatFilter(null);
+                        setGlobalSearch('');
+                      }}
+                      className="active-filters-clear"
+                    >
+                      Limpiar todos
+                    </button>
+                  </div>
+                )}
 
                 {/* Table */}
                 <div className="guias-table-container">
@@ -2587,6 +3000,14 @@ export function GuiasModule() {
         guides={guias}
         onConfirm={handleConfirmReasignacion}
       />
+
+      {/* Modal de Gestión de Conductores */}
+      {gestionConductoresModalOpen && (
+        <GestionConductores
+          isOpen={gestionConductoresModalOpen}
+          onClose={() => setGestionConductoresModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

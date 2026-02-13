@@ -5,10 +5,11 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap
+  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useSede } from '../contexts/SedeContext'
 import { useNavigate, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { useEffectivePermissions } from '../hooks/useEffectivePermissions'
 import { useTheme } from '../contexts/ThemeContext'
@@ -55,6 +56,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'inventario-pedidos': ClipboardList,
   'zonas-peligrosas': MapPin,
   'escuela': GraduationCap,
+  'conceptos-facturacion': Receipt,
 }
 
 // Función para obtener icono de un menú
@@ -181,6 +183,7 @@ import { ProfilePage } from './profile/ProfilePage'
 // Multas/Telepase
 import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
 import { MultasPage } from './multas-telepase/MultasPage'
+import { ConceptosFacturacionPage } from './parametros/ConceptosFacturacionPage'
 import { GuiasPage } from './GuiasPage'
 import { EscuelaPage } from './EscuelaPage'
 import { fetchGuias, distributeDriversService, type Guia } from '../modules/guias/guiasService'
@@ -199,6 +202,7 @@ interface SubmenuWithHierarchy {
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
+  const { sedes, sedeActual, cambiarSede, puedeVerTodasSedes } = useSede()
   const navigate = useNavigate()
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
@@ -529,8 +533,9 @@ export function HomePage() {
         }
 
         .nav-item.active {
-          background: var(--color-gray-800);
-          color: var(--text-inverse);
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          font-weight: 600;
         }
 
         .nav-item:disabled {
@@ -1218,6 +1223,64 @@ export function HomePage() {
             </div>
           </div>
 
+          {/* Selector de sede */}
+          {sedes.length > 1 && !sidebarCollapsed && (
+            <div style={{
+              padding: '8px 16px',
+              borderBottom: '1px solid var(--border-primary)',
+            }}>
+              {puedeVerTodasSedes ? (
+                <select
+                  value={sedeActual?.id || ''}
+                  onChange={(e) => cambiarSede(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-primary)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    outline: 'none',
+                  }}
+                >
+                  {sedes.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '12px',
+                  color: 'var(--text-secondary)',
+                  fontWeight: 500,
+                }}>
+                  <Building2 size={14} />
+                  <span>{sedeActual?.nombre || 'Sin sede'}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {sedes.length > 1 && sidebarCollapsed && (
+            <div style={{
+              padding: '8px 0',
+              display: 'flex',
+              justifyContent: 'center',
+              borderBottom: '1px solid var(--border-primary)',
+            }}
+              title={sedeActual?.nombre || 'Sede'}
+            >
+              <Building2 size={18} style={{ color: 'var(--text-secondary)' }} />
+            </div>
+          )}
+
           <nav className="sidebar-nav">
             {visibleMenus.length > 0 ? (
               visibleMenus.map((menu) => {
@@ -1582,6 +1645,13 @@ export function HomePage() {
               <Route path="/multas" element={
                 <ProtectedRoute submenuName="multas" action="view">
                   <MultasPage />
+                </ProtectedRoute>
+              } />
+
+              {/* Parámetros */}
+              <Route path="/conceptos-facturacion" element={
+                <ProtectedRoute submenuName="conceptos-facturacion" action="view">
+                  <ConceptosFacturacionPage />
                 </ProtectedRoute>
               } />
 

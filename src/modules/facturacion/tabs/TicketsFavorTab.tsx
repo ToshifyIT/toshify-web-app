@@ -15,8 +15,10 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import type { TicketFavor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, TIPOS_TICKET_FAVOR } from '../../../types/facturacion.types'
+import { useSede } from '../../../contexts/SedeContext'
 
 export function TicketsFavorTab() {
+  const { sedeActualId } = useSede()
   const [tickets, setTickets] = useState<TicketFavor[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState<string>('todos')
@@ -30,8 +32,8 @@ export function TicketsFavorTab() {
   const [estadoFilterExcel, setEstadoFilterExcel] = useState<string[]>([])
 
   useEffect(() => {
-    cargarTickets()
-  }, [])
+    if (sedeActualId) cargarTickets()
+  }, [sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -73,6 +75,7 @@ export function TicketsFavorTab() {
       const { data, error } = await supabase
         .from('tickets_favor')
         .select('*')
+        .eq('sede_id', sedeActualId)
         .order('fecha_solicitud', { ascending: false })
 
       if (error) throw error

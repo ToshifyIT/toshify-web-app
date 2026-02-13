@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, GraduationCap } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { startOfISOWeek, endOfISOWeek, format, setISOWeek, isSameDay, isWithinInterval, subWeeks } from 'date-fns';
 // import { es } from 'date-fns/locale';
 import './WeekSelector.css';
@@ -7,7 +7,6 @@ import './WeekSelector.css';
 interface WeekSelectorProps {
   selectedWeek: string; // Format: "YYYY-Www"
   onWeekChange: (week: string) => void;
-  onSchoolTrackingClick?: () => void;
 }
 
 // Días de la semana (Lunes a Domingo)
@@ -15,7 +14,7 @@ const DAYS_SHORT = ['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'];
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-export function WeekSelector({ selectedWeek, onWeekChange, onSchoolTrackingClick }: WeekSelectorProps) {
+export function WeekSelector({ selectedWeek, onWeekChange }: WeekSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   
   // Parse initial date from selectedWeek string
