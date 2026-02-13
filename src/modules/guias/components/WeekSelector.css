@@ -4,7 +4,6 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 100%;
 }
 
 /* =====================================================
@@ -13,29 +12,28 @@
 
 .week-calendar-selector {
   position: relative;
-  height: 100%;
 }
 
 .week-calendar-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 100%;
+  height: 42px;
   padding: 0 14px;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: #374151;
+  color: var(--text-primary);
   cursor: pointer;
   transition: all 0.15s;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .week-calendar-btn:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
+  background: var(--bg-secondary);
+  border-color: var(--border-hover, var(--border-primary));
 }
 
 .week-calendar-btn:disabled {
@@ -44,7 +42,7 @@
 }
 
 .week-calendar-btn svg {
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .week-calendar-btn svg.rotate {
@@ -57,8 +55,8 @@
   top: calc(100% + 8px);
   right: 0;
   left: auto;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 12px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   padding: 16px;
@@ -69,7 +67,7 @@
 /* Tabs */
 .week-calendar-tabs {
   display: flex;
-  background: #f3f4f6;
+  background: var(--bg-secondary);
   padding: 4px;
   border-radius: 8px;
   margin-bottom: 16px;
@@ -80,7 +78,7 @@
   padding: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   border-radius: 6px;
@@ -89,8 +87,8 @@
 }
 
 .week-calendar-tab.active {
-  background: white;
-  color: #111827;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
@@ -105,7 +103,7 @@
 .week-calendar-month {
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
   text-transform: capitalize;
 }
 
@@ -117,15 +115,15 @@
   height: 28px;
   background: transparent;
   border: none;
-  color: #6b7280;
+  color: var(--text-secondary);
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.15s;
 }
 
 .week-calendar-nav:hover {
-  background-color: #f3f4f6;
-  color: #111827;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 /* Days Header */
@@ -139,7 +137,7 @@
   text-align: center;
   font-size: 11px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   padding: 4px 0;
 }
 
@@ -157,7 +155,7 @@
   justify-content: center;
   height: 36px;
   font-size: 13px;
-  color: #374151;
+  color: var(--text-primary);
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.1s;
@@ -166,11 +164,11 @@
 }
 
 .week-calendar-day:hover:not(.selected):not(.unavailable) {
-  background: #f3f4f6;
+  background: var(--bg-secondary);
 }
 
 .week-calendar-day.other-month {
-  color: #d1d5db;
+  color: var(--text-tertiary);
 }
 
 .week-calendar-day.today {
@@ -209,18 +207,18 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border-primary);
   padding-top: 12px;
 }
 
 .week-calendar-shortcut {
   text-align: left;
   padding: 8px 12px;
-  background: #f9fafb;
+  background: var(--bg-secondary);
   border: 1px solid transparent;
   border-radius: 6px;
   font-size: 13px;
-  color: #4b5563;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -248,18 +246,18 @@
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .week-refresh-btn:hover {
-  background: #f9fafb;
-  color: #111827;
-  border-color: #d1d5db;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-hover, var(--border-primary));
 }

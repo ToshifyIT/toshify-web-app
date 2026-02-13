@@ -169,8 +169,6 @@ export function EscuelaModule() {
         const sundayPrev1 = previousSunday(fechaEscuelaDate);
         const sundayPrev2 = subWeeks(sundayPrev1, 1);
         
-        console.log(`[Dates] ${d.nombres} ${d.apellidos} - School: ${format(fechaEscuelaDate, 'yyyy-MM-dd')}`);
-        
         const metricsPrev = await getMetrics([sundayPrev1, sundayPrev2]);
 
         // 2. POST CAPACITACIÓN (2 domingos posteriores)
@@ -284,133 +282,119 @@ export function EscuelaModule() {
     () => [
       {
         accessorKey: "nombre",
-        header: "NOMBRE",
+        header: "Nombre",
+        size: 200,
+        minSize: 180,
         cell: ({ row }) => (
-          <div className="flex flex-col items-center justify-center w-full">
-            <span style={{ fontWeight: 600 }}>{row.original.nombre}</span>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{row.original.nombre}</span>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{row.original.dni}</span>
           </div>
         ),
       },
       {
         accessorKey: "estado",
-        header: "ESTADO",
+        header: "Estado",
+        size: 90,
         cell: ({ getValue }) => {
           const val = (getValue() as string) || '';
-          const lowerVal = val.toLowerCase();
-          
-          let displayVal = 'BAJA';
-          let badgeClass = 'badge badge-estado-baja';
-
-          if (lowerVal.includes('activo')) {
-            displayVal = 'ACTIVO';
-            badgeClass = 'badge badge-estado-activo';
-          }
-
+          const isActivo = val.toLowerCase().includes('activo');
           return (
-            <div className="flex justify-center items-center w-full">
-              <span className={badgeClass}>{displayVal}</span>
-            </div>
+            <span className={`dt-badge ${isActivo ? 'dt-badge-green' : 'dt-badge-gray'}`}>
+              {isActivo ? 'Activo' : 'Baja'}
+            </span>
           );
         }
       },
       {
         accessorKey: "fechaCap",
-        header: "FECHA CAP.",
+        header: "Fecha",
+        size: 95,
         cell: ({ getValue }) => (
-          <div className="flex justify-center items-center w-full">
-            {getValue() as string}
-          </div>
+          <span style={{ color: 'var(--text-primary)' }}>{getValue() as string}</span>
         )
       },
       // PREVIO GROUP
       {
         id: "prev_ganancia",
-        header: "PREV. GANANCIA",
+        header: "Gan. Pre",
+        size: 100,
         accessorFn: (row) => row.previo.promGan,
         cell: ({ getValue }) => (
-           <div className="flex justify-center items-center w-full td-money">
-             {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(getValue() as number)}
-           </div>
+          <span className="td-money">
+            {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(getValue() as number)}
+          </span>
         )
       },
       {
         id: "prev_horas",
-        header: "PREV. HORAS",
+        header: "Hrs Pre",
+        size: 75,
         accessorFn: (row) => row.previo.horas,
         cell: ({ getValue }) => (
-          <div className="flex justify-center items-center w-full td-porcentaje">
-            {(getValue() as number).toFixed(2)}
-          </div>
+          <span className="td-porcentaje">{(getValue() as number).toFixed(1)}</span>
         )
       },
       {
         id: "prev_ocup",
-        header: "PREV. %OCUP",
+        header: "Ocup Pre",
+        size: 80,
         accessorFn: (row) => row.previo.porcOcup,
         cell: ({ getValue }) => (
-          <div className="flex justify-center items-center w-full td-porcentaje">
-            {(getValue() as number).toFixed(0)}%
-          </div>
+          <span className="td-porcentaje">{(getValue() as number).toFixed(0)}%</span>
         )
       },
       {
         id: "prev_acept",
-        header: "PREV. ACEPT",
+        header: "Acep Pre",
+        size: 80,
         accessorFn: (row) => row.previo.acept,
         cell: ({ getValue }) => (
-          <div className="flex justify-center items-center w-full td-porcentaje">
-            {(getValue() as number).toFixed(0)}%
-          </div>
+          <span className="td-porcentaje">{(getValue() as number).toFixed(0)}%</span>
         )
       },
       // POST GROUP
       {
         id: "post_ganancia",
-        header: "POST GANANCIA",
+        header: "Gan. Post",
+        size: 100,
         accessorFn: (row) => row.post.promGan,
         cell: ({ getValue }) => (
-           <div className="flex justify-center items-center w-full td-money" style={{ fontWeight: 700 }}>
-             {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(getValue() as number)}
-           </div>
+          <span className="td-money" style={{ fontWeight: 700 }}>
+            {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(getValue() as number)}
+          </span>
         )
       },
       {
         id: "post_horas",
-        header: "POST HORAS",
+        header: "Hrs Post",
+        size: 75,
         accessorFn: (row) => row.post.horas,
         cell: ({ getValue }) => (
-          <div className="flex justify-center items-center w-full td-porcentaje">
-            {(getValue() as number).toFixed(2)}
-          </div>
+          <span className="td-porcentaje">{(getValue() as number).toFixed(1)}</span>
         )
       },
       {
         id: "post_ocup",
-        header: "POST %OCUP",
+        header: "Ocup Post",
+        size: 80,
         accessorFn: (row) => row.post.porcOcup,
         cell: ({ getValue }) => (
-          <div className="flex justify-center items-center w-full td-porcentaje">
-            {(getValue() as number).toFixed(0)}%
-          </div>
+          <span className="td-porcentaje">{(getValue() as number).toFixed(0)}%</span>
         )
       },
       {
         id: "post_acept",
-        header: "POST ACEPT",
+        header: "Acep Post",
+        size: 80,
         accessorFn: (row) => row.post.acept,
         cell: ({ getValue }) => {
             const val = getValue() as number;
-            let colorClass = "badge-baja";
-            if (val >= 90) colorClass = "badge-muy-alta";
-            else if (val >= 80) colorClass = "badge-alta";
-            else if (val >= 70) colorClass = "badge-media";
-            
-            return (
-              <div className="flex justify-center items-center w-full">
-                <span className={`badge ${colorClass}`}>{val.toFixed(0)}%</span>
-              </div>
-            );
+            let badgeColor = 'red';
+            if (val >= 90) badgeColor = 'green';
+            else if (val >= 80) badgeColor = 'blue';
+            else if (val >= 70) badgeColor = 'yellow';
+            return <span className={`dt-badge dt-badge-${badgeColor}`}>{val.toFixed(0)}%</span>;
         }
       },
     ],

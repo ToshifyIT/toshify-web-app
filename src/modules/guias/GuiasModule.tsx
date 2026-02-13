@@ -37,6 +37,7 @@ import { ReporteEscuelaModal, type ConductorEscuela } from './components/Reporte
 import { ReasignacionModal } from './components/ReasignacionModal'
 import GestionConductores from './components/GestionConductores'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSede } from '../../contexts/SedeContext'
 import './GuiasModule.css'
 import './GuiasToolbar.css'
 import iconNotas from './Iconos/notas.png'
@@ -81,6 +82,7 @@ export function GuiasModule() {
   const [searchParams] = useSearchParams()
   const { id: paramId } = useParams()
   const { profile } = useAuth()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const urlGuiaId = paramId || searchParams.get('id')
   const hasDistributedRef = useRef(false)
   const hasSyncedRef = useRef(false)
@@ -161,7 +163,6 @@ export function GuiasModule() {
     }
 
     try {
-      console.log('🔄 Iniciando precálculo de reporte escuela en segundo plano...');
       const updatedData = await Promise.all(conductoresEscuela.map(async (d) => {
         const baseData = {
             id: d.id,
@@ -285,7 +286,6 @@ export function GuiasModule() {
         };
       }));
 
-      console.log('✅ Precálculo de reporte escuela finalizado', updatedData);
       setPrecalculatedSchoolReport(updatedData);
       setIsSchoolReportCalculated(true);
 
@@ -656,7 +656,6 @@ export function GuiasModule() {
       const { data, error } = await supabase.from('guias_seguimiento').select('*');
       if (error) throw error;
       if (data) {
-        console.log("Seguimiento rules loaded:", data);
         setSeguimientoRules(data);
       }
     } catch (err) {
@@ -676,7 +675,7 @@ export function GuiasModule() {
     } else {
       setDrivers([])
     }
-  }, [selectedGuiaId, selectedWeek])
+  }, [selectedGuiaId, selectedWeek, sedeActualId])
 
   useEffect(() => {
     if (selectedGuiaId) {
@@ -684,7 +683,7 @@ export function GuiasModule() {
     } else {
       setCurrentWeekDrivers([])
     }
-  }, [selectedGuiaId])
+  }, [selectedGuiaId, sedeActualId])
 
   const fetchDriversData = async (guiaId: string, targetWeek: string) => {
     const isCurrentWeek = targetWeek === getCurrentWeek();
@@ -777,9 +776,7 @@ export function GuiasModule() {
             .gte('fecha_inicio', startDate.toISOString())
             .lte('fecha_inicio', endDate.toISOString());
 
-          if (cabifyError) {
-             console.error('Error fetching cabify_historico:', cabifyError);
-          } else if (cabifyDataRaw && cabifyDataRaw.length > 0) {
+           if (!cabifyError && cabifyDataRaw && cabifyDataRaw.length > 0) {
              cabifyDataRaw.forEach(d => {
                const cobroApp = Number(d.cobro_app) || 0;
                const cobroEfectivo = Number(d.cobro_efectivo) || 0;
@@ -808,8 +805,8 @@ export function GuiasModule() {
              });
           }
         }
-      } catch (err) {
-        console.error("Error loading Cabify data for cross-reference:", err);
+      } catch {
+        // Cabify data cross-reference failed silently
       }
 
       // Procesar conductores desde el historial
@@ -958,24 +955,20 @@ export function GuiasModule() {
 
       // Ejecutar actualizaciones masivas si hay cambios detectados
       if (updatesToPerform.length > 0) {
-        console.log(`GuiasModule: Updating ${updatesToPerform.length} records in guias_historial_semanal...`);
-        // Promise.all para actualizaciones individuales seguras
         await Promise.all(updatesToPerform.map(u => {
-          const { id, ...payload } = u; // Separar ID del resto de datos a actualizar
+          const { id, ...payload } = u;
           return supabase
             .from('guias_historial_semanal')
             .update(payload)
             .eq('id', id)
         }));
-        console.log('GuiasModule: Actualizaciones completadas.');
       }
 
       return processedDrivers;
       } else {
         return [];
       }
-    } catch (error) {
-      console.error('Error loading drivers:', error)
+    } catch {
       return [];
     }
   }
@@ -985,8 +978,7 @@ export function GuiasModule() {
       setLoadingDrivers(true);
       const data = await fetchDriversData(guiaId, selectedWeek);
       setDrivers(data);
-    } catch (error) {
-      console.error('Error loading drivers:', error);
+    } catch {
       setDrivers([]);
     } finally {
       setLoadingDrivers(false);
@@ -997,16 +989,14 @@ export function GuiasModule() {
     try {
       const data = await fetchDriversData(guiaId, getCurrentWeek());
       setCurrentWeekDrivers(data);
-    } catch (error) {
-      console.error('Error loading current week metrics:', error);
+    } catch {
+      // Current week metrics load failed
     }
   }
 
   // Nueva función para clonar historial de la semana anterior
   const syncWeeklyHistory = async () => {
     const currentWeek = getCurrentWeek();
-    console.log(`GuiasModule: Checking sync for week ${currentWeek}`);
-    
     try {
       // A. Verificar si ya hay datos para la semana actual
       const { count, error: countError } = await supabase
@@ -1019,7 +1009,6 @@ export function GuiasModule() {
       // Si ya hay registros significativos (> 0), asumimos que la semana ya fue inicializada.
       // Podríamos poner un umbral bajo, pero >0 es lo más seguro para no duplicar.
       if (count !== null && count > 0) {
-        console.log(`GuiasModule: Week ${currentWeek} already has ${count} records. Skipping cloning.`);
         return;
       }
 
@@ -1035,7 +1024,7 @@ export function GuiasModule() {
       const prevWeekDate = addHours(currentWeekDate, -24 * 7); // Restar 7 días
       const prevWeek = format(prevWeekDate, "R-'W'II");
       
-      console.log(`GuiasModule: Cloning from previous week ${prevWeek} to ${currentWeek}`);
+
 
       // C. Obtener candidatos de la semana anterior
       // - Semana anterior
@@ -1064,7 +1053,6 @@ export function GuiasModule() {
       if (prevError) throw prevError;
 
       if (!prevData || prevData.length === 0) {
-        console.log('GuiasModule: No data found in previous week to clone.');
         return;
       }
 
@@ -1088,11 +1076,8 @@ export function GuiasModule() {
         }));
 
       if (newRecords.length === 0) {
-        console.log('GuiasModule: No valid active drivers with vehicle found to clone.');
         return;
       }
-
-      console.log(`GuiasModule: Cloning ${newRecords.length} records...`);
 
       // E. Insertar masivamente
       const { error: insertError } = await supabase
@@ -1101,9 +1086,7 @@ export function GuiasModule() {
 
       if (insertError) throw insertError;
 
-      console.log('GuiasModule: Cloning completed successfully.');
-      
-      // Opcional: Mostrar notificación discreta
+      // Mostrar notificación discreta
       const Toast = Swal.mixin({
         toast: true,
         position: 'top-end',
@@ -1116,9 +1099,8 @@ export function GuiasModule() {
         title: `Se inició la semana con ${newRecords.length} conductores`
       });
 
-    } catch (error) {
-      console.error('GuiasModule: Error executing weekly sync:', error);
-      // No bloqueamos la UI, solo logueamos, la distribución continua servirá de fallback
+    } catch {
+      // No bloqueamos la UI, la distribución continua servirá de fallback
     } finally {
       setSyncFinished(true);
     }
@@ -1138,45 +1120,30 @@ export function GuiasModule() {
 
   // 2. Efecto de distribución de carga (solo después de sincronizar y tener guías)
   useEffect(() => {
-    console.log('GuiasModule: useEffect checking distribution', { 
-      syncFinished,
-      hasDistributed: hasDistributedRef.current, 
-      guiasLength: guias.length 
-    });
-    
     if (syncFinished && !hasDistributedRef.current && guias.length > 0) {
       hasDistributedRef.current = true
-      console.log('GuiasModule: Triggering distributeDrivers');
       distributeDrivers();
     }
   }, [syncFinished, guias])
 
 
   const distributeDrivers = async () => {
-    console.log('GuiasModule: Starting distributeDrivers execution - STRICT MODE (vehiculo_id fix)');
     try {
       if (guias.length === 0) {
-        console.log('GuiasModule: No guias found, aborting distribution');
         return
       }
-
-      console.log('GuiasModule: Fetching currently assigned drivers...');
-      const { data: assignedDrivers, error: assignedError } = await supabase
+      const { data: assignedDrivers, error: assignedError } = await aplicarFiltroSede(supabase
         .from('conductores')
         .select('id, id_guia')
         .eq('estado_id', '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2')
-        .eq('guia_asignado', true)
+        .eq('guia_asignado', true))
 
       if (assignedError) {
-        console.error('Error fetching assigned drivers:', assignedError)
         return
       }
-      console.log('GuiasModule: Assigned drivers found:', assignedDrivers?.length || 0);
-
-      console.log('GuiasModule: Fetching unassigned drivers...');
       // Modificación estricta: Usamos !inner en todas las relaciones jerárquicas para forzar
       // que existan los registros hijos. Si no hay vehiculo, no trae el conductor.
-      const { data: rawUnassignedDrivers, error: unassignedError } = await supabase
+      const { data: rawUnassignedDrivers, error: unassignedError } = await aplicarFiltroSede(supabase
         .from('conductores')
         .select(`
           id,
@@ -1195,14 +1162,11 @@ export function GuiasModule() {
         `)
         .eq('estado_id', '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2')
         .or('guia_asignado.is.null,guia_asignado.eq.false')
-        .in('asignaciones_conductores.asignaciones.estado', ['activo', 'activa']);
+        .in('asignaciones_conductores.asignaciones.estado', ['activo', 'activa']));
 
       if (unassignedError) {
-        console.error('Error fetching unassigned drivers:', unassignedError)
         return
       }
-
-      console.log(`GuiasModule: Total candidatos crudos recuperados de DB: ${rawUnassignedDrivers?.length || 0}`);
 
       // Filtrar en memoria para asegurar que tengan vehículo y eliminar duplicados
       const unassignedDriversMap = new Map();
@@ -1221,36 +1185,16 @@ export function GuiasModule() {
            
            const isValid = esActivo && tieneIdVehiculo && tieneObjetoVehiculo && tienePatente;
            
-           if (isValid) {
-               // Guardamos la patente válida en el objeto del conductor para mostrarla en el log final
-               d._debug_patente = asignacion.vehiculos.patente;
-               console.log(`GuiasModule: Conductor VÁLIDO para asignación: ${d.nombres} ${d.apellidos} - Patente: ${asignacion.vehiculos.patente}, Estado: ${estado}`);
-           }
-           
            return isValid;
         });
 
         if (tieneVehiculoActivo) {
           unassignedDriversMap.set(d.id, d);
-        } else {
-          console.warn(`GuiasModule: Conductor RECHAZADO (Sin vehículo activo válido): ${d.nombres} ${d.apellidos} - ID: ${d.id}`);
         }
       });
       const unassignedDrivers = Array.from(unassignedDriversMap.values());
 
-      console.log(`GuiasModule: === RESUMEN FINAL DE FILTRADO ===`);
-      console.log(`GuiasModule: Total Aceptados: ${unassignedDrivers.length}`);
-      console.log(`GuiasModule: Detalle de conductores aceptados:`, unassignedDrivers.map(d => ({
-          id: d.id,
-          nombre: `${d.nombres} ${d.apellidos}`,
-          patente: d._debug_patente || 'N/A'
-      })));
-      console.log(`GuiasModule: =================================`);
-
-      console.log('GuiasModule: Unassigned drivers found:', unassignedDrivers.length);
-
       if (unassignedDrivers.length === 0) {
-        console.log('GuiasModule: No unassigned drivers to distribute.');
         return
       }
 
@@ -1262,8 +1206,6 @@ export function GuiasModule() {
           guideLoad.set(d.id_guia, guideLoad.get(d.id_guia)! + 1)
         }
       })
-      
-      console.log('GuiasModule: Current guide loads:', Object.fromEntries(guideLoad));
 
       const updates: any[] = []
       const guideIds = guias.map(g => g.id)
@@ -1283,8 +1225,6 @@ export function GuiasModule() {
         
         guideLoad.set(selectedGuideId, (guideLoad.get(selectedGuideId) || 0) + 1)
         
-        console.log(`GuiasModule: Planificando asignación - Conductor: ${driver.id} -> Guía: ${selectedGuideId}`);
-
         updates.push({
           id: driver.id,
           guia_asignado: true,
@@ -1292,11 +1232,7 @@ export function GuiasModule() {
         })
       }
 
-      console.log('GuiasModule: Updates prepared:', updates.length);
-
       if (updates.length > 0) {
-        console.log('GuiasModule: Performing updates to conductores...', updates);
-        
         // Usamos Promise.all con update individual para evitar problemas de constraints (not-null)
         // con upsert si faltan campos obligatorios en el objeto parcial.
         const updatePromises = updates.map(update => 
@@ -1315,15 +1251,11 @@ export function GuiasModule() {
         // Verificar errores en las actualizaciones individuales
         const errors = results.filter(r => r.error).map(r => r.error);
         if (errors.length > 0) {
-          console.error('Errores actualizando conductores:', errors);
-          throw errors[0]; // Lanzamos el primero para que caiga en el catch
+          throw errors[0];
         }
-
-        console.log(`Asignados ${updates.length} conductores a guías.`);
 
         // Insertar en historial semanal
         const currentWeek = getCurrentWeek()
-        console.log('GuiasModule: Preparing history inserts for week:', currentWeek);
         
         // Verificar historial existente para esta semana para evitar duplicados
         // Esto asegura que solo se creen registros para NUEVAS asignaciones
@@ -1339,8 +1271,6 @@ export function GuiasModule() {
         const driversToInsert = updates.filter(u => !existingHistoryIds.has(u.id));
         
         if (driversToInsert.length > 0) {
-          console.log(`GuiasModule: Found ${driversToInsert.length} drivers needing history. Checking for previous call dates...`);
-          
           // 2. Fetch latest history for these drivers to preserve fecha_llamada and id_accion_imp
            const driverIds = driversToInsert.map(u => u.id);
            const lastHistoryMap = new Map();
@@ -1364,18 +1294,15 @@ export function GuiasModule() {
                  }
                });
              }
-           } catch (err) {
-             console.error('GuiasModule: Error fetching previous history, proceeding without it:', err);
-           }
+            } catch {
+              // Proceed without previous history
+            }
 
            // 3. Prepare inserts
            driversToInsert.forEach(u => {
-             const preservedData = lastHistoryMap.get(u.id);
-             if (preservedData) {
-                console.log(`GuiasModule: Preserving history for driver ${u.id}:`, preservedData);
-             }
-             
-             historyInserts.push({
+              const preservedData = lastHistoryMap.get(u.id);
+              
+              historyInserts.push({
                id_conductor: u.id,
                id_guia: u.id_guia,
                semana: currentWeek,
@@ -1388,18 +1315,13 @@ export function GuiasModule() {
         }
 
         if (historyInserts.length > 0) {
-          console.log(`GuiasModule: Performing bulk insert of ${historyInserts.length} records to guias_historial_semanal...`, historyInserts);
           const { error: historyError } = await supabase
             .from('guias_historial_semanal')
             .insert(historyInserts)
 
           if (historyError) {
-            console.error('Error creando historial semanal:', historyError)
-          } else {
-            console.log(`Creados ${historyInserts.length} registros en historial semanal.`)
+            // History insert failed
           }
-        } else {
-          console.log('GuiasModule: No new history records needed (all drivers already have history for this week).');
         }
         
         // Recargar datos para reflejar cambios
@@ -1408,8 +1330,8 @@ export function GuiasModule() {
         }
       }
 
-    } catch (error) {
-      console.error('Error distribuyendo conductores:', error)
+    } catch {
+      // Distribution failed
     }
   }
 
@@ -1449,8 +1371,8 @@ export function GuiasModule() {
       if (initialId) {
         setSelectedGuiaId(initialId)
       }
-    } catch (error) {
-      console.error('Error loading guias:', error)
+    } catch {
+      // Guias load failed
     } finally {
       setLoading(false)
     }
@@ -2418,10 +2340,6 @@ export function GuiasModule() {
           };
 
           const total = parseTotal(rawTotal);
-          
-          // DEBUG LOGS (Temporary for debugging)
-          console.log(`[Seguimiento] Row: ${(row.original as any).nombres} | Total: ${total} (Raw: ${rawTotal})`);
-          // console.log('Rules:', seguimientoRules);
 
           let ruleMatch = null;
           
@@ -2435,16 +2353,10 @@ export function GuiasModule() {
               const matchesUpper = hasta === null || total <= hasta;
               
               if (matchesLower && matchesUpper) {
-                console.log(`  -> Match found: ${rule.rango_nombre} (${desde} - ${hasta})`);
                 ruleMatch = rule;
                 break;
               }
             }
-            if (!ruleMatch) {
-                console.log(`  -> No match found for total ${total}`);
-            }
-          } else {
-             console.warn('[Seguimiento] No rules loaded!');
           }
 
           const getBadgeColor = (color: string) => {
@@ -2763,41 +2675,59 @@ export function GuiasModule() {
               </div>
 
               {/* Filters & Table Container */}
-              <div className="guias-filters-container flex flex-col gap-4">
-                {/* Filters Row: Week Selector + Search */}
-                <div className="flex flex-col md:flex-row items-stretch md:items-stretch gap-4 bg-white p-3 rounded-lg shadow-sm">
-                  
-                  {/* External Search Input */}
-                  <div 
-                    className="dt-search-wrapper w-full md:w-auto md:flex-1 bg-gray-50 rounded-md"
-                    style={{ padding: '10px' }}
-                  >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Filters Row: Search + Week Selector + Button */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  background: 'var(--bg-secondary)',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  boxShadow: 'var(--shadow-sm)',
+                  flexWrap: 'wrap',
+                }}>
+                  {/* Search Input */}
+                  <div className="dt-search-wrapper" style={{ flex: 1, minWidth: '200px' }}>
                     <Search className="dt-search-icon" size={20} />
                     <input
                       type="text"
-                      className="dt-search-input h-full"
+                      className="dt-search-input"
                       placeholder="Buscar en esta lista..."
                       value={globalSearch}
                       onChange={(e) => setGlobalSearch(e.target.value)}
                     />
                   </div>
 
-                  {/* Week Selector - Remaining width */}
-                  <div className="w-full md:w-auto">
-                    <WeekSelector 
-                      selectedWeek={selectedWeek} 
-                      onWeekChange={setSelectedWeek} 
-                    />
+                  {/* Week Selector */}
+                  <WeekSelector 
+                    selectedWeek={selectedWeek} 
+                    onWeekChange={setSelectedWeek} 
+                  />
 
-                    {/* Botón Gestión de Conductores */}
-                    <button 
-                      onClick={() => setGestionConductoresModalOpen(true)}
-                      className="guias-btn"
-                    >
-                      <Users size={16} />
-                      <span>Gestión de Conductores</span>
-                    </button>
-                  </div>
+                  {/* Botón Gestión de Conductores */}
+                  <button 
+                    onClick={() => setGestionConductoresModalOpen(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      height: '42px',
+                      padding: '0 16px',
+                      background: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <Users size={16} />
+                    <span>Gestión de Conductores</span>
+                  </button>
                 </div>
 
                 {/* Filtros Activos */}
