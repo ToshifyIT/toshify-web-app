@@ -57,6 +57,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'zonas-peligrosas': MapPin,
   'escuela': GraduationCap,
   'conceptos-facturacion': Receipt,
+  'sedes': Building2,
 }
 
 // Función para obtener icono de un menú
@@ -179,6 +180,7 @@ import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
 import { GestorMenusPage } from './administracion/GestorMenusPage'
 import { AuditoriaPage } from './administracion/AuditoriaPage'
 import { ZonasPage } from './administracion/ZonasPage'
+import { SedesPage } from './administracion/SedesPage'
 import { ProfilePage } from './profile/ProfilePage'
 // Multas/Telepase
 import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
@@ -1633,6 +1635,11 @@ export function HomePage() {
               <Route path="/administracion/zonas" element={
                 <ProtectedRoute submenuName="zonas-peligrosas" action="view">
                   <ZonasPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/administracion/sedes" element={
+                <ProtectedRoute submenuName="sedes" action="view">
+                  <SedesPage />
                 </ProtectedRoute>
               } />
 

@@ -20,8 +20,9 @@ import {
   Heart,
   Star,
   Target,
-  Award,
-  GraduationCap
+  GraduationCap,
+  Triangle,
+  X
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
