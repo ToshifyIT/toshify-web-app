@@ -2793,8 +2793,9 @@ export function ReporteFacturacionTab() {
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i]
-        const dni = String(row[7] || '').trim()
-        if (!dni || dni === '0' || dni === '') continue
+        const dniRaw = String(row[7] || '').replace(/[.,\s]/g, '').trim()
+        if (!dniRaw || dniRaw === '0' || dniRaw === '') continue
+        const dni = dniRaw
 
         const disponible = parseFloat(row[15]) || 0
         const importeDescontar = parseFloat(row[16]) || 0
@@ -2823,7 +2824,7 @@ export function ReporteFacturacionTab() {
       const noMatch: string[] = []
 
       for (const exRow of excelData) {
-        const fact = facturaciones.find(f => String(f.conductor_dni).trim() === exRow.dni)
+        const fact = facturaciones.find(f => String(f.conductor_dni || '').replace(/[.,\s]/g, '').trim() === exRow.dni)
         if (!fact) {
           noMatch.push(`${exRow.nombre} (DNI: ${exRow.dni})`)
           continue
