@@ -713,7 +713,7 @@ export function ReporteFacturacionTab() {
           
           const currentDate = new Date(asig.fechaInicio)
           while (currentDate <= asig.fechaFin) {
-            const precioDiario = getPrecioEnFechaVP(codigo, currentDate) / 7
+            const precioDiario = getPrecioEnFechaVP(codigo, currentDate)
             ;(prorrateo as any)[montoKey] += precioDiario
             currentDate.setDate(currentDate.getDate() + 1)
           }
@@ -1406,12 +1406,12 @@ export function ReporteFacturacionTab() {
         .lte('fecha_vigencia_desde', fechaFin)
         .gte('fecha_vigencia_hasta', fechaInicio)
       
-      // Precios actuales como fallback
+      // Precios actuales como fallback (valores DIARIOS)
       const preciosActuales: Record<string, number> = {
-        'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 349690,
+        'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 35000,
         'P002': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 51429,
-        'P003': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 50000,
-        'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_final || 350900
+        'P003': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 7143,
+        'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_final || 39584
       }
       
       // Función helper para obtener precio en una fecha específica
@@ -1454,7 +1454,7 @@ export function ReporteFacturacionTab() {
           // Iterar día por día y sumar el precio correspondiente
           const currentDate = new Date(asig.fechaInicio)
           while (currentDate <= asig.fechaFin) {
-            const precioDiario = getPrecioEnFecha(codigo, currentDate) / 7
+            const precioDiario = getPrecioEnFecha(codigo, currentDate)
             ;(prorrateo as any)[montoKey] += precioDiario
             currentDate.setDate(currentDate.getDate() + 1)
           }
