@@ -25,7 +25,7 @@ import {
   formatDate,
   FACTURACION_CONFIG
 } from '../../../types/facturacion.types'
-import { format, differenceInDays, startOfWeek } from 'date-fns'
+import { format, startOfWeek, endOfWeek } from 'date-fns'
 import * as XLSX from 'xlsx'
 
 interface Liquidacion {
@@ -362,10 +362,21 @@ export function LiquidacionConductoresTab() {
         vehiculos: (asigConductor as any).asignaciones?.vehiculos
       } : null
 
-      // Calcular días trabajados en la semana
+      // Calcular días trabajados en la semana (basado en detecciones reales)
       const fechaCorteDate = new Date(fechaCorte)
       const lunesSemana = startOfWeek(fechaCorteDate, { weekStartsOn: 1 })
-      const diasTrabajados = differenceInDays(fechaCorteDate, lunesSemana) + 1
+      const fechaFinSemana = endOfWeek(fechaCorteDate, { weekStartsOn: 1 })
+      
+      // Contar días únicos con detecciones
+      const { data: deteccionesData } = await supabase
+        .from('detecciones')
+        .select('fecha')
+        .eq('conductor_id', conductorId)
+        .gte('fecha', format(lunesSemana, 'yyyy-MM-dd'))
+        .lte('fecha', format(fechaFinSemana, 'yyyy-MM-dd'))
+      
+      const diasUnicos = new Set((deteccionesData || []).map(d => d.fecha))
+      const diasTrabajados = Math.max(diasUnicos.size, 1) // Mínimo 1 día
 
       // Obtener tipo alquiler y valores
       const tipoAlquiler = (asignacion as any)?.horario || 'CARGO'
