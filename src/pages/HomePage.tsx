@@ -1,6 +1,7 @@
 // src/pages/HomePage.tsx
 import { useState, useEffect, lazy, Suspense, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
+import { supabase } from '../lib/supabase'
 import { 
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
@@ -221,7 +222,46 @@ export function HomePage() {
   const [guias, setGuias] = useState<Guia[]>([])
 
   useEffect(() => {
-    fetchGuias().then(setGuias)
+    const initGuias = async () => {
+      const guiasData = await fetchGuias()
+      setGuias(guiasData)
+      
+      // Auto-sync guías como submenús en la tabla submenus
+      const { data: menusData } = await supabase
+        .from('menus')
+        .select('id, name')
+        .eq('is_active', true)
+        .eq('name', 'seguimiento-conductores')
+        .single()
+      
+      if (menusData) {
+        const { data: existingSubmenus } = await supabase
+          .from('submenus')
+          .select('id, name')
+          .eq('is_active', true)
+          .eq('menu_id', menusData.id)
+          .like('name', 'guia-%')
+        
+        const existingGuiaIds = new Set((existingSubmenus || []).map((s: any) => s.name.replace('guia-', '')))
+        const missingGuias = guiasData.filter((g: Guia) => !existingGuiaIds.has(g.id))
+        
+        if (missingGuias.length > 0) {
+          await supabase.from('submenus').insert(
+            missingGuias.map((g: Guia, idx: number) => ({
+              name: `guia-${g.id}`,
+              label: g.full_name,
+              route: `/guias/${g.id}`,
+              menu_id: menusData.id,
+              parent_id: null,
+              level: 1,
+              order_index: 100 + idx,
+              is_active: true,
+            }))
+          )
+        }
+      }
+    }
+    initGuias()
   }, [])
 
   const distributeDrivers = async () => {
