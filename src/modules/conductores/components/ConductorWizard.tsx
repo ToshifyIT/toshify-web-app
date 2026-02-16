@@ -37,6 +37,7 @@ interface ConductorFormData {
   preferencia_turno: string
   url_documentacion: string
   numero_ibutton: string
+  sede_id: string
 }
 
 interface ConductorWizardProps {
@@ -48,6 +49,7 @@ interface ConductorWizardProps {
   estadosConductor: any[]
   estadosLicencia: any[]
   tiposLicencia: any[]
+  sedes: { id: string; nombre: string }[]
   onCancel: () => void
   onSubmit: () => void
   saving: boolean
@@ -70,6 +72,7 @@ export function ConductorWizard({
   estadosConductor,
   estadosLicencia,
   tiposLicencia,
+  sedes,
   onCancel,
   onSubmit,
   saving,
@@ -81,6 +84,7 @@ export function ConductorWizard({
     const newErrors: Record<string, string> = {}
 
     if (step === 1) {
+      if (!formData.sede_id) newErrors.sede_id = 'La sede es requerida'
       if (!formData.nombres.trim()) newErrors.nombres = 'Requerido'
       if (!formData.apellidos.trim()) newErrors.apellidos = 'Requerido'
       if (!formData.numero_dni.trim()) newErrors.numero_dni = 'Requerido'
@@ -133,6 +137,22 @@ export function ConductorWizard({
               <h3>Información Personal</h3>
             </div>
             <p className="step-description">Datos básicos del conductor. Todos los campos son obligatorios.</p>
+
+            <div className="form-group">
+              <label className="form-label">Sede *</label>
+              <select
+                className={`form-input ${errors.sede_id ? 'input-error' : ''}`}
+                value={formData.sede_id}
+                onChange={(e) => setFormData({ ...formData, sede_id: e.target.value })}
+                disabled={saving}
+              >
+                <option value="">Seleccionar sede...</option>
+                {sedes.map(sede => (
+                  <option key={sede.id} value={sede.id}>{sede.nombre}</option>
+                ))}
+              </select>
+              {errors.sede_id && <span className="error-message">{errors.sede_id}</span>}
+            </div>
 
             <div className="form-row">
               <div className="form-group">
