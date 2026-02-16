@@ -46,7 +46,7 @@ const ESTADO_LABELS: Record<string, string> = {
 
 
 export function VehicleManagement() {
-  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
+  const { sedeActualId, aplicarFiltroSede } = useSede()
   const [vehiculos, setVehiculos] = useState<VehiculoWithRelations[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -57,6 +57,7 @@ export function VehicleManagement() {
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
   const [creatingDriveFolder, setCreatingDriveFolder] = useState<string | null>(null)
+  const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
 
   // Drive Files Modal
   const [showDriveModal, setShowDriveModal] = useState(false)
@@ -123,7 +124,8 @@ export function VehicleManagement() {
     seguro_vigencia: '',
     titular: '',
     notas: '',
-    url_documentacion: ''
+    url_documentacion: '',
+    sede_id: ''
   })
 
   // ✅ OPTIMIZADO: Carga unificada en paralelo (recarga al cambiar sede)
@@ -188,7 +190,7 @@ export function VehicleManagement() {
     setError('')
 
     try {
-      const [vehiculosRes, estadosRes] = await Promise.all([
+      const [vehiculosRes, estadosRes, sedesRes] = await Promise.all([
         aplicarFiltroSede(supabase
           .from('vehiculos')
           .select(`
@@ -197,11 +199,13 @@ export function VehicleManagement() {
             vehiculos_estados (id, codigo, descripcion)
           `))
           .order('created_at', { ascending: false }),
-        supabase.from('vehiculos_estados').select('id, codigo, descripcion').order('descripcion')
+        supabase.from('vehiculos_estados').select('id, codigo, descripcion').order('descripcion'),
+        supabase.from('sedes').select('id, nombre').order('nombre')
       ])
 
       if (vehiculosRes.error) throw vehiculosRes.error
       if (estadosRes.data) setVehiculosEstados(estadosRes.data)
+      if (sedesRes.data) setSedes(sedesRes.data)
 
       if (vehiculosRes.data && vehiculosRes.data.length > 0) {
         // Ordenar: DISPONIBLE primero
@@ -300,11 +304,11 @@ export function VehicleManagement() {
       return
     }
 
-    if (!formData.patente || !formData.marca || !formData.modelo) {
+    if (!formData.patente || !formData.marca || !formData.modelo || !formData.sede_id) {
       Swal.fire({
         icon: 'warning',
         title: 'Campos requeridos',
-        text: 'Complete todos los campos requeridos',
+        text: 'Complete todos los campos requeridos (incluyendo sede)',
         confirmButtonColor: '#ff0033'
       })
       return
@@ -340,7 +344,7 @@ export function VehicleManagement() {
           notas: formData.notas || null,
           created_by: user?.id,
           created_by_name: profile?.full_name || 'Sistema',
-          sede_id: sedeActualId || sedeUsuario?.id,
+          sede_id: formData.sede_id,
         }])
 
       if (insertError) throw insertError
@@ -585,7 +589,8 @@ export function VehicleManagement() {
           seguro_vigencia: fullVehiculo.seguro_vigencia || '',
           titular: fullVehiculo.titular || '',
           notas: fullVehiculo.notas || '',
-          url_documentacion: (fullVehiculo as any).url_documentacion || (fullVehiculo as any).documentos_urls || ''
+          url_documentacion: (fullVehiculo as any).url_documentacion || (fullVehiculo as any).documentos_urls || '',
+          sede_id: (fullVehiculo as any).sede_id || ''
         })
         setShowEditModal(true)
       }
@@ -622,7 +627,8 @@ export function VehicleManagement() {
       seguro_vigencia: '',
       titular: '',
       notas: '',
-      url_documentacion: ''
+      url_documentacion: '',
+      sede_id: ''
     })
   }
 
@@ -1306,6 +1312,7 @@ export function VehicleManagement() {
               vehiculosEstados={vehiculosEstados}
               marcasExistentes={marcasExistentes}
               modelosExistentes={modelosExistentes}
+              sedes={sedes}
               onCancel={() => {
                 setShowCreateModal(false)
                 resetForm()

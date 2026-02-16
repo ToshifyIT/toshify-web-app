@@ -26,6 +26,7 @@ interface VehiculoFormData {
   titular: string
   notas: string
   url_documentacion: string
+  sede_id: string
 }
 
 interface VehiculoWizardProps {
@@ -34,6 +35,7 @@ interface VehiculoWizardProps {
   vehiculosEstados: VehiculoEstado[]
   marcasExistentes: string[]
   modelosExistentes: string[]
+  sedes: { id: string; nombre: string }[]
   onCancel: () => void
   onSubmit: () => void
   saving: boolean
@@ -55,6 +57,7 @@ export function VehiculoWizard({
   vehiculosEstados,
   marcasExistentes,
   modelosExistentes,
+  sedes,
   onCancel,
   onSubmit,
   saving
@@ -66,7 +69,10 @@ export function VehiculoWizard({
     const newErrors: Record<string, string> = {}
 
     if (stepIndex === 0) {
-      // Paso 1: Básico - patente es requerida
+      // Paso 1: Básico - sede y patente son requeridos
+      if (!formData.sede_id) {
+        newErrors.sede_id = 'La sede es requerida'
+      }
       if (!formData.patente.trim()) {
         newErrors.patente = 'La patente es requerida'
       }
@@ -111,8 +117,24 @@ export function VehiculoWizard({
               <h3>Información Básica</h3>
             </div>
             <p className="step-description">
-              Ingresa los datos principales del vehículo. La patente es obligatoria.
+              Selecciona la sede y ingresa los datos principales del vehículo.
             </p>
+
+            <div className="form-group">
+              <label className="form-label">Sede *</label>
+              <select
+                className={`form-input ${errors.sede_id ? 'input-error' : ''}`}
+                value={formData.sede_id}
+                onChange={(e) => setFormData({ ...formData, sede_id: e.target.value })}
+                disabled={saving}
+              >
+                <option value="">Seleccionar sede...</option>
+                {sedes.map(sede => (
+                  <option key={sede.id} value={sede.id}>{sede.nombre}</option>
+                ))}
+              </select>
+              {errors.sede_id && <span className="error-message">{errors.sede_id}</span>}
+            </div>
 
             <div className="form-group">
               <label className="form-label">Patente *</label>
