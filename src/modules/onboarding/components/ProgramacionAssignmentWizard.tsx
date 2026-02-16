@@ -600,20 +600,110 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     setLoadingPares(true)
 
     try {
+      // 1. Primero intentar cargar desde la base de datos (datos pre-calculados)
+      const { data: emparajamientosDB, error: errorDB } = await supabase
+        .from('conductor_emparajamientos')
+        .select('*')
+        .gte('score', 50) // Solo pares con score decente
+        .order('score', { ascending: false })
+        .limit(50)
+
+      if (!errorDB && emparajamientosDB && emparajamientosDB.length > 0) {
+        // Obtener IDs de conductores para buscar info
+        const conductorIds = new Set<string>()
+        emparajamientosDB.forEach(e => {
+          conductorIds.add(e.conductor_a_id)
+          conductorIds.add(e.conductor_b_id)
+        })
+
+        // Cargar info de conductores
+        const { data: conductoresData } = await supabase
+          .from('conductores')
+          .select('id, nombres, apellidos, numero_dni, preferencia_turno, direccion_lat, direccion_lng')
+          .in('id', Array.from(conductorIds))
+
+        if (conductoresData) {
+          // Crear mapa de conductores
+          const conductoresMap = new Map(conductoresData.map((c: any) => [c.id, c]))
+
+          // Buscar emparajamientos que coincidan con diurno-nocturno
+          const paresDB: any[] = []
+
+          for (const emp of emparajamientosDB) {
+            const conductorA = conductoresMap.get(emp.conductor_a_id)
+            const conductorB = conductoresMap.get(emp.conductor_b_id)
+
+            if (!conductorA || !conductorB) continue
+
+            // Verificar que sea un par válido (diurno + nocturno)
+            const esDiurnoA = conductorA.preferencia_turno === 'DIURNO' || conductorA.preferencia_turno === 'SIN_PREFERENCIA' || !conductorA.preferencia_turno
+            const esNocturnoA = conductorA.preferencia_turno === 'NOCTURNO' || conductorA.preferencia_turno === 'SIN_PREFERENCIA' || !conductorA.preferencia_turno
+            const esDiurnoB = conductorB.preferencia_turno === 'DIURNO' || conductorB.preferencia_turno === 'SIN_PREFERENCIA' || !conductorB.preferencia_turno
+            const esNocturnoB = conductorB.preferencia_turno === 'NOCTURNO' || conductorB.preferencia_turno === 'SIN_PREFERENCIA' || !conductorB.preferencia_turno
+
+            let diurno = null, nocturno = null
+            if (esDiurnoA && esNocturnoB) {
+              diurno = conductorA
+              nocturno = conductorB
+            } else if (esNocturnoA && esDiurnoB) {
+              diurno = conductorB
+              nocturno = conductorA
+            }
+
+            if (diurno && nocturno) {
+              paresDB.push({
+                diurno: {
+                  ...diurno,
+                  id: diurno.id,
+                  nombres: diurno.nombres,
+                  apellidos: diurno.apellidos,
+                  numero_dni: diurno.numero_dni,
+                  preferencia_turno: diurno.preferencia_turno,
+                  direccion_lat: diurno.direccion_lat,
+                  direccion_lng: diurno.direccion_lng
+                },
+                nocturno: {
+                  ...nocturno,
+                  id: nocturno.id,
+                  nombres: nocturno.nombres,
+                  apellidos: nocturno.apellidos,
+                  numero_dni: nocturno.numero_dni,
+                  preferencia_turno: nocturno.preferencia_turno,
+                  direccion_lat: nocturno.direccion_lat,
+                  direccion_lng: nocturno.direccion_lng
+                },
+                distanciaKm: emp.distancia_km,
+                tiempoMinutos: emp.tiempo_minutos,
+                score: emp.score
+              })
+            }
+          }
+
+          if (paresDB.length > 0) {
+            setParesCercanos(paresDB.slice(0, 10))
+            setMostrarParesCercanos(true)
+            setLoadingPares(false)
+            return
+          }
+        }
+      }
+
+      // 2. Fallback: calcular en tiempo real si no hay datos en BD
+      
       // Geocodificar conductores sin coordenadas
       const conductoresActualizados = await geocodificarConductoresSinCoordenadas(conductores)
       setConductores(conductoresActualizados)
 
       // Filtrar conductores con coordenadas y disponibles
-      const conductoresConCoords = conductoresActualizados.filter(c =>
+      const conductoresConCoords = conductoresActualizados.filter((c: Conductor) =>
         c.direccion_lat && c.direccion_lng
       )
 
       // Separar por preferencia de turno
-      const diurnos = conductoresConCoords.filter(c =>
+      const diurnos = conductoresConCoords.filter((c: Conductor) =>
         c.preferencia_turno === 'DIURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno
       )
-      const nocturnos = conductoresConCoords.filter(c =>
+      const nocturnos = conductoresConCoords.filter((c: Conductor) =>
         c.preferencia_turno === 'NOCTURNO' || c.preferencia_turno === 'SIN_PREFERENCIA' || !c.preferencia_turno
       )
 
