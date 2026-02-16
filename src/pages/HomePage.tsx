@@ -297,12 +297,14 @@ export function HomePage() {
         )
       } else {
         // Submenú sin hijos - renderizar como botón navegable
+        const isGuia = submenu.submenu_name?.startsWith('guia-')
         return (
           <button
             key={submenu.submenu_id}
             className={`nav-item ${depth > 0 ? 'nested' : ''} ${isActiveRoute(submenu.submenu_route) ? 'active' : ''}`}
             onClick={() => navigate(submenu.submenu_route)}
           >
+            {isGuia && <span className="nav-icon"><Users size={16} /></span>}
             <span className="nav-label">{submenu.submenu_label === 'Telepase Histórico' ? 'Telepase' : submenu.submenu_label}</span>
           </button>
         )
@@ -1236,7 +1238,7 @@ export function HomePage() {
                 const submenus = getVisibleSubmenusForMenu(menu.menu_id)
                 const isMenuOpen = openMenus[menu.menu_name] || false
                 const isSeguimiento = menu.menu_name === 'seguimiento-conductores'
-                const hasSubmenus = submenus.length > 0 || isSeguimiento
+                const hasSubmenus = submenus.length > 0
 
                 if (hasSubmenus) {
                   // Menú con submenús
@@ -1264,23 +1266,13 @@ export function HomePage() {
                             <div className="nav-flyout-content">
                               <div className="nav-flyout-header">{menu.menu_label}</div>
                               <div className="nav-flyout-items">
-                                {/* Guías dinámicas (solo para seguimiento-conductores) */}
-                                {isSeguimiento && guias.map(guia => (
-                                  <button
-                                    key={guia.id}
-                                    className={`nav-flyout-item ${isActiveRoute(`/guias/${guia.id}`) ? 'active' : ''}`}
-                                    onClick={() => navigate(`/guias/${guia.id}`)}
-                                  >
-                                    <span className="nav-flyout-icon"><Users size={16} /></span>
-                                    <span>{guia.full_name}</span>
-                                  </button>
-                                ))}
-                                {/* Submenús estáticos del menú */}
+                                {/* Submenús del menú (incluye guías registradas como submenús) */}
                                 {(submenus as SubmenuWithHierarchy[])
                                   .filter(sub => sub.parent_id === null)
                                   .sort((a, b) => a.order_index - b.order_index)
                                   .map(submenu => {
-                                    const SubIcon = getMenuIcon(submenu.submenu_name)
+                                    const isGuia = submenu.submenu_name?.startsWith('guia-')
+                                    const SubIcon = isGuia ? Users : getMenuIcon(submenu.submenu_name)
                                     return (
                                       <button
                                         key={submenu.submenu_id}
@@ -1299,18 +1291,7 @@ export function HomePage() {
                       </div>
 
                       <div className={`nav-section-items ${!isMenuOpen ? 'collapsed' : ''}`}>
-                        {/* Guías dinámicas (solo para seguimiento-conductores) */}
-                        {isSeguimiento && guias.map(guia => (
-                          <button
-                            key={guia.id}
-                            className={`nav-item ${isActiveRoute(`/guias/${guia.id}`) ? 'active' : ''}`}
-                            onClick={() => navigate(`/guias/${guia.id}`)}
-                          >
-                            <span className="nav-icon"><Users size={16} /></span>
-                            <span className="nav-label">{guia.full_name}</span>
-                          </button>
-                        ))}
-                        {/* Submenús estáticos */}
+                        {/* Submenús (incluye guías registradas como submenús) */}
                         {renderSubmenus(submenus as SubmenuWithHierarchy[], null, 0)}
                       </div>
                     </div>

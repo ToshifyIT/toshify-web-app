@@ -144,10 +144,78 @@ export function UserMenuPermissionsManager() {
 
       if (submenusError) throw submenusError
 
+      // =====================================================
+      // AUTO-SYNC: Registrar guías como submenús de "seguimiento-conductores"
+      // =====================================================
+      let finalSubmenus = submenusData || []
+      const seguimientoMenu = (menusData || []).find((m: any) => m.name === 'seguimiento-conductores')
+      if (seguimientoMenu) {
+        // Obtener guías activas
+        const { data: guiasData } = await supabase
+          .from('user_profiles')
+          .select('id, full_name, roles!inner(name)')
+          .eq('roles.name', 'guia')
+
+        if (guiasData && guiasData.length > 0) {
+          const existingGuiaSubmenus = (submenusData || []).filter((s: any) =>
+            s.name?.startsWith('guia-') && s.menu_id === seguimientoMenu.id
+          )
+          const existingGuiaIds = new Set(existingGuiaSubmenus.map((s: any) => s.name?.replace('guia-', '')))
+
+          // Crear submenús faltantes para guías
+          const missingGuias = guiasData.filter((g: any) => !existingGuiaIds.has(g.id))
+          if (missingGuias.length > 0) {
+            const newSubmenus = missingGuias.map((g: any, idx: number) => ({
+              name: `guia-${g.id}`,
+              label: g.full_name || 'Guía sin nombre',
+              route: `/guias/${g.id}`,
+              menu_id: seguimientoMenu.id,
+              parent_id: null,
+              level: 1,
+              order_index: 100 + idx,
+              is_active: true,
+            }))
+
+            const { error: insertError } = await supabase
+              .from('submenus')
+              .insert(newSubmenus)
+
+            if (!insertError) {
+              // Recargar submenús con los nuevos registros
+              const { data: updatedSubmenus } = await supabase
+                .from('submenus')
+                .select('*, menus(name)')
+                .eq('is_active', true)
+                .order('order_index')
+
+              if (updatedSubmenus) {
+                finalSubmenus = updatedSubmenus
+              }
+            }
+          }
+
+          // Limpiar submenús de guías que ya no existen
+          const activeGuiaIds = new Set(guiasData.map((g: any) => g.id))
+          const orphanGuiaSubmenus = existingGuiaSubmenus.filter(
+            (s: any) => !activeGuiaIds.has(s.name?.replace('guia-', ''))
+          )
+          if (orphanGuiaSubmenus.length > 0) {
+            await supabase
+              .from('submenus')
+              .delete()
+              .in('id', orphanGuiaSubmenus.map((s: any) => s.id))
+
+            finalSubmenus = finalSubmenus.filter(
+              (s: any) => !orphanGuiaSubmenus.some((o: any) => o.id === s.id)
+            )
+          }
+        }
+      }
+
       // Sanitizar datos antes de guardar en estado
       setUsers((usersData as UserWithRole[] || []).map(user => sanitizeObject(user)))
       setMenus((menusData || []).map(menu => sanitizeObject(menu)))
-      setSubmenus((submenusData || []).map(submenu => sanitizeObject(submenu)))
+      setSubmenus(finalSubmenus.map((submenu: any) => sanitizeObject(submenu)))
 
       devLog.info('✅ Datos cargados correctamente')
     } catch (err) {
