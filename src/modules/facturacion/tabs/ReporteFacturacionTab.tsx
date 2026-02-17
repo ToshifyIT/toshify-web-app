@@ -656,6 +656,10 @@ export function ReporteFacturacionTab() {
         const modalidadAsignacion = asignacion.horario // 'TURNO' o 'CARGO'
         const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
         
+        // Si la asignación padre está finalizada/cancelada sin fecha_fin → registro huérfano
+        const estadoPadreVP = (asignacion.estado || '').toLowerCase()
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVP) && !asignacion.fecha_fin) return
+        
         // Calcular días que este registro se solapa con la semana
         // Usar fecha_fin de la asignación padre como límite si la del conductor es NULL
         const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) 
@@ -1382,6 +1386,11 @@ export function ReporteFacturacionTab() {
         
         const modalidadAsignacion = asignacion.horario // 'TURNO' o 'CARGO'
         const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
+        
+        // Si la asignación padre está finalizada/cancelada y no tiene fecha_fin,
+        // es un registro huérfano (datos inconsistentes) — no contar
+        const estadoPadre = (asignacion.estado || '').toLowerCase()
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) return
         
         // Calcular días que este registro se solapa con la semana
         // Usar fecha_fin de la asignación padre como límite si la del conductor es NULL
