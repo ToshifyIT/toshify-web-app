@@ -484,9 +484,10 @@ export function calcularGarantiaProporcional(turnosCobrados: number): number {
 }
 
 export function formatCurrency(value: number): string {
+  const hasDecimals = value % 1 !== 0
   const formatted = new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: hasDecimals ? 2 : 0
   }).format(value)
   return `$ ${formatted}`
 }

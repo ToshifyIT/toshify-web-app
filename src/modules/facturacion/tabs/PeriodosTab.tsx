@@ -452,12 +452,16 @@ export function PeriodosTab() {
           .select('*')
           .in('conductor_id', conductorIds)
           .eq('aplicado', false),
-        // Peajes de Cabify para el período (P005)
-        supabase
-          .from('cabify_historico')
-          .select('dni, peajes')
-          .gte('fecha_inicio', semana.fecha_inicio + 'T00:00:00')
-          .lte('fecha_inicio', semana.fecha_fin + 'T23:59:59'),
+        // Peajes de Cabify de la SEMANA ANTERIOR (P005)
+        (() => {
+          const semanaAnteriorInicio = format(subWeeks(parseISO(semana.fecha_inicio), 1), 'yyyy-MM-dd')
+          const semanaAnteriorFin = format(subWeeks(parseISO(semana.fecha_fin), 1), 'yyyy-MM-dd')
+          return supabase
+            .from('cabify_historico')
+            .select('dni, peajes')
+            .gte('fecha_inicio', semanaAnteriorInicio + 'T00:00:00')
+            .lte('fecha_inicio', semanaAnteriorFin + 'T23:59:59')
+        })(),
         // Garantías de conductores
         supabase
           .from('garantias_conductores')

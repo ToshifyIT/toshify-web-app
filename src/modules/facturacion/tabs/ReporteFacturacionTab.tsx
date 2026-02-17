@@ -750,24 +750,33 @@ export function ReporteFacturacionTab() {
         tipo_alquiler: string;
       }>((garantias || []).map((g: any) => [g.conductor_nombre?.toLowerCase().trim() || '', g]))
 
-      // 3.1 Cargar datos de Cabify desde la tabla cabify_historico
-      const { data: cabifyData } = await supabase
-        .from('cabify_historico')
-        .select('dni, ganancia_total, cobro_efectivo, peajes')
-        .gte('fecha_inicio', fechaInicio + 'T00:00:00')
-        .lte('fecha_inicio', fechaFin + 'T23:59:59')
+      // 3.1 Cargar datos de Cabify desde la tabla cabify_historico (peajes de la SEMANA ANTERIOR)
+      const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
+      const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
+      const [{ data: cabifyData }, { data: cabifyPeajesData }] = await Promise.all([
+        supabase.from('cabify_historico')
+          .select('dni, ganancia_total, cobro_efectivo')
+          .gte('fecha_inicio', fechaInicio + 'T00:00:00')
+          .lte('fecha_inicio', fechaFin + 'T23:59:59'),
+        supabase.from('cabify_historico')
+          .select('dni, peajes')
+          .gte('fecha_inicio', peajesInicio + 'T00:00:00')
+          .lte('fecha_inicio', peajesFin + 'T23:59:59')
+      ])
 
       // Crear mapa de ganancias Cabify por DNI (sumar si hay múltiples registros)
       const cabifyMap = new Map<string, number>()
-      // Crear mapa de peajes Cabify por DNI (P005)
-      const peajesMap = new Map<string, number>()
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
-          // Ganancias
           const actualGanancia = cabifyMap.get(record.dni) || 0
           const ganancia = parseFloat(String(record.ganancia_total)) || 0
           cabifyMap.set(record.dni, actualGanancia + ganancia)
-          // Peajes (P005)
+        }
+      })
+      // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
+      const peajesMap = new Map<string, number>()
+      ;(cabifyPeajesData || []).forEach((record: any) => {
+        if (record.dni && record.peajes) {
           const actualPeajes = peajesMap.get(record.dni) || 0
           const peajes = parseFloat(String(record.peajes)) || 0
           peajesMap.set(record.dni, actualPeajes + peajes)
@@ -1474,7 +1483,12 @@ export function ReporteFacturacionTab() {
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('*').in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
-        supabase.from('cabify_historico').select('dni, peajes').gte('fecha_inicio', fechaInicio + 'T00:00:00').lte('fecha_inicio', fechaFin + 'T23:59:59'),
+        // Peajes de la SEMANA ANTERIOR
+        (() => {
+          const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
+          const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
+          return supabase.from('cabify_historico').select('dni, peajes').gte('fecha_inicio', peajesInicio + 'T00:00:00').lte('fecha_inicio', peajesFin + 'T23:59:59')
+        })(),
         (supabase.from('garantias_conductores') as any).select('*').in('conductor_id', conductorIds),
         (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).lte('semana', semanaNum).eq('anio', anioNum),
         (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin),
