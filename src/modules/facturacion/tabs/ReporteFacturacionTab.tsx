@@ -1000,8 +1000,8 @@ export function ReporteFacturacionTab() {
         }
         const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // "De baja": solo incluir si tienen días > 0 (asignación finalizada en la semana)
-        if (control.estado === 'De baja' && diasTotales === 0) continue
+        // Solo incluir conductores con días trabajados durante la semana
+        if (diasTotales === 0) continue
         
         // Calcular alquiler usando montos pre-calculados con precios históricos
         const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
@@ -1469,10 +1469,9 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // "De baja": solo incluir si tienen días > 0 (asignación finalizada en la semana)
-        if (control.estado === 'De baja' && totalDias === 0) continue
+        // Solo incluir conductores con días trabajados durante la semana
+        if (totalDias === 0) continue
         
-        // Activos con 0 días: incluir para cobrarles saldo/penalidades/etc con alquiler $0
         conductoresProcesados.push({
           conductor_id: conductorData.id,
           conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
