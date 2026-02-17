@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Swal from 'sweetalert2'
@@ -223,6 +224,7 @@ export function ReporteFacturacionTab() {
   const [showSiFacturaPreview, setShowSiFacturaPreview] = useState(false)
   const [siFacturaPreviewData, setSiFacturaPreviewData] = useState<FacturacionPreviewRow[]>([])
   const [loadingSiFacturaPreview, setLoadingSiFacturaPreview] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [conceptosPendientes, setConceptosPendientes] = useState<ConceptoPendiente[]>([])
   const [conceptosNomina, setConceptosNomina] = useState<ConceptoNomina[]>([])
 
@@ -4521,7 +4523,7 @@ export function ReporteFacturacionTab() {
     }
   }
 
-  // Sincronizar cambios del preview RIT con la BD
+  // Sincronizar cambios del preview RIT con la BD (deshabilitado - previews son solo lectura)
   async function syncRITChanges(updatedData: RITPreviewRow[]): Promise<boolean> {
     if (!periodo) return false
 
@@ -6080,8 +6082,6 @@ export function ReporteFacturacionTab() {
       ? format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')
       : format(semanaActual.fin, 'dd/MM/yyyy')
 
-    const esPeriodoAbierto = periodo?.estado === 'abierto'
-    
     return (
       <FacturacionPreviewTable
         data={siFacturaPreviewData}
@@ -6090,9 +6090,9 @@ export function ReporteFacturacionTab() {
         anio={anioNum}
         fechaInicio={fechaInicioStr}
         fechaFin={fechaFinStr}
-        periodoAbierto={esPeriodoAbierto}
-        conceptosPendientes={conceptosPendientes}
-        onEnlazarConcepto={esPeriodoAbierto ? enlazarConceptoPendiente : undefined}
+        periodoAbierto={false}
+        conceptosPendientes={[]}
+        onEnlazarConcepto={undefined}
         onClose={() => {
           setShowSiFacturaPreview(false)
           setSiFacturaPreviewData([])
@@ -6100,14 +6100,13 @@ export function ReporteFacturacionTab() {
         }}
         onExport={exportarSiFacturaExcel}
         exporting={exportingSiFactura}
-        onSync={esPeriodoAbierto ? syncFacturacionChanges : undefined}
+        onSync={undefined}
       />
     )
   }
 
   // Si estamos en modo RIT Preview, mostrar el componente de preview
   if (showRITPreview && periodo) {
-    const periodoAbierto = periodo.estado === 'abierto'
     return (
       <RITPreviewTable
         data={ritPreviewData}
@@ -6115,12 +6114,12 @@ export function ReporteFacturacionTab() {
         anio={periodo.anio}
         fechaInicio={format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')}
         fechaFin={format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}
-        periodoAbierto={periodoAbierto}
+        periodoAbierto={false}
         onClose={() => {
           setShowRITPreview(false)
           setRitPreviewData([])
         }}
-        onSync={periodoAbierto ? syncRITChanges : undefined}
+        onSync={undefined}
       />
     )
   }
@@ -6287,8 +6286,6 @@ export function ReporteFacturacionTab() {
       ? format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')
       : format(semanaActual.fin, 'dd/MM/yyyy')
     
-    const esPeriodoAbierto = periodo?.estado === 'abierto'
-
     return (
       <CabifyPreviewTable
         data={cabifyPreviewData}
@@ -6296,17 +6293,20 @@ export function ReporteFacturacionTab() {
         anio={anioNum}
         fechaInicio={fechaInicioStr}
         fechaFin={fechaFinStr}
-        periodoId={esPeriodoAbierto ? periodo?.id : undefined}
+        periodoId={undefined}
         onClose={() => {
           setShowCabifyPreview(false)
           setCabifyPreviewData([])
         }}
         onExport={exportarCabifyExcel}
         exporting={exportingCabify}
-        onSync={esPeriodoAbierto ? syncCabifyChanges : undefined}
+        onSync={undefined}
       />
     )
   }
+
+  // Funciones de sync deshabilitadas temporalmente - previews son solo vista previa (read-only)
+  void syncRITChanges; void syncFacturacionChanges; void enlazarConceptoPendiente; void syncCabifyChanges; void conceptosPendientes
 
   return (
     <>
