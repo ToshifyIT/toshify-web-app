@@ -220,7 +220,7 @@ export function HomePage() {
   const [guias, setGuias] = useState<Guia[]>([])
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
-  const [showSedeSelector, setShowSedeSelector] = useState(!sedeActualId && puedeVerTodasSedes)
+  const [showSedeSelector, setShowSedeSelector] = useState(!sedeActualId)
 
   useEffect(() => {
     const initGuias = async () => {
