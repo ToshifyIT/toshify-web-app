@@ -5,7 +5,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin } from 'lucide-react'
+import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
@@ -92,6 +92,7 @@ const getPreferenciaBadge = (preferencia?: string): { bg: string; color: string 
 }
 
 interface ProgramacionData {
+  sede_id: string
   modalidad: 'TURNO' | 'CARGO' | ''
   vehiculo_id: string
   vehiculo_patente: string
@@ -148,9 +149,9 @@ interface Props {
 
 export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: Props) {
   const { user, profile } = useAuth()
-  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
   const isEditMode = !!editData
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(0)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [conductores, setConductores] = useState<Conductor[]>([])
   const [loading, setLoading] = useState(false)
@@ -179,6 +180,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     if (editData) {
       const isCargo = editData.modalidad === 'CARGO'
       return {
+        sede_id: editData.sede_id || '',
         modalidad: editData.modalidad || '',
         vehiculo_id: editData.vehiculo_entregar_id || '',
         vehiculo_patente: editData.vehiculo_entregar_patente || editData.vehiculo_entregar_patente_sistema || '',
@@ -222,6 +224,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
     // Valores por defecto para crear
     return {
+      sede_id: '',
       modalidad: '',
       vehiculo_id: '',
       vehiculo_patente: '',
@@ -2328,8 +2331,19 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           {/* Stepper */}
           <div className="wizard-stepper">
             <div className="step-item">
+              <div className={`step-circle ${step >= 0 ? 'active' : ''} ${step > 0 ? 'completed' : ''}`}>
+                {step > 0 ? <Check size={16} /> : '1'}
+              </div>
+              <span className={`step-label ${step >= 0 ? 'active' : ''} ${step > 0 ? 'completed' : ''}`}>
+                Sede
+              </span>
+            </div>
+
+            <div className={`step-connector ${step > 0 ? 'completed' : ''}`} />
+
+            <div className="step-item">
               <div className={`step-circle ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
-                {step > 1 ? <Check size={16} /> : '1'}
+                {step > 1 ? <Check size={16} /> : '2'}
               </div>
               <span className={`step-label ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
                 Modalidad
@@ -2340,7 +2354,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
             <div className="step-item">
               <div className={`step-circle ${step >= 2 ? 'active' : ''} ${step > 2 ? 'completed' : ''}`}>
-                {step > 2 ? <Check size={16} /> : '2'}
+                {step > 2 ? <Check size={16} /> : '3'}
               </div>
               <span className={`step-label ${step >= 2 ? 'active' : ''} ${step > 2 ? 'completed' : ''}`}>
                 Vehiculo
@@ -2368,6 +2382,38 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
           {/* Content */}
           <div className="wizard-content">
+            {/* Step 0: Sede */}
+            {step === 0 && (
+              <div>
+                <div className="step-description">
+                  <h3>Paso 1: Selecciona la Sede</h3>
+                  <p>En qué sede se har la asignacion?</p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '400px', margin: '0 auto' }}>
+                  {sedes.map(sede => (
+                    <button
+                      key={sede.id}
+                      onClick={() => {
+                        setFormData({ ...formData, sede_id: sede.id })
+                        setStep(1)
+                      }}
+                      className={`modality-card ${formData.sede_id === sede.id ? 'selected' : ''}`}
+                      style={{ padding: '20px', textAlign: 'left' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Building2 size={32} />
+                        <div>
+                          <h4>{sede.nombre}</h4>
+                          <p style={{ fontSize: '12px', margin: 0 }}>{sede.direccion || 'Sin dirección'}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Step 1: Modalidad */}
             {step === 1 && (
               <div>
