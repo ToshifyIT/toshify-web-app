@@ -567,15 +567,32 @@ export function ReporteFacturacionTab() {
       const anioDelPeriodo = getYear(parseISO(fechaInicio))
 
       // 1. Cargar conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
-      // Excluir conductores con estado 'De baja'
+      // Excluir "De baja" inicialmente - luego agregamos los de baja con asignación en la semana
       let qControl = (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaDelPeriodo)
         .eq('anio', anioDelPeriodo)
       if (sedeActualId) qControl = qControl.eq('sede_id', sedeActualId)
-      const { data: conductoresControl, error: errControl } = await qControl
+      const { data: conductoresControlActivosVP, error: errControl } = await qControl
         .not('estado', 'eq', 'De baja')
+      
+      // También cargar "De baja" para incluir los que tienen asignación finalizada en la semana
+      let qBajaVP = (supabase
+        .from('conductores_semana_facturacion') as any)
+        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
+        .eq('semana', semanaDelPeriodo)
+        .eq('anio', anioDelPeriodo)
+        .eq('estado', 'De baja')
+      if (sedeActualId) qBajaVP = qBajaVP.eq('sede_id', sedeActualId)
+      const { data: conductoresBajaVP } = await qBajaVP
+      
+      // Unificar: activos + de baja (deduplicados por DNI)
+      const dnisActivosVP = new Set((conductoresControlActivosVP || []).map((c: any) => c.numero_dni))
+      const conductoresControl = [
+        ...(conductoresControlActivosVP || []),
+        ...(conductoresBajaVP || []).filter((c: any) => !dnisActivosVP.has(c.numero_dni))
+      ]
 
       if (errControl) throw errControl
 
@@ -600,7 +617,7 @@ export function ReporteFacturacionTab() {
           fecha_fin,
           estado,
           asignacion_id,
-          asignaciones!inner(id, horario, estado)
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIds)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada'])
@@ -640,8 +657,11 @@ export function ReporteFacturacionTab() {
         const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
         
         // Calcular días que este registro se solapa con la semana
-        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) : fechaInicioSemana
-        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) : fechaFinSemana
+        // Usar fecha_fin de la asignación padre como límite si la del conductor es NULL
+        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) 
+          : (asignacion.fecha_inicio ? new Date(asignacion.fecha_inicio) : fechaInicioSemana)
+        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) 
+          : (asignacion.fecha_fin ? new Date(asignacion.fecha_fin) : fechaFinSemana)
         
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
@@ -655,19 +675,25 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoMap.get(ac.conductor_id)
         if (!prorrateo) return
         
-        // Determinar modalidad
+        // Determinar modalidad basándose en asignaciones.horario + asignaciones_conductores.horario
         let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
-        if (modalidadAsignacion === 'CARGO' || horarioConductor === 'todo_dia') {
+        const horarioLowerVP = (horarioConductor || '').toLowerCase().trim()
+        if (modalidadAsignacion === 'CARGO' || horarioLowerVP === 'todo_dia') {
           modalidad = 'CARGO'
           prorrateo.CARGO += dias
         } else if (modalidadAsignacion === 'TURNO') {
-          if (horarioConductor === 'diurno' || horarioConductor === 'DIURNO' || horarioConductor === 'D') {
-            modalidad = 'TURNO_DIURNO'
-            prorrateo.TURNO_DIURNO += dias
-          } else if (horarioConductor === 'nocturno' || horarioConductor === 'NOCTURNO' || horarioConductor === 'N') {
+          if (horarioLowerVP === 'nocturno' || horarioLowerVP === 'n') {
             modalidad = 'TURNO_NOCTURNO'
             prorrateo.TURNO_NOCTURNO += dias
+          } else {
+            // Default para TURNO: diurno (incluye 'diurno', 'd', null, vacío, etc.)
+            modalidad = 'TURNO_DIURNO'
+            prorrateo.TURNO_DIURNO += dias
           }
+        } else {
+          // modalidadAsignacion no reconocida: tratar como CARGO por defecto
+          modalidad = 'CARGO'
+          prorrateo.CARGO += dias
         }
         
         // Guardar asignación para cálculo de montos
@@ -939,6 +965,9 @@ export function ReporteFacturacionTab() {
         }
       })
       
+      // Cuota de garantía semanal: precio diario de conceptos_nomina × 7
+      const cuotaGarantiaSemanalVP = (preciosAlquiler.get('P003') || 7143) * 7
+
       // 6. Calcular facturación proyectada para cada conductor
       const facturacionesProyectadas: FacturacionConductor[] = []
 
@@ -961,8 +990,8 @@ export function ReporteFacturacionTab() {
         }
         const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Si el conductor no tiene asignaciones activas durante la semana, excluirlo
-        if (diasTotales === 0) continue
+        // "De baja": solo incluir si tienen días > 0 (asignación finalizada en la semana)
+        if (control.estado === 'De baja' && diasTotales === 0) continue
         
         // Calcular alquiler usando montos pre-calculados con precios históricos
         const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
@@ -989,12 +1018,12 @@ export function ReporteFacturacionTab() {
             subtotalGarantia = 0
             cuotaGarantiaNumero = 'NA'
           } else {
-            subtotalGarantia = Math.round(FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL * factorProporcional)
+            subtotalGarantia = Math.round(cuotaGarantiaSemanalVP * factorProporcional)
             const cuotaActual = garantia.cuotas_pagadas + 1
             cuotaGarantiaNumero = `${cuotaActual} de ${garantia.cuotas_totales}`
           }
         } else {
-          subtotalGarantia = Math.round(FACTURACION_CONFIG.GARANTIA_CUOTA_SEMANAL * factorProporcional)
+          subtotalGarantia = Math.round(cuotaGarantiaSemanalVP * factorProporcional)
           cuotaGarantiaNumero = `1 de ${cuotasTotales}`
         }
 
@@ -1257,15 +1286,33 @@ export function ReporteFacturacionTab() {
       await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
       // 3. Obtener conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
-      // Excluir conductores con estado 'De baja'
+      // Excluir "De baja" inicialmente - luego agregamos los de baja con asignación en la semana
       let qRecalc = (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaNum)
         .eq('anio', anioNum)
       if (sedeActualId) qRecalc = qRecalc.eq('sede_id', sedeActualId)
-      const { data: conductoresControl } = await qRecalc
+      const { data: conductoresControlActivos } = await qRecalc
         .not('estado', 'eq', 'De baja')
+      
+      // También cargar "De baja" para incluir los que tienen asignación finalizada en la semana
+      let qBaja = (supabase
+        .from('conductores_semana_facturacion') as any)
+        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
+        .eq('semana', semanaNum)
+        .eq('anio', anioNum)
+        .eq('estado', 'De baja')
+      if (sedeActualId) qBaja = qBaja.eq('sede_id', sedeActualId)
+      const { data: conductoresBaja } = await qBaja
+      
+      // Unificar: activos + de baja (se deduplicarán después por DNI)
+      const dnisActivos = new Set((conductoresControlActivos || []).map((c: any) => c.numero_dni))
+      const conductoresControl = [
+        ...(conductoresControlActivos || []),
+        // Solo agregar "De baja" si no están ya como activos (evitar duplicados)
+        ...(conductoresBaja || []).filter((c: any) => !dnisActivos.has(c.numero_dni))
+      ]
 
       if (!conductoresControl || conductoresControl.length === 0) {
         await (supabase.from('periodos_facturacion') as any)
@@ -1297,7 +1344,7 @@ export function ReporteFacturacionTab() {
           fecha_fin,
           estado,
           asignacion_id,
-          asignaciones!inner(id, horario, estado)
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIdsTemp)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada'])
@@ -1337,14 +1384,17 @@ export function ReporteFacturacionTab() {
         const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
         
         // Calcular días que este registro se solapa con la semana
-        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) : fechaInicioSemanaRecalc
-        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) : fechaFinSemanaRecalc
+        // Usar fecha_fin de la asignación padre como límite si la del conductor es NULL
+        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) 
+          : (asignacion.fecha_inicio ? new Date(asignacion.fecha_inicio) : fechaInicioSemanaRecalc)
+        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) 
+          : (asignacion.fecha_fin ? new Date(asignacion.fecha_fin) : fechaFinSemanaRecalc)
         
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
         const efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
         
-        // Calcular días
+        // Calcular días (si el rango no se solapa con la semana, será <= 0)
         const dias = Math.max(0, Math.ceil((efectivoFin.getTime() - efectivoInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
         
         if (dias <= 0) return
@@ -1352,19 +1402,25 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
         if (!prorrateo) return
         
-        // Determinar modalidad
+        // Determinar modalidad basándose en asignaciones.horario + asignaciones_conductores.horario
         let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
-        if (modalidadAsignacion === 'CARGO' || horarioConductor === 'todo_dia') {
+        const horarioLower = (horarioConductor || '').toLowerCase().trim()
+        if (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia') {
           modalidad = 'CARGO'
           prorrateo.CARGO += dias
         } else if (modalidadAsignacion === 'TURNO') {
-          if (horarioConductor === 'diurno' || horarioConductor === 'DIURNO' || horarioConductor === 'D') {
-            modalidad = 'TURNO_DIURNO'
-            prorrateo.TURNO_DIURNO += dias
-          } else if (horarioConductor === 'nocturno' || horarioConductor === 'NOCTURNO' || horarioConductor === 'N') {
+          if (horarioLower === 'nocturno' || horarioLower === 'n') {
             modalidad = 'TURNO_NOCTURNO'
             prorrateo.TURNO_NOCTURNO += dias
+          } else {
+            // Default para TURNO: diurno (incluye 'diurno', 'd', null, vacío, etc.)
+            modalidad = 'TURNO_DIURNO'
+            prorrateo.TURNO_DIURNO += dias
           }
+        } else {
+          // modalidadAsignacion no reconocida: tratar como CARGO por defecto
+          modalidad = 'CARGO'
+          prorrateo.CARGO += dias
         }
         
         // Guardar asignación para cálculo de montos con precios históricos
@@ -1374,23 +1430,29 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Procesar conductores desde tabla de control
+      // Procesar conductores desde tabla de control (deduplicando por DNI)
       const conductoresProcesados: {
         conductor_id: string; conductor_nombre: string; conductor_dni: string | null;
         conductor_cuit: string | null; vehiculo_patente: string | null;
         dias_turno_diurno: number; dias_turno_nocturno: number; dias_cargo: number; total_dias: number;
       }[] = []
+      const dnisYaProcesados = new Set<string>()
 
       for (const control of conductoresControl) {
+        // Deduplicar por DNI
+        if (dnisYaProcesados.has(control.numero_dni)) continue
+        dnisYaProcesados.add(control.numero_dni)
+
         const conductorData = conductoresMap.get(control.numero_dni)
         if (!conductorData) continue
 
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Si el conductor no tiene asignaciones activas durante la semana, excluirlo
-        if (totalDias === 0) continue
+        // "De baja": solo incluir si tienen días > 0 (asignación finalizada en la semana)
+        if (control.estado === 'De baja' && totalDias === 0) continue
         
+        // Activos con 0 días: incluir para cobrarles saldo/penalidades/etc con alquiler $0
         conductoresProcesados.push({
           conductor_id: conductorData.id,
           conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
@@ -1440,10 +1502,12 @@ export function ReporteFacturacionTab() {
       }
       
       // Variables de compatibilidad con código existente
+      // Precios diarios para alquiler (se calculan día a día más abajo)
       const precioTurnoDiurno = preciosActuales['P001']
       const precioCargo = preciosActuales['P002']
-      const cuotaGarantia = preciosActuales['P003']
       const precioTurnoNocturno = preciosActuales['P013']
+      // Garantía: precio en conceptos_nomina es DIARIO, multiplicar por 7 para obtener cuota semanal
+      const cuotaGarantia = preciosActuales['P003'] * 7
       
       // Mapa de código de concepto por modalidad
       const codigosPorModalidad: Record<string, string> = {

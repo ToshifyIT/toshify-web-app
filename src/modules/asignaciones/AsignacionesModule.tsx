@@ -703,13 +703,13 @@ export function AsignacionesModule() {
           conductoresTurno: {
             diurno: diurno ? {
               id: diurno.id,
-              nombre: `${diurno.conductores.nombres} ${diurno.conductores.apellidos}`,
+              nombre: `${diurno.conductores?.nombres || ''} ${diurno.conductores?.apellidos || ''}`.trim() || 'Sin datos',
               confirmado: diurno.confirmado || false,
               cancelado: !esAsignacionFinalizada && diurno.estado === 'cancelado'
             } : null,
             nocturno: nocturno ? {
               id: nocturno.id,
-              nombre: `${nocturno.conductores.nombres} ${nocturno.conductores.apellidos}`,
+              nombre: `${nocturno.conductores?.nombres || ''} ${nocturno.conductores?.apellidos || ''}`.trim() || 'Sin datos',
               confirmado: nocturno.confirmado || false,
               cancelado: !esAsignacionFinalizada && nocturno.estado === 'cancelado'
             } : null
