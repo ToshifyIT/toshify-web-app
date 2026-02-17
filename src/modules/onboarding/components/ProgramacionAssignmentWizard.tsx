@@ -222,9 +222,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         observaciones: editData.observaciones || ''
       }
     }
-    // Valores por defecto para crear
+    // Valores por defecto para crear - preseleccionar sede si hay una activa
     return {
-      sede_id: '',
+      sede_id: sedeActualId || sedeUsuario?.id || '',
       modalidad: '',
       vehiculo_id: '',
       vehiculo_patente: '',
@@ -606,88 +606,54 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       // 1. Primero intentar cargar desde la base de datos (datos pre-calculados)
       const { data: emparajamientosDB, error: errorDB } = await supabase
         .from('conductor_emparajamientos')
-        .select('*')
-        .gte('score', 50) // Solo pares con score decente
+        .select(`
+          *,
+          conductor_a:conductor_a_id(id, nombres, apellidos, numero_dni, preferencia_turno),
+          conductor_b:conductor_b_id(id, nombres, apellidos, numero_dni, preferencia_turno)
+        `)
+        .gte('score', 50)
         .order('score', { ascending: false })
         .limit(50)
 
       if (!errorDB && emparajamientosDB && emparajamientosDB.length > 0) {
-        // Obtener IDs de conductores para buscar info
-        const conductorIds = new Set<string>()
-        emparajamientosDB.forEach(e => {
-          conductorIds.add(e.conductor_a_id)
-          conductorIds.add(e.conductor_b_id)
-        })
+        const paresDB: any[] = []
 
-        // Cargar info de conductores
-        const { data: conductoresData } = await supabase
-          .from('conductores')
-          .select('id, nombres, apellidos, numero_dni, preferencia_turno, direccion_lat, direccion_lng')
-          .in('id', Array.from(conductorIds))
+        for (const emp of emparajamientosDB) {
+          const conductorA = emp.conductor_a
+          const conductorB = emp.conductor_b
 
-        if (conductoresData) {
-          // Crear mapa de conductores
-          const conductoresMap = new Map(conductoresData.map((c: any) => [c.id, c]))
+          if (!conductorA || !conductorB) continue
 
-          // Buscar emparajamientos que coincidan con diurno-nocturno
-          const paresDB: any[] = []
+          const esDiurnoA = conductorA.preferencia_turno === 'DIURNO' || conductorA.preferencia_turno === 'SIN_PREFERENCIA' || !conductorA.preferencia_turno
+          const esNocturnoA = conductorA.preferencia_turno === 'NOCTURNO' || conductorA.preferencia_turno === 'SIN_PREFERENCIA' || !conductorA.preferencia_turno
+          const esDiurnoB = conductorB.preferencia_turno === 'DIURNO' || conductorB.preferencia_turno === 'SIN_PREFERENCIA' || !conductorB.preferencia_turno
+          const esNocturnoB = conductorB.preferencia_turno === 'NOCTURNO' || conductorB.preferencia_turno === 'SIN_PREFERENCIA' || !conductorB.preferencia_turno
 
-          for (const emp of emparajamientosDB) {
-            const conductorA = conductoresMap.get(emp.conductor_a_id)
-            const conductorB = conductoresMap.get(emp.conductor_b_id)
-
-            if (!conductorA || !conductorB) continue
-
-            // Verificar que sea un par válido (diurno + nocturno)
-            const esDiurnoA = conductorA.preferencia_turno === 'DIURNO' || conductorA.preferencia_turno === 'SIN_PREFERENCIA' || !conductorA.preferencia_turno
-            const esNocturnoA = conductorA.preferencia_turno === 'NOCTURNO' || conductorA.preferencia_turno === 'SIN_PREFERENCIA' || !conductorA.preferencia_turno
-            const esDiurnoB = conductorB.preferencia_turno === 'DIURNO' || conductorB.preferencia_turno === 'SIN_PREFERENCIA' || !conductorB.preferencia_turno
-            const esNocturnoB = conductorB.preferencia_turno === 'NOCTURNO' || conductorB.preferencia_turno === 'SIN_PREFERENCIA' || !conductorB.preferencia_turno
-
-            let diurno = null, nocturno = null
-            if (esDiurnoA && esNocturnoB) {
-              diurno = conductorA
-              nocturno = conductorB
-            } else if (esNocturnoA && esDiurnoB) {
-              diurno = conductorB
-              nocturno = conductorA
-            }
-
-            if (diurno && nocturno) {
-              paresDB.push({
-                diurno: {
-                  ...diurno,
-                  id: diurno.id,
-                  nombres: diurno.nombres,
-                  apellidos: diurno.apellidos,
-                  numero_dni: diurno.numero_dni,
-                  preferencia_turno: diurno.preferencia_turno,
-                  direccion_lat: diurno.direccion_lat,
-                  direccion_lng: diurno.direccion_lng
-                },
-                nocturno: {
-                  ...nocturno,
-                  id: nocturno.id,
-                  nombres: nocturno.nombres,
-                  apellidos: nocturno.apellidos,
-                  numero_dni: nocturno.numero_dni,
-                  preferencia_turno: nocturno.preferencia_turno,
-                  direccion_lat: nocturno.direccion_lat,
-                  direccion_lng: nocturno.direccion_lng
-                },
-                distanciaKm: emp.distancia_km,
-                tiempoMinutos: emp.tiempo_minutos,
-                score: emp.score
-              })
-            }
+          let diurno: any = null, nocturno: any = null
+          if (esDiurnoA && esNocturnoB) {
+            diurno = conductorA
+            nocturno = conductorB
+          } else if (esNocturnoA && esDiurnoB) {
+            diurno = conductorB
+            nocturno = conductorA
           }
 
-          if (paresDB.length > 0) {
-            setParesCercanos(paresDB.slice(0, 10))
-            setMostrarParesCercanos(true)
-            setLoadingPares(false)
-            return
+          if (diurno && nocturno) {
+            paresDB.push({
+              diurno,
+              nocturno,
+              distanciaKm: emp.distancia_km,
+              tiempoMinutos: emp.tiempo_minutos,
+              score: emp.score
+            })
           }
+        }
+
+        if (paresDB.length > 0) {
+          setParesCercanos(paresDB.slice(0, 10))
+          setMostrarParesCercanos(true)
+          setLoadingPares(false)
+          return
         }
       }
 

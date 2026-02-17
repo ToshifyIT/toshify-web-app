@@ -622,8 +622,10 @@ export function HomePage() {
           cursor: pointer;
           transition: all 0.15s;
           margin-bottom: 2px;
-          font-size: 13px;
-          font-weight: 500;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
           border: none;
           background: none;
           width: 100%;
