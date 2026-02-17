@@ -1102,57 +1102,38 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         // Estados activos (no cancelados ni completados)
         const estadosActivos = ['por_agendar', 'agendado', 'en_curso']
 
-        // Verificar si el vehículo ya está programado
-        const { data: vehiculosProgramados } = await aplicarFiltroSede(supabase
+        // Verificar si ya existe una programación con el mismo vehículo Y mismos conductores
+        const { data: progExistentes } = await aplicarFiltroSede(supabase
           .from('programaciones_onboarding')
-          .select('id, vehiculo_entregar_patente, estado')
+          .select('id, vehiculo_entregar_patente, estado, conductor_id, conductor_diurno_id, conductor_nocturno_id, modalidad')
           .eq('vehiculo_entregar_id', formData.vehiculo_id)
-          .in('estado', estadosActivos))
-          .limit(1) as { data: Array<{ id: string; vehiculo_entregar_patente: string; estado: string }> | null }
+          .in('estado', estadosActivos)) as { data: Array<any> | null }
 
-        const vehiculoProgramado = vehiculosProgramados?.[0]
-        if (vehiculoProgramado) {
-          Swal.fire({
-            icon: 'warning',
-            title: 'Vehículo ya programado',
-            html: `El vehículo <strong>${formData.vehiculo_patente}</strong> ya tiene una programación activa (${ESTADO_LABELS[vehiculoProgramado.estado] || vehiculoProgramado.estado}).<br><br>Debe cancelar o completar esa programación primero.`,
-            confirmButtonColor: '#FF0033'
-          })
-          return
-        }
+        if (progExistentes && progExistentes.length > 0) {
+          // Verificar si alguna programación existente tiene exactamente los mismos conductores
+          for (const prog of progExistentes) {
+            let mismosonductores = false
 
-        // Verificar conductores duplicados según modalidad
-        const conductoresToCheck: { id: string, nombre: string, tipo: string }[] = []
+            if (formData.modalidad === 'CARGO') {
+              mismosonductores = prog.conductor_id === formData.conductor_id
+            } else {
+              // TURNO: verificar diurno y nocturno
+              const mismoDiurno = (!formData.conductor_diurno_id && !prog.conductor_diurno_id) || 
+                prog.conductor_diurno_id === formData.conductor_diurno_id
+              const mismoNocturno = (!formData.conductor_nocturno_id && !prog.conductor_nocturno_id) ||
+                prog.conductor_nocturno_id === formData.conductor_nocturno_id
+              mismosonductores = mismoDiurno && mismoNocturno
+            }
 
-        if (formData.modalidad === 'CARGO' && formData.conductor_id) {
-          conductoresToCheck.push({ id: formData.conductor_id, nombre: formData.conductor_nombre, tipo: 'A Cargo' })
-        } else {
-          if (formData.conductor_diurno_id) {
-            conductoresToCheck.push({ id: formData.conductor_diurno_id, nombre: formData.conductor_diurno_nombre, tipo: 'Diurno' })
-          }
-          if (formData.conductor_nocturno_id) {
-            conductoresToCheck.push({ id: formData.conductor_nocturno_id, nombre: formData.conductor_nocturno_nombre, tipo: 'Nocturno' })
-          }
-        }
-
-        for (const conductor of conductoresToCheck) {
-          // Buscar en todos los campos posibles de conductor
-          const { data: conductoresProgramados } = await aplicarFiltroSede(supabase
-            .from('programaciones_onboarding')
-            .select('id, vehiculo_entregar_patente, estado')
-            .in('estado', estadosActivos)
-            .or(`conductor_id.eq.${conductor.id},conductor_diurno_id.eq.${conductor.id},conductor_nocturno_id.eq.${conductor.id}`))
-            .limit(1) as { data: Array<{ id: string; vehiculo_entregar_patente: string; estado: string }> | null }
-
-          const conductorProgramado = conductoresProgramados?.[0]
-          if (conductorProgramado) {
-            Swal.fire({
-              icon: 'warning',
-              title: 'Conductor ya programado',
-              html: `El conductor <strong>${conductor.nombre}</strong> (${conductor.tipo}) ya tiene una programación activa para el vehículo ${conductorProgramado.vehiculo_entregar_patente} (${ESTADO_LABELS[conductorProgramado.estado] || conductorProgramado.estado}).<br><br>Debe cancelar o completar esa programación primero.`,
-              confirmButtonColor: '#FF0033'
-            })
-            return
+            if (mismosonductores) {
+              Swal.fire({
+                icon: 'warning',
+                title: 'Programación duplicada',
+                html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con los mismos conductores (${ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
+                confirmButtonColor: '#FF0033'
+              })
+              return
+            }
           }
         }
       } catch (checkError: any) {
@@ -2534,9 +2515,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       return (
                         <div
                           key={vehicle.id}
-                          className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''} ${isProgramado ? 'disabled' : ''}`}
-                          onClick={() => !isProgramado && handleSelectVehicle(vehicle)}
-                          style={isProgramado ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                          className={`vehicle-card ${formData.vehiculo_id === vehicle.id ? 'selected' : ''}`}
+                          onClick={() => handleSelectVehicle(vehicle)}
+                          style={undefined}
                         >
                           <div className="vehicle-info">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>

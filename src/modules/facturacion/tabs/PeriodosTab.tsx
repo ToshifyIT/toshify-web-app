@@ -78,7 +78,7 @@ function generarSemanasDelAnio(cantidadSemanas: number = 12): { semana: number; 
 
 export function PeriodosTab() {
   const { profile } = useAuth()
-  const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
   const [semanas, setSemanas] = useState<SemanaFacturacion[]>([])
   const [loading, setLoading] = useState(true)
   const [generando, setGenerando] = useState<string | null>(null) // ID de semana generándose
@@ -264,7 +264,7 @@ export function PeriodosTab() {
           .eq('id', periodoId)
       }
 
-      // 2. NUEVO: Obtener conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
+      // 2. Obtener conductores desde conductores_semana_facturacion (tabla de control)
       const semanaNum = getWeek(parseISO(semana.fecha_inicio), { weekStartsOn: 1 })
       const anioNum = getYear(parseISO(semana.fecha_inicio))
       
@@ -276,40 +276,108 @@ export function PeriodosTab() {
 
       if (errControl) throw errControl
 
-      if (!conductoresControl || conductoresControl.length === 0) {
+      // Crear set de DNIs ya en tabla de control
+      const dnisEnControl = new Set((conductoresControl || []).map((c: any) => c.numero_dni))
+
+      // 3. Obtener TODOS los conductores con asignación activa en la semana actual
+      // Esto incluye nuevos conductores asignados, desasignados, etc.
+      const { data: todasAsignaciones } = await aplicarFiltroSede(supabase
+        .from('asignaciones_conductores')
+        .select(`
+          conductor_id, horario,
+          asignaciones!inner(id, estado, horario, vehiculo_id,
+            vehiculos(patente)
+          ),
+          conductores!inner(id, nombres, apellidos, numero_dni, numero_cuit)
+        `)
+        .in('estado', ['asignado', 'activo', 'activa']))
+
+      // Mapear conductores con asignación activa
+      const conductoresAsignados = new Map<string, { 
+        conductor: any; modalidad: string; patente: string | null 
+      }>()
+      for (const ac of (todasAsignaciones || []) as any[]) {
+        const asig = ac.asignaciones
+        if (!asig || asig.estado !== 'activa') continue
+        const conductor = ac.conductores
+        if (!conductor) continue
+        
+        const modalidad = asig.horario === 'CARGO' ? 'CARGO' : 'TURNO'
+        const patente = asig.vehiculos?.patente || null
+        
+        // Si ya está mapeado, no sobreescribir
+        if (!conductoresAsignados.has(conductor.id)) {
+          conductoresAsignados.set(conductor.id, { conductor, modalidad, patente })
+        }
+      }
+
+      // 4. Agregar a conductores_semana_facturacion los que tienen asignación activa pero no están en la tabla
+      const nuevosParaControl: any[] = []
+      for (const [, { conductor, modalidad, patente }] of conductoresAsignados.entries()) {
+        if (!dnisEnControl.has(conductor.numero_dni)) {
+          nuevosParaControl.push({
+            numero_dni: conductor.numero_dni,
+            semana: semanaNum,
+            anio: anioNum,
+            estado: 'Activo',
+            patente: patente,
+            modalidad: modalidad,
+            sede_id: sedeActualId || sedeUsuario?.id,
+          })
+        }
+      }
+      
+      if (nuevosParaControl.length > 0) {
+        await (supabase.from('conductores_semana_facturacion') as any).insert(nuevosParaControl)
+        console.log(`Se agregaron ${nuevosParaControl.length} conductores nuevos a la tabla de control`)
+      }
+
+      // 5. Obtener datos completos de todos los conductores (control + nuevos)
+      const todosLosDnis = [
+        ...Array.from(dnisEnControl),
+        ...nuevosParaControl.map(c => c.numero_dni)
+      ]
+
+      if (todosLosDnis.length === 0) {
         await (supabase
           .from('periodos_facturacion') as any)
           .update({ estado: 'abierto', total_conductores: 0 })
           .eq('id', periodoId)
-
-        Swal.fire('Aviso', 'No hay conductores en la tabla de control para esta semana', 'warning')
+        Swal.fire('Aviso', 'No hay conductores con asignación activa para esta semana', 'warning')
         cargarSemanas()
         return
       }
 
-      // 3. Obtener datos de conductores desde tabla conductores
-      const dnisControl = conductoresControl.map((c: any) => c.numero_dni)
-      
       const { data: conductoresData } = await aplicarFiltroSede(supabase
         .from('conductores')
         .select('id, nombres, apellidos, numero_dni, numero_cuit'))
-        .in('numero_dni', dnisControl)
+        .in('numero_dni', todosLosDnis)
 
       // Crear mapa de conductores por DNI
       const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
 
-      // 4. Procesar conductores desde tabla de control
+      // Set de conductor IDs con asignación activa
+      const conductoresConAsignacion = new Set(
+        Array.from(conductoresAsignados.keys())
+      )
+
+      // 6. Re-leer tabla de control actualizada (incluye los recién agregados)
+      const { data: controlActualizado } = await aplicarFiltroSede((supabase
+        .from('conductores_semana_facturacion') as any)
+        .select('numero_dni, estado, patente, modalidad, valor_alquiler'))
+        .eq('semana', semanaNum)
+        .eq('anio', anioNum)
+
+      // 7. Procesar solo conductores con asignación activa - 7 días fijos
       const conductoresProcesados: ConductorProcesado[] = []
 
-      for (const control of conductoresControl) {
+      for (const control of (controlActualizado || [])) {
         const conductorData = conductoresMap.get(control.numero_dni)
-        
-        if (!conductorData) {
-          // Conductor no existe en la tabla conductores, saltar
-          continue
-        }
+        if (!conductorData) continue
 
-        // Usar datos de la tabla de control
+        // Solo incluir conductores con asignación activa
+        if (!conductoresConAsignacion.has(conductorData.id)) continue
+
         const modalidad = control.modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
         const diasTurno = modalidad === 'TURNO' ? 7 : 0
         const diasCargo = modalidad === 'CARGO' ? 7 : 0
@@ -319,11 +387,11 @@ export function PeriodosTab() {
           conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
           conductor_dni: conductorData.numero_dni,
           conductor_cuit: conductorData.numero_cuit,
-          vehiculo_id: null, // Se obtiene de la patente
+          vehiculo_id: null,
           vehiculo_patente: control.patente || null,
           dias_turno: diasTurno,
           dias_cargo: diasCargo,
-          total_dias: 7, // Semana completa desde control
+          total_dias: 7,
           modalidad_inicial: modalidad as 'TURNO' | 'CARGO'
         })
       }
