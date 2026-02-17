@@ -603,7 +603,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado)
         `)
         .in('conductor_id', conductorIds)
-        .in('estado', ['asignado', 'activo', 'activa'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada'])
 
       // Crear mapa de prorrateo con días y montos para precios históricos
       interface ProrrateoVistaPrevia {
@@ -1300,7 +1300,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado)
         `)
         .in('conductor_id', conductorIdsTemp)
-        .in('estado', ['asignado', 'activo', 'activa'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada'])
 
       // Crear mapa de prorrateo: conductor_id -> { días y montos por modalidad }
       // Los montos se calculan día a día para considerar cambios de precio históricos

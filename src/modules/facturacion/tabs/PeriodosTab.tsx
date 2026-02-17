@@ -279,28 +279,38 @@ export function PeriodosTab() {
       // Crear set de DNIs ya en tabla de control
       const dnisEnControl = new Set((conductoresControl || []).map((c: any) => c.numero_dni))
 
-      // 3. Obtener TODOS los conductores con asignación activa en la semana actual
-      // Esto incluye nuevos conductores asignados, desasignados, etc.
+      // 3. Obtener TODOS los conductores con asignación durante la semana
+      // Incluye activas, finalizadas y programadas que se solaparon con la semana
       const { data: todasAsignaciones } = await aplicarFiltroSede(supabase
         .from('asignaciones_conductores')
         .select(`
-          conductor_id, horario,
+          conductor_id, horario, fecha_inicio, fecha_fin,
           asignaciones!inner(id, estado, horario, vehiculo_id,
             vehiculos(patente)
           ),
           conductores!inner(id, nombres, apellidos, numero_dni, numero_cuit)
         `)
-        .in('estado', ['asignado', 'activo', 'activa']))
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada']))
 
-      // Mapear conductores con asignación activa
+      // Mapear conductores con asignación que se solapó con la semana
       const conductoresAsignados = new Map<string, { 
         conductor: any; modalidad: string; patente: string | null 
       }>()
+      const semanaInicioDate = new Date(semana.fecha_inicio + 'T00:00:00')
+      const semanaFinDate = new Date(semana.fecha_fin + 'T23:59:59')
+
       for (const ac of (todasAsignaciones || []) as any[]) {
         const asig = ac.asignaciones
-        if (!asig || asig.estado !== 'activa') continue
+        if (!asig) continue
         const conductor = ac.conductores
         if (!conductor) continue
+
+        // Verificar que la asignación se solape con la semana
+        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio + 'T00:00:00') : new Date('2020-01-01')
+        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin + 'T23:59:59') : new Date('2099-12-31')
+        
+        // Si la asignación terminó antes de la semana o empezó después, no cuenta
+        if (acFin < semanaInicioDate || acInicio > semanaFinDate) continue
         
         const modalidad = asig.horario === 'CARGO' ? 'CARGO' : 'TURNO'
         const patente = asig.vehiculos?.patente || null
