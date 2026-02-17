@@ -209,17 +209,18 @@ interface SubmenuWithHierarchy {
 
 export function HomePage() {
   const { profile, signOut } = useAuth()
-  const { sedes, sedeActual, verTodas, cambiarSede, puedeVerTodasSedes } = useSede()
+  const { sedes, sedeActual, verTodas, cambiarSede, puedeVerTodasSedes, sedeActualId } = useSede()
   const navigate = useNavigate()
   const location = useLocation()
   const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
   useTheme() // Para mantener el contexto del tema activo
   const [sedeDropdownOpen, setSedeDropdownOpen] = useState(false)
-  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
-  const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [guias, setGuias] = useState<Guia[]>([])
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
+  const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
+  const [showSedeSelector, setShowSedeSelector] = useState(!sedeActualId && puedeVerTodasSedes)
 
   useEffect(() => {
     const initGuias = async () => {
@@ -370,6 +371,59 @@ export function HomePage() {
 
   return (
     <>
+      {/* Selector inicial de sede */}
+      {showSedeSelector && sedes.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+        }}>
+          <div style={{
+            background: 'var(--bg-primary)',
+            padding: '40px',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            width: '90%',
+            textAlign: 'center',
+          }}>
+            <h2 style={{ marginBottom: '8px', color: 'var(--text-primary)' }}>Seleccionar Sede</h2>
+            <p style={{ marginBottom: '24px', color: 'var(--text-secondary)' }}>
+              Por favor selecciona una sede para continuar
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {sedes.map(sede => (
+                <button
+                  key={sede.id}
+                  onClick={() => {
+                    cambiarSede(sede.id)
+                    setShowSedeSelector(false)
+                  }}
+                  style={{
+                    padding: '16px 24px',
+                    fontSize: '16px',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {sede.nombre}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
