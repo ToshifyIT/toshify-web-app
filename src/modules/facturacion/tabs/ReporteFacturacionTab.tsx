@@ -5699,68 +5699,6 @@ export function ReporteFacturacionTab() {
     return excesos.filter(e => e.conductor_id === conductorId)
   }
 
-  // Función para editar saldo de un conductor
-  async function editarSaldo(facturacion: FacturacionConductor) {
-    // Detectar tema oscuro
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-    const colors = {
-      bg: isDark ? '#1E293B' : '#fff',
-      text: isDark ? '#F1F5F9' : '#374151',
-      textSecondary: isDark ? '#94A3B8' : '#6B7280',
-      textMuted: isDark ? '#64748B' : '#9CA3AF',
-      border: isDark ? '#475569' : '#D1D5DB',
-      inputBg: isDark ? '#0F172A' : '#fff'
-    }
-
-    const { value: nuevoSaldo } = await Swal.fire({
-      title: 'Ajustar Saldo',
-      background: colors.bg,
-      color: colors.text,
-      html: `
-        <div style="text-align: left; padding: 0 8px;">
-          <p style="font-size: 13px; color: ${colors.textSecondary}; margin-bottom: 12px;">
-            <strong style="color: ${colors.text}">${facturacion.conductor_nombre}</strong>
-          </p>
-          <div style="margin-bottom: 16px;">
-            <label style="display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: ${colors.text}; text-transform: uppercase;">Saldo Actual</label>
-            <input id="swal-saldo" type="number" value="${facturacion.saldo_anterior}" style="width: 100%; padding: 10px 12px; border: 1px solid ${colors.border}; border-radius: 6px; font-size: 14px; background: ${colors.inputBg}; color: ${colors.text};">
-          </div>
-          <p style="font-size: 11px; color: ${colors.textMuted};">
-            Positivo = Deuda del conductor<br>
-            Negativo = Saldo a favor del conductor
-          </p>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'Guardar',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#ff0033',
-      preConfirm: () => {
-        return parseFloat((document.getElementById('swal-saldo') as HTMLInputElement).value) || 0
-      }
-    })
-
-    if (nuevoSaldo === undefined) return
-
-    try {
-      // Actualizar en saldos_conductores
-      const { error } = await (supabase
-        .from('saldos_conductores') as any)
-        .upsert({
-          conductor_id: facturacion.conductor_id,
-          saldo_actual: nuevoSaldo,
-          ultima_actualizacion: new Date().toISOString()
-        }, { onConflict: 'conductor_id' })
-
-      if (error) throw error
-
-      showSuccess('Saldo Actualizado', 'El nuevo saldo se aplicará en la próxima generación')
-    } catch (error: any) {
-      console.error('Error actualizando saldo:', error)
-      Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
-    }
-  }
-
   // Columnas de la tabla
   const columns = useMemo<ColumnDef<FacturacionConductor>[]>(() => [
     {
@@ -6070,31 +6008,13 @@ export function ReporteFacturacionTab() {
       accessorKey: 'saldo_anterior',
       header: 'Saldo Ant.',
       cell: ({ row }) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{
-            fontSize: '12px',
-            fontWeight: row.original.saldo_anterior !== 0 ? 600 : 400,
-            color: row.original.saldo_anterior > 0 ? 'var(--badge-red-text)' : row.original.saldo_anterior < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
-          }}>
-            {row.original.saldo_anterior !== 0 ? formatCurrency(row.original.saldo_anterior) : '-'}
-          </span>
-          {!modoVistaPrevia && (
-            <button
-              onClick={(e) => { e.stopPropagation(); editarSaldo(row.original) }}
-              style={{
-                padding: '2px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-muted)',
-                opacity: 0.6
-              }}
-              title="Ajustar saldo"
-            >
-              <Edit2 size={12} />
-            </button>
-          )}
-        </div>
+        <span style={{
+          fontSize: '12px',
+          fontWeight: row.original.saldo_anterior !== 0 ? 600 : 400,
+          color: row.original.saldo_anterior > 0 ? 'var(--badge-red-text)' : row.original.saldo_anterior < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
+        }}>
+          {row.original.saldo_anterior !== 0 ? formatCurrency(row.original.saldo_anterior) : '-'}
+        </span>
       ),
       enableSorting: true,
     },
