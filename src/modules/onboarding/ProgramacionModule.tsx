@@ -290,10 +290,11 @@ export function ProgramacionModule() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadProgramaciones()
     loadEspecialistas()
-  }, [sedeActualId])
+  }, [sedeActualId, aplicarFiltroSede])
 
   // Cargar histórico de programaciones (completadas)
   const loadHistorico = async () => {
@@ -317,11 +318,12 @@ export function ProgramacionModule() {
   }
 
   // Cargar histórico cuando se cambia al tab o sede
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeTab === 'historico') {
       loadHistorico()
     }
-  }, [activeTab, sedeActualId])
+  }, [activeTab, sedeActualId, aplicarFiltroSede])
 
   // Handlers
   const handleCreate = () => {

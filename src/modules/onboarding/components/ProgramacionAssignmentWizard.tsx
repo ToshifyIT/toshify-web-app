@@ -263,23 +263,31 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
   })
 
-  // Cargar vehiculos con informacion de disponibilidad
+  // Cargar vehiculos con informacion de disponibilidad (filtrado por sede del wizard)
   useEffect(() => {
+    const sedeId = formData.sede_id
+    if (!sedeId && !editData) return // No cargar si no hay sede seleccionada
+
+    const filtrarPorSede = <T,>(query: T): T => {
+      if (!sedeId) return query
+      return (query as any).eq('sede_id', sedeId)
+    }
+
     const loadVehicles = async () => {
       setLoadingVehicles(true)
       try {
         // Hacer los 3 queries en PARALELO - solo campos minimos necesarios
         const [vehiculosRes, asignacionesRes, programacionesRes] = await Promise.all([
-          aplicarFiltroSede(supabase
+          filtrarPorSede(supabase
             .from('vehiculos')
             .select('id, patente, marca, modelo, anio, color, vehiculos_estados!inner(codigo)')
             .in('vehiculos_estados.codigo', ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE']))
             .order('patente'),
-          aplicarFiltroSede(supabase
+          filtrarPorSede(supabase
             .from('asignaciones')
             .select('vehiculo_id, horario, estado, asignaciones_conductores(horario)')
             .in('estado', ['activa', 'programado'])),
-          aplicarFiltroSede(supabase
+          filtrarPorSede(supabase
             .from('programaciones_onboarding')
             .select('vehiculo_entregar_id, id')
             .in('estado', ['por_agendar', 'agendado', 'en_curso']))
@@ -382,14 +390,17 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
 
     loadVehicles()
-  }, [editData?.id, sedeActualId])
+  }, [editData?.id, formData.sede_id])
 
-  // Cargar conductores disponibles
+  // Cargar conductores disponibles (filtrado por sede del wizard)
   useEffect(() => {
+    const sedeId = formData.sede_id
+    if (!sedeId && !editData) return // No cargar si no hay sede seleccionada
+
     const loadConductores = async () => {
       setLoadingConductores(true)
       try {
-        const { data, error } = await aplicarFiltroSede(supabase
+        let query = supabase
           .from('conductores')
           .select(`
             id,
@@ -407,8 +418,11 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
               codigo,
               descripcion
             )
-          `))
-          .order('apellidos')
+          `)
+        if (sedeId) {
+          query = query.eq('sede_id', sedeId)
+        }
+        const { data, error } = await query.order('apellidos')
 
         if (error) throw error
 
@@ -460,7 +474,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
 
     loadConductores()
-  }, [sedeActualId])
+  }, [formData.sede_id])
 
   // Función para cargar Google Maps API si no está disponible
   const loadGoogleMapsAPI = (): Promise<void> => {
@@ -1930,9 +1944,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           font-weight: 600;
           color: var(--text-primary);
           margin: 0 0 2px 0;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          word-break: break-word;
         }
 
         .conductor-license {
