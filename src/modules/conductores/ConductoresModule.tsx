@@ -94,6 +94,7 @@ export function ConductoresModule() {
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [selectedConductor, setSelectedConductor] =
     useState<ConductorWithRelations | null>(null);
+  const [sedes, setSedes] = useState<{id: string; nombre: string}[]>([]);
 
   // Stats ahora se calculan con useMemo desde los datos cargados (calculatedStats)
 
@@ -196,12 +197,21 @@ export function ConductoresModule() {
     preferencia_turno: "SIN_PREFERENCIA",
     url_documentacion: "",
     numero_ibutton: "",
+    sede_id: "",
   });
 
   // ✅ OPTIMIZADO: Carga inicial unificada en paralelo (recarga al cambiar sede)
   useEffect(() => {
     loadAllData();
   }, [sedeActualId]);
+
+  // Cargar sedes para selector en wizard
+  useEffect(() => {
+    supabase.from('sedes').select('id, nombre').order('nombre')
+      .then(({ data }) => {
+        if (data) setSedes(data);
+      });
+  }, []);
 
   // Cerrar dropdown de filtro al hacer click fuera
   useEffect(() => {
@@ -797,7 +807,8 @@ export function ConductoresModule() {
     if (
       !formData.nombres ||
       !formData.apellidos ||
-      !formData.licencia_vencimiento
+      !formData.licencia_vencimiento ||
+      !formData.sede_id
     ) {
       Swal.fire({
         icon: "warning",
@@ -851,7 +862,7 @@ export function ConductoresModule() {
             numero_ibutton: formData.numero_ibutton || null,
             created_by: user?.id,
             created_by_name: profile?.full_name || "Sistema",
-            sede_id: sedeActualId || sedeUsuario?.id,
+            sede_id: formData.sede_id || sedeActualId || sedeUsuario?.id,
           },
         ])
         .select();
@@ -1370,6 +1381,7 @@ export function ConductoresModule() {
       preferencia_turno: fc.preferencia_turno || "SIN_PREFERENCIA",
       url_documentacion: fc.url_documentacion || "",
       numero_ibutton: fc.numero_ibutton || "",
+      sede_id: fc.sede_id || "",
     });
     setShowEditModal(true);
   };
@@ -1413,6 +1425,7 @@ export function ConductoresModule() {
       preferencia_turno: "SIN_PREFERENCIA",
       url_documentacion: "",
       numero_ibutton: "",
+      sede_id: "",
     });
   };
 
@@ -2266,6 +2279,7 @@ export function ConductoresModule() {
           estadosConductor={estadosConductor}
           estadosLicencia={estadosLicencia}
           tiposLicencia={tiposLicencia}
+          sedes={sedes}
         />
       )}
       {showEditModal && selectedConductor && (
@@ -2344,6 +2358,7 @@ function ModalCrear({
   estadosConductor,
   estadosLicencia,
   tiposLicencia,
+  sedes,
 }: any) {
   return (
     <div
@@ -2371,6 +2386,7 @@ function ModalCrear({
           estadosConductor={estadosConductor}
           estadosLicencia={estadosLicencia}
           tiposLicencia={tiposLicencia}
+          sedes={sedes}
           onCancel={() => {
             setShowCreateModal(false);
             resetForm();
