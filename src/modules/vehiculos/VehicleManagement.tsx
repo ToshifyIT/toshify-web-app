@@ -1598,6 +1598,18 @@ export function VehicleManagement() {
             </div>
 
             <div className="form-group">
+              <label className="form-label">URL Documentación</label>
+              <input
+                type="url"
+                className="form-input"
+                value={formData.url_documentacion}
+                onChange={(e) => setFormData({ ...formData, url_documentacion: e.target.value })}
+                disabled={saving}
+                placeholder="https://..."
+              />
+            </div>
+
+            <div className="form-group">
               <label className="form-label">Notas</label>
               <textarea
                 className="form-input"
