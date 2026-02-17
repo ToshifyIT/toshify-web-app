@@ -125,6 +125,7 @@ interface PeriodoFacturacion {
   total_descuentos: number
   total_neto: number
   fecha_cierre: string | null
+  sede_id: string | null
 }
 
 // Función para obtener el inicio de semana en Argentina (lunes)
@@ -567,13 +568,15 @@ export function ReporteFacturacionTab() {
       const anioDelPeriodo = getYear(parseISO(fechaInicio))
 
       // 1. Cargar conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
+      // SIEMPRE filtrar por sede (usar sedeActualId o sede del usuario)
+      const sedeParaVP = sedeActualId || sedeUsuario?.id
       // Excluir "De baja" inicialmente - luego agregamos los de baja con asignación en la semana
       let qControl = (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaDelPeriodo)
         .eq('anio', anioDelPeriodo)
-      if (sedeActualId) qControl = qControl.eq('sede_id', sedeActualId)
+      if (sedeParaVP) qControl = qControl.eq('sede_id', sedeParaVP)
       const { data: conductoresControlActivosVP, error: errControl } = await qControl
         .not('estado', 'eq', 'De baja')
       
@@ -584,7 +587,7 @@ export function ReporteFacturacionTab() {
         .eq('semana', semanaDelPeriodo)
         .eq('anio', anioDelPeriodo)
         .eq('estado', 'De baja')
-      if (sedeActualId) qBajaVP = qBajaVP.eq('sede_id', sedeActualId)
+      if (sedeParaVP) qBajaVP = qBajaVP.eq('sede_id', sedeParaVP)
       const { data: conductoresBajaVP } = await qBajaVP
       
       // Unificar: activos + de baja (deduplicados por DNI)
@@ -597,11 +600,14 @@ export function ReporteFacturacionTab() {
       if (errControl) throw errControl
 
       // Obtener datos de conductores desde tabla conductores
+      // FILTRAR por sede para obtener solo conductores de esta sede
       const dnisControl = (conductoresControl || []).map((c: any) => c.numero_dni)
-      const { data: conductoresData } = await supabase
+      let qConductoresVP = supabase
         .from('conductores')
         .select('id, nombres, apellidos, numero_dni, numero_cuit')
         .in('numero_dni', dnisControl)
+      if (sedeParaVP) qConductoresVP = qConductoresVP.eq('sede_id', sedeParaVP)
+      const { data: conductoresData } = await qConductoresVP
 
       const conductoresDataMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
 
@@ -1251,6 +1257,8 @@ export function ReporteFacturacionTab() {
       const semanaNum = periodo.semana
       const anioNum = periodo.anio
       const periodoId = periodo.id
+      // Usar sede_id del período (no depender de sedeActualId que puede ser null)
+      const sedeDelPeriodo = periodo.sede_id || sedeActualId
 
       // 1. RESET: Revertir flags de aplicado para registros vinculados a este período
       // Tickets: tienen periodo_aplicado_id
@@ -1290,13 +1298,13 @@ export function ReporteFacturacionTab() {
       await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
       // 3. Obtener conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
-      // Excluir "De baja" inicialmente - luego agregamos los de baja con asignación en la semana
+      // SIEMPRE filtrar por sede del período (no depender de sedeActualId)
       let qRecalc = (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', semanaNum)
         .eq('anio', anioNum)
-      if (sedeActualId) qRecalc = qRecalc.eq('sede_id', sedeActualId)
+      if (sedeDelPeriodo) qRecalc = qRecalc.eq('sede_id', sedeDelPeriodo)
       const { data: conductoresControlActivos } = await qRecalc
         .not('estado', 'eq', 'De baja')
       
@@ -1307,7 +1315,7 @@ export function ReporteFacturacionTab() {
         .eq('semana', semanaNum)
         .eq('anio', anioNum)
         .eq('estado', 'De baja')
-      if (sedeActualId) qBaja = qBaja.eq('sede_id', sedeActualId)
+      if (sedeDelPeriodo) qBaja = qBaja.eq('sede_id', sedeDelPeriodo)
       const { data: conductoresBaja } = await qBaja
       
       // Unificar: activos + de baja (se deduplicarán después por DNI)
@@ -1328,11 +1336,14 @@ export function ReporteFacturacionTab() {
       }
 
       // Obtener datos de conductores desde tabla conductores
+      // FILTRAR por sede del período para obtener solo conductores de esta sede
       const dnisControl = conductoresControl.map((c: any) => c.numero_dni)
-      const { data: conductoresData } = await supabase
+      let qConductoresRecalc = supabase
         .from('conductores')
         .select('id, nombres, apellidos, numero_dni, numero_cuit')
         .in('numero_dni', dnisControl)
+      if (sedeDelPeriodo) qConductoresRecalc = qConductoresRecalc.eq('sede_id', sedeDelPeriodo)
+      const { data: conductoresData } = await qConductoresRecalc
 
       const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
       const conductorIdsTemp = (conductoresData || []).map((c: any) => c.id)
@@ -2056,12 +2067,14 @@ export function ReporteFacturacionTab() {
       const anioSiguiente = getYear(fechaSiguiente)
 
       // 3. Obtener conductores de la semana que se cierra
+      // Usar sede_id del período (no depender de sedeActualId)
+      const sedeCierre = periodo.sede_id || sedeActualId
       let qCopy = (supabase
         .from('conductores_semana_facturacion') as any)
         .select('numero_dni, estado, patente, modalidad, valor_alquiler')
         .eq('semana', periodo.semana)
         .eq('anio', periodo.anio)
-      if (sedeActualId) qCopy = qCopy.eq('sede_id', sedeActualId)
+      if (sedeCierre) qCopy = qCopy.eq('sede_id', sedeCierre)
       const { data: conductoresActuales } = await qCopy
 
       let conductoresCopiados = 0
@@ -2073,7 +2086,7 @@ export function ReporteFacturacionTab() {
           .select('numero_dni')
           .eq('semana', semanaSiguiente)
           .eq('anio', anioSiguiente)
-        if (sedeActualId) qExist = qExist.eq('sede_id', sedeActualId)
+        if (sedeCierre) qExist = qExist.eq('sede_id', sedeCierre)
         const { data: yaExistentes } = await qExist
           .in('numero_dni', dnis)
 
@@ -2090,7 +2103,7 @@ export function ReporteFacturacionTab() {
             patente: c.patente,
             modalidad: c.modalidad,
             valor_alquiler: c.valor_alquiler,
-            sede_id: sedeActualId || sedeUsuario?.id,
+            sede_id: sedeCierre || sedeUsuario?.id,
           }))
 
           const { error: insertError } = await (supabase
@@ -5357,11 +5370,12 @@ export function ReporteFacturacionTab() {
         const email = emailMap.get(f.conductor_dni || '') || ''
         const cabifyInfo = cabifyMap.get(f.conductor_dni || '') || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
         
-        // Importe Contrato = Monto del alquiler (P001/P002)
+        // Importe Contrato = Monto del alquiler (P001/P002/P013)
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = (Todos los cargos - descuentos P004) - alquiler
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato
+        // EXCEDENTES = (Todos los cargos - descuentos) - alquiler + saldo anterior
+        const saldoAnterior = f.saldo_anterior || 0
+        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato + saldoAnterior
 
         return {
           anio,
@@ -5475,11 +5489,12 @@ export function ReporteFacturacionTab() {
           }
         }
         
-        // Importe Contrato = Monto del alquiler
+        // Importe Contrato = Monto del alquiler (P001/P002/P013)
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = (Todos los cargos - descuentos P004) - alquiler
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato
+        // EXCEDENTES = (Todos los cargos - descuentos) - alquiler + saldo anterior
+        const saldoAnteriorCabify = f.saldo_anterior || 0
+        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato + saldoAnteriorCabify
 
         return {
           anio: periodo.anio,

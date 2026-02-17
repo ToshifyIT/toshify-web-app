@@ -36,6 +36,7 @@ interface ConductorProcesado {
   vehiculo_patente: string | null
   // Días por modalidad (para prorrateo cuando hay cambios)
   dias_turno: number
+  dias_turno_nocturno: number
   dias_cargo: number
   total_dias: number
   // Primera modalidad (para determinar orden de facturación)
@@ -294,7 +295,7 @@ export function PeriodosTab() {
 
       // Mapear conductores con asignación que se solapó con la semana
       const conductoresAsignados = new Map<string, { 
-        conductor: any; modalidad: string; patente: string | null 
+        conductor: any; modalidad: string; patente: string | null; horarioConductor: string | null 
       }>()
       const semanaInicioDate = new Date(semana.fecha_inicio + 'T00:00:00')
       const semanaFinDate = new Date(semana.fecha_fin + 'T23:59:59')
@@ -317,7 +318,7 @@ export function PeriodosTab() {
         
         // Si ya está mapeado, no sobreescribir
         if (!conductoresAsignados.has(conductor.id)) {
-          conductoresAsignados.set(conductor.id, { conductor, modalidad, patente })
+          conductoresAsignados.set(conductor.id, { conductor, modalidad, patente, horarioConductor: ac.horario || null })
         }
       }
 
@@ -381,6 +382,12 @@ export function PeriodosTab() {
       // 7. Procesar solo conductores con asignación activa - 7 días fijos
       const conductoresProcesados: ConductorProcesado[] = []
 
+      // Mapa de conductor_id -> horario del conductor (diurno/nocturno)
+      const horariosPorConductor = new Map<string, string | null>()
+      for (const [conductorId, data] of conductoresAsignados.entries()) {
+        horariosPorConductor.set(conductorId, data.horarioConductor)
+      }
+
       for (const control of (controlActualizado || [])) {
         const conductorData = conductoresMap.get(control.numero_dni)
         if (!conductorData) continue
@@ -389,7 +396,10 @@ export function PeriodosTab() {
         if (!conductoresConAsignacion.has(conductorData.id)) continue
 
         const modalidad = control.modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
-        const diasTurno = modalidad === 'TURNO' ? 7 : 0
+        const horarioConductor = (horariosPorConductor.get(conductorData.id) || '').toLowerCase().trim()
+        const esTurnoNocturno = modalidad === 'TURNO' && (horarioConductor === 'nocturno' || horarioConductor === 'n')
+        const diasTurno = (modalidad === 'TURNO' && !esTurnoNocturno) ? 7 : 0
+        const diasTurnoNocturno = esTurnoNocturno ? 7 : 0
         const diasCargo = modalidad === 'CARGO' ? 7 : 0
 
         conductoresProcesados.push({
@@ -400,6 +410,7 @@ export function PeriodosTab() {
           vehiculo_id: null,
           vehiculo_patente: control.patente || null,
           dias_turno: diasTurno,
+          dias_turno_nocturno: diasTurnoNocturno,
           dias_cargo: diasCargo,
           total_dias: 7,
           modalidad_inicial: modalidad as 'TURNO' | 'CARGO'
@@ -426,16 +437,18 @@ export function PeriodosTab() {
         .select('*')
         .eq('activo', true)
 
-      // P001 = TURNO, P002 = CARGO - precios en BD son DIARIOS (precio_final)
-      // Convertir a semanal multiplicando por 7
-      const precioTurnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 35000
+      // P001 = TURNO DIURNO, P002 = CARGO, P013 = TURNO NOCTURNO
+      // Precios en BD son DIARIOS (precio_final), convertir a semanal × 7
+      const precioTurnoDiurnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 35000
       const precioCargoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 51428.57
       const cuotaGarantiaDiaria = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 7142.86
+      const precioTurnoNocturnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_final || 39584
       
       // Precios semanales (7 días)
-      const precioTurno = precioTurnoDiario * 7  // ~$245,000
-      const precioCargo = precioCargoDiario * 7  // ~$360,000
-      const cuotaGarantia = cuotaGarantiaDiaria * 7  // ~$50,000
+      const precioTurnoDiurno = precioTurnoDiurnoDiario * 7  // P001
+      const precioTurnoNocturno = precioTurnoNocturnoDiario * 7  // P013
+      const precioCargo = precioCargoDiario * 7  // P002
+      const cuotaGarantia = cuotaGarantiaDiaria * 7  // P003
 
       // 7. Obtener datos adicionales (penalidades, tickets, etc.)
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes] = await Promise.all([
@@ -571,24 +584,36 @@ export function PeriodosTab() {
         let alquilerTotal = 0
         const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
 
-        // Si tiene días en TURNO
+        // Si tiene días en TURNO DIURNO (P001)
         if (conductor.dias_turno > 0) {
-          const montoTurno = Math.round((precioTurno / 7) * conductor.dias_turno)
+          const montoTurno = Math.round((precioTurnoDiurno / 7) * conductor.dias_turno)
           alquilerTotal += montoTurno
           detallesAlquiler.push({
-            codigo: 'P002',
-            descripcion: conductor.dias_turno < 7 ? `Alquiler Turno (${conductor.dias_turno}/7 días)` : 'Alquiler Turno',
+            codigo: 'P001',
+            descripcion: conductor.dias_turno < 7 ? `Alquiler Turno Diurno (${conductor.dias_turno}/7 días)` : 'Alquiler Turno Diurno',
             dias: conductor.dias_turno,
             monto: montoTurno
           })
         }
 
-        // Si tiene días en CARGO
+        // Si tiene días en TURNO NOCTURNO (P013)
+        if (conductor.dias_turno_nocturno > 0) {
+          const montoNocturno = Math.round((precioTurnoNocturno / 7) * conductor.dias_turno_nocturno)
+          alquilerTotal += montoNocturno
+          detallesAlquiler.push({
+            codigo: 'P013',
+            descripcion: conductor.dias_turno_nocturno < 7 ? `Alquiler Turno Nocturno (${conductor.dias_turno_nocturno}/7 días)` : 'Alquiler Turno Nocturno',
+            dias: conductor.dias_turno_nocturno,
+            monto: montoNocturno
+          })
+        }
+
+        // Si tiene días en CARGO (P002)
         if (conductor.dias_cargo > 0) {
           const montoCargo = Math.round((precioCargo / 7) * conductor.dias_cargo)
           alquilerTotal += montoCargo
           detallesAlquiler.push({
-            codigo: 'P001',
+            codigo: 'P002',
             descripcion: conductor.dias_cargo < 7 ? `Alquiler a Cargo (${conductor.dias_cargo}/7 días)` : 'Alquiler a Cargo',
             dias: conductor.dias_cargo,
             monto: montoCargo
@@ -668,7 +693,8 @@ export function PeriodosTab() {
         totalDescuentosGlobal += subtotalDescuentos
 
         // Determinar tipo alquiler principal (el que tiene más días o el inicial)
-        const tipoAlquilerPrincipal = conductor.dias_cargo >= conductor.dias_turno ? 'CARGO' : 'TURNO'
+        const diasTurnoTotal = conductor.dias_turno + conductor.dias_turno_nocturno
+        const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'CARGO' : 'TURNO'
 
         // Insertar facturación del conductor
         const { data: factConductor, error: errFact } = await (supabase
@@ -714,7 +740,7 @@ export function PeriodosTab() {
             concepto_codigo: detalle.codigo,
             concepto_descripcion: detalle.descripcion,
             cantidad: detalle.dias,
-            precio_unitario: detalle.codigo === 'P001' ? precioCargo / 7 : precioTurno / 7,
+            precio_unitario: detalle.codigo === 'P002' ? precioCargo / 7 : detalle.codigo === 'P013' ? precioTurnoNocturno / 7 : precioTurnoDiurno / 7,
             subtotal: detalle.monto,
             total: detalle.monto,
             es_descuento: false
