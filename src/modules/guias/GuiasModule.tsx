@@ -2349,14 +2349,14 @@ export function GuiasModule() {
            const first = parts[0] || "";
            const second = parts.slice(1).join(" ") || null;
            return (
-            <div style={{ display: 'flex', flexDirection: 'column', whiteSpace: 'normal' }}>
+             <div style={{ display: 'flex', flexDirection: 'column' }}>
                <span>{first}</span>
                {second && <span>{second}</span>}
              </div>
            );
         },
         enableSorting: true,
-        size: 260,
+        size: 160,
       },
       {
         id: "seguimiento",
@@ -2855,7 +2855,6 @@ export function GuiasModule() {
                     <button 
                       onClick={() => {
                         setNombreFilter([]);
-                        setDniFilter([]);
                         setEstadoFilter([]);
                         setTurnoFilter([]);
                         setAsignacionFilter([]);

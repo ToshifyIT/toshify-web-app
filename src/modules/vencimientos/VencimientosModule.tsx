@@ -713,7 +713,6 @@ export function VencimientosModule() {
           loading={false}
           showSearch={false}
           pageSize={100}
-          showEmptyTableWhenNoData
           emptyIcon={<Shield size={40} />}
           emptyTitle="No hay vencimientos para mostrar"
           emptyDescription="Los vencimientos aparecerán aquí cuando se registren."
