@@ -95,10 +95,30 @@
   border: 1px solid var(--border-primary);
 }
 
-.stats-grid {
+.siniestros-stats .stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
+}
+
+.siniestros-week-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.siniestros-week-row .stats-grid {
+  flex: 1;
+}
+
+.siniestros-week-selector {
+  flex-shrink: 0;
+}
+
+.siniestros-week-selector .date-range-dropdown {
+  left: auto;
+  right: 0;
 }
 
 .stat-card {

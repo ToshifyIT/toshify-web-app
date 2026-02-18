@@ -202,6 +202,10 @@ export interface SiniestroStats {
   con_lesionados: number
   total_recuperados: number
   procesando_pago_total: number
+  dias_desde_ultimo_robo: number | null
+  dias_entre_ultimos_robos: number | null
+  dias_desde_ultimo_siniestro: number | null
+  dias_entre_ultimos_siniestros: number | null
 }
 
 // Tipo para vehículo simplificado (para selects)

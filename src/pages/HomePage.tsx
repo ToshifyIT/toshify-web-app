@@ -26,6 +26,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'conductores': Users,
   'incidencias': AlertTriangle,
   'siniestros': FileWarning,
+  'vencimientos': FileWarning,
   'reportes': BarChart3,
   'facturacion': Receipt,
   'logistica': Truck,
@@ -165,6 +166,7 @@ const AsignacionesPage = lazy(() => import('./asignaciones/AsignacionesPage').th
 import { UsuariosPage } from './usuarios/UsuariosPage'
 import { VehiculosPage } from './vehiculos/VehiculosPage'
 import { SiniestrosPage } from './siniestros/SiniestrosPage'
+import { VencimientosPage } from './vencimientos/VencimientosPage'
 import { InformesPage } from './informes/InformesPage'
 import { AsignacionesActivasPage } from './asignaciones/AsignacionesActivasPage'
 import { ProductosPage } from './productos/ProductosPage'
@@ -1729,6 +1731,11 @@ export function HomePage() {
               <Route path="/siniestros" element={
                 <ProtectedRoute menuName="siniestros" action="view">
                   <SiniestrosPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/vencimientos" element={
+                <ProtectedRoute menuName="vencimientos" action="view">
+                  <VencimientosPage />
                 </ProtectedRoute>
               } />
               <Route path="/incidencias" element={

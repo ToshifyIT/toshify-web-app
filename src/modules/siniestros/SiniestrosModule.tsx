@@ -27,6 +27,7 @@ import {
   CheckCircle
 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
+import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
 import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
@@ -41,11 +42,45 @@ import type {
   ConductorSimple,
   SiniestroStats
 } from '../../types/siniestros.types'
+import type { DateRange } from '../../components/ui/DateRangeSelector'
 import type { VehiculoEstado } from '../../types/database.types'
 import './SiniestrosModule.css'
 import { SiniestroWizard } from './components/SiniestroWizard'
 import { ReparacionTicket } from './components/ReparacionTicket'
 import { SiniestroSeguimiento } from './components/SiniestroSeguimiento'
+
+function toISODateLocal(date: Date) {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseFechaSiniestro(fechaStr: string | undefined | null) {
+  if (!fechaStr) return null
+  const raw = fechaStr.split('T')[0]
+  if (raw.includes('-')) {
+    const parts = raw.split('-')
+    if (parts.length !== 3) return null
+    const [yearStr, monthStr, dayStr] = parts
+    const year = Number(yearStr)
+    const month = Number(monthStr)
+    const day = Number(dayStr)
+    if (!year || !month || !day) return null
+    return new Date(year, month - 1, day)
+  }
+  if (raw.includes('/')) {
+    const parts = raw.split('/')
+    if (parts.length !== 3) return null
+    const [dayStr, monthStr, yearStr] = parts
+    const year = Number(yearStr)
+    const month = Number(monthStr)
+    const day = Number(dayStr)
+    if (!year || !month || !day) return null
+    return new Date(year, month - 1, day)
+  }
+  return null
+}
 
 export function SiniestrosModule() {
   const { user, profile } = useAuth()
@@ -74,6 +109,12 @@ export function SiniestrosModule() {
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
   const [stats, setStats] = useState<SiniestroStats | null>(null)
+  const [dateRangeSemana, setDateRangeSemana] = useState<DateRange | null>({
+    startDate: '',
+    endDate: '',
+    label: 'Todo el historial',
+    type: 'all'
+  })
 
   // Filtros por columna tipo Excel con Portal
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -175,6 +216,42 @@ export function SiniestrosModule() {
   }
 
   function calcularStats(data: SiniestroCompleto[], estadosData: SiniestroEstado[], categoriasData: SiniestroCategoria[]) {
+    const esCategoriaRobo = (nombre: string | undefined | null) => {
+      if (!nombre) return false
+      const normalized = nombre.toLowerCase().trim()
+      return normalized === 'robo' || normalized === 'robo parcial'
+    }
+
+    const diffDias = (from: Date, to: Date) => {
+      const fromDate = new Date(from.getFullYear(), from.getMonth(), from.getDate())
+      const toDate = new Date(to.getFullYear(), to.getMonth(), to.getDate())
+      const diffMs = fromDate.getTime() - toDate.getTime()
+      const dias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+      return dias < 0 ? 0 : dias
+    }
+
+    const robos = data.filter(s => esCategoriaRobo(s.categoria_nombre))
+
+    const siniestrosSinRobo = data.filter(s => !esCategoriaRobo(s.categoria_nombre))
+
+    const today = new Date()
+
+    const fechasRobos = robos
+      .map(s => parseFechaSiniestro(s.fecha_siniestro))
+      .filter((d): d is Date => d !== null)
+      .sort((a, b) => b.getTime() - a.getTime())
+
+    const fechasSiniestros = siniestrosSinRobo
+      .map(s => parseFechaSiniestro(s.fecha_siniestro))
+      .filter((d): d is Date => d !== null)
+      .sort((a, b) => b.getTime() - a.getTime())
+
+    const diasDesdeUltimoRobo = fechasRobos.length >= 1 ? diffDias(today, fechasRobos[0]) : null
+    const diasEntreUltimosRobos = fechasRobos.length >= 2 ? diffDias(fechasRobos[0], fechasRobos[1]) : null
+
+    const diasDesdeUltimoSiniestro = fechasSiniestros.length >= 1 ? diffDias(today, fechasSiniestros[0]) : null
+    const diasEntreUltimosSiniestros = fechasSiniestros.length >= 2 ? diffDias(fechasSiniestros[0], fechasSiniestros[1]) : null
+
     const porEstado = estadosData.map(e => ({
       estado: e.nombre,
       color: e.color,
@@ -206,7 +283,11 @@ export function SiniestrosModule() {
       total_recuperados: data.reduce((sum, s) => sum + (s.presupuesto_aprobado_seguro || 0), 0),
       procesando_pago_total: estadoProcesando
         ? data.filter(s => s.estado_id === estadoProcesando.id).reduce((sum, s) => sum + (s.presupuesto_real || 0), 0)
-        : 0
+        : 0,
+      dias_desde_ultimo_robo: diasDesdeUltimoRobo,
+      dias_entre_ultimos_robos: diasEntreUltimosRobos,
+      dias_desde_ultimo_siniestro: diasDesdeUltimoSiniestro,
+      dias_entre_ultimos_siniestros: diasEntreUltimosSiniestros
     })
   }
 
@@ -229,7 +310,6 @@ export function SiniestrosModule() {
   , [siniestros])
 
 
-  // Filtro global personalizado para buscar términos en todos los campos relevantes
   const customGlobalFilter = useMemo<FilterFn<SiniestroCompleto>>(() => {
     return (row, _columnId, filterValue) => {
       if (!filterValue || typeof filterValue !== 'string') return true
@@ -268,13 +348,23 @@ export function SiniestrosModule() {
   }, [])
 
 
-  // Filtrar siniestros según tab y filtros tipo Excel
+  const siniestrosSemana = useMemo(() => {
+    if (!dateRangeSemana || dateRangeSemana.type === 'all') {
+      return [...siniestros]
+    }
+    return siniestros.filter(s => {
+      const fecha = parseFechaSiniestro(s.fecha_siniestro)
+      if (!fecha) return false
+      const iso = toISODateLocal(fecha)
+      if (dateRangeSemana.startDate && iso < dateRangeSemana.startDate) return false
+      if (dateRangeSemana.endDate && iso > dateRangeSemana.endDate) return false
+      return true
+    })
+  }, [siniestros, dateRangeSemana])
+
   const siniestrosFiltrados = useMemo(() => {
-    let filtered = [...siniestros]
+    let filtered = [...siniestrosSemana]
 
-    // Mostrar todos los siniestros (se filtra por columnas)
-
-    // Aplicar filtros tipo Excel
     if (patenteFilter.length > 0) {
       filtered = filtered.filter(s => patenteFilter.includes(s.vehiculo_patente || ''))
     }
@@ -291,10 +381,8 @@ export function SiniestrosModule() {
       filtered = filtered.filter(s => estadoFilter.includes(s.estado_nombre || ''))
     }
     
-    //Prueba de cambio
-
     return filtered
-  }, [siniestros, patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter])
+  }, [siniestrosSemana, patenteFilter, conductorFilter, categoriaFilter, responsableFilter, estadoFilter])
 
   // Filtros externos para mostrar en la barra de filtros del DataTable
   const externalFilters = useMemo(() => {
@@ -830,6 +918,18 @@ export function SiniestrosModule() {
     })
   }
 
+  function formatDias(value: number | null | undefined) {
+    if (value === null || value === undefined) return 'Sin datos'
+    return `${value} días`
+  }
+
+  const siniestrosSemanaCount = useMemo(() => siniestrosSemana.length, [siniestrosSemana])
+
+  const presupuestoSemanaTotal = useMemo(
+    () => siniestrosSemana.reduce((sum, s) => sum + (s.presupuesto_real || 0), 0),
+    [siniestrosSemana]
+  )
+
   function handleExportarExcel() {
     if (siniestrosFiltrados.length === 0) {
       Swal.fire('Sin datos', 'No hay siniestros para exportar', 'info')
@@ -898,7 +998,6 @@ export function SiniestrosModule() {
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando siniestros..." size="lg" />
 
-      {/* Stats rápidos - Arriba de todo */}
       <div className="siniestros-stats">
         <div className="stats-grid">
           <div className="stat-card">
@@ -930,6 +1029,62 @@ export function SiniestrosModule() {
             </div>
           </div>
         </div>
+        <div className="stats-grid" style={{ marginTop: 12 }}>
+          <div className="stat-card">
+            <Shield size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{formatDias(stats?.dias_desde_ultimo_robo)}</span>
+              <span className="stat-label">Días desde último Robo</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <AlertTriangle size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{formatDias(stats?.dias_entre_ultimos_robos)}</span>
+              <span className="stat-label">Días entre los dos últimos Robos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Car size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{formatDias(stats?.dias_desde_ultimo_siniestro)}</span>
+              <span className="stat-label">Días desde último Siniestro</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <Clock size={20} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{formatDias(stats?.dias_entre_ultimos_siniestros)}</span>
+              <span className="stat-label">Días entre los dos últimos Siniestros</span>
+            </div>
+          </div>
+        </div>
+        <div className="siniestros-week-row">
+          <div className="stats-grid">
+            <div className="stat-card">
+              <FileText size={20} className="stat-icon" />
+              <div className="stat-content">
+                <span className="stat-value">{siniestrosSemanaCount}</span>
+                <span className="stat-label">Cantidad de siniestros de la semana</span>
+              </div>
+            </div>
+            <div className="stat-card">
+              <DollarSign size={20} className="stat-icon" />
+              <div className="stat-content">
+                <span className="stat-value">{formatMoney(presupuestoSemanaTotal)}</span>
+                <span className="stat-label">Presupuesto total de la semana</span>
+              </div>
+            </div>
+          </div>
+          <div className="siniestros-week-selector">
+            <DateRangeSelector
+              selectedRange={dateRangeSemana}
+              onRangeChange={setDateRangeSemana}
+              showAllOption
+              placeholder="Semana actual"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Tabs + Action Button */}
@@ -940,7 +1095,7 @@ export function SiniestrosModule() {
         >
           <FileText size={16} />
           Listado
-          <span className="tab-badge">{siniestros.length}</span>
+          <span className="tab-badge">{siniestrosFiltrados.length}</span>
         </button>
         </div>
         <div className="tabs-actions">
