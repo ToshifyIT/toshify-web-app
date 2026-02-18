@@ -90,7 +90,6 @@ export function GuiasModule() {
 
   // Estados para filtros (replicados de ConductoresModule)
   const [nombreFilter, setNombreFilter] = useState<string[]>([])
-  const [dniFilter, setDniFilter] = useState<string[]>([])
   const [cbuFilter] = useState<string[]>([]) // Reutilizado para CUIL
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
   const [turnoFilter, setTurnoFilter] = useState<string[]>([])
@@ -103,7 +102,6 @@ export function GuiasModule() {
   
   // Estados para búsqueda dentro de filtros
   const [nombreSearch, setNombreSearch] = useState('')
-  const [dniSearch, setDniSearch] = useState('')
   const [globalSearch, setGlobalSearch] = useState('')
   const [cbuSearch] = useState('')
   const [efectivoSearch, setEfectivoSearch] = useState('')
@@ -809,6 +807,54 @@ export function GuiasModule() {
         // Cabify data cross-reference failed silently
       }
 
+      // Calcular historial de vehículos por conductor (sin filtrar por estado actual)
+      const vehiculosHistorialCountMap = new Map<string, number>();
+      try {
+        const conductorIds = Array.from(
+          new Set(
+            (historialData || [])
+              .map((h: any) => h.id_conductor)
+              .filter((id: string | null) => !!id)
+          )
+        );
+
+        if (conductorIds.length > 0) {
+          const { data: vehiculosHistorial } = await supabase
+            .from('asignaciones_conductores')
+            .select(`
+              conductor_id,
+              asignaciones (
+                vehiculos (id, patente, marca, modelo, anio)
+              )
+            `)
+            .in('conductor_id', conductorIds);
+
+          if (vehiculosHistorial) {
+            const tmpMap = new Map<string, Set<string>>();
+
+            vehiculosHistorial.forEach((ac: any) => {
+              const conductorId = ac.conductor_id as string | null;
+              const veh = ac.asignaciones?.vehiculos;
+              if (!conductorId || !veh) return;
+
+              const key = veh.id || veh.patente || `${veh.marca || ''}-${veh.modelo || ''}-${veh.anio || ''}`;
+              if (!key) return;
+
+              if (!tmpMap.has(conductorId)) {
+                tmpMap.set(conductorId, new Set<string>());
+              }
+              tmpMap.get(conductorId)!.add(key);
+            });
+
+            tmpMap.forEach((set, conductorId) => {
+              vehiculosHistorialCountMap.set(conductorId, set.size);
+            });
+          }
+        }
+      } catch {
+        // Si falla, dejamos el mapa vacío y caemos en el fallback por fila
+      }
+
       // Procesar conductores desde el historial
       if (historialData && historialData.length > 0) {
         const processedDrivers: any[] = [];
@@ -854,6 +900,27 @@ export function GuiasModule() {
                 turno_conductor: asignacionActiva.horario // 'diurno' o 'nocturno'
               };
             }
+          }
+ 
+          // Contar vehículos históricos usando asignaciones_conductores sin filtrar por estado
+          const vehiculosCountFromMap = vehiculosHistorialCountMap.get(conductor.id) ?? 0;
+          if (vehiculosCountFromMap > 0) {
+            baseConductor.vehiculos_historial_count = vehiculosCountFromMap;
+          } else if (Array.isArray(conductor.asignaciones_conductores)) {
+            // Fallback: usar relación cargada en este query
+            const vehiculosSet = new Set<string>();
+            conductor.asignaciones_conductores.forEach((ac: any) => {
+              const veh = ac.asignaciones?.vehiculos;
+              if (veh) {
+                const key = veh.id || veh.patente || `${veh.marca || ''}-${veh.modelo || ''}-${veh.anio || ''}`;
+                if (key) {
+                  vehiculosSet.add(key);
+                }
+              }
+            });
+            baseConductor.vehiculos_historial_count = vehiculosSet.size;
+          } else {
+            baseConductor.vehiculos_historial_count = 0;
           }
           
           const estadoCodigo = baseConductor.conductores_estados?.codigo?.toLowerCase();
@@ -1386,11 +1453,6 @@ export function GuiasModule() {
     return [...new Set(nombres)].sort();
   }, [drivers]);
 
-  const dnisUnicos = useMemo(() => {
-    const dnis = drivers.map(c => c.numero_dni).filter(Boolean) as string[];
-    return [...new Set(dnis)].sort();
-  }, [drivers]);
-
   const cuilsUnicos = useMemo(() => {
     const cuils = drivers.map(c => c.numero_cuit).filter(Boolean) as string[];
     return [...new Set(cuils)].sort();
@@ -1410,11 +1472,6 @@ export function GuiasModule() {
     return nombresUnicos.filter(n => n.toLowerCase().includes(nombreSearch.toLowerCase()));
   }, [nombresUnicos, nombreSearch]);
 
-  const dnisFiltrados = useMemo(() => {
-    if (!dniSearch) return dnisUnicos;
-    return dnisUnicos.filter(d => d.toLowerCase().includes(dniSearch.toLowerCase()));
-  }, [dnisUnicos, dniSearch]);
-
   const cuilsFiltrados = useMemo(() => {
     if (!cbuSearch) return cuilsUnicos;
     return cuilsUnicos.filter(c => c.toLowerCase().includes(cbuSearch.toLowerCase()));
@@ -1423,12 +1480,6 @@ export function GuiasModule() {
   const toggleNombreFilter = (nombre: string) => {
     setNombreFilter(prev =>
       prev.includes(nombre) ? prev.filter(n => n !== nombre) : [...prev, nombre]
-    );
-  };
-
-  const toggleDniFilter = (dni: string) => {
-    setDniFilter(prev =>
-      prev.includes(dni) ? prev.filter(d => d !== dni) : [...prev, dni]
     );
   };
 
@@ -1474,12 +1525,6 @@ export function GuiasModule() {
     if (nombreFilter.length > 0) {
       result = result.filter(c =>
         nombreFilter.includes(`${c.nombres} ${c.apellidos}`)
-      );
-    }
-
-    if (dniFilter.length > 0) {
-      result = result.filter(c =>
-        dniFilter.includes(c.numero_dni || '')
       );
     }
 
@@ -1631,7 +1676,7 @@ export function GuiasModule() {
     }
 
     return result;
-  }, [drivers, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter]);
+  }, [drivers, nombreFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, activeStatFilter, selectedWeek, seguimientoRules, efectivoFilter, appFilter, totalFilter]);
 
   const uniqueEstados = useMemo(() => {
     const estados = new Map<string, string>();
@@ -1748,67 +1793,20 @@ export function GuiasModule() {
           </div>
         ),
         cell: ({ row }) => (
-          <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
-        ),
-        enableSorting: true,
-        size: 150,
-      },
-      {
-        accessorKey: "numero_dni",
-        header: () => (
-          <div className="dt-column-filter">
-            <span>DNI {dniFilter.length > 0 && `(${dniFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${dniFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'dni' ? null : 'dni');
-              }}
-              title="Filtrar por DNI"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'dni' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={dniSearch}
-                  onChange={(e) => setDniSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {dnisFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    dnisFiltrados.slice(0, 50).map(dni => (
-                      <label key={dni} className={`dt-column-filter-checkbox ${dniFilter.includes(dni) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={dniFilter.includes(dni)}
-                          onChange={() => toggleDniFilter(dni)}
-                        />
-                        <span>{dni}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {dniFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setDniFilter([]); setDniSearch(''); }}
-                  >
-                    Limpiar ({dniFilter.length})
-                  </button>
-                )}
-              </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
+            {row.original.numero_dni && (
+              <span
+                className="dt-badge dt-badge-blue badge-with-dot"
+                style={{ marginTop: 4, alignSelf: 'flex-start', fontSize: '11px' }}
+              >
+                {row.original.numero_dni}
+              </span>
             )}
           </div>
         ),
-        cell: ({ getValue }) => (getValue() as string) || "-",
         enableSorting: true,
-        size: 85,
+        size: 150,
       },
 
       ...(selectedWeek === getCurrentWeek() ? [{
@@ -1853,76 +1851,77 @@ export function GuiasModule() {
           </div>
         ),
         accessorFn: (row: any) => {
-          // 1. Priorizar turno real de la asignación actual
           const asignacionInfo = (row as any).asignacion_info;
           if (asignacionInfo) {
-            if (asignacionInfo.modalidad === 'CARGO') return 'A_CARGO';
+            if (asignacionInfo.modalidad === 'CARGO') return 'A';
             if (asignacionInfo.turno_conductor) {
-               const t = asignacionInfo.turno_conductor.toUpperCase();
-               return t === 'DIURNO' ? 'DIURNO' : t === 'NOCTURNO' ? 'NOCTURNO' : t;
+              const t = asignacionInfo.turno_conductor.toUpperCase();
+              if (t === 'DIURNO') return 'D';
+              if (t === 'NOCTURNO') return 'N';
+              return t.charAt(0);
             }
           }
-          // 2. Fallback a preferencia de turno si no hay asignación
-          return (row as any).preferencia_turno || 'SIN_PREFERENCIA'
+          const preferencia = ((row as any).preferencia_turno || '').toString().toLowerCase();
+          if (!preferencia) return 'S';
+          if (preferencia === 'diurno' || preferencia === 'mañana') return 'D';
+          if (preferencia === 'nocturno' || preferencia === 'noche') return 'N';
+          if (preferencia === 'sin preferencia') return 'S';
+          return preferencia.charAt(0).toUpperCase();
         },
         cell: ({ row }: any) => {
           const asignacionInfo = (row.original as any).asignacion_info;
           
-          // Si tiene asignación activa, mostrar el turno real
           if (asignacionInfo) {
             if (asignacionInfo.modalidad === 'CARGO') {
-               return (
-                 <span className="dt-badge dt-badge-purple badge-with-dot">
-                   A Cargo
-                 </span>
-               );
+              return (
+                <span className="dt-badge dt-badge-purple badge-with-dot">
+                  A
+                </span>
+              );
             }
             const turno = asignacionInfo.turno_conductor?.toLowerCase();
             if (turno === 'diurno') {
-               return (
-                 <span className="dt-badge dt-badge-orange badge-with-dot">
-                   Diurno
-                 </span>
-               );
-            } else if (turno === 'nocturno') {
-               return (
-                 <span className="dt-badge dt-badge-blue badge-with-dot">
-                   Nocturno
-                 </span>
-               );
+              return (
+                <span className="dt-badge dt-badge-orange badge-with-dot">
+                  D
+                </span>
+              );
+            }
+            if (turno === 'nocturno') {
+              return (
+                <span className="dt-badge dt-badge-blue badge-with-dot">
+                  N
+                </span>
+              );
+            }
+            if (turno) {
+              return (
+                <span className="dt-badge dt-badge-gray badge-with-dot">
+                  {turno.charAt(0).toUpperCase()}
+                </span>
+              );
             }
           }
 
-          // Fallback original: Preferencia de turno
-          const preferencia = (row.original as any).preferencia_turno?.toLowerCase();
-          
-          if (!preferencia) {
-            return (
-              <span className="dt-badge dt-badge-gray badge-with-dot">
-                Sin pref.
-              </span>
-            );
-          }
+          const preferenciaRaw = (row.original as any).preferencia_turno;
+          const preferencia = preferenciaRaw ? preferenciaRaw.toString().toLowerCase() : '';
+
+          let label = 'S';
+          let badgeClass = 'dt-badge dt-badge-gray badge-with-dot';
 
           if (preferencia === 'diurno' || preferencia === 'mañana') {
-            return (
-              <span className="dt-badge dt-badge-orange badge-with-dot">
-                Diurno
-              </span>
-            );
-          }
-          
-          if (preferencia === 'nocturno' || preferencia === 'noche') {
-            return (
-              <span className="dt-badge dt-badge-blue badge-with-dot">
-                Nocturno
-              </span>
-            );
+            label = 'D';
+            badgeClass = 'dt-badge dt-badge-orange badge-with-dot';
+          } else if (preferencia === 'nocturno' || preferencia === 'noche') {
+            label = 'N';
+            badgeClass = 'dt-badge dt-badge-blue badge-with-dot';
+          } else if (preferencia && preferencia !== 'sin preferencia') {
+            label = preferencia.charAt(0).toUpperCase();
           }
 
           return (
-            <span className="dt-badge dt-badge-gray badge-with-dot">
-              {preferencia}
+            <span className={badgeClass}>
+              {label}
             </span>
           );
         },
@@ -1933,6 +1932,27 @@ export function GuiasModule() {
         },
         size: 90,
       }] : []),
+
+      {
+        id: 'vehiculos_historial',
+        header: 'Vehiculos',
+        accessorFn: (row: any) => (row as any).vehiculos_historial_count ?? 0,
+        cell: ({ getValue }) => {
+          const count = (getValue() as number) || 0;
+          const hasMany = count >= 2;
+          const label = hasMany ? 'SI' : 'NO';
+          const badgeClass = hasMany
+            ? 'dt-badge dt-badge-green badge-no-dot'
+            : 'dt-badge dt-badge-gray badge-no-dot';
+          return (
+            <span className={badgeClass}>
+              {label}
+            </span>
+          );
+        },
+        enableSorting: true,
+        size: 90,
+      },
 
       {
         accessorKey: "conductores_estados.codigo",
@@ -2296,40 +2316,47 @@ export function GuiasModule() {
         header: "Llamada",
         accessorFn: (row) => (row as any).fecha_llamada,
         cell: ({ getValue }) => {
-          const fecha = getValue();
-          return fecha ? (
-            <span className="dt-badge dt-badge-green badge-no-dot">Realizada</span>
-          ) : (
-            <span className="dt-badge dt-badge-yellow badge-no-dot">Pendientes</span>
+          const fecha = getValue() as string | null;
+          const hasFecha = !!fecha;
+          const formatted = hasFecha ? new Date(fecha).toLocaleDateString('es-AR') : null;
+          const isRealizada = hasFecha;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className={isRealizada ? 'dt-badge dt-badge-green badge-no-dot' : 'dt-badge dt-badge-yellow badge-no-dot'}>
+                {isRealizada ? 'Realizada' : 'Pendientes'}
+              </span>
+              {isRealizada && formatted && (
+                <span style={{ marginTop: 2, fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                  {formatted}
+                </span>
+              )}
+            </div>
           );
         },
         enableSorting: true,
         size: 95,
       },
       {
-        accessorKey: "fecha_llamada",
-        header: "Fecha Llamada",
-        cell: ({ getValue }) => {
-          const fecha = getValue() as string;
-          if (!fecha) return "-";
-          return new Date(fecha).toLocaleDateString("es-AR");
-        },
-        enableSorting: true,
-        size: 105,
-      },
-      {
         accessorKey: "id_accion_imp",
-        header: "Acción Implementada",
+        header: "Accion Imple.",
         cell: ({ row }) => {
            const idAccion = (row.original as any).id_accion_imp;
-           // Si no hay ID o es nulo, asumimos 1 (CAPACITACION CABIFY) por defecto visualmente, 
-           // aunque idealmente debería venir de la DB.
            const targetId = idAccion || 1; 
            const accion = accionesImplementadas.find(a => a.id === targetId);
-           return accion ? accion.nombre : (idAccion || "-");
+           const rawName = accion ? accion.nombre : (idAccion || "-");
+           const name = (rawName || "").toString().toUpperCase();
+           const parts = name.split(" ");
+           const first = parts[0] || "";
+           const second = parts.slice(1).join(" ") || null;
+           return (
+            <div style={{ display: 'flex', flexDirection: 'column', whiteSpace: 'normal' }}>
+               <span>{first}</span>
+               {second && <span>{second}</span>}
+             </div>
+           );
         },
         enableSorting: true,
-        size: 160,
+        size: 260,
       },
       {
         id: "seguimiento",
@@ -2438,10 +2465,10 @@ export function GuiasModule() {
       },
     ],
     [
-      nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, 
+      nombreFilter, cbuFilter, estadoFilter, turnoFilter, 
       categoriaFilter, asignacionFilter, openColumnFilter,
-      nombresFiltrados, dnisFiltrados, cuilsFiltrados, uniqueCategorias, uniqueEstados,
-      nombreSearch, dniSearch, cbuSearch, selectedWeek, seguimientoRules, accionesImplementadas
+      nombresFiltrados, cuilsFiltrados, uniqueCategorias, uniqueEstados,
+      nombreSearch, cbuSearch, selectedWeek, seguimientoRules, accionesImplementadas
     ]
   );
 
@@ -2745,7 +2772,7 @@ export function GuiasModule() {
                 </div>
 
                 {/* Filtros Activos */}
-                {(nombreFilter.length > 0 || dniFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || efectivoFilter.length > 0 || appFilter.length > 0 || totalFilter.length > 0 || activeStatFilter) && (
+                {(nombreFilter.length > 0 || estadoFilter.length > 0 || turnoFilter.length > 0 || asignacionFilter.length > 0 || efectivoFilter.length > 0 || appFilter.length > 0 || totalFilter.length > 0 || activeStatFilter) && (
                   <div className="active-filters-container">
                     <div className="active-filters-label">
                       <Triangle size={8} fill="var(--color-primary)" stroke="var(--color-primary)" style={{ transform: 'rotate(180deg)' }} />
@@ -2758,14 +2785,6 @@ export function GuiasModule() {
                         <button onClick={() => toggleNombreFilter(f)} className="active-filter-close"><X size={10} /></button>
                       </span>
                     ))}
-                    
-                    {dniFilter.map(f => (
-                      <span key={`dni-${f}`} className="active-filter-tag">
-                        DNI: {f}
-                        <button onClick={() => toggleDniFilter(f)} className="active-filter-close"><X size={10} /></button>
-                      </span>
-                    ))}
-
                     {estadoFilter.map(f => (
                       <span key={`est-${f}`} className="active-filter-tag">
                         Estado: {getEstadoConductorDisplay({ codigo: f })}
