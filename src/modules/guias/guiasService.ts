@@ -22,28 +22,20 @@ export interface Guia {
 
 export const fetchGuias = async (): Promise<Guia[]> => {
   try {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select(`
-        *,
-        roles!inner (
-          name,
-          description
-        )
-      `)
-      .eq('roles.name', 'guia')
-      .order('created_at', { ascending: false })
+    // Usar RPC SECURITY DEFINER para bypasear RLS de user_profiles
+    // (user_profiles solo permite leer el propio perfil para no-admin)
+    const { data, error } = await supabase.rpc('get_guias')
 
     if (error) throw error
 
-    return data.map((item: any) => ({
+    return (data || []).map((item: any) => ({
       id: item.id,
       email: item.email,
       full_name: item.full_name,
       is_active: item.is_active,
       created_at: item.created_at,
-      role_name: item.roles?.name,
-      role_description: item.roles?.description
+      role_name: item.role_name,
+      role_description: item.role_description
     }))
   } catch (error) {
     console.error('Error loading guias:', error)

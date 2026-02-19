@@ -220,6 +220,7 @@ export function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [guias, setGuias] = useState<Guia[]>([])
+  const [seguimientoMenuId, setSeguimientoMenuId] = useState<string | null>(null)
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [showSedeSelector, setShowSedeSelector] = useState(!sedeActualId)
@@ -238,6 +239,7 @@ export function HomePage() {
         .single()
       
       if (menusData) {
+        setSeguimientoMenuId(menusData.id)
         const { data: existingSubmenus } = await supabase
           .from('submenus')
           .select('id, name')
@@ -251,7 +253,7 @@ export function HomePage() {
         
         // Agregar submenús para guías nuevas
         if (missingGuias.length > 0) {
-          await supabase.from('submenus').insert(
+          const { data: insertedSubmenus } = await supabase.from('submenus').insert(
             missingGuias.map((g: Guia, idx: number) => ({
               name: `guia-${g.id}`,
               label: g.full_name,
@@ -262,7 +264,32 @@ export function HomePage() {
               order_index: 100 + idx,
               is_active: true,
             }))
-          )
+          ).select('id')
+
+          // Auto-crear permisos para los roles que tienen acceso al menú seguimiento-conductores
+          if (insertedSubmenus && insertedSubmenus.length > 0) {
+            const { data: menuRoles } = await supabase
+              .from('role_menu_permissions')
+              .select('role_id, can_view, can_create, can_edit, can_delete')
+              .eq('menu_id', menusData.id)
+              .eq('can_view', true)
+
+            if (menuRoles && menuRoles.length > 0) {
+              const permRecords = insertedSubmenus.flatMap((sub: any) =>
+                menuRoles.map((role: any) => ({
+                  role_id: role.role_id,
+                  submenu_id: sub.id,
+                  can_view: role.can_view,
+                  can_create: role.can_create,
+                  can_edit: role.can_edit,
+                  can_delete: role.can_delete,
+                }))
+              )
+              await supabase.from('role_submenu_permissions').upsert(permRecords, {
+                onConflict: 'role_id,submenu_id',
+              })
+            }
+          }
         }
 
         // Limpiar submenús de guías que ya no tienen el rol
@@ -368,7 +395,30 @@ export function HomePage() {
     })
   }
 
-  const visibleMenus = getVisibleMenus()
+  const baseVisibleMenus = getVisibleMenus()
+
+  // Si hay guías pero el menú seguimiento-conductores no aparece en los permisos, inyectarlo
+  const visibleMenus = (() => {
+    if (guias.length > 0 && seguimientoMenuId) {
+      const hasSeguimiento = baseVisibleMenus.some(m => m.menu_name === 'seguimiento-conductores')
+      if (!hasSeguimiento) {
+        return [...baseVisibleMenus, {
+          menu_id: seguimientoMenuId,
+          menu_name: 'seguimiento-conductores',
+          menu_label: 'Seguimiento de Conductores',
+          menu_route: '',
+          order_index: 18,
+          can_view: true,
+          can_create: true,
+          can_edit: true,
+          can_delete: false,
+          has_individual_override: false,
+          has_role_permission: true,
+        }].sort((a, b) => a.order_index - b.order_index)
+      }
+    }
+    return baseVisibleMenus
+  })()
 
   if (loading) {
     return (
@@ -1346,9 +1396,37 @@ export function HomePage() {
           <nav className="sidebar-nav">
             {visibleMenus.length > 0 ? (
               visibleMenus.map((menu) => {
-                const submenus = getVisibleSubmenusForMenu(menu.menu_id)
+                let submenus = getVisibleSubmenusForMenu(menu.menu_id)
                 const isMenuOpen = openMenus[menu.menu_name] || false
                 const isSeguimiento = menu.menu_name === 'seguimiento-conductores'
+
+                // Inyectar guías como submenús si no están ya presentes
+                // Esto evita depender de role_submenu_permissions (que puede estar bloqueado por RLS)
+                if (isSeguimiento && guias.length > 0) {
+                  const existingSubmenuNames = new Set(submenus.map((s: any) => s.submenu_name))
+                  const guiaSubmenus = guias
+                    .filter(g => !existingSubmenuNames.has(`guia-${g.id}`))
+                    .map((g, idx) => ({
+                      submenu_id: `guia-injected-${g.id}`,
+                      submenu_name: `guia-${g.id}`,
+                      submenu_label: g.full_name,
+                      submenu_route: `/guias/${g.id}`,
+                      menu_id: menu.menu_id,
+                      parent_id: null,
+                      level: 1,
+                      order_index: 100 + idx,
+                      can_view: true,
+                      can_create: true,
+                      can_edit: true,
+                      can_delete: false,
+                      has_individual_override: false,
+                      has_role_permission: true,
+                    }))
+                  if (guiaSubmenus.length > 0) {
+                    submenus = [...submenus, ...guiaSubmenus]
+                  }
+                }
+
                 const hasSubmenus = submenus.length > 0
 
                 if (hasSubmenus) {

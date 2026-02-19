@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { fetchGuias } from './guiasService'
 import { format, startOfISOWeek, endOfISOWeek, setISOWeek, addHours, previousSunday, startOfDay, endOfDay, subWeeks, nextSunday, addWeeks } from 'date-fns'
 import { WeekSelector } from './components/WeekSelector'
 import { 
@@ -1721,41 +1722,19 @@ export function GuiasModule() {
   const loadGuias = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select(`
-          *,
-          roles!inner (
-            name,
-            description
-          )
-        `)
-        .eq('roles.name', 'guia')
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      const formattedGuias: Guia[] = data.map((item: any) => ({
-        id: item.id,
-        email: item.email,
-        full_name: item.full_name,
-        is_active: item.is_active,
-        created_at: item.created_at,
-        role_name: item.roles?.name,
-        role_description: item.roles?.description
-      }))
-
+      const formattedGuias = await fetchGuias()
       setGuias(formattedGuias)
       
-      // Solo seleccionar la guía si el ID del URL coincide con una guía real
-      // Si el URL tiene un ID que no es guía, no seleccionar ninguna (evita mostrar datos de otra guía)
+      // Seleccionar la guía del URL o la primera disponible
       if (urlGuiaId) {
         const matchedGuia = formattedGuias.find(g => g.id === urlGuiaId)
         if (matchedGuia) {
           setSelectedGuiaId(matchedGuia.id)
+        } else if (formattedGuias.length > 0) {
+          // URL no coincide con ninguna guía, usar la primera
+          setSelectedGuiaId(formattedGuias[0].id)
         }
       } else if (formattedGuias.length > 0) {
-        // Sin ID en URL (/guias sin parametro), usar la primera guía
         setSelectedGuiaId(formattedGuias[0].id)
       }
     } catch {

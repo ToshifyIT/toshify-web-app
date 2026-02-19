@@ -259,222 +259,81 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           permission_source: 'role_inherited' as const
         }))
       } else {
-        // Para usuarios NO admin, cargar permisos combinando:
-        // 1. Permisos específicos del usuario (tienen prioridad)
-        // 2. Permisos del rol (como fallback)
-        const roleId = (profileData as any).role_id
+        // Para usuarios NO admin, usar funciones RPC (SECURITY DEFINER)
+        // que bypasean RLS y combinan permisos de rol + usuario
         const userId = user!.id
 
-        // Maps para indexar permisos por menu_id/submenu_id/tab_id
-        const menuPermsMap = new Map<string, any>()
-        const submenuPermsMap = new Map<string, any>()
-        const tabPermsMap = new Map<string, any>()
+        // Cargar permisos de menús y submenús via RPC
+        const { data: rpcPerms, error: rpcError } = await supabase
+          .rpc('get_user_permissions', { p_user_id: userId })
 
-        // 1. Cargar permisos del ROL primero (base)
-        if (roleId) {
-          const { data: roleMenuPerms } = await supabase
-            .from('role_menu_permissions')
-            .select(`
-              can_view, can_create, can_edit, can_delete,
-              menus (id, name, label, route, order_index, is_active)
-            `)
-            .eq('role_id', roleId)
-            .eq('can_view', true)
+        if (rpcError) throw rpcError
 
-          const { data: roleSubmenuPerms } = await supabase
-            .from('role_submenu_permissions')
-            .select(`
-              can_view, can_create, can_edit, can_delete,
-              submenus (id, name, label, route, order_index, menu_id, parent_id, level, is_active)
-            `)
-            .eq('role_id', roleId)
-            .eq('can_view', true)
+        const rpcRows = (rpcPerms || []) as any[]
 
-          // Agregar permisos del rol al map
-          for (const p of (roleMenuPerms || []) as any[]) {
-            if (p.menus?.is_active) {
-              menuPermsMap.set(p.menus.id, {
-                can_view: p.can_view,
-                can_create: p.can_create,
-                can_edit: p.can_edit,
-                can_delete: p.can_delete,
-                menus: p.menus,
-                permission_source: 'role_inherited'
-              })
-            }
-          }
-
-          for (const p of (roleSubmenuPerms || []) as any[]) {
-            if (p.submenus?.is_active) {
-              submenuPermsMap.set(p.submenus.id, {
-                can_view: p.can_view,
-                can_create: p.can_create,
-                can_edit: p.can_edit,
-                can_delete: p.can_delete,
-                submenus: p.submenus,
-                permission_source: 'role_inherited'
-              })
-            }
-          }
-
-          // Cargar permisos de TABS del rol
-          const { data: roleTabPerms } = await supabase
-            .from('role_tab_permissions')
-            .select(`
-              can_view, can_create, can_edit, can_delete,
-              tabs (id, name, label, menu_id, submenu_id, order_index, is_active)
-            `)
-            .eq('role_id', roleId)
-            .eq('can_view', true)
-
-          for (const p of (roleTabPerms || []) as any[]) {
-            if (p.tabs?.is_active) {
-              tabPermsMap.set(p.tabs.id, {
-                can_view: p.can_view,
-                can_create: p.can_create,
-                can_edit: p.can_edit,
-                can_delete: p.can_delete,
-                tabs: p.tabs,
-                permission_source: 'role_inherited'
-              })
-            }
-          }
-        }
-
-        // 2. Cargar permisos del USUARIO (sobrescriben los del rol)
-        const { data: userMenuPerms } = await supabase
-          .from('user_menu_permissions')
-          .select(`
-            can_view, can_create, can_edit, can_delete,
-            menus (id, name, label, route, order_index, is_active)
-          `)
-          .eq('user_id', userId)
-
-        const { data: userSubmenuPerms } = await supabase
-          .from('user_submenu_permissions')
-          .select(`
-            can_view, can_create, can_edit, can_delete,
-            submenus (id, name, label, route, order_index, menu_id, parent_id, level, is_active)
-          `)
-          .eq('user_id', userId)
-
-        // Sobrescribir con permisos de usuario (tienen prioridad)
-        for (const p of (userMenuPerms || []) as any[]) {
-          if (p.menus?.is_active) {
-            menuPermsMap.set(p.menus.id, {
-              can_view: p.can_view,
-              can_create: p.can_create,
-              can_edit: p.can_edit,
-              can_delete: p.can_delete,
-              menus: p.menus,
-              permission_source: 'user_override'
-            })
-          }
-        }
-
-        for (const p of (userSubmenuPerms || []) as any[]) {
-          if (p.submenus?.is_active) {
-            submenuPermsMap.set(p.submenus.id, {
-              can_view: p.can_view,
-              can_create: p.can_create,
-              can_edit: p.can_edit,
-              can_delete: p.can_delete,
-              submenus: p.submenus,
-              permission_source: 'user_override'
-            })
-          }
-        }
-
-        // 2b. Cargar permisos de TABS del usuario (sobrescriben rol)
-        const { data: userTabPerms } = await supabase
-          .from('user_tab_permissions')
-          .select(`
-            can_view, can_create, can_edit, can_delete,
-            tabs (id, name, label, menu_id, submenu_id, order_index, is_active)
-          `)
-          .eq('user_id', userId)
-
-        for (const p of (userTabPerms || []) as any[]) {
-          if (p.tabs?.is_active) {
-            tabPermsMap.set(p.tabs.id, {
-              can_view: p.can_view,
-              can_create: p.can_create,
-              can_edit: p.can_edit,
-              can_delete: p.can_delete,
-              tabs: p.tabs,
-              permission_source: 'user_override'
-            })
-          }
-        }
-
-        // 3. Convertir maps a arrays finales
-        menusData = Array.from(menuPermsMap.values())
-          .filter((p: any) => p.can_view)
-          .map((p: any) => ({
-            id: p.menus.id,
-            name: p.menus.name,
-            label: p.menus.label,
-            route: p.menus.route,
-            order_index: p.menus.order_index || 0,
+        // Separar menús y submenús
+        menusData = rpcRows
+          .filter((r: any) => r.is_menu && r.can_view)
+          .map((r: any) => ({
+            id: r.menu_id,
+            name: r.menu_name,
+            label: r.menu_label,
+            route: r.menu_route || '',
+            order_index: r.order_index || 0,
             permissions: {
-              can_view: p.can_view || false,
-              can_create: p.can_create || false,
-              can_edit: p.can_edit || false,
-              can_delete: p.can_delete || false
+              can_view: r.can_view || false,
+              can_create: r.can_create || false,
+              can_edit: r.can_edit || false,
+              can_delete: r.can_delete || false
             },
-            permission_source: p.permission_source as 'user_override' | 'role_inherited'
+            permission_source: (r.permission_source || 'role_inherited') as 'user_override' | 'role_inherited'
           }))
 
-        submenusData = Array.from(submenuPermsMap.values())
-          .filter((p: any) => p.can_view)
-          .map((p: any) => ({
-            id: p.submenus.id,
-            name: p.submenus.name,
-            label: p.submenus.label,
-            route: p.submenus.route,
-            order_index: p.submenus.order_index || 0,
-            menu_id: p.submenus.menu_id,
-            parent_id: p.submenus.parent_id || null,
-            level: p.submenus.level || 1,
+        submenusData = rpcRows
+          .filter((r: any) => !r.is_menu && r.can_view)
+          .map((r: any) => ({
+            id: r.menu_id,
+            name: r.menu_name,
+            label: r.menu_label,
+            route: r.menu_route || '',
+            order_index: r.order_index || 0,
+            menu_id: r.parent_menu_id,
+            parent_id: null,
+            level: 1,
             permissions: {
-              can_view: p.can_view || false,
-              can_create: p.can_create || false,
-              can_edit: p.can_edit || false,
-              can_delete: p.can_delete || false
+              can_view: r.can_view || false,
+              can_create: r.can_create || false,
+              can_edit: r.can_edit || false,
+              can_delete: r.can_delete || false
             },
-            permission_source: p.permission_source as 'user_override' | 'role_inherited'
+            permission_source: (r.permission_source || 'role_inherited') as 'user_override' | 'role_inherited'
           }))
 
-        tabsData = Array.from(tabPermsMap.values())
-          .filter((p: any) => p.can_view)
-          .map((p: any) => ({
-            id: p.tabs.id,
-            name: p.tabs.name,
-            label: p.tabs.label,
-            menu_id: p.tabs.menu_id,
-            submenu_id: p.tabs.submenu_id,
-            order_index: p.tabs.order_index || 0,
+        // Cargar permisos de tabs via RPC
+        const { data: rpcTabs, error: rpcTabError } = await supabase
+          .rpc('get_user_tab_permissions', { p_user_id: userId })
+
+        if (rpcTabError) throw rpcTabError
+
+        tabsData = ((rpcTabs || []) as any[])
+          .filter((r: any) => r.can_view)
+          .map((r: any) => ({
+            id: r.tab_id,
+            name: r.tab_name,
+            label: r.tab_label,
+            menu_id: r.menu_id || null,
+            submenu_id: r.submenu_id || null,
+            order_index: r.order_index || 0,
             permissions: {
-              can_view: p.can_view || false,
-              can_create: p.can_create || false,
-              can_edit: p.can_edit || false,
-              can_delete: p.can_delete || false
+              can_view: r.can_view || false,
+              can_create: r.can_create || false,
+              can_edit: r.can_edit || false,
+              can_delete: r.can_delete || false
             },
-            permission_source: p.permission_source as 'user_override' | 'role_inherited'
+            permission_source: (r.permission_source || 'role_inherited') as 'user_override' | 'role_inherited'
           }))
 
       }
-
-      // DEBUG: Ver permisos cargados
-      console.log('🔐 Permisos cargados:', {
-        user: user!.email,
-        role: (profileData as any).roles?.name,
-        submenus: submenusData.map(s => ({
-          name: s.name,
-          can_create: s.permissions.can_create,
-          can_edit: s.permissions.can_edit
-        }))
-      })
 
       setUserPermissions({
         user_id: user!.id,

@@ -384,8 +384,8 @@ export function ReporteFacturacionTab() {
       // Usar nombre de tabla conductores en formato "Nombres Apellidos"
       let facturacionesTransformadas = (facturacionesData || []).map((f: any) => {
         const conductorEstadoId = f.conductor?.estado_id
-        // Estado billing: Activo (días>0), De baja (inactivo en DB), Pausa (activo sin asignación)
-        const estadoBilling = f.turnos_cobrados > 0 ? 'Activo'
+        // Estado: Activo (7 días), De baja (baja durante la semana), Pausa (perdió asignación)
+        const estadoBilling = f.turnos_cobrados >= 7 ? 'Activo'
           : (conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD ? 'De baja' : 'Pausa')
         return {
           ...f,
@@ -403,22 +403,23 @@ export function ReporteFacturacionTab() {
         .gte('fecha_inicio', (periodoData as any).fecha_inicio + 'T00:00:00')
         .lte('fecha_inicio', (periodoData as any).fecha_fin + 'T23:59:59')
 
-      // Agrupar ganancias y peajes por DNI
+      // Agrupar ganancias y peajes por DNI (normalizado sin ceros adelante)
       const gananciasPorDni = new Map<string, number>()
       const peajesPorDni = new Map<string, number>()
       ;(cabifyData || []).forEach((c: any) => {
         if (c.dni) {
-          const dniStr = String(c.dni)
-          const actual = gananciasPorDni.get(dniStr) || 0
-          gananciasPorDni.set(dniStr, actual + (parseFloat(c.ganancia_total) || 0))
-          const actualPeajes = peajesPorDni.get(dniStr) || 0
-          peajesPorDni.set(dniStr, actualPeajes + (parseFloat(String(c.peajes)) || 0))
+          const dniNorm = String(c.dni).replace(/^0+/, '')
+          const actual = gananciasPorDni.get(dniNorm) || 0
+          gananciasPorDni.set(dniNorm, actual + (parseFloat(c.ganancia_total) || 0))
+          const actualPeajes = peajesPorDni.get(dniNorm) || 0
+          peajesPorDni.set(dniNorm, actualPeajes + (parseFloat(String(c.peajes)) || 0))
         }
       })
 
       // Agregar ganancia_cabify a cada facturación
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
-        const ganancia = f.conductor_dni ? (gananciasPorDni.get(String(f.conductor_dni)) || 0) : 0
+        const dniNorm = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
+        const ganancia = dniNorm ? (gananciasPorDni.get(dniNorm) || 0) : 0
         const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
         return {
           ...f,
@@ -526,8 +527,9 @@ export function ReporteFacturacionTab() {
         const pago = pagosMap.get(f.id)
         const detalle = detallesMap.get(f.id)
         const peajesDetalle = detalle?.monto_peajes || 0
-        // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI
-        const peajesCabify = f.conductor_dni ? (peajesPorDni.get(String(f.conductor_dni)) || 0) : 0
+        // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI (normalizado)
+        const dniNormPeaje = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
+        const peajesCabify = dniNormPeaje ? (peajesPorDni.get(dniNormPeaje) || 0) : 0
         // Días reales de asignación (override del turnos_cobrados guardado)
         // Si no tiene asignación activa, son 0 días
         const diasReales = diasRealesMap.get(f.conductor_id) || 0
@@ -873,18 +875,21 @@ export function ReporteFacturacionTab() {
       const cabifyMap = new Map<string, number>()
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
-          const actualGanancia = cabifyMap.get(record.dni) || 0
+          const dniNorm = String(record.dni).replace(/^0+/, '')
+          const actualGanancia = cabifyMap.get(dniNorm) || 0
           const ganancia = parseFloat(String(record.ganancia_total)) || 0
-          cabifyMap.set(record.dni, actualGanancia + ganancia)
+          cabifyMap.set(dniNorm, actualGanancia + ganancia)
         }
       })
       // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
+      // Normalizar DNI: quitar ceros adelante para match consistente
       const peajesMap = new Map<string, number>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
         if (record.dni && record.peajes) {
-          const actualPeajes = peajesMap.get(record.dni) || 0
+          const dniNorm = String(record.dni).replace(/^0+/, '')
+          const actualPeajes = peajesMap.get(dniNorm) || 0
           const peajes = parseFloat(String(record.peajes)) || 0
-          peajesMap.set(record.dni, actualPeajes + peajes)
+          peajesMap.set(dniNorm, actualPeajes + peajes)
         }
       })
 
@@ -1069,8 +1074,9 @@ export function ReporteFacturacionTab() {
         }
         const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Incluir TODOS los conductores de la tabla de control, incluso con 0 días
-        // Los de "Pausa" tienen $0 alquiler/$0 garantía pero pueden tener peajes, saldo, multas, etc.
+        // Solo incluir conductores que tuvieron actividad durante la semana
+        // Si no tuvieron asignación solapada con la semana, no deben aparecer
+        if (diasTotales === 0) continue
         
         // Calcular alquiler usando montos pre-calculados con precios históricos (precio_base sin IVA)
         let subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
@@ -1110,8 +1116,8 @@ export function ReporteFacturacionTab() {
           cuotaGarantiaNumero = `1 de ${cuotasTotales}`
         }
 
-        // Datos por DNI del conductor
-        const dniConductor = conductor.numero_dni || ''
+        // Datos por DNI del conductor (normalizado sin ceros adelante)
+        const dniConductor = (conductor.numero_dni || '').replace(/^0+/, '')
 
         // Excesos de KM (P006)
         const exceso = excesosMap.get(conductorId)
@@ -1184,8 +1190,8 @@ export function ReporteFacturacionTab() {
            monto_penalidades: montoPenalidades,  // P007
            // Detalle de penalidades para el modal
            penalidades_detalle: detalleMap.get(conductorId) || [],
-           // Estado de facturación: Activo (días>0), De baja (inactivo en DB), Pausa (activo sin asignación)
-           estado_billing: diasTotales > 0 ? 'Activo'
+           // Estado: Activo (7 días), De baja (baja durante la semana, parcial), Pausa (perdió asignación, parcial)
+           estado_billing: diasTotales >= 7 ? 'Activo'
              : (conductor.estado_id !== ESTADO_ACTIVO_ID ? 'De baja' : 'Pausa'),
          })
        }
@@ -1599,11 +1605,15 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Incluir TODOS los conductores de la tabla de control, incluso con 0 días
-        // Los de "Pausa" tienen $0 alquiler/$0 garantía pero pueden tener peajes, saldo, multas, etc.
+        // Solo incluir conductores que tuvieron actividad durante la semana
+        // Si no tuvieron asignación solapada con la semana, no deben aparecer
+        if (totalDias === 0) continue
         
-        // Determinar estado de facturación: Activo (días>0), De baja (inactivo en DB), Pausa (activo sin asignación)
-        const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = totalDias > 0 ? 'Activo'
+        // Determinar estado de facturación:
+        // - Activo: tuvo asignación los 7 días
+        // - De baja: conductor dado de baja durante la semana (tiene días parciales y estado inactivo)
+        // - Pausa: conductor activo pero perdió asignación durante la semana (días parciales)
+        const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = totalDias >= 7 ? 'Activo'
           : (conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC ? 'De baja' : 'Pausa')
 
         conductoresProcesados.push({
@@ -1756,11 +1766,12 @@ export function ReporteFacturacionTab() {
       // Filtrar cobros fraccionados: excluir pagados (aplicado=true O en pagos_conductores)
       const cobros = (cobrosRes.data || []).filter((c: any) => c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id))
 
-      // Mapear peajes por DNI
+      // Mapear peajes por DNI (normalizado sin ceros adelante)
       const peajesMap = new Map<string, number>()
       ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
         if (r.dni && r.peajes) {
-          peajesMap.set(String(r.dni), (peajesMap.get(String(r.dni)) || 0) + (parseFloat(String(r.peajes)) || 0))
+          const dniNorm = String(r.dni).replace(/^0+/, '')
+          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + (parseFloat(String(r.peajes)) || 0))
         }
       })
 
@@ -1862,8 +1873,8 @@ export function ReporteFacturacionTab() {
         const excesosConductor = (excesosArr as any[]).filter((e: any) => e.conductor_id === conductor.conductor_id)
         const totalExcesos = excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
-        // Peajes (P005)
-        const totalPeajes = conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni)) || 0) : 0
+        // Peajes (P005) - normalizar DNI sin ceros adelante
+        const totalPeajes = conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni).replace(/^0+/, '')) || 0) : 0
 
         // Cobros fraccionados (P010) - calcular monto real de la cuota
         const cobrosConductor = (cobros as any[]).filter((c: any) => c.conductor_id === conductor.conductor_id)
@@ -5893,7 +5904,7 @@ export function ReporteFacturacionTab() {
       ),
       cell: ({ row }) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <strong style={{ fontSize: '13px', textTransform: 'uppercase' }}>{row.original.conductor_nombre}</strong>
+          <strong style={{ fontSize: '11px', textTransform: 'uppercase' }}>{row.original.conductor_nombre}</strong>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
               {row.original.vehiculo_patente || '-'}
@@ -5914,7 +5925,7 @@ export function ReporteFacturacionTab() {
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
         return (
-          <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)' }}>
             {cobrados}
           </span>
         )
@@ -5933,7 +5944,7 @@ export function ReporteFacturacionTab() {
         const cubreCuota = ganancia >= alquiler && ganancia > 0
 
         return (
-          <div style={{ fontSize: '12px', minWidth: '100px' }}>
+          <div style={{ fontSize: '11px', minWidth: '80px' }}>
             <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
               {formatCurrency(alquiler)}
             </div>
@@ -6006,7 +6017,7 @@ export function ReporteFacturacionTab() {
         }
 
         return (
-          <div style={{ fontSize: '12px', minWidth: '90px' }}>
+          <div style={{ fontSize: '11px', minWidth: '70px' }}>
             <div style={{ fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
               {formatCurrency(garantia)}
             </div>
@@ -6053,16 +6064,16 @@ export function ReporteFacturacionTab() {
         const total = Math.abs(row.original.total_a_pagar || 0)
 
         if (modoVistaPrevia) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
         if (cobrado === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
         const esPagoCompleto = cobrado >= total
         return (
-          <div style={{ fontSize: '12px' }}>
+          <div style={{ fontSize: '11px' }}>
             <span style={{
               fontWeight: 600,
               color: esPagoCompleto ? '#10b981' : '#f59e0b'
@@ -6081,28 +6092,30 @@ export function ReporteFacturacionTab() {
     {
       id: 'peajes',
       header: 'Peajes',
+      accessorFn: (row) => row.monto_peajes || 0,
       cell: ({ row }) => {
         const peajes = row.original.monto_peajes || 0
         if (peajes === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
         return (
-          <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)' }}>
             {formatCurrency(peajes)}
           </span>
         )
       },
-      enableSorting: false,
+      enableSorting: true,
     },
     {
       id: 'incidencias',
       header: 'Incidencias',
+      accessorFn: (row) => row.monto_penalidades || 0,
       cell: ({ row }) => {
         const penalidades = row.original.penalidades_detalle || []
         const montoPen = row.original.monto_penalidades || 0
 
         if (penalidades.length === 0 && montoPen === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
         const count = penalidades.length || (montoPen > 0 ? 1 : 0)
@@ -6156,14 +6169,14 @@ export function ReporteFacturacionTab() {
           </button>
         )
       },
-      enableSorting: false,
+      enableSorting: true,
     },
     {
       accessorKey: 'saldo_anterior',
       header: 'Saldo Ant.',
       cell: ({ row }) => (
         <span style={{
-          fontSize: '12px',
+          fontSize: '11px',
           fontWeight: row.original.saldo_anterior !== 0 ? 600 : 400,
           color: row.original.saldo_anterior > 0 ? 'var(--badge-red-text)' : row.original.saldo_anterior < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
         }}>
@@ -6180,9 +6193,9 @@ export function ReporteFacturacionTab() {
         const total = row.original.total_a_pagar
         return (
           <span style={{
-            fontSize: '13px',
+            fontSize: '11px',
             fontWeight: 700,
-            padding: '4px 8px',
+            padding: '3px 6px',
             borderRadius: '4px',
             background: total > 0 ? 'var(--badge-red-bg)' : 'var(--badge-green-bg)',
             color: total > 0 ? 'var(--badge-red-text)' : 'var(--badge-green-text)'
