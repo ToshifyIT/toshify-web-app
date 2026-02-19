@@ -392,15 +392,16 @@ export function PeriodosTab() {
         const conductorData = conductoresMap.get(control.numero_dni)
         if (!conductorData) continue
 
-        // Solo incluir conductores con asignación activa
-        if (!conductoresConAsignacion.has(conductorData.id)) continue
+        // Conductores del control table sin asignación en la semana: incluir con 0 días (De baja)
+        const tieneAsignacion = conductoresConAsignacion.has(conductorData.id)
 
         const modalidad = control.modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
         const horarioConductor = (horariosPorConductor.get(conductorData.id) || '').toLowerCase().trim()
         const esTurnoNocturno = modalidad === 'TURNO' && (horarioConductor === 'nocturno' || horarioConductor === 'n')
-        const diasTurno = (modalidad === 'TURNO' && !esTurnoNocturno) ? 7 : 0
-        const diasTurnoNocturno = esTurnoNocturno ? 7 : 0
-        const diasCargo = modalidad === 'CARGO' ? 7 : 0
+        // Conductores sin asignación en la semana → 0 días (De baja)
+        const diasTurno = tieneAsignacion ? ((modalidad === 'TURNO' && !esTurnoNocturno) ? 7 : 0) : 0
+        const diasTurnoNocturno = tieneAsignacion ? (esTurnoNocturno ? 7 : 0) : 0
+        const diasCargo = tieneAsignacion ? (modalidad === 'CARGO' ? 7 : 0) : 0
 
         conductoresProcesados.push({
           conductor_id: conductorData.id,

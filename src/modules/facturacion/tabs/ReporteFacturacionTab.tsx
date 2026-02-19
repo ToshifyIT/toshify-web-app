@@ -615,6 +615,9 @@ export function ReporteFacturacionTab() {
 
       if (errControl) throw errControl
 
+      // Guardar DNIs originales del control table ANTES de suplementar
+      const dnisEnControlOriginal = new Set(conductoresControl.map((c: any) => c.numero_dni))
+
       // Suplementar con conductores que tienen asignaciones en la semana pero NO están en la tabla de control
       // Captura conductores dados de baja o ausentes del control que trabajaron durante la semana
       {
@@ -1074,9 +1077,9 @@ export function ReporteFacturacionTab() {
         }
         const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Solo incluir conductores que tuvieron actividad durante la semana
-        // Si no tuvieron asignación solapada con la semana, no deben aparecer
-        if (diasTotales === 0) continue
+        // Solo excluir conductores suplementados (no en tabla de control) si no tuvieron actividad
+        // Conductores de la tabla de control SIEMPRE aparecen (pueden ser De baja con 0 días)
+        if (diasTotales === 0 && !dnisEnControlOriginal.has(control.numero_dni)) continue
         
         // Calcular alquiler usando montos pre-calculados con precios históricos (precio_base sin IVA)
         let subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
@@ -1408,6 +1411,9 @@ export function ReporteFacturacionTab() {
         ...(conductoresBaja || []).filter((c: any) => !dnisActivos.has(c.numero_dni))
       ]
 
+      // Guardar DNIs originales del control table ANTES de suplementar
+      const dnisEnControlOriginalRecalc = new Set(conductoresControl.map((c: any) => c.numero_dni))
+
       // Suplementar con conductores que tienen asignaciones en la semana pero NO están en la tabla de control
       // Captura conductores dados de baja o ausentes del control que trabajaron durante la semana
       {
@@ -1605,9 +1611,9 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Solo incluir conductores que tuvieron actividad durante la semana
-        // Si no tuvieron asignación solapada con la semana, no deben aparecer
-        if (totalDias === 0) continue
+        // Solo excluir conductores suplementados (no en tabla de control) si no tuvieron actividad
+        // Conductores de la tabla de control SIEMPRE aparecen (pueden ser De baja con 0 días)
+        if (totalDias === 0 && !dnisEnControlOriginalRecalc.has(control.numero_dni)) continue
         
         // Determinar estado de facturación:
         // - Activo: tuvo asignación los 7 días
