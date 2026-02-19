@@ -3,11 +3,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files first (better cache)
+# Copy package files first (better cache - only reinstalls when deps change)
 COPY package*.json ./
 
-# Install ALL dependencies for build (ignore scripts to skip husky in Docker)
-RUN npm ci --ignore-scripts
+# Install ALL dependencies for build with BuildKit cache mount
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --ignore-scripts
 
 # Build arguments for environment variables
 ARG VITE_SUPABASE_URL
@@ -41,14 +42,15 @@ COPY . .
 # Build the app
 RUN npm run build
 
-# Production stage
+# Production stage - minimal image
 FROM node:20-alpine
 
 WORKDIR /app
 
 # Copy package files and install production dependencies only
 COPY package*.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev --ignore-scripts
 
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
