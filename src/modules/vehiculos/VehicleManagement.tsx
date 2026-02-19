@@ -530,10 +530,40 @@ export function VehicleManagement() {
 
     setSaving(true)
     try {
+      const vid = selectedVehiculo.id
+
+      // SET NULL en todas las tablas con FK a vehiculos para no perder datos históricos
+      const nullifyTables: { table: string; column: string }[] = [
+        { table: 'asignaciones', column: 'vehiculo_id' },
+        { table: 'devoluciones', column: 'vehiculo_id' },
+        { table: 'excesos_kilometraje', column: 'vehiculo_id' },
+        { table: 'facturacion_conductores', column: 'vehiculo_id' },
+        { table: 'incidencias', column: 'vehiculo_id' },
+        { table: 'inventario', column: 'asignado_a_vehiculo_id' },
+        { table: 'movimientos', column: 'vehiculo_destino_id' },
+        { table: 'movimientos', column: 'vehiculo_origen_id' },
+        { table: 'penalidades', column: 'vehiculo_id' },
+        { table: 'programaciones_onboarding', column: 'vehiculo_cambio_id' },
+        { table: 'programaciones_onboarding', column: 'vehiculo_entregar_id' },
+        { table: 'siniestros', column: 'vehiculo_id' },
+        { table: 'uss_excesos_velocidad', column: 'vehiculo_id' },
+        { table: 'vehiculos_turnos_ocupados', column: 'vehiculo_id' },
+      ]
+
+      for (const { table, column } of nullifyTables) {
+        const { error: nullErr } = await supabase
+          .from(table)
+          .update({ [column]: null })
+          .eq(column, vid)
+        if (nullErr) {
+          console.error(`Error nullificando ${table}.${column}:`, nullErr)
+        }
+      }
+
       const { error: deleteError } = await supabase
         .from('vehiculos')
         .delete()
-        .eq('id', selectedVehiculo.id)
+        .eq('id', vid)
 
       if (deleteError) throw deleteError
 
