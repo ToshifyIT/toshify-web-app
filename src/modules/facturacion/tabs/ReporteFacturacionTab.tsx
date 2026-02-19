@@ -626,7 +626,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
 
         const semInicioVP = parseISO(fechaInicio)
         const semFinVP = parseISO(fechaFin)
@@ -695,7 +695,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIds)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
 
       // Crear mapa de prorrateo con días y montos para precios históricos
       interface ProrrateoVistaPrevia {
@@ -1419,7 +1419,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
 
         const semInicioRecalc = parseISO(fechaInicio)
         const semFinRecalc = parseISO(fechaFin)
@@ -1496,7 +1496,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIdsTemp)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
 
       // Crear mapa de prorrateo: conductor_id -> { días y montos por modalidad }
       // Los montos se calculan día a día para considerar cambios de precio históricos

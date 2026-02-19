@@ -291,7 +291,7 @@ export function PeriodosTab() {
           ),
           conductores!inner(id, nombres, apellidos, numero_dni, numero_cuit)
         `)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado']))
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado']))
 
       // Mapear conductores con asignación que se solapó con la semana
       const conductoresAsignados = new Map<string, { 
