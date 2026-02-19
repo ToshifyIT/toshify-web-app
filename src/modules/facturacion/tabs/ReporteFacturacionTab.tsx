@@ -88,6 +88,8 @@ interface FacturacionConductor {
   // Datos de pago registrado
   monto_cobrado?: number
   fecha_pago?: string | null
+  // Estado de facturación semanal (Activo, Pausa, De baja)
+  estado_billing?: 'Activo' | 'Pausa' | 'De baja'
 }
 
 interface FacturacionDetalle {
@@ -368,19 +370,29 @@ export function ReporteFacturacionTab() {
         .from('facturacion_conductores') as any)
         .select(`
           *,
-          conductor:conductores!conductor_id(nombres, apellidos)
+          conductor:conductores!conductor_id(nombres, apellidos, estado_id)
         `)
         .eq('periodo_id', (periodoData as any).id)
 
       if (errFact) throw errFact
 
+      // ID del estado "Activo" para conductores
+      const ESTADO_ACTIVO_ID_LOAD = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
+
       // Usar nombre de tabla conductores en formato "Nombres Apellidos"
-      let facturacionesTransformadas = (facturacionesData || []).map((f: any) => ({
-        ...f,
-        conductor_nombre: f.conductor 
-          ? `${f.conductor.nombres || ''} ${f.conductor.apellidos || ''}`.trim()
-          : f.conductor_nombre || ''
-      }))
+      let facturacionesTransformadas = (facturacionesData || []).map((f: any) => {
+        const conductorEstadoId = f.conductor?.estado_id
+        // Estado billing: Activo (días>0), De baja (inactivo en DB), Pausa (activo sin asignación)
+        const estadoBilling = f.turnos_cobrados > 0 ? 'Activo'
+          : (conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD ? 'De baja' : 'Pausa')
+        return {
+          ...f,
+          conductor_nombre: f.conductor 
+            ? `${f.conductor.nombres || ''} ${f.conductor.apellidos || ''}`.trim()
+            : f.conductor_nombre || '',
+          estado_billing: estadoBilling,
+        }
+      })
 
       // 2.5 Cargar ganancias y peajes de Cabify para el período
       const { data: cabifyData } = await supabase
@@ -655,12 +667,14 @@ export function ReporteFacturacionTab() {
       const dnisControl = (conductoresControl || []).map((c: any) => c.numero_dni)
       let qConductoresVP = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id')
         .in('numero_dni', dnisControl)
       if (sedeParaVP) qConductoresVP = qConductoresVP.eq('sede_id', sedeParaVP)
       const { data: conductoresData } = await qConductoresVP
 
       const conductoresDataMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
+      // ID del estado "Activo" para conductores
+      const ESTADO_ACTIVO_ID = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
 
       // 1.1 Cargar asignaciones_conductores para calcular prorrateo por días/modalidad/horario
       const conductorIds = (conductoresData || []).map((c: any) => c.id)
@@ -1161,14 +1175,17 @@ export function ReporteFacturacionTab() {
           monto_peajes: montoPeajes,       // P005
           monto_excesos: montoExcesos,     // P006
           km_exceso: kmExceso,
-          monto_penalidades: montoPenalidades,  // P007
-          // Detalle de penalidades para el modal
-          penalidades_detalle: detalleMap.get(conductorId) || []
-        })
-      }
+           monto_penalidades: montoPenalidades,  // P007
+           // Detalle de penalidades para el modal
+           penalidades_detalle: detalleMap.get(conductorId) || [],
+           // Estado de facturación: Activo (días>0), De baja (inactivo en DB), Pausa (activo sin asignación)
+           estado_billing: diasTotales > 0 ? 'Activo'
+             : (conductor.estado_id !== ESTADO_ACTIVO_ID ? 'De baja' : 'Pausa'),
+         })
+       }
 
-      // Ordenar por nombre
-      facturacionesProyectadas.sort((a, b) => a.conductor_nombre.localeCompare(b.conductor_nombre))
+       // Ordenar por nombre
+       facturacionesProyectadas.sort((a, b) => a.conductor_nombre.localeCompare(b.conductor_nombre))
 
       setVistaPreviaData(facturacionesProyectadas)
 
@@ -1444,12 +1461,13 @@ export function ReporteFacturacionTab() {
       const dnisControl = conductoresControl.map((c: any) => c.numero_dni)
       let qConductoresRecalc = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id')
         .in('numero_dni', dnisControl)
       if (sedeDelPeriodo) qConductoresRecalc = qConductoresRecalc.eq('sede_id', sedeDelPeriodo)
       const { data: conductoresData } = await qConductoresRecalc
 
       const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
+      const ESTADO_ACTIVO_ID_RECALC = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const conductorIdsTemp = (conductoresData || []).map((c: any) => c.id)
 
       // Cargar asignaciones_conductores para calcular prorrateo por días/modalidad/horario
@@ -1560,6 +1578,7 @@ export function ReporteFacturacionTab() {
         conductor_id: string; conductor_nombre: string; conductor_dni: string | null;
         conductor_cuit: string | null; vehiculo_patente: string | null;
         dias_turno_diurno: number; dias_turno_nocturno: number; dias_cargo: number; total_dias: number;
+        estado_billing: 'Activo' | 'Pausa' | 'De baja';
       }[] = []
       const dnisYaProcesados = new Set<string>()
 
@@ -1577,6 +1596,10 @@ export function ReporteFacturacionTab() {
         // Incluir TODOS los conductores de la tabla de control, incluso con 0 días
         // Los de "Pausa" tienen $0 alquiler/$0 garantía pero pueden tener peajes, saldo, multas, etc.
         
+        // Determinar estado de facturación: Activo (días>0), De baja (inactivo en DB), Pausa (activo sin asignación)
+        const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = totalDias > 0 ? 'Activo'
+          : (conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC ? 'De baja' : 'Pausa')
+
         conductoresProcesados.push({
           conductor_id: conductorData.id,
           conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
@@ -1587,6 +1610,7 @@ export function ReporteFacturacionTab() {
           dias_turno_nocturno: prorrateo.TURNO_NOCTURNO,
           dias_cargo: prorrateo.CARGO,
           total_dias: totalDias,
+          estado_billing: estadoBilling,
         })
       }
 
@@ -6158,7 +6182,36 @@ export function ReporteFacturacionTab() {
       },
       enableSorting: true,
     },
-    // Columna Cabify Ganancia removida - generaba confusión
+    {
+      id: 'estado_billing',
+      header: 'Estado',
+      accessorFn: (row) => row.estado_billing || '',
+      cell: ({ row }) => {
+        const estado = row.original.estado_billing
+        if (!estado) return '-'
+        const estilos: Record<string, { bg: string; text: string }> = {
+          'Activo': { bg: 'var(--badge-green-bg)', text: 'var(--badge-green-text)' },
+          'Pausa': { bg: 'var(--badge-yellow-bg, #fef3c7)', text: 'var(--badge-yellow-text, #92400e)' },
+          'De baja': { bg: 'var(--badge-red-bg)', text: 'var(--badge-red-text)' },
+        }
+        const estilo = estilos[estado] || { bg: '#f3f4f6', text: '#6b7280' }
+        return (
+          <span style={{
+            fontSize: '11px',
+            fontWeight: 600,
+            padding: '2px 8px',
+            borderRadius: '10px',
+            background: estilo.bg,
+            color: estilo.text,
+            whiteSpace: 'nowrap',
+          }}>
+            {estado}
+          </span>
+        )
+      },
+      enableSorting: true,
+      filterFn: 'equals',
+    },
     {
       id: 'acciones',
       header: '',
