@@ -5904,7 +5904,7 @@ export function ReporteFacturacionTab() {
       ),
       cell: ({ row }) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <strong style={{ fontSize: '13px', textTransform: 'uppercase' }}>{row.original.conductor_nombre}</strong>
+          <strong style={{ fontSize: '11px', textTransform: 'uppercase' }}>{row.original.conductor_nombre}</strong>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
               {row.original.vehiculo_patente || '-'}
@@ -5925,7 +5925,7 @@ export function ReporteFacturacionTab() {
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
         return (
-          <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)' }}>
             {cobrados}
           </span>
         )
@@ -5944,7 +5944,7 @@ export function ReporteFacturacionTab() {
         const cubreCuota = ganancia >= alquiler && ganancia > 0
 
         return (
-          <div style={{ fontSize: '12px', minWidth: '100px' }}>
+          <div style={{ fontSize: '11px', minWidth: '80px' }}>
             <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
               {formatCurrency(alquiler)}
             </div>
@@ -6017,7 +6017,7 @@ export function ReporteFacturacionTab() {
         }
 
         return (
-          <div style={{ fontSize: '12px', minWidth: '90px' }}>
+          <div style={{ fontSize: '11px', minWidth: '70px' }}>
             <div style={{ fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
               {formatCurrency(garantia)}
             </div>
@@ -6064,16 +6064,16 @@ export function ReporteFacturacionTab() {
         const total = Math.abs(row.original.total_a_pagar || 0)
 
         if (modoVistaPrevia) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
         if (cobrado === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
         const esPagoCompleto = cobrado >= total
         return (
-          <div style={{ fontSize: '12px' }}>
+          <div style={{ fontSize: '11px' }}>
             <span style={{
               fontWeight: 600,
               color: esPagoCompleto ? '#10b981' : '#f59e0b'
@@ -6096,10 +6096,10 @@ export function ReporteFacturacionTab() {
       cell: ({ row }) => {
         const peajes = row.original.monto_peajes || 0
         if (peajes === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
         return (
-          <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)' }}>
             {formatCurrency(peajes)}
           </span>
         )
@@ -6115,7 +6115,7 @@ export function ReporteFacturacionTab() {
         const montoPen = row.original.monto_penalidades || 0
 
         if (penalidades.length === 0 && montoPen === 0) {
-          return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
         const count = penalidades.length || (montoPen > 0 ? 1 : 0)
@@ -6176,7 +6176,7 @@ export function ReporteFacturacionTab() {
       header: 'Saldo Ant.',
       cell: ({ row }) => (
         <span style={{
-          fontSize: '12px',
+          fontSize: '11px',
           fontWeight: row.original.saldo_anterior !== 0 ? 600 : 400,
           color: row.original.saldo_anterior > 0 ? 'var(--badge-red-text)' : row.original.saldo_anterior < 0 ? 'var(--badge-green-text)' : 'var(--text-muted)'
         }}>
@@ -6193,9 +6193,9 @@ export function ReporteFacturacionTab() {
         const total = row.original.total_a_pagar
         return (
           <span style={{
-            fontSize: '13px',
+            fontSize: '11px',
             fontWeight: 700,
-            padding: '4px 8px',
+            padding: '3px 6px',
             borderRadius: '4px',
             background: total > 0 ? 'var(--badge-red-bg)' : 'var(--badge-green-bg)',
             color: total > 0 ? 'var(--badge-red-text)' : 'var(--badge-green-text)'
