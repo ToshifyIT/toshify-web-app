@@ -34,6 +34,7 @@ interface DriverDetailModalProps {
       modalidad?: string;
       turno_conductor?: string;
     };
+    seguimiento?: string | null;
   };
   onClose: () => void;
   onDriverUpdate?: () => void;
@@ -76,6 +77,19 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
     return date.toISOString().split('T')[0];
   };
 
+  const getInitialSeguimiento = () => {
+    const raw = (driver.seguimiento || '').toString().trim();
+    if (raw) {
+      return raw.toUpperCase();
+    }
+    const prev = ((driver as any).prev_week_seguimiento || '').toString().toLowerCase();
+    if (!prev) return '';
+    if (prev.includes('diario')) return 'DIARIO';
+    if (prev.includes('cercano')) return 'CERCANO';
+    if (prev.includes('semanal')) return 'SEMANAL';
+    return '';
+  };
+
   const [formData, setFormData] = useState({
     meta_sem_cumplida: getInitialMeta(driver.meta_sem_cumplida),
     accion_implementaria: driver.accion_implementaria || "",
@@ -84,7 +98,8 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
     fecha_escuela: formatDateForDateInput(driver.fecha_escuela),
     fecha_llamada: formatDateForInput(driver.fecha_llamada),
     facturacion_app: driver.facturacion_app || 0,
-    facturacion_efectivo: driver.facturacion_efectivo || 0
+    facturacion_efectivo: driver.facturacion_efectivo || 0,
+    seguimiento: getInitialSeguimiento()
   });
 
   // Si tiene datos de cabify (relacion cabify = SI), no es editable
@@ -170,7 +185,8 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
         accion_implementaria: formData.accion_implementaria || null,
         id_accion_imp: formData.id_accion_imp,
         escuela_conductores: formData.escuela_conductores || null,
-        fecha_llamada: formData.fecha_llamada ? new Date(formData.fecha_llamada).toISOString() : null
+        fecha_llamada: formData.fecha_llamada ? new Date(formData.fecha_llamada).toISOString() : null,
+        seguimiento: (formData as any).seguimiento ? (formData as any).seguimiento.toString().toUpperCase() : null
       };
 
       // Si NO está conectado a Cabify, permitimos guardar los montos editados
@@ -365,7 +381,6 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
           {/* Columna Izquierda: GUIAS + Historial */}
           <div className="flex flex-col h-full">
             <div className="section-header">
-              <div className="section-indicator"></div>
               <span className="section-title">Nuestros Programas Educativos</span>
             </div>
 
@@ -500,6 +515,22 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
                     ))}
                   </select>
                 </div>
+                
+                <div className="form-group col-span-2">
+                  <label className="info-label block mb-2">Seguimiento</label>
+                  <select
+                    className="w-full p-2.5 border rounded-lg text-sm transition-all outline-none disabled:opacity-60"
+                    style={{ borderColor: 'var(--input-border)', background: 'var(--input-bg)', color: 'var(--text-primary)' }}
+                    value={(formData as any).seguimiento || ""}
+                    onChange={(e) => handleInputChange('seguimiento', e.target.value.toUpperCase())}
+                    disabled={readOnly}
+                  >
+                    <option value="">Sin definir</option>
+                    <option value="SEMANAL">SEMANAL</option>
+                    <option value="CERCANO">CERCANO</option>
+                    <option value="DIARIO">DIARIO</option>
+                  </select>
+                </div>
               </div>
               
               <IncidentsHistory 
@@ -521,7 +552,6 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
             {/* Sección: Información Personal */}
             <div>
               <div className="section-header">
-                <div className="section-indicator"></div>
                 <span className="section-title">Información Personal</span>
               </div>
               
@@ -553,7 +583,6 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
             {/* Sección: Documentación y Estado */}
             <div>
               <div className="section-header">
-                <div className="section-indicator"></div>
                 <span className="section-title">Documentación y Estado</span>
               </div>
 
@@ -589,7 +618,6 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
             {/* Sección: Asignación Vehicular */}
             <div>
               <div className="section-header">
-                <div className="section-indicator"></div>
                 <span className="section-title">Asignación Vehicular</span>
               </div>
                 

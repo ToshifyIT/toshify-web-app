@@ -10,6 +10,7 @@ interface RangoSeguimiento {
   id: number
   created_at: string
   rango_nombre: string
+  sub_rango_nombre: string | null
   color: string
   desde: number | null
   hasta: number | null
@@ -54,6 +55,12 @@ export function RangoSeguimientoPage() {
     const colorOptions = COLOR_OPTIONS.map(c =>
       `<option value="${c.value}">${c.label}</option>`
     ).join('')
+    const turnoOptions = [
+      { value: '', label: 'Todos los turnos' },
+      { value: 'DIURNO', label: 'Diurno' },
+      { value: 'NOCTURNO', label: 'Nocturno' },
+      { value: 'CARGO', label: 'A Cargo' },
+    ].map(t => `<option value="${t.value}">${t.label}</option>`).join('')
 
     const { value: formValues } = await Swal.fire({
       title: 'Nuevo Rango de Seguimiento',
@@ -67,6 +74,12 @@ export function RangoSeguimientoPage() {
             <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Color</label>
             <select id="swal-color" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
               ${colorOptions}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Turno</label>
+            <select id="swal-turno" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
+              ${turnoOptions}
             </select>
           </div>
           <div style="display:flex;gap:12px;">
@@ -88,6 +101,7 @@ export function RangoSeguimientoPage() {
       preConfirm: () => {
         const nombre = (document.getElementById('swal-nombre') as HTMLInputElement).value.trim().toUpperCase()
         const color = (document.getElementById('swal-color') as HTMLSelectElement).value
+        const turno = (document.getElementById('swal-turno') as HTMLSelectElement).value
         const desde = (document.getElementById('swal-desde') as HTMLInputElement).value
         const hasta = (document.getElementById('swal-hasta') as HTMLInputElement).value
 
@@ -103,6 +117,7 @@ export function RangoSeguimientoPage() {
         return {
           rango_nombre: nombre,
           color,
+          sub_rango_nombre: turno ? turno.toUpperCase() : null,
           desde: parseInt(desde),
           hasta: hasta ? parseInt(hasta) : null,
         }
@@ -129,6 +144,12 @@ export function RangoSeguimientoPage() {
     const colorOptions = COLOR_OPTIONS.map(c =>
       `<option value="${c.value}" ${c.value === rango.color ? 'selected' : ''}>${c.label}</option>`
     ).join('')
+    const turnoOptions = [
+      { value: '', label: 'Todos los turnos' },
+      { value: 'DIURNO', label: 'Diurno' },
+      { value: 'NOCTURNO', label: 'Nocturno' },
+      { value: 'CARGO', label: 'A Cargo' },
+    ].map(t => `<option value="${t.value}" ${t.value === (rango.sub_rango_nombre || '') ? 'selected' : ''}>${t.label}</option>`).join('')
 
     const { value: formValues } = await Swal.fire({
       title: 'Editar Rango de Seguimiento',
@@ -142,6 +163,12 @@ export function RangoSeguimientoPage() {
             <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Color</label>
             <select id="swal-color" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
               ${colorOptions}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:13px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Turno</label>
+            <select id="swal-turno" class="swal2-select" style="margin:0;width:100%;box-sizing:border-box;">
+              ${turnoOptions}
             </select>
           </div>
           <div style="display:flex;gap:12px;">
@@ -163,6 +190,7 @@ export function RangoSeguimientoPage() {
       preConfirm: () => {
         const nombre = (document.getElementById('swal-nombre') as HTMLInputElement).value.trim().toUpperCase()
         const color = (document.getElementById('swal-color') as HTMLSelectElement).value
+        const turno = (document.getElementById('swal-turno') as HTMLSelectElement).value
         const desde = (document.getElementById('swal-desde') as HTMLInputElement).value
         const hasta = (document.getElementById('swal-hasta') as HTMLInputElement).value
 
@@ -178,6 +206,7 @@ export function RangoSeguimientoPage() {
         return {
           rango_nombre: nombre,
           color,
+          sub_rango_nombre: turno ? turno.toUpperCase() : null,
           desde: parseInt(desde),
           hasta: hasta ? parseInt(hasta) : null,
         }
@@ -241,6 +270,14 @@ export function RangoSeguimientoPage() {
       size: 200,
       cell: ({ row }) => (
         <span style={{ fontWeight: 600 }}>{row.original.rango_nombre}</span>
+      ),
+    },
+    {
+      accessorKey: 'sub_rango_nombre',
+      header: 'TURNO',
+      size: 180,
+      cell: ({ row }) => (
+        <span>{row.original.sub_rango_nombre || '—'}</span>
       ),
     },
     {

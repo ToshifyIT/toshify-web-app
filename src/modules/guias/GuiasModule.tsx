@@ -133,6 +133,7 @@ export function GuiasModule() {
   const [historyNotesModalOpen, setHistoryNotesModalOpen] = useState(false);
   const [historyNotesData, setHistoryNotesData] = useState<Anotacion[]>([]);
   const [historyNotesDriverName, setHistoryNotesDriverName] = useState("");
+  const [historyNotesDriverDni, setHistoryNotesDriverDni] = useState("");
   const [historyNotesTotal, setHistoryNotesTotal] = useState(0);
 
   // Estados para modal de Reporte Escuela
@@ -359,6 +360,7 @@ export function GuiasModule() {
   const handleViewHistoryNotes = async (row: any) => {
     const driverId = row.original.id; // ID del conductor
     const driverName = `${row.original.nombres} ${row.original.apellidos}`;
+    const driverDni = row.original.numero_dni || '';
     
     try {
       // Consultar historial de todas las semanas para este conductor
@@ -392,6 +394,7 @@ export function GuiasModule() {
       setHistoryNotesData(allNotes);
       setHistoryNotesTotal(allNotes.length);
       setHistoryNotesDriverName(driverName);
+      setHistoryNotesDriverDni(driverDni ? String(driverDni) : '');
       setHistoryNotesModalOpen(true);
 
     } catch (error) {
@@ -507,104 +510,28 @@ export function GuiasModule() {
 
       if (historyError) throw historyError;
 
-      // 2. Get Cabify data for cross-referencing (to fill 0s)
-      const cabifyByWeek: Record<string, { app: number, efectivo: number }> = {};
-      
-      // Ensure we have a clean DNI for matching
-      const cleanDni = driver.numero_dni ? driver.numero_dni.replace(/\./g, '').trim() : '';
-      const cleanName = driver.nombres ? driver.nombres.trim() : '';
-      const cleanSurname = driver.apellidos ? driver.apellidos.trim() : '';
-      
-      if (cleanDni || (cleanName && cleanSurname)) {
-         let query = supabase
-            .from('cabify_historico')
-            .select('fecha_inicio, cobro_app, cobro_efectivo, dni, nombre, apellido');
-            
-         const orConditions: string[] = [];
-         if (cleanDni) {
-             orConditions.push(`dni.eq.${driver.numero_dni}`);
-             orConditions.push(`dni.eq.${cleanDni}`);
-         }
-         // Add name match condition if name exists (case insensitive)
-         if (cleanName && cleanSurname) {
-             orConditions.push(`and(nombre.ilike.${cleanName},apellido.ilike.${cleanSurname})`);
-         }
-         
-         if (orConditions.length > 0) {
-             query = query.or(orConditions.join(','));
-         }
-
-         const { data: cabifyData, error: cabifyError } = await query;
-         
-         if (!cabifyError && cabifyData) {
-            cabifyData.forEach(d => {
-               let match = false;
-
-               // 1. Check DNI match
-               const dbDni = d.dni ? d.dni.replace(/\./g, '').trim() : '';
-               if (cleanDni && dbDni === cleanDni) {
-                   match = true;
-               }
-               
-               // 2. Check Name match if no DNI match yet
-               if (!match && cleanName && cleanSurname) {
-                   const dbName = d.nombre ? d.nombre.trim().toLowerCase() : '';
-                   const dbSurname = d.apellido ? d.apellido.trim().toLowerCase() : '';
-                   if (dbName === cleanName.toLowerCase() && dbSurname === cleanSurname.toLowerCase()) {
-                       match = true;
-                   }
-               }
-
-               if (!match) return;
-
-               if (d.fecha_inicio) {
-                  const date = new Date(d.fecha_inicio);
-                  // Format: YYYY-Www (same as guias_historial_semanal.semana)
-                  const weekStr = format(date, "R-'W'II");
-                  
-                  if (!cabifyByWeek[weekStr]) {
-                     cabifyByWeek[weekStr] = { app: 0, efectivo: 0 };
-                  }
-                  
-                  cabifyByWeek[weekStr].app += parseCustomCurrency(d.cobro_app);
-                  cabifyByWeek[weekStr].efectivo += parseCustomCurrency(d.cobro_efectivo);
-               }
-            });
-         }
-      }
-
       if (historyData) {
         const rows = historyData.map(d => {
-           // Priority: DB Value > Cabify Data (aggregated) > 0
-          // Si la base de datos ya tiene información (incluso 0 si fue guardado explícitamente, pero asumiremos que si es 0 intentamos buscar respaldo),
-          // la respetamos. Aquí la lógica es: si DB tiene valor > 0, usar DB. Si no, fallback a Cabify.
-          
-          // CORRECCIÓN: Las columnas en guias_historial_semanal son 'app' y 'efectivo', NO 'cobro_app'/'cobro_efectivo'.
           const dbApp = parseCustomCurrency(d.app);
           const dbEfectivo = parseCustomCurrency(d.efectivo);
-          
-          const cabifyWeek = cabifyByWeek[d.semana];
-          
-          // Usamos el valor de DB si es mayor a 0, de lo contrario intentamos usar el recálculo
-          const app = dbApp > 0 ? dbApp : (cabifyWeek ? cabifyWeek.app : 0);
-          const efectivo = dbEfectivo > 0 ? dbEfectivo : (cabifyWeek ? cabifyWeek.efectivo : 0);
-          
-          // Si dbTotal existe y es coherente, usarlo. Si no, sumar componentes.
-          // A veces el total guardado puede diferir por redondeos, priorizamos lo guardado si existe.
           const dbTotal = parseCustomCurrency(d.total);
+          const app = dbApp;
+          const efectivo = dbEfectivo;
           const total = dbTotal > 0 ? dbTotal : (app + efectivo);
            
-           // Calculate seguimiento
-           let seguimientoLabel = 'SEMANAL'; 
-           if (seguimientoRules && seguimientoRules.length > 0) {
-              for (const rule of seguimientoRules) {
-                 const desde = Number(rule.desde || 0);
-                 const hasta = rule.hasta !== null && rule.hasta !== undefined ? Number(rule.hasta) : Infinity;
-                 if (total >= desde && total <= hasta) {
-                    seguimientoLabel = rule.rango_nombre || 'SEMANAL';
-                    break;
-                 }
-              }
+           let seguimientoLabel = 'SEMANAL';
+           const rawSeguimiento = (d as any).seguimiento;
+           if (rawSeguimiento && typeof rawSeguimiento === 'string' && rawSeguimiento.trim() !== '') {
+             seguimientoLabel = rawSeguimiento.trim().toUpperCase();
+           } else if (seguimientoRules && seguimientoRules.length > 0) {
+             for (const rule of seguimientoRules) {
+               const desde = Number(rule.desde || 0);
+               const hasta = rule.hasta !== null && rule.hasta !== undefined ? Number(rule.hasta) : Infinity;
+               if (total >= desde && total <= hasta) {
+                 seguimientoLabel = (rule.rango_nombre || 'SEMANAL').toString().toUpperCase();
+                 break;
+               }
+             }
            }
 
            // Accion nombre
@@ -651,7 +578,10 @@ export function GuiasModule() {
 
   const loadSeguimientoRules = async () => {
     try {
-      const { data, error } = await supabase.from('guias_seguimiento').select('*');
+      const { data, error } = await supabase
+        .from('guias_seguimiento')
+        .select('*')
+        .order('desde', { ascending: true });
       if (error) throw error;
       if (data) {
         setSeguimientoRules(data);
@@ -807,8 +737,10 @@ export function GuiasModule() {
         // Cabify data cross-reference failed silently
       }
 
-      // Calcular historial de vehículos por conductor (sin filtrar por estado actual)
       const vehiculosHistorialCountMap = new Map<string, number>();
+      const prevWeekAssignmentsMap = new Map<string, { total: number; diurno: number; nocturno: number; cargo: number }>();
+      const prevWeekFinancialMap = new Map<string, { app: any; efectivo: any; total: any }>();
+      let prevWeekLabel: string | null = null;
       try {
         const conductorIds = Array.from(
           new Set(
@@ -851,8 +783,226 @@ export function GuiasModule() {
             });
           }
         }
+
+        if (conductorIds.length > 0) {
+          const [yearStr, weekStr] = targetWeek.split('-W');
+          if (yearStr && weekStr) {
+            const year = parseInt(yearStr);
+            const week = parseInt(weekStr);
+            const baseDate = new Date(year, 0, 4);
+            const weekDate = setISOWeek(baseDate, week);
+            const mondayLocal = startOfISOWeek(weekDate);
+            const sundayLocal = endOfISOWeek(weekDate);
+
+            const prevMondayLocal = subWeeks(mondayLocal, 1);
+            const prevSundayLocal = subWeeks(sundayLocal, 1);
+            prevWeekLabel = format(prevMondayLocal, "R-'W'II");
+
+            const prevStartDate = new Date(Date.UTC(
+              prevMondayLocal.getFullYear(),
+              prevMondayLocal.getMonth(),
+              prevMondayLocal.getDate(),
+              0, 0, 0, 0
+            ));
+
+            const prevEndDate = new Date(Date.UTC(
+              prevSundayLocal.getFullYear(),
+              prevSundayLocal.getMonth(),
+              prevSundayLocal.getDate(),
+              23, 59, 59, 999
+            ));
+
+            const baseSelect = `
+              id,
+              conductor_id,
+              horario,
+              estado,
+              asignaciones!inner (
+                id,
+                codigo,
+                estado,
+                horario,
+                modalidad,
+                fecha_inicio,
+                fecha_fin,
+                sede_id
+              )
+            `;
+            // A: fecha_fin IS NULL y fecha_inicio <= finSemana
+            let qA: any = supabase
+              .from('asignaciones_conductores')
+              .select(baseSelect)
+              .in('conductor_id', conductorIds)
+              .lte('asignaciones.fecha_inicio', prevEndDate.toISOString())
+              .is('asignaciones.fecha_fin', null);
+            qA = aplicarFiltroSede(qA, 'asignaciones.sede_id');
+
+            // B: fecha_fin >= inicioSemana y fecha_inicio <= finSemana
+            let qB: any = supabase
+              .from('asignaciones_conductores')
+              .select(baseSelect)
+              .in('conductor_id', conductorIds)
+              .lte('asignaciones.fecha_inicio', prevEndDate.toISOString())
+              .gte('asignaciones.fecha_fin', prevStartDate.toISOString());
+            qB = aplicarFiltroSede(qB, 'asignaciones.sede_id');
+
+            const [resA, resB] = await Promise.all([qA, qB]);
+            if (resA.error) {
+              console.error('GuiasModule: error consultando asignaciones (A - fin NULL)', {
+                message: (resA.error as any).message,
+                details: (resA.error as any).details,
+                hint: (resA.error as any).hint
+              });
+            }
+            if (resB.error) {
+              console.error('GuiasModule: error consultando asignaciones (B - fin >= inicioSemana)', {
+                message: (resB.error as any).message,
+                details: (resB.error as any).details,
+                hint: (resB.error as any).hint
+              });
+            }
+            const prevAssignmentsRaw = [...(resA.data || []), ...(resB.data || [])];
+            // De-duplicar por (asignacion_id + conductor_id) si es posible; si no, por (id + conductor_id)
+            const seen = new Set<string>();
+            const prevAssignments = prevAssignmentsRaw.filter((ac: any) => {
+              const key = `${ac.asignaciones?.id || ac.id}-${ac.conductor_id}`;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
+
+            const prevWeekAssignmentsDetailMap = new Map<string, any[]>();
+            if (prevAssignments) {
+              prevAssignments.forEach((ac: any) => {
+                const conductorId = ac.conductor_id as string | null;
+                if (!conductorId) return;
+                const asignacion = ac.asignaciones;
+                if (!asignacion) return;
+
+                const currentStats = prevWeekAssignmentsMap.get(conductorId) || { total: 0, diurno: 0, nocturno: 0, cargo: 0 };
+                currentStats.total += 1;
+
+                const modalidadRaw = asignacion.horario || asignacion.modalidad || '';
+                const modalidad = modalidadRaw ? modalidadRaw.toString().toUpperCase() : '';
+
+                if (modalidad === 'TURNO') {
+                  const hRaw = ac.horario || '';
+                  const h = hRaw ? hRaw.toString().toLowerCase() : '';
+                  if (h === 'diurno' || h === 'd') {
+                    currentStats.diurno += 1;
+                  } else if (h === 'nocturno' || h === 'n') {
+                    currentStats.nocturno += 1;
+                  } else {
+                    currentStats.cargo += 1;
+                  }
+                } else {
+                  currentStats.cargo += 1;
+                }
+
+                prevWeekAssignmentsMap.set(conductorId, currentStats);
+                
+                const detail = {
+                  asignacion_id: asignacion.id,
+                  codigo: asignacion.codigo,
+                  modalidad: asignacion.horario || asignacion.modalidad || null,
+                  estado: asignacion.estado,
+                  fecha_inicio: asignacion.fecha_inicio,
+                  fecha_fin: asignacion.fecha_fin,
+                  turno_conductor: ac.horario
+                };
+                const arr = prevWeekAssignmentsDetailMap.get(conductorId) || [];
+                arr.push(detail);
+                prevWeekAssignmentsDetailMap.set(conductorId, arr);
+              });
+            }
+
+            // Consultar totales (app/efectivo/total) de la semana anterior por conductor
+            if (prevWeekLabel && conductorIds.length > 0) {
+              const altPrevWeekLabel = prevWeekLabel.replace('W', '');
+              const { data: prevHist, error: prevHistError } = await supabase
+                .from('guias_historial_semanal')
+                .select('id_conductor, app, efectivo, total')
+                .or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`)
+                .eq('id_guia', guiaId)
+                .in('id_conductor', conductorIds);
+              
+              if (prevHistError) {
+                console.error('GuiasModule: error consultando totales de semana anterior', {
+                  message: (prevHistError as any).message,
+                  details: (prevHistError as any).details,
+                  hint: (prevHistError as any).hint
+                });
+              } else if (prevHist && prevHist.length > 0) {
+                prevHist.forEach((row: any) => {
+                  if (row?.id_conductor) {
+                    prevWeekFinancialMap.set(row.id_conductor, {
+                      app: row.app,
+                      efectivo: row.efectivo,
+                      total: row.total
+                    });
+                  }
+                });
+              }
+              const missingConductorIds = conductorIds.filter(id => !prevWeekFinancialMap.has(id));
+              if (missingConductorIds.length > 0) {
+                const { data: prevHistAny } = await supabase
+                  .from('guias_historial_semanal')
+                  .select('id_conductor, app, efectivo, total, id_guia')
+                  .or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`)
+                  .in('id_conductor', missingConductorIds);
+                if (prevHistAny && prevHistAny.length > 0) {
+                  const parseAmt = (v: any) => {
+                    if (v === null || v === undefined) return 0;
+                    if (typeof v === 'number') return v;
+                    const s = String(v).trim();
+                    if (s.includes('.') && !s.includes(',') && /^\d+\.\d{1,2}$/.test(s)) return parseFloat(s);
+                    const clean = s.replace(/\./g, '').replace(',', '.');
+                    const n = parseFloat(clean);
+                    return isNaN(n) ? 0 : n;
+                  };
+                  const bestByConductor = new Map<string, { app: any; efectivo: any; total: any }>();
+                  prevHistAny.forEach((row: any) => {
+                    const idc = row?.id_conductor;
+                    if (!idc) return;
+                    const candidate = { app: row.app, efectivo: row.efectivo, total: row.total };
+                    const current = bestByConductor.get(idc);
+                    if (!current || parseAmt(candidate.total) >= parseAmt(current.total)) {
+                      bestByConductor.set(idc, candidate);
+                    }
+                  });
+                  bestByConductor.forEach((v, k) => {
+                    if (!prevWeekFinancialMap.has(k)) {
+                      prevWeekFinancialMap.set(k, v);
+                    }
+                  });
+                }
+              }
+            }
+
+            console.log('GuiasModule: resumen asignaciones semana anterior', {
+              guiaId,
+              semanaReferencia: targetWeek,
+              semanaBuscada: prevWeekLabel,
+              rangoSemanaBuscada: {
+                inicio: prevStartDate.toISOString(),
+                fin: prevEndDate.toISOString()
+              },
+              conductoresEvaluados: conductorIds.length,
+              asignacionesEncontradas: prevAssignments?.length || 0
+            });
+            
+            // Log de diagnóstico: top 5 asignaciones por primer conductor (si existen)
+            const firstConductorId = conductorIds[0];
+            if (firstConductorId) {
+              console.log('GuiasModule: muestra asignaciones solapadas (primer conductor)', {
+                conductorId: firstConductorId,
+                semanaBuscada: prevWeekLabel,
+                detalles: (prevWeekAssignmentsDetailMap.get(firstConductorId) || []).slice(0, 5)
+              });
+            }
+          }
+        }
       } catch {
-        // Si falla, dejamos el mapa vacío y caemos en el fallback por fila
       }
 
       // Procesar conductores desde el historial
@@ -860,9 +1010,9 @@ export function GuiasModule() {
         const processedDrivers: any[] = [];
         const updatesToPerform: any[] = [];
         
-        historialData.forEach((historial: any) => {
+        for (const historial of historialData) {
           const conductor = historial.conductores;
-          // Flatten conductor data
+          
           const baseConductor: any = { 
             ...conductor,
             // Mantener campos del historial en el nivel superior para la tabla
@@ -877,6 +1027,7 @@ export function GuiasModule() {
             historial_id: historial.id,
             row_id: `${conductor.id}-${historial.semana}`
           };
+          baseConductor.conductor_created_at = conductor.created_at;
 
           if (conductor.conductores_licencias_categorias?.length > 0) {
             baseConductor.licencias_categorias = conductor.conductores_licencias_categorias
@@ -902,7 +1053,6 @@ export function GuiasModule() {
             }
           }
  
-          // Contar vehículos históricos usando asignaciones_conductores sin filtrar por estado
           const vehiculosCountFromMap = vehiculosHistorialCountMap.get(conductor.id) ?? 0;
           if (vehiculosCountFromMap > 0) {
             baseConductor.vehiculos_historial_count = vehiculosCountFromMap;
@@ -922,6 +1072,36 @@ export function GuiasModule() {
           } else {
             baseConductor.vehiculos_historial_count = 0;
           }
+          
+          const prevWeekStats = prevWeekAssignmentsMap.get(conductor.id) || { total: 0, diurno: 0, nocturno: 0, cargo: 0 };
+          baseConductor.prev_week_turnos = prevWeekStats;
+          
+          let dominantTurno: string | null = null;
+          const counts = [
+            { key: 'DIURNO', value: prevWeekStats.diurno },
+            { key: 'NOCTURNO', value: prevWeekStats.nocturno },
+            { key: 'CARGO', value: prevWeekStats.cargo },
+          ];
+          counts.sort((a, b) => b.value - a.value);
+          if (counts[0].value > 0) {
+            dominantTurno = counts[0].key;
+          }
+
+          let matchingSeguimientoRules: any[] = [];
+          if (dominantTurno && seguimientoRules && seguimientoRules.length > 0) {
+            matchingSeguimientoRules = seguimientoRules.filter((rule: any) => {
+              let sub = (rule.sub_rango_nombre || '').toString().toUpperCase().trim();
+              if (sub) {
+                sub = sub.replace(/[_\s]+/g, ' ').trim();
+                if (sub === 'A CARGO') sub = 'CARGO';
+              }
+              return !sub || sub === dominantTurno;
+            });
+          }
+
+          const totalPrevWeek = typeof prevWeekStats.total === 'number'
+            ? prevWeekStats.total
+            : (prevWeekStats.diurno + prevWeekStats.nocturno + prevWeekStats.cargo);
           
           const estadoCodigo = baseConductor.conductores_estados?.codigo?.toLowerCase();
           const tieneAsignacion = !!baseConductor.vehiculo_asignado;
@@ -986,6 +1166,100 @@ export function GuiasModule() {
           baseConductor.facturacion_total = facturacionTotal;
           baseConductor.cabifyData = cabifyData;
 
+          // Cálculo parseado de app/efectivo/total de la semana anterior (monetario) para logging
+          let prevFinancialRow = prevWeekFinancialMap.get(conductor.id);
+          // Fallback puntual por conductor: si no hay datos aún, buscar directamente por id_conductor + semana
+          if (!prevFinancialRow && prevWeekLabel) {
+            try {
+              const altPrevWeekLabel = prevWeekLabel.replace('W', '');
+              const { data: singlePrev } = await supabase
+                .from('guias_historial_semanal')
+                .select('app, efectivo, total')
+                .eq('id_conductor', conductor.id)
+                .or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`)
+                .maybeSingle();
+              if (singlePrev) {
+                prevFinancialRow = {
+                  app: singlePrev.app,
+                  efectivo: singlePrev.efectivo,
+                  total: singlePrev.total
+                };
+                prevWeekFinancialMap.set(conductor.id, prevFinancialRow);
+              }
+            } catch {
+              // Ignorar silenciosamente fallback fallido
+            }
+          }
+          let prevAppParsed = 0;
+          let prevEfectivoParsed = 0;
+          let prevTotalParsed = 0;
+          if (prevFinancialRow) {
+            prevAppParsed = parseCustomCurrency(prevFinancialRow.app);
+            prevEfectivoParsed = parseCustomCurrency(prevFinancialRow.efectivo);
+            prevTotalParsed = parseCustomCurrency(prevFinancialRow.total);
+          }
+
+          let prevSeguimientoRule: any | null = null;
+          if (matchingSeguimientoRules && matchingSeguimientoRules.length > 0) {
+            for (const rule of matchingSeguimientoRules) {
+              const desde = Number(rule.desde || 0);
+              const hasHasta = rule.hasta !== null && rule.hasta !== undefined;
+              const hasta = hasHasta ? Number(rule.hasta) : null;
+              const matchesLower = prevTotalParsed >= desde;
+              const matchesUpper = hasHasta ? prevTotalParsed <= (hasta as number) : true;
+              if (matchesLower && matchesUpper) {
+                prevSeguimientoRule = rule;
+                break;
+              }
+            }
+          }
+
+          baseConductor.prev_week_total_monetario = prevTotalParsed;
+          baseConductor.prev_week_matching_rules = (matchingSeguimientoRules || [])
+            .slice()
+            .sort((a: any, b: any) => {
+              const aSub = (a.sub_rango_nombre || '').toString().trim();
+              const bSub = (b.sub_rango_nombre || '').toString().trim();
+              // Priorizar reglas con sub_rango_nombre definido por sobre genéricas
+              if (aSub && !bSub) return -1;
+              if (!aSub && bSub) return 1;
+              return 0;
+            })
+            .map((r: any) => ({
+              id: r.id,
+              rango_nombre: r.rango_nombre,
+              sub_rango_nombre: r.sub_rango_nombre,
+              desde: r.desde,
+              hasta: r.hasta,
+              color: r.color
+            }));
+          baseConductor.prev_week_seguimiento = prevSeguimientoRule ? prevSeguimientoRule.rango_nombre : null;
+          baseConductor.prev_week_seguimiento_color = prevSeguimientoRule ? prevSeguimientoRule.color : null;
+
+          console.log('GuiasModule: asignaciones semana anterior por conductor', {
+            guiaId,
+            semanaReferencia: targetWeek,
+            semanaBuscada: prevWeekLabel,
+            conductorId: conductor.id,
+            nombre: `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim(),
+            created_at_conductor: conductor.created_at,
+            stats: prevWeekStats,
+            totalSemanaAnterior: totalPrevWeek,
+            totalMonetarioSemanaAnterior: prevTotalParsed,
+            totalMonetarioSemanaAnteriorApp: prevAppParsed,
+            totalMonetarioSemanaAnteriorEfectivo: prevEfectivoParsed,
+            turnoDominante: dominantTurno,
+            reglasSubRangoCoincidentes: (matchingSeguimientoRules || []).map((r: any) => ({
+              id: r.id,
+              rango_nombre: r.rango_nombre,
+              sub_rango_nombre: r.sub_rango_nombre,
+              desde: r.desde,
+              hasta: r.hasta,
+              color: r.color
+            })),
+            reglaSeleccionadaPorTotalMonetario: prevSeguimientoRule
+          });
+
           // Lógica de actualización automática de las columnas 'app', 'efectivo' y 'total'
           // Solo si estamos en la semana actual
           if (isCurrentWeek) {
@@ -1018,7 +1292,7 @@ export function GuiasModule() {
             }
           }
           processedDrivers.push(baseConductor);
-        });
+        }
 
       // Ejecutar actualizaciones masivas si hay cambios detectados
       if (updatesToPerform.length > 0) {
@@ -1447,6 +1721,29 @@ export function GuiasModule() {
 
   const selectedGuia = guias.find(g => g.id === selectedGuiaId)
 
+  const getTurnoKeyForFilter = (conductor: any): string => {
+    const info = conductor.asignacion_info;
+    if (info) {
+      if (info.modalidad === 'CARGO') {
+        return 'A_CARGO';
+      }
+      const turnoAsignado = info.turno_conductor ? info.turno_conductor.toString().toUpperCase() : '';
+      if (turnoAsignado === 'DIURNO') return 'DIURNO';
+      if (turnoAsignado === 'NOCTURNO') return 'NOCTURNO';
+    }
+
+    const preferenciaRaw = conductor.preferencia_turno;
+    const preferencia = preferenciaRaw ? preferenciaRaw.toString().toUpperCase() : '';
+
+    if (!preferencia) return 'SIN_PREFERENCIA';
+    if (preferencia === 'DIURNO' || preferencia === 'MAÑANA' || preferencia === 'MANANA') return 'DIURNO';
+    if (preferencia === 'NOCTURNO' || preferencia === 'NOCHE') return 'NOCTURNO';
+    if (preferencia === 'A_CARGO') return 'A_CARGO';
+    if (preferencia === 'SIN_PREFERENCIA') return 'SIN_PREFERENCIA';
+
+    return 'SIN_PREFERENCIA';
+  };
+
   // Valores únicos para filtros
   const nombresUnicos = useMemo(() => {
     const nombres = drivers.map(c => `${c.nombres} ${c.apellidos}`).filter(Boolean);
@@ -1542,9 +1839,7 @@ export function GuiasModule() {
     }
 
     if (turnoFilter.length > 0) {
-      result = result.filter(c =>
-        turnoFilter.includes((c as any).preferencia_turno || 'SIN_PREFERENCIA')
-      );
+      result = result.filter(c => turnoFilter.includes(getTurnoKeyForFilter(c as any)));
     }
 
     if (categoriaFilter.length > 0) {
@@ -1792,21 +2087,63 @@ export function GuiasModule() {
             )}
           </div>
         ),
-        cell: ({ row }) => (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
-            {row.original.numero_dni && (
-              <span
-                className="dt-badge dt-badge-blue badge-with-dot"
-                style={{ marginTop: 4, alignSelf: 'flex-start', fontSize: '11px' }}
-              >
-                {row.original.numero_dni}
-              </span>
-            )}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const createdAtRaw = (row.original as any).conductor_created_at;
+          let label = '';
+          if (createdAtRaw) {
+            let createdAt: Date | null = null;
+            if (createdAtRaw instanceof Date) {
+              createdAt = createdAtRaw;
+            } else {
+              const str = String(createdAtRaw).trim();
+              const parts = str.split(' ');
+              if (parts.length >= 2) {
+                const datePart = parts[0];
+                const timePartWithOffset = parts[1];
+                const timePart = timePartWithOffset.split('+')[0];
+                const iso = `${datePart}T${timePart}Z`;
+                const parsed = new Date(iso);
+                if (!isNaN(parsed.getTime())) {
+                  createdAt = parsed;
+                }
+              }
+              if (!createdAt) {
+                const fallback = new Date(str);
+                if (!isNaN(fallback.getTime())) {
+                  createdAt = fallback;
+                }
+              }
+            }
+            if (createdAt) {
+              const cutoff = new Date('2026-01-16T00:00:00Z');
+              label = createdAt < cutoff ? 'ANTIGUO' : 'NUEVO';
+            }
+          }
+          const dni = row.original.numero_dni;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
+              {label && (
+                <span
+                  className="dt-badge dt-badge-gray badge-no-dot"
+                  style={{ fontSize: '11px', marginTop: 4, alignSelf: 'flex-start' }}
+                >
+                  {label}
+                </span>
+              )}
+              {dni && (
+                <span
+                  className="dt-badge dt-badge-gray badge-with-dot"
+                  style={{ fontSize: '11px', marginTop: 4, alignSelf: 'flex-start' }}
+                >
+                  {dni}
+                </span>
+              )}
+            </div>
+          );
+        },
         enableSorting: true,
-        size: 150,
+        size: 120,
       },
 
       ...(selectedWeek === getCurrentWeek() ? [{
@@ -1932,27 +2269,6 @@ export function GuiasModule() {
         },
         size: 90,
       }] : []),
-
-      {
-        id: 'vehiculos_historial',
-        header: 'Vehiculos',
-        accessorFn: (row: any) => (row as any).vehiculos_historial_count ?? 0,
-        cell: ({ getValue }) => {
-          const count = (getValue() as number) || 0;
-          const hasMany = count >= 2;
-          const label = hasMany ? 'SI' : 'NO';
-          const badgeClass = hasMany
-            ? 'dt-badge dt-badge-green badge-no-dot'
-            : 'dt-badge dt-badge-gray badge-no-dot';
-          return (
-            <span className={badgeClass}>
-              {label}
-            </span>
-          );
-        },
-        enableSorting: true,
-        size: 90,
-      },
 
       {
         accessorKey: "conductores_estados.codigo",
@@ -2314,19 +2630,33 @@ export function GuiasModule() {
       {
         id: "llamada_status",
         header: "Llamada",
-        accessorFn: (row) => (row as any).fecha_llamada,
-        cell: ({ getValue }) => {
-          const fecha = getValue() as string | null;
+        accessorFn: (row) => {
+          const fecha = (row as any).fecha_llamada as string | null;
+          const hasFecha = !!fecha;
+          return hasFecha ? 'Realizada' : 'Pendientes';
+        },
+        cell: ({ row }) => {
+          const fecha = (row.original as any).fecha_llamada as string | null;
           const hasFecha = !!fecha;
           const formatted = hasFecha ? new Date(fecha).toLocaleDateString('es-AR') : null;
           const isRealizada = hasFecha;
           return (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <span className={isRealizada ? 'dt-badge dt-badge-green badge-no-dot' : 'dt-badge dt-badge-yellow badge-no-dot'}>
                 {isRealizada ? 'Realizada' : 'Pendientes'}
               </span>
               {isRealizada && formatted && (
-                <span style={{ marginTop: 2, fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                <span
+                  style={{
+                    marginTop: 4,
+                    fontSize: '13px',
+                    color: '#111827',
+                    backgroundColor: '#e5e7eb',
+                    padding: '2px 8px',
+                    borderRadius: 9999,
+                    display: 'inline-block',
+                  }}
+                >
                   {formatted}
                 </span>
               )}
@@ -2337,23 +2667,26 @@ export function GuiasModule() {
         size: 95,
       },
       {
-        accessorKey: "id_accion_imp",
+        id: "accion_imple",
         header: "Accion Imple.",
-        cell: ({ row }) => {
-           const idAccion = (row.original as any).id_accion_imp;
-           const targetId = idAccion || 1; 
-           const accion = accionesImplementadas.find(a => a.id === targetId);
-           const rawName = accion ? accion.nombre : (idAccion || "-");
-           const name = (rawName || "").toString().toUpperCase();
-           const parts = name.split(" ");
-           const first = parts[0] || "";
-           const second = parts.slice(1).join(" ") || null;
-           return (
-             <div style={{ display: 'flex', flexDirection: 'column' }}>
-               <span>{first}</span>
-               {second && <span>{second}</span>}
-             </div>
-           );
+        accessorFn: (row) => {
+          const idAccion = (row as any).id_accion_imp;
+          const targetId = idAccion || 1;
+          const accion = accionesImplementadas.find(a => a.id === targetId);
+          const rawName = accion ? accion.nombre : (idAccion || "-");
+          return (rawName || "").toString().toUpperCase();
+        },
+        cell: ({ getValue }) => {
+          const name = ((getValue() as string) || "").toString().toUpperCase();
+          const parts = name.split(" ");
+          const first = parts[0] || "";
+          const second = parts.slice(1).join(" ") || null;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span>{first}</span>
+              {second && <span>{second}</span>}
+            </div>
+          );
         },
         enableSorting: true,
         size: 160,
@@ -2361,42 +2694,64 @@ export function GuiasModule() {
       {
         id: "seguimiento",
         header: "Seguimiento",
-        accessorFn: (row) => (row as any).fecha_llamada,
-        cell: ({ row }) => {
-          // Logic for Financial Status
-          const rawTotal = (row.original as any).facturacion_total;
-          
-          // Helper to ensure we have a valid number
-          const parseTotal = (val: any): number => {
+        accessorFn: (row) => {
+          const rawSeguimientoDb = (row as any).seguimiento;
+          const rawTotalPrev = (row as any).prev_week_total_monetario;
+          const matchingRules = ((row as any).prev_week_matching_rules || []) as any[];
+
+          const rawDb = typeof rawSeguimientoDb === 'string' ? rawSeguimientoDb.trim().toUpperCase() : '';
+          if (rawDb) return rawDb;
+
+          const parse = (val: any): number => {
             if (typeof val === 'number') return val;
             if (!val) return 0;
-            // Handle string formats if any remain (e.g. "123.456,78" or "123456.78")
             const str = String(val).trim();
-            // Simple check: if it looks like standard JS number
             if (!isNaN(Number(str))) return Number(str);
-            // If it has comma decimal separator
             return parseFloat(str.replace(/\./g, '').replace(',', '.'));
           };
 
-          const total = parseTotal(rawTotal);
+          const total = parse(rawTotalPrev);
 
-          let ruleMatch = null;
-          
-          if (seguimientoRules && seguimientoRules.length > 0) {
-            for (const rule of seguimientoRules) {
-              // Direct numeric comparison using 'desde' and 'hasta' fields
+          let ruleMatch: any = null;
+          if (matchingRules && matchingRules.length > 0) {
+            for (const rule of matchingRules) {
               const desde = Number(rule.desde || 0);
-              const hasta = rule.hasta !== null && rule.hasta !== undefined ? Number(rule.hasta) : null;
-
+              const hasHasta = rule.hasta !== null && rule.hasta !== undefined;
+              const hasta = hasHasta ? Number(rule.hasta) : null;
               const matchesLower = total >= desde;
-              const matchesUpper = hasta === null || total <= hasta;
-              
+              const matchesUpper = hasHasta ? total <= (hasta as number) : true;
               if (matchesLower && matchesUpper) {
                 ruleMatch = rule;
                 break;
               }
             }
           }
+
+          if (ruleMatch) {
+            const nombre = (ruleMatch.rango_nombre || '').toString().toUpperCase();
+            if (nombre.includes('DIARIO')) return 'DIARIO';
+            if (nombre.includes('CERCANO')) return 'CERCANO';
+            if (nombre.includes('SEMANAL')) return 'SEMANAL';
+            return nombre || '-';
+          }
+
+          if (!matchingRules || matchingRules.length === 0) return 'SIN REGISTRO';
+          return '-';
+        },
+        cell: ({ row }) => {
+          const rawSeguimientoDb = (row.original as any).seguimiento;
+          const rawTotalPrev = (row.original as any).prev_week_total_monetario;
+          const matchingRules = ((row.original as any).prev_week_matching_rules || []) as any[];
+          
+          const parseTotal = (val: any): number => {
+            if (typeof val === 'number') return val;
+            if (!val) return 0;
+            const str = String(val).trim();
+            if (!isNaN(Number(str))) return Number(str);
+            return parseFloat(str.replace(/\./g, '').replace(',', '.'));
+          };
+
+          const total = parseTotal(rawTotalPrev);
 
           const getBadgeColor = (color: string) => {
             const c = color?.toLowerCase().trim();
@@ -2406,11 +2761,44 @@ export function GuiasModule() {
             return 'dt-badge dt-badge-gray badge-no-dot';
           };
 
+          const rawDb = typeof rawSeguimientoDb === 'string' ? rawSeguimientoDb.trim().toUpperCase() : '';
+          if (rawDb) {
+            let manualClass = 'dt-badge dt-badge-gray badge-no-dot';
+            if (rawDb === 'SEMANAL') manualClass = 'dt-badge dt-badge-green badge-no-dot';
+            else if (rawDb === 'CERCANO') manualClass = 'dt-badge dt-badge-yellow badge-no-dot';
+            else if (rawDb === 'DIARIO') manualClass = 'dt-badge dt-badge-red badge-no-dot';
+            return (
+              <div className="flex justify-center">
+                <span className={manualClass}>{rawDb}</span>
+              </div>
+            );
+          }
+
+          let ruleMatch = null;
+          
+          if (matchingRules && matchingRules.length > 0) {
+            for (const rule of matchingRules) {
+              const desde = Number(rule.desde || 0);
+              const hasHasta = rule.hasta !== null && rule.hasta !== undefined;
+              const hasta = hasHasta ? Number(rule.hasta) : null;
+              const matchesLower = total >= desde;
+              const matchesUpper = hasHasta ? total <= (hasta as number) : true;
+              if (matchesLower && matchesUpper) {
+                ruleMatch = rule;
+                break;
+              }
+            }
+          }
+
           return (
             <div className="flex justify-center">
               {ruleMatch ? (
                 <span className={getBadgeColor(ruleMatch.color)}>
                   {ruleMatch.rango_nombre}
+                </span>
+              ) : matchingRules.length === 0 ? (
+                <span className="dt-badge dt-badge-gray badge-no-dot">
+                  SIN REGISTRO
                 </span>
               ) : (
                 <span style={{ color: 'var(--text-tertiary)' }}>-</span>
@@ -2504,12 +2892,24 @@ export function GuiasModule() {
                   const llamadasRealizadas = currentWeekDrivers.filter(d => !!d.fecha_llamada).length;
                   const llamadasPendientes = currentWeekDrivers.filter(d => !d.fecha_llamada).length;
 
-                  // Conteo de seguimiento
                   let seguimientoDiario = 0;
                   let seguimientoCercano = 0;
                   let seguimientoSemanal = 0;
 
                   currentWeekDrivers.forEach(d => {
+                    const rawSeguimiento = (d as any).seguimiento;
+                    if (rawSeguimiento && typeof rawSeguimiento === 'string' && rawSeguimiento.trim() !== '') {
+                      const nombre = rawSeguimiento.trim().toLowerCase();
+                      if (nombre === 'diario') {
+                        seguimientoDiario++;
+                      } else if (nombre === 'cercano') {
+                        seguimientoCercano++;
+                      } else if (nombre === 'semanal') {
+                        seguimientoSemanal++;
+                      }
+                      return;
+                    }
+
                     const total = Number(d.facturacion_total) || 0;
                     let ruleMatch = null;
 
@@ -2940,7 +3340,9 @@ export function GuiasModule() {
           onClose={() => setHistoryNotesModalOpen(false)}
           anotaciones={historyNotesData}
           totalAnotaciones={historyNotesTotal}
-          title={`Historial de Anotaciones - ${historyNotesDriverName}`}
+          title="Historial de Anotaciones"
+          driverName={historyNotesDriverName}
+          driverDni={historyNotesDriverDni}
         />
       )}
 

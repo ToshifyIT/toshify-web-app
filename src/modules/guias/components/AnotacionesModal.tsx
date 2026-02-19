@@ -19,6 +19,8 @@ interface AnotacionesModalProps {
   paginaActual?: number;
   onPageChange?: (page: number) => void;
   title?: string;
+  driverName?: string;
+  driverDni?: string;
 }
 
 export function AnotacionesModal({
@@ -28,7 +30,9 @@ export function AnotacionesModal({
   totalAnotaciones,
   paginaActual: externalPage,
   onPageChange,
-  title
+  title,
+  driverName,
+  driverDni
 }: AnotacionesModalProps) {
   const [internalPage, setInternalPage] = useState(1);
 
@@ -63,8 +67,19 @@ export function AnotacionesModal({
         <div className="anotaciones-header">
           <div className="anotaciones-header-left">
             <div>
-              <h2 className="anotaciones-title">{title || 'Anotaciones de la semana'}</h2>
-              <p className="anotaciones-subtitle">Historial de registros y comentarios recientes</p>
+              <h2 className="anotaciones-title">{title || 'Historial de Anotaciones'}</h2>
+              {(driverName || driverDni) && (
+                <p className="anotaciones-subtitle">
+                  <span>
+                    <span className="anotaciones-subtitle-label">Nombre:</span>
+                    <span>{driverName || '-'}</span>
+                  </span>
+                  <span>
+                    <span className="anotaciones-subtitle-label">DNI:</span>
+                    <span>{driverDni || '-'}</span>
+                  </span>
+                </p>
+              )}
             </div>
           </div>
           <button className="anotaciones-close" onClick={onClose}>
