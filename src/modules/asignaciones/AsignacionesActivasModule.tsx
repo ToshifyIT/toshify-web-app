@@ -127,7 +127,8 @@ export function AsignacionesActivasModule() {
         // Query 2: Vehículos con estado y datos completos para PKG_ON_BASE
         aplicarFiltroSede(supabase
           .from('vehiculos')
-          .select('id, patente, marca, modelo, anio, estado_id, vehiculos_estados(codigo, descripcion), vehiculos_tipos(descripcion)'))
+          .select('id, patente, marca, modelo, anio, estado_id, vehiculos_estados(codigo, descripcion), vehiculos_tipos(descripcion)')
+          .is('deleted_at', null))
       ])
 
       // Procesar asignaciones

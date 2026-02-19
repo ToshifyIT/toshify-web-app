@@ -108,7 +108,8 @@ export function MultasTab() {
       // Cargar vehiculos para mapear patentes
       const { data: vehiculosData } = await aplicarFiltroSede(supabase
         .from('vehiculos')
-        .select('id, patente'))
+        .select('id, patente')
+        .is('deleted_at', null))
 
       const vehiculosList = (vehiculosData || []) as Vehiculo[]
       setVehiculos(vehiculosList)

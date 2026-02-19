@@ -166,7 +166,7 @@ export function SiniestrosModule() {
         supabase.from('siniestros_categorias' as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('siniestros_estados' as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('seguros' as any).select('*').eq('is_active', true).order('nombre'),
-        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo')).order('patente'),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo').is('deleted_at', null)).order('patente'),
         estadoActivoId
           ? aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos').eq('estado_id', estadoActivoId)).order('apellidos')
           : aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),

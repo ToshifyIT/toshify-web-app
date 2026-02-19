@@ -120,7 +120,7 @@ export function IncidenciaPenalidadModal({
       const [estadosRes, tiposRes, vehiculosRes, conductoresRes] = await Promise.all([
         supabase.from('incidencias_estados').select('id, codigo, nombre').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('id, nombre').eq('is_active', true).order('nombre'),
-        supabase.from('vehiculos').select('id, patente, marca, modelo').order('patente'),
+        supabase.from('vehiculos').select('id, patente, marca, modelo').is('deleted_at', null).order('patente'),
         supabase.from('conductores').select('id, nombres, apellidos').order('apellidos')
       ])
 

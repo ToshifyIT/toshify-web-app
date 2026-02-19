@@ -160,7 +160,8 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
       // Cargar vehiculos
       const { data: vehData } = await aplicarFiltroSede(supabase
         .from('vehiculos')
-        .select('id, patente, marca, modelo'))
+        .select('id, patente, marca, modelo')
+        .is('deleted_at', null))
         .order('patente')
 
       let vehiculosList: VehiculoSimple[] = (vehData || []) as VehiculoSimple[]
