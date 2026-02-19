@@ -518,7 +518,8 @@ export function GuiasModule() {
           const app = dbApp;
           const efectivo = dbEfectivo;
           const total = dbTotal > 0 ? dbTotal : (app + efectivo);
-           
+          const seguimientoBase = app;
+
            let seguimientoLabel = 'SEMANAL';
            const rawSeguimiento = (d as any).seguimiento;
            if (rawSeguimiento && typeof rawSeguimiento === 'string' && rawSeguimiento.trim() !== '') {
@@ -527,7 +528,7 @@ export function GuiasModule() {
              for (const rule of seguimientoRules) {
                const desde = Number(rule.desde || 0);
                const hasta = rule.hasta !== null && rule.hasta !== undefined ? Number(rule.hasta) : Infinity;
-               if (total >= desde && total <= hasta) {
+               if (seguimientoBase >= desde && seguimientoBase <= hasta) {
                  seguimientoLabel = (rule.rango_nombre || 'SEMANAL').toString().toUpperCase();
                  break;
                }
@@ -1166,6 +1167,22 @@ export function GuiasModule() {
           baseConductor.facturacion_total = facturacionTotal;
           baseConductor.cabifyData = cabifyData;
 
+          const hasCabifyData = !!cabifyData;
+          const getFilterDisplayValue = (value: number | null | undefined) => {
+            if (value === undefined || value === null) return "N/A";
+            if (value === 0 && isCurrentWeek && !hasCabifyData) return "N/A";
+            return new Intl.NumberFormat('es-AR', {
+              style: 'currency',
+              currency: 'ARS',
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(value);
+          };
+
+          baseConductor.facturacion_efectivo_filter = getFilterDisplayValue(facturacionEfectivo);
+          baseConductor.facturacion_app_filter = getFilterDisplayValue(facturacionApp);
+          baseConductor.facturacion_total_filter = getFilterDisplayValue(facturacionTotal);
+
           // Cálculo parseado de app/efectivo/total de la semana anterior (monetario) para logging
           let prevFinancialRow = prevWeekFinancialMap.get(conductor.id);
           // Fallback puntual por conductor: si no hay datos aún, buscar directamente por id_conductor + semana
@@ -1205,8 +1222,8 @@ export function GuiasModule() {
               const desde = Number(rule.desde || 0);
               const hasHasta = rule.hasta !== null && rule.hasta !== undefined;
               const hasta = hasHasta ? Number(rule.hasta) : null;
-              const matchesLower = prevTotalParsed >= desde;
-              const matchesUpper = hasHasta ? prevTotalParsed <= (hasta as number) : true;
+              const matchesLower = prevAppParsed >= desde;
+              const matchesUpper = hasHasta ? prevAppParsed <= (hasta as number) : true;
               if (matchesLower && matchesUpper) {
                 prevSeguimientoRule = rule;
                 break;
@@ -1214,7 +1231,7 @@ export function GuiasModule() {
             }
           }
 
-          baseConductor.prev_week_total_monetario = prevTotalParsed;
+          baseConductor.prev_week_total_monetario = prevAppParsed;
           baseConductor.prev_week_matching_rules = (matchingSeguimientoRules || [])
             .slice()
             .sort((a: any, b: any) => {
@@ -1235,6 +1252,26 @@ export function GuiasModule() {
             }));
           baseConductor.prev_week_seguimiento = prevSeguimientoRule ? prevSeguimientoRule.rango_nombre : null;
           baseConductor.prev_week_seguimiento_color = prevSeguimientoRule ? prevSeguimientoRule.color : null;
+
+          const rawSeguimientoDb = typeof historial.seguimiento === 'string'
+            ? historial.seguimiento.trim().toUpperCase()
+            : '';
+          let autoSeguimiento = rawSeguimientoDb;
+          if (!autoSeguimiento && prevSeguimientoRule) {
+            const nombre = (prevSeguimientoRule.rango_nombre || '').toString().toUpperCase();
+            if (nombre.includes('DIARIO')) {
+              autoSeguimiento = 'DIARIO';
+            } else if (nombre.includes('CERCANO')) {
+              autoSeguimiento = 'CERCANO';
+            } else if (nombre.includes('SEMANAL')) {
+              autoSeguimiento = 'SEMANAL';
+            } else {
+              autoSeguimiento = nombre;
+            }
+          }
+          if (autoSeguimiento) {
+            baseConductor.seguimiento = autoSeguimiento;
+          }
 
           console.log('GuiasModule: asignaciones semana anterior por conductor', {
             guiaId,
@@ -1282,6 +1319,11 @@ export function GuiasModule() {
             if (Math.abs(parseCustomCurrency(historial.total) - facturacionTotal) > 0.01) {
                updates.total = facturacionTotal;
                needsUpdate = true;
+            }
+
+            if (!rawSeguimientoDb && autoSeguimiento) {
+              updates.seguimiento = autoSeguimiento;
+              needsUpdate = true;
             }
 
             if (needsUpdate) {
@@ -1759,11 +1801,10 @@ export function GuiasModule() {
     return [...new Set(cuils)].sort();
   }, [drivers]);
 
-  const turnosUnicos = ['DIURNO', 'NOCTURNO', 'SIN_PREFERENCIA', 'A_CARGO'];
+  const turnosUnicos = ['DIURNO', 'NOCTURNO', 'A_CARGO'];
   const turnoLabels: Record<string, string> = {
     'DIURNO': 'Diurno',
     'NOCTURNO': 'Nocturno',
-    'SIN_PREFERENCIA': 'Sin Preferencia',
     'A_CARGO': 'A Cargo'
   };
 
@@ -1864,38 +1905,23 @@ export function GuiasModule() {
       });
     }
 
-    const formatCurrencyForFilter = (val: number | undefined | null) => {
-      // Misma lógica que en cell para consistencia
-      if (val && val > 0) {
-        return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-      }
-      if (selectedWeek === getCurrentWeek() && !(activeStatFilter)) { // Simplificación, revisar contexto
-         // Aquí hay un detalle: en cell usamos row.original.cabifyData para decidir si mostrar N/A
-         // Pero en filter no tenemos row fácilmente accesible si no lo pasamos.
-         // Sin embargo, filteredDrivers itera sobre drivers (que es la data).
-         // Vamos a usar una lógica simplificada: formatear el valor numérico.
-      }
-      if (val === undefined || val === null) return "-";
-      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-    };
-
     if (efectivoFilter.length > 0) {
       result = result.filter(c => {
-         const val = formatCurrencyForFilter((c as any).facturacion_efectivo);
+         const val = (c as any).facturacion_efectivo_filter || "N/A";
          return efectivoFilter.includes(val);
       });
     }
 
     if (appFilter.length > 0) {
       result = result.filter(c => {
-         const val = formatCurrencyForFilter((c as any).facturacion_app);
+         const val = (c as any).facturacion_app_filter || "N/A";
          return appFilter.includes(val);
       });
     }
 
     if (totalFilter.length > 0) {
       result = result.filter(c => {
-         const val = formatCurrencyForFilter((c as any).facturacion_total);
+         const val = (c as any).facturacion_total_filter || "N/A";
          return totalFilter.includes(val);
       });
     }
@@ -1925,7 +1951,7 @@ export function GuiasModule() {
         case 'seguimientoCercano':
         case 'seguimientoSemanal':
           result = result.filter(d => {
-            const total = Number(d.facturacion_total) || 0;
+            const total = Number((d as any).facturacion_app) || 0;
             let ruleMatch = null;
             if (seguimientoRules && seguimientoRules.length > 0) {
               for (const rule of seguimientoRules) {
@@ -2001,23 +2027,18 @@ export function GuiasModule() {
     return Array.from(categorias.keys()).sort();
   }, [drivers]);
 
-  const formatCurrencyValue = (val: number | undefined | null) => {
-      if (val === undefined || val === null) return "-";
-      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-  };
-
   const uniqueEfectivo = useMemo(() => {
-    const values = drivers.map(c => formatCurrencyValue(c.facturacion_efectivo));
+    const values = drivers.map(c => (c as any).facturacion_efectivo_filter || "N/A");
     return [...new Set(values)].sort();
   }, [drivers]);
 
   const uniqueApp = useMemo(() => {
-    const values = drivers.map(c => formatCurrencyValue(c.facturacion_app));
+    const values = drivers.map(c => (c as any).facturacion_app_filter || "N/A");
     return [...new Set(values)].sort();
   }, [drivers]);
 
   const uniqueTotal = useMemo(() => {
-    const values = drivers.map(c => formatCurrencyValue(c.facturacion_total));
+    const values = drivers.map(c => (c as any).facturacion_total_filter || "N/A");
     return [...new Set(values)].sort();
   }, [drivers]);
 
@@ -2860,7 +2881,10 @@ export function GuiasModule() {
       nombreFilter, cbuFilter, estadoFilter, turnoFilter, 
       categoriaFilter, asignacionFilter, openColumnFilter,
       nombresFiltrados, cuilsFiltrados, uniqueCategorias, uniqueEstados,
-      nombreSearch, cbuSearch, selectedWeek, seguimientoRules, accionesImplementadas
+      nombreSearch, cbuSearch, selectedWeek, seguimientoRules, accionesImplementadas,
+      efectivoFilter, appFilter, totalFilter,
+      efectivoFiltrados, appFiltrados, totalFiltrados,
+      efectivoSearch, appSearch, totalSearch
     ]
   );
 
@@ -2914,7 +2938,7 @@ export function GuiasModule() {
                       return;
                     }
 
-                    const total = Number(d.facturacion_total) || 0;
+                    const total = Number((d as any).facturacion_app) || 0;
                     let ruleMatch = null;
 
                     if (seguimientoRules && seguimientoRules.length > 0) {
