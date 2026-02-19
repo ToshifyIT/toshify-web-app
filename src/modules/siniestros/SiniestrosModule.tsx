@@ -56,6 +56,23 @@ function toISODateLocal(date: Date) {
   return `${year}-${month}-${day}`
 }
 
+function getCurrentWeekRange(): DateRange {
+  const today = new Date()
+  const dayOfWeek = today.getDay()
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const monday = new Date(today)
+  monday.setDate(today.getDate() + diffToMonday)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+
+  return {
+    startDate: toISODateLocal(monday),
+    endDate: toISODateLocal(sunday),
+    label: 'Semana actual',
+    type: 'week'
+  }
+}
+
 function parseFechaSiniestro(fechaStr: string | undefined | null) {
   if (!fechaStr) return null
   const raw = fechaStr.split('T')[0]
@@ -109,12 +126,7 @@ export function SiniestrosModule() {
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
   const [stats, setStats] = useState<SiniestroStats | null>(null)
-  const [dateRangeSemana, setDateRangeSemana] = useState<DateRange | null>({
-    startDate: '',
-    endDate: '',
-    label: 'Todo el historial',
-    type: 'all'
-  })
+  const [dateRangeSemana, setDateRangeSemana] = useState<DateRange | null>(getCurrentWeekRange())
 
   // Filtros por columna tipo Excel con Portal
   const { openFilterId, setOpenFilterId } = useExcelFilters()

@@ -31,7 +31,6 @@ interface VencimientoFormData {
   fecha_entrega?: string
   fecha_vencimiento: string
   fecha_iniciar_gestion?: string
-  prioridad: 'ALTO' | 'MEDIO' | 'BAJO' | ''
   solicitado: boolean
   observacion?: string
 }
@@ -61,6 +60,13 @@ function formatDate(value: string | null | undefined): string {
   return `${day}/${month}/${year}`
 }
 
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function normalizeToday(): Date {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -71,6 +77,18 @@ function addDays(base: Date, days: number): Date {
   const copy = new Date(base)
   copy.setDate(copy.getDate() + days)
   return copy
+}
+
+function prioridadFromFecha(fecha: string | null | undefined): 'ALTO' | 'MEDIO' | 'BAJO' {
+  const d = parseDate(fecha)
+  if (!d) return 'BAJO'
+  const today = normalizeToday()
+  const target = new Date(d)
+  target.setHours(0, 0, 0, 0)
+  const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays <= 14) return 'ALTO'
+  if (diffDays <= 45) return 'MEDIO'
+  return 'BAJO'
 }
 
 function isProximoAVencerEn5Dias(item: Vencimiento): boolean {
@@ -88,7 +106,7 @@ export function VencimientosModule() {
   const [items, setItems] = useState<Vencimiento[]>([])
   const [search, setSearch] = useState('')
 
-  const [vehiculos, setVehiculos] = useState<Array<{ id: string; patente: string; marca: string; modelo: string }>>([])
+  const [vehiculos, setVehiculos] = useState<Array<{ id: string; patente: string; marca: string; modelo: string; titular: string }>>([])
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
 
@@ -102,7 +120,6 @@ export function VencimientosModule() {
     fecha_entrega: '',
     fecha_vencimiento: '',
     fecha_iniciar_gestion: '',
-    prioridad: '',
     solicitado: false,
     observacion: ''
   })
@@ -150,7 +167,7 @@ export function VencimientosModule() {
     try {
       const { data, error } = await supabase
         .from('vehiculos' as any)
-        .select('id, patente, marca, modelo')
+        .select('id, patente, marca, modelo, titular')
         .order('patente', { ascending: true })
 
       if (error) throw error
@@ -159,7 +176,8 @@ export function VencimientosModule() {
         id: v.id as string,
         patente: (v.patente || '') as string,
         marca: (v.marca || '') as string,
-        modelo: (v.modelo || '') as string
+        modelo: (v.modelo || '') as string,
+        titular: (v.titular || '') as string
       }))
 
       setVehiculos(mapped)
@@ -185,20 +203,17 @@ export function VencimientosModule() {
     [items]
   )
 
-  const totalPrioridadAlta = useMemo(
-    () => items.filter(item => item.prioridad === 'ALTO').length,
-    [items]
-  )
+  const totalPrioridadAlta = useMemo(() => {
+    return items.filter(item => prioridadFromFecha(item.fecha_iniciar_gestion)).filter(i => prioridadFromFecha(i.fecha_iniciar_gestion) === 'ALTO').length
+  }, [items])
 
-  const totalPrioridadMedia = useMemo(
-    () => items.filter(item => item.prioridad === 'MEDIO').length,
-    [items]
-  )
+  const totalPrioridadMedia = useMemo(() => {
+    return items.filter(item => prioridadFromFecha(item.fecha_iniciar_gestion)).filter(i => prioridadFromFecha(i.fecha_iniciar_gestion) === 'MEDIO').length
+  }, [items])
 
-  const totalPrioridadBaja = useMemo(
-    () => items.filter(item => item.prioridad === 'BAJO').length,
-    [items]
-  )
+  const totalPrioridadBaja = useMemo(() => {
+    return items.filter(item => prioridadFromFecha(item.fecha_iniciar_gestion)).filter(i => prioridadFromFecha(i.fecha_iniciar_gestion) === 'BAJO').length
+  }, [items])
 
   const totalSolicitadosSi = useMemo(
     () => items.filter(item => item.solicitado).length,
@@ -233,7 +248,6 @@ export function VencimientosModule() {
       fecha_entrega: '',
       fecha_vencimiento: '',
       fecha_iniciar_gestion: '',
-      prioridad: '',
       solicitado: false,
       observacion: ''
     })
@@ -250,7 +264,6 @@ export function VencimientosModule() {
       fecha_entrega: item.fecha_entrega || '',
       fecha_vencimiento: item.fecha_vencimiento,
       fecha_iniciar_gestion: item.fecha_iniciar_gestion || '',
-      prioridad: item.prioridad,
       solicitado: item.solicitado,
       observacion: item.observacion || ''
     })
@@ -267,7 +280,6 @@ export function VencimientosModule() {
       fecha_entrega: item.fecha_entrega || '',
       fecha_vencimiento: item.fecha_vencimiento,
       fecha_iniciar_gestion: item.fecha_iniciar_gestion || '',
-      prioridad: item.prioridad,
       solicitado: item.solicitado,
       observacion: item.observacion || ''
     })
@@ -323,7 +335,7 @@ export function VencimientosModule() {
   }
 
   async function handleSubmit() {
-    if (!formData.titular.trim() || !formData.patente.trim() || !formData.fecha_vencimiento || !formData.prioridad) {
+    if (!formData.titular.trim() || !formData.patente.trim() || !formData.fecha_vencimiento) {
       Swal.fire('Campos incompletos', 'Completa los campos obligatorios', 'warning')
       return
     }
@@ -338,7 +350,6 @@ export function VencimientosModule() {
           fecha_entrega: formData.fecha_entrega || null,
           fecha_vencimiento: formData.fecha_vencimiento,
           fecha_iniciar_gestion: formData.fecha_iniciar_gestion || null,
-          prioridad: formData.prioridad,
           solicitado: formData.solicitado,
           observacion: formData.observacion?.trim() || null
         }
@@ -360,7 +371,6 @@ export function VencimientosModule() {
           fecha_entrega: row.fecha_entrega ?? null,
           fecha_vencimiento: row.fecha_vencimiento,
           fecha_iniciar_gestion: row.fecha_iniciar_gestion ?? null,
-          prioridad: (row.prioridad || 'MEDIO') as 'ALTO' | 'MEDIO' | 'BAJO',
           solicitado: !!row.solicitado,
           observacion: row.observacion ?? null,
           created_at: row.created_at
@@ -376,7 +386,6 @@ export function VencimientosModule() {
           fecha_entrega: formData.fecha_entrega || null,
           fecha_vencimiento: formData.fecha_vencimiento,
           fecha_iniciar_gestion: formData.fecha_iniciar_gestion || null,
-          prioridad: formData.prioridad,
           solicitado: formData.solicitado,
           observacion: formData.observacion?.trim() || null
         }
@@ -399,7 +408,6 @@ export function VencimientosModule() {
                   fecha_entrega: payload.fecha_entrega,
                   fecha_vencimiento: payload.fecha_vencimiento,
                   fecha_iniciar_gestion: payload.fecha_iniciar_gestion,
-                  prioridad: payload.prioridad as 'ALTO' | 'MEDIO' | 'BAJO',
                   solicitado: payload.solicitado,
                   observacion: payload.observacion
                 }
@@ -472,9 +480,9 @@ export function VencimientosModule() {
     {
       accessorKey: 'prioridad',
       header: 'Prioridad',
-      cell: ({ getValue }) => {
-        const value = (getValue() as string) || '-'
-        const upper = value.toUpperCase()
+      cell: ({ row }) => {
+        const pr = prioridadFromFecha(row.original.fecha_iniciar_gestion)
+        const upper = pr.toUpperCase()
         let cls = 'prioridad-badge prioridad-baja'
         if (upper === 'ALTO') cls = 'prioridad-badge prioridad-alta'
         else if (upper === 'MEDIO') cls = 'prioridad-badge prioridad-media'
@@ -556,7 +564,7 @@ export function VencimientosModule() {
         Fecha_entrega: formatDate(item.fecha_entrega),
         Fecha_vencimiento: formatDate(item.fecha_vencimiento),
         Fecha_iniciar_gestion: formatDate(item.fecha_iniciar_gestion),
-        Prioridad: item.prioridad,
+        Prioridad: prioridadFromFecha(item.fecha_iniciar_gestion),
         Solicitado: item.solicitado ? 'Sí' : 'No',
         Observaciones: item.observacion || ''
       }))
@@ -781,7 +789,7 @@ export function VencimientosModule() {
                               key={v.id}
                               className="searchable-option"
                               onClick={() => {
-                                setFormData(prev => ({ ...prev, patente: v.patente }))
+                                setFormData(prev => ({ ...prev, patente: v.patente, titular: v.titular }))
                                 setVehiculoSearch('')
                                 setShowVehiculoDropdown(false)
                               }}
@@ -826,7 +834,38 @@ export function VencimientosModule() {
                     <input
                       type="date"
                       value={formData.fecha_entrega || ''}
-                      onChange={e => setFormData(prev => ({ ...prev, fecha_entrega: e.target.value }))}
+                      onChange={e => {
+                        const value = e.target.value
+                        setFormData(prev => {
+                          let fechaVencimiento = prev.fecha_vencimiento
+                          let fechaIniciarGestion = prev.fecha_iniciar_gestion
+
+                          if (modalMode === 'create') {
+                            if (value) {
+                              const baseDate = parseDate(value)
+                              if (baseDate) {
+                                const vencimientoDate = addDays(baseDate, 60)
+                                const iniciarGestionDate = addDays(vencimientoDate, -14)
+                                fechaVencimiento = formatDateInput(vencimientoDate)
+                                fechaIniciarGestion = formatDateInput(iniciarGestionDate)
+                              } else {
+                                fechaVencimiento = ''
+                                fechaIniciarGestion = ''
+                              }
+                            } else {
+                              fechaVencimiento = ''
+                              fechaIniciarGestion = ''
+                            }
+                          }
+
+                          return { 
+                            ...prev, 
+                            fecha_entrega: value, 
+                            fecha_vencimiento: fechaVencimiento, 
+                            fecha_iniciar_gestion: fechaIniciarGestion 
+                          }
+                        })
+                      }}
                       disabled={modalMode === 'view' || saving}
                     />
                   </div>
@@ -839,7 +878,7 @@ export function VencimientosModule() {
                       type="date"
                       value={formData.fecha_vencimiento}
                       onChange={e => setFormData(prev => ({ ...prev, fecha_vencimiento: e.target.value }))}
-                      disabled={modalMode === 'view' || saving}
+                      disabled={modalMode !== 'edit' || saving}
                     />
                   </div>
                 </div>
@@ -850,26 +889,8 @@ export function VencimientosModule() {
                       type="date"
                       value={formData.fecha_iniciar_gestion || ''}
                       onChange={e => setFormData(prev => ({ ...prev, fecha_iniciar_gestion: e.target.value }))}
-                      disabled={modalMode === 'view' || saving}
+                      disabled={modalMode !== 'edit' || saving}
                     />
-                  </div>
-                  <div className="form-group">
-                    <label>
-                      Prioridad
-                      <span className="required">*</span>
-                    </label>
-                    <select
-                      value={formData.prioridad}
-                      onChange={e =>
-                        setFormData(prev => ({ ...prev, prioridad: e.target.value as VencimientoFormData['prioridad'] }))
-                      }
-                      disabled={modalMode === 'view' || saving}
-                    >
-                      <option value="">Seleccionar</option>
-                      <option value="ALTO">Alto</option>
-                      <option value="MEDIO">Medio</option>
-                      <option value="BAJO">Bajo</option>
-                    </select>
                   </div>
                 </div>
                 <div className="form-row">
