@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { fetchGuias } from './guiasService'
 import { format, startOfISOWeek, endOfISOWeek, setISOWeek, addHours, previousSunday, startOfDay, endOfDay, subWeeks, nextSunday, addWeeks } from 'date-fns'
 import { WeekSelector } from './components/WeekSelector'
 import { 
@@ -1679,69 +1680,7 @@ export function GuiasModule() {
   const loadGuias = async () => {
     try {
       setLoading(true)
-
-      // Estrategia dual: intentar user_profiles primero, fallback a submenus
-      // RLS puede impedir que un guía vea otros user_profiles
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select(`
-          *,
-          roles!inner (
-            name,
-            description
-          )
-        `)
-        .eq('roles.name', 'guia')
-        .order('created_at', { ascending: false })
-
-      let formattedGuias: Guia[] = []
-
-      if (!error && data && data.length > 0) {
-        formattedGuias = data.map((item: any) => ({
-          id: item.id,
-          email: item.email,
-          full_name: item.full_name,
-          is_active: item.is_active,
-          created_at: item.created_at,
-          role_name: item.roles?.name,
-          role_description: item.roles?.description
-        }))
-      }
-
-      // Fallback: si RLS limita los resultados, obtener guías desde submenus
-      // Los submenus guia-* contienen el ID y nombre de cada guía
-      if (formattedGuias.length <= 1) {
-        const { data: menuData } = await supabase
-          .from('menus')
-          .select('id')
-          .eq('name', 'seguimiento-conductores')
-          .single()
-
-        if (menuData) {
-          const { data: submenuData } = await supabase
-            .from('submenus')
-            .select('name, label, route, is_active')
-            .eq('menu_id', menuData.id)
-            .like('name', 'guia-%')
-            .eq('is_active', true)
-
-          if (submenuData && submenuData.length > formattedGuias.length) {
-            formattedGuias = submenuData.map((sub: any) => {
-              const guiaId = sub.name.replace('guia-', '')
-              return {
-                id: guiaId,
-                email: '',
-                full_name: sub.label || guiaId,
-                is_active: sub.is_active,
-                created_at: '',
-                role_name: 'guia',
-                role_description: ''
-              }
-            })
-          }
-        }
-      }
-
+      const formattedGuias = await fetchGuias()
       setGuias(formattedGuias)
       
       // Seleccionar la guía del URL o la primera disponible
@@ -1749,6 +1688,9 @@ export function GuiasModule() {
         const matchedGuia = formattedGuias.find(g => g.id === urlGuiaId)
         if (matchedGuia) {
           setSelectedGuiaId(matchedGuia.id)
+        } else if (formattedGuias.length > 0) {
+          // URL no coincide con ninguna guía, usar la primera
+          setSelectedGuiaId(formattedGuias[0].id)
         }
       } else if (formattedGuias.length > 0) {
         setSelectedGuiaId(formattedGuias[0].id)
