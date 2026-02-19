@@ -460,12 +460,12 @@ export function ReporteFacturacionTab() {
       })
 
       // 2.8 Calcular días reales de asignación para cada conductor
-      // Primero obtener asignaciones activas (vehículos), luego sus conductores
+      // Primero obtener asignaciones activas o finalizadas (vehículos), luego sus conductores
       const conductorIds = facturacionesTransformadas.map((f: any) => f.conductor_id).filter(Boolean)
       const { data: asignacionesActivasData } = await (supabase
         .from('asignaciones') as any)
         .select('id')
-        .in('estado', ['activo', 'activa'])
+        .in('estado', ['activo', 'activa', 'finalizada', 'finalizado'])
       const asignacionActivaIds = (asignacionesActivasData || []).map((a: any) => a.id)
 
       const { data: asignacionesData } = asignacionActivaIds.length > 0
@@ -599,6 +599,57 @@ export function ReporteFacturacionTab() {
 
       if (errControl) throw errControl
 
+      // Suplementar con conductores que tienen asignaciones en la semana pero NO están en la tabla de control
+      // Captura conductores dados de baja o ausentes del control que trabajaron durante la semana
+      {
+        const dnisEnControlVP = new Set(conductoresControl.map((c: any) => c.numero_dni))
+        const { data: asignacionesSemanaVP } = await (supabase
+          .from('asignaciones_conductores') as any)
+          .select(`
+            conductor_id, horario, fecha_inicio, fecha_fin, estado,
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
+            conductores!inner(numero_dni, sede_id)
+          `)
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+
+        const semInicioVP = parseISO(fechaInicio)
+        const semFinVP = parseISO(fechaFin)
+        const conductoresExtraVP = new Map<string, any>()
+
+        for (const ac of (asignacionesSemanaVP || [])) {
+          const cond = ac.conductores
+          const asig = ac.asignaciones
+          if (!cond || !asig) continue
+          if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
+          if (dnisEnControlVP.has(cond.numero_dni)) continue
+
+          // Descartar asignaciones huérfanas (padre finalizado sin fecha_fin)
+          const estadoPadreVPExtra = (asig.estado || '').toLowerCase()
+          if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVPExtra) && !asig.fecha_fin) continue
+
+          // Verificar solapamiento con la semana
+          const acInicioExtra = ac.fecha_inicio ? parseISO(ac.fecha_inicio) : new Date('2020-01-01')
+          const acFinExtra = ac.fecha_fin ? parseISO(ac.fecha_fin)
+            : (asig.fecha_fin ? parseISO(asig.fecha_fin) : new Date('2099-12-31'))
+          if (acFinExtra < semInicioVP || acInicioExtra > semFinVP) continue
+
+          if (!conductoresExtraVP.has(cond.numero_dni)) {
+            const modalidad = (asig.horario || '').toUpperCase() === 'CARGO' ? 'CARGO' : 'TURNO'
+            conductoresExtraVP.set(cond.numero_dni, {
+              numero_dni: cond.numero_dni,
+              estado: 'Activo',
+              patente: asig.vehiculos?.patente || '',
+              modalidad,
+              valor_alquiler: null
+            })
+          }
+        }
+
+        for (const [, extra] of conductoresExtraVP) {
+          conductoresControl.push(extra)
+        }
+      }
+
       // Obtener datos de conductores desde tabla conductores
       // FILTRAR por sede para obtener solo conductores de esta sede
       const dnisControl = (conductoresControl || []).map((c: any) => c.numero_dni)
@@ -626,7 +677,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIds)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
 
       // Crear mapa de prorrateo con días y montos para precios históricos
       interface ProrrateoVistaPrevia {
@@ -645,7 +696,8 @@ export function ReporteFacturacionTab() {
 
       // Calcular días por modalidad/horario para cada conductor
       const fechaInicioSemana = semanaActual.inicio
-      const fechaFinSemana = semanaActual.fin
+      // Para semana actual: usar HOY como fin (no contar días futuros)
+      const fechaFinSemana = esSemanaActual ? fechaFinEfectiva : semanaActual.fin
       
       // Guardar asignaciones por conductor para cálculo de montos con precios históricos
       const asignacionesPorConductorVP = new Map<string, Array<{
@@ -668,10 +720,11 @@ export function ReporteFacturacionTab() {
         
         // Calcular días que este registro se solapa con la semana
         // Usar fecha_fin de la asignación padre como límite si la del conductor es NULL
-        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) 
-          : (asignacion.fecha_inicio ? new Date(asignacion.fecha_inicio) : fechaInicioSemana)
-        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) 
-          : (asignacion.fecha_fin ? new Date(asignacion.fecha_fin) : fechaFinSemana)
+        // IMPORTANTE: usar parseISO en vez de new Date para evitar que fechas 'YYYY-MM-DD' se interpreten como UTC
+        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio) 
+          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio) : fechaInicioSemana)
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin) 
+          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin) : fechaFinSemana)
         
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
@@ -1000,8 +1053,8 @@ export function ReporteFacturacionTab() {
         }
         const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Solo incluir conductores con días trabajados durante la semana
-        if (diasTotales === 0) continue
+        // Incluir TODOS los conductores de la tabla de control, incluso con 0 días
+        // Los de "Pausa" tienen $0 alquiler/$0 garantía pero pueden tener peajes, saldo, multas, etc.
         
         // Calcular alquiler usando montos pre-calculados con precios históricos
         const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
@@ -1326,6 +1379,57 @@ export function ReporteFacturacionTab() {
         ...(conductoresBaja || []).filter((c: any) => !dnisActivos.has(c.numero_dni))
       ]
 
+      // Suplementar con conductores que tienen asignaciones en la semana pero NO están en la tabla de control
+      // Captura conductores dados de baja o ausentes del control que trabajaron durante la semana
+      {
+        const dnisEnControlRecalc = new Set(conductoresControl.map((c: any) => c.numero_dni))
+        const { data: asignacionesSemanaRecalc } = await (supabase
+          .from('asignaciones_conductores') as any)
+          .select(`
+            conductor_id, horario, fecha_inicio, fecha_fin, estado,
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
+            conductores!inner(numero_dni, sede_id)
+          `)
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+
+        const semInicioRecalc = parseISO(fechaInicio)
+        const semFinRecalc = parseISO(fechaFin)
+        const conductoresExtraRecalc = new Map<string, any>()
+
+        for (const ac of (asignacionesSemanaRecalc || [])) {
+          const cond = ac.conductores
+          const asig = ac.asignaciones
+          if (!cond || !asig) continue
+          if (sedeDelPeriodo && cond.sede_id !== sedeDelPeriodo) continue
+          if (dnisEnControlRecalc.has(cond.numero_dni)) continue
+
+          // Descartar asignaciones huérfanas (padre finalizado sin fecha_fin)
+          const estadoPadreRecExtra = (asig.estado || '').toLowerCase()
+          if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreRecExtra) && !asig.fecha_fin) continue
+
+          // Verificar solapamiento con la semana
+          const acInicioRecExtra = ac.fecha_inicio ? parseISO(ac.fecha_inicio) : new Date('2020-01-01')
+          const acFinRecExtra = ac.fecha_fin ? parseISO(ac.fecha_fin)
+            : (asig.fecha_fin ? parseISO(asig.fecha_fin) : new Date('2099-12-31'))
+          if (acFinRecExtra < semInicioRecalc || acInicioRecExtra > semFinRecalc) continue
+
+          if (!conductoresExtraRecalc.has(cond.numero_dni)) {
+            const modalidad = (asig.horario || '').toUpperCase() === 'CARGO' ? 'CARGO' : 'TURNO'
+            conductoresExtraRecalc.set(cond.numero_dni, {
+              numero_dni: cond.numero_dni,
+              estado: 'Activo',
+              patente: asig.vehiculos?.patente || '',
+              modalidad,
+              valor_alquiler: null
+            })
+          }
+        }
+
+        for (const [, extra] of conductoresExtraRecalc) {
+          conductoresControl.push(extra)
+        }
+      }
+
       if (!conductoresControl || conductoresControl.length === 0) {
         await (supabase.from('periodos_facturacion') as any)
           .update({ estado: 'abierto', total_conductores: 0 })
@@ -1362,7 +1466,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIdsTemp)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
 
       // Crear mapa de prorrateo: conductor_id -> { días y montos por modalidad }
       // Los montos se calculan día a día para considerar cambios de precio históricos
@@ -1405,10 +1509,11 @@ export function ReporteFacturacionTab() {
         
         // Calcular días que este registro se solapa con la semana
         // Usar fecha_fin de la asignación padre como límite si la del conductor es NULL
-        const acInicio = ac.fecha_inicio ? new Date(ac.fecha_inicio) 
-          : (asignacion.fecha_inicio ? new Date(asignacion.fecha_inicio) : fechaInicioSemanaRecalc)
-        const acFin = ac.fecha_fin ? new Date(ac.fecha_fin) 
-          : (asignacion.fecha_fin ? new Date(asignacion.fecha_fin) : fechaFinSemanaRecalc)
+        // IMPORTANTE: usar parseISO en vez de new Date para evitar que fechas 'YYYY-MM-DD' se interpreten como UTC
+        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio) 
+          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio) : fechaInicioSemanaRecalc)
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin) 
+          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin) : fechaFinSemanaRecalc)
         
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
@@ -1469,8 +1574,8 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Solo incluir conductores con días trabajados durante la semana
-        if (totalDias === 0) continue
+        // Incluir TODOS los conductores de la tabla de control, incluso con 0 días
+        // Los de "Pausa" tienen $0 alquiler/$0 garantía pero pueden tener peajes, saldo, multas, etc.
         
         conductoresProcesados.push({
           conductor_id: conductorData.id,

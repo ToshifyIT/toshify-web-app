@@ -1431,12 +1431,16 @@ export function GuiasModule() {
 
       setGuias(formattedGuias)
       
-      const initialId = urlGuiaId && formattedGuias.some(g => g.id === urlGuiaId) 
-        ? urlGuiaId 
-        : (formattedGuias.length > 0 ? formattedGuias[0].id : null)
-      
-      if (initialId) {
-        setSelectedGuiaId(initialId)
+      // Solo seleccionar la guía si el ID del URL coincide con una guía real
+      // Si el URL tiene un ID que no es guía, no seleccionar ninguna (evita mostrar datos de otra guía)
+      if (urlGuiaId) {
+        const matchedGuia = formattedGuias.find(g => g.id === urlGuiaId)
+        if (matchedGuia) {
+          setSelectedGuiaId(matchedGuia.id)
+        }
+      } else if (formattedGuias.length > 0) {
+        // Sin ID en URL (/guias sin parametro), usar la primera guía
+        setSelectedGuiaId(formattedGuias[0].id)
       }
     } catch {
       // Guias load failed

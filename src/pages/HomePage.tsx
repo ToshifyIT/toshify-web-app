@@ -246,8 +246,10 @@ export function HomePage() {
           .like('name', 'guia-%')
         
         const existingGuiaIds = new Set((existingSubmenus || []).map((s: any) => s.name.replace('guia-', '')))
+        const activeGuiaIds = new Set(guiasData.map((g: Guia) => g.id))
         const missingGuias = guiasData.filter((g: Guia) => !existingGuiaIds.has(g.id))
         
+        // Agregar submenús para guías nuevas
         if (missingGuias.length > 0) {
           await supabase.from('submenus').insert(
             missingGuias.map((g: Guia, idx: number) => ({
@@ -261,6 +263,17 @@ export function HomePage() {
               is_active: true,
             }))
           )
+        }
+
+        // Limpiar submenús de guías que ya no tienen el rol
+        const staleSubmenus = (existingSubmenus || []).filter(
+          (s: any) => !activeGuiaIds.has(s.name.replace('guia-', ''))
+        )
+        if (staleSubmenus.length > 0) {
+          await supabase
+            .from('submenus')
+            .delete()
+            .in('id', staleSubmenus.map((s: any) => s.id))
         }
       }
     }
@@ -1875,11 +1888,6 @@ export function HomePage() {
 
               {/* Guias */}
               <Route path="/guias" element={
-                <ProtectedRoute>
-                  <GuiasPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/guias/:id" element={
                 <ProtectedRoute>
                   <GuiasPage />
                 </ProtectedRoute>
