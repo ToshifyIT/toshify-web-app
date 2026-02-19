@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Car, User, Calendar, FileText, Plus,
   Eye, Trash2, CheckCircle, XCircle, Send,
-  MessageSquareText, Pencil, Copy, RefreshCw
+  MessageSquareText, Pencil, Copy, RefreshCw, Sun, Moon
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable/DataTable'
@@ -1952,7 +1952,7 @@ export function ProgramacionModule() {
                 <>
                   {/* Conductor Diurno */}
                   <div className="prog-modal-section" style={{ background: '#FEF9C3', padding: '12px', borderRadius: '8px' }}>
-                    <h3 style={{ color: '#92400E', margin: '0 0 12px 0', fontSize: '14px' }}>🌞 Conductor Diurno</h3>
+                    <h3 style={{ color: '#92400E', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Sun size={16} /> Conductor Diurno</h3>
                     {/* Selector de conductor diurno */}
                     <div style={{ marginBottom: '12px' }}>
                       <label>Conductor *</label>
@@ -2065,7 +2065,7 @@ export function ProgramacionModule() {
 
                   {/* Conductor Nocturno */}
                   <div className="prog-modal-section" style={{ background: '#DBEAFE', padding: '12px', borderRadius: '8px', marginTop: '12px' }}>
-                    <h3 style={{ color: '#1E40AF', margin: '0 0 12px 0', fontSize: '14px' }}>🌙 Conductor Nocturno</h3>
+                    <h3 style={{ color: '#1E40AF', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}><Moon size={16} /> Conductor Nocturno</h3>
                     {/* Selector de conductor nocturno */}
                     <div style={{ marginBottom: '12px' }}>
                       <label>Conductor *</label>

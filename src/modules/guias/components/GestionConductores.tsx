@@ -3,6 +3,7 @@ import { supabase } from "../../../lib/supabase";
 import { format } from "date-fns";
 import Swal from "sweetalert2";
 import { useSede } from '../../../contexts/SedeContext';
+import { Search, FileEdit } from 'lucide-react';
 import "./GestionConductores.css";
 
 // Interfaces
@@ -288,7 +289,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
         
         <div className="gc-toolbar">
           <div className="gc-search-wrap" style={{ position: 'relative' }}>
-            <span className="gc-search-icon">🔍</span>
+            <span className="gc-search-icon"><Search size={14} /></span>
             <input
               ref={inputRef}
               className="gc-search"
@@ -378,7 +379,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
                             onClick={() => handleViewNotes(row.notas)}
                             title="Ver notas"
                           >
-                            📝 <span className="gc-notes-badge">{row.notas.length}</span>
+                            <FileEdit size={14} /> <span className="gc-notes-badge">{row.notas.length}</span>
                           </button>
                         ) : (
                           <span style={{ color: '#ccc' }}>—</span>
@@ -397,7 +398,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
             </table>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '300px', color: '#999' }}>
-              <span style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</span>
+              <Search size={48} style={{ marginBottom: '16px', color: '#ccc' }} />
               <p>Busque y seleccione un conductor para ver su historial.</p>
             </div>
           )}

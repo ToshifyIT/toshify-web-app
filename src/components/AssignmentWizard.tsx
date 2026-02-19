@@ -1681,13 +1681,13 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                           badgeText = 'En Uso'
                           badgeBg = '#F59E0B'
                           badgeColor = 'white'
-                          detalleText = '☀️ Diurno Libre'
+                          detalleText = 'Diurno Libre'
                           break
                         case 'turno_nocturno_libre':
                           badgeText = 'En Uso'
                           badgeBg = '#F59E0B'
                           badgeColor = 'white'
-                          detalleText = '🌙 Nocturno Libre'
+                          detalleText = 'Nocturno Libre'
                           break
                         case 'ocupado':
                           badgeText = 'En Uso'

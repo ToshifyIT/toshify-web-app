@@ -499,7 +499,7 @@ export function CabifyPreviewTable({
       {/* Hint de edición */}
       {periodoId && (
         <div className="fact-preview-edit-hint">
-          💡 Click en cualquier celda numérica para editarla. Los cambios se guardan al sincronizar con la BD.
+          Click en cualquier celda numérica para editarla. Los cambios se guardan al sincronizar con la BD.
         </div>
       )}
 

@@ -371,6 +371,7 @@ export function VencimientosModule() {
           fecha_entrega: row.fecha_entrega ?? null,
           fecha_vencimiento: row.fecha_vencimiento,
           fecha_iniciar_gestion: row.fecha_iniciar_gestion ?? null,
+          prioridad: row.prioridad || 'MEDIO',
           solicitado: !!row.solicitado,
           observacion: row.observacion ?? null,
           created_at: row.created_at

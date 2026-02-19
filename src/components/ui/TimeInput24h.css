@@ -36,7 +36,7 @@
   font-size: 14px;
   font-weight: 500;
   color: #374151;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: monospace;
 }
 
 .time-icon {
@@ -106,7 +106,7 @@
   color: #374151;
   cursor: pointer;
   text-align: center;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: monospace;
   transition: background-color 0.15s;
 }
 

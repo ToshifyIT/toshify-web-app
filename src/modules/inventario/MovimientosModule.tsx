@@ -14,7 +14,9 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle,
-  XCircle
+  XCircle,
+  Package,
+  FileText
 } from 'lucide-react'
 
 // =====================================================
@@ -832,7 +834,7 @@ export function MovimientosModule() {
               }}>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                    {modoLote ? '📦 Ingreso por Lote/Pedido' : '📄 Ingreso Simple'}
+                    {modoLote ? <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ingreso por Lote/Pedido</> : <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ingreso Simple</>}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                     {modoLote
@@ -972,7 +974,7 @@ export function MovimientosModule() {
               }}>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                    {modoLoteSalida ? '📦 Salida por Lote' : '📄 Salida Simple'}
+                    {modoLoteSalida ? <><Package size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Salida por Lote</> : <><FileText size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Salida Simple</>}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                     {modoLoteSalida

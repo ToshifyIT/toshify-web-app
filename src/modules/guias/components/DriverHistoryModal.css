@@ -153,7 +153,7 @@
 }
 
 .td-money {
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: monospace;
   text-align: right;
   font-weight: 500;
   letter-spacing: -0.5px;
