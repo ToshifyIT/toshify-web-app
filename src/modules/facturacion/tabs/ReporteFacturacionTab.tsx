@@ -5523,13 +5523,10 @@ export function ReporteFacturacionTab() {
         // Importe Contrato = Solo alquiler (P001/P002/P013)
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = montos a favor (descuentos) - cobros (resto de cargos) + saldo pendiente
-        // cobros = subtotal_cargos sin alquiler (garantía P003, peajes P005, excesos P006, penalidades P007, etc.)
-        // montos a favor = subtotal_descuentos (tickets P004, etc.)
-        const cobros = (f.subtotal_cargos || 0) - importeContrato
-        const montosFavor = f.subtotal_descuentos || 0
+        // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
+        // Cobros (garantía, peajes, excesos, penalidades) suman, montos a favor (tickets) restan
         const saldoPendiente = f.saldo_anterior || 0
-        const excedentes = montosFavor - cobros + saldoPendiente
+        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato + saldoPendiente
 
         return {
           anio,
@@ -5646,11 +5643,9 @@ export function ReporteFacturacionTab() {
         // Importe Contrato = Solo alquiler (P001/P002/P013)
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = montos a favor (descuentos) - cobros (resto de cargos) + saldo pendiente
-        const cobros = (f.subtotal_cargos || 0) - importeContrato
-        const montosFavor = f.subtotal_descuentos || 0
+        // EXCEDENTES = resto de productos (sin alquiler) + saldo pendiente
         const saldoPendiente = f.saldo_anterior || 0
-        const excedentes = montosFavor - cobros + saldoPendiente
+        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato + saldoPendiente
 
         return {
           anio: periodo.anio,
