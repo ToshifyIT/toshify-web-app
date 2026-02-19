@@ -1760,7 +1760,7 @@
 }
 
 .stat-card.highlight .stat-icon {
-  color: #D97706;
+  color: var(--color-primary);
 }
 
 .stat-card.highlight .stat-value {

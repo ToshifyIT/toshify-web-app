@@ -590,35 +590,35 @@ export default function TelepaseHistoricoModule() {
       <div className="multas-stats">
         <div className="multas-stats-grid five-cols">
           <div className="stat-card">
-            <FileText size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <FileText size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{registrosFiltrados.length}</span>
               <span className="stat-label">Total</span>
             </div>
           </div>
           <div className="stat-card">
-            <Car size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{patentesUnicasCount}</span>
               <span className="stat-label">Vehiculos</span>
             </div>
           </div>
           <div className="stat-card">
-            <Users size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{conductoresUnicosCount}</span>
               <span className="stat-label">Conductores</span>
             </div>
           </div>
           <div className="stat-card">
-            <DollarSign size={18} className="stat-icon" style={{ color: '#22C55E' }} />
+            <DollarSign size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{formatMoney(totalTarifa)}</span>
               <span className="stat-label">Total Tarifas</span>
             </div>
           </div>
           <div className="stat-card">
-            <AlertCircle size={18} className="stat-icon" style={{ color: conObservaciones > 0 ? '#F59E0B' : '#10B981' }} />
+            <AlertCircle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{conObservaciones}</span>
               <span className="stat-label">Con Obs.</span>

@@ -1106,16 +1106,16 @@ export function GarantiasTab() {
                 </div>
               </div>
               <div className="fact-stat-card">
-                <DollarSign size={18} className="fact-stat-icon" style={{ color: '#16a34a' }} />
+                <DollarSign size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
-                  <span className="fact-stat-value" style={{ color: '#16a34a' }}>{formatCurrency(stats.totalRecaudado)}</span>
+                  <span className="fact-stat-value">{formatCurrency(stats.totalRecaudado)}</span>
                   <span className="fact-stat-label">Recaudado</span>
                 </div>
               </div>
               <div className="fact-stat-card">
-                <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#ff0033' }} />
+                <AlertTriangle size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
-                  <span className="fact-stat-value" style={{ color: '#ff0033' }}>{formatCurrency(stats.totalPorRecaudar)}</span>
+                  <span className="fact-stat-value">{formatCurrency(stats.totalPorRecaudar)}</span>
                   <span className="fact-stat-label">Por Recaudar</span>
                 </div>
               </div>
@@ -1159,9 +1159,9 @@ export function GarantiasTab() {
                 </div>
               </div>
               <div className="fact-stat-card">
-                <ArrowUpCircle size={18} className="fact-stat-icon" style={{ color: '#16a34a' }} />
+                <ArrowUpCircle size={18} className="fact-stat-icon" />
                 <div className="fact-stat-content">
-                  <span className="fact-stat-value" style={{ color: '#16a34a' }}>
+                  <span className="fact-stat-value">
                     {formatCurrency(todosLosPagos.reduce((sum, p) => sum + p.monto, 0))}
                   </span>
                   <span className="fact-stat-label">Total Pagado</span>

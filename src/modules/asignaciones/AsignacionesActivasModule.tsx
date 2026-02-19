@@ -742,9 +742,9 @@ export function AsignacionesActivasModule() {
             title="Total de vehículos con estado PKG_ON_BASE - Click para ver listado"
             onClick={() => handleStatCardClick('disponibles')}
           >
-            <Car size={18} className="stat-icon" style={{ color: '#059669' }} />
+            <Car size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value" style={{ color: '#059669' }}>{stats.pkgOnBase}</span>
+              <span className="stat-value">{stats.pkgOnBase}</span>
               <span className="stat-label">Disponibles</span>
             </div>
           </div>
@@ -788,9 +788,9 @@ export function AsignacionesActivasModule() {
               })
             }}
           >
-            <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
+            <TrendingUp size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOcupacionGeneral}%</span>
+              <span className="stat-value">{stats.porcentajeOcupacionGeneral}%</span>
               <span className="stat-label">% Ocupación</span>
             </div>
           </div>
@@ -820,9 +820,9 @@ export function AsignacionesActivasModule() {
               })
             }}
           >
-            <TrendingUp size={18} className="stat-icon" style={{ color: '#059669' }} />
+            <TrendingUp size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value" style={{ color: '#059669' }}>{stats.porcentajeOperatividad}%</span>
+              <span className="stat-value">{stats.porcentajeOperatividad}%</span>
               <span className="stat-label">% Operatividad</span>
             </div>
           </div>

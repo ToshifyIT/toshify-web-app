@@ -1016,21 +1016,21 @@ export function LiquidacionConductoresTab() {
             </div>
           </div>
           <div className="fact-stat-card">
-            <CheckCircle size={18} className="fact-stat-icon" style={{ color: '#10B981' }} />
+            <CheckCircle size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{stats.aprobadas}</span>
               <span className="fact-stat-label">Aprobadas</span>
             </div>
           </div>
           <div className="fact-stat-card">
-            <DollarSign size={18} className="fact-stat-icon" style={{ color: '#ff0033' }} />
+            <DollarSign size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{formatCurrency(stats.montoCobrar)}</span>
               <span className="fact-stat-label">Total a Cobrar</span>
             </div>
           </div>
           <div className="fact-stat-card">
-            <Shield size={18} className="fact-stat-icon" style={{ color: '#10B981' }} />
+            <Shield size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{formatCurrency(stats.montoDevolver)}</span>
               <span className="fact-stat-label">Total a Devolver</span>

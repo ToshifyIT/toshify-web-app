@@ -171,7 +171,7 @@
 
 /* Iconos de stats con colores */
 .fact-stats .stat-icon.green {
-  color: #059669;
+  color: var(--color-primary);
 }
 
 .fact-stats .stat-icon.red {

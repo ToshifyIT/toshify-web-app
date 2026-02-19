@@ -548,6 +548,7 @@ export default function MultasModule() {
   const columns = useMemo<ColumnDef<Multa>[]>(() => [
     {
       accessorKey: 'created_at',
+      size: 110,
       header: () => (
         <ExcelDateRangeFilter
           label="Fecha Carga"
@@ -562,10 +563,15 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => formatDateTime(row.original.created_at)
+      cell: ({ row }) => (
+        <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
+          {formatDateTime(row.original.created_at)}
+        </span>
+      )
     },
     {
       id: 'semana',
+      size: 50,
       header: () => (
         <ExcelColumnFilter
           label="Sem."
@@ -584,6 +590,7 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'fecha_infraccion',
+      size: 110,
       header: () => (
         <ExcelDateRangeFilter
           label="Fecha Infraccion"
@@ -598,10 +605,15 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => formatDateTime(row.original.fecha_infraccion)
+      cell: ({ row }) => (
+        <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
+          {formatDateTime(row.original.fecha_infraccion)}
+        </span>
+      )
     },
     {
       accessorKey: 'patente',
+      size: 80,
       header: () => (
         <ExcelColumnFilter
           label="Patente"
@@ -619,6 +631,7 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'lugar',
+      size: 70,
       header: () => (
         <ExcelColumnFilter
           label="Lugar"
@@ -630,10 +643,13 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => row.original.lugar || '-'
+      cell: ({ row }) => (
+        <span style={{ fontSize: '12px' }}>{row.original.lugar || '-'}</span>
+      )
     },
     {
       accessorKey: 'infraccion',
+      size: 100,
       header: () => (
         <ExcelColumnFilter
           label="Infraccion"
@@ -646,13 +662,14 @@ export default function MultasModule() {
         />
       ),
       cell: ({ row }) => (
-        <span style={{ fontSize: '13px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+        <span style={{ fontSize: '12px', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
           {row.original.infraccion || '-'}
         </span>
       )
     },
     {
       accessorKey: 'detalle',
+      size: 150,
       header: () => (
         <ExcelColumnFilter
           label="Detalle Infraccion"
@@ -667,7 +684,7 @@ export default function MultasModule() {
       cell: ({ row }) => (
         <span 
           title={row.original.detalle || '-'}
-          style={{ fontSize: '13px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
+          style={{ fontSize: '12px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
         >
           {row.original.detalle || '-'}
         </span>
@@ -675,6 +692,7 @@ export default function MultasModule() {
     },
     {
       accessorKey: 'importe',
+      size: 80,
       header: () => (
         <ExcelColumnFilter
           label="Importe"
@@ -687,13 +705,14 @@ export default function MultasModule() {
         />
       ),
       cell: ({ row }) => (
-        <span className="font-medium text-orange-500">
+        <span className="font-medium text-orange-500" style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
           {row.original.importe}
         </span>
       )
     },
     {
       accessorKey: 'conductor_responsable',
+      size: 130,
       header: () => (
         <ExcelColumnFilter
           label="Conductor"
@@ -705,10 +724,15 @@ export default function MultasModule() {
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => row.original.conductor_responsable || '-'
+      cell: ({ row }) => (
+        <span style={{ fontSize: '12px', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+          {row.original.conductor_responsable || '-'}
+        </span>
+      )
     },
     {
       accessorKey: 'ibutton',
+      size: 55,
       header: () => (
         <ExcelColumnFilter
           label="iButton"
@@ -724,6 +748,7 @@ export default function MultasModule() {
     },
     {
       id: 'obs',
+      size: 40,
       header: () => (
         <ExcelColumnFilter
           label="Obs."
@@ -740,9 +765,9 @@ export default function MultasModule() {
         return (
           <div className="flex justify-center" title={tieneObs ? "Con observaciones" : "Sin observaciones"}>
             {tieneObs ? (
-              <AlertCircle className="w-5 h-5 text-amber-500" />
+              <AlertCircle className="w-4 h-4 text-amber-500" />
             ) : (
-              <CheckCircle className="w-5 h-5 text-emerald-500" />
+              <CheckCircle className="w-4 h-4 text-emerald-500" />
             )}
           </div>
         )
@@ -750,6 +775,7 @@ export default function MultasModule() {
     },
     {
       id: 'acciones',
+      size: 90,
       header: 'Acciones',
       cell: ({ row }) => (
         <div className="dt-actions">
@@ -805,28 +831,28 @@ export default function MultasModule() {
       <div className="multas-stats">
         <div className="multas-stats-grid">
           <div className="stat-card">
-            <AlertTriangle size={18} className="stat-icon" style={{ color: '#EF4444' }} />
+            <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{multasFiltradas.length}</span>
               <span className="stat-label">Total Multas</span>
             </div>
           </div>
           <div className="stat-card">
-            <Car size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <Car size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{patentesUnicasCount}</span>
               <span className="stat-label">Vehiculos</span>
             </div>
           </div>
           <div className="stat-card">
-            <Users size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <Users size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{conductoresUnicosCount}</span>
               <span className="stat-label">Conductores</span>
             </div>
           </div>
           <div className="stat-card">
-            <DollarSign size={18} className="stat-icon" style={{ color: '#22C55E' }} />
+            <DollarSign size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{formatMoney(totalImporte)}</span>
               <span className="stat-label">Monto Total</span>

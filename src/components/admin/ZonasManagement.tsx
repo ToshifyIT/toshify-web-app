@@ -654,21 +654,21 @@ export function ZonasManagement() {
             </div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon" style={{ color: 'var(--color-success)' }}><Shield size={20} /></div>
+            <div className="stat-icon"><Shield size={20} /></div>
             <div className="stat-content">
               <span className="stat-value">{stats.activas}</span>
               <span className="stat-label">Activas</span>
             </div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon" style={{ color: 'var(--color-danger)' }}><Ban size={20} /></div>
+            <div className="stat-icon"><Ban size={20} /></div>
             <div className="stat-content">
               <span className="stat-value">{stats.bloqueo}</span>
               <span className="stat-label">Con Bloqueo</span>
             </div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon" style={{ color: 'var(--color-warning)' }}><AlertTriangle size={20} /></div>
+            <div className="stat-icon"><AlertTriangle size={20} /></div>
             <div className="stat-content">
               <span className="stat-value">{stats.advertencia}</span>
               <span className="stat-label">Con Advertencia</span>

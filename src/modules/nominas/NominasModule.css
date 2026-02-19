@@ -609,7 +609,7 @@
 
 /* Iconos de stats con colores */
 .nom-stats .stat-icon.green {
-  color: #059669;
+  color: var(--color-primary);
 }
 
 .nom-stats .stat-icon.red {

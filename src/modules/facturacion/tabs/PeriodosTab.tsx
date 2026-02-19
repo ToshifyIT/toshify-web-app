@@ -1325,7 +1325,7 @@ export function PeriodosTab() {
             </div>
           </div>
           <div className="fact-stat-card">
-            <CheckCircle size={18} className="fact-stat-icon" style={{ color: '#059669' }} />
+            <CheckCircle size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{stats.abiertos}</span>
               <span className="fact-stat-label">Abiertos</span>

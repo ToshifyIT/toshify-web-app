@@ -342,21 +342,21 @@ export function AuditModule() {
             </div>
           </div>
           <div className="stat-card">
-            <Database size={18} className="stat-icon" style={{ color: '#10b981' }} />
+            <Database size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.inserts}</span>
               <span className="stat-label">Creaciones</span>
             </div>
           </div>
           <div className="stat-card">
-            <Database size={18} className="stat-icon" style={{ color: '#f59e0b' }} />
+            <Database size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.updates}</span>
               <span className="stat-label">Modificaciones</span>
             </div>
           </div>
           <div className="stat-card">
-            <Database size={18} className="stat-icon" style={{ color: '#ef4444' }} />
+            <Database size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{stats.deletes}</span>
               <span className="stat-label">Eliminaciones</span>

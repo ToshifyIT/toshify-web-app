@@ -3295,14 +3295,14 @@ export function IncidenciasModule() {
           <div className="incidencias-stats">
             <div className="stats-grid">
               <div className="stat-card">
-                <CheckCircle size={20} className="stat-icon" style={{ color: '#16a34a' }} />
+                <CheckCircle size={20} className="stat-icon" />
                 <div className="stat-content">
                   <span className="stat-value">{penalidadesFiltradas.length}</span>
                   <span className="stat-label">Aplicadas</span>
                 </div>
               </div>
               <div className="stat-card">
-                <DollarSign size={20} className="stat-icon" style={{ color: '#16a34a' }} />
+                <DollarSign size={20} className="stat-icon" />
                 <div className="stat-content">
                   <span className="stat-value">{formatMoney(penalidadesFiltradas.reduce((s, p) => s + (p.monto || 0), 0))}</span>
                   <span className="stat-label">$ Aplicado</span>

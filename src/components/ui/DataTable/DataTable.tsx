@@ -1301,7 +1301,7 @@ export function DataTable<T>({
                             ${isActionsColumn ? "dt-sticky-col" : ""}
                             ${isExpandColumn ? "dt-expand-col" : ""}
                           `}
-                          style={isExpandColumn ? { width: '40px' } : undefined}
+                          style={isExpandColumn ? { width: '40px' } : header.column.columnDef.size ? { width: `${header.column.columnDef.size}px`, maxWidth: `${header.column.columnDef.size}px` } : undefined}
                         >
                           <div
                             className={`dt-header-content ${
@@ -1348,6 +1348,7 @@ export function DataTable<T>({
                                 ${isActionsColumn ? "dt-sticky-col" : ""}
                                 ${isExpandColumn ? "dt-expand-col" : ""}
                               `}
+                              style={cell.column.columnDef.size ? { maxWidth: `${cell.column.columnDef.size}px` } : undefined}
                             >
                               {flexRender(
                                 cell.column.columnDef.cell,

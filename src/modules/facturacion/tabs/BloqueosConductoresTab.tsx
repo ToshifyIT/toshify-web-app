@@ -643,14 +643,14 @@ export function BloqueosConductoresTab() {
       <div className="fact-stats">
         <div className="fact-stats-grid">
           <div className="fact-stat-card">
-            <AlertTriangle size={18} className="fact-stat-icon" style={{ color: '#F59E0B' }} />
+            <AlertTriangle size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{stats.candidatos}</span>
               <span className="fact-stat-label">Candidatos a Bloqueo</span>
             </div>
           </div>
           <div className="fact-stat-card">
-            <Ban size={18} className="fact-stat-icon" style={{ color: '#ff0033' }} />
+            <Ban size={18} className="fact-stat-icon" />
             <div className="fact-stat-content">
               <span className="fact-stat-value">{stats.bloqueados}</span>
               <span className="fact-stat-label">Bloqueados</span>

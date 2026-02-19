@@ -2190,7 +2190,7 @@ export function ConductoresModule() {
             onClick={() => handleStatCardClick('asignados')}
             title="Conductores activos con vehículo asignado"
           >
-            <UserCheck size={18} className="stat-icon" style={{ color: '#22C55E' }} />
+            <UserCheck size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.conductoresAsignados}</span>
               <span className="stat-label">Activos con Auto</span>
@@ -2201,7 +2201,7 @@ export function ConductoresModule() {
             onClick={() => handleStatCardClick('disponibles')}
             title="Conductores activos esperando vehículo"
           >
-            <Clock size={18} className="stat-icon" style={{ color: '#F59E0B' }} />
+            <Clock size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.conductoresDisponibles}</span>
               <span className="stat-label">En Espera</span>
@@ -2212,7 +2212,7 @@ export function ConductoresModule() {
             onClick={() => handleStatCardClick('baja')}
             title="Conductores de baja"
           >
-            <UserX size={18} className="stat-icon" style={{ color: '#6B7280' }} />
+            <UserX size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.conductoresBaja}</span>
               <span className="stat-label">Bajas</span>
@@ -2223,7 +2223,7 @@ export function ConductoresModule() {
             onClick={() => handleStatCardClick('licencias')}
             title="Licencias por vencer en los próximos 30 días (solo conductores con asignación)"
           >
-            <AlertTriangle size={18} className="stat-icon" style={{ color: '#EF4444' }} />
+            <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.licenciasPorVencer}</span>
               <span className="stat-label">Lic. por Vencer</span>
