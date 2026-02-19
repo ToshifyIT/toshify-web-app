@@ -384,9 +384,10 @@ export function ReporteFacturacionTab() {
       // Usar nombre de tabla conductores en formato "Nombres Apellidos"
       let facturacionesTransformadas = (facturacionesData || []).map((f: any) => {
         const conductorEstadoId = f.conductor?.estado_id
-        // Estado: Activo (7 días), De baja (baja durante la semana), Pausa (perdió asignación)
+        // Estado: Activo (7 días), De baja (0 días o inactivo), Pausa (activo con días parciales)
         const estadoBilling = f.turnos_cobrados >= 7 ? 'Activo'
-          : (conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD ? 'De baja' : 'Pausa')
+          : (f.turnos_cobrados === 0 ? 'De baja'
+          : (conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD ? 'De baja' : 'Pausa'))
         return {
           ...f,
           conductor_nombre: f.conductor 
@@ -1193,9 +1194,10 @@ export function ReporteFacturacionTab() {
            monto_penalidades: montoPenalidades,  // P007
            // Detalle de penalidades para el modal
            penalidades_detalle: detalleMap.get(conductorId) || [],
-           // Estado: Activo (7 días), De baja (baja durante la semana, parcial), Pausa (perdió asignación, parcial)
+           // Estado: Activo (7 días), De baja (sin asignación o baja), Pausa (activo con días parciales > 0)
            estado_billing: diasTotales >= 7 ? 'Activo'
-             : (conductor.estado_id !== ESTADO_ACTIVO_ID ? 'De baja' : 'Pausa'),
+             : (diasTotales === 0 ? 'De baja'
+             : (conductor.estado_id !== ESTADO_ACTIVO_ID ? 'De baja' : 'Pausa')),
          })
        }
 
@@ -1617,10 +1619,11 @@ export function ReporteFacturacionTab() {
         
         // Determinar estado de facturación:
         // - Activo: tuvo asignación los 7 días
-        // - De baja: conductor dado de baja durante la semana (tiene días parciales y estado inactivo)
-        // - Pausa: conductor activo pero perdió asignación durante la semana (días parciales)
+        // - De baja: sin asignación en la semana (0 días) o conductor inactivo con días parciales
+        // - Pausa: conductor activo con días parciales > 0 (perdió asignación durante la semana)
         const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = totalDias >= 7 ? 'Activo'
-          : (conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC ? 'De baja' : 'Pausa')
+          : (totalDias === 0 ? 'De baja'
+          : (conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC ? 'De baja' : 'Pausa'))
 
         conductoresProcesados.push({
           conductor_id: conductorData.id,
