@@ -384,8 +384,8 @@ export function ReporteFacturacionTab() {
       // Usar nombre de tabla conductores en formato "Nombres Apellidos"
       let facturacionesTransformadas = (facturacionesData || []).map((f: any) => {
         const conductorEstadoId = f.conductor?.estado_id
-        // Estado billing: Activo (días>0), De baja (inactivo en DB), Pausa (activo sin asignación)
-        const estadoBilling = f.turnos_cobrados > 0 ? 'Activo'
+        // Estado: Activo (7 días), De baja (baja durante la semana), Pausa (perdió asignación)
+        const estadoBilling = f.turnos_cobrados >= 7 ? 'Activo'
           : (conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD ? 'De baja' : 'Pausa')
         return {
           ...f,
@@ -1069,8 +1069,9 @@ export function ReporteFacturacionTab() {
         }
         const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Incluir TODOS los conductores de la tabla de control, incluso con 0 días
-        // Los de "Pausa" tienen $0 alquiler/$0 garantía pero pueden tener peajes, saldo, multas, etc.
+        // Solo incluir conductores que tuvieron actividad durante la semana
+        // Si no tuvieron asignación solapada con la semana, no deben aparecer
+        if (diasTotales === 0) continue
         
         // Calcular alquiler usando montos pre-calculados con precios históricos (precio_base sin IVA)
         let subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
@@ -1184,8 +1185,8 @@ export function ReporteFacturacionTab() {
            monto_penalidades: montoPenalidades,  // P007
            // Detalle de penalidades para el modal
            penalidades_detalle: detalleMap.get(conductorId) || [],
-           // Estado de facturación: Activo (días>0), De baja (inactivo en DB), Pausa (activo sin asignación)
-           estado_billing: diasTotales > 0 ? 'Activo'
+           // Estado: Activo (7 días), De baja (baja durante la semana, parcial), Pausa (perdió asignación, parcial)
+           estado_billing: diasTotales >= 7 ? 'Activo'
              : (conductor.estado_id !== ESTADO_ACTIVO_ID ? 'De baja' : 'Pausa'),
          })
        }
@@ -1599,11 +1600,15 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
         
-        // Incluir TODOS los conductores de la tabla de control, incluso con 0 días
-        // Los de "Pausa" tienen $0 alquiler/$0 garantía pero pueden tener peajes, saldo, multas, etc.
+        // Solo incluir conductores que tuvieron actividad durante la semana
+        // Si no tuvieron asignación solapada con la semana, no deben aparecer
+        if (totalDias === 0) continue
         
-        // Determinar estado de facturación: Activo (días>0), De baja (inactivo en DB), Pausa (activo sin asignación)
-        const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = totalDias > 0 ? 'Activo'
+        // Determinar estado de facturación:
+        // - Activo: tuvo asignación los 7 días
+        // - De baja: conductor dado de baja durante la semana (tiene días parciales y estado inactivo)
+        // - Pausa: conductor activo pero perdió asignación durante la semana (días parciales)
+        const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = totalDias >= 7 ? 'Activo'
           : (conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC ? 'De baja' : 'Pausa')
 
         conductoresProcesados.push({

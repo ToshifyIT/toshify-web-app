@@ -465,17 +465,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
       }
 
-      // DEBUG: Ver permisos cargados
-      console.log('🔐 Permisos cargados:', {
-        user: user!.email,
-        role: (profileData as any).roles?.name,
-        submenus: submenusData.map(s => ({
-          name: s.name,
-          can_create: s.permissions.can_create,
-          can_edit: s.permissions.can_edit
-        }))
-      })
-
       setUserPermissions({
         user_id: user!.id,
         email: user!.email || '',
