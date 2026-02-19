@@ -6092,6 +6092,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'peajes',
       header: 'Peajes',
+      accessorFn: (row) => row.monto_peajes || 0,
       cell: ({ row }) => {
         const peajes = row.original.monto_peajes || 0
         if (peajes === 0) {
@@ -6103,11 +6104,12 @@ export function ReporteFacturacionTab() {
           </span>
         )
       },
-      enableSorting: false,
+      enableSorting: true,
     },
     {
       id: 'incidencias',
       header: 'Incidencias',
+      accessorFn: (row) => row.monto_penalidades || 0,
       cell: ({ row }) => {
         const penalidades = row.original.penalidades_detalle || []
         const montoPen = row.original.monto_penalidades || 0
@@ -6167,7 +6169,7 @@ export function ReporteFacturacionTab() {
           </button>
         )
       },
-      enableSorting: false,
+      enableSorting: true,
     },
     {
       accessorKey: 'saldo_anterior',
