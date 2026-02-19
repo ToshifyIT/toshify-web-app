@@ -270,16 +270,18 @@ export function ReporteFacturacionTab() {
     async function cargarConceptos() {
       const { data } = await supabase
         .from('conceptos_nomina')
-        .select('id, codigo, descripcion, tipo, es_variable, iva_porcentaje, precio_final')
+        .select('id, codigo, descripcion, tipo, es_variable, iva_porcentaje, precio_base, precio_final')
         .eq('activo', true)
         .order('codigo')
       
       if (data) {
         setConceptosNomina(data as ConceptoNomina[])
-        // Crear mapa de precios por código para alquileres
+        // Crear mapa de precios por código para alquileres (usar precio_base, IVA se aplica aparte si tiene CUIT)
         const precios = new Map<string, number>()
         data.forEach((c: any) => {
-          if (c.precio_final) {
+          if (c.precio_base != null) {
+            precios.set(c.codigo, c.precio_base)
+          } else if (c.precio_final) {
             precios.set(c.codigo, c.precio_final)
           }
         })
@@ -783,12 +785,12 @@ export function ReporteFacturacionTab() {
       // Cargar historial de precios para la semana
       const { data: historialPreciosVP } = await (supabase
         .from('conceptos_facturacion_historial') as any)
-        .select('codigo, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
+        .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
         .in('codigo', ['P001', 'P002', 'P003', 'P013'])
         .lte('fecha_vigencia_desde', fechaFin)
         .gte('fecha_vigencia_hasta', fechaInicio)
       
-      // Función helper para obtener precio en una fecha específica
+      // Función helper para obtener precio BASE en una fecha específica (IVA se aplica aparte si tiene CUIT)
       const getPrecioEnFechaVP = (codigo: string, fecha: Date): number => {
         const fechaStr = fecha.toISOString().split('T')[0]
         const historial = (historialPreciosVP || []).find((h: any) => 
@@ -796,7 +798,7 @@ export function ReporteFacturacionTab() {
           h.fecha_vigencia_desde <= fechaStr && 
           h.fecha_vigencia_hasta >= fechaStr
         )
-        if (historial) return historial.precio_final
+        if (historial) return historial.precio_base ?? historial.precio_final
         return preciosAlquiler.get(codigo) || 0
       }
       
@@ -1070,8 +1072,12 @@ export function ReporteFacturacionTab() {
         // Incluir TODOS los conductores de la tabla de control, incluso con 0 días
         // Los de "Pausa" tienen $0 alquiler/$0 garantía pero pueden tener peajes, saldo, multas, etc.
         
-        // Calcular alquiler usando montos pre-calculados con precios históricos
-        const subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
+        // Calcular alquiler usando montos pre-calculados con precios históricos (precio_base sin IVA)
+        let subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
+        // IVA 21% solo si el conductor tiene CUIT
+        if (conductor.numero_cuit && subtotalAlquiler > 0) {
+          subtotalAlquiler = Math.round(subtotalAlquiler * 1.21)
+        }
         
         // Determinar tipo de alquiler predominante para garantía
         const tipoAlquiler: 'CARGO' | 'TURNO' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO) 
@@ -1622,20 +1628,20 @@ export function ReporteFacturacionTab() {
       // Cargar historial de precios para la semana (si hubo cambios)
       const { data: historialPrecios } = await (supabase
         .from('conceptos_facturacion_historial') as any)
-        .select('codigo, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
+        .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
         .in('codigo', ['P001', 'P002', 'P003', 'P013'])
         .lte('fecha_vigencia_desde', fechaFin)
         .gte('fecha_vigencia_hasta', fechaInicio)
       
-      // Precios actuales como fallback (valores DIARIOS)
+      // Precios actuales como fallback (valores DIARIOS - precio_base sin IVA)
       const preciosActuales: Record<string, number> = {
-        'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 35000,
-        'P002': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 51429,
-        'P003': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 7143,
-        'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_final || 39584
+        'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_base || 42714,
+        'P002': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_base || 75429,
+        'P003': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_base || 7143,
+        'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_base || 32714
       }
       
-      // Función helper para obtener precio en una fecha específica
+      // Función helper para obtener precio BASE en una fecha específica (IVA se aplica aparte si tiene CUIT)
       const getPrecioEnFecha = (codigo: string, fecha: Date): number => {
         // Buscar en historial primero
         const fechaStr = fecha.toISOString().split('T')[0]
@@ -1644,7 +1650,7 @@ export function ReporteFacturacionTab() {
           h.fecha_vigencia_desde <= fechaStr && 
           h.fecha_vigencia_hasta >= fechaStr
         )
-        if (historial) return historial.precio_final
+        if (historial) return historial.precio_base ?? historial.precio_final
         // Si no hay historial, usar precio actual
         return preciosActuales[codigo] || 0
       }
@@ -1818,6 +1824,11 @@ export function ReporteFacturacionTab() {
             descripcion: conductor.dias_cargo < 7 ? `Alquiler a Cargo (${conductor.dias_cargo}/7 días)` : 'Alquiler a Cargo',
             dias: conductor.dias_cargo, monto: montoCargo
           })
+        }
+
+        // IVA 21% solo si el conductor tiene CUIT
+        if (conductor.conductor_cuit && alquilerTotal > 0) {
+          alquilerTotal = Math.round(alquilerTotal * 1.21)
         }
 
         // Garantía
