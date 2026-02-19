@@ -403,22 +403,23 @@ export function ReporteFacturacionTab() {
         .gte('fecha_inicio', (periodoData as any).fecha_inicio + 'T00:00:00')
         .lte('fecha_inicio', (periodoData as any).fecha_fin + 'T23:59:59')
 
-      // Agrupar ganancias y peajes por DNI
+      // Agrupar ganancias y peajes por DNI (normalizado sin ceros adelante)
       const gananciasPorDni = new Map<string, number>()
       const peajesPorDni = new Map<string, number>()
       ;(cabifyData || []).forEach((c: any) => {
         if (c.dni) {
-          const dniStr = String(c.dni)
-          const actual = gananciasPorDni.get(dniStr) || 0
-          gananciasPorDni.set(dniStr, actual + (parseFloat(c.ganancia_total) || 0))
-          const actualPeajes = peajesPorDni.get(dniStr) || 0
-          peajesPorDni.set(dniStr, actualPeajes + (parseFloat(String(c.peajes)) || 0))
+          const dniNorm = String(c.dni).replace(/^0+/, '')
+          const actual = gananciasPorDni.get(dniNorm) || 0
+          gananciasPorDni.set(dniNorm, actual + (parseFloat(c.ganancia_total) || 0))
+          const actualPeajes = peajesPorDni.get(dniNorm) || 0
+          peajesPorDni.set(dniNorm, actualPeajes + (parseFloat(String(c.peajes)) || 0))
         }
       })
 
       // Agregar ganancia_cabify a cada facturación
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
-        const ganancia = f.conductor_dni ? (gananciasPorDni.get(String(f.conductor_dni)) || 0) : 0
+        const dniNorm = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
+        const ganancia = dniNorm ? (gananciasPorDni.get(dniNorm) || 0) : 0
         const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
         return {
           ...f,
@@ -526,8 +527,9 @@ export function ReporteFacturacionTab() {
         const pago = pagosMap.get(f.id)
         const detalle = detallesMap.get(f.id)
         const peajesDetalle = detalle?.monto_peajes || 0
-        // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI
-        const peajesCabify = f.conductor_dni ? (peajesPorDni.get(String(f.conductor_dni)) || 0) : 0
+        // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI (normalizado)
+        const dniNormPeaje = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
+        const peajesCabify = dniNormPeaje ? (peajesPorDni.get(dniNormPeaje) || 0) : 0
         // Días reales de asignación (override del turnos_cobrados guardado)
         // Si no tiene asignación activa, son 0 días
         const diasReales = diasRealesMap.get(f.conductor_id) || 0
@@ -873,18 +875,21 @@ export function ReporteFacturacionTab() {
       const cabifyMap = new Map<string, number>()
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
-          const actualGanancia = cabifyMap.get(record.dni) || 0
+          const dniNorm = String(record.dni).replace(/^0+/, '')
+          const actualGanancia = cabifyMap.get(dniNorm) || 0
           const ganancia = parseFloat(String(record.ganancia_total)) || 0
-          cabifyMap.set(record.dni, actualGanancia + ganancia)
+          cabifyMap.set(dniNorm, actualGanancia + ganancia)
         }
       })
       // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
+      // Normalizar DNI: quitar ceros adelante para match consistente
       const peajesMap = new Map<string, number>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
         if (record.dni && record.peajes) {
-          const actualPeajes = peajesMap.get(record.dni) || 0
+          const dniNorm = String(record.dni).replace(/^0+/, '')
+          const actualPeajes = peajesMap.get(dniNorm) || 0
           const peajes = parseFloat(String(record.peajes)) || 0
-          peajesMap.set(record.dni, actualPeajes + peajes)
+          peajesMap.set(dniNorm, actualPeajes + peajes)
         }
       })
 
@@ -1111,8 +1116,8 @@ export function ReporteFacturacionTab() {
           cuotaGarantiaNumero = `1 de ${cuotasTotales}`
         }
 
-        // Datos por DNI del conductor
-        const dniConductor = conductor.numero_dni || ''
+        // Datos por DNI del conductor (normalizado sin ceros adelante)
+        const dniConductor = (conductor.numero_dni || '').replace(/^0+/, '')
 
         // Excesos de KM (P006)
         const exceso = excesosMap.get(conductorId)
@@ -1761,11 +1766,12 @@ export function ReporteFacturacionTab() {
       // Filtrar cobros fraccionados: excluir pagados (aplicado=true O en pagos_conductores)
       const cobros = (cobrosRes.data || []).filter((c: any) => c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id))
 
-      // Mapear peajes por DNI
+      // Mapear peajes por DNI (normalizado sin ceros adelante)
       const peajesMap = new Map<string, number>()
       ;((cabifyRes.data || []) as any[]).forEach((r: any) => {
         if (r.dni && r.peajes) {
-          peajesMap.set(String(r.dni), (peajesMap.get(String(r.dni)) || 0) + (parseFloat(String(r.peajes)) || 0))
+          const dniNorm = String(r.dni).replace(/^0+/, '')
+          peajesMap.set(dniNorm, (peajesMap.get(dniNorm) || 0) + (parseFloat(String(r.peajes)) || 0))
         }
       })
 
@@ -1867,8 +1873,8 @@ export function ReporteFacturacionTab() {
         const excesosConductor = (excesosArr as any[]).filter((e: any) => e.conductor_id === conductor.conductor_id)
         const totalExcesos = excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
-        // Peajes (P005)
-        const totalPeajes = conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni)) || 0) : 0
+        // Peajes (P005) - normalizar DNI sin ceros adelante
+        const totalPeajes = conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni).replace(/^0+/, '')) || 0) : 0
 
         // Cobros fraccionados (P010) - calcular monto real de la cuota
         const cobrosConductor = (cobros as any[]).filter((c: any) => c.conductor_id === conductor.conductor_id)
