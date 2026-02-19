@@ -5520,12 +5520,16 @@ export function ReporteFacturacionTab() {
         const email = emailMap.get(f.conductor_dni || '') || ''
         const cabifyInfo = cabifyMap.get(f.conductor_dni || '') || { horas: 0, ganancia: 0, cobroApp: 0, efectivo: 0 }
         
-        // Importe Contrato = Monto del alquiler (P001/P002/P013)
+        // Importe Contrato = Solo alquiler (P001/P002/P013)
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = (Todos los cargos - descuentos) - alquiler + saldo anterior
-        const saldoAnterior = f.saldo_anterior || 0
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato + saldoAnterior
+        // EXCEDENTES = montos a favor (descuentos) - cobros (resto de cargos) + saldo pendiente
+        // cobros = subtotal_cargos sin alquiler (garantía P003, peajes P005, excesos P006, penalidades P007, etc.)
+        // montos a favor = subtotal_descuentos (tickets P004, etc.)
+        const cobros = (f.subtotal_cargos || 0) - importeContrato
+        const montosFavor = f.subtotal_descuentos || 0
+        const saldoPendiente = f.saldo_anterior || 0
+        const excedentes = montosFavor - cobros + saldoPendiente
 
         return {
           anio,
@@ -5639,12 +5643,14 @@ export function ReporteFacturacionTab() {
           }
         }
         
-        // Importe Contrato = Monto del alquiler (P001/P002/P013)
+        // Importe Contrato = Solo alquiler (P001/P002/P013)
         const importeContrato = f.subtotal_alquiler || 0
         
-        // EXCEDENTES = (Todos los cargos - descuentos) - alquiler + saldo anterior
-        const saldoAnteriorCabify = f.saldo_anterior || 0
-        const excedentes = (f.subtotal_cargos || 0) - (f.subtotal_descuentos || 0) - importeContrato + saldoAnteriorCabify
+        // EXCEDENTES = montos a favor (descuentos) - cobros (resto de cargos) + saldo pendiente
+        const cobros = (f.subtotal_cargos || 0) - importeContrato
+        const montosFavor = f.subtotal_descuentos || 0
+        const saldoPendiente = f.saldo_anterior || 0
+        const excedentes = montosFavor - cobros + saldoPendiente
 
         return {
           anio: periodo.anio,
