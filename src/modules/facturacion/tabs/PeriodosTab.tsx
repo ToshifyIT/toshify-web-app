@@ -291,7 +291,7 @@ export function PeriodosTab() {
           ),
           conductores!inner(id, nombres, apellidos, numero_dni, numero_cuit)
         `)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada']))
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado']))
 
       // Mapear conductores con asignación que se solapó con la semana
       const conductoresAsignados = new Map<string, { 
@@ -438,11 +438,11 @@ export function PeriodosTab() {
         .eq('activo', true)
 
       // P001 = TURNO DIURNO, P002 = CARGO, P013 = TURNO NOCTURNO
-      // Precios en BD son DIARIOS (precio_final), convertir a semanal × 7
-      const precioTurnoDiurnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 35000
-      const precioCargoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 51428.57
-      const cuotaGarantiaDiaria = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 7142.86
-      const precioTurnoNocturnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_final || 39584
+      // Precios en BD son DIARIOS (precio_base sin IVA), IVA se aplica aparte si tiene CUIT
+      const precioTurnoDiurnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_base || 42714
+      const precioCargoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_base || 75429
+      const cuotaGarantiaDiaria = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_base || 7143
+      const precioTurnoNocturnoDiario = ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_base || 32714
       
       // Precios semanales (7 días)
       const precioTurnoDiurno = precioTurnoDiurnoDiario * 7  // P001
@@ -618,6 +618,11 @@ export function PeriodosTab() {
             dias: conductor.dias_cargo,
             monto: montoCargo
           })
+        }
+
+        // IVA 21% solo si el conductor tiene CUIT
+        if (conductor.conductor_cuit && alquilerTotal > 0) {
+          alquilerTotal = Math.round(alquilerTotal * 1.21)
         }
 
         // Garantía prorrateada según días totales
