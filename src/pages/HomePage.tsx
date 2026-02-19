@@ -1976,9 +1976,9 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
 
-              {/* Escuela */}
+              {/* Escuela Conductores (submenú de Seguimiento de Conductores) */}
               <Route path="/escuela-conductores" element={
-                <ProtectedRoute menuName="escuela" action="view">
+                <ProtectedRoute menuName="seguimiento-conductores" submenuName="escuela-conductores" action="view">
                   <EscuelaPage />
                 </ProtectedRoute>
               } />

@@ -376,7 +376,7 @@ export function IncidenciasModule() {
         (supabase.from('incidencias_estados' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_penalidad' as any) as any).select('*').eq('is_active', true).order('orden'),
         (supabase.from('tipos_cobro_descuento' as any) as any).select('*').eq('is_active', true).order('orden'),
-        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo')).order('patente'),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo').is('deleted_at', null)).order('patente'),
         aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
         aplicarFiltroSede((supabase.from('v_incidencias_completas' as any) as any).select('*')).order('fecha', { ascending: false }),
         aplicarFiltroSede((supabase.from('v_penalidades_completas' as any) as any).select('*')).order('fecha', { ascending: false }),

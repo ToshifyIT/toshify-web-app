@@ -281,7 +281,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           filtrarPorSede(supabase
             .from('vehiculos')
             .select('id, patente, marca, modelo, anio, color, vehiculos_estados!inner(codigo)')
-            .in('vehiculos_estados.codigo', ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE']))
+            .in('vehiculos_estados.codigo', ['PKG_ON_BASE', 'EN_USO', 'DISPONIBLE'])
+            .is('deleted_at', null))
             .order('patente'),
           filtrarPorSede(supabase
             .from('asignaciones')

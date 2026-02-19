@@ -235,7 +235,8 @@ export function MovimientosModule() {
           .order('razon_social'),
         aplicarFiltroSede(supabase
           .from('vehiculos')
-          .select('id, patente, marca, modelo'))
+          .select('id, patente, marca, modelo')
+          .is('deleted_at', null))
           .order('patente'),
         // Cargar stock disponible por producto
         supabase

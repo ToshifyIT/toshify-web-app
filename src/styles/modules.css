@@ -667,15 +667,15 @@ input[type="checkbox"] {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
 }
 
 .stat-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 8px 10px;
   background: var(--bg-secondary);
   border-radius: 6px;
 }
@@ -692,13 +692,13 @@ input[type="checkbox"] {
 }
 
 .stat-value {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-tertiary);
 }
 
@@ -720,15 +720,15 @@ input[type="checkbox"] {
   }
 
   .stat-card {
-    padding: 10px;
-    gap: 8px;
+    padding: 6px 8px;
+    gap: 6px;
   }
 
   .stat-value {
-    font-size: 14px;
+    font-size: 12px;
   }
 
   .stat-label {
-    font-size: 10px;
+    font-size: 9px;
   }
 }

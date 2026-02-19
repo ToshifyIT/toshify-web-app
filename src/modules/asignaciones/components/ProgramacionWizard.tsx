@@ -128,7 +128,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
     setLoading(true)
     try {
       const [vehiculosRes, conductoresRes] = await Promise.all([
-        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, color')).order('patente'),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, color').is('deleted_at', null)).order('patente'),
         aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos, numero_dni')).order('apellidos')
       ])
 

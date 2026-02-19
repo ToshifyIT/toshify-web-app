@@ -383,7 +383,8 @@ export function ProgramacionModule() {
       const estadosNoDisponibles = ['REPARACION', 'MANTENIMIENTO', 'TALLER_AXIS', 'TALLER_CHAPA_PINTURA', 'TALLER_ALLIANCE', 'TALLER_KALZALO']
       const { data: vehiculosData } = await aplicarFiltroSede(supabase
         .from('vehiculos')
-        .select('id, patente, marca, modelo, vehiculos_estados(codigo)'))
+        .select('id, patente, marca, modelo, vehiculos_estados(codigo)')
+        .is('deleted_at', null))
         .order('patente')
 
       // Obtener vehiculos ya programados (excepto el actual)

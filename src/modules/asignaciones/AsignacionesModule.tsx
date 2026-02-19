@@ -373,10 +373,11 @@ export function AsignacionesModule() {
           .or(`estado.in.(programado,activa),created_at.gte.${fechaLimiteStr}`)
           .order('created_at', { ascending: false })
           .limit(500),
-        // Vehículos con estado - solo activos
+        // Vehículos con estado - solo activos (excluir soft-deleted)
         aplicarFiltroSede(supabase
           .from('vehiculos')
-          .select('id, estado_id, vehiculos_estados(codigo)'))
+          .select('id, estado_id, vehiculos_estados(codigo)')
+          .is('deleted_at', null))
           .limit(1000),
         // Conductores con estado - solo activos
         aplicarFiltroSede(supabase
@@ -1608,7 +1609,7 @@ export function AsignacionesModule() {
     
     // Cargar vehículos, conductores disponibles Y conductores de esta asignación
     const [vehiculosRes, conductoresRes, asignacionConductoresRes] = await Promise.all([
-      aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)')).order('patente'),
+      aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo, vehiculos_estados(codigo)').is('deleted_at', null)).order('patente'),
       aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
       supabase.from('asignaciones_conductores').select('conductor_id, horario, estado, documento').eq('asignacion_id', asignacion.id)
     ])

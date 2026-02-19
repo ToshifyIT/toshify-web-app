@@ -197,7 +197,8 @@ export function VehicleManagement() {
             id, patente, marca, modelo, anio, color, kilometraje_actual, estado_id, created_at,
             drive_folder_id, drive_folder_url,
             vehiculos_estados (id, codigo, descripcion)
-          `))
+          `)
+          .is('deleted_at', null))
           .order('created_at', { ascending: false }),
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').order('descripcion'),
         supabase.from('sedes').select('id, nombre').order('nombre')
@@ -262,7 +263,8 @@ export function VehicleManagement() {
             codigo,
             descripcion
           )
-        `))
+        `)
+        .is('deleted_at', null))
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
@@ -530,9 +532,10 @@ export function VehicleManagement() {
 
     setSaving(true)
     try {
+      // Soft delete: marcar como eliminado sin borrar datos ni romper FK
       const { error: deleteError } = await supabase
         .from('vehiculos')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', selectedVehiculo.id)
 
       if (deleteError) throw deleteError

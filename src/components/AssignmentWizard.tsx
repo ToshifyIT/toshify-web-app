@@ -149,6 +149,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
               descripcion
             )
           `)
+          .is('deleted_at', null)
         if (sedeActualId) vehiculosQuery = vehiculosQuery.eq('sede_id', sedeActualId)
         const { data: vehiculosData, error: vehiculosError } = await vehiculosQuery.order('patente')
 
