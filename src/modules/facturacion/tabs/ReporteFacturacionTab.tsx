@@ -85,6 +85,13 @@ interface FacturacionConductor {
     cuotaNum?: number
     totalCuotas?: number
   }>
+  // Prorrateo desglosado por modalidad (Vista Previa)
+  prorrateo_cargo_dias?: number
+  prorrateo_cargo_monto?: number
+  prorrateo_diurno_dias?: number
+  prorrateo_diurno_monto?: number
+  prorrateo_nocturno_dias?: number
+  prorrateo_nocturno_monto?: number
   // Datos de pago registrado
   monto_cobrado?: number
   fecha_pago?: string | null
@@ -1278,10 +1285,17 @@ export function ReporteFacturacionTab() {
           cubre_cuota: cubreCuota,
           cuota_garantia_numero: cuotaGarantiaNumero,
           // Datos detallados para RIT export
-          monto_peajes: montoPeajes,       // P005
-          monto_excesos: montoExcesos,     // P006
-          km_exceso: kmExceso,
+           monto_peajes: montoPeajes,       // P005
+           monto_excesos: montoExcesos,     // P006
+           km_exceso: kmExceso,
            monto_penalidades: montoPenalidades,  // P007
+           // Prorrateo desglosado por modalidad
+           prorrateo_cargo_dias: prorrateo.CARGO,
+           prorrateo_cargo_monto: prorrateo.monto_CARGO,
+           prorrateo_diurno_dias: prorrateo.TURNO_DIURNO,
+           prorrateo_diurno_monto: prorrateo.monto_TURNO_DIURNO,
+           prorrateo_nocturno_dias: prorrateo.TURNO_NOCTURNO,
+           prorrateo_nocturno_monto: prorrateo.monto_TURNO_NOCTURNO,
            // Detalle de penalidades para el modal
            penalidades_detalle: detalleMap.get(conductorId) || [],
            // Estado: si tiene fecha_terminacion en/antes de la semana → De baja
@@ -2303,21 +2317,68 @@ export function ReporteFacturacionTab() {
     // En modo Vista Previa, generar detalles simulados desde los datos calculados
     if (modoVistaPrevia || facturacion.id.startsWith('preview-')) {
       const detallesSimulados: FacturacionDetalle[] = []
+      const totalDias = facturacion.turnos_cobrados
+      const diasDesc = totalDias < 7 ? ` (${totalDias}/7 días)` : ''
 
-      // P001/P002 - Alquiler
-      if (facturacion.subtotal_alquiler > 0) {
-        const codigoAlquiler = facturacion.tipo_alquiler === 'CARGO' ? 'P001' : 'P002'
-        const descAlquiler = facturacion.tipo_alquiler === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler a Turno'
-        const diasDesc = facturacion.turnos_cobrados < 7 ? ` (${facturacion.turnos_cobrados}/7 días)` : ''
+      // === CARGOS (A PAGAR) ===
+
+      // P002 - Alquiler a Cargo
+      const cargoDias = facturacion.prorrateo_cargo_dias || 0
+      const cargoMonto = facturacion.prorrateo_cargo_monto || 0
+      if (cargoDias > 0 && cargoMonto > 0) {
+        let montoConIva = cargoMonto
+        if (facturacion.conductor_cuit) montoConIva = Math.round(cargoMonto * 1.21)
         detallesSimulados.push({
-          id: `det-alquiler-${facturacion.conductor_id}`,
+          id: `det-cargo-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
-          concepto_codigo: codigoAlquiler,
-          concepto_descripcion: descAlquiler + diasDesc,
-          cantidad: facturacion.turnos_cobrados,
-          precio_unitario: Math.round(facturacion.subtotal_alquiler / facturacion.turnos_cobrados),
-          subtotal: facturacion.subtotal_alquiler,
-          total: facturacion.subtotal_alquiler,
+          concepto_codigo: 'P002',
+          concepto_descripcion: `Alquiler a Cargo (${cargoDias}/7 días)`,
+          cantidad: cargoDias,
+          precio_unitario: Math.round(montoConIva / cargoDias),
+          subtotal: montoConIva,
+          total: montoConIva,
+          es_descuento: false,
+          referencia_id: null,
+          referencia_tipo: null
+        })
+      }
+
+      // P001 - Alquiler Turno Diurno
+      const diurnoDias = facturacion.prorrateo_diurno_dias || 0
+      const diurnoMonto = facturacion.prorrateo_diurno_monto || 0
+      if (diurnoDias > 0 && diurnoMonto > 0) {
+        let montoConIva = diurnoMonto
+        if (facturacion.conductor_cuit) montoConIva = Math.round(diurnoMonto * 1.21)
+        detallesSimulados.push({
+          id: `det-diurno-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'P001',
+          concepto_descripcion: `Alquiler Turno Diurno (${diurnoDias}/7 días)`,
+          cantidad: diurnoDias,
+          precio_unitario: Math.round(montoConIva / diurnoDias),
+          subtotal: montoConIva,
+          total: montoConIva,
+          es_descuento: false,
+          referencia_id: null,
+          referencia_tipo: null
+        })
+      }
+
+      // P013 - Alquiler Turno Nocturno
+      const nocturnoDias = facturacion.prorrateo_nocturno_dias || 0
+      const nocturnoMonto = facturacion.prorrateo_nocturno_monto || 0
+      if (nocturnoDias > 0 && nocturnoMonto > 0) {
+        let montoConIva = nocturnoMonto
+        if (facturacion.conductor_cuit) montoConIva = Math.round(nocturnoMonto * 1.21)
+        detallesSimulados.push({
+          id: `det-nocturno-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'P013',
+          concepto_descripcion: `Alquiler Turno Nocturno (${nocturnoDias}/7 días)`,
+          cantidad: nocturnoDias,
+          precio_unitario: Math.round(montoConIva / nocturnoDias),
+          subtotal: montoConIva,
+          total: montoConIva,
           es_descuento: false,
           referencia_id: null,
           referencia_tipo: null
@@ -2326,16 +2387,32 @@ export function ReporteFacturacionTab() {
 
       // P003 - Garantía
       if (facturacion.subtotal_garantia > 0) {
-        const diasDesc = facturacion.turnos_cobrados < 7 ? ` (${facturacion.turnos_cobrados}/7 días)` : ''
         detallesSimulados.push({
           id: `det-garantia-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P003',
-          concepto_descripcion: 'Cuota de Garantía' + diasDesc,
+          concepto_descripcion: `Cuota de Garantía${facturacion.cuota_garantia_numero ? ` ${facturacion.cuota_garantia_numero}` : ''}${diasDesc}`,
           cantidad: 1,
           precio_unitario: facturacion.subtotal_garantia,
           subtotal: facturacion.subtotal_garantia,
           total: facturacion.subtotal_garantia,
+          es_descuento: false,
+          referencia_id: null,
+          referencia_tipo: null
+        })
+      }
+
+      // P005 - Peajes Cabify
+      if ((facturacion.monto_peajes || 0) > 0) {
+        detallesSimulados.push({
+          id: `det-peajes-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'P005',
+          concepto_descripcion: 'Peajes Cabify (semana anterior)',
+          cantidad: 1,
+          precio_unitario: facturacion.monto_peajes!,
+          subtotal: facturacion.monto_peajes!,
+          total: facturacion.monto_peajes!,
           es_descuento: false,
           referencia_id: null,
           referencia_tipo: null
@@ -2362,66 +2439,91 @@ export function ReporteFacturacionTab() {
         })
       }
 
-      // Penalidades - Consultar con categoría para segmentar por producto
-      // Filtrar por rango de fechas del periodo actual (no traer penalidades de otras semanas)
-      const fechaInicioDetalle = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
-      const fechaFinDetalle = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
+      // Penalidades completas - Filtrar por semana de aplicación
+      const semDetalle = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
+      const anioDetalle = periodo?.anio || getYear(semanaActual.inicio)
+
       const { data: penalidades } = await (supabase
         .from('penalidades') as any)
-        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
+        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, semana_aplicacion, anio_aplicacion, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('conductor_id', facturacion.conductor_id)
-        .gte('fecha', fechaInicioDetalle)
-        .lte('fecha', fechaFinDetalle)
+        .eq('aplicado', true)
         .eq('fraccionado', false)
-      
-      // Agregar cada penalidad con su código correcto según categoría
+        .eq('semana_aplicacion', semDetalle)
+        .eq('anio_aplicacion', anioDetalle)
+
+      // Penalidades que tienen cuotas (excluir del listado completo)
+      const { data: penIdsConCuotasDet } = await (supabase
+        .from('penalidades_cuotas') as any)
+        .select('penalidad_id')
+      const penConCuotasSet = new Set((penIdsConCuotasDet || []).map((p: any) => p.penalidad_id))
+
       ;(penalidades || []).forEach((p: any, idx: number) => {
-        if (!p.fraccionado) {
-          const categoria = p.tipos_cobro_descuento?.categoria
-          // NULL categoria = pendiente, mostrar como tal
-          if (!categoria) {
-            detallesSimulados.push({
-              id: `det-pen-pendiente-${facturacion.conductor_id}-${idx}`,
-              facturacion_id: facturacion.id,
-              concepto_codigo: 'PEND',
-              concepto_descripcion: `[PENDIENTE] ${p.observaciones || 'Sin tipo asignado'}`,
-              cantidad: 1,
-              precio_unitario: p.monto,
-              subtotal: p.monto,
-              total: p.monto,
-              es_descuento: false,
-              referencia_id: p.id,
-              referencia_tipo: 'penalidad'
-            })
-            return
-          }
-          const tipoNombre = p.tipos_cobro_descuento?.nombre || p.observaciones || 'Sin detalle'
-          const esDescuento = categoria === 'P004'
-          const descripcion = categoria === 'P004'
-            ? `Ticket: ${tipoNombre}`
-            : categoria === 'P006'
-              ? `Exceso KM: ${tipoNombre}`
-              : `Penalidad: ${tipoNombre}`
+        if (penConCuotasSet.has(p.id)) return // Tiene cuotas, se cobra por cuota
+        const categoria = p.tipos_cobro_descuento?.categoria
+        if (!categoria) {
           detallesSimulados.push({
-            id: `det-pen-${facturacion.conductor_id}-${idx}`,
+            id: `det-pen-pendiente-${facturacion.conductor_id}-${idx}`,
             facturacion_id: facturacion.id,
-            concepto_codigo: categoria,
-            concepto_descripcion: descripcion,
-            cantidad: 1,
-            precio_unitario: p.monto,
-            subtotal: p.monto,
-            total: p.monto,
-            es_descuento: esDescuento,
-            referencia_id: p.id,
-            referencia_tipo: 'penalidad'
+            concepto_codigo: 'PEND',
+            concepto_descripcion: `[PENDIENTE] ${p.observaciones || 'Sin tipo asignado'}`,
+            cantidad: 1, precio_unitario: p.monto, subtotal: p.monto, total: p.monto,
+            es_descuento: false, referencia_id: p.id, referencia_tipo: 'penalidad'
           })
+          return
         }
+        const tipoNombre = p.tipos_cobro_descuento?.nombre || p.observaciones || 'Sin detalle'
+        const esDescuento = categoria === 'P004'
+        const descripcion = esDescuento ? `Ticket: ${tipoNombre}` : `Penalidad: ${tipoNombre}`
+        detallesSimulados.push({
+          id: `det-pen-${facturacion.conductor_id}-${idx}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: categoria,
+          concepto_descripcion: descripcion,
+          cantidad: 1, precio_unitario: p.monto, subtotal: p.monto, total: p.monto,
+          es_descuento: esDescuento, referencia_id: p.id, referencia_tipo: 'penalidad'
+        })
       })
+
+      // Cuotas fraccionadas de penalidades para esta semana
+      {
+        const { data: cuotasSemDet } = await (supabase
+          .from('penalidades_cuotas') as any)
+          .select('id, penalidad_id, monto_cuota, numero_cuota')
+          .lte('semana', semDetalle)
+        const { data: pagosCuotasDet } = await (supabase
+          .from('pagos_conductores') as any)
+          .select('referencia_id')
+          .eq('tipo_cobro', 'penalidad_cuota')
+        const cuotasPagadasIds = new Set((pagosCuotasDet || []).map((p: any) => p.referencia_id))
+
+        // Obtener conductor_id y total cuotas de las penalidades padre
+        const penIdsCuotas = [...new Set((cuotasSemDet || []).map((c: any) => c.penalidad_id))]
+        let penPadreCuotas: any[] = []
+        if (penIdsCuotas.length > 0) {
+          const { data } = await (supabase.from('penalidades') as any)
+            .select('id, conductor_id, cantidad_cuotas, observaciones')
+            .in('id', penIdsCuotas)
+          penPadreCuotas = data || []
+        }
+        const penPadreMap = new Map(penPadreCuotas.map((p: any) => [p.id, p]))
+
+        ;(cuotasSemDet || []).filter((c: any) => c.aplicado !== true && !cuotasPagadasIds.has(c.id)).forEach((cuota: any, idx: number) => {
+          const padre = penPadreMap.get(cuota.penalidad_id) as any
+          if (!padre || padre.conductor_id !== facturacion.conductor_id) return
+          detallesSimulados.push({
+            id: `det-cuota-${facturacion.conductor_id}-${idx}`,
+            facturacion_id: facturacion.id,
+            concepto_codigo: 'P007',
+            concepto_descripcion: `Cuota ${cuota.numero_cuota}/${padre.cantidad_cuotas || '?'}: ${padre.observaciones || 'Cobro fraccionado'}`,
+            cantidad: 1, precio_unitario: cuota.monto_cuota, subtotal: cuota.monto_cuota, total: cuota.monto_cuota,
+            es_descuento: false, referencia_id: cuota.id, referencia_tipo: 'penalidad_cuota'
+          })
+        })
+      }
 
       // P010 - Cobros fraccionados (plan de pagos) de esta semana
       {
-        const semDetalle = periodo?.semana || getWeek(semanaActual.inicio, { weekStartsOn: 1 })
-        const anioDetalle = periodo?.anio || getYear(semanaActual.inicio)
         const { data: cobrosDetalle } = await (supabase
           .from('cobros_fraccionados') as any)
           .select('*')
@@ -2429,7 +2531,6 @@ export function ReporteFacturacionTab() {
           .lte('semana', semDetalle)
           .eq('anio', anioDetalle)
 
-        // Cruzar con pagos_conductores para excluir cobros ya pagados
         const { data: pagosCobrosDetalle } = await (supabase
           .from('pagos_conductores') as any)
           .select('referencia_id')
@@ -2443,38 +2544,92 @@ export function ReporteFacturacionTab() {
           const mc = cobro.monto_cuota || 0
           const tc = cobro.total_cuotas || 1
           const montoCuotaReal = (mc > 0 && mc < mt) ? mc : Math.ceil(mt / tc)
-          const descripcionCobro = cobro.descripcion ||
-            `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`
           detallesSimulados.push({
             id: `det-cobro-${facturacion.conductor_id}-${idx}`,
             facturacion_id: facturacion.id,
             concepto_codigo: 'P010',
-            concepto_descripcion: descripcionCobro,
-            cantidad: 1,
-            precio_unitario: montoCuotaReal,
-            subtotal: montoCuotaReal,
-            total: montoCuotaReal,
-            es_descuento: false,
-            referencia_id: cobro.id,
-            referencia_tipo: 'cobro_fraccionado'
+            concepto_descripcion: cobro.descripcion || `Cuota ${cobro.numero_cuota} de ${cobro.total_cuotas}`,
+            cantidad: 1, precio_unitario: montoCuotaReal, subtotal: montoCuotaReal, total: montoCuotaReal,
+            es_descuento: false, referencia_id: cobro.id, referencia_tipo: 'cobro_fraccionado'
           })
         })
       }
 
-      // P004 - Tickets a Favor (descuentos)
+      // P008 - Multas de tránsito (por patente del conductor)
+      if (facturacion.vehiculo_patente) {
+        const patenteNorm = facturacion.vehiculo_patente.toUpperCase().replace(/\s+/g, '')
+        const fechaInicioMul = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
+        const fechaFinMul = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
+        const { data: multasDet } = await (supabase
+          .from('multas') as any)
+          .select('id, monto, fecha')
+          .ilike('patente', patenteNorm)
+          .gte('fecha', fechaInicioMul)
+          .lte('fecha', fechaFinMul)
+          .eq('aplicado', false)
+        if (multasDet && multasDet.length > 0) {
+          const montoMultasDet = multasDet.reduce((s: number, m: any) => s + (m.monto || 0), 0)
+          detallesSimulados.push({
+            id: `det-multas-${facturacion.conductor_id}`,
+            facturacion_id: facturacion.id,
+            concepto_codigo: 'P008',
+            concepto_descripcion: `Multas de Tránsito (${multasDet.length})`,
+            cantidad: multasDet.length,
+            precio_unitario: Math.round(montoMultasDet / multasDet.length),
+            subtotal: montoMultasDet, total: montoMultasDet,
+            es_descuento: false, referencia_id: null, referencia_tipo: null
+          })
+        }
+      }
+
+      // === DESCUENTOS ===
+
+      // P004 - Tickets a Favor
       if (facturacion.subtotal_descuentos > 0) {
         detallesSimulados.push({
           id: `det-tickets-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P004',
           concepto_descripcion: 'Tickets a Favor',
-          cantidad: 1,
-          precio_unitario: facturacion.subtotal_descuentos,
-          subtotal: facturacion.subtotal_descuentos,
-          total: facturacion.subtotal_descuentos,
-          es_descuento: true,
-          referencia_id: null,
-          referencia_tipo: null
+          cantidad: 1, precio_unitario: facturacion.subtotal_descuentos,
+          subtotal: facturacion.subtotal_descuentos, total: facturacion.subtotal_descuentos,
+          es_descuento: true, referencia_id: null, referencia_tipo: null
+        })
+      }
+
+      // Saldo anterior (deuda pendiente)
+      if (facturacion.saldo_anterior > 0) {
+        detallesSimulados.push({
+          id: `det-saldo-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'SALDO',
+          concepto_descripcion: 'Saldo Anterior (deuda)',
+          cantidad: 1, precio_unitario: facturacion.saldo_anterior,
+          subtotal: facturacion.saldo_anterior, total: facturacion.saldo_anterior,
+          es_descuento: false, referencia_id: null, referencia_tipo: null
+        })
+      } else if (facturacion.saldo_anterior < 0) {
+        detallesSimulados.push({
+          id: `det-saldo-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'SALDO',
+          concepto_descripcion: 'Saldo a Favor',
+          cantidad: 1, precio_unitario: Math.abs(facturacion.saldo_anterior),
+          subtotal: Math.abs(facturacion.saldo_anterior), total: Math.abs(facturacion.saldo_anterior),
+          es_descuento: true, referencia_id: null, referencia_tipo: null
+        })
+      }
+
+      // Mora (1% diario)
+      if (facturacion.monto_mora > 0) {
+        detallesSimulados.push({
+          id: `det-mora-${facturacion.conductor_id}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'MORA',
+          concepto_descripcion: `Mora (${facturacion.dias_mora} días al 1%)`,
+          cantidad: facturacion.dias_mora, precio_unitario: Math.round(facturacion.monto_mora / facturacion.dias_mora),
+          subtotal: facturacion.monto_mora, total: facturacion.monto_mora,
+          es_descuento: false, referencia_id: null, referencia_tipo: null
         })
       }
 
