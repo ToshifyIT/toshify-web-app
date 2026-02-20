@@ -359,6 +359,12 @@ export function ReporteFacturacionTab() {
       const semanaInicio = parseISO(fechaInicio)
       const semanaFin = parseISO(fechaFin)
 
+      // En Vista Previa de la semana actual: cortar en HOY (no contar días futuros)
+      const hoyDesglose = new Date()
+      hoyDesglose.setHours(23, 59, 59, 999)
+      const esVistaPreviewActual = modoVistaPrevia && hoyDesglose >= semanaInicio && hoyDesglose <= semanaFin
+      const limiteConteo = esVistaPreviewActual ? hoyDesglose : semanaFin
+
       const { data: asignacionesCond } = await (supabase
         .from('asignaciones_conductores') as any)
         .select(`
@@ -392,13 +398,13 @@ export function ReporteFacturacionTab() {
         const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin)
           : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin) : semanaFin)
 
-        if (acFin < semanaInicio || acInicio > semanaFin) {
+        if (acFin < semanaInicio || acInicio > limiteConteo) {
           historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango' })
           continue
         }
 
         const efectivoInicio = acInicio < semanaInicio ? semanaInicio : acInicio
-        const efectivoFin = acFin > semanaFin ? semanaFin : acFin
+        const efectivoFin = acFin > limiteConteo ? limiteConteo : acFin
         let diasContados = 0
 
         const cursorAc = new Date(efectivoInicio)
@@ -414,16 +420,18 @@ export function ReporteFacturacionTab() {
       }
 
       // Generar los 7 días de la semana con su estado
+      // Días futuros (después de HOY en Vista Previa) se muestran pero NO como trabajados
       const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean }[] = []
       const cursor = new Date(semanaInicio)
       while (cursor <= semanaFin) {
         const key = format(cursor, 'yyyy-MM-dd')
         const cubierto = diasCubiertos.get(key)
+        const esFuturo = esVistaPreviewActual && cursor > hoyDesglose
         diasSemana.push({
           fecha: format(cursor, 'dd/MM/yyyy'),
           diaSemana: diasNombres[cursor.getDay()],
-          horario: cubierto || '-',
-          trabajado: !!cubierto,
+          horario: esFuturo ? '-' : (cubierto || '-'),
+          trabajado: esFuturo ? false : !!cubierto,
         })
         cursor.setDate(cursor.getDate() + 1)
       }
