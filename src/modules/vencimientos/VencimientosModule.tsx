@@ -815,6 +815,7 @@ export function VencimientosModule() {
                       <option value="Constancia de cédula">Constancia de cédula</option>
                       <option value="VTV">VTV</option>
                       <option value="GNC">GNC</option>
+                      <option value="Habilitacion remis">Habilitacion remis</option>
                     </select>
                   </div>
                   <div className="form-group">
