@@ -354,8 +354,8 @@ export function ReporteFacturacionTab() {
     const realConductorId = conductorId.startsWith('preview-') ? conductorId.replace('preview-', '') : conductorId
 
     try {
-      const fechaInicio = periodo?.fecha_inicio || format(infoSemana.inicio, 'yyyy-MM-dd')
-      const fechaFin = periodo?.fecha_fin || format(infoSemana.fin, 'yyyy-MM-dd')
+      const fechaInicio = periodo?.fecha_inicio || format(semanaActual.inicio, 'yyyy-MM-dd')
+      const fechaFin = periodo?.fecha_fin || format(semanaActual.fin, 'yyyy-MM-dd')
       const semanaInicio = parseISO(fechaInicio)
       const semanaFin = parseISO(fechaFin)
 
