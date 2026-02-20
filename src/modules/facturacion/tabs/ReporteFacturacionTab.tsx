@@ -387,10 +387,11 @@ export function ReporteFacturacionTab() {
           continue
         }
 
-        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio)
-          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio) : semanaInicio)
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin)
-          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin) : semanaFin)
+        // Normalizar fechas a solo fecha (sin hora) para conteo correcto de días
+        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10))
+          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio.substring(0, 10)) : semanaInicio)
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
+          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : semanaFin)
 
         if (acFin < semanaInicio || acInicio > limiteConteo) {
           historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango' })
@@ -723,10 +724,10 @@ export function ReporteFacturacionTab() {
           const estadoPadreVPExtra = (asig.estado || '').toLowerCase()
           if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVPExtra) && !asig.fecha_fin) continue
 
-          // Verificar solapamiento con la semana
-          const acInicioExtra = ac.fecha_inicio ? parseISO(ac.fecha_inicio) : new Date('2020-01-01')
-          const acFinExtra = ac.fecha_fin ? parseISO(ac.fecha_fin)
-            : (asig.fecha_fin ? parseISO(asig.fecha_fin) : new Date('2099-12-31'))
+          // Verificar solapamiento con la semana (normalizar sin hora)
+          const acInicioExtra = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10)) : new Date('2020-01-01')
+          const acFinExtra = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
+            : (asig.fecha_fin ? parseISO(asig.fecha_fin.substring(0, 10)) : new Date('2099-12-31'))
           if (acFinExtra < semInicioVP || acInicioExtra > semFinVP) continue
 
           if (!conductoresExtraVP.has(cond.numero_dni)) {
@@ -823,12 +824,11 @@ export function ReporteFacturacionTab() {
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVP) && !asignacion.fecha_fin) return
         
         // Calcular días que este registro se solapa con la semana
-        // Usar fecha_fin de la asignación padre como límite si la del conductor es NULL
-        // IMPORTANTE: usar parseISO en vez de new Date para evitar que fechas 'YYYY-MM-DD' se interpreten como UTC
-        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio) 
-          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio) : fechaInicioSemana)
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin) 
-          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin) : fechaFinSemana)
+        // Normalizar a solo fecha (sin hora) — timestamps de asignaciones tienen hora que rompe el conteo
+        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10)) 
+          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio.substring(0, 10)) : fechaInicioSemana)
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10)) 
+          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : fechaFinSemana)
         
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio

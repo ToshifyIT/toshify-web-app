@@ -821,6 +821,25 @@ export function ConductoresModule() {
 
     setSaving(true);
     try {
+      // Validar DNI duplicado antes de crear
+      if (formData.numero_dni) {
+        const { data: existente } = await supabase
+          .from('conductores')
+          .select('id, nombres, apellidos')
+          .eq('numero_dni', formData.numero_dni)
+          .maybeSingle();
+        if (existente) {
+          setSaving(false);
+          Swal.fire({
+            icon: 'warning',
+            title: 'DNI duplicado',
+            html: `Ya existe un conductor con DNI <strong>${formData.numero_dni}</strong>:<br/><strong>${existente.apellidos}, ${existente.nombres}</strong>`,
+            confirmButtonColor: '#ff0033',
+          });
+          return;
+        }
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -884,25 +903,23 @@ export function ConductoresModule() {
         if (categoriasError) throw categoriasError;
       }
 
-      // Crear carpeta en Google Drive para el conductor
+      // Crear carpeta en Google Drive para el conductor y guardar URL
       if (newConductor && newConductor.length > 0) {
         const conductor = newConductor[0];
         const nombreCompleto = `${formData.nombres} ${formData.apellidos}`;
 
-        // Intentar crear carpeta en Drive (no bloquea si falla)
         createConductorDriveFolder(
           conductor.id,
           nombreCompleto,
           formData.numero_dni
-        ).then((result) => {
-          if (result.success) {
-            console.log('Carpeta Drive creada:', result.folderUrl);
-          } else {
-            console.warn('No se pudo crear carpeta Drive:', result.error);
+        ).then(async (result) => {
+          if (result.success && result.folderUrl) {
+            await (supabase as any)
+              .from('conductores')
+              .update({ drive_folder_url: result.folderUrl })
+              .eq('id', conductor.id);
           }
-        }).catch((err) => {
-          console.warn('Error creando carpeta Drive:', err);
-        });
+        }).catch(() => { /* silencioso */ });
       }
 
       showSuccess("Conductor creado");
