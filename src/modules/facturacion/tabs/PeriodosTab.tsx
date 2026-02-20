@@ -294,6 +294,7 @@ export function PeriodosTab() {
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado']))
 
       // Mapear conductores con asignación que se solapó con la semana
+      // Mapear conductores con asignación que se solapó con la semana
       const conductoresAsignados = new Map<string, { 
         conductor: any; modalidad: string; patente: string | null; horarioConductor: string | null 
       }>()
@@ -340,7 +341,6 @@ export function PeriodosTab() {
       
       if (nuevosParaControl.length > 0) {
         await (supabase.from('conductores_semana_facturacion') as any).insert(nuevosParaControl)
-        console.log(`Se agregaron ${nuevosParaControl.length} conductores nuevos a la tabla de control`)
       }
 
       // 5. Obtener datos completos de todos los conductores (control + nuevos)
@@ -361,16 +361,11 @@ export function PeriodosTab() {
 
       const { data: conductoresData } = await aplicarFiltroSede(supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit'))
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id'))
         .in('numero_dni', todosLosDnis)
 
       // Crear mapa de conductores por DNI
       const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
-
-      // Set de conductor IDs con asignación activa
-      const conductoresConAsignacion = new Set(
-        Array.from(conductoresAsignados.keys())
-      )
 
       // 6. Re-leer tabla de control actualizada (incluye los recién agregados)
       const { data: controlActualizado } = await aplicarFiltroSede((supabase
@@ -379,8 +374,10 @@ export function PeriodosTab() {
         .eq('semana', semanaNum)
         .eq('anio', anioNum)
 
-      // 7. Procesar solo conductores con asignación activa - 7 días fijos
-      const conductoresProcesados: ConductorProcesado[] = []
+      // Set de conductor IDs con asignación activa
+      const conductoresConAsignacion = new Set(
+        Array.from(conductoresAsignados.keys())
+      )
 
       // Mapa de conductor_id -> horario del conductor (diurno/nocturno)
       const horariosPorConductor = new Map<string, string | null>()
@@ -388,20 +385,26 @@ export function PeriodosTab() {
         horariosPorConductor.set(conductorId, data.horarioConductor)
       }
 
+      // 7. Procesar conductores - solo ACTIVOS en la BD, 7 días fijos
+      const ESTADO_ACTIVO_ID_GEN = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
+      const conductoresProcesados: ConductorProcesado[] = []
+
       for (const control of (controlActualizado || [])) {
         const conductorData = conductoresMap.get(control.numero_dni)
         if (!conductorData) continue
 
-        // Conductores del control table sin asignación en la semana: incluir con 0 días (De baja)
+        // Excluir conductores INACTIVOS en la BD
+        if (conductorData.estado_id !== ESTADO_ACTIVO_ID_GEN) continue
+
         const tieneAsignacion = conductoresConAsignacion.has(conductorData.id)
 
         const modalidad = control.modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
         const horarioConductor = (horariosPorConductor.get(conductorData.id) || '').toLowerCase().trim()
         const esTurnoNocturno = modalidad === 'TURNO' && (horarioConductor === 'nocturno' || horarioConductor === 'n')
-        // Conductores sin asignación en la semana → 0 días (De baja)
         const diasTurno = tieneAsignacion ? ((modalidad === 'TURNO' && !esTurnoNocturno) ? 7 : 0) : 0
         const diasTurnoNocturno = tieneAsignacion ? (esTurnoNocturno ? 7 : 0) : 0
         const diasCargo = tieneAsignacion ? (modalidad === 'CARGO' ? 7 : 0) : 0
+        const totalDias = tieneAsignacion ? 7 : 0
 
         conductoresProcesados.push({
           conductor_id: conductorData.id,
@@ -413,7 +416,7 @@ export function PeriodosTab() {
           dias_turno: diasTurno,
           dias_turno_nocturno: diasTurnoNocturno,
           dias_cargo: diasCargo,
-          total_dias: 7,
+          total_dias: totalDias,
           modalidad_inicial: modalidad as 'TURNO' | 'CARGO'
         })
       }
@@ -635,7 +638,8 @@ export function PeriodosTab() {
           (garantiaConductor?.cuotas_pagadas >= garantiaConductor?.cuotas_totales)
         
         // Si la garantía está completada, no cobrar más cuotas
-        const cuotaGarantiaProporcional = garantiaCompletada ? 0 : Math.round(cuotaGarantia * factorProporcional)
+        // Garantía es valor fijo semanal (no proporcional a días trabajados)
+        const cuotaGarantiaProporcional = garantiaCompletada ? 0 : cuotaGarantia
         const cuotaActual = garantiaCompletada ? garantiaConductor?.cuotas_totales : (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.cuotas_totales || 16
 
@@ -732,7 +736,6 @@ export function PeriodosTab() {
           .single()
 
         if (errFact) {
-          console.error('Error insertando facturación:', errFact)
           continue
         }
 

@@ -167,6 +167,30 @@ export function ReporteFacturacionTab() {
     return getSemanaArgentina(hoy)
   })
 
+  // Modal de desglose de días
+  const [showDiasModal, setShowDiasModal] = useState(false)
+  const [showDiasHistorial, setShowDiasHistorial] = useState(false)
+  const [diasModalData, setDiasModalData] = useState<{
+    conductorNombre: string
+    conductorDni: string
+    totalDias: number
+    dias: {
+      fecha: string
+      diaSemana: string
+      horario: string
+      trabajado: boolean
+    }[]
+    historial: {
+      fechaInicio: string
+      fechaFin: string
+      padreEstado: string
+      horario: string
+      dias: number
+      nota: string
+    }[]
+  } | null>(null)
+  const [loadingDias, setLoadingDias] = useState(false)
+
   // Modal de detalle
   const [showDetalle, setShowDetalle] = useState(false)
   const [detalleFacturacion, setDetalleFacturacion] = useState<FacturacionConductor | null>(null)
@@ -318,6 +342,106 @@ export function ReporteFacturacionTab() {
   const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
+
+  // Cargar desglose de días para un conductor específico
+  async function cargarDesgloseDias(conductorId: string, conductorNombre: string, conductorDni: string, _turnosCobrados: number) {
+    setShowDiasModal(true)
+    setShowDiasHistorial(false)
+    setLoadingDias(true)
+    setDiasModalData(null)
+
+    // En Vista Previa los IDs vienen con prefijo 'preview-'
+    const realConductorId = conductorId.startsWith('preview-') ? conductorId.replace('preview-', '') : conductorId
+
+    try {
+      const fechaInicio = periodo?.fecha_inicio || format(infoSemana.inicio, 'yyyy-MM-dd')
+      const fechaFin = periodo?.fecha_fin || format(infoSemana.fin, 'yyyy-MM-dd')
+      const semanaInicio = parseISO(fechaInicio)
+      const semanaFin = parseISO(fechaFin)
+
+      const { data: asignacionesCond } = await (supabase
+        .from('asignaciones_conductores') as any)
+        .select(`
+          id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
+        `)
+        .eq('conductor_id', realConductorId)
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
+
+      // Construir un Set de fechas cubiertas con su horario
+      const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+      const diasCubiertos = new Map<string, string>() // fecha -> horario
+      const historial: { fechaInicio: string; fechaFin: string; padreEstado: string; horario: string; dias: number; nota: string }[] = []
+
+      for (const ac of (asignacionesCond || []) as any[]) {
+        const asignacion = ac.asignaciones
+        if (!asignacion) continue
+
+        const estadoPadre = (asignacion.estado || '').toLowerCase()
+        const horario = ac.horario || asignacion.horario || '-'
+        const acInicioStr = ac.fecha_inicio ? ac.fecha_inicio.substring(0, 10) : 'NULL'
+        const acFinStr = ac.fecha_fin ? ac.fecha_fin.substring(0, 10) : 'NULL'
+
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) {
+          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Huérfano (padre sin fecha_fin)' })
+          continue
+        }
+
+        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio)
+          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio) : semanaInicio)
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin)
+          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin) : semanaFin)
+
+        if (acFin < semanaInicio || acInicio > semanaFin) {
+          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango' })
+          continue
+        }
+
+        const efectivoInicio = acInicio < semanaInicio ? semanaInicio : acInicio
+        const efectivoFin = acFin > semanaFin ? semanaFin : acFin
+        let diasContados = 0
+
+        const cursorAc = new Date(efectivoInicio)
+        while (cursorAc <= efectivoFin) {
+          const key = format(cursorAc, 'yyyy-MM-dd')
+          if (!diasCubiertos.has(key)) {
+            diasCubiertos.set(key, horario)
+            diasContados++
+          }
+          cursorAc.setDate(cursorAc.getDate() + 1)
+        }
+        historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: diasContados, nota: diasContados > 0 ? `${format(efectivoInicio, 'dd/MM')} → ${format(efectivoFin, 'dd/MM')}` : 'Días ya cubiertos' })
+      }
+
+      // Generar los 7 días de la semana con su estado
+      const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean }[] = []
+      const cursor = new Date(semanaInicio)
+      while (cursor <= semanaFin) {
+        const key = format(cursor, 'yyyy-MM-dd')
+        const cubierto = diasCubiertos.get(key)
+        diasSemana.push({
+          fecha: format(cursor, 'dd/MM/yyyy'),
+          diaSemana: diasNombres[cursor.getDay()],
+          horario: cubierto || '-',
+          trabajado: !!cubierto,
+        })
+        cursor.setDate(cursor.getDate() + 1)
+      }
+
+      setDiasModalData({
+        conductorNombre,
+        conductorDni,
+        totalDias: Math.min(7, diasCubiertos.size),
+        dias: diasSemana,
+        historial,
+      })
+    } catch {
+      Swal.fire('Error', 'No se pudo cargar el desglose de días', 'error')
+      setShowDiasModal(false)
+    } finally {
+      setLoadingDias(false)
+    }
+  }
 
   async function cargarFacturacion() {
     setLoading(true)
@@ -475,54 +599,6 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // 2.8 Calcular días reales de asignación para cada conductor
-      // Primero obtener asignaciones activas o finalizadas (vehículos), luego sus conductores
-      const conductorIds = facturacionesTransformadas.map((f: any) => f.conductor_id).filter(Boolean)
-      const { data: asignacionesActivasData } = await (supabase
-        .from('asignaciones') as any)
-        .select('id')
-        .in('estado', ['activo', 'activa', 'finalizada', 'finalizado'])
-      const asignacionActivaIds = (asignacionesActivasData || []).map((a: any) => a.id)
-
-      const { data: asignacionesData } = asignacionActivaIds.length > 0
-        ? await (supabase
-            .from('asignaciones_conductores') as any)
-            .select('conductor_id, fecha_inicio, fecha_fin')
-            .in('conductor_id', conductorIds)
-            .in('asignacion_id', asignacionActivaIds)
-        : { data: [] }
-
-      // Usar strings yyyy-MM-dd para evitar problemas de timezone
-      const periodoInicioStr = (periodoData as any).fecha_inicio as string // 'yyyy-MM-dd'
-      const periodoFinStr = (periodoData as any).fecha_fin as string
-      // Hoy como string yyyy-MM-dd
-      const hoyDate = new Date()
-      const hoyStr = `${hoyDate.getFullYear()}-${String(hoyDate.getMonth() + 1).padStart(2, '0')}-${String(hoyDate.getDate()).padStart(2, '0')}`
-      // Para período abierto, contar días solo hasta hoy
-      const topeStr = hoyStr < periodoFinStr ? hoyStr : periodoFinStr
-
-      // Función para contar días entre dos fechas string inclusive
-      const contarDias = (inicio: string, fin: string) => {
-        const d1 = new Date(inicio + 'T00:00:00')
-        const d2 = new Date(fin + 'T00:00:00')
-        return Math.max(0, Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1)
-      }
-
-      const diasRealesMap = new Map<string, number>()
-      ;(asignacionesData || []).forEach((ac: any) => {
-        const acInicioStr = ac.fecha_inicio ? ac.fecha_inicio.substring(0, 10) : periodoInicioStr
-        const acFinStr = ac.fecha_fin ? ac.fecha_fin.substring(0, 10) : topeStr
-        // Si terminó antes del período, ignorar
-        if (acFinStr < periodoInicioStr) return
-        // Rango efectivo dentro del período y hasta hoy
-        const efectivoInicio = acInicioStr > periodoInicioStr ? acInicioStr : periodoInicioStr
-        const efectivoFin = acFinStr < topeStr ? acFinStr : topeStr
-        const dias = contarDias(efectivoInicio, efectivoFin)
-        if (dias > 0) {
-          diasRealesMap.set(ac.conductor_id, Math.min((diasRealesMap.get(ac.conductor_id) || 0) + dias, 7))
-        }
-      })
-
       // Agregar monto_cobrado + detalles a cada facturación
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pago = pagosMap.get(f.id)
@@ -531,9 +607,6 @@ export function ReporteFacturacionTab() {
         // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI (normalizado)
         const dniNormPeaje = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
         const peajesCabify = dniNormPeaje ? (peajesPorDni.get(dniNormPeaje) || 0) : 0
-        // Días reales de asignación (override del turnos_cobrados guardado)
-        // Si no tiene asignación activa, son 0 días
-        const diasReales = diasRealesMap.get(f.conductor_id) || 0
         return {
           ...f,
           monto_cobrado: pago?.monto || 0,
@@ -541,7 +614,6 @@ export function ReporteFacturacionTab() {
           monto_peajes: peajesDetalle > 0 ? peajesDetalle : peajesCabify,
           monto_penalidades: detalle?.monto_penalidades || 0,
           penalidades_detalle: detalle?.penalidades_detalle || [],
-          turnos_cobrados: diasReales,
         }
       })
 
@@ -1076,7 +1148,7 @@ export function ReporteFacturacionTab() {
           CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
           monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
         }
-        const diasTotales = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
+        const diasTotales = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
         
         // Solo excluir conductores suplementados (no en tabla de control) si no tuvieron actividad
         // Conductores de la tabla de control SIEMPRE aparecen (pueden ser De baja con 0 días)
@@ -1111,12 +1183,12 @@ export function ReporteFacturacionTab() {
             subtotalGarantia = 0
             cuotaGarantiaNumero = 'NA'
           } else {
-            subtotalGarantia = Math.round(cuotaGarantiaSemanalVP * factorProporcional)
+            subtotalGarantia = cuotaGarantiaSemanalVP
             const cuotaActual = garantia.cuotas_pagadas + 1
             cuotaGarantiaNumero = `${cuotaActual} de ${garantia.cuotas_totales}`
           }
         } else {
-          subtotalGarantia = Math.round(cuotaGarantiaSemanalVP * factorProporcional)
+          subtotalGarantia = cuotaGarantiaSemanalVP
           cuotaGarantiaNumero = `1 de ${cuotasTotales}`
         }
 
@@ -1207,7 +1279,6 @@ export function ReporteFacturacionTab() {
       setVistaPreviaData(facturacionesProyectadas)
 
     } catch (error) {
-      console.error('Error cargando vista previa:', error)
       if (showError) {
         Swal.fire('Error', 'No se pudo cargar la vista previa', 'error')
       }
@@ -1413,9 +1484,6 @@ export function ReporteFacturacionTab() {
         ...(conductoresBaja || []).filter((c: any) => !dnisActivos.has(c.numero_dni))
       ]
 
-      // Guardar DNIs originales del control table ANTES de suplementar
-      const dnisEnControlOriginalRecalc = new Set(conductoresControl.map((c: any) => c.numero_dni))
-
       // Suplementar con conductores que tienen asignaciones en la semana pero NO están en la tabla de control
       // Captura conductores dados de baja o ausentes del control que trabajaron durante la semana
       {
@@ -1487,113 +1555,71 @@ export function ReporteFacturacionTab() {
       const { data: conductoresData } = await qConductoresRecalc
 
       const conductoresMap = new Map((conductoresData || []).map((c: any) => [c.numero_dni, c]))
-      const ESTADO_ACTIVO_ID_RECALC = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const conductorIdsTemp = (conductoresData || []).map((c: any) => c.id)
 
-      // Cargar asignaciones_conductores para calcular prorrateo por días/modalidad/horario
+      // Cargar asignaciones_conductores para calcular días reales por modalidad
       const { data: asignacionesConductoresRecalc } = await (supabase
         .from('asignaciones_conductores') as any)
         .select(`
-          id,
-          conductor_id,
-          horario,
-          fecha_inicio,
-          fecha_fin,
-          estado,
-          asignacion_id,
+          id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIdsTemp)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
 
-      // Crear mapa de prorrateo: conductor_id -> { días y montos por modalidad }
-      // Los montos se calculan día a día para considerar cambios de precio históricos
-      interface ProrrateoData {
+      // Calcular días reales por conductor por modalidad
+      interface ProrrateoRecalc {
         CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
-        monto_CARGO: number; monto_TURNO_DIURNO: number; monto_TURNO_NOCTURNO: number;
       }
-      const prorrateoRecalcMap = new Map<string, ProrrateoData>()
+      const prorrateoRecalcMap = new Map<string, ProrrateoRecalc>()
       conductorIdsTemp.forEach((id: string) => {
-        prorrateoRecalcMap.set(id, { 
-          CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
-          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
-        })
+        prorrateoRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 })
       })
 
-      // Calcular días por modalidad/horario para cada conductor
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
       const fechaFinSemanaRecalc = parseISO(fechaFin)
-      
-      // NOTE: Los precios históricos se cargarán después (sección 4), por ahora solo contamos días
-      // Los montos se calcularán en la sección 4 después de cargar precios
-      const asignacionesPorConductor = new Map<string, Array<{
-        modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO';
-        fechaInicio: Date;
-        fechaFin: Date;
-      }>>()
-      conductorIdsTemp.forEach((id: string) => asignacionesPorConductor.set(id, []))
-      
-      ;(asignacionesConductoresRecalc || []).forEach((ac: any) => {
+
+      for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
         const asignacion = ac.asignaciones
-        if (!asignacion) return
-        
-        const modalidadAsignacion = asignacion.horario // 'TURNO' o 'CARGO'
-        const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
-        
-        // Si la asignación padre está finalizada/cancelada y no tiene fecha_fin,
-        // es un registro huérfano (datos inconsistentes) — no contar
+        if (!asignacion) continue
+
+        // Skip orphan: padre finalizado/cancelado sin fecha_fin
         const estadoPadre = (asignacion.estado || '').toLowerCase()
-        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) return
-        
-        // Calcular días que este registro se solapa con la semana
-        // Usar fecha_fin de la asignación padre como límite si la del conductor es NULL
-        // IMPORTANTE: usar parseISO en vez de new Date para evitar que fechas 'YYYY-MM-DD' se interpreten como UTC
-        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio) 
+        if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
+
+        // Fechas: usar conductor > padre > semana como fallback
+        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio)
           : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio) : fechaInicioSemanaRecalc)
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin) 
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin)
           : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin) : fechaFinSemanaRecalc)
-        
-        // Rango efectivo dentro de la semana
+
+        if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
+
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
         const efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
-        
-        // Calcular días (si el rango no se solapa con la semana, será <= 0)
         const dias = Math.max(0, Math.ceil((efectivoFin.getTime() - efectivoInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
-        
-        if (dias <= 0) return
-        
+        if (dias <= 0) continue
+
         const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
-        if (!prorrateo) return
-        
-        // Determinar modalidad basándose en asignaciones.horario + asignaciones_conductores.horario
-        let modalidad: 'CARGO' | 'TURNO_DIURNO' | 'TURNO_NOCTURNO' = 'CARGO'
-        const horarioLower = (horarioConductor || '').toLowerCase().trim()
+        if (!prorrateo) continue
+
+        const modalidadAsignacion = asignacion.horario
+        const horarioLower = (ac.horario || '').toLowerCase().trim()
         if (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia') {
-          modalidad = 'CARGO'
           prorrateo.CARGO += dias
         } else if (modalidadAsignacion === 'TURNO') {
           if (horarioLower === 'nocturno' || horarioLower === 'n') {
-            modalidad = 'TURNO_NOCTURNO'
             prorrateo.TURNO_NOCTURNO += dias
           } else {
-            // Default para TURNO: diurno (incluye 'diurno', 'd', null, vacío, etc.)
-            modalidad = 'TURNO_DIURNO'
             prorrateo.TURNO_DIURNO += dias
           }
         } else {
-          // modalidadAsignacion no reconocida: tratar como CARGO por defecto
-          modalidad = 'CARGO'
           prorrateo.CARGO += dias
         }
-        
-        // Guardar asignación para cálculo de montos con precios históricos
-        const asigs = asignacionesPorConductor.get(ac.conductor_id)
-        if (asigs) {
-          asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin })
-        }
-      })
+      }
 
-      // Procesar conductores desde tabla de control (deduplicando por DNI)
+      // Procesar conductores: solo los que tienen al menos 1 día real en la semana
+      const ESTADO_ACTIVO_ID_RECALC = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const conductoresProcesados: {
         conductor_id: string; conductor_nombre: string; conductor_dni: string | null;
         conductor_cuit: string | null; vehiculo_patente: string | null;
@@ -1603,7 +1629,6 @@ export function ReporteFacturacionTab() {
       const dnisYaProcesados = new Set<string>()
 
       for (const control of conductoresControl) {
-        // Deduplicar por DNI
         if (dnisYaProcesados.has(control.numero_dni)) continue
         dnisYaProcesados.add(control.numero_dni)
 
@@ -1611,19 +1636,14 @@ export function ReporteFacturacionTab() {
         if (!conductorData) continue
 
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
-        const totalDias = prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO
-        
-        // Solo excluir conductores suplementados (no en tabla de control) si no tuvieron actividad
-        // Conductores de la tabla de control SIEMPRE aparecen (pueden ser De baja con 0 días)
-        if (totalDias === 0 && !dnisEnControlOriginalRecalc.has(control.numero_dni)) continue
-        
-        // Determinar estado de facturación:
-        // - Activo: tuvo asignación los 7 días
-        // - De baja: sin asignación en la semana (0 días) o conductor inactivo con días parciales
-        // - Pausa: conductor activo con días parciales > 0 (perdió asignación durante la semana)
+        const totalDias = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
+
+        // Solo incluir conductores con al menos 1 día en la semana
+        if (totalDias === 0) continue
+
+        // Estado: >= 7 = Activo, < 7 + activo en BD = Pausa, < 7 + inactivo = De baja
         const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = totalDias >= 7 ? 'Activo'
-          : (totalDias === 0 ? 'De baja'
-          : (conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC ? 'De baja' : 'Pausa'))
+          : (conductorData.estado_id === ESTADO_ACTIVO_ID_RECALC ? 'Pausa' : 'De baja')
 
         conductoresProcesados.push({
           conductor_id: conductorData.id,
@@ -1641,18 +1661,10 @@ export function ReporteFacturacionTab() {
 
       const conductorIds = conductoresProcesados.map(c => c.conductor_id)
 
-      // 4. Obtener conceptos (precios actuales) e historial de precios
+      // 4. Obtener conceptos (precios actuales)
       const { data: conceptos } = await supabase.from('conceptos_nomina').select('*').eq('activo', true)
       
-      // Cargar historial de precios para la semana (si hubo cambios)
-      const { data: historialPrecios } = await (supabase
-        .from('conceptos_facturacion_historial') as any)
-        .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-        .in('codigo', ['P001', 'P002', 'P003', 'P013'])
-        .lte('fecha_vigencia_desde', fechaFin)
-        .gte('fecha_vigencia_hasta', fechaInicio)
-      
-      // Precios actuales como fallback (valores DIARIOS - precio_base sin IVA)
+      // Precios DIARIOS (precio_base sin IVA)
       const preciosActuales: Record<string, number> = {
         'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_base || 42714,
         'P002': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_base || 75429,
@@ -1660,60 +1672,13 @@ export function ReporteFacturacionTab() {
         'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_base || 32714
       }
       
-      // Función helper para obtener precio BASE en una fecha específica (IVA se aplica aparte si tiene CUIT)
-      const getPrecioEnFecha = (codigo: string, fecha: Date): number => {
-        // Buscar en historial primero
-        const fechaStr = fecha.toISOString().split('T')[0]
-        const historial = (historialPrecios || []).find((h: any) => 
-          h.codigo === codigo && 
-          h.fecha_vigencia_desde <= fechaStr && 
-          h.fecha_vigencia_hasta >= fechaStr
-        )
-        if (historial) return historial.precio_base ?? historial.precio_final
-        // Si no hay historial, usar precio actual
-        return preciosActuales[codigo] || 0
-      }
-      
-      // Variables de compatibilidad con código existente
-      // Precios diarios para alquiler (se calculan día a día más abajo)
+      // Precios diarios para alquiler
       const precioTurnoDiurno = preciosActuales['P001']
       const precioCargo = preciosActuales['P002']
       const precioTurnoNocturno = preciosActuales['P013']
       // Garantía: precio en conceptos_nomina es DIARIO, multiplicar por 7 para obtener cuota semanal
       const cuotaGarantia = preciosActuales['P003'] * 7
       
-      // Mapa de código de concepto por modalidad
-      const codigosPorModalidad: Record<string, string> = {
-        'CARGO': 'P002',
-        'TURNO_DIURNO': 'P001', 
-        'TURNO_NOCTURNO': 'P013'
-      }
-      
-      // Calcular montos por día usando precios históricos
-      // Iteramos cada asignación y sumamos el precio diario correspondiente a cada día
-      for (const [conductorId, asignaciones] of asignacionesPorConductor.entries()) {
-        const prorrateo = prorrateoRecalcMap.get(conductorId)
-        if (!prorrateo) continue
-        
-        for (const asig of asignaciones) {
-          const codigo = codigosPorModalidad[asig.modalidad]
-          const montoKey = `monto_${asig.modalidad}` as keyof ProrrateoData
-          
-          // Iterar día por día y sumar el precio correspondiente
-          const currentDate = new Date(asig.fechaInicio)
-          while (currentDate <= asig.fechaFin) {
-            const precioDiario = getPrecioEnFecha(codigo, currentDate)
-            ;(prorrateo as any)[montoKey] += precioDiario
-            currentDate.setDate(currentDate.getDate() + 1)
-          }
-        }
-        
-        // Redondear los montos
-        prorrateo.monto_CARGO = Math.round(prorrateo.monto_CARGO)
-        prorrateo.monto_TURNO_DIURNO = Math.round(prorrateo.monto_TURNO_DIURNO)
-        prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO)
-      }
-
       // 5. Obtener datos adicionales en paralelo
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false),
@@ -1805,19 +1770,13 @@ export function ReporteFacturacionTab() {
       setRecalculandoProgreso({ actual: 0, total: conductoresProcesados.length })
 
       for (const conductor of conductoresProcesados) {
-        // Obtener montos pre-calculados con precios históricos
-        const prorrateo = prorrateoRecalcMap.get(conductor.conductor_id) || {
-          CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0,
-          monto_CARGO: 0, monto_TURNO_DIURNO: 0, monto_TURNO_NOCTURNO: 0
-        }
-        
-        // Calcular alquiler con prorrateo por modalidad/horario (usando montos históricos)
+        // Calcular alquiler con precio diario × días
         let alquilerTotal = 0
         const detallesAlquiler: { codigo: string; descripcion: string; dias: number; monto: number }[] = []
 
-        // P001: Turno Diurno (usando monto pre-calculado con precios históricos)
+        // P001: Turno Diurno
         if (conductor.dias_turno_diurno > 0) {
-          const montoDiurno = prorrateo.monto_TURNO_DIURNO
+          const montoDiurno = Math.round(precioTurnoDiurno * conductor.dias_turno_diurno)
           alquilerTotal += montoDiurno
           detallesAlquiler.push({
             codigo: 'P001', 
@@ -1825,9 +1784,9 @@ export function ReporteFacturacionTab() {
             dias: conductor.dias_turno_diurno, monto: montoDiurno
           })
         }
-        // P013: Turno Nocturno (usando monto pre-calculado con precios históricos)
+        // P013: Turno Nocturno
         if (conductor.dias_turno_nocturno > 0) {
-          const montoNocturno = prorrateo.monto_TURNO_NOCTURNO
+          const montoNocturno = Math.round(precioTurnoNocturno * conductor.dias_turno_nocturno)
           alquilerTotal += montoNocturno
           detallesAlquiler.push({
             codigo: 'P013', 
@@ -1835,9 +1794,9 @@ export function ReporteFacturacionTab() {
             dias: conductor.dias_turno_nocturno, monto: montoNocturno
           })
         }
-        // P002: A Cargo (usando monto pre-calculado con precios históricos)
+        // P002: A Cargo
         if (conductor.dias_cargo > 0) {
-          const montoCargo = prorrateo.monto_CARGO
+          const montoCargo = Math.round(precioCargo * conductor.dias_cargo)
           alquilerTotal += montoCargo
           detallesAlquiler.push({
             codigo: 'P002', 
@@ -1851,9 +1810,9 @@ export function ReporteFacturacionTab() {
           alquilerTotal = Math.round(alquilerTotal * 1.21)
         }
 
-        // Garantía
+        // Garantía - valor fijo semanal (no proporcional a días trabajados)
         const factorProporcional = conductor.total_dias / 7
-        const cuotaGarantiaProporcional = Math.round(cuotaGarantia * factorProporcional)
+        const cuotaGarantiaProporcional = cuotaGarantia
         const garantiaConductor = (garantias as any[]).find((g: any) => g.conductor_id === conductor.conductor_id)
         const cuotaActual = (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.total_cuotas || 16
@@ -2298,14 +2257,12 @@ export function ReporteFacturacionTab() {
 
   // Ver detalle de facturación
   async function verDetalle(facturacion: FacturacionConductor) {
-    console.log('[verDetalle] INICIO - modoVistaPrevia:', modoVistaPrevia, 'facturacion.id:', facturacion.id)
     setLoadingDetalle(true)
     setShowDetalle(true)
     setDetalleFacturacion(facturacion)
 
     // En modo Vista Previa, generar detalles simulados desde los datos calculados
     if (modoVistaPrevia || facturacion.id.startsWith('preview-')) {
-      console.log('[verDetalle] Entrando en modo Vista Previa')
       const detallesSimulados: FacturacionDetalle[] = []
 
       // P001/P002 - Alquiler
@@ -5935,7 +5892,15 @@ export function ReporteFacturacionTab() {
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
         return (
-          <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          <span
+            style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
+            onClick={() => cargarDesgloseDias(
+              row.original.conductor_id,
+              row.original.conductor_nombre,
+              row.original.conductor_dni || '',
+              cobrados
+            )}
+          >
             {cobrados}
           </span>
         )
@@ -6955,6 +6920,121 @@ export function ReporteFacturacionTab() {
             />
           </div>
         </>
+      )}
+
+      {/* Modal de desglose de días */}
+      {showDiasModal && (
+        <div className="fact-modal-overlay" onClick={() => { setShowDiasModal(false); setShowDiasHistorial(false) }}>
+          <div className="fact-modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="fact-modal-header">
+              <h2>Desglose de Días</h2>
+              <button className="fact-modal-close" onClick={() => { setShowDiasModal(false); setShowDiasHistorial(false) }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="fact-modal-body">
+              {loadingDias ? (
+                <div className="fact-loading-detalle">
+                  <Loader2 size={32} className="spinning" />
+                  <span>Cargando...</span>
+                </div>
+              ) : diasModalData ? (
+                <div style={{ padding: '4px 0' }}>
+                  <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{diasModalData.conductorNombre}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>DNI: {diasModalData.conductorDni}</div>
+                    </div>
+                    <div style={{
+                      fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)',
+                      lineHeight: 1,
+                    }}>
+                      {diasModalData.totalDias}<span style={{ fontSize: '13px', fontWeight: 400, color: 'var(--text-secondary)' }}>/7</span>
+                    </div>
+                  </div>
+
+                  {/* Día por día */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {diasModalData.dias.map((d, i) => (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        padding: '8px 12px', borderRadius: '6px',
+                        background: d.trabajado ? 'rgba(16, 185, 129, 0.06)' : 'transparent',
+                        border: `1px solid ${d.trabajado ? 'rgba(16, 185, 129, 0.15)' : 'var(--border-primary)'}`,
+                      }}>
+                        <div style={{
+                          width: '8px', height: '8px', borderRadius: '50%',
+                          background: d.trabajado ? '#10b981' : '#d1d5db', flexShrink: 0,
+                        }} />
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', width: '80px' }}>
+                          {d.diaSemana}
+                        </span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>
+                          {d.fecha}
+                        </span>
+                        {d.trabajado ? (
+                          <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
+                        ) : (
+                          <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>-</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Botón historial */}
+                  <div style={{ marginTop: '12px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => setShowDiasHistorial(!showDiasHistorial)}
+                      style={{
+                        background: 'none', border: '1px solid var(--border-primary)', borderRadius: '6px',
+                        padding: '6px 14px', fontSize: '11px', color: 'var(--text-secondary)',
+                        cursor: 'pointer', fontWeight: 500,
+                      }}
+                    >
+                      {showDiasHistorial ? 'Ocultar historial' : 'Ver historial de asignaciones'}
+                    </button>
+                  </div>
+
+                  {/* Historial de asignaciones */}
+                  {showDiasHistorial && diasModalData.historial.length > 0 && (
+                    <div style={{ marginTop: '10px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid var(--border-primary)' }}>
+                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Inicio</th>
+                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Fin</th>
+                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Estado</th>
+                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Horario</th>
+                            <th style={{ padding: '6px 4px', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Días</th>
+                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Nota</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {diasModalData.historial.map((h, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid var(--border-primary)', opacity: h.dias === 0 ? 0.5 : 1 }}>
+                              <td style={{ padding: '4px' }}>{h.fechaInicio}</td>
+                              <td style={{ padding: '4px' }}>{h.fechaFin}</td>
+                              <td style={{ padding: '4px' }}>
+                                <span style={{
+                                  padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 500,
+                                  background: h.padreEstado.includes('activ') ? 'rgba(16,185,129,0.1)' : 'rgba(107,114,128,0.1)',
+                                  color: h.padreEstado.includes('activ') ? '#10b981' : '#6b7280',
+                                }}>{h.padreEstado}</span>
+                              </td>
+                              <td style={{ padding: '4px' }}>{h.horario}</td>
+                              <td style={{ padding: '4px', textAlign: 'right', fontWeight: h.dias > 0 ? 600 : 400, color: h.dias > 0 ? '#10b981' : 'var(--text-secondary)' }}>{h.dias}</td>
+                              <td style={{ padding: '4px', fontSize: '10px', color: 'var(--text-secondary)' }}>{h.nota}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal de detalle */}
