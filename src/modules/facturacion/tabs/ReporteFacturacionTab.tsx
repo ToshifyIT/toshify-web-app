@@ -287,9 +287,6 @@ export function ReporteFacturacionTab() {
   }, [semanaActual, sedeActualId])
 
   // Cargar conceptos de nómina al montar (para agregar ajustes manuales)
-  // Mapa de precios de alquiler por código de concepto
-  const [preciosAlquiler, setPreciosAlquiler] = useState<Map<string, number>>(new Map())
-  
   useEffect(() => {
     async function cargarConceptos() {
       const { data } = await supabase
@@ -300,16 +297,6 @@ export function ReporteFacturacionTab() {
       
       if (data) {
         setConceptosNomina(data as ConceptoNomina[])
-        // Crear mapa de precios por código para alquileres (usar precio_base, IVA se aplica aparte si tiene CUIT)
-        const precios = new Map<string, number>()
-        data.forEach((c: any) => {
-          if (c.precio_base != null) {
-            precios.set(c.codigo, c.precio_base)
-          } else if (c.precio_final) {
-            precios.set(c.codigo, c.precio_final)
-          }
-        })
-        setPreciosAlquiler(precios)
       }
     }
     cargarConceptos()
@@ -888,6 +875,17 @@ export function ReporteFacturacionTab() {
         .lte('fecha_vigencia_desde', fechaFin)
         .gte('fecha_vigencia_hasta', fechaInicio)
       
+      // Cargar precios base directamente (evita race condition con preciosAlquiler state)
+      const { data: conceptosNominaVP } = await supabase
+        .from('conceptos_nomina')
+        .select('codigo, precio_base, precio_final')
+        .eq('activo', true)
+        .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+      const preciosBaseVP = new Map<string, number>()
+      ;(conceptosNominaVP || []).forEach((c: any) => {
+        preciosBaseVP.set(c.codigo, c.precio_base ?? c.precio_final ?? 0)
+      })
+      
       // Función helper para obtener precio BASE en una fecha específica (IVA se aplica aparte si tiene CUIT)
       const getPrecioEnFechaVP = (codigo: string, fecha: Date): number => {
         const fechaStr = fecha.toISOString().split('T')[0]
@@ -897,7 +895,7 @@ export function ReporteFacturacionTab() {
           h.fecha_vigencia_hasta >= fechaStr
         )
         if (historial) return historial.precio_base ?? historial.precio_final
-        return preciosAlquiler.get(codigo) || 0
+        return preciosBaseVP.get(codigo) || 0
       }
       
       // Mapa de código de concepto por modalidad
@@ -1146,7 +1144,7 @@ export function ReporteFacturacionTab() {
       })
       
       // Cuota de garantía semanal: precio diario de conceptos_nomina × 7
-      const cuotaGarantiaSemanalVP = (preciosAlquiler.get('P003') || 7143) * 7
+      const cuotaGarantiaSemanalVP = (preciosBaseVP.get('P003') || 7143) * 7
 
       // 6. Calcular facturación proyectada para cada conductor
       const facturacionesProyectadas: FacturacionConductor[] = []
@@ -3326,8 +3324,14 @@ export function ReporteFacturacionTab() {
   }
 
   function semanaSiguiente() {
+    // No avanzar más allá de la semana en curso
+    const hoyNav = new Date()
+    if (hoyNav >= semanaActual.inicio && hoyNav <= semanaActual.fin) return
     const nuevaFecha = addWeeks(semanaActual.inicio, 1)
-    setSemanaActual(getSemanaArgentina(nuevaFecha))
+    // No avanzar si la nueva semana sería futura
+    const nuevaSemana = getSemanaArgentina(nuevaFecha)
+    if (nuevaSemana.inicio > hoyNav) return
+    setSemanaActual(nuevaSemana)
   }
 
   // function irASemanaActual() {
@@ -6542,7 +6546,13 @@ export function ReporteFacturacionTab() {
             <span className="fact-semana-titulo">Semana {infoSemana.semana}</span>
             <span className="fact-semana-fecha">{infoSemana.inicio} - {infoSemana.fin} / {infoSemana.anio}</span>
           </div>
-          <button className="fact-nav-btn" onClick={semanaSiguiente} title="Semana siguiente">
+          <button
+            className="fact-nav-btn"
+            onClick={semanaSiguiente}
+            title={new Date() >= semanaActual.inicio && new Date() <= semanaActual.fin ? 'Estás en la semana actual' : 'Semana siguiente'}
+            disabled={new Date() >= semanaActual.inicio && new Date() <= semanaActual.fin}
+            style={new Date() >= semanaActual.inicio && new Date() <= semanaActual.fin ? { opacity: 0.3, cursor: 'not-allowed' } : {}}
+          >
             <ChevronRight size={18} />
           </button>
         </div>
