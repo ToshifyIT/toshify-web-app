@@ -752,18 +752,6 @@ export function VencimientosModule() {
                 <div className="form-row">
                   <div className="form-group">
                     <label>
-                      Titular
-                      <span className="required">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.titular}
-                      onChange={e => setFormData(prev => ({ ...prev, titular: e.target.value }))}
-                      disabled={modalMode === 'view' || saving}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>
                       Patente
                       <span className="required">*</span>
                     </label>
@@ -802,6 +790,17 @@ export function VencimientosModule() {
                       )}
                     </div>
                   </div>
+                  <div className="form-group">
+                    <label>
+                      Titular
+                      <span className="required">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.titular}
+                      disabled
+                    />
+                  </div>
                 </div>
                 <div className="form-row">
                   <div className="form-group">
@@ -814,6 +813,8 @@ export function VencimientosModule() {
                       <option value="">Seleccionar</option>
                       <option value="Patente provisoria">Patente provisoria</option>
                       <option value="Constancia de cédula">Constancia de cédula</option>
+                      <option value="VTV">VTV</option>
+                      <option value="GNC">GNC</option>
                     </select>
                   </div>
                   <div className="form-group">
