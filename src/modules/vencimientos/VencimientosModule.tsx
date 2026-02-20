@@ -880,7 +880,7 @@ export function VencimientosModule() {
                       type="date"
                       value={formData.fecha_vencimiento}
                       onChange={e => setFormData(prev => ({ ...prev, fecha_vencimiento: e.target.value }))}
-                      disabled={modalMode !== 'edit' || saving}
+                      disabled={modalMode === 'view' || saving}
                     />
                   </div>
                 </div>
@@ -891,7 +891,7 @@ export function VencimientosModule() {
                       type="date"
                       value={formData.fecha_iniciar_gestion || ''}
                       onChange={e => setFormData(prev => ({ ...prev, fecha_iniciar_gestion: e.target.value }))}
-                      disabled={modalMode !== 'edit' || saving}
+                      disabled={modalMode === 'view' || saving}
                     />
                   </div>
                 </div>
