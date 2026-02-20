@@ -649,11 +649,10 @@ export function ReporteFacturacionTab() {
 
     try {
       const fechaInicio = format(semanaActual.inicio, 'yyyy-MM-dd')
-      // Para Vista Previa: usar HOY como fecha fin si estamos en la semana actual
-      const hoy = new Date()
-      const esSemanaActual = hoy >= semanaActual.inicio && hoy <= semanaActual.fin
-      const fechaFinEfectiva = esSemanaActual ? hoy : semanaActual.fin
-      const fechaFin = format(fechaFinEfectiva, 'yyyy-MM-dd')
+      // Vista Previa PROYECTADA: siempre usar semana completa (7 días) como un periodo abierto
+      const fechaFin = format(semanaActual.fin, 'yyyy-MM-dd')
+      const fechaFinEfectiva = semanaActual.fin
+      const esSemanaActual = false // Proyección: no cortar en HOY
       // Semana y año del período (para queries)
       const semanaDelPeriodo = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
       const anioDelPeriodo = getYear(parseISO(fechaInicio))
