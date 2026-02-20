@@ -109,7 +109,7 @@ function getAreaResponsablePorRol(roleName: string | undefined | null): string {
 export function IncidenciasModule() {
   const { user, profile } = useAuth()
   const { canCreateInMenu, canEditInMenu, canDeleteInMenu, canViewTab } = usePermissions()
-  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Permisos específicos para el menú de incidencias
@@ -1823,7 +1823,8 @@ export function IncidenciasModule() {
       conductor_nombre: incidencia.conductor_nombre,
       vehiculo_patente: incidencia.vehiculo_patente,
       tipo_cobro_descuento_id: incidencia.tipo_cobro_descuento_id,
-      monto: incidencia.monto // Cargar monto al editar
+      monto: incidencia.monto, // Cargar monto al editar
+      sede_id: (incidencia as any).sede_id,
     })
     setModalMode('edit')
     setModalType('incidencia')
@@ -1879,7 +1880,8 @@ export function IncidenciasModule() {
       aplicado: penalidad.aplicado,
       nota_administrativa: penalidad.nota_administrativa,
       conductor_nombre: penalidad.conductor_nombre,
-      vehiculo_patente: penalidad.vehiculo_patente
+      vehiculo_patente: penalidad.vehiculo_patente,
+      sede_id: (penalidad as any).sede_id,
     })
     setModalMode('edit')
     setModalType('penalidad')
@@ -2122,7 +2124,7 @@ export function IncidenciasModule() {
         tipo_cobro_descuento_id: esCobro && tipoCobroId && !esLogisticaTipo ? tipoCobroId : null,
         monto: esCobro ? (incidenciaForm.monto || 0) : null,
         km_exceso: esCobro ? (incidenciaForm.km_exceso || null) : null,
-        sede_id: sedeActualId || sedeUsuario?.id,
+        sede_id: modalMode === 'edit' ? (incidenciaForm.sede_id || sedeActualId || sedeUsuario?.id) : (sedeActualId || sedeUsuario?.id),
       }
 
       if (modalMode === 'edit' && selectedIncidencia) {
@@ -2223,7 +2225,7 @@ export function IncidenciasModule() {
         aplicado: penalidadForm.aplicado || false,
         nota_administrativa: penalidadForm.nota_administrativa || null,
         created_by: user?.id,
-        sede_id: sedeActualId || sedeUsuario?.id,
+        sede_id: modalMode === 'edit' ? (penalidadForm.sede_id || sedeActualId || sedeUsuario?.id) : (sedeActualId || sedeUsuario?.id),
       }
 
       if (modalMode === 'edit' && selectedPenalidad) {
@@ -3459,6 +3461,7 @@ export function IncidenciasModule() {
                   conceptosNomina={conceptosNomina}
                   disabled={saving}
                   esCobro={activeTab === 'cobro'}
+                  sedes={sedes}
                 />
               ) : (
                 <PenalidadForm
@@ -3912,6 +3915,7 @@ interface IncidenciaFormProps {
   conceptosNomina?: { id: string; codigo: string; descripcion: string; precio_final: number }[]
   disabled?: boolean
   esCobro?: boolean  // Indica si es incidencia de cobro (muestra campo monto)
+  sedes?: any[]
 }
 
 interface ConductorAsignado {
@@ -3921,7 +3925,7 @@ interface ConductorAsignado {
   turno: string // diurno, nocturno, todo_dia (de asignaciones_conductores)
 }
 
-function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], disabled, esCobro = false }: IncidenciaFormProps) {
+function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores, tiposCobroDescuento, conceptosNomina = [], disabled, esCobro = false, sedes }: IncidenciaFormProps) {
   const [vehiculoSearch, setVehiculoSearch] = useState('')
   const [conductorSearch, setConductorSearch] = useState('')
   const [showVehiculoDropdown, setShowVehiculoDropdown] = useState(false)
@@ -4312,6 +4316,15 @@ function IncidenciaForm({ formData, setFormData, estados, vehiculos, conductores
               <option value="">Seleccionar</option>
               {estados.map(e => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Sede</label>
+            <select value={formData.sede_id || ''} onChange={e => setFormData((prev: any) => ({ ...prev, sede_id: e.target.value }))} disabled={disabled}>
+              <option value="">Seleccionar</option>
+              {(sedes || []).map((s: any) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
               ))}
             </select>
           </div>

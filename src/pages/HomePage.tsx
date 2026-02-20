@@ -63,6 +63,8 @@ const menuIcons: Record<string, LucideIcon> = {
   'seguimiento-conductores': Compass,
   'escuela-conductores': GraduationCap,
   'rango-seguimiento-guias': Target,
+  'gestion-vehiculos': Car,
+  'registro-vencimientos': FileWarning,
 }
 
 // Función para obtener icono de un menú
@@ -1768,7 +1770,7 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
               <Route path="/vehiculos" element={
-                <ProtectedRoute menuName="vehiculos" action="view">
+                <ProtectedRoute submenuName="gestion-vehiculos" action="view">
                   <VehiculosPage />
                 </ProtectedRoute>
               } />
@@ -1825,7 +1827,7 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
               <Route path="/vencimientos" element={
-                <ProtectedRoute menuName="vencimientos" action="view">
+                <ProtectedRoute submenuName="registro-vencimientos" action="view">
                   <VencimientosPage />
                 </ProtectedRoute>
               } />

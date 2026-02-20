@@ -102,7 +102,7 @@ function parseFechaSiniestro(fechaStr: string | undefined | null) {
 export function SiniestrosModule() {
   const { user, profile } = useAuth()
   const { canCreateInSubmenu, canEditInSubmenu, isAdmin } = usePermissions()
-  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
 
   // Permisos específicos para el submenú de siniestros
   // Admin siempre tiene acceso completo
@@ -693,7 +693,8 @@ export function SiniestrosModule() {
       habilitado_circular: (siniestro as any).habilitado_circular ?? true,
       costos_reparacion: (siniestro as any).costos_reparacion || undefined,
       total_reparacion_pagada: (siniestro as any).total_reparacion_pagada || undefined,
-      fecha_cierre: (siniestro as any).fecha_cierre || undefined
+      fecha_cierre: (siniestro as any).fecha_cierre || undefined,
+      sede_id: (siniestro as any).sede_id || undefined,
     })
     setModalMode('edit')
     setShowModal(true)
@@ -1199,6 +1200,7 @@ export function SiniestrosModule() {
                   onVehiculoChange={handleVehiculoChange}
                   disabled={modalMode === 'view'}
                   isEditMode={modalMode === 'edit'}
+                  sedes={sedes}
                 />
               )}
             </div>
@@ -1240,6 +1242,7 @@ interface SiniestroFormProps {
   onVehiculoChange: (id: string) => void
   disabled?: boolean
   isEditMode?: boolean // Solo permite editar estado y responsable
+  sedes?: any[]
 }
 
 function SiniestroForm({
@@ -1253,7 +1256,8 @@ function SiniestroForm({
   onVehiculoChange,
   disabled,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  isEditMode: _isEditMode = false
+  isEditMode: _isEditMode = false,
+  sedes,
 }: SiniestroFormProps) {
   // Todos los campos son editables en modo edición
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1441,6 +1445,21 @@ function SiniestroForm({
               <option value="">Seleccionar estado</option>
               {estados.map(e => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Sede</label>
+            <select
+              value={formData.sede_id || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, sede_id: e.target.value || undefined }))}
+              disabled={isFieldDisabled('other')}
+            >
+              <option value="">Seleccionar sede</option>
+              {(sedes || []).map((s: any) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
               ))}
             </select>
           </div>

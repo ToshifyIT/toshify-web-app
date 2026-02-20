@@ -30,6 +30,7 @@ interface Multa {
   infraccion: string
   lugar_detalle: string
   ibutton: string
+  sede_id?: string
 }
 
 interface Vehiculo {
@@ -86,7 +87,7 @@ function getWeekNumber(dateStr: string): number {
 }
 
 export default function MultasModule() {
-  const { aplicarFiltroSede, sedeActualId, sedeUsuario } = useSede()
+  const { aplicarFiltroSede, sedeActualId, sedeUsuario, sedes } = useSede()
   const [loading, setLoading] = useState(true)
   const [multas, setMultas] = useState<Multa[]>([])
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
@@ -428,7 +429,8 @@ export default function MultasModule() {
           conductor_responsable: editingMulta.conductor_responsable || null,
           detalle: editingMulta.detalle || null,
           observaciones: editingMulta.observaciones || null,
-          ibutton: editingMulta.ibutton || null
+          ibutton: editingMulta.ibutton || null,
+          sede_id: editingMulta.sede_id || null
         })
         .eq('id', editingMulta.id)
 
@@ -994,6 +996,20 @@ export default function MultasModule() {
                   </select>
                 </div>
                 
+                <div className="multas-form-group">
+                  <label className="multas-form-label">Sede</label>
+                  <select
+                    className="multas-form-select"
+                    value={editingMulta.sede_id || ''}
+                    onChange={e => setEditingMulta({...editingMulta, sede_id: e.target.value || undefined})}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {(sedes || []).map((s: any) => (
+                      <option key={s.id} value={s.id}>{s.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Fecha Infraccion */}
                 <div className="multas-form-group">
                   <label className="multas-form-label">Fecha Infraccion *</label>

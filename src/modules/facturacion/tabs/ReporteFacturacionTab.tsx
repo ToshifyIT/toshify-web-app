@@ -494,9 +494,9 @@ export function ReporteFacturacionTab() {
       // JOIN con tabla conductores para obtener nombre actualizado
       const { data: facturacionesData, error: errFact } = await (supabase
         .from('facturacion_conductores') as any)
-        .select(`
+         .select(`
           *,
-          conductor:conductores!conductor_id(nombres, apellidos, estado_id)
+          conductor:conductores!conductor_id(nombres, apellidos, estado_id, fecha_terminacion)
         `)
         .eq('periodo_id', (periodoData as any).id)
 
@@ -504,14 +504,16 @@ export function ReporteFacturacionTab() {
 
       // ID del estado "Activo" para conductores
       const ESTADO_ACTIVO_ID_LOAD = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
+      const fechaFinPeriodoLoad = parseISO((periodoData as any).fecha_fin)
 
       // Usar nombre de tabla conductores en formato "Nombres Apellidos"
       let facturacionesTransformadas = (facturacionesData || []).map((f: any) => {
         const conductorEstadoId = f.conductor?.estado_id
-        // Estado: Activo (7 días), De baja (0 días o inactivo), Pausa (activo con días parciales)
-        const estadoBilling = f.turnos_cobrados >= 7 ? 'Activo'
-          : (f.turnos_cobrados === 0 ? 'De baja'
-          : (conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD ? 'De baja' : 'Pausa'))
+        const fechaTermLoad = f.conductor?.fecha_terminacion ? parseISO(f.conductor.fecha_terminacion) : null
+        const esDeBajaLoad = conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD
+          || (fechaTermLoad && fechaTermLoad <= fechaFinPeriodoLoad)
+        const estadoBilling = esDeBajaLoad ? 'De baja'
+          : (f.turnos_cobrados >= 7 ? 'Activo' : 'Pausa')
         return {
           ...f,
           conductor_nombre: f.conductor 
@@ -747,7 +749,7 @@ export function ReporteFacturacionTab() {
       const dnisControl = (conductoresControl || []).map((c: any) => c.numero_dni)
       let qConductoresVP = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id, fecha_terminacion')
         .in('numero_dni', dnisControl)
       if (sedeParaVP) qConductoresVP = qConductoresVP.eq('sede_id', sedeParaVP)
       const { data: conductoresData } = await qConductoresVP
@@ -792,6 +794,12 @@ export function ReporteFacturacionTab() {
       const fechaInicioSemana = semanaActual.inicio
       // Para semana actual: usar HOY como fin (no contar días futuros)
       const fechaFinSemana = esSemanaActual ? fechaFinEfectiva : semanaActual.fin
+
+      // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
+      const fechaTermMapVP = new Map<string, Date>()
+      for (const c of (conductoresData || []) as any[]) {
+        if (c.fecha_terminacion) fechaTermMapVP.set(c.id, parseISO(c.fecha_terminacion))
+      }
       
       // Guardar asignaciones por conductor para cálculo de montos con precios históricos
       const asignacionesPorConductorVP = new Map<string, Array<{
@@ -822,7 +830,11 @@ export function ReporteFacturacionTab() {
         
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
-        const efectivoFin = acFin > fechaFinSemana ? fechaFinSemana : acFin
+        let efectivoFin = acFin > fechaFinSemana ? fechaFinSemana : acFin
+
+        // Si el conductor tiene fecha_terminacion, no contar días después de esa fecha
+        const fechaTermVP = fechaTermMapVP.get(ac.conductor_id)
+        if (fechaTermVP && efectivoFin > fechaTermVP) efectivoFin = fechaTermVP
         
         // Calcular días (diferencia en milisegundos / ms por día)
         const dias = Math.max(0, Math.ceil((efectivoFin.getTime() - efectivoInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
@@ -1266,10 +1278,12 @@ export function ReporteFacturacionTab() {
            monto_penalidades: montoPenalidades,  // P007
            // Detalle de penalidades para el modal
            penalidades_detalle: detalleMap.get(conductorId) || [],
-           // Estado: Activo (7 días), De baja (sin asignación o baja), Pausa (activo con días parciales > 0)
-           estado_billing: diasTotales >= 7 ? 'Activo'
-             : (diasTotales === 0 ? 'De baja'
-             : (conductor.estado_id !== ESTADO_ACTIVO_ID ? 'De baja' : 'Pausa')),
+           // Estado: si tiene fecha_terminacion en/antes de la semana → De baja
+           estado_billing: (() => {
+             const ftVP = conductor.fecha_terminacion ? parseISO(conductor.fecha_terminacion) : null
+             const esBajaVP = conductor.estado_id !== ESTADO_ACTIVO_ID || (ftVP && ftVP <= semanaActual.fin)
+             return esBajaVP ? 'De baja' : (diasTotales >= 7 ? 'Activo' : 'Pausa')
+           })(),
          })
        }
 
@@ -1549,7 +1563,7 @@ export function ReporteFacturacionTab() {
       const dnisControl = conductoresControl.map((c: any) => c.numero_dni)
       let qConductoresRecalc = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id')
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id, fecha_terminacion')
         .in('numero_dni', dnisControl)
       if (sedeDelPeriodo) qConductoresRecalc = qConductoresRecalc.eq('sede_id', sedeDelPeriodo)
       const { data: conductoresData } = await qConductoresRecalc
@@ -1579,6 +1593,14 @@ export function ReporteFacturacionTab() {
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
       const fechaFinSemanaRecalc = parseISO(fechaFin)
 
+      // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
+      const fechaTerminacionMap = new Map<string, Date>()
+      for (const [, c] of conductoresMap) {
+        if (c.fecha_terminacion) {
+          fechaTerminacionMap.set(c.id, parseISO(c.fecha_terminacion))
+        }
+      }
+
       for (const ac of (asignacionesConductoresRecalc || []) as any[]) {
         const asignacion = ac.asignaciones
         if (!asignacion) continue
@@ -1596,7 +1618,13 @@ export function ReporteFacturacionTab() {
         if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
 
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
-        const efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
+        let efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
+
+        // Si el conductor tiene fecha_terminacion, no contar días después de esa fecha
+        const fechaTerm = fechaTerminacionMap.get(ac.conductor_id)
+        if (fechaTerm && efectivoFin > fechaTerm) {
+          efectivoFin = fechaTerm
+        }
         const dias = Math.max(0, Math.ceil((efectivoFin.getTime() - efectivoInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
         if (dias <= 0) continue
 
@@ -1641,9 +1669,14 @@ export function ReporteFacturacionTab() {
         // Solo incluir conductores con al menos 1 día en la semana
         if (totalDias === 0) continue
 
-        // Estado: >= 7 = Activo, < 7 + activo en BD = Pausa, < 7 + inactivo = De baja
-        const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = totalDias >= 7 ? 'Activo'
-          : (conductorData.estado_id === ESTADO_ACTIVO_ID_RECALC ? 'Pausa' : 'De baja')
+        // Estado: si tiene fecha_terminacion en/antes de la semana → De baja
+        // Si no: >= 7 = Activo, < 7 + activo en BD = Pausa, < 7 + inactivo = De baja
+        const fechaTermCond = conductorData.fecha_terminacion ? parseISO(conductorData.fecha_terminacion) : null
+        const esDeBaja = conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC
+          || (fechaTermCond && fechaTermCond <= fechaFinSemanaRecalc)
+        const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = esDeBaja
+          ? 'De baja'
+          : (totalDias >= 7 ? 'Activo' : 'Pausa')
 
         conductoresProcesados.push({
           conductor_id: conductorData.id,

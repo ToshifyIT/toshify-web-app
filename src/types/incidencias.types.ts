@@ -161,6 +161,7 @@ export interface IncidenciaFormData {
   tipo?: TipoIncidencia  // Tipo de incidencia (logistica o cobro)
   tipo_incidencia?: string  // Legacy: Tipo específico (ej: "Exceso de kilometraje", "Falta de lavado")
   tipo_cobro_descuento_id?: string // Nueva FK unificada
+  sede_id?: string
 }
 
 export interface PenalidadFormData {
@@ -180,6 +181,7 @@ export interface PenalidadFormData {
   nota_administrativa?: string
   conductor_nombre?: string
   vehiculo_patente?: string
+  sede_id?: string
 }
 
 // Tipos para filtros

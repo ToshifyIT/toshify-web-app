@@ -492,6 +492,7 @@ export function VehicleManagement() {
           seguro_vigencia: formData.seguro_vigencia || null,
           titular: formData.titular || null,
           notas: formData.notas || null,
+          sede_id: formData.sede_id || null,
           updated_at: new Date().toISOString(),
           updated_by: profile?.full_name || 'Sistema'
         })
@@ -1525,6 +1526,23 @@ export function VehicleManagement() {
                 </select>
               </div>
 
+              <div className="form-group">
+                <label className="form-label">Sede</label>
+                <select
+                  className="form-input"
+                  value={formData.sede_id}
+                  onChange={(e) => setFormData({ ...formData, sede_id: e.target.value })}
+                  disabled={saving}
+                >
+                  <option value="">Seleccionar...</option>
+                  {sedes.map((s) => (
+                    <option key={s.id} value={s.id}>{s.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Fecha Adquisición</label>
                 <input

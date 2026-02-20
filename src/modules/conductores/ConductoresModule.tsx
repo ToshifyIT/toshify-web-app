@@ -1227,6 +1227,7 @@ export function ConductoresModule() {
         preferencia_turno: formData.preferencia_turno || "SIN_PREFERENCIA",
         url_documentacion: formData.url_documentacion || null,
         numero_ibutton: formData.numero_ibutton || null,
+        sede_id: formData.sede_id || null,
         updated_at: new Date().toISOString(),
         updated_by: profile?.full_name || "Sistema",
       })
@@ -2297,6 +2298,7 @@ export function ConductoresModule() {
           estadosConductor={estadosConductor}
           estadosLicencia={estadosLicencia}
           tiposLicencia={tiposLicencia}
+          sedes={sedes}
           editErrors={editErrors}
           setEditErrors={setEditErrors}
         />
@@ -2415,6 +2417,7 @@ function ModalEditar({
   estadosConductor,
   estadosLicencia,
   tiposLicencia,
+  sedes,
   editErrors,
   setEditErrors,
 }: any) {
@@ -2555,6 +2558,23 @@ function ModalEditar({
               disabled={saving}
               placeholder="Ej: Zona Norte, CABA, etc."
             />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Sede</label>
+            <select
+              className="form-input"
+              value={formData.sede_id}
+              onChange={(e) => setFormData({ ...formData, sede_id: e.target.value })}
+              disabled={saving}
+            >
+              <option value="">Seleccionar...</option>
+              {(sedes || []).map((s: any) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
+              ))}
+            </select>
           </div>
         </div>
 

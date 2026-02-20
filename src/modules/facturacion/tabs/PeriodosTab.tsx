@@ -361,7 +361,7 @@ export function PeriodosTab() {
 
       const { data: conductoresData } = await aplicarFiltroSede(supabase
         .from('conductores')
-        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id'))
+        .select('id, nombres, apellidos, numero_dni, numero_cuit, estado_id, fecha_terminacion'))
         .in('numero_dni', todosLosDnis)
 
       // Crear mapa de conductores por DNI
@@ -393,18 +393,25 @@ export function PeriodosTab() {
         const conductorData = conductoresMap.get(control.numero_dni)
         if (!conductorData) continue
 
-        // Excluir conductores INACTIVOS en la BD
-        if (conductorData.estado_id !== ESTADO_ACTIVO_ID_GEN) continue
+        // Incluir conductores activos + inactivos con fecha_terminacion dentro de la semana
+        const fechaTermGen = conductorData.fecha_terminacion ? parseISO(conductorData.fecha_terminacion) : null
+        const esInactivo = conductorData.estado_id !== ESTADO_ACTIVO_ID_GEN
+        if (esInactivo && !(fechaTermGen && fechaTermGen >= semanaInicioDate && fechaTermGen <= semanaFinDate)) continue
 
         const tieneAsignacion = conductoresConAsignacion.has(conductorData.id)
 
         const modalidad = control.modalidad === 'CARGO' ? 'CARGO' : 'TURNO'
         const horarioConductor = (horariosPorConductor.get(conductorData.id) || '').toLowerCase().trim()
         const esTurnoNocturno = modalidad === 'TURNO' && (horarioConductor === 'nocturno' || horarioConductor === 'n')
-        const diasTurno = tieneAsignacion ? ((modalidad === 'TURNO' && !esTurnoNocturno) ? 7 : 0) : 0
-        const diasTurnoNocturno = tieneAsignacion ? (esTurnoNocturno ? 7 : 0) : 0
-        const diasCargo = tieneAsignacion ? (modalidad === 'CARGO' ? 7 : 0) : 0
-        const totalDias = tieneAsignacion ? 7 : 0
+        // Si tiene fecha_terminacion en la semana, calcular días hasta esa fecha
+        let diasMaximos = 7
+        if (fechaTermGen && fechaTermGen >= semanaInicioDate && fechaTermGen <= semanaFinDate) {
+          diasMaximos = Math.max(0, Math.ceil((fechaTermGen.getTime() - semanaInicioDate.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+        }
+        const diasTurno = tieneAsignacion ? ((modalidad === 'TURNO' && !esTurnoNocturno) ? diasMaximos : 0) : 0
+        const diasTurnoNocturno = tieneAsignacion ? (esTurnoNocturno ? diasMaximos : 0) : 0
+        const diasCargo = tieneAsignacion ? (modalidad === 'CARGO' ? diasMaximos : 0) : 0
+        const totalDias = tieneAsignacion ? diasMaximos : 0
 
         conductoresProcesados.push({
           conductor_id: conductorData.id,

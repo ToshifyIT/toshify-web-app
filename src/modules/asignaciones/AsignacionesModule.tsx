@@ -116,7 +116,7 @@ function getLocalDateStr(isoString: string): string {
 export function AsignacionesModule() {
   const { canEditInMenu, canDeleteInMenu } = usePermissions()
   const { profile } = useAuth()
-  const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedes } = useSede()
   const canEdit = canEditInMenu('asignaciones')
   const canDelete = canDeleteInMenu('asignaciones')
   
@@ -154,7 +154,8 @@ export function AsignacionesModule() {
     documento_diurno: string
     documento_nocturno: string
     documento_cargo: string
-  }>({ fecha_inicio: '', fecha_fin: '', notas: '', vehiculo_id: '', horario: '', conductor_diurno_id: '', conductor_nocturno_id: '', conductor_cargo_id: '', estado: '', documento_diurno: '', documento_nocturno: '', documento_cargo: '' })
+    sede_id: string
+  }>({ fecha_inicio: '', fecha_fin: '', notas: '', vehiculo_id: '', horario: '', conductor_diurno_id: '', conductor_nocturno_id: '', conductor_cargo_id: '', estado: '', documento_diurno: '', documento_nocturno: '', documento_cargo: '', sede_id: '' })
   const [vehiculosDisponibles, setVehiculosDisponibles] = useState<any[]>([])
   const [conductoresDisponibles, setConductoresDisponibles] = useState<any[]>([])
   const [loadingRegularizar, setLoadingRegularizar] = useState(false)
@@ -1647,7 +1648,8 @@ export function AsignacionesModule() {
       estado: asignacion.estado || 'programado',
       documento_diurno: diurno?.documento || '',
       documento_nocturno: nocturno?.documento || '',
-      documento_cargo: cargo?.documento || ''
+      documento_cargo: cargo?.documento || '',
+      sede_id: (asignacion as any).sede_id || '',
     })
     
     // Reset search states
@@ -1744,6 +1746,9 @@ export function AsignacionesModule() {
       }
       if (regularizarData.estado && regularizarData.estado !== regularizarAsignacion.estado) {
         updateData.estado = regularizarData.estado
+      }
+      if (regularizarData.sede_id) {
+        updateData.sede_id = regularizarData.sede_id
       }
 
       // Agregar traza de cambios a las notas
@@ -2785,6 +2790,21 @@ export function AsignacionesModule() {
                       <option value="activa">Activa</option>
                       <option value="finalizada">Finalizada</option>
                       <option value="cancelada">Cancelada</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="asig-edit-row single">
+                  <div className="asig-edit-field">
+                    <label>Sede</label>
+                    <select
+                      value={regularizarData.sede_id}
+                      onChange={e => setRegularizarData(prev => ({ ...prev, sede_id: e.target.value }))}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {(sedes || []).map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.nombre}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

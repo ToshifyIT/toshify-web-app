@@ -179,6 +179,7 @@ export interface SiniestroFormData {
   costos_reparacion?: number
   total_reparacion_pagada?: number
   fecha_cierre?: string
+  sede_id?: string
 }
 
 // Tipos para filtros
