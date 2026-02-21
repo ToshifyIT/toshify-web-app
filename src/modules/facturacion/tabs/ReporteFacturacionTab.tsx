@@ -396,7 +396,13 @@ export function ReporteFacturacionTab() {
         if (!asignacion) continue
 
         const estadoPadre = (asignacion.estado || '').toLowerCase()
-        const horario = ac.horario || asignacion.horario || '-'
+        const horarioRawDias = (ac.horario || asignacion.horario || '-').toLowerCase().trim()
+        const horario = horarioRawDias === 'todo_dia' ? 'CARGO'
+          : horarioRawDias === 'diurno' || horarioRawDias === 'd' ? 'DIURNO'
+          : horarioRawDias === 'nocturno' || horarioRawDias === 'n' ? 'NOCTURNO'
+          : horarioRawDias === 'cargo' ? 'CARGO'
+          : horarioRawDias === 'turno' ? 'TURNO'
+          : horarioRawDias.toUpperCase()
         const acInicioStr = ac.fecha_inicio ? ac.fecha_inicio.substring(0, 10) : 'NULL'
         const acFinStr = ac.fecha_fin ? ac.fecha_fin.substring(0, 10) : 'NULL'
 
@@ -509,10 +515,19 @@ export function ReporteFacturacionTab() {
         const acInicio = ac.fecha_inicio || padre.fecha_inicio || null
         const acFin = ac.fecha_fin || padre.fecha_fin || null
 
+        // Traducir horario crudo a label legible
+        const horarioRaw = (ac.horario || padre.horario || '-').toLowerCase().trim()
+        const horarioLabel = horarioRaw === 'todo_dia' ? 'CARGO'
+          : horarioRaw === 'diurno' || horarioRaw === 'd' ? 'DIURNO'
+          : horarioRaw === 'nocturno' || horarioRaw === 'n' ? 'NOCTURNO'
+          : horarioRaw === 'cargo' ? 'CARGO'
+          : horarioRaw === 'turno' ? 'TURNO'
+          : horarioRaw.toUpperCase()
+
         asignaciones.push({
           id: ac.id,
           vehiculoPatente: padre.vehiculos?.patente || '-',
-          horario: ac.horario || padre.horario || '-',
+          horario: horarioLabel,
           estado: ac.estado || '-',
           padreEstado: padre.estado || '-',
           fechaInicio: acInicio ? acInicio.substring(0, 10) : '-',
@@ -953,6 +968,10 @@ export function ReporteFacturacionTab() {
         fechaFin: Date;
       }>>()
       conductorIds.forEach((id: string) => asignacionesPorConductorVP.set(id, []))
+
+      // Set de fechas ya contadas por conductor para deduplicar registros duplicados
+      const diasContadosVP = new Map<string, Set<string>>()
+      conductorIds.forEach((id: string) => diasContadosVP.set(id, new Set()))
       
       ;(asignacionesConductores || []).forEach((ac: any) => {
         const asignacion = ac.asignaciones
@@ -982,11 +1001,6 @@ export function ReporteFacturacionTab() {
         const fechaTermVP = fechaTermMapVP.get(ac.conductor_id)
         if (fechaTermVP && efectivoFin > fechaTermVP) efectivoFin = fechaTermVP
         
-        // Calcular días (diferencia en milisegundos / ms por día)
-        const dias = Math.max(0, Math.ceil((efectivoFin.getTime() - efectivoInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
-        
-        if (dias <= 0) return
-        
         const prorrateo = prorrateoMap.get(ac.conductor_id)
         if (!prorrateo) return
         
@@ -995,21 +1009,31 @@ export function ReporteFacturacionTab() {
         const horarioLowerVP = (horarioConductor || '').toLowerCase().trim()
         if (modalidadAsignacion === 'CARGO' || horarioLowerVP === 'todo_dia') {
           modalidad = 'CARGO'
-          prorrateo.CARGO += dias
         } else if (modalidadAsignacion === 'TURNO') {
           if (horarioLowerVP === 'nocturno' || horarioLowerVP === 'n') {
             modalidad = 'TURNO_NOCTURNO'
-            prorrateo.TURNO_NOCTURNO += dias
           } else {
-            // Default para TURNO: diurno (incluye 'diurno', 'd', null, vacío, etc.)
             modalidad = 'TURNO_DIURNO'
-            prorrateo.TURNO_DIURNO += dias
           }
-        } else {
-          // modalidadAsignacion no reconocida: tratar como CARGO por defecto
-          modalidad = 'CARGO'
-          prorrateo.CARGO += dias
         }
+
+        // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
+        const fechasContadas = diasContadosVP.get(ac.conductor_id)!
+        let diasReales = 0
+        const cursorVP = new Date(efectivoInicio)
+        while (cursorVP <= efectivoFin) {
+          const key = format(cursorVP, 'yyyy-MM-dd')
+          if (!fechasContadas.has(key)) {
+            fechasContadas.add(key)
+            diasReales++
+            if (modalidad === 'CARGO') prorrateo.CARGO++
+            else if (modalidad === 'TURNO_NOCTURNO') prorrateo.TURNO_NOCTURNO++
+            else prorrateo.TURNO_DIURNO++
+          }
+          cursorVP.setDate(cursorVP.getDate() + 1)
+        }
+        
+        if (diasReales <= 0) return
         
         // Guardar asignación para cálculo de montos
         const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
@@ -1792,6 +1816,10 @@ export function ReporteFacturacionTab() {
         prorrateoRecalcMap.set(id, { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 })
       })
 
+      // Set de fechas ya contadas por conductor para deduplicar registros duplicados
+      const diasContadosRecalc = new Map<string, Set<string>>()
+      conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
+
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
       const fechaFinSemanaRecalc = parseISO(fechaFin)
 
@@ -1830,24 +1858,32 @@ export function ReporteFacturacionTab() {
         if (fechaTerm && efectivoFin > fechaTerm) {
           efectivoFin = fechaTerm
         }
-        const dias = Math.max(0, Math.ceil((efectivoFin.getTime() - efectivoInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
-        if (dias <= 0) continue
-
         const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
         if (!prorrateo) continue
 
         const modalidadAsignacion = asignacion.horario
         const horarioLower = (ac.horario || '').toLowerCase().trim()
-        if (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia') {
-          prorrateo.CARGO += dias
-        } else if (modalidadAsignacion === 'TURNO') {
-          if (horarioLower === 'nocturno' || horarioLower === 'n') {
-            prorrateo.TURNO_NOCTURNO += dias
-          } else {
-            prorrateo.TURNO_DIURNO += dias
+
+        // Contar días deduplicando por fecha (evita doble conteo con registros duplicados)
+        const fechasContadasR = diasContadosRecalc.get(ac.conductor_id)!
+        const cursorR = new Date(efectivoInicio)
+        while (cursorR <= efectivoFin) {
+          const key = format(cursorR, 'yyyy-MM-dd')
+          if (!fechasContadasR.has(key)) {
+            fechasContadasR.add(key)
+            if (modalidadAsignacion === 'CARGO' || horarioLower === 'todo_dia') {
+              prorrateo.CARGO++
+            } else if (modalidadAsignacion === 'TURNO') {
+              if (horarioLower === 'nocturno' || horarioLower === 'n') {
+                prorrateo.TURNO_NOCTURNO++
+              } else {
+                prorrateo.TURNO_DIURNO++
+              }
+            } else {
+              prorrateo.CARGO++
+            }
           }
-        } else {
-          prorrateo.CARGO += dias
+          cursorR.setDate(cursorR.getDate() + 1)
         }
       }
 
