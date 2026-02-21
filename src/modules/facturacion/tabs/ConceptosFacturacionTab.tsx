@@ -96,7 +96,7 @@ export function ConceptosFacturacionTab() {
           </div>
           <div class="fact-form-row">
             <div class="fact-form-group">
-              <label class="fact-form-label">Precio Base</label>
+              <label class="fact-form-label">Precio</label>
               <input id="swal-precio" type="number" class="fact-form-input" placeholder="0" step="0.01">
             </div>
             <div class="fact-form-group">
@@ -150,9 +150,9 @@ export function ConceptosFacturacionTab() {
           codigo: codigo.toUpperCase(),
           descripcion,
           tipo,
-          precio_base: precioBase,
+          precio_base: ivaPorcentaje === 0 ? precioBase : Number((precioBase / (1 + ivaPorcentaje / 100)).toFixed(2)),
           iva_porcentaje: ivaPorcentaje,
-          precio_final: ivaPorcentaje === 0 ? precioBase : Number((precioBase * (1 + ivaPorcentaje / 100)).toFixed(2)),
+          precio_final: precioBase,
           es_variable: esVariable,
           aplica_turno: aplicaTurno,
           aplica_cargo: aplicaCargo,
@@ -202,8 +202,8 @@ export function ConceptosFacturacionTab() {
           </div>
           <div class="fact-form-row">
             <div class="fact-form-group">
-              <label class="fact-form-label">Precio Base</label>
-              <input id="swal-precio" type="number" class="fact-form-input" value="${concepto.precio_base || 0}" step="0.01">
+              <label class="fact-form-label">Precio</label>
+              <input id="swal-precio" type="number" class="fact-form-input" value="${concepto.precio_final || 0}" step="0.01">
             </div>
             <div class="fact-form-group">
               <label class="fact-form-label">IVA (%)</label>
@@ -251,11 +251,9 @@ export function ConceptosFacturacionTab() {
         const ivaInput = document.getElementById('swal-iva') as HTMLInputElement
         const vigenciaGroup = document.getElementById('swal-vigencia-group') as HTMLDivElement
         const checkPriceChange = () => {
-          const newBase = parseFloat(precioInput.value) || 0
-          const newIva = parseFloat(ivaInput.value) || 0
-          const newFinal = newIva === 0 ? newBase : Number((newBase * (1 + newIva / 100)).toFixed(2))
+          const newPrice = parseFloat(precioInput.value) || 0
           const oldFinal = concepto.precio_final || 0
-          vigenciaGroup.style.display = Math.abs(newFinal - oldFinal) > 0.01 ? 'block' : 'none'
+          vigenciaGroup.style.display = Math.abs(newPrice - oldFinal) > 0.01 ? 'block' : 'none'
         }
         precioInput.addEventListener('input', checkPriceChange)
         ivaInput.addEventListener('input', checkPriceChange)
@@ -277,7 +275,8 @@ export function ConceptosFacturacionTab() {
           return false
         }
 
-        const newFinal = ivaPorcentaje === 0 ? precioBase : Number((precioBase * (1 + ivaPorcentaje / 100)).toFixed(2))
+        const newFinal = precioBase
+        const newBase = ivaPorcentaje === 0 ? precioBase : Number((precioBase / (1 + ivaPorcentaje / 100)).toFixed(2))
         const priceChanged = Math.abs(newFinal - (concepto.precio_final || 0)) > 0.01
 
         if (priceChanged && !vigenciaValue) {
@@ -288,7 +287,7 @@ export function ConceptosFacturacionTab() {
         return {
           descripcion,
           tipo,
-          precio_base: precioBase,
+          precio_base: newBase,
           iva_porcentaje: ivaPorcentaje,
           precio_final: newFinal,
           es_variable: esVariable,

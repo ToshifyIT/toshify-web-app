@@ -215,7 +215,6 @@ export function IncidenciasModule() {
   const [aplicandoCobro, setAplicandoCobro] = useState(false)
   
   // Selección masiva para Por Aplicar (aplicar/rechazar en lote)
-  const [modoSeleccionPorAplicar, setModoSeleccionPorAplicar] = useState(false)
   const [penalidadesSeleccionadas, setPenalidadesSeleccionadas] = useState<Set<string>>(new Set())
   const [procesandoMasivoPenalidades, setProcesandoMasivoPenalidades] = useState(false)
 
@@ -762,7 +761,6 @@ export function IncidenciasModule() {
     }
 
     setProcesandoMasivoPenalidades(false)
-    setModoSeleccionPorAplicar(false)
     setPenalidadesSeleccionadas(new Set())
 
     if (errores > 0) {
@@ -834,7 +832,6 @@ export function IncidenciasModule() {
     }
 
     setProcesandoMasivoPenalidades(false)
-    setModoSeleccionPorAplicar(false)
     setPenalidadesSeleccionadas(new Set())
 
     if (errores > 0) {
@@ -1422,23 +1419,39 @@ export function IncidenciasModule() {
   const penalidadesColumns = useMemo<ColumnDef<PenalidadCompleta>[]>(() => {
     const cols: ColumnDef<PenalidadCompleta>[] = []
 
-    // Columna de checkbox solo en modo selección masiva de "Por Aplicar"
-    if (modoSeleccionPorAplicar) {
+    // Columna de checkbox en "Por Aplicar" - visible en hover o cuando está seleccionado
+    if (activeTab === 'por_aplicar' && canEdit) {
       cols.push({
         id: 'seleccion_penalidad',
-        header: '',
-        size: 40,
+        header: () => {
+          const todasSeleccionadas = penalidadesPorAplicar.length > 0 && penalidadesSeleccionadas.size === penalidadesPorAplicar.length;
+          return (
+            <button
+              className="pen-check-header"
+              onClick={() => {
+                if (todasSeleccionadas) {
+                  handleDeseleccionarTodasPenalidades()
+                } else {
+                  handleSeleccionarTodasPenalidades()
+                }
+              }}
+            >
+              {todasSeleccionadas ? <CheckSquare size={16} color="#10b981" /> : <Square size={16} color="#9ca3af" />}
+            </button>
+          )
+        },
+        size: 36,
         cell: ({ row }) => {
           const puedeSeleccionar = penalidadesPorAplicar.some(p => p.id === row.original.id)
-          if (!puedeSeleccionar) return <span style={{ opacity: 0.3 }}><Square size={16} /></span>
+          if (!puedeSeleccionar) return null
 
           const seleccionada = penalidadesSeleccionadas.has(row.original.id)
           return (
             <button
+              className={`pen-check-cell ${seleccionada ? 'checked' : ''}`}
               onClick={() => handleToggleSeleccionPenalidad(row.original.id)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
             >
-              {seleccionada ? <CheckSquare size={18} color="#10b981" /> : <Square size={18} color="#9ca3af" />}
+              {seleccionada ? <CheckSquare size={16} color="#10b981" /> : <Square size={16} color="#9ca3af" />}
             </button>
           )
         }
@@ -1574,67 +1587,34 @@ export function IncidenciasModule() {
     {
       id: 'acciones',
       header: 'Acciones',
+      size: 120,
       cell: ({ row }) => {
         const esRechazado = row.original.rechazado
         const esAplicado = row.original.aplicado
-        
-        return (
-          <div className="dt-actions">
-            {/* Botón aplicar solo en Por Aplicar (requiere permiso editar) */}
-            {!esAplicado && !esRechazado && canEdit && (
-              <button className="dt-btn-action dt-btn-success" data-tooltip="Aplicar a facturación" onClick={() => handleMarcarAplicado(row.original)}>
-                <CheckCircle size={14} />
-              </button>
-            )}
-            {/* Botón rechazar solo en Por Aplicar (requiere permiso editar) */}
-            {!esAplicado && !esRechazado && canEdit && (
-              <button 
-                className="dt-btn-action dt-btn-danger" 
-                data-tooltip="Rechazar" 
-                onClick={() => {
-                  setPenalidadRechazar(row.original)
-                  setMotivoRechazo('')
-                  setShowRechazoModal(true)
-                }}
-              >
-                <Ban size={14} />
-              </button>
-            )}
-            {/* Botones de aplicadas (requiere permiso editar) */}
-            {esAplicado && !esRechazado && canEdit && (
-              <>
-                <button className="dt-btn-action dt-btn-info" data-tooltip="Reasignar semana" onClick={() => handleReasignarSemana(row.original)}>
-                  <Calendar size={14} />
-                </button>
-                <button className="dt-btn-action dt-btn-warning" data-tooltip="Desaplicar" onClick={() => handleDesaplicar(row.original)}>
-                  <XCircle size={14} />
-                </button>
-              </>
-            )}
-            {/* Ver detalle siempre visible */}
-            <button className="dt-btn-action dt-btn-view" data-tooltip="Ver detalle" onClick={() => handleVerPenalidad(row.original)}>
-              <Eye size={14} />
-            </button>
-            {/* Editar y eliminar no en rechazados */}
-            {!esRechazado && (
-              <>
-                <button className="dt-btn-action dt-btn-edit" data-tooltip="Editar" onClick={() => handleEditarPenalidad(row.original)}>
-                  <Edit2 size={14} />
-                </button>
-                {canDelete && (
-                  <button className="dt-btn-action dt-btn-delete" data-tooltip="Eliminar" onClick={() => handleEliminarPenalidad(row.original)}>
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )
+
+        const actions = [
+          // Aplicar - solo en Por Aplicar
+          { icon: <CheckCircle size={14} />, label: 'Aplicar', onClick: () => handleMarcarAplicado(row.original), variant: 'success' as const, hidden: esAplicado || esRechazado || !canEdit },
+          // Rechazar - solo en Por Aplicar
+          { icon: <Ban size={14} />, label: 'Rechazar', onClick: () => { setPenalidadRechazar(row.original); setMotivoRechazo(''); setShowRechazoModal(true) }, variant: 'danger' as const, hidden: esAplicado || esRechazado || !canEdit },
+          // Reasignar - solo en Aplicadas
+          { icon: <Calendar size={14} />, label: 'Reasignar semana', onClick: () => handleReasignarSemana(row.original), variant: 'info' as const, hidden: !esAplicado || esRechazado || !canEdit },
+          // Desaplicar - solo en Aplicadas
+          { icon: <XCircle size={14} />, label: 'Desaplicar', onClick: () => handleDesaplicar(row.original), variant: 'warning' as const, hidden: !esAplicado || esRechazado || !canEdit },
+          // Ver detalle
+          { icon: <Eye size={14} />, label: 'Ver detalle', onClick: () => handleVerPenalidad(row.original) },
+          // Editar
+          { icon: <Edit2 size={14} />, label: 'Editar', onClick: () => handleEditarPenalidad(row.original), hidden: esRechazado },
+          // Eliminar
+          { icon: <Trash2 size={14} />, label: 'Eliminar', onClick: () => handleEliminarPenalidad(row.original), variant: 'danger' as const, hidden: esRechazado || !canDelete },
+        ]
+
+        return <ActionsMenu actions={actions} maxVisible={2} />
       }
     })
 
     return cols
-  }, [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId, canDelete, canEdit, fraccionamientoMap, modoSeleccionPorAplicar, penalidadesSeleccionadas, penalidadesPorAplicar])
+  }, [penPatentesUnicas, penPatenteFilter, penConductoresUnicos, penConductorFilter, penTiposUnicos, penTipoFilter, penAplicadoFilter, openFilterId, canDelete, canEdit, fraccionamientoMap, activeTab, penalidadesSeleccionadas, penalidadesPorAplicar])
 
   function handleNuevaIncidencia() {
     const estadoPendiente = estados.find(e => e.codigo === 'PENDIENTE')
@@ -3149,62 +3129,35 @@ export function IncidenciasModule() {
                 </div>
               </div>
             </div>
-            {canEdit && penalidadesPorAplicar.length > 0 && !modoSeleccionPorAplicar && (
-              <button className="btn-primary" onClick={() => setModoSeleccionPorAplicar(true)}>
-                <CheckSquare size={16} />
-                Selección masiva
-              </button>
-            )}
-            {modoSeleccionPorAplicar && (
+            {canEdit && penalidadesSeleccionadas.size > 0 && (
               <button
                 className="btn-secondary"
                 onClick={() => {
-                  setModoSeleccionPorAplicar(false)
                   setPenalidadesSeleccionadas(new Set())
                 }}
+                style={{ fontSize: 12 }}
               >
-                <X size={16} />
-                Cancelar
+                <X size={14} />
+                Limpiar selección
               </button>
             )}
           </div>
 
-          {/* Barra de selección masiva */}
-          {modoSeleccionPorAplicar && (
+          {/* Barra de acciones masivas - aparece cuando hay seleccionados */}
+          {penalidadesSeleccionadas.size > 0 && (
             <div className="incidencias-selection-bar">
-              <button
-                className="btn-select-all"
-                onClick={() => {
-                  if (penalidadesSeleccionadas.size === penalidadesPorAplicar.length) {
-                    handleDeseleccionarTodasPenalidades()
-                  } else {
-                    handleSeleccionarTodasPenalidades()
-                  }
-                }}
-              >
-                {penalidadesSeleccionadas.size === penalidadesPorAplicar.length && penalidadesPorAplicar.length > 0 ? (
-                  <><CheckSquare size={16} color="#10b981" /> Deseleccionar todas</>
-                ) : (
-                  <><Square size={16} /> Seleccionar todas ({penalidadesPorAplicar.length})</>
-                )}
-              </button>
-
               <span className="selection-count">
                 <strong>{penalidadesSeleccionadas.size}</strong> de {penalidadesPorAplicar.length} seleccionadas
               </span>
 
-              {penalidadesSeleccionadas.size > 0 && (
-                <>
-                  <button className="btn-send" onClick={handleAplicarMasivo} disabled={procesandoMasivoPenalidades} style={{ background: '#10b981' }}>
-                    <CheckCircle size={16} />
-                    {procesandoMasivoPenalidades ? 'Procesando...' : `Aplicar ${penalidadesSeleccionadas.size}`}
-                  </button>
-                  <button className="btn-send" onClick={handleRechazarMasivo} disabled={procesandoMasivoPenalidades} style={{ background: '#ef4444' }}>
-                    <Ban size={16} />
-                    {procesandoMasivoPenalidades ? 'Procesando...' : `Rechazar ${penalidadesSeleccionadas.size}`}
-                  </button>
-                </>
-              )}
+              <button className="btn-send" onClick={handleAplicarMasivo} disabled={procesandoMasivoPenalidades} style={{ background: '#10b981' }}>
+                <CheckCircle size={16} />
+                {procesandoMasivoPenalidades ? 'Procesando...' : `Aplicar ${penalidadesSeleccionadas.size}`}
+              </button>
+              <button className="btn-send" onClick={handleRechazarMasivo} disabled={procesandoMasivoPenalidades} style={{ background: '#ef4444' }}>
+                <Ban size={16} />
+                {procesandoMasivoPenalidades ? 'Procesando...' : `Rechazar ${penalidadesSeleccionadas.size}`}
+              </button>
             </div>
           )}
 

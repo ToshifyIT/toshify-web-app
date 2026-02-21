@@ -1509,3 +1509,34 @@
   background: #FEE2E2;
   color: var(--color-primary);
 }
+
+/* Checkbox de selección en Por Aplicar - visible en hover */
+.pen-check-header {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.pen-check-cell {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.pen-check-cell.checked {
+  opacity: 1;
+}
+
+/* Mostrar checkbox en hover de la fila */
+tr:hover .pen-check-cell,
+[role="row"]:hover .pen-check-cell {
+  opacity: 1;
+}
