@@ -494,8 +494,16 @@ export function ReporteFacturacionTab() {
         cursor.setDate(cursor.getDate() + 1)
       }
 
-      // Ordenar historial: vigentes (sin fechaFin) primero, luego descendente por fechaInicio
-      historial.sort((a, b) => {
+      // Filtrar historial: solo asignaciones que aportan días o están vigentes
+      const historialFiltrado = historial.filter(h => {
+        const estado = h.padreEstado.toLowerCase()
+        if (estado.includes('program') || estado.includes('cancel')) return false
+        if (h.dias === 0 && h.nota !== 'Días ya cubiertos') return false
+        return true
+      })
+
+      // Ordenar: vigentes primero, luego descendente por fechaInicio
+      historialFiltrado.sort((a, b) => {
         const aVigente = !a.fechaFin || a.fechaFin === 'NULL'
         const bVigente = !b.fechaFin || b.fechaFin === 'NULL'
         if (aVigente && !bVigente) return -1
@@ -509,7 +517,7 @@ export function ReporteFacturacionTab() {
         conductorDni,
         totalDias: Math.min(7, diasCubiertos.size),
         dias: diasSemana,
-        historial,
+        historial: historialFiltrado,
       })
     } catch {
       Swal.fire('Error', 'No se pudo cargar el desglose de días', 'error')
