@@ -176,8 +176,9 @@ export function ReporteFacturacionTab() {
 
   // Modal de desglose de días
   const [showDiasModal, setShowDiasModal] = useState(false)
-  const [showDiasHistorial, setShowDiasHistorial] = useState(false)
+
   const [diasModalData, setDiasModalData] = useState<{
+    conductorId: string
     conductorNombre: string
     conductorDni: string
     totalDias: number
@@ -197,6 +198,24 @@ export function ReporteFacturacionTab() {
     }[]
   } | null>(null)
   const [loadingDias, setLoadingDias] = useState(false)
+
+  // Modal de historial de asignaciones (completo, todas las asignaciones del conductor)
+  const [showHistorialModal, setShowHistorialModal] = useState(false)
+  const [loadingHistorial, setLoadingHistorial] = useState(false)
+  const [historialModalData, setHistorialModalData] = useState<{
+    conductorNombre: string
+    conductorDni: string
+    asignaciones: {
+      id: string
+      vehiculoPatente: string
+      horario: string
+      estado: string
+      padreEstado: string
+      fechaInicio: string
+      fechaFin: string | null
+      modalidad: string
+    }[]
+  } | null>(null)
 
   // Modal de detalle
   const [showDetalle, setShowDetalle] = useState(false)
@@ -340,7 +359,6 @@ export function ReporteFacturacionTab() {
   // Cargar desglose de días para un conductor específico
   async function cargarDesgloseDias(conductorId: string, conductorNombre: string, conductorDni: string, _turnosCobrados: number) {
     setShowDiasModal(true)
-    setShowDiasHistorial(false)
     setLoadingDias(true)
     setDiasModalData(null)
 
@@ -381,6 +399,12 @@ export function ReporteFacturacionTab() {
         const horario = ac.horario || asignacion.horario || '-'
         const acInicioStr = ac.fecha_inicio ? ac.fecha_inicio.substring(0, 10) : 'NULL'
         const acFinStr = ac.fecha_fin ? ac.fecha_fin.substring(0, 10) : 'NULL'
+
+        // Skip PROGRAMADO — asignación no ha iniciado, no cuenta para facturación
+        if (['programado', 'programada'].includes(estadoPadre)) {
+          historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Programada (no iniciada)' })
+          continue
+        }
 
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) {
           historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Huérfano (padre sin fecha_fin)' })
@@ -432,6 +456,7 @@ export function ReporteFacturacionTab() {
       }
 
       setDiasModalData({
+        conductorId: realConductorId,
         conductorNombre,
         conductorDni,
         totalDias: Math.min(7, diasCubiertos.size),
@@ -443,6 +468,76 @@ export function ReporteFacturacionTab() {
       setShowDiasModal(false)
     } finally {
       setLoadingDias(false)
+    }
+  }
+
+  // Cargar historial completo de asignaciones para un conductor
+  async function cargarHistorialAsignaciones(conductorId: string, conductorNombre: string, conductorDni: string) {
+    setShowHistorialModal(true)
+    setLoadingHistorial(true)
+    setHistorialModalData(null)
+
+    const realConductorId = conductorId.startsWith('preview-') ? conductorId.replace('preview-', '') : conductorId
+
+    try {
+      const { data: asignacionesCond } = await (supabase
+        .from('asignaciones_conductores') as any)
+        .select(`
+          id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
+          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin, modalidad,
+            vehiculos(patente)
+          )
+        `)
+        .eq('conductor_id', realConductorId)
+        .order('fecha_inicio', { ascending: false, nullsFirst: false })
+
+      const asignaciones: {
+        id: string
+        vehiculoPatente: string
+        horario: string
+        estado: string
+        padreEstado: string
+        fechaInicio: string
+        fechaFin: string | null
+        modalidad: string
+      }[] = []
+
+      for (const ac of (asignacionesCond || []) as any[]) {
+        const padre = ac.asignaciones
+        if (!padre) continue
+
+        const acInicio = ac.fecha_inicio || padre.fecha_inicio || null
+        const acFin = ac.fecha_fin || padre.fecha_fin || null
+
+        asignaciones.push({
+          id: ac.id,
+          vehiculoPatente: padre.vehiculos?.patente || '-',
+          horario: ac.horario || padre.horario || '-',
+          estado: ac.estado || '-',
+          padreEstado: padre.estado || '-',
+          fechaInicio: acInicio ? acInicio.substring(0, 10) : '-',
+          fechaFin: acFin ? acFin.substring(0, 10) : null,
+          modalidad: padre.modalidad || padre.horario || '-',
+        })
+      }
+
+      // Ordenar por fecha_inicio descendente (más reciente primero)
+      asignaciones.sort((a, b) => {
+        if (a.fechaInicio === '-') return 1
+        if (b.fechaInicio === '-') return -1
+        return b.fechaInicio.localeCompare(a.fechaInicio)
+      })
+
+      setHistorialModalData({
+        conductorNombre,
+        conductorDni,
+        asignaciones,
+      })
+    } catch {
+      Swal.fire('Error', 'No se pudo cargar el historial de asignaciones', 'error')
+      setShowHistorialModal(false)
+    } finally {
+      setLoadingHistorial(false)
     }
   }
 
@@ -509,20 +604,76 @@ export function ReporteFacturacionTab() {
       const ESTADO_ACTIVO_ID_LOAD = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const fechaFinPeriodoLoad = parseISO((periodoData as any).fecha_fin)
 
+      // Cargar asignaciones para determinar si tienen asignación al cierre de la semana y horario
+      const conductorIdsLoad = (facturacionesData || []).map((f: any) => f.conductor_id).filter(Boolean)
+      const { data: asignacionesLoad } = conductorIdsLoad.length > 0 ? await (supabase
+        .from('asignaciones_conductores') as any)
+        .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin)')
+        .in('conductor_id', conductorIdsLoad)
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+      : { data: [] }
+
+      const conductoresConAsignacionAlCierreLoad = new Set<string>()
+      // Calcular horario (diurno/nocturno) por conductor para períodos guardados
+      const horarioMapLoad = new Map<string, { diurno: number; nocturno: number; cargo: number }>()
+      ;(asignacionesLoad || []).forEach((ac: any) => {
+        const asignacion = ac.asignaciones
+        if (!asignacion) return
+        const estadoPadre = (asignacion.estado || '').toLowerCase()
+        if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadre)) return
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10)) : null
+        const asigFin = asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : null
+        const finEfectivo = acFin || asigFin
+        if (!finEfectivo || finEfectivo >= fechaFinPeriodoLoad) {
+          conductoresConAsignacionAlCierreLoad.add(ac.conductor_id)
+        }
+
+        // Calcular overlap con el período para determinar horario
+        const periodoInicioLoad = parseISO((periodoData as any).fecha_inicio)
+        const acInicioLoad = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10))
+          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio.substring(0, 10)) : periodoInicioLoad)
+        const acFinLoad = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
+          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : fechaFinPeriodoLoad)
+        const efInicio = acInicioLoad < periodoInicioLoad ? periodoInicioLoad : acInicioLoad
+        const efFin = acFinLoad > fechaFinPeriodoLoad ? fechaFinPeriodoLoad : acFinLoad
+        const diasOverlap = Math.max(0, Math.ceil((efFin.getTime() - efInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+        if (diasOverlap <= 0) return
+
+        if (!horarioMapLoad.has(ac.conductor_id)) {
+          horarioMapLoad.set(ac.conductor_id, { diurno: 0, nocturno: 0, cargo: 0 })
+        }
+        const h = horarioMapLoad.get(ac.conductor_id)!
+        const modalidadPadre = asignacion.horario // 'TURNO' o 'CARGO'
+        const horarioCond = (ac.horario || '').toLowerCase().trim()
+        if (modalidadPadre === 'CARGO' || horarioCond === 'todo_dia') {
+          h.cargo += diasOverlap
+        } else if (modalidadPadre === 'TURNO') {
+          if (horarioCond === 'nocturno' || horarioCond === 'n') h.nocturno += diasOverlap
+          else h.diurno += diasOverlap
+        } else {
+          h.cargo += diasOverlap
+        }
+      })
+
       // Usar nombre de tabla conductores en formato "Nombres Apellidos"
       let facturacionesTransformadas = (facturacionesData || []).map((f: any) => {
         const conductorEstadoId = f.conductor?.estado_id
         const fechaTermLoad = f.conductor?.fecha_terminacion ? parseISO(f.conductor.fecha_terminacion) : null
         const esDeBajaLoad = conductorEstadoId !== ESTADO_ACTIVO_ID_LOAD
           || (fechaTermLoad && fechaTermLoad <= fechaFinPeriodoLoad)
+        const tieneAsignacionCierreLoad = conductoresConAsignacionAlCierreLoad.has(f.conductor_id)
         const estadoBilling = esDeBajaLoad ? 'De baja'
-          : (f.turnos_cobrados >= 7 ? 'Activo' : 'Pausa')
+          : ((f.turnos_cobrados >= 7 || tieneAsignacionCierreLoad) ? 'Activo' : 'Pausa')
+        const horarioInfo = horarioMapLoad.get(f.conductor_id)
         return {
           ...f,
           conductor_nombre: f.conductor 
             ? `${f.conductor.nombres || ''} ${f.conductor.apellidos || ''}`.trim()
             : f.conductor_nombre || '',
           estado_billing: estadoBilling,
+          prorrateo_diurno_dias: f.prorrateo_diurno_dias ?? (horarioInfo?.diurno || 0),
+          prorrateo_nocturno_dias: f.prorrateo_nocturno_dias ?? (horarioInfo?.nocturno || 0),
+          prorrateo_cargo_dias: f.prorrateo_cargo_dias ?? (horarioInfo?.cargo || 0),
         }
       })
 
@@ -661,45 +812,13 @@ export function ReporteFacturacionTab() {
       const semanaDelPeriodo = getWeek(parseISO(fechaInicio), { weekStartsOn: 1 })
       const anioDelPeriodo = getYear(parseISO(fechaInicio))
 
-      // 1. Cargar conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
-      // SIEMPRE filtrar por sede (usar sedeActualId o sede del usuario)
+      // 1. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
       const sedeParaVP = sedeActualId || sedeUsuario?.id
-      // Excluir "De baja" inicialmente - luego agregamos los de baja con asignación en la semana
-      let qControl = (supabase
-        .from('conductores_semana_facturacion') as any)
-        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
-        .eq('semana', semanaDelPeriodo)
-        .eq('anio', anioDelPeriodo)
-      if (sedeParaVP) qControl = qControl.eq('sede_id', sedeParaVP)
-      const { data: conductoresControlActivosVP, error: errControl } = await qControl
-        .not('estado', 'eq', 'De baja')
-      
-      // También cargar "De baja" para incluir los que tienen asignación finalizada en la semana
-      let qBajaVP = (supabase
-        .from('conductores_semana_facturacion') as any)
-        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
-        .eq('semana', semanaDelPeriodo)
-        .eq('anio', anioDelPeriodo)
-        .eq('estado', 'De baja')
-      if (sedeParaVP) qBajaVP = qBajaVP.eq('sede_id', sedeParaVP)
-      const { data: conductoresBajaVP } = await qBajaVP
-      
-      // Unificar: activos + de baja (deduplicados por DNI)
-      const dnisActivosVP = new Set((conductoresControlActivosVP || []).map((c: any) => c.numero_dni))
-      const conductoresControl = [
-        ...(conductoresControlActivosVP || []),
-        ...(conductoresBajaVP || []).filter((c: any) => !dnisActivosVP.has(c.numero_dni))
-      ]
+      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null }[] = []
+      const dnisAgregadosVP = new Set<string>()
 
-      if (errControl) throw errControl
-
-      // Guardar DNIs originales del control table ANTES de suplementar
-      const dnisEnControlOriginal = new Set(conductoresControl.map((c: any) => c.numero_dni))
-
-      // Suplementar con conductores que tienen asignaciones en la semana pero NO están en la tabla de control
-      // Captura conductores dados de baja o ausentes del control que trabajaron durante la semana
+      // 1a. Conductores con asignaciones activas/finalizadas que se solapan con la semana
       {
-        const dnisEnControlVP = new Set(conductoresControl.map((c: any) => c.numero_dni))
         const { data: asignacionesSemanaVP } = await (supabase
           .from('asignaciones_conductores') as any)
           .select(`
@@ -707,21 +826,20 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
 
         const semInicioVP = parseISO(fechaInicio)
         const semFinVP = parseISO(fechaFin)
-        const conductoresExtraVP = new Map<string, any>()
 
-        for (const ac of (asignacionesSemanaVP || [])) {
+        for (const ac of (asignacionesSemanaVP || []) as any[]) {
           const cond = ac.conductores
           const asig = ac.asignaciones
           if (!cond || !asig) continue
           if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
-          if (dnisEnControlVP.has(cond.numero_dni)) continue
 
-          // Descartar asignaciones huérfanas (padre finalizado sin fecha_fin)
+          // Skip PROGRAMADO y huérfanos
           const estadoPadreVPExtra = (asig.estado || '').toLowerCase()
+          if (['programado', 'programada'].includes(estadoPadreVPExtra)) continue
           if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVPExtra) && !asig.fecha_fin) continue
 
           // Verificar solapamiento con la semana (normalizar sin hora)
@@ -730,9 +848,10 @@ export function ReporteFacturacionTab() {
             : (asig.fecha_fin ? parseISO(asig.fecha_fin.substring(0, 10)) : new Date('2099-12-31'))
           if (acFinExtra < semInicioVP || acInicioExtra > semFinVP) continue
 
-          if (!conductoresExtraVP.has(cond.numero_dni)) {
+          if (!dnisAgregadosVP.has(cond.numero_dni)) {
+            dnisAgregadosVP.add(cond.numero_dni)
             const modalidad = (asig.horario || '').toUpperCase() === 'CARGO' ? 'CARGO' : 'TURNO'
-            conductoresExtraVP.set(cond.numero_dni, {
+            conductoresControl.push({
               numero_dni: cond.numero_dni,
               estado: 'Activo',
               patente: asig.vehiculos?.patente || '',
@@ -741,9 +860,32 @@ export function ReporteFacturacionTab() {
             })
           }
         }
+      }
 
-        for (const [, extra] of conductoresExtraVP) {
-          conductoresControl.push(extra)
+      // 1b. Conductores con penalidades pendientes (cobros de incidencias) en la semana
+      const dnisConPenalidadesVP = new Set<string>()
+      {
+        const { data: penalidadesPendientesVP } = await (supabase
+          .from('penalidades') as any)
+          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
+          .gte('fecha', fechaInicio)
+          .lte('fecha', format(semanaActual.fin, 'yyyy-MM-dd'))
+          .eq('aplicado', false)
+
+        for (const p of (penalidadesPendientesVP || []) as any[]) {
+          const cond = p.conductores
+          if (!cond || !cond.numero_dni) continue
+          if (sedeParaVP && cond.sede_id !== sedeParaVP) continue
+          if (dnisAgregadosVP.has(cond.numero_dni)) continue
+          dnisAgregadosVP.add(cond.numero_dni)
+          dnisConPenalidadesVP.add(cond.numero_dni)
+          conductoresControl.push({
+            numero_dni: cond.numero_dni,
+            estado: 'Activo',
+            patente: '',
+            modalidad: 'TURNO',
+            valor_alquiler: null
+          })
         }
       }
 
@@ -819,8 +961,10 @@ export function ReporteFacturacionTab() {
         const modalidadAsignacion = asignacion.horario // 'TURNO' o 'CARGO'
         const horarioConductor = ac.horario // 'diurno', 'nocturno', 'todo_dia'
         
-        // Si la asignación padre está finalizada/cancelada sin fecha_fin → registro huérfano
+        // Si la asignación padre está programada → no ha iniciado, no cuenta para facturación
         const estadoPadreVP = (asignacion.estado || '').toLowerCase()
+        if (['programado', 'programada'].includes(estadoPadreVP)) return
+        // Si la asignación padre está finalizada/cancelada sin fecha_fin → registro huérfano
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVP) && !asignacion.fecha_fin) return
         
         // Calcular días que este registro se solapa con la semana
@@ -874,6 +1018,22 @@ export function ReporteFacturacionTab() {
         }
       })
       
+      // Determinar conductores con asignación activa al cierre de la semana
+      // Si tiene asignación sin fecha_fin o con fecha_fin >= fin de semana → Activo
+      const conductoresConAsignacionAlCierreVP = new Set<string>()
+      ;(asignacionesConductores || []).forEach((ac: any) => {
+        const asignacion = ac.asignaciones
+        if (!asignacion) return
+        const estadoPadre = (asignacion.estado || '').toLowerCase()
+        if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadre)) return
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10)) : null
+        const asigFin = asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : null
+        const finEfectivo = acFin || asigFin
+        if (!finEfectivo || finEfectivo >= semanaActual.fin) {
+          conductoresConAsignacionAlCierreVP.add(ac.conductor_id)
+        }
+      })
+
       // Cargar historial de precios para la semana
       const { data: historialPreciosVP } = await (supabase
         .from('conceptos_facturacion_historial') as any)
@@ -947,7 +1107,7 @@ export function ReporteFacturacionTab() {
       // Nota: conductor_id puede ser NULL (importado desde histórico), usamos conductor_nombre como clave
       const { data: garantias } = await (supabase
         .from('garantias_conductores') as any)
-        .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler')
+        .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal')
 
       const garantiasMap = new Map<string, {
         conductor_id: string | null;
@@ -956,6 +1116,7 @@ export function ReporteFacturacionTab() {
         cuotas_pagadas: number;
         cuotas_totales: number;
         tipo_alquiler: string;
+        monto_cuota_semanal: number | null;
       }>((garantias || []).map((g: any) => [g.conductor_nombre?.toLowerCase().trim() || '', g]))
 
       // 3.1 Cargar datos de Cabify desde la tabla cabify_historico (peajes de la SEMANA ANTERIOR)
@@ -1175,9 +1336,8 @@ export function ReporteFacturacionTab() {
         }
         const diasTotales = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
         
-        // Solo excluir conductores suplementados (no en tabla de control) si no tuvieron actividad
-        // Conductores de la tabla de control SIEMPRE aparecen (pueden ser De baja con 0 días)
-        if (diasTotales === 0 && !dnisEnControlOriginal.has(control.numero_dni)) continue
+        // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
+        if (diasTotales === 0 && !dnisConPenalidadesVP.has(control.numero_dni)) continue
         
         // Calcular alquiler usando montos pre-calculados con precios históricos (precio_base sin IVA)
         let subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
@@ -1208,7 +1368,7 @@ export function ReporteFacturacionTab() {
             subtotalGarantia = 0
             cuotaGarantiaNumero = 'NA'
           } else {
-            subtotalGarantia = cuotaGarantiaSemanalVP
+            subtotalGarantia = garantia.monto_cuota_semanal || cuotaGarantiaSemanalVP
             const cuotaActual = garantia.cuotas_pagadas + 1
             cuotaGarantiaNumero = `${cuotaActual} de ${garantia.cuotas_totales}`
           }
@@ -1217,18 +1377,24 @@ export function ReporteFacturacionTab() {
           cuotaGarantiaNumero = `1 de ${cuotasTotales}`
         }
 
+        // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
+        if (diasTotales === 0) {
+          subtotalGarantia = 0
+          cuotaGarantiaNumero = 'NA'
+        }
+
         // Datos por DNI del conductor (normalizado sin ceros adelante)
         const dniConductor = (conductor.numero_dni || '').replace(/^0+/, '')
 
-        // Excesos de KM (P006)
+        // Excesos de KM (P006) - no aplica si tiene 0 días
         const exceso = excesosMap.get(conductorId)
-        const montoExcesos = exceso?.monto || 0
+        const montoExcesos = diasTotales === 0 ? 0 : (exceso?.monto || 0)
         const kmExceso = exceso?.kmExceso || 0
 
-        // Peajes de Cabify (P005)
-        const montoPeajes = peajesMap.get(dniConductor) || 0
+        // Peajes de Cabify (P005) - no aplica si tiene 0 días
+        const montoPeajes = diasTotales === 0 ? 0 : (peajesMap.get(dniConductor) || 0)
 
-        // Penalidades (P006 + P007 como cargos)
+        // Penalidades (P006 + P007 como cargos) - siempre aplica
         const montoPenalidades = penalidadesMap.get(conductorId) || 0
         // Penalidades P004 como descuentos
         const montoPenalidadesDescuento = penalidadesDescuentoMap.get(conductorId) || 0
@@ -1239,12 +1405,10 @@ export function ReporteFacturacionTab() {
         // Tickets a favor (descuentos) + P004 de penalidades
         const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento
 
-        // Saldo anterior y mora (1% diario, max 7 días)
-        // NOTA: En saldos_conductores, saldo_actual > 0 = A FAVOR, < 0 = DEUDA
-        // Para facturación, invertimos: saldoAnterior > 0 = DEUDA (se suma), < 0 = A FAVOR (se resta)
+        // Saldo anterior y mora - no aplica si tiene 0 días (solo penalidades)
         const saldo = saldosMap.get(conductorId)
-        const saldoAnterior = -(saldo?.saldo_actual || 0)
-        const diasMora = saldo?.dias_mora || 0
+        const saldoAnterior = diasTotales === 0 ? 0 : -(saldo?.saldo_actual || 0)
+        const diasMora = diasTotales === 0 ? 0 : (saldo?.dias_mora || 0)
         const montoMora = calcularMora(saldoAnterior, diasMora)
 
         // Total a pagar
@@ -1298,11 +1462,14 @@ export function ReporteFacturacionTab() {
            prorrateo_nocturno_monto: prorrateo.monto_TURNO_NOCTURNO,
            // Detalle de penalidades para el modal
            penalidades_detalle: detalleMap.get(conductorId) || [],
-           // Estado: si tiene fecha_terminacion en/antes de la semana → De baja
+           // Estado: De baja si tiene fecha_terminacion o no está activo
+           // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
            estado_billing: (() => {
              const ftVP = conductor.fecha_terminacion ? parseISO(conductor.fecha_terminacion) : null
              const esBajaVP = conductor.estado_id !== ESTADO_ACTIVO_ID || (ftVP && ftVP <= semanaActual.fin)
-             return esBajaVP ? 'De baja' : (diasTotales >= 7 ? 'Activo' : 'Pausa')
+             if (esBajaVP) return 'De baja'
+             const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
+             return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
            })(),
          })
        }
@@ -1478,50 +1645,43 @@ export function ReporteFacturacionTab() {
         .eq('anio', anioNum)
 
       // 2. BORRAR toda la facturación existente del período
+      // Primero leer los totales para revertir las deudas en saldos_conductores
       const { data: factExistentes } = await supabase
         .from('facturacion_conductores')
-        .select('id')
+        .select('id, conductor_id, subtotal_neto, saldo_aplicado')
         .eq('periodo_id', periodoId)
 
       if (factExistentes && factExistentes.length > 0) {
         const factIds = factExistentes.map((f: any) => f.id)
         await supabase.from('facturacion_detalle').delete().in('facturacion_id', factIds)
+
+        // Revertir solo registros donde saldo_aplicado=true (generados con código nuevo)
+        // La facturación vieja nunca escribió al saldo, así que no hay nada que revertir
+        for (const fact of factExistentes as any[]) {
+          if (!fact.conductor_id || !fact.subtotal_neto || !fact.saldo_aplicado) continue
+          const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+            .select('id, saldo_actual')
+            .eq('conductor_id', fact.conductor_id)
+            .maybeSingle()
+          if (saldoExistente) {
+            await (supabase.from('saldos_conductores') as any)
+              .update({
+                saldo_actual: (saldoExistente.saldo_actual || 0) + fact.subtotal_neto,
+                ultima_actualizacion: new Date().toISOString()
+              })
+              .eq('id', saldoExistente.id)
+          }
+        }
       }
       await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
-      // 3. Obtener conductores desde conductores_semana_facturacion (FUENTE DE VERDAD)
-      // SIEMPRE filtrar por sede del período (no depender de sedeActualId)
-      let qRecalc = (supabase
-        .from('conductores_semana_facturacion') as any)
-        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
-        .eq('semana', semanaNum)
-        .eq('anio', anioNum)
-      if (sedeDelPeriodo) qRecalc = qRecalc.eq('sede_id', sedeDelPeriodo)
-      const { data: conductoresControlActivos } = await qRecalc
-        .not('estado', 'eq', 'De baja')
-      
-      // También cargar "De baja" para incluir los que tienen asignación finalizada en la semana
-      let qBaja = (supabase
-        .from('conductores_semana_facturacion') as any)
-        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
-        .eq('semana', semanaNum)
-        .eq('anio', anioNum)
-        .eq('estado', 'De baja')
-      if (sedeDelPeriodo) qBaja = qBaja.eq('sede_id', sedeDelPeriodo)
-      const { data: conductoresBaja } = await qBaja
-      
-      // Unificar: activos + de baja (se deduplicarán después por DNI)
-      const dnisActivos = new Set((conductoresControlActivos || []).map((c: any) => c.numero_dni))
-      const conductoresControl = [
-        ...(conductoresControlActivos || []),
-        // Solo agregar "De baja" si no están ya como activos (evitar duplicados)
-        ...(conductoresBaja || []).filter((c: any) => !dnisActivos.has(c.numero_dni))
-      ]
+      // 3. Cargar conductores desde asignaciones que se solapan con la semana + penalidades pendientes
+      const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null }[] = []
+      const dnisAgregadosRecalc = new Set<string>()
+      const dnisConPenalidadesRecalc = new Set<string>()
 
-      // Suplementar con conductores que tienen asignaciones en la semana pero NO están en la tabla de control
-      // Captura conductores dados de baja o ausentes del control que trabajaron durante la semana
+      // 3a. Conductores con asignaciones activas/finalizadas que se solapan con la semana
       {
-        const dnisEnControlRecalc = new Set(conductoresControl.map((c: any) => c.numero_dni))
         const { data: asignacionesSemanaRecalc } = await (supabase
           .from('asignaciones_conductores') as any)
           .select(`
@@ -1529,32 +1689,32 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
 
         const semInicioRecalc = parseISO(fechaInicio)
         const semFinRecalc = parseISO(fechaFin)
-        const conductoresExtraRecalc = new Map<string, any>()
 
-        for (const ac of (asignacionesSemanaRecalc || [])) {
+        for (const ac of (asignacionesSemanaRecalc || []) as any[]) {
           const cond = ac.conductores
           const asig = ac.asignaciones
           if (!cond || !asig) continue
           if (sedeDelPeriodo && cond.sede_id !== sedeDelPeriodo) continue
-          if (dnisEnControlRecalc.has(cond.numero_dni)) continue
 
-          // Descartar asignaciones huérfanas (padre finalizado sin fecha_fin)
+          // Skip PROGRAMADO y huérfanos
           const estadoPadreRecExtra = (asig.estado || '').toLowerCase()
+          if (['programado', 'programada'].includes(estadoPadreRecExtra)) continue
           if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreRecExtra) && !asig.fecha_fin) continue
 
-          // Verificar solapamiento con la semana
-          const acInicioRecExtra = ac.fecha_inicio ? parseISO(ac.fecha_inicio) : new Date('2020-01-01')
-          const acFinRecExtra = ac.fecha_fin ? parseISO(ac.fecha_fin)
-            : (asig.fecha_fin ? parseISO(asig.fecha_fin) : new Date('2099-12-31'))
+          // Verificar solapamiento con la semana (normalizar sin hora)
+          const acInicioRecExtra = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10)) : new Date('2020-01-01')
+          const acFinRecExtra = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
+            : (asig.fecha_fin ? parseISO(asig.fecha_fin.substring(0, 10)) : new Date('2099-12-31'))
           if (acFinRecExtra < semInicioRecalc || acInicioRecExtra > semFinRecalc) continue
 
-          if (!conductoresExtraRecalc.has(cond.numero_dni)) {
+          if (!dnisAgregadosRecalc.has(cond.numero_dni)) {
+            dnisAgregadosRecalc.add(cond.numero_dni)
             const modalidad = (asig.horario || '').toUpperCase() === 'CARGO' ? 'CARGO' : 'TURNO'
-            conductoresExtraRecalc.set(cond.numero_dni, {
+            conductoresControl.push({
               numero_dni: cond.numero_dni,
               estado: 'Activo',
               patente: asig.vehiculos?.patente || '',
@@ -1563,9 +1723,31 @@ export function ReporteFacturacionTab() {
             })
           }
         }
+      }
 
-        for (const [, extra] of conductoresExtraRecalc) {
-          conductoresControl.push(extra)
+      // 3b. Conductores con penalidades pendientes (cobros de incidencias) en la semana
+      {
+        const { data: penalidadesPendientesRecalc } = await (supabase
+          .from('penalidades') as any)
+          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
+          .gte('fecha', fechaInicio)
+          .lte('fecha', fechaFin)
+          .eq('aplicado', false)
+
+        for (const p of (penalidadesPendientesRecalc || []) as any[]) {
+          const cond = p.conductores
+          if (!cond || !cond.numero_dni) continue
+          if (sedeDelPeriodo && cond.sede_id !== sedeDelPeriodo) continue
+          if (dnisAgregadosRecalc.has(cond.numero_dni)) continue
+          dnisAgregadosRecalc.add(cond.numero_dni)
+          dnisConPenalidadesRecalc.add(cond.numero_dni)
+          conductoresControl.push({
+            numero_dni: cond.numero_dni,
+            estado: 'Activo',
+            patente: '',
+            modalidad: 'TURNO',
+            valor_alquiler: null
+          })
         }
       }
 
@@ -1574,7 +1756,7 @@ export function ReporteFacturacionTab() {
           .update({ estado: 'abierto', total_conductores: 0 })
           .eq('id', periodoId)
         await cargarFacturacion()
-        Swal.fire('Aviso', 'No hay conductores en la tabla de control para esta semana', 'warning')
+        Swal.fire('Aviso', 'No hay conductores con asignaciones ni penalidades en esta semana', 'warning')
         return
       }
 
@@ -1625,15 +1807,18 @@ export function ReporteFacturacionTab() {
         const asignacion = ac.asignaciones
         if (!asignacion) continue
 
-        // Skip orphan: padre finalizado/cancelado sin fecha_fin
+        // Skip PROGRAMADO — asignación no ha iniciado, no cuenta para facturación
         const estadoPadre = (asignacion.estado || '').toLowerCase()
+        if (['programado', 'programada'].includes(estadoPadre)) continue
+        // Skip orphan: padre finalizado/cancelado sin fecha_fin
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
 
         // Fechas: usar conductor > padre > semana como fallback
-        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio)
-          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio) : fechaInicioSemanaRecalc)
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin)
-          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin) : fechaFinSemanaRecalc)
+        // Normalizar a solo fecha (sin hora) — timestamps tienen hora que rompe el conteo
+        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10))
+          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio.substring(0, 10)) : fechaInicioSemanaRecalc)
+        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
+          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : fechaFinSemanaRecalc)
 
         if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
 
@@ -1666,6 +1851,21 @@ export function ReporteFacturacionTab() {
         }
       }
 
+      // Determinar conductores con asignación activa al cierre de la semana
+      const conductoresConAsignacionAlCierreRecalc = new Set<string>()
+      ;(asignacionesConductoresRecalc || []).forEach((ac: any) => {
+        const asignacion = ac.asignaciones
+        if (!asignacion) return
+        const estadoPadreR = (asignacion.estado || '').toLowerCase()
+        if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadreR)) return
+        const acFinR = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10)) : null
+        const asigFinR = asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : null
+        const finEfectivoR = acFinR || asigFinR
+        if (!finEfectivoR || finEfectivoR >= fechaFinSemanaRecalc) {
+          conductoresConAsignacionAlCierreRecalc.add(ac.conductor_id)
+        }
+      })
+
       // Procesar conductores: solo los que tienen al menos 1 día real en la semana
       const ESTADO_ACTIVO_ID_RECALC = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
       const conductoresProcesados: {
@@ -1686,17 +1886,18 @@ export function ReporteFacturacionTab() {
         const prorrateo = prorrateoRecalcMap.get(conductorData.id) || { CARGO: 0, TURNO_DIURNO: 0, TURNO_NOCTURNO: 0 }
         const totalDias = Math.min(7, prorrateo.CARGO + prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO)
 
-        // Solo incluir conductores con al menos 1 día en la semana
-        if (totalDias === 0) continue
+        // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
+        if (totalDias === 0 && !dnisConPenalidadesRecalc.has(control.numero_dni)) continue
 
-        // Estado: si tiene fecha_terminacion en/antes de la semana → De baja
-        // Si no: >= 7 = Activo, < 7 + activo en BD = Pausa, < 7 + inactivo = De baja
+        // Estado: De baja si tiene fecha_terminacion o no está activo
+        // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
         const fechaTermCond = conductorData.fecha_terminacion ? parseISO(conductorData.fecha_terminacion) : null
         const esDeBaja = conductorData.estado_id !== ESTADO_ACTIVO_ID_RECALC
           || (fechaTermCond && fechaTermCond <= fechaFinSemanaRecalc)
+        const tieneAsignacionCierreRecalc = conductoresConAsignacionAlCierreRecalc.has(conductorData.id)
         const estadoBilling: 'Activo' | 'Pausa' | 'De baja' = esDeBaja
           ? 'De baja'
-          : (totalDias >= 7 ? 'Activo' : 'Pausa')
+          : ((totalDias >= 7 || tieneAsignacionCierreRecalc) ? 'Activo' : 'Pausa')
 
         conductoresProcesados.push({
           conductor_id: conductorData.id,
@@ -1864,9 +2065,10 @@ export function ReporteFacturacionTab() {
         }
 
         // Garantía - valor fijo semanal (no proporcional a días trabajados)
+        // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
         const factorProporcional = conductor.total_dias / 7
-        const cuotaGarantiaProporcional = cuotaGarantia
         const garantiaConductor = (garantias as any[]).find((g: any) => g.conductor_id === conductor.conductor_id)
+        const cuotaGarantiaProporcional = conductor.total_dias === 0 ? 0 : (garantiaConductor?.monto_cuota_semanal || cuotaGarantia)
         const cuotaActual = (garantiaConductor?.cuotas_pagadas || 0) + 1
         const totalCuotas = garantiaConductor?.total_cuotas || 16
 
@@ -1890,12 +2092,12 @@ export function ReporteFacturacionTab() {
         const ticketsConductor = (tickets as any[]).filter((t: any) => t.conductor_id === conductor.conductor_id)
         const totalTickets = ticketsConductor.reduce((sum: number, t: any) => sum + (t.monto || 0), 0)
 
-        // Excesos (P006)
+        // Excesos (P006) - no aplica si tiene 0 días
         const excesosConductor = (excesosArr as any[]).filter((e: any) => e.conductor_id === conductor.conductor_id)
-        const totalExcesos = excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
+        const totalExcesos = conductor.total_dias === 0 ? 0 : excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
-        // Peajes (P005) - normalizar DNI sin ceros adelante
-        const totalPeajes = conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni).replace(/^0+/, '')) || 0) : 0
+        // Peajes (P005) - no aplica si tiene 0 días
+        const totalPeajes = conductor.total_dias === 0 ? 0 : (conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni).replace(/^0+/, '')) || 0) : 0)
 
         // Cobros fraccionados (P010) - calcular monto real de la cuota
         const cobrosConductor = (cobros as any[]).filter((c: any) => c.conductor_id === conductor.conductor_id)
@@ -1919,13 +2121,11 @@ export function ReporteFacturacionTab() {
         const montoMultas = multasVehiculo?.monto || 0
         const cantidadMultas = multasVehiculo?.cantidad || 0
 
-        // Saldo anterior y mora
-        // NOTA: En saldos_conductores, saldo_actual > 0 = A FAVOR, < 0 = DEUDA
-        // Para facturación, invertimos: saldoAnterior > 0 = DEUDA (se suma), < 0 = A FAVOR (se resta)
+        // Saldo anterior y mora - no aplica si tiene 0 días (solo penalidades)
         const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
-        const saldoAnterior = -(saldoConductor?.saldo_actual || 0)
-        const diasMora = saldoAnterior > 0 ? Math.min(saldoConductor?.dias_mora || 0, 7) : 0
-        const montoMora = saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0
+        const saldoAnterior = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_actual || 0)
+        const diasMora = conductor.total_dias === 0 ? 0 : (saldoAnterior > 0 ? Math.min(saldoConductor?.dias_mora || 0, 7) : 0)
+        const montoMora = conductor.total_dias === 0 ? 0 : (saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0)
 
         // Totales
         const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + montoMultas + totalCobros + totalCuotasPenalidades
@@ -1963,7 +2163,8 @@ export function ReporteFacturacionTab() {
             dias_mora: diasMora,
             monto_mora: montoMora,
             total_a_pagar: totalAPagar,
-            estado: 'calculado'
+            estado: 'calculado',
+            saldo_aplicado: true
           })
           .select()
           .single()
@@ -2007,7 +2208,7 @@ export function ReporteFacturacionTab() {
         await (supabase.from('facturacion_detalle') as any).insert({
           facturacion_id: facturacionId,
           concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
-          cantidad: conductor.total_dias, precio_unitario: cuotaGarantia / 7,
+          cantidad: conductor.total_dias, precio_unitario: cuotaGarantiaProporcional / 7,
           subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
         })
 
@@ -2143,6 +2344,36 @@ export function ReporteFacturacionTab() {
             referencia_id: cuota.id, referencia_tipo: 'penalidad_cuota'
           })
           // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
+        }
+
+        // Registrar cargos nuevos en saldos_conductores: restar subtotalNeto del saldo
+        // IMPORTANTE: solo restar subtotalNeto (cargos nuevos de esta semana), NO totalAPagar
+        // porque totalAPagar incluye saldoAnterior que ya está reflejado en el saldo
+        if (subtotalNeto !== 0) {
+          const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+            .select('id, saldo_actual')
+            .eq('conductor_id', conductor.conductor_id)
+            .maybeSingle()
+
+          if (saldoExistente) {
+            await (supabase.from('saldos_conductores') as any)
+              .update({
+                saldo_actual: (saldoExistente.saldo_actual || 0) - subtotalNeto,
+                ultima_actualizacion: new Date().toISOString()
+              })
+              .eq('id', saldoExistente.id)
+          } else {
+            await (supabase.from('saldos_conductores') as any)
+              .insert({
+                conductor_id: conductor.conductor_id,
+                conductor_nombre: conductor.conductor_nombre,
+                conductor_dni: conductor.conductor_dni,
+                conductor_cuit: conductor.conductor_cuit || null,
+                saldo_actual: -subtotalNeto,
+                dias_mora: 0,
+                ultima_actualizacion: new Date().toISOString()
+              })
+          }
         }
 
         conductoresProcesadosCount++
@@ -3067,20 +3298,15 @@ export function ReporteFacturacionTab() {
       if (errorPago) throw errorPago
 
       // 2. Actualizar saldo_actual en saldos_conductores
-      // Si ya hay cobros previos, la deuda ya fue contabilizada → solo sumar este pago
-      // Si es el primer pago, contabilizar deuda + pago
-      const diferenciaPago = yaCobrado > 0
-        ? formValues.monto
-        : formValues.monto - totalAbsoluto
-
+      // La deuda ya fue registrada al GENERAR (saldo -= total_a_pagar)
+      // El pago simplemente suma al saldo
       const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
         .select('id, saldo_actual')
         .eq('conductor_id', facturacion.conductor_id)
         .maybeSingle()
 
       if (saldoExistente) {
-        // Acumular al saldo existente
-        const saldoAcumulado = (saldoExistente.saldo_actual || 0) + diferenciaPago
+        const saldoAcumulado = (saldoExistente.saldo_actual || 0) + formValues.monto
         const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
           .update({
             saldo_actual: saldoAcumulado,
@@ -3090,14 +3316,14 @@ export function ReporteFacturacionTab() {
           .eq('id', saldoExistente.id)
         if (errorSaldo) throw errorSaldo
       } else {
-        // Crear entrada de saldo si no existe
+        // Crear entrada de saldo si no existe (edge case: pago sin GENERAR previo)
         const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
           .insert({
             conductor_id: facturacion.conductor_id,
             conductor_nombre: facturacion.conductor_nombre,
             conductor_dni: facturacion.conductor_dni,
             conductor_cuit: facturacion.conductor_cuit || null,
-            saldo_actual: diferenciaPago,
+            saldo_actual: formValues.monto,
             dias_mora: 0,
             ultima_actualizacion: new Date().toISOString()
           })
@@ -3346,15 +3572,14 @@ export function ReporteFacturacionTab() {
         if (errorPago) throw errorPago
 
         // 2. Actualizar saldo en saldos_conductores
-        const diferenciaPago = yaCobrado > 0 ? monto : monto - totalAbsoluto
-
+        // La deuda ya fue registrada al GENERAR — el pago simplemente suma al saldo
         const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
           .select('id, saldo_actual')
           .eq('conductor_id', pago.conductor_id)
           .maybeSingle()
 
         if (saldoExistente) {
-          const saldoAcumulado = (saldoExistente.saldo_actual || 0) + diferenciaPago
+          const saldoAcumulado = (saldoExistente.saldo_actual || 0) + monto
           const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
             .update({
               saldo_actual: saldoAcumulado,
@@ -3370,7 +3595,7 @@ export function ReporteFacturacionTab() {
               conductor_nombre: pago.conductor_nombre,
               conductor_dni: pago.conductor_dni,
               conductor_cuit: pago.conductor_cuit || null,
-              saldo_actual: diferenciaPago,
+              saldo_actual: monto,
               dias_mora: 0,
               ultima_actualizacion: hoy.toISOString()
             })
@@ -6071,24 +6296,46 @@ export function ReporteFacturacionTab() {
       ),
       cell: ({ row }) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <strong style={{ fontSize: '11px', textTransform: 'uppercase' }}>{row.original.conductor_nombre}</strong>
+          <strong
+            style={{ fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--color-primary)' }}
+            onClick={() => cargarHistorialAsignaciones(
+              row.original.conductor_id,
+              row.original.conductor_nombre,
+              row.original.conductor_dni || ''
+            )}
+          >
+            {row.original.conductor_nombre}
+          </strong>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
               {row.original.vehiculo_patente || '-'}
             </span>
-            <span className={`dt-badge ${row.original.tipo_alquiler === 'CARGO' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
-              {row.original.tipo_alquiler}
-            </span>
+            {(() => {
+              const o = row.original
+              if (o.tipo_alquiler === 'CARGO') {
+                return <span className="dt-badge dt-badge-solid-blue" style={{ fontSize: '9px', padding: '1px 5px' }}>CARGO</span>
+              }
+              // TURNO: determinar si es diurno, nocturno o mixto usando prorrateo
+              const diurno = o.prorrateo_diurno_dias || 0
+              const nocturno = o.prorrateo_nocturno_dias || 0
+              let label = 'TURNO'
+              if (diurno > 0 && nocturno === 0) label = 'DIURNO'
+              else if (nocturno > 0 && diurno === 0) label = 'NOCTURNO'
+              else if (diurno > 0 && nocturno > 0) label = 'D+N'
+              return <span className="dt-badge dt-badge-solid-gray" style={{ fontSize: '9px', padding: '1px 5px' }}>{label}</span>
+            })()}
           </div>
         </div>
       ),
       enableSorting: true,
+      size: 160,
     },
     {
       id: 'dias_trabajados',
       accessorFn: (row) => row.turnos_cobrados,
       header: 'Días',
       enableSorting: true,
+      size: 45,
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
         return (
@@ -6111,6 +6358,7 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.subtotal_alquiler,
       header: 'Alquiler',
       enableSorting: true,
+      size: 110,
       cell: ({ row }) => {
         const alquiler = row.original.subtotal_alquiler
         const ganancia = row.original.ganancia_cabify || 0
@@ -6161,6 +6409,7 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.subtotal_garantia,
       header: 'Garantía',
       enableSorting: true,
+      size: 100,
       cell: ({ row }) => {
         const garantia = row.original.subtotal_garantia
         const cuotaNum = row.original.cuota_garantia_numero || ''
@@ -6234,6 +6483,7 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.monto_cobrado || 0,
       header: 'Cobrado',
       enableSorting: true,
+      size: 90,
       cell: ({ row }) => {
         const cobrado = row.original.monto_cobrado || 0
         const total = Math.abs(row.original.total_a_pagar || 0)
@@ -6267,6 +6517,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'peajes',
       header: 'Peajes',
+      size: 85,
       accessorFn: (row) => row.monto_peajes || 0,
       cell: ({ row }) => {
         const peajes = row.original.monto_peajes || 0
@@ -6284,6 +6535,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'incidencias',
       header: 'Incidencias',
+      size: 110,
       accessorFn: (row) => row.monto_penalidades || 0,
       cell: ({ row }) => {
         const penalidades = row.original.penalidades_detalle || []
@@ -6349,6 +6601,7 @@ export function ReporteFacturacionTab() {
     {
       accessorKey: 'saldo_anterior',
       header: 'Saldo Ant.',
+      size: 85,
       cell: ({ row }) => (
         <span style={{
           fontSize: '11px',
@@ -6364,6 +6617,7 @@ export function ReporteFacturacionTab() {
     {
       accessorKey: 'total_a_pagar',
       header: 'TOTAL',
+      size: 100,
       cell: ({ row }) => {
         const total = row.original.total_a_pagar
         return (
@@ -6384,6 +6638,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'estado_billing',
       header: 'Estado',
+      size: 70,
       accessorFn: (row) => row.estado_billing || '',
       cell: ({ row }) => {
         const estado = row.original.estado_billing
@@ -7130,11 +7385,11 @@ export function ReporteFacturacionTab() {
 
       {/* Modal de desglose de días */}
       {showDiasModal && (
-        <div className="fact-modal-overlay" onClick={() => { setShowDiasModal(false); setShowDiasHistorial(false) }}>
+        <div className="fact-modal-overlay" onClick={() => setShowDiasModal(false)}>
           <div className="fact-modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
             <div className="fact-modal-header">
               <h2>Desglose de Días</h2>
-              <button className="fact-modal-close" onClick={() => { setShowDiasModal(false); setShowDiasHistorial(false) }}>
+              <button className="fact-modal-close" onClick={() => setShowDiasModal(false)}>
                 <X size={20} />
               </button>
             </div>
@@ -7187,53 +7442,144 @@ export function ReporteFacturacionTab() {
                     ))}
                   </div>
 
-                  {/* Botón historial */}
+                  {/* Botón historial completo */}
                   <div style={{ marginTop: '12px', textAlign: 'center' }}>
                     <button
-                      onClick={() => setShowDiasHistorial(!showDiasHistorial)}
+                      onClick={() => {
+                        if (diasModalData) {
+                          cargarHistorialAsignaciones(diasModalData.conductorId, diasModalData.conductorNombre, diasModalData.conductorDni)
+                        }
+                      }}
                       style={{
                         background: 'none', border: '1px solid var(--border-primary)', borderRadius: '6px',
                         padding: '6px 14px', fontSize: '11px', color: 'var(--text-secondary)',
                         cursor: 'pointer', fontWeight: 500,
                       }}
                     >
-                      {showDiasHistorial ? 'Ocultar historial' : 'Ver historial de asignaciones'}
+                      Ver historial de asignaciones
                     </button>
                   </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
 
-                  {/* Historial de asignaciones */}
-                  {showDiasHistorial && diasModalData.historial.length > 0 && (
-                    <div style={{ marginTop: '10px' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-                        <thead>
-                          <tr style={{ borderBottom: '2px solid var(--border-primary)' }}>
-                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Inicio</th>
-                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Fin</th>
-                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Estado</th>
-                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Horario</th>
-                            <th style={{ padding: '6px 4px', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Días</th>
-                            <th style={{ padding: '6px 4px', textAlign: 'left', color: 'var(--text-secondary)', fontSize: '9px', textTransform: 'uppercase' }}>Nota</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {diasModalData.historial.map((h, i) => (
-                            <tr key={i} style={{ borderBottom: '1px solid var(--border-primary)', opacity: h.dias === 0 ? 0.5 : 1 }}>
-                              <td style={{ padding: '4px' }}>{h.fechaInicio}</td>
-                              <td style={{ padding: '4px' }}>{h.fechaFin}</td>
-                              <td style={{ padding: '4px' }}>
-                                <span style={{
-                                  padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 500,
-                                  background: h.padreEstado.includes('activ') ? 'rgba(16,185,129,0.1)' : 'rgba(107,114,128,0.1)',
-                                  color: h.padreEstado.includes('activ') ? '#10b981' : '#6b7280',
-                                }}>{h.padreEstado}</span>
-                              </td>
-                              <td style={{ padding: '4px' }}>{h.horario}</td>
-                              <td style={{ padding: '4px', textAlign: 'right', fontWeight: h.dias > 0 ? 600 : 400, color: h.dias > 0 ? '#10b981' : 'var(--text-secondary)' }}>{h.dias}</td>
-                              <td style={{ padding: '4px', fontSize: '10px', color: 'var(--text-secondary)' }}>{h.nota}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+      {/* Modal de historial de asignaciones */}
+      {showHistorialModal && (
+        <div className="fact-modal-overlay" onClick={() => setShowHistorialModal(false)}>
+          <div className="fact-modal-content" style={{ maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="fact-modal-header">
+              <h2>Historial de Asignaciones</h2>
+              <button className="fact-modal-close" onClick={() => setShowHistorialModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="fact-modal-body">
+              {loadingHistorial ? (
+                <div className="fact-loading-detalle">
+                  <Loader2 size={32} className="spinning" />
+                  <span>Cargando historial...</span>
+                </div>
+              ) : historialModalData ? (
+                <div style={{ padding: '4px 0' }}>
+                  <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{historialModalData.conductorNombre}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>DNI: {historialModalData.conductorDni}</div>
+                    </div>
+                    <div style={{
+                      fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)',
+                      lineHeight: 1,
+                    }}>
+                      {historialModalData.asignaciones.length}
+                      <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-secondary)', marginLeft: '4px' }}>
+                        {historialModalData.asignaciones.length === 1 ? 'asignacion' : 'asignaciones'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {historialModalData.asignaciones.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                      Sin asignaciones registradas
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {historialModalData.asignaciones.map((a) => {
+                          const esActiva = a.padreEstado.toLowerCase().includes('activ')
+                          const esFinalizada = a.padreEstado.toLowerCase().includes('finaliz')
+                          const esCancelada = a.padreEstado.toLowerCase().includes('cancel')
+                          const esProgramada = a.padreEstado.toLowerCase().includes('program')
+
+                          const bgColor = esActiva ? 'rgba(16, 185, 129, 0.06)'
+                            : esFinalizada ? 'rgba(107, 114, 128, 0.04)'
+                            : esCancelada ? 'rgba(239, 68, 68, 0.04)'
+                            : 'transparent'
+
+                          const borderColor = esActiva ? 'rgba(16, 185, 129, 0.15)'
+                            : esCancelada ? 'rgba(239, 68, 68, 0.12)'
+                            : 'var(--border-primary)'
+
+                          const estadoColor = esActiva ? '#10b981'
+                            : esCancelada ? '#ef4444'
+                            : esProgramada ? '#3b82f6'
+                            : '#6b7280'
+
+                          const estadoBg = esActiva ? 'rgba(16,185,129,0.1)'
+                            : esCancelada ? 'rgba(239,68,68,0.1)'
+                            : esProgramada ? 'rgba(59,130,246,0.1)'
+                            : 'rgba(107,114,128,0.1)'
+
+                          return (
+                            <div key={a.id} style={{
+                              display: 'flex', alignItems: 'center', gap: '10px',
+                              padding: '8px 12px', borderRadius: '6px',
+                              background: bgColor,
+                              border: `1px solid ${borderColor}`,
+                            }}>
+                              {/* Indicador */}
+                              <div style={{
+                                width: '8px', height: '8px', borderRadius: '50%',
+                                background: estadoColor, flexShrink: 0,
+                              }} />
+
+                              {/* Patente */}
+                              <span style={{
+                                fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)',
+                                width: '70px', flexShrink: 0,
+                                fontFamily: 'monospace',
+                              }}>
+                                {a.vehiculoPatente}
+                              </span>
+
+                              {/* Fechas */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '11px', color: 'var(--text-primary)' }}>
+                                  {a.fechaInicio !== '-' ? formatDate(a.fechaInicio) : '-'}
+                                  <span style={{ color: 'var(--text-secondary)', margin: '0 4px' }}>&rarr;</span>
+                                  {a.fechaFin ? formatDate(a.fechaFin) : <span style={{ color: '#10b981', fontWeight: 500 }}>vigente</span>}
+                                </div>
+                              </div>
+
+                              {/* Horario */}
+                              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', width: '55px', textAlign: 'center' }}>
+                                {a.horario}
+                              </span>
+
+                              {/* Estado badge */}
+                              <span style={{
+                                padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 500,
+                                background: estadoBg, color: estadoColor,
+                                whiteSpace: 'nowrap',
+                              }}>
+                                {a.padreEstado}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

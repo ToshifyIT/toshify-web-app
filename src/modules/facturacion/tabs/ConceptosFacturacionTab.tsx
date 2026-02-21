@@ -152,7 +152,7 @@ export function ConceptosFacturacionTab() {
           tipo,
           precio_base: precioBase,
           iva_porcentaje: ivaPorcentaje,
-          precio_final: precioBase * (1 + ivaPorcentaje / 100),
+          precio_final: ivaPorcentaje === 0 ? precioBase : Number((precioBase * (1 + ivaPorcentaje / 100)).toFixed(2)),
           es_variable: esVariable,
           aplica_turno: aplicaTurno,
           aplica_cargo: aplicaCargo,
@@ -253,7 +253,7 @@ export function ConceptosFacturacionTab() {
         const checkPriceChange = () => {
           const newBase = parseFloat(precioInput.value) || 0
           const newIva = parseFloat(ivaInput.value) || 0
-          const newFinal = newBase * (1 + newIva / 100)
+          const newFinal = newIva === 0 ? newBase : Number((newBase * (1 + newIva / 100)).toFixed(2))
           const oldFinal = concepto.precio_final || 0
           vigenciaGroup.style.display = Math.abs(newFinal - oldFinal) > 0.01 ? 'block' : 'none'
         }
@@ -277,7 +277,7 @@ export function ConceptosFacturacionTab() {
           return false
         }
 
-        const newFinal = precioBase * (1 + ivaPorcentaje / 100)
+        const newFinal = ivaPorcentaje === 0 ? precioBase : Number((precioBase * (1 + ivaPorcentaje / 100)).toFixed(2))
         const priceChanged = Math.abs(newFinal - (concepto.precio_final || 0)) > 0.01
 
         if (priceChanged && !vigenciaValue) {
@@ -442,8 +442,15 @@ export function ConceptosFacturacionTab() {
       }
     },
     {
+      accessorKey: 'precio_base',
+      header: 'Precio Base (sin IVA)',
+      cell: ({ row }) => row.original.es_variable
+        ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Variable</span>
+        : <span style={{ fontFamily: 'monospace' }}>{formatCurrency(row.original.precio_base || 0)}</span>
+    },
+    {
       accessorKey: 'precio_final',
-      header: 'Precio Final',
+      header: 'Precio Final (con IVA)',
       cell: ({ row }) => row.original.es_variable
         ? <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Variable</span>
         : <span style={{ fontFamily: 'monospace' }}>{formatCurrency(row.original.precio_final || 0)}</span>
