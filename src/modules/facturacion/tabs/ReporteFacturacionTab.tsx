@@ -546,8 +546,17 @@ export function ReporteFacturacionTab() {
         })
       }
 
+      // Deduplicar por patente + fechas + horario (registros duplicados en la DB)
+      const seen = new Set<string>()
+      const asignacionesDedup = asignaciones.filter(a => {
+        const key = `${a.vehiculoPatente}|${a.fechaInicio}|${a.fechaFin}|${a.horario}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+
       // Ordenar por fecha_inicio descendente (más reciente primero)
-      asignaciones.sort((a, b) => {
+      asignacionesDedup.sort((a, b) => {
         if (a.fechaInicio === '-') return 1
         if (b.fechaInicio === '-') return -1
         return b.fechaInicio.localeCompare(a.fechaInicio)
@@ -556,7 +565,7 @@ export function ReporteFacturacionTab() {
       setHistorialModalData({
         conductorNombre,
         conductorDni,
-        asignaciones,
+        asignaciones: asignacionesDedup,
       })
     } catch {
       Swal.fire('Error', 'No se pudo cargar el historial de asignaciones', 'error')
