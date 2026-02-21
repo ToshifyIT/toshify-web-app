@@ -494,6 +494,15 @@ export function ReporteFacturacionTab() {
         cursor.setDate(cursor.getDate() + 1)
       }
 
+      // Ordenar historial: vigentes (sin fechaFin) primero, luego descendente por fechaInicio
+      historial.sort((a, b) => {
+        const aVigente = !a.fechaFin || a.fechaFin === 'NULL'
+        const bVigente = !b.fechaFin || b.fechaFin === 'NULL'
+        if (aVigente && !bVigente) return -1
+        if (!aVigente && bVigente) return 1
+        return b.fechaInicio.localeCompare(a.fechaInicio)
+      })
+
       setDiasModalData({
         conductorId: realConductorId,
         conductorNombre,
@@ -7543,7 +7552,7 @@ export function ReporteFacturacionTab() {
       {/* Modal de desglose de días */}
       {showDiasModal && (
         <div className="fact-modal-overlay" onClick={() => setShowDiasModal(false)}>
-          <div className="fact-modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="fact-modal-content" style={{ maxWidth: '820px' }} onClick={(e) => e.stopPropagation()}>
             <div className="fact-modal-header">
               <h2>Desglose de Días</h2>
               <button className="fact-modal-close" onClick={() => setShowDiasModal(false)}>
@@ -7558,63 +7567,121 @@ export function ReporteFacturacionTab() {
                 </div>
               ) : diasModalData ? (
                 <div style={{ padding: '4px 0' }}>
-                  <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* Info del conductor */}
+                  <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{diasModalData.conductorNombre}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>DNI: {diasModalData.conductorDni}</div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>{diasModalData.conductorNombre}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>DNI: {diasModalData.conductorDni}</div>
                     </div>
                     <div style={{
-                      fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)',
+                      fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)',
                       lineHeight: 1,
                     }}>
-                      {diasModalData.totalDias}<span style={{ fontSize: '13px', fontWeight: 400, color: 'var(--text-secondary)' }}>/7</span>
+                      {diasModalData.totalDias}<span style={{ fontSize: '14px', fontWeight: 400, color: 'var(--text-secondary)' }}>/7 días</span>
                     </div>
                   </div>
 
-                  {/* Día por día */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {diasModalData.dias.map((d, i) => (
-                      <div key={i} style={{
-                        display: 'flex', alignItems: 'center', gap: '10px',
-                        padding: '8px 12px', borderRadius: '6px',
-                        background: d.trabajado ? 'rgba(16, 185, 129, 0.06)' : 'transparent',
-                        border: `1px solid ${d.trabajado ? 'rgba(16, 185, 129, 0.15)' : 'var(--border-primary)'}`,
-                      }}>
-                        <div style={{
-                          width: '8px', height: '8px', borderRadius: '50%',
-                          background: d.trabajado ? '#10b981' : '#d1d5db', flexShrink: 0,
-                        }} />
-                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', width: '80px' }}>
-                          {d.diaSemana}
-                        </span>
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>
-                          {d.fecha}
-                        </span>
-                        {d.trabajado ? (
-                          <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
-                        ) : (
-                          <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>-</span>
-                        )}
+                  {/* Dos columnas: Días + Asignaciones */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    {/* Columna izquierda: Desglose de días */}
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                        Días de la Semana
                       </div>
-                    ))}
-                  </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {diasModalData.dias.map((d, i) => (
+                          <div key={i} style={{
+                            display: 'flex', alignItems: 'center', gap: '10px',
+                            padding: '7px 12px', borderRadius: '6px',
+                            background: d.trabajado ? 'rgba(16, 185, 129, 0.06)' : 'transparent',
+                            border: `1px solid ${d.trabajado ? 'rgba(16, 185, 129, 0.15)' : 'var(--border-primary)'}`,
+                          }}>
+                            <div style={{
+                              width: '8px', height: '8px', borderRadius: '50%',
+                              background: d.trabajado ? '#10b981' : '#d1d5db', flexShrink: 0,
+                            }} />
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', width: '75px' }}>
+                              {d.diaSemana}
+                            </span>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>
+                              {d.fecha}
+                            </span>
+                            {d.trabajado ? (
+                              <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>{d.horario}</span>
+                            ) : (
+                              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>-</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
-                  {/* Botón historial completo */}
-                  <div style={{ marginTop: '12px', textAlign: 'center' }}>
-                    <button
-                      onClick={() => {
-                        if (diasModalData) {
-                          cargarHistorialAsignaciones(diasModalData.conductorId, diasModalData.conductorNombre, diasModalData.conductorDni)
-                        }
-                      }}
-                      style={{
-                        background: 'none', border: '1px solid var(--border-primary)', borderRadius: '6px',
-                        padding: '6px 14px', fontSize: '11px', color: 'var(--text-secondary)',
-                        cursor: 'pointer', fontWeight: 500,
-                      }}
-                    >
-                      Ver historial de asignaciones
-                    </button>
+                    {/* Columna derecha: Asignaciones */}
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                        Asignaciones ({diasModalData.historial.length})
+                      </div>
+                      {diasModalData.historial.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                          Sin asignaciones registradas
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '320px', overflowY: 'auto' }}>
+                          {diasModalData.historial.map((h, i) => {
+                            const esActiva = h.padreEstado.toLowerCase().includes('activ')
+                            const esCancelada = h.padreEstado.toLowerCase().includes('cancel')
+                            const esProgramada = h.padreEstado.toLowerCase().includes('program')
+
+                            const estadoColor = esActiva ? '#10b981'
+                              : esCancelada ? '#ef4444'
+                              : esProgramada ? '#3b82f6'
+                              : '#6b7280'
+
+                            const bgColor = esActiva ? 'rgba(16, 185, 129, 0.06)'
+                              : esCancelada ? 'rgba(239, 68, 68, 0.04)'
+                              : 'transparent'
+
+                            const borderColor = esActiva ? 'rgba(16, 185, 129, 0.15)'
+                              : esCancelada ? 'rgba(239, 68, 68, 0.12)'
+                              : 'var(--border-primary)'
+
+                            return (
+                              <div key={i} style={{
+                                padding: '7px 12px', borderRadius: '6px',
+                                background: bgColor,
+                                border: `1px solid ${borderColor}`,
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{
+                                    width: '8px', height: '8px', borderRadius: '50%',
+                                    background: estadoColor, flexShrink: 0,
+                                  }} />
+                                  <span style={{ fontSize: '11px', color: 'var(--text-primary)', flex: 1 }}>
+                                    {h.fechaInicio && h.fechaInicio !== 'NULL' ? displayArgDate(h.fechaInicio) : <span style={{ color: 'var(--text-secondary)' }}>s/f</span>}
+                                    <span style={{ color: 'var(--text-secondary)', margin: '0 4px' }}>&rarr;</span>
+                                    {h.fechaFin && h.fechaFin !== 'NULL' ? displayArgDate(h.fechaFin) : <span style={{ color: '#10b981', fontWeight: 500 }}>vigente</span>}
+                                  </span>
+                                  <span style={{ fontSize: '10px', color: estadoColor, fontWeight: 600 }}>
+                                    {h.horario}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px', paddingLeft: '16px' }}>
+                                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                                    {h.dias > 0 ? `${h.dias} día${h.dias > 1 ? 's' : ''} contados` : h.nota}
+                                  </span>
+                                  <span style={{
+                                    fontSize: '9px', padding: '1px 5px', borderRadius: '3px', fontWeight: 500,
+                                    background: `${estadoColor}15`, color: estadoColor,
+                                  }}>
+                                    {h.padreEstado}
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : null}
