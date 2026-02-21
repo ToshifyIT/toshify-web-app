@@ -6830,8 +6830,9 @@ export function ReporteFacturacionTab() {
               {estado}
             </span>
             {noCoincide && (
-              <span title="Fecha de baja no coincide con fin de asignacion" style={{ cursor: 'help' }}>
+              <span className="fact-tooltip-wrap" style={{ cursor: 'help', position: 'relative', display: 'inline-flex' }}>
                 <AlertTriangle size={13} style={{ color: '#f59e0b' }} />
+                <span className="fact-tooltip">Fecha de baja no coincide con fin de asignación</span>
               </span>
             )}
           </div>
