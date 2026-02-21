@@ -432,8 +432,12 @@ export function ReporteFacturacionTab() {
         }
 
         // Normalizar fechas a timezone Argentina para conteo correcto de días
-        const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio))
-          : (asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : semanaInicio)
+        // Usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
+        const conductorInicioD = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+        const padreInicioD = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+        const acInicio = conductorInicioD && padreInicioD
+          ? (conductorInicioD > padreInicioD ? conductorInicioD : padreInicioD)
+          : (conductorInicioD || padreInicioD || semanaInicio)
         const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
           : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : semanaFin)
 
@@ -530,7 +534,12 @@ export function ReporteFacturacionTab() {
         const padre = ac.asignaciones
         if (!padre) continue
 
-        const acInicio = ac.fecha_inicio || padre.fecha_inicio || null
+        // Usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
+        const conductorInicioH = ac.fecha_inicio ? toArgDate(ac.fecha_inicio) : null
+        const padreInicioH = padre.fecha_inicio ? toArgDate(padre.fecha_inicio) : null
+        const acInicio = conductorInicioH && padreInicioH
+          ? (conductorInicioH > padreInicioH ? ac.fecha_inicio : padre.fecha_inicio)
+          : (ac.fecha_inicio || padre.fecha_inicio || null)
         const acFin = ac.fecha_fin || padre.fecha_fin || null
 
         // Traducir horario crudo a label legible
@@ -1015,8 +1024,13 @@ export function ReporteFacturacionTab() {
         
         // Calcular días que este registro se solapa con la semana
         // Normalizar a solo fecha (sin hora) — timestamps de asignaciones tienen hora que rompe el conteo
-        const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) 
-          : (asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : fechaInicioSemana)
+        // Usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
+        // para no cobrar antes de que el vehículo fuera realmente entregado
+        const conductorInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+        const padreInicio = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+        const acInicio = conductorInicio && padreInicio
+          ? (conductorInicio > padreInicio ? conductorInicio : padreInicio)
+          : (conductorInicio || padreInicio || fechaInicioSemana)
         const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) 
           : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : fechaFinSemana)
         
@@ -1865,10 +1879,13 @@ export function ReporteFacturacionTab() {
         // Skip orphan: padre finalizado/cancelado sin fecha_fin
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
 
-        // Fechas: usar conductor > padre > semana como fallback
-        // Normalizar a solo fecha (sin hora) — timestamps tienen hora que rompe el conteo
-        const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio))
-          : (asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : fechaInicioSemanaRecalc)
+        // Fechas: usar la MÁS TARDÍA entre conductor y padre (Entrega Real)
+        // para no cobrar antes de que el vehículo fuera realmente entregado
+        const conductorInicioR = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
+        const padreInicioR = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
+        const acInicio = conductorInicioR && padreInicioR
+          ? (conductorInicioR > padreInicioR ? conductorInicioR : padreInicioR)
+          : (conductorInicioR || padreInicioR || fechaInicioSemanaRecalc)
         const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
           : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : fechaFinSemanaRecalc)
 
