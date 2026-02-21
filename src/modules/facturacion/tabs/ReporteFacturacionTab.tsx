@@ -23,6 +23,7 @@ import {
   // FileSpreadsheet,
   Filter,
   AlertCircle,
+  AlertTriangle,
   Calculator,
   Edit2,
   Search,
@@ -49,6 +50,13 @@ const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'n
 function toArgDate(timestamp: string | null | undefined): string {
   if (!timestamp) return '-'
   return argDateFmt.format(new Date(timestamp))
+}
+// Reformatea "YYYY-MM-DD" a "DD/MM/YYYY" sin pasar por new Date() (evita doble shift de timezone)
+function displayArgDate(d: string | null | undefined): string {
+  if (!d || d === '-') return '-'
+  const parts = d.split('-')
+  if (parts.length !== 3) return d
+  return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
 
 // Tipos para datos de facturación generada
@@ -105,6 +113,8 @@ interface FacturacionConductor {
   fecha_pago?: string | null
   // Estado de facturación semanal (Activo, Pausa, De baja)
   estado_billing?: 'Activo' | 'Pausa' | 'De baja'
+  // Alerta: fecha_terminacion del conductor no coincide con fecha_fin de asignación
+  fecha_baja_no_coincide?: boolean
 }
 
 interface FacturacionDetalle {
@@ -448,8 +458,9 @@ export function ReporteFacturacionTab() {
 
         const efectivoInicio = acInicio < semanaInicio ? semanaInicio : acInicio
         let efectivoFin = acFin > limiteConteo ? limiteConteo : acFin
-        // Cortar en fecha_terminacion si existe
-        if (fechaTermDesglose && efectivoFin > fechaTermDesglose) {
+        // Solo aplicar fecha_terminacion como tope si la asignación NO tiene fecha_fin propia
+        const tieneFinPropioD = ac.fecha_fin || asignacion.fecha_fin
+        if (fechaTermDesglose && !tieneFinPropioD && efectivoFin > fechaTermDesglose) {
           efectivoFin = fechaTermDesglose
         }
         let diasContados = 0
@@ -667,6 +678,8 @@ export function ReporteFacturacionTab() {
       const conductoresConAsignacionAlCierreLoad = new Set<string>()
       // Calcular horario (diurno/nocturno) por conductor para períodos guardados
       const horarioMapLoad = new Map<string, { diurno: number; nocturno: number; cargo: number }>()
+      // Rastrear fecha_fin más tardía de asignación por conductor
+      const maxAsigFinLoad = new Map<string, string>()
       ;(asignacionesLoad || []).forEach((ac: any) => {
         const asignacion = ac.asignaciones
         if (!asignacion) return
@@ -689,6 +702,12 @@ export function ReporteFacturacionTab() {
         const efFin = acFinLoad > fechaFinPeriodoLoad ? fechaFinPeriodoLoad : acFinLoad
         const diasOverlap = Math.max(0, Math.ceil((efFin.getTime() - efInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
         if (diasOverlap <= 0) return
+
+        // Rastrear la fecha_fin más tardía de la asignación
+        const finRealStrLoad = toArgDate(ac.fecha_fin || asignacion.fecha_fin || '')
+        if (finRealStrLoad && finRealStrLoad > (maxAsigFinLoad.get(ac.conductor_id) || '')) {
+          maxAsigFinLoad.set(ac.conductor_id, finRealStrLoad)
+        }
 
         if (!horarioMapLoad.has(ac.conductor_id)) {
           horarioMapLoad.set(ac.conductor_id, { diurno: 0, nocturno: 0, cargo: 0 })
@@ -716,12 +735,17 @@ export function ReporteFacturacionTab() {
         const estadoBilling = esDeBajaLoad ? 'De baja'
           : ((f.turnos_cobrados >= 7 || tieneAsignacionCierreLoad) ? 'Activo' : 'Pausa')
         const horarioInfo = horarioMapLoad.get(f.conductor_id)
+        // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
+        const ftStrLoad = f.conductor?.fecha_terminacion ? f.conductor.fecha_terminacion.substring(0, 10) : null
+        const maxFinAsigLoad = maxAsigFinLoad.get(f.conductor_id)
+        const fechaBajaNoCoincideLoad = !!(ftStrLoad && maxFinAsigLoad && ftStrLoad !== maxFinAsigLoad)
         return {
           ...f,
           conductor_nombre: f.conductor 
             ? `${f.conductor.nombres || ''} ${f.conductor.apellidos || ''}`.trim()
             : f.conductor_nombre || '',
           estado_billing: estadoBilling,
+          fecha_baja_no_coincide: fechaBajaNoCoincideLoad,
           prorrateo_diurno_dias: f.prorrateo_diurno_dias ?? (horarioInfo?.diurno || 0),
           prorrateo_nocturno_dias: f.prorrateo_nocturno_dias ?? (horarioInfo?.nocturno || 0),
           prorrateo_cargo_dias: f.prorrateo_cargo_dias ?? (horarioInfo?.cargo || 0),
@@ -1005,6 +1029,9 @@ export function ReporteFacturacionTab() {
       }>>()
       conductorIds.forEach((id: string) => asignacionesPorConductorVP.set(id, []))
 
+      // Rastrear la fecha_fin más tardía de asignaciones por conductor (para comparar con fecha_terminacion)
+      const maxAsigFinVP = new Map<string, string>()
+
       // Set de fechas ya contadas por conductor para deduplicar registros duplicados
       const diasContadosVP = new Map<string, Set<string>>()
       conductorIds.forEach((id: string) => diasContadosVP.set(id, new Set()))
@@ -1038,9 +1065,10 @@ export function ReporteFacturacionTab() {
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
         let efectivoFin = acFin > fechaFinSemana ? fechaFinSemana : acFin
 
-        // Si el conductor tiene fecha_terminacion, no contar días después de esa fecha
+        // Solo aplicar fecha_terminacion como tope si la asignación NO tiene fecha_fin propia
+        const tieneFinPropioVP = ac.fecha_fin || asignacion.fecha_fin
         const fechaTermVP = fechaTermMapVP.get(ac.conductor_id)
-        if (fechaTermVP && efectivoFin > fechaTermVP) efectivoFin = fechaTermVP
+        if (fechaTermVP && !tieneFinPropioVP && efectivoFin > fechaTermVP) efectivoFin = fechaTermVP
         
         const prorrateo = prorrateoMap.get(ac.conductor_id)
         if (!prorrateo) return
@@ -1080,6 +1108,12 @@ export function ReporteFacturacionTab() {
         const asigs = asignacionesPorConductorVP.get(ac.conductor_id)
         if (asigs) {
           asigs.push({ modalidad, fechaInicio: efectivoInicio, fechaFin: efectivoFin })
+        }
+
+        // Rastrear la fecha_fin más tardía de la asignación (no la efectiva, la real del registro)
+        const finRealStr = toArgDate(ac.fecha_fin || asignacion.fecha_fin || '')
+        if (finRealStr && finRealStr > (maxAsigFinVP.get(ac.conductor_id) || '')) {
+          maxAsigFinVP.set(ac.conductor_id, finRealStr)
         }
       })
       
@@ -1526,14 +1560,22 @@ export function ReporteFacturacionTab() {
            penalidades_detalle: detalleMap.get(conductorId) || [],
            // Estado: De baja si tiene fecha_terminacion o no está activo
            // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
-           estado_billing: (() => {
-             const ftVP = conductor.fecha_terminacion ? parseISO(conductor.fecha_terminacion) : null
-             const esBajaVP = conductor.estado_id !== ESTADO_ACTIVO_ID || (ftVP && ftVP <= semanaActual.fin)
-             if (esBajaVP) return 'De baja'
-             const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
-             return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
-           })(),
-         })
+            estado_billing: (() => {
+              const ftVP = conductor.fecha_terminacion ? parseISO(conductor.fecha_terminacion) : null
+              const esBajaVP = conductor.estado_id !== ESTADO_ACTIVO_ID || (ftVP && ftVP <= semanaActual.fin)
+              if (esBajaVP) return 'De baja'
+              const tieneAsignacionCierre = conductoresConAsignacionAlCierreVP.has(conductorId)
+              return (diasTotales >= 7 || tieneAsignacionCierre) ? 'Activo' : 'Pausa'
+            })(),
+            // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
+            fecha_baja_no_coincide: (() => {
+              if (!conductor.fecha_terminacion) return false
+              const ftStr = conductor.fecha_terminacion.substring(0, 10)
+              const maxFinAsig = maxAsigFinVP.get(conductorId)
+              if (!maxFinAsig) return false
+              return ftStr !== maxFinAsig
+            })(),
+          })
        }
 
        // Ordenar por nombre
@@ -1845,6 +1887,9 @@ export function ReporteFacturacionTab() {
         .in('conductor_id', conductorIdsTemp)
         .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
 
+      // Rastrear la fecha_fin más tardía de asignaciones por conductor
+      const maxAsigFinRecalc = new Map<string, string>()
+
       // Calcular días reales por conductor por modalidad
       interface ProrrateoRecalc {
         CARGO: number; TURNO_DIURNO: number; TURNO_NOCTURNO: number;
@@ -1894,9 +1939,10 @@ export function ReporteFacturacionTab() {
         const efectivoInicio = acInicio < fechaInicioSemanaRecalc ? fechaInicioSemanaRecalc : acInicio
         let efectivoFin = acFin > fechaFinSemanaRecalc ? fechaFinSemanaRecalc : acFin
 
-        // Si el conductor tiene fecha_terminacion, no contar días después de esa fecha
+        // Solo aplicar fecha_terminacion como tope si la asignación NO tiene fecha_fin propia
+        const tieneFinPropioR = ac.fecha_fin || asignacion.fecha_fin
         const fechaTerm = fechaTerminacionMap.get(ac.conductor_id)
-        if (fechaTerm && efectivoFin > fechaTerm) {
+        if (fechaTerm && !tieneFinPropioR && efectivoFin > fechaTerm) {
           efectivoFin = fechaTerm
         }
         const prorrateo = prorrateoRecalcMap.get(ac.conductor_id)
@@ -1926,6 +1972,12 @@ export function ReporteFacturacionTab() {
           }
           cursorR.setDate(cursorR.getDate() + 1)
         }
+
+        // Rastrear fecha_fin más tardía de asignación
+        const finRealStrR = toArgDate(ac.fecha_fin || asignacion.fecha_fin || '')
+        if (finRealStrR && finRealStrR > (maxAsigFinRecalc.get(ac.conductor_id) || '')) {
+          maxAsigFinRecalc.set(ac.conductor_id, finRealStrR)
+        }
       }
 
       // Determinar conductores con asignación activa al cierre de la semana
@@ -1950,6 +2002,7 @@ export function ReporteFacturacionTab() {
         conductor_cuit: string | null; vehiculo_patente: string | null;
         dias_turno_diurno: number; dias_turno_nocturno: number; dias_cargo: number; total_dias: number;
         estado_billing: 'Activo' | 'Pausa' | 'De baja';
+        fecha_baja_no_coincide?: boolean;
       }[] = []
       const dnisYaProcesados = new Set<string>()
 
@@ -1976,6 +2029,11 @@ export function ReporteFacturacionTab() {
           ? 'De baja'
           : ((totalDias >= 7 || tieneAsignacionCierreRecalc) ? 'Activo' : 'Pausa')
 
+        // Detectar si fecha_terminacion no coincide con fecha_fin de asignación
+        const maxFinAsigR = maxAsigFinRecalc.get(conductorData.id)
+        const ftStrR = conductorData.fecha_terminacion ? conductorData.fecha_terminacion.substring(0, 10) : null
+        const fechaBajaNoCoincide = !!(ftStrR && maxFinAsigR && ftStrR !== maxFinAsigR)
+
         conductoresProcesados.push({
           conductor_id: conductorData.id,
           conductor_nombre: `${conductorData.nombres || ''} ${conductorData.apellidos || ''}`.trim(),
@@ -1987,6 +2045,7 @@ export function ReporteFacturacionTab() {
           dias_cargo: prorrateo.CARGO,
           total_dias: totalDias,
           estado_billing: estadoBilling,
+          fecha_baja_no_coincide: fechaBajaNoCoincide,
         })
       }
 
@@ -6712,7 +6771,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'estado_billing',
       header: 'Estado',
-      size: 70,
+      size: 90,
       accessorFn: (row) => row.estado_billing || '',
       cell: ({ row }) => {
         const estado = row.original.estado_billing
@@ -6723,18 +6782,27 @@ export function ReporteFacturacionTab() {
           'De baja': { bg: 'var(--badge-red-bg)', text: 'var(--badge-red-text)' },
         }
         const estilo = estilos[estado] || { bg: '#f3f4f6', text: '#6b7280' }
+        const noCoincide = row.original.fecha_baja_no_coincide
         return (
-          <span style={{
-            fontSize: '11px',
-            fontWeight: 600,
-            padding: '2px 8px',
-            borderRadius: '10px',
-            background: estilo.bg,
-            color: estilo.text,
-            whiteSpace: 'nowrap',
-          }}>
-            {estado}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              padding: '2px 8px',
+              borderRadius: '10px',
+              background: noCoincide ? '#fef3c7' : estilo.bg,
+              color: noCoincide ? '#92400e' : estilo.text,
+              whiteSpace: 'nowrap',
+              border: noCoincide ? '1px solid #f59e0b' : 'none',
+            }}>
+              {estado}
+            </span>
+            {noCoincide && (
+              <span title="Fecha de baja no coincide con fin de asignacion" style={{ cursor: 'help' }}>
+                <AlertTriangle size={13} style={{ color: '#f59e0b' }} />
+              </span>
+            )}
+          </div>
         )
       },
       enableSorting: true,
@@ -7631,9 +7699,9 @@ export function ReporteFacturacionTab() {
                               {/* Fechas */}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: '11px', color: 'var(--text-primary)' }}>
-                                  {a.fechaInicio !== '-' ? formatDate(a.fechaInicio) : '-'}
+                                  {displayArgDate(a.fechaInicio)}
                                   <span style={{ color: 'var(--text-secondary)', margin: '0 4px' }}>&rarr;</span>
-                                  {a.fechaFin ? formatDate(a.fechaFin) : <span style={{ color: '#10b981', fontWeight: 500 }}>vigente</span>}
+                                  {a.fechaFin ? displayArgDate(a.fechaFin) : <span style={{ color: '#10b981', fontWeight: 500 }}>vigente</span>}
                                 </div>
                               </div>
 
