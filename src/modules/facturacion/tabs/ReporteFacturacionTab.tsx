@@ -7825,7 +7825,7 @@ export function ReporteFacturacionTab() {
       {/* Modal de detalle */}
       {showDetalle && (
         <div className="fact-modal-overlay" onClick={() => { setShowDetalle(false); setDetallePagos([]) }}>
-          <div className="fact-modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="fact-modal-content" style={{ maxWidth: '580px' }} onClick={(e) => e.stopPropagation()}>
             <div className="fact-modal-header">
               <h2>Detalle de Facturación</h2>
               <button className="fact-modal-close" onClick={() => { setShowDetalle(false); setDetallePagos([]) }}>
@@ -7840,94 +7840,162 @@ export function ReporteFacturacionTab() {
                   <span>Cargando detalle...</span>
                 </div>
               ) : detalleFacturacion ? (
-                <div className="fact-detalle">
-                  {/* Encabezado */}
-                  <div className="fact-detalle-header">
-                    <div className="fact-detalle-conductor">
-                      <h3>{detalleFacturacion.conductor_nombre}</h3>
-                      <span>{detalleFacturacion.conductor_cuit || `DNI: ${detalleFacturacion.conductor_dni}`}</span>
+                <div style={{ padding: '4px 0' }}>
+                  {/* Header: Conductor + Semana */}
+                  <div style={{
+                    marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                    paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {detalleFacturacion.conductor_nombre}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {detalleFacturacion.conductor_cuit || `DNI: ${detalleFacturacion.conductor_dni}`}
+                      </div>
                     </div>
-                    <div className="fact-detalle-periodo">
-                      <span className="fact-detalle-semana">Semana {periodo?.semana || infoSemana.semana}</span>
-                      <span className="fact-detalle-fechas">
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-primary)' }}>
+                        Semana {periodo?.semana || infoSemana.semana}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                         {periodo
                           ? `${format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')} - ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`
                           : `${infoSemana.inicio} - ${infoSemana.fin} / ${infoSemana.anio}`
                         }
-                      </span>
+                      </div>
                       {modoVistaPrevia && (
-                        <span style={{ fontSize: '10px', color: '#3B82F6', marginTop: '4px' }}>
-                          (Vista Previa - Proyección)
-                        </span>
+                        <div style={{ fontSize: '10px', color: '#3B82F6', marginTop: '3px', fontWeight: 500 }}>
+                          Vista Previa
+                        </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Info de asignación */}
-                  <div className="fact-detalle-asignacion">
-                    <div className="fact-info-item">
-                      <span className="label">Vehículo:</span>
-                      <span className="value">{detalleFacturacion.vehiculo_patente || '-'}</span>
+                  {/* Info bar: Vehículo, Tipo, Turnos */}
+                  <div style={{
+                    display: 'flex', gap: '16px', marginBottom: '16px',
+                    padding: '8px 12px', borderRadius: '6px',
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Vehículo</span>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{detalleFacturacion.vehiculo_patente || '-'}</span>
                     </div>
-                    <div className="fact-info-item">
-                      <span className="label">Tipo:</span>
-                      <span className={`dt-badge ${detalleFacturacion.tipo_alquiler === 'CARGO' ? 'dt-badge-solid-blue' : 'dt-badge-solid-gray'}`}>
+                    <div style={{ width: '1px', background: 'var(--border-primary)' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Tipo</span>
+                      <span style={{
+                        fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
+                        background: detalleFacturacion.tipo_alquiler === 'CARGO' ? 'rgba(59,130,246,0.1)' : 'rgba(107,114,128,0.1)',
+                        color: detalleFacturacion.tipo_alquiler === 'CARGO' ? '#2563eb' : '#6b7280',
+                      }}>
                         {detalleFacturacion.tipo_alquiler}
                       </span>
                     </div>
-                    <div className="fact-info-item">
-                      <span className="label">Turnos:</span>
-                      <span className="value">{detalleFacturacion.turnos_cobrados}/{detalleFacturacion.turnos_base}</span>
+                    <div style={{ width: '1px', background: 'var(--border-primary)' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Turnos</span>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {detalleFacturacion.turnos_cobrados}<span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>/{detalleFacturacion.turnos_base}</span>
+                      </span>
                     </div>
                   </div>
 
-                   {/* Sección de Cargos */}
-                  <div className="fact-detalle-seccion">
-                    <h4 className="fact-seccion-titulo cargos">Cargos (A Pagar)</h4>
-                    <div className="fact-detalle-items">
+                  {/* Sección: Cargos */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{
+                      fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
+                      textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
+                    }}>
+                      Cargos
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                       {detalleCargos.map(item => {
-                        // Asegurar que la descripción incluya el nombre del concepto
                         const conceptoLabels: Record<string, string> = {
                           'P001': 'Alquiler a Cargo',
                           'P002': 'Alquiler Turno',
                           'P003': 'Cuota de Garantía',
                           'P005': 'Telepeajes',
-                        }
-                        const label = conceptoLabels[item.concepto_codigo]
-                        let desc = item.concepto_descripcion
+                        };
+                        const label = conceptoLabels[item.concepto_codigo];
+                        let desc = item.concepto_descripcion;
                         if (label && !desc.includes('Alquiler') && !desc.includes('Garantía') && !desc.includes('Telepeaje')) {
-                          desc = desc ? `${label} (${desc})` : label
+                          desc = desc ? `${label} (${desc})` : label;
                         }
                         return (
-                        <div key={item.id} className="fact-item">
-                          <span className="fact-item-desc">
-                            {desc}
-                            {item.cantidad > 1 && <small> x{item.cantidad}</small>}
-                          </span>
-                          <span className="fact-item-monto">{formatCurrency(item.total)}</span>
-                        </div>
-                        )
+                          <div key={item.id} style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            padding: '7px 12px', borderRadius: '6px',
+                            background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{
+                                fontSize: '9px', fontWeight: 600, fontFamily: 'monospace',
+                                padding: '1px 5px', borderRadius: '3px',
+                                background: 'rgba(255, 0, 51, 0.08)', color: '#ff0033',
+                                flexShrink: 0,
+                              }}>
+                                {item.concepto_codigo}
+                              </span>
+                              <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
+                                {desc}
+                                {item.cantidad > 1 && <span style={{ color: 'var(--text-secondary)', marginLeft: '4px', fontSize: '11px' }}>x{item.cantidad}</span>}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
+                              {formatCurrency(item.total)}
+                            </span>
+                          </div>
+                        );
                       })}
 
-                      {/* Saldo anterior positivo = debe pagar */}
+                      {/* Saldo anterior positivo = deuda */}
                       {detalleFacturacion.saldo_anterior > 0 && (
-                        <div className="fact-item" style={{ background: '#FEF3C7', padding: '6px 8px', borderRadius: '4px', marginTop: '4px' }}>
-                          <span className="fact-item-desc" style={{ color: '#92400E' }}>Saldo Anterior (Deuda)</span>
-                          <span className="fact-item-monto" style={{ color: '#ff0033' }}>{formatCurrency(detalleFacturacion.saldo_anterior)}</span>
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '7px 12px', borderRadius: '6px',
+                          background: 'rgba(245, 158, 11, 0.06)', border: '1px solid rgba(245, 158, 11, 0.15)',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
+                            <span style={{ fontSize: '12px', color: '#92400E' }}>Saldo Anterior (Deuda)</span>
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#ff0033' }}>
+                            {formatCurrency(detalleFacturacion.saldo_anterior)}
+                          </span>
                         </div>
                       )}
 
-                      {/* Mora: solo mostrar como línea separada si NO existe P009 en los detalles (evitar duplicado) */}
+                      {/* Mora */}
                       {detalleFacturacion.monto_mora > 0 && !detalleCargos.some(d => d.concepto_codigo === 'P009') && (
-                        <div className="fact-item">
-                          <span className="fact-item-desc">Mora ({detalleFacturacion.dias_mora} días al 1%)</span>
-                          <span className="fact-item-monto">{formatCurrency(detalleFacturacion.monto_mora)}</span>
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '7px 12px', borderRadius: '6px',
+                          background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff0033', flexShrink: 0 }} />
+                            <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
+                              Mora <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>({detalleFacturacion.dias_mora} días al 1%)</span>
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
+                            {formatCurrency(detalleFacturacion.monto_mora)}
+                          </span>
                         </div>
                       )}
 
-                      <div className="fact-item total">
-                        <span className="fact-item-desc">SUBTOTAL CARGOS</span>
-                        <span className="fact-item-monto">
+                      {/* Subtotal Cargos */}
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '7px 12px', marginTop: '2px',
+                        borderTop: '1px solid var(--border-primary)',
+                      }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                          Subtotal Cargos
+                        </span>
+                        <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
                           {formatCurrency(
                             detalleFacturacion.subtotal_cargos
                             + Math.max(0, detalleFacturacion.saldo_anterior)
@@ -7938,41 +8006,76 @@ export function ReporteFacturacionTab() {
                     </div>
                   </div>
 
-                  {/* Sección de Descuentos / Créditos */}
+                  {/* Sección: Descuentos / Créditos */}
                   {(detalleDescuentos.length > 0 || detalleFacturacion.saldo_anterior < 0) && (
-                    <div className="fact-detalle-seccion">
-                      <h4 className="fact-seccion-titulo creditos">Descuentos / Créditos (A Favor)</h4>
-                      <div className="fact-detalle-items">
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{
+                        fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
+                        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
+                      }}>
+                        Descuentos / Créditos
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         {detalleDescuentos.map(item => {
                           const conceptoLabels: Record<string, string> = {
                             'P004': 'Tickets/Descuentos',
-                          }
-                          const label = conceptoLabels[item.concepto_codigo]
-                          let desc = item.concepto_descripcion
+                          };
+                          const label = conceptoLabels[item.concepto_codigo];
+                          let desc = item.concepto_descripcion;
                           if (label && !desc.includes('Ticket') && !desc.includes('Descuento') && !desc.includes('Comisión')) {
-                            desc = desc ? `${label} (${desc})` : label
+                            desc = desc ? `${label} (${desc})` : label;
                           }
                           return (
-                          <div key={item.id} className="fact-item">
-                            <span className="fact-item-desc">{desc}</span>
-                            <span className="fact-item-monto credito">-{formatCurrency(item.total)}</span>
-                          </div>
-                          )
+                            <div key={item.id} style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              padding: '7px 12px', borderRadius: '6px',
+                              background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.12)',
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{
+                                  fontSize: '9px', fontWeight: 600, fontFamily: 'monospace',
+                                  padding: '1px 5px', borderRadius: '3px',
+                                  background: 'rgba(16, 185, 129, 0.1)', color: '#059669',
+                                  flexShrink: 0,
+                                }}>
+                                  {item.concepto_codigo}
+                                </span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{desc}</span>
+                              </div>
+                              <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
+                                -{formatCurrency(item.total)}
+                              </span>
+                            </div>
+                          );
                         })}
 
                         {/* Saldo anterior negativo = crédito a favor */}
                         {detalleFacturacion.saldo_anterior < 0 && (
-                          <div className="fact-item" style={{ background: '#D1FAE5', padding: '6px 8px', borderRadius: '4px', marginTop: '4px' }}>
-                            <span className="fact-item-desc" style={{ color: '#065F46' }}>Saldo a Favor (Crédito Acumulado)</span>
-                            <span className="fact-item-monto credito" style={{ color: '#059669', fontWeight: 600 }}>
+                          <div style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            padding: '7px 12px', borderRadius: '6px',
+                            background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.15)',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
+                              <span style={{ fontSize: '12px', color: '#065F46' }}>Saldo a Favor</span>
+                            </div>
+                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
                               -{formatCurrency(Math.abs(detalleFacturacion.saldo_anterior))}
                             </span>
                           </div>
                         )}
 
-                        <div className="fact-item total">
-                          <span className="fact-item-desc">SUBTOTAL DESCUENTOS</span>
-                          <span className="fact-item-monto credito">
+                        {/* Subtotal Descuentos */}
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '7px 12px', marginTop: '2px',
+                          borderTop: '1px solid var(--border-primary)',
+                        }}>
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                            Subtotal Descuentos
+                          </span>
+                          <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: '#059669' }}>
                             -{formatCurrency(detalleFacturacion.subtotal_descuentos + Math.abs(Math.min(0, detalleFacturacion.saldo_anterior)))}
                           </span>
                         </div>
@@ -7980,80 +8083,94 @@ export function ReporteFacturacionTab() {
                     </div>
                   )}
 
-                  {/* Saldo Final */}
-                  <div className="fact-detalle-saldo">
-                    <span className="fact-saldo-label">TOTAL A PAGAR</span>
-                    <span className={`fact-saldo-valor ${detalleFacturacion.total_a_pagar > 0 ? 'debe' : 'favor'}`}>
+                  {/* Total a Pagar */}
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    padding: '16px', borderRadius: '8px', marginTop: '4px',
+                    background: 'var(--bg-secondary)', border: '2px solid var(--border-primary)',
+                  }}>
+                    <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>
+                      Total a Pagar
+                    </span>
+                    <span style={{
+                      fontSize: '28px', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1,
+                      margin: '6px 0',
+                      color: detalleFacturacion.total_a_pagar > 0 ? '#ff0033' : '#059669',
+                    }}>
                       {formatCurrency(detalleFacturacion.total_a_pagar)}
                     </span>
-                    <span className="fact-saldo-estado">
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                       {detalleFacturacion.total_a_pagar > 0 ? 'El conductor debe pagar' : 'Saldo a favor del conductor'}
                     </span>
                   </div>
 
-                  {/* Pago registrado (solo visual, no se exporta en PDF) */}
-                  {!modoVistaPrevia && (detalleFacturacion.monto_cobrado || 0) > 0 && (
-                    <div style={{
-                      marginTop: '12px',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      background: (detalleFacturacion.monto_cobrado || 0) >= Math.abs(detalleFacturacion.total_a_pagar) ? '#F0FDF4' : '#FEF3C7',
-                      border: `1px solid ${(detalleFacturacion.monto_cobrado || 0) >= Math.abs(detalleFacturacion.total_a_pagar) ? '#BBF7D0' : '#FDE68A'}`
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>COBRADO</span>
-                        <span style={{
-                          fontSize: '16px',
-                          fontWeight: 700,
-                          color: (detalleFacturacion.monto_cobrado || 0) >= Math.abs(detalleFacturacion.total_a_pagar) ? '#16a34a' : '#d97706'
-                        }}>
-                          {formatCurrency(detalleFacturacion.monto_cobrado || 0)}
-                        </span>
-                      </div>
-                      {(detalleFacturacion.monto_cobrado || 0) < Math.abs(detalleFacturacion.total_a_pagar) && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                          <span style={{ fontSize: '11px', color: '#991B1B' }}>Saldo pendiente</span>
-                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#dc2626' }}>
-                            {formatCurrency(Math.abs(detalleFacturacion.total_a_pagar) - (detalleFacturacion.monto_cobrado || 0))}
+                  {/* Cobrado */}
+                  {!modoVistaPrevia && (detalleFacturacion.monto_cobrado || 0) > 0 && (() => {
+                    const cobrado = detalleFacturacion.monto_cobrado || 0;
+                    const totalAbs = Math.abs(detalleFacturacion.total_a_pagar);
+                    const completo = cobrado >= totalAbs;
+                    return (
+                      <div style={{
+                        marginTop: '12px', padding: '10px 12px', borderRadius: '6px',
+                        background: completo ? 'rgba(16, 185, 129, 0.06)' : 'rgba(245, 158, 11, 0.06)',
+                        border: `1px solid ${completo ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}`,
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '8px', height: '8px', borderRadius: '50%',
+                              background: completo ? '#10b981' : '#f59e0b',
+                            }} />
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                              Cobrado
+                            </span>
+                          </div>
+                          <span style={{
+                            fontSize: '14px', fontWeight: 700, fontFamily: 'monospace',
+                            color: completo ? '#059669' : '#d97706',
+                          }}>
+                            {formatCurrency(cobrado)}
                           </span>
                         </div>
-                      )}
-                    </div>
-                  )}
+                        {!completo && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', paddingLeft: '16px' }}>
+                            <span style={{ fontSize: '11px', color: '#991B1B' }}>Saldo pendiente</span>
+                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#dc2626' }}>
+                              {formatCurrency(totalAbs - cobrado)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
-                  {/* Detalle de pagos registrados - editar/eliminar */}
+                  {/* Pagos Registrados */}
                   {!modoVistaPrevia && detallePagos.length > 0 && (
-                    <div style={{
-                      marginTop: '12px',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-primary)'
-                    }}>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                    <div style={{ marginTop: '12px' }}>
+                      <div style={{
+                        fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
+                        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
+                      }}>
                         Pagos Registrados ({detallePagos.length})
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         {detallePagos.map((pago) => (
                           <div key={pago.id} style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            padding: '6px 8px',
-                            background: 'var(--bg-primary)',
-                            borderRadius: '6px',
-                            border: '1px solid var(--border-primary)'
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            padding: '7px 12px', borderRadius: '6px',
+                            background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
                           }}>
-                            <div style={{ flex: 1, fontSize: '12px' }}>
-                              <span style={{ fontWeight: 600, color: '#16a34a' }}>{formatCurrency(pago.monto)}</span>
-                              <span style={{ color: 'var(--text-muted)', marginLeft: '8px' }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
+                            <div style={{ flex: 1, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>{formatCurrency(pago.monto)}</span>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
                                 S{pago.semana}/{pago.anio}
                               </span>
-                              <span style={{ color: 'var(--text-muted)', marginLeft: '8px', fontSize: '11px' }}>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
                                 {formatDate(pago.fecha_pago)}
                               </span>
                               {pago.referencia && (
-                                <span style={{ color: 'var(--text-secondary)', marginLeft: '8px', fontSize: '11px', fontStyle: 'italic' }}>
+                                <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontStyle: 'italic' }}>
                                   {pago.referencia}
                                 </span>
                               )}
