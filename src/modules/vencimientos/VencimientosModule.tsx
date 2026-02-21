@@ -815,6 +815,7 @@ export function VencimientosModule() {
                       <option value="Constancia de cédula">Constancia de cédula</option>
                       <option value="VTV">VTV</option>
                       <option value="GNC">GNC</option>
+                      <option value="Habilitacion remis">Habilitacion remis</option>
                     </select>
                   </div>
                   <div className="form-group">
@@ -880,7 +881,7 @@ export function VencimientosModule() {
                       type="date"
                       value={formData.fecha_vencimiento}
                       onChange={e => setFormData(prev => ({ ...prev, fecha_vencimiento: e.target.value }))}
-                      disabled={modalMode !== 'edit' || saving}
+                      disabled={modalMode === 'view' || saving}
                     />
                   </div>
                 </div>
@@ -891,7 +892,7 @@ export function VencimientosModule() {
                       type="date"
                       value={formData.fecha_iniciar_gestion || ''}
                       onChange={e => setFormData(prev => ({ ...prev, fecha_iniciar_gestion: e.target.value }))}
-                      disabled={modalMode !== 'edit' || saving}
+                      disabled={modalMode === 'view' || saving}
                     />
                   </div>
                 </div>
