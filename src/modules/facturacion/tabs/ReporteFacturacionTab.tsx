@@ -43,6 +43,14 @@ import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTab
 import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
 import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyPreviewTable'
 
+// Helper: extraer fecha (yyyy-MM-dd) en timezone Argentina desde un timestamp
+const ARG_TZ = 'America/Argentina/Buenos_Aires'
+const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+function toArgDate(timestamp: string | null | undefined): string {
+  if (!timestamp) return '-'
+  return argDateFmt.format(new Date(timestamp))
+}
+
 // Tipos para datos de facturación generada
 interface FacturacionConductor {
   id: string
@@ -409,8 +417,8 @@ export function ReporteFacturacionTab() {
           : horarioRawDias === 'cargo' ? 'CARGO'
           : horarioRawDias === 'turno' ? 'TURNO'
           : horarioRawDias.toUpperCase()
-        const acInicioStr = ac.fecha_inicio ? ac.fecha_inicio.substring(0, 10) : 'NULL'
-        const acFinStr = ac.fecha_fin ? ac.fecha_fin.substring(0, 10) : 'NULL'
+        const acInicioStr = ac.fecha_inicio ? toArgDate(ac.fecha_inicio) : 'NULL'
+        const acFinStr = ac.fecha_fin ? toArgDate(ac.fecha_fin) : 'NULL'
 
         // Skip PROGRAMADO — asignación no ha iniciado, no cuenta para facturación
         if (['programado', 'programada'].includes(estadoPadre)) {
@@ -423,11 +431,11 @@ export function ReporteFacturacionTab() {
           continue
         }
 
-        // Normalizar fechas a solo fecha (sin hora) para conteo correcto de días
-        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10))
-          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio.substring(0, 10)) : semanaInicio)
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
-          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : semanaFin)
+        // Normalizar fechas a timezone Argentina para conteo correcto de días
+        const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio))
+          : (asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : semanaInicio)
+        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
+          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : semanaFin)
 
         if (acFin < semanaInicio || acInicio > limiteConteo) {
           historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango' })
@@ -540,8 +548,8 @@ export function ReporteFacturacionTab() {
           horario: horarioLabel,
           estado: ac.estado || '-',
           padreEstado: padre.estado || '-',
-          fechaInicio: acInicio ? acInicio.substring(0, 10) : '-',
-          fechaFin: acFin ? acFin.substring(0, 10) : null,
+          fechaInicio: toArgDate(acInicio),
+          fechaFin: acFin ? toArgDate(acFin) : null,
           modalidad: padre.modalidad || padre.horario || '-',
         })
       }
@@ -655,8 +663,8 @@ export function ReporteFacturacionTab() {
         if (!asignacion) return
         const estadoPadre = (asignacion.estado || '').toLowerCase()
         if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadre)) return
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10)) : null
-        const asigFin = asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : null
+        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const asigFin = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
         const finEfectivo = acFin || asigFin
         if (!finEfectivo || finEfectivo >= fechaFinPeriodoLoad) {
           conductoresConAsignacionAlCierreLoad.add(ac.conductor_id)
@@ -664,10 +672,10 @@ export function ReporteFacturacionTab() {
 
         // Calcular overlap con el período para determinar horario
         const periodoInicioLoad = parseISO((periodoData as any).fecha_inicio)
-        const acInicioLoad = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10))
-          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio.substring(0, 10)) : periodoInicioLoad)
-        const acFinLoad = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
-          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : fechaFinPeriodoLoad)
+        const acInicioLoad = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio))
+          : (asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : periodoInicioLoad)
+        const acFinLoad = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
+          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : fechaFinPeriodoLoad)
         const efInicio = acInicioLoad < periodoInicioLoad ? periodoInicioLoad : acInicioLoad
         const efFin = acFinLoad > fechaFinPeriodoLoad ? fechaFinPeriodoLoad : acFinLoad
         const diasOverlap = Math.max(0, Math.ceil((efFin.getTime() - efInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1)
@@ -877,9 +885,9 @@ export function ReporteFacturacionTab() {
           if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreVPExtra) && !asig.fecha_fin) continue
 
           // Verificar solapamiento con la semana (normalizar sin hora)
-          const acInicioExtra = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10)) : new Date('2020-01-01')
-          const acFinExtra = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
-            : (asig.fecha_fin ? parseISO(asig.fecha_fin.substring(0, 10)) : new Date('2099-12-31'))
+          const acInicioExtra = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : new Date('2020-01-01')
+          const acFinExtra = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
+            : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
           if (acFinExtra < semInicioVP || acInicioExtra > semFinVP) continue
 
           if (!dnisAgregadosVP.has(cond.numero_dni)) {
@@ -1007,10 +1015,10 @@ export function ReporteFacturacionTab() {
         
         // Calcular días que este registro se solapa con la semana
         // Normalizar a solo fecha (sin hora) — timestamps de asignaciones tienen hora que rompe el conteo
-        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10)) 
-          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio.substring(0, 10)) : fechaInicioSemana)
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10)) 
-          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : fechaFinSemana)
+        const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) 
+          : (asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : fechaInicioSemana)
+        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) 
+          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : fechaFinSemana)
         
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
@@ -1069,8 +1077,8 @@ export function ReporteFacturacionTab() {
         if (!asignacion) return
         const estadoPadre = (asignacion.estado || '').toLowerCase()
         if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadre)) return
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10)) : null
-        const asigFin = asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : null
+        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const asigFin = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
         const finEfectivo = acFin || asigFin
         if (!finEfectivo || finEfectivo >= semanaActual.fin) {
           conductoresConAsignacionAlCierreVP.add(ac.conductor_id)
@@ -1746,9 +1754,9 @@ export function ReporteFacturacionTab() {
           if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadreRecExtra) && !asig.fecha_fin) continue
 
           // Verificar solapamiento con la semana (normalizar sin hora)
-          const acInicioRecExtra = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10)) : new Date('2020-01-01')
-          const acFinRecExtra = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
-            : (asig.fecha_fin ? parseISO(asig.fecha_fin.substring(0, 10)) : new Date('2099-12-31'))
+          const acInicioRecExtra = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : new Date('2020-01-01')
+          const acFinRecExtra = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
+            : (asig.fecha_fin ? parseISO(toArgDate(asig.fecha_fin)) : new Date('2099-12-31'))
           if (acFinRecExtra < semInicioRecalc || acInicioRecExtra > semFinRecalc) continue
 
           if (!dnisAgregadosRecalc.has(cond.numero_dni)) {
@@ -1859,10 +1867,10 @@ export function ReporteFacturacionTab() {
 
         // Fechas: usar conductor > padre > semana como fallback
         // Normalizar a solo fecha (sin hora) — timestamps tienen hora que rompe el conteo
-        const acInicio = ac.fecha_inicio ? parseISO(ac.fecha_inicio.substring(0, 10))
-          : (asignacion.fecha_inicio ? parseISO(asignacion.fecha_inicio.substring(0, 10)) : fechaInicioSemanaRecalc)
-        const acFin = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10))
-          : (asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : fechaFinSemanaRecalc)
+        const acInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio))
+          : (asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : fechaInicioSemanaRecalc)
+        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
+          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : fechaFinSemanaRecalc)
 
         if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
 
@@ -1910,8 +1918,8 @@ export function ReporteFacturacionTab() {
         if (!asignacion) return
         const estadoPadreR = (asignacion.estado || '').toLowerCase()
         if (['programado', 'programada', 'cancelado', 'cancelada'].includes(estadoPadreR)) return
-        const acFinR = ac.fecha_fin ? parseISO(ac.fecha_fin.substring(0, 10)) : null
-        const asigFinR = asignacion.fecha_fin ? parseISO(asignacion.fecha_fin.substring(0, 10)) : null
+        const acFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const asigFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
         const finEfectivoR = acFinR || asigFinR
         if (!finEfectivoR || finEfectivoR >= fechaFinSemanaRecalc) {
           conductoresConAsignacionAlCierreRecalc.add(ac.conductor_id)
