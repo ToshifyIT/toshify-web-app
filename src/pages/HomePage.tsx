@@ -935,8 +935,10 @@ export function HomePage() {
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.15s;
-          font-size: 13px;
-          font-weight: 500;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
           border: none;
           background: none;
           width: 100%;
@@ -972,7 +974,7 @@ export function HomePage() {
 
         .nav-item.nested {
           padding: 10px 12px;
-          font-size: 13px;
+          font-size: 11px;
         }
 
         .nav-divider {
