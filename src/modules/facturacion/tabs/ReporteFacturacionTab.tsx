@@ -1074,10 +1074,10 @@ export function ReporteFacturacionTab() {
         .in('codigo', ['P001', 'P002', 'P003', 'P013'])
       const preciosBaseVP = new Map<string, number>()
       ;(conceptosNominaVP || []).forEach((c: any) => {
-        preciosBaseVP.set(c.codigo, c.precio_base ?? c.precio_final ?? 0)
+        preciosBaseVP.set(c.codigo, c.precio_final ?? c.precio_base ?? 0)
       })
       
-      // Función helper para obtener precio BASE en una fecha específica (IVA se aplica aparte si tiene CUIT)
+      // Función helper para obtener precio FINAL en una fecha específica (precio real ingresado)
       const getPrecioEnFechaVP = (codigo: string, fecha: Date): number => {
         const fechaStr = fecha.toISOString().split('T')[0]
         const historial = (historialPreciosVP || []).find((h: any) => 
@@ -1085,7 +1085,7 @@ export function ReporteFacturacionTab() {
           h.fecha_vigencia_desde <= fechaStr && 
           h.fecha_vigencia_hasta >= fechaStr
         )
-        if (historial) return historial.precio_base ?? historial.precio_final
+        if (historial) return historial.precio_final ?? historial.precio_base
         return preciosBaseVP.get(codigo) || 0
       }
       
@@ -1363,12 +1363,9 @@ export function ReporteFacturacionTab() {
         // Excluir conductores con 0 días, SALVO que tengan penalidades pendientes
         if (diasTotales === 0 && !dnisConPenalidadesVP.has(control.numero_dni)) continue
         
-        // Calcular alquiler usando montos pre-calculados con precios históricos (precio_base sin IVA)
+        // Calcular alquiler usando montos pre-calculados con precios (precio_final ya incluye IVA)
         let subtotalAlquiler = prorrateo.monto_CARGO + prorrateo.monto_TURNO_DIURNO + prorrateo.monto_TURNO_NOCTURNO
-        // IVA 21% solo si el conductor tiene CUIT
-        if (conductor.numero_cuit && subtotalAlquiler > 0) {
-          subtotalAlquiler = Math.round(subtotalAlquiler * 1.21)
-        }
+        // precio_final ya incluye IVA - no se agrega de nuevo
         
         // Determinar tipo de alquiler predominante para garantía
         const tipoAlquiler: 'CARGO' | 'TURNO' = prorrateo.CARGO > (prorrateo.TURNO_DIURNO + prorrateo.TURNO_NOCTURNO) 
@@ -1954,12 +1951,12 @@ export function ReporteFacturacionTab() {
       // 4. Obtener conceptos (precios actuales)
       const { data: conceptos } = await supabase.from('conceptos_nomina').select('*').eq('activo', true)
       
-      // Precios DIARIOS (precio_base sin IVA)
+      // Precios DIARIOS (precio_final con IVA = precio real ingresado)
       const preciosActuales: Record<string, number> = {
-        'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_base || 42714,
-        'P002': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_base || 75429,
-        'P003': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_base || 7143,
-        'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_base || 32714
+        'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 42714,
+        'P002': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 75429,
+        'P003': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 7143,
+        'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_final || 32714
       }
       
       // Precios diarios para alquiler
@@ -2095,10 +2092,7 @@ export function ReporteFacturacionTab() {
           })
         }
 
-        // IVA 21% solo si el conductor tiene CUIT
-        if (conductor.conductor_cuit && alquilerTotal > 0) {
-          alquilerTotal = Math.round(alquilerTotal * 1.21)
-        }
+        // precio_final ya incluye IVA - no se agrega de nuevo
 
         // Garantía - valor fijo semanal (no proporcional a días trabajados)
         // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
