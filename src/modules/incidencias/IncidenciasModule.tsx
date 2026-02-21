@@ -115,10 +115,10 @@ export function IncidenciasModule() {
   // Permisos específicos para el menú de incidencias
   // Solo admin/superadmin puede editar incidencias y aplicar/rechazar
   const roleName = ((profile as any)?.roles?.name || '').toLowerCase()
-  const isAdmin = roleName === 'admin' || roleName === 'superadmin' || roleName === 'administrador'
+  const isAdmin = roleName === 'admin' || roleName === 'superadmin' || roleName === 'administrador' || roleName === 'administrativo'
   const canCreate = canCreateInMenu('incidencias')
-  const canEdit = isAdmin && canEditInMenu('incidencias')
-  const canDelete = isAdmin && canDeleteInMenu('incidencias')
+  const canEdit = isAdmin || canEditInMenu('incidencias')
+  const canDelete = isAdmin || canDeleteInMenu('incidencias')
 
   const [activeTab, setActiveTab] = useState<TabType>('logistica')
   const [loading, setLoading] = useState(true)
