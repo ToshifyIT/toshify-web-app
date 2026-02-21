@@ -377,14 +377,20 @@ export function ReporteFacturacionTab() {
       const esVistaPreviewActual = modoVistaPrevia && hoyDesglose >= semanaInicio && hoyDesglose <= semanaFin
       const limiteConteo = esVistaPreviewActual ? hoyDesglose : semanaFin
 
-      const { data: asignacionesCond } = await (supabase
-        .from('asignaciones_conductores') as any)
-        .select(`
-          id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
-          asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
-        `)
-        .eq('conductor_id', realConductorId)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
+      const [{ data: asignacionesCond }, { data: conductorDesglose }] = await Promise.all([
+        (supabase
+          .from('asignaciones_conductores') as any)
+          .select(`
+            id, conductor_id, horario, fecha_inicio, fecha_fin, estado,
+            asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
+          `)
+          .eq('conductor_id', realConductorId)
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado']),
+        supabase.from('conductores').select('fecha_terminacion').eq('id', realConductorId).maybeSingle()
+      ])
+
+      // Tope por fecha_terminacion del conductor
+      const fechaTermDesglose = conductorDesglose?.fecha_terminacion ? parseISO(conductorDesglose.fecha_terminacion) : null
 
       // Construir un Set de fechas cubiertas con su horario
       const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -429,7 +435,11 @@ export function ReporteFacturacionTab() {
         }
 
         const efectivoInicio = acInicio < semanaInicio ? semanaInicio : acInicio
-        const efectivoFin = acFin > limiteConteo ? limiteConteo : acFin
+        let efectivoFin = acFin > limiteConteo ? limiteConteo : acFin
+        // Cortar en fecha_terminacion si existe
+        if (fechaTermDesglose && efectivoFin > fechaTermDesglose) {
+          efectivoFin = fechaTermDesglose
+        }
         let diasContados = 0
 
         const cursorAc = new Date(efectivoInicio)
