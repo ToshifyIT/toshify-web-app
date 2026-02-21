@@ -1363,7 +1363,7 @@ export function ReporteFacturacionTab() {
       })
       
       // Cuota de garantía semanal: precio diario de conceptos_nomina × 7
-      const cuotaGarantiaSemanalVP = (preciosBaseVP.get('P003') || 7143) * 7
+      const cuotaGarantiaSemanalVP = Math.round((preciosBaseVP.get('P003') || 7143) * 7)
 
       // 6. Calcular facturación proyectada para cada conductor
       const facturacionesProyectadas: FacturacionConductor[] = []
@@ -1991,7 +1991,7 @@ export function ReporteFacturacionTab() {
       const precioCargo = preciosActuales['P002']
       const precioTurnoNocturno = preciosActuales['P013']
       // Garantía: precio en conceptos_nomina es DIARIO, multiplicar por 7 para obtener cuota semanal
-      const cuotaGarantia = preciosActuales['P003'] * 7
+      const cuotaGarantia = Math.round(preciosActuales['P003'] * 7)
       
       // 5. Obtener datos adicionales en paralelo
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([

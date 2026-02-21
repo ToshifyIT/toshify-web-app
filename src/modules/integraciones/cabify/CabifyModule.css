@@ -579,24 +579,15 @@
   font-weight: 600;
 }
 
-/* Table Container - tabla ancha con scroll */
+/* Table Container */
 .cabify-table-container {
   overflow: visible;
 }
 
-.cabify-table-container .dt-table-wrapper {
-  max-height: 500px;
-  overflow: auto;
-}
-
-.cabify-table-container .dt-table {
-  min-width: 1800px;
-}
-
-.cabify-table-container .dt-table th,
 .cabify-table-container .dt-table td {
   white-space: nowrap;
-  padding: 6px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ==========================================
