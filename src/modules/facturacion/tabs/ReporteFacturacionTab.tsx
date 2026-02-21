@@ -752,23 +752,38 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // 2.5 Cargar ganancias y peajes de Cabify para el período
-      const { data: cabifyData } = await supabase
-        .from('cabify_historico')
-        .select('dni, ganancia_total, peajes')
-        .gte('fecha_inicio', (periodoData as any).fecha_inicio + 'T00:00:00')
-        .lte('fecha_inicio', (periodoData as any).fecha_fin + 'T23:59:59')
+      // 2.5 Cargar ganancias de Cabify (semana actual) y peajes (semana ANTERIOR)
+      const periodoInicio = (periodoData as any).fecha_inicio
+      const periodoFin = (periodoData as any).fecha_fin
+      const peajesInicioSemAnt = format(subWeeks(parseISO(periodoInicio), 1), 'yyyy-MM-dd')
+      const peajesFinSemAnt = format(subWeeks(parseISO(periodoFin), 1), 'yyyy-MM-dd')
 
-      // Agrupar ganancias y peajes por DNI (normalizado sin ceros adelante)
+      const [{ data: cabifyGanancias }, { data: cabifyPeajes }] = await Promise.all([
+        supabase.from('cabify_historico')
+          .select('dni, ganancia_total')
+          .gte('fecha_inicio', periodoInicio + 'T00:00:00')
+          .lte('fecha_inicio', periodoFin + 'T23:59:59'),
+        supabase.from('cabify_historico')
+          .select('dni, peajes')
+          .gte('fecha_inicio', peajesInicioSemAnt + 'T00:00:00')
+          .lte('fecha_inicio', peajesFinSemAnt + 'T23:59:59')
+      ])
+
+      // Agrupar ganancias por DNI (semana actual)
       const gananciasPorDni = new Map<string, number>()
-      const peajesPorDni = new Map<string, number>()
-      ;(cabifyData || []).forEach((c: any) => {
+      ;(cabifyGanancias || []).forEach((c: any) => {
         if (c.dni) {
           const dniNorm = String(c.dni).replace(/^0+/, '')
-          const actual = gananciasPorDni.get(dniNorm) || 0
-          gananciasPorDni.set(dniNorm, actual + (parseFloat(c.ganancia_total) || 0))
-          const actualPeajes = peajesPorDni.get(dniNorm) || 0
-          peajesPorDni.set(dniNorm, actualPeajes + (parseFloat(String(c.peajes)) || 0))
+          gananciasPorDni.set(dniNorm, (gananciasPorDni.get(dniNorm) || 0) + (parseFloat(c.ganancia_total) || 0))
+        }
+      })
+
+      // Agrupar peajes por DNI (semana anterior)
+      const peajesPorDni = new Map<string, number>()
+      ;(cabifyPeajes || []).forEach((c: any) => {
+        if (c.dni && c.peajes) {
+          const dniNorm = String(c.dni).replace(/^0+/, '')
+          peajesPorDni.set(dniNorm, (peajesPorDni.get(dniNorm) || 0) + (parseFloat(String(c.peajes)) || 0))
         }
       })
 
