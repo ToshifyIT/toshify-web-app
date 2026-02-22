@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
@@ -1072,6 +1073,7 @@ export function GarantiasTab() {
             <div className="fact-header-left">
             </div>
             <div className="fact-header-right">
+              <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos']} label="Garant\u00edas" />
               <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>
                 <UserPlus size={16} />
                 Agregar Garantía

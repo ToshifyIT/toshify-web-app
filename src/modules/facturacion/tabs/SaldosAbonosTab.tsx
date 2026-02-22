@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
 
@@ -1491,7 +1492,12 @@ export function SaldosAbonosTab() {
       <LoadingOverlay show={loading} message="Cargando saldos..." size="lg" />
 
       {/* ===== SALDOS ===== */}
-          {/* Header (filtro removido - se usan los filtros de columna) */}
+          <div className="fact-header">
+            <div className="fact-header-left"></div>
+            <div className="fact-header-right">
+              <VerLogsButton tablas={['saldos_conductores', 'abonos_conductores', 'cobros_fraccionados']} label="Saldos" />
+            </div>
+          </div>
 
            {/* Stats */}
           <div className="fact-stats">

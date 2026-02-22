@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
+import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { type ColumnDef } from '@tanstack/react-table'
 import type { ConductorWithRelations } from '../../types/database.types'
 import Swal from 'sweetalert2'
@@ -3176,6 +3177,7 @@ export function GuiasModule() {
                     <Users size={16} />
                     <span>Gestión de Conductores</span>
                   </button>
+                  <VerLogsButton tablas={['guias_seguimiento', 'guias_historial_semanal', 'guias_acciones_implementadas']} label="Gu\u00edas" />
                 </div>
 
                 {/* Filtros Activos */}

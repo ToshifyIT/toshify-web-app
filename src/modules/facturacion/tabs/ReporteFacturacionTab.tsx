@@ -35,6 +35,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
@@ -7719,6 +7720,7 @@ export function ReporteFacturacionTab() {
             </div>
 
             <div className="fact-export-btn-group">
+              <VerLogsButton tablas={['facturacion_conductores', 'facturacion_detalle', 'periodos_facturacion', 'penalidades', 'saldos_conductores']} label="Facturación" />
               <button
                 className="fact-btn-export"
                 onClick={prepararFacturacionPreviewVistaPrevia}
