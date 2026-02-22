@@ -1,10 +1,10 @@
 // src/components/admin/AuditModule.tsx
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay } from '../ui/LoadingOverlay'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { History, Eye, Filter, Calendar, User, Database, Monitor, Users } from 'lucide-react'
+import { History, Eye, Filter, Calendar, User, Database, Monitor, Users, ChevronLeft, ChevronRight } from 'lucide-react'
 import Swal from 'sweetalert2'
 import './UserManagement.css'
 import './AdminStyles.css'
@@ -16,8 +16,8 @@ interface AuditLog {
   tabla: string
   registro_id: string | null
   accion: 'INSERT' | 'UPDATE' | 'DELETE'
-  datos_anteriores: Record<string, any> | null
-  datos_nuevos: Record<string, any> | null
+  datos_anteriores?: Record<string, unknown> | null
+  datos_nuevos?: Record<string, unknown> | null
   campos_modificados: string[] | null
   usuario_id: string | null
   usuario_nombre: string | null
@@ -27,24 +27,54 @@ interface AuditLog {
 
 // Mapeo de nombres de tablas a español
 const TABLA_LABELS: Record<string, string> = {
-  conductores: 'Conductores',
-  vehiculos: 'Vehículos',
-  asignaciones: 'Asignaciones',
-  incidencias: 'Incidencias',
-  penalidades: 'Penalidades',
-  siniestros: 'Siniestros',
-  productos: 'Productos',
-  inventario: 'Inventario',
-  movimientos: 'Movimientos',
-  facturacion_conductores: 'Facturación',
-  garantias_conductores: 'Garantías',
-  conceptos_nomina: 'Conceptos Nómina',
-  periodos_facturacion: 'Períodos',
-  user_profiles: 'Usuarios',
-  roles: 'Roles',
-  proveedores: 'Proveedores',
   abonos_conductores: 'Abonos',
-  tickets_favor: 'Tickets a Favor'
+  asignaciones: 'Asignaciones',
+  asignaciones_conductores: 'Asignaciones Conductores',
+  cabify_historico: 'Cabify Histórico',
+  cabify_sync_log: 'Cabify Sync',
+  cobros_fraccionados: 'Cobros Fraccionados',
+  conceptos_nomina: 'Conceptos Nómina',
+  conductores: 'Conductores',
+  conductores_semana_facturacion: 'Semana Facturación',
+  devoluciones: 'Devoluciones',
+  excesos_kilometraje: 'Excesos Km',
+  facturacion_cabify: 'Facturación Cabify',
+  facturacion_conductores: 'Facturación',
+  facturacion_detalle: 'Facturación Detalle',
+  garantias_conductores: 'Garantías',
+  garantias_pagos: 'Garantía Pagos',
+  guias_acciones_implementadas: 'Guías Acciones',
+  guias_historial_semanal: 'Guías Historial',
+  guias_seguimiento: 'Guías Seguimiento',
+  incidencias: 'Incidencias',
+  inventario: 'Inventario',
+  menus: 'Menús',
+  movimientos: 'Movimientos',
+  multas_historico: 'Multas',
+  pagos_conductores: 'Pagos Conductores',
+  penalidades: 'Penalidades',
+  penalidades_cuotas: 'Penalidades Cuotas',
+  penalidades_rechazos: 'Penalidades Rechazos',
+  periodos_facturacion: 'Períodos',
+  productos: 'Productos',
+  proveedores: 'Proveedores',
+  roles: 'Roles',
+  role_menu_permissions: 'Permisos Menú',
+  role_submenu_permissions: 'Permisos Submenú',
+  saldos_conductores: 'Saldos',
+  sedes: 'Sedes',
+  siniestros: 'Siniestros',
+  siniestros_seguimientos: 'Siniestros Seguimiento',
+  submenus: 'Submenús',
+  telepase_control: 'Telepase Control',
+  telepase_historico: 'Telepase Histórico',
+  tickets_favor: 'Tickets a Favor',
+  tipos_cobro_descuento: 'Tipos Cobro/Descuento',
+  user_profiles: 'Usuarios',
+  uss_sync_log: 'USS Sync',
+  vehiculos: 'Vehículos',
+  wialon_bitacora: 'Wialon Bitácora',
+  wialon_bitacora_sync_log: 'Wialon Sync',
 }
 
 const ACCION_LABELS: Record<string, { label: string; color: string }> = {
@@ -53,40 +83,71 @@ const ACCION_LABELS: Record<string, { label: string; color: string }> = {
   DELETE: { label: 'Eliminación', color: 'dt-badge-red' }
 }
 
+const PAGE_SIZE = 100
+
+// Helper: fecha hace N días en formato yyyy-MM-dd
+function daysAgo(n: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return d.toISOString().split('T')[0]
+}
+
 export function AuditModule() {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>('usuarios')
   const [tabCounts, setTabCounts] = useState({ sistema: 0, usuarios: 0 })
+  const [totalCount, setTotalCount] = useState(0)
+  const [page, setPage] = useState(0)
 
-  // Filtros
+  // Filtros - default últimos 7 días
   const [filtroTabla, setFiltroTabla] = useState<string>('')
   const [filtroAccion, setFiltroAccion] = useState<string>('')
   const [filtroUsuario, setFiltroUsuario] = useState<string>('')
-  const [filtroFechaInicio, setFiltroFechaInicio] = useState<string>('')
+  const [filtroUsuarioDebounced, setFiltroUsuarioDebounced] = useState<string>('')
+  const [filtroFechaInicio, setFiltroFechaInicio] = useState<string>(daysAgo(7))
   const [filtroFechaFin, setFiltroFechaFin] = useState<string>('')
 
-  // Tablas disponibles
-  const tablasDisponibles = Object.keys(TABLA_LABELS)
+  // Tablas disponibles (dinámicas, se cargan de la BD)
+  const [tablasDisponibles, setTablasDisponibles] = useState<string[]>(Object.keys(TABLA_LABELS))
+
+  // Debounce para filtro usuario
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setFiltroUsuarioDebounced(filtroUsuario)
+    }, 500)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [filtroUsuario])
+
+  // Reset page al cambiar filtros
+  useEffect(() => {
+    setPage(0)
+  }, [filtroTabla, filtroAccion, filtroUsuarioDebounced, filtroFechaInicio, filtroFechaFin, activeTab])
 
   useEffect(() => {
     loadLogs()
-  }, [filtroTabla, filtroAccion, filtroUsuario, filtroFechaInicio, filtroFechaFin, activeTab])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroTabla, filtroAccion, filtroUsuarioDebounced, filtroFechaInicio, filtroFechaFin, activeTab, page])
 
-  // Cargar contadores de pestañas
+  // Cargar contadores de pestañas (con rango de fecha para no timeout)
   useEffect(() => {
     const loadCounts = async () => {
+      const fechaDesde = filtroFechaInicio || daysAgo(7)
       const [sistemaResult, usuariosResult] = await Promise.all([
         supabase
           .from('audit_log')
           .select('id', { count: 'exact', head: true })
-          .or('usuario_nombre.is.null,usuario_nombre.eq.Sistema'),
+          .or('usuario_nombre.is.null,usuario_nombre.eq.Sistema')
+          .gte('created_at', `${fechaDesde}T00:00:00`),
         supabase
           .from('audit_log')
           .select('id', { count: 'exact', head: true })
           .not('usuario_nombre', 'is', null)
           .neq('usuario_nombre', 'Sistema')
+          .gte('created_at', `${fechaDesde}T00:00:00`),
       ])
       setTabCounts({
         sistema: sistemaResult.count || 0,
@@ -94,70 +155,107 @@ export function AuditModule() {
       })
     }
     loadCounts()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroFechaInicio, filtroFechaFin])
+
+  // Cargar tablas disponibles dinámicamente (últimos 30 días)
+  useEffect(() => {
+    const loadTablas = async () => {
+      const { data } = await supabase
+        .from('audit_log')
+        .select('tabla')
+        .gte('created_at', `${daysAgo(30)}T00:00:00`)
+        .order('tabla')
+        .limit(5000)
+      if (data) {
+        const tablas = [...new Set(data.map((r: { tabla: string }) => r.tabla))].sort()
+        if (tablas.length > 0) setTablasDisponibles(tablas)
+      }
+    }
+    loadTablas()
   }, [])
+
+  const buildQuery = useCallback(() => {
+    // Select solo columnas livianas (sin datos_anteriores/datos_nuevos que son JSONB pesados)
+    let query = supabase
+      .from('audit_log')
+      .select('id, tabla, registro_id, accion, campos_modificados, usuario_id, usuario_nombre, usuario_email, created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+
+    // Filtrar por tipo de log (sistema o usuario)
+    if (activeTab === 'sistema') {
+      query = query.or('usuario_nombre.is.null,usuario_nombre.eq.Sistema')
+    } else {
+      query = query.not('usuario_nombre', 'is', null)
+        .neq('usuario_nombre', 'Sistema')
+    }
+
+    // Aplicar filtros
+    if (filtroTabla) {
+      query = query.eq('tabla', filtroTabla)
+    }
+    if (filtroAccion) {
+      query = query.eq('accion', filtroAccion)
+    }
+    if (filtroUsuarioDebounced) {
+      query = query.or(`usuario_nombre.ilike.%${filtroUsuarioDebounced}%,usuario_email.ilike.%${filtroUsuarioDebounced}%`)
+    }
+    if (filtroFechaInicio) {
+      query = query.gte('created_at', `${filtroFechaInicio}T00:00:00`)
+    }
+    if (filtroFechaFin) {
+      query = query.lte('created_at', `${filtroFechaFin}T23:59:59`)
+    }
+
+    return query
+  }, [activeTab, filtroTabla, filtroAccion, filtroUsuarioDebounced, filtroFechaInicio, filtroFechaFin])
 
   const loadLogs = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      let query = supabase
-        .from('audit_log')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500)
+      const from = page * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
 
-      // Filtrar por tipo de log (sistema o usuario)
-      if (activeTab === 'sistema') {
-        query = query.or('usuario_nombre.is.null,usuario_nombre.eq.Sistema')
-      } else {
-        query = query.not('usuario_nombre', 'is', null)
-          .neq('usuario_nombre', 'Sistema')
-      }
-
-      // Aplicar filtros
-      if (filtroTabla) {
-        query = query.eq('tabla', filtroTabla)
-      }
-      if (filtroAccion) {
-        query = query.eq('accion', filtroAccion)
-      }
-      if (filtroUsuario) {
-        query = query.or(`usuario_nombre.ilike.%${filtroUsuario}%,usuario_email.ilike.%${filtroUsuario}%`)
-      }
-      if (filtroFechaInicio) {
-        query = query.gte('created_at', `${filtroFechaInicio}T00:00:00`)
-      }
-      if (filtroFechaFin) {
-        query = query.lte('created_at', `${filtroFechaFin}T23:59:59`)
-      }
-
-      const { data, error: queryError } = await query
+      const query = buildQuery().range(from, to)
+      const { data, error: queryError, count } = await query
 
       if (queryError) throw queryError
       setLogs(data || [])
-    } catch (err: any) {
-      console.error('Error cargando logs:', err)
-      setError(err.message)
+      setTotalCount(count || 0)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error desconocido'
+      setError(message)
     } finally {
       setLoading(false)
     }
   }
 
-  const verDetalle = (log: AuditLog) => {
+  const verDetalle = async (log: AuditLog) => {
+    // Cargar datos completos (incluyendo JSONB) solo para este registro
+    const { data: fullLog } = await supabase
+      .from('audit_log')
+      .select('datos_anteriores, datos_nuevos')
+      .eq('id', log.id)
+      .single()
+
+    const datosAnteriores = fullLog?.datos_anteriores as Record<string, unknown> | null
+    const datosNuevos = fullLog?.datos_nuevos as Record<string, unknown> | null
+
     let htmlContent = ''
 
     if (log.accion === 'INSERT') {
       htmlContent = `
         <div style="text-align: left; max-height: 400px; overflow-y: auto;">
           <h4 style="margin-bottom: 12px; color: #10b981;">Datos Creados:</h4>
-          <pre style="background: #f3f4f6; padding: 12px; border-radius: 8px; font-size: 12px; overflow-x: auto; white-space: pre-wrap;">${JSON.stringify(log.datos_nuevos, null, 2)}</pre>
+          <pre style="background: #f3f4f6; padding: 12px; border-radius: 8px; font-size: 12px; overflow-x: auto; white-space: pre-wrap;">${JSON.stringify(datosNuevos, null, 2)}</pre>
         </div>
       `
     } else if (log.accion === 'UPDATE') {
       const camposModificados = log.campos_modificados || []
-      const anterior = log.datos_anteriores || {}
-      const nuevo = log.datos_nuevos || {}
+      const anterior = datosAnteriores || {}
+      const nuevo = datosNuevos || {}
 
       let cambiosHtml = '<table style="width: 100%; border-collapse: collapse; font-size: 13px;">'
       cambiosHtml += '<tr style="background: #f3f4f6;"><th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Campo</th><th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Valor Anterior</th><th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Valor Nuevo</th></tr>'
@@ -179,7 +277,7 @@ export function AuditModule() {
       htmlContent = `
         <div style="text-align: left; max-height: 400px; overflow-y: auto;">
           <h4 style="margin-bottom: 12px; color: #ef4444;">Datos Eliminados:</h4>
-          <pre style="background: #fef2f2; padding: 12px; border-radius: 8px; font-size: 12px; overflow-x: auto; white-space: pre-wrap;">${JSON.stringify(log.datos_anteriores, null, 2)}</pre>
+          <pre style="background: #fef2f2; padding: 12px; border-radius: 8px; font-size: 12px; overflow-x: auto; white-space: pre-wrap;">${JSON.stringify(datosAnteriores, null, 2)}</pre>
         </div>
       `
     }
@@ -204,12 +302,18 @@ export function AuditModule() {
     setFiltroTabla('')
     setFiltroAccion('')
     setFiltroUsuario('')
-    setFiltroFechaInicio('')
+    setFiltroUsuarioDebounced('')
+    setFiltroFechaInicio(daysAgo(7))
     setFiltroFechaFin('')
   }
 
+  // Paginación
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const canPrev = page > 0
+  const canNext = page < totalPages - 1
+
   // Definir columnas
-  const columns = useMemo<ColumnDef<AuditLog, any>[]>(
+  const columns = useMemo<ColumnDef<AuditLog, unknown>[]>(
     () => [
       {
         accessorKey: 'created_at',
@@ -229,7 +333,7 @@ export function AuditModule() {
         header: 'Módulo',
         cell: ({ getValue }) => (
           <span className="audit-modulo">
-            {TABLA_LABELS[getValue() as string] || getValue()}
+            {TABLA_LABELS[getValue() as string] || getValue() as string}
           </span>
         ),
       },
@@ -292,21 +396,17 @@ export function AuditModule() {
         ),
       },
     ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   )
 
-  // Los logs ya vienen filtrados del backend según la pestaña activa
-  const filteredLogs = logs
-
-
-  // Estadísticas basadas en los logs filtrados
+  // Estadísticas basadas en los logs cargados
   const stats = useMemo(() => {
-    const total = filteredLogs.length
-    const inserts = filteredLogs.filter(l => l.accion === 'INSERT').length
-    const updates = filteredLogs.filter(l => l.accion === 'UPDATE').length
-    const deletes = filteredLogs.filter(l => l.accion === 'DELETE').length
-    return { total, inserts, updates, deletes }
-  }, [filteredLogs])
+    const inserts = logs.filter(l => l.accion === 'INSERT').length
+    const updates = logs.filter(l => l.accion === 'UPDATE').length
+    const deletes = logs.filter(l => l.accion === 'DELETE').length
+    return { total: totalCount, inserts, updates, deletes }
+  }, [logs, totalCount])
 
   return (
     <div className="admin-module">
@@ -337,7 +437,7 @@ export function AuditModule() {
           <div className="stat-card">
             <History size={18} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{stats.total}</span>
+              <span className="stat-value">{stats.total.toLocaleString()}</span>
               <span className="stat-label">Total Registros</span>
             </div>
           </div>
@@ -373,7 +473,7 @@ export function AuditModule() {
             <select value={filtroTabla} onChange={(e) => setFiltroTabla(e.target.value)}>
               <option value="">Todos</option>
               {tablasDisponibles.map(tabla => (
-                <option key={tabla} value={tabla}>{TABLA_LABELS[tabla]}</option>
+                <option key={tabla} value={tabla}>{TABLA_LABELS[tabla] || tabla}</option>
               ))}
             </select>
           </div>
@@ -424,17 +524,54 @@ export function AuditModule() {
 
       {/* DataTable */}
       <DataTable
-        data={filteredLogs}
+        data={logs}
         columns={columns}
         loading={loading}
         error={error}
         searchPlaceholder="Buscar en registros..."
         emptyIcon={<History size={48} />}
-        emptyTitle={activeTab === 'usuarios' ? "No hay logs de usuarios" : "No hay logs de sistema"}
-        emptyDescription={activeTab === 'usuarios' ? "Las acciones realizadas por usuarios aparecerán aquí" : "Los cambios automáticos del sistema aparecerán aquí"}
-        pageSize={100}
-        pageSizeOptions={[10, 20, 50, 100]}
+        emptyTitle={activeTab === 'usuarios' ? 'No hay logs de usuarios' : 'No hay logs de sistema'}
+        emptyDescription={activeTab === 'usuarios' ? 'Las acciones realizadas por usuarios aparecerán aquí' : 'Los cambios automáticos del sistema aparecerán aquí'}
+        pageSize={PAGE_SIZE}
+        pageSizeOptions={[PAGE_SIZE]}
       />
+
+      {/* Paginación servidor */}
+      {totalCount > PAGE_SIZE && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+          padding: '12px 0', fontSize: '13px', color: 'var(--text-secondary)',
+        }}>
+          <button
+            onClick={() => setPage(p => p - 1)}
+            disabled={!canPrev}
+            style={{
+              padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+              background: canPrev ? 'var(--bg-primary)' : 'var(--bg-secondary)',
+              cursor: canPrev ? 'pointer' : 'not-allowed', color: 'var(--text-primary)',
+              display: 'flex', alignItems: 'center', gap: '4px', opacity: canPrev ? 1 : 0.4,
+            }}
+          >
+            <ChevronLeft size={14} /> Anterior
+          </button>
+          <span>
+            Página <strong>{page + 1}</strong> de <strong>{totalPages}</strong>
+            {' '}({totalCount.toLocaleString()} registros)
+          </span>
+          <button
+            onClick={() => setPage(p => p + 1)}
+            disabled={!canNext}
+            style={{
+              padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-primary)',
+              background: canNext ? 'var(--bg-primary)' : 'var(--bg-secondary)',
+              cursor: canNext ? 'pointer' : 'not-allowed', color: 'var(--text-primary)',
+              display: 'flex', alignItems: 'center', gap: '4px', opacity: canNext ? 1 : 0.4,
+            }}
+          >
+            Siguiente <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
