@@ -852,13 +852,12 @@ export function ReporteFacturacionTab() {
         .in('facturacion_id', facIds)
         .in('concepto_codigo', ['P005', 'P007'])
 
-      // 2.8 Cargar tickets a favor aprobados pendientes de aplicar
+      // 2.8 Cargar tickets a favor aprobados (todos, sin importar si ya fueron aplicados)
       const { data: ticketsData } = await (supabase
         .from('tickets_favor') as any)
-        .select('conductor_id, monto, detalle, tipo')
+        .select('conductor_id, monto, detalle, tipo, periodo_aplicado_id')
         .in('conductor_id', Array.from(new Set(facturacionesTransformadas.map((f: any) => f.conductor_id))))
         .eq('estado', 'aprobado')
-        .is('periodo_aplicado_id', null)
 
       const ticketsMap = new Map<string, any[]>()
       ;(ticketsData || []).forEach((t: any) => {
