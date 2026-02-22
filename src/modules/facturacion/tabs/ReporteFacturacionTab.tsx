@@ -93,6 +93,7 @@ interface FacturacionConductor {
   monto_excesos?: number      // P006 - Excesos de KM
   km_exceso?: number          // KM de exceso
   monto_penalidades?: number  // P007 - Penalidades
+  monto_tickets_favor?: number  // Tickets a favor
   // Detalle de penalidades para el modal
   penalidades_detalle?: Array<{
     monto: number
@@ -100,6 +101,11 @@ interface FacturacionConductor {
     tipo: 'completa' | 'cuota'
     cuotaNum?: number
     totalCuotas?: number
+  }>
+  // Detalle de tickets a favor para el modal
+  tickets_detalle?: Array<{
+    monto: number
+    detalle: string
   }>
   // Prorrateo desglosado por modalidad (Vista Previa)
   prorrateo_cargo_dias?: number
@@ -1289,13 +1295,17 @@ export function ReporteFacturacionTab() {
       // 4. Cargar tickets a favor aprobados (no aplicados)
       const { data: tickets } = await (supabase
         .from('tickets_favor') as any)
-        .select('conductor_id, monto, estado')
+        .select('conductor_id, monto, estado, detalle')
         .eq('estado', 'aprobado')
 
       const ticketsMap = new Map<string, number>()
+      const ticketsDetalleMap = new Map<string, Array<{ monto: number; detalle: string }>>()
       ;(tickets || []).forEach((t: any) => {
         const actual = ticketsMap.get(t.conductor_id) || 0
         ticketsMap.set(t.conductor_id, actual + t.monto)
+        
+        if (!ticketsDetalleMap.has(t.conductor_id)) ticketsDetalleMap.set(t.conductor_id, [])
+        ticketsDetalleMap.get(t.conductor_id)!.push({ monto: t.monto, detalle: t.detalle || 'Ticket' })
       })
 
       // 5. Cargar excesos de km pendientes
@@ -1577,10 +1587,11 @@ export function ReporteFacturacionTab() {
           cubre_cuota: cubreCuota,
           cuota_garantia_numero: cuotaGarantiaNumero,
           // Datos detallados para RIT export
-           monto_peajes: montoPeajes,       // P005
-           monto_excesos: montoExcesos,     // P006
-           km_exceso: kmExceso,
-           monto_penalidades: montoPenalidades,  // P007
+            monto_peajes: montoPeajes,       // P005
+            monto_excesos: montoExcesos,     // P006
+            km_exceso: kmExceso,
+            monto_penalidades: montoPenalidades,  // P007
+            monto_tickets_favor: ticketsMap.get(conductorId) || 0,  // Tickets a favor
            // Prorrateo desglosado por modalidad
            prorrateo_cargo_dias: prorrateo.CARGO,
            prorrateo_cargo_monto: prorrateo.monto_CARGO,
@@ -1588,9 +1599,11 @@ export function ReporteFacturacionTab() {
            prorrateo_diurno_monto: prorrateo.monto_TURNO_DIURNO,
            prorrateo_nocturno_dias: prorrateo.TURNO_NOCTURNO,
            prorrateo_nocturno_monto: prorrateo.monto_TURNO_NOCTURNO,
-           // Detalle de penalidades para el modal
-           penalidades_detalle: detalleMap.get(conductorId) || [],
-           // Estado: De baja si tiene fecha_terminacion o no está activo
+            // Detalle de penalidades para el modal
+            penalidades_detalle: detalleMap.get(conductorId) || [],
+            // Detalle de tickets a favor para el modal
+            tickets_detalle: ticketsDetalleMap.get(conductorId) || [],
+            // Estado: De baja si tiene fecha_terminacion o no está activo
            // Activo si tiene 7 días O tiene asignación vigente al cierre de la semana
             estado_billing: (() => {
               const ftVP = conductor.fecha_terminacion ? parseISO(conductor.fecha_terminacion) : null
@@ -6757,6 +6770,72 @@ export function ReporteFacturacionTab() {
             {count}
             <span style={{ fontSize: '10px', fontWeight: 400 }}>
               ({formatCurrency(montoPen)})
+            </span>
+          </button>
+        )
+      },
+      enableSorting: true,
+    },
+    {
+      id: 'tickets_favor',
+      header: 'Tickets Fav.',
+      size: 95,
+      accessorFn: (row) => row.monto_tickets_favor || 0,
+      cell: ({ row }) => {
+        const tickets = row.original.tickets_detalle || []
+        const montoTickets = row.original.monto_tickets_favor || 0
+
+        if (tickets.length === 0 && montoTickets === 0) {
+          return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
+        }
+
+        const count = tickets.length || (montoTickets > 0 ? 1 : 0)
+
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              const html = tickets.length > 0
+                ? `<table style="width:100%;text-align:left;font-size:13px;border-collapse:collapse;">
+                    <thead><tr style="border-bottom:2px solid var(--border-primary);">
+                      <th style="padding:8px;">Detalle</th>
+                      <th style="padding:8px;text-align:right;">Monto</th>
+                    </tr></thead>
+                    <tbody>${tickets.map((t: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${t.detalle}</td><td style="padding:8px;text-align:right;font-weight:600;color:#059669;">${formatCurrency(t.monto)}</td></tr>`).join('')}</tbody>
+                    <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
+                      <td style="padding:8px;">Total</td>
+                      <td style="padding:8px;text-align:right;color:#059669;">${formatCurrency(montoTickets)}</td>
+                    </tr></tfoot>
+                  </table>`
+                : `<p>Total tickets: <strong>${formatCurrency(montoTickets)}</strong></p>`
+
+              Swal.fire({
+                title: `Tickets a Favor - ${row.original.conductor_nombre}`,
+                html,
+                width: 500,
+                confirmButtonText: 'Cerrar',
+                confirmButtonColor: '#6B7280',
+                customClass: { popup: 'fact-modal' }
+              })
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '12px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 600,
+              background: 'rgba(5, 150, 105, 0.1)',
+              color: '#059669',
+            }}
+            title="Ver detalle de tickets a favor"
+          >
+            {count}
+            <span style={{ fontSize: '10px', fontWeight: 400 }}>
+              ({formatCurrency(montoTickets)})
             </span>
           </button>
         )

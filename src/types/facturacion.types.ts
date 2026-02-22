@@ -60,6 +60,14 @@ export interface FacturacionConductor {
   estado: 'borrador' | 'calculado' | 'cerrado' | 'pagado'
   created_at: string
   updated_at: string
+  // Campos dinámicos para Vista Previa
+  monto_peajes?: number
+  monto_excesos?: number
+  km_exceso?: number
+  monto_penalidades?: number
+  monto_tickets_favor?: number
+  penalidades_detalle?: Array<{ monto: number; detalle: string }>
+  tickets_detalle?: Array<{ monto: number; detalle: string }>
 }
 
 export interface FacturacionResumen {
