@@ -783,13 +783,14 @@ export function ReporteFacturacionTab() {
       const peajesInicioSemAnt = format(subWeeks(parseISO(periodoInicio), 1), 'yyyy-MM-dd')
       const peajesFinSemAnt = format(subWeeks(parseISO(periodoFin), 1), 'yyyy-MM-dd')
 
+      // Obtener datos de Cabify incluyendo driver_id y company_id para validar peajes con API
       const [{ data: cabifyGanancias }, { data: cabifyPeajes }] = await Promise.all([
         supabase.from('cabify_historico')
-          .select('dni, ganancia_total')
+          .select('dni, ganancia_total, cabify_driver_id, cabify_company_id')
           .gte('fecha_inicio', periodoInicio + 'T00:00:00')
           .lte('fecha_inicio', periodoFin + 'T23:59:59'),
         supabase.from('cabify_historico')
-          .select('dni, peajes, fecha_inicio')
+          .select('dni, peajes, fecha_inicio, cabify_driver_id, cabify_company_id')
           .gte('fecha_inicio', peajesInicioSemAnt + 'T00:00:00')
           .lte('fecha_inicio', peajesFinSemAnt + 'T23:59:59')
       ])
