@@ -16,7 +16,8 @@ import {
   Trash2,
   Receipt,
   ArrowUpCircle,
-  ArrowDownCircle
+  ArrowDownCircle,
+  Banknote
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -744,6 +745,103 @@ export function SaldosAbonosTab() {
     }
   }
 
+  // Registrar pago — reduce la deuda del conductor (suma al saldo)
+  async function registrarPago(saldo: SaldoConductor) {
+    const saldoColor = saldo.saldo_actual < 0 ? '#DC2626' : saldo.saldo_actual > 0 ? '#16A34A' : '#6B7280'
+
+    const { value: formValues } = await Swal.fire({
+      title: '<span style="font-size: 16px; font-weight: 600;">Registrar Pago</span>',
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
+            <div style="color: ${saldoColor}; font-size: 12px; margin-top: 4px;">
+              Saldo actual: <strong>${formatCurrency(saldo.saldo_actual)}</strong>
+              ${saldo.saldo_actual < 0 ? ' <span style="color: #DC2626;">(DEUDA)</span>' : ''}
+            </div>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto del pago:</label>
+            <input id="swal-pago-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Monto" min="0" step="0.01">
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Concepto:</label>
+            <input id="swal-pago-concepto" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Pago en efectivo" value="Pago en efectivo">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
+            <input id="swal-pago-ref" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Recibo #123">
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Registrar Pago',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#16a34a',
+      cancelButtonColor: '#6B7280',
+      width: 380,
+      customClass: {
+        popup: 'swal-compact',
+        title: 'swal-title-compact',
+        htmlContainer: 'swal-html-compact'
+      },
+      preConfirm: () => {
+        const monto = (document.getElementById('swal-pago-monto') as HTMLInputElement).value
+        const concepto = (document.getElementById('swal-pago-concepto') as HTMLInputElement).value
+        const referencia = (document.getElementById('swal-pago-ref') as HTMLInputElement).value
+
+        if (!monto || parseFloat(monto) <= 0) {
+          Swal.showValidationMessage('Ingrese un monto valido')
+          return false
+        }
+        if (!concepto) {
+          Swal.showValidationMessage('Ingrese un concepto')
+          return false
+        }
+
+        return {
+          monto: parseFloat(monto),
+          concepto,
+          referencia: referencia || null
+        }
+      }
+    })
+
+    if (!formValues) return
+
+    try {
+      // Pago = abono (suma al saldo, reduce deuda)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
+        conductor_id: saldo.conductor_id,
+        tipo: 'pago',
+        monto: formValues.monto,
+        concepto: formValues.concepto,
+        referencia: formValues.referencia,
+        semana: getWeekNumber(new Date().toISOString().split('T')[0]),
+        anio: new Date().getFullYear(),
+        fecha_abono: new Date().toISOString()
+      })
+
+      if (errorAbono) throw errorAbono
+
+      const nuevoSaldo = saldo.saldo_actual + formValues.monto
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
+        .update({ saldo_actual: nuevoSaldo, ultima_actualizacion: new Date().toISOString() })
+        .eq('id', saldo.id)
+
+      if (errorUpdate) throw errorUpdate
+
+      showSuccess('Pago Registrado', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
+      cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
+    }
+  }
+
   async function eliminarSaldo(saldo: SaldoConductor) {
     const result = await Swal.fire({
       title: 'Eliminar Saldo',
@@ -1203,6 +1301,9 @@ export function SaldosAbonosTab() {
           </button>
           <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar">
             <Edit3 size={14} />
+          </button>
+          <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
+            <Banknote size={14} />
           </button>
           <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarAbono(row.original)} data-tooltip="Registrar movimiento">
             <Plus size={14} />

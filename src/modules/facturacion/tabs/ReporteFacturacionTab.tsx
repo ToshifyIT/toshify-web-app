@@ -261,8 +261,8 @@ export function ReporteFacturacionTab() {
   
 
   // Memoized filtered detalle items to avoid recalculation on each render
-  const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento), [detalleItems])
-  const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento), [detalleItems])
+  const detalleCargos = useMemo(() => detalleItems.filter(d => !d.es_descuento && d.total !== 0), [detalleItems])
+  const detalleDescuentos = useMemo(() => detalleItems.filter(d => d.es_descuento && d.total !== 0), [detalleItems])
 
   // Table instance and filters
   const [tableInstance, setTableInstance] = useState<Table<FacturacionConductor> | null>(null)
@@ -1785,19 +1785,18 @@ export function ReporteFacturacionTab() {
 
     setRecalculando(true)
     try {
-      // 0. Marcar período como 'procesando'
-      await (supabase.from('periodos_facturacion') as any)
-        .update({ estado: 'procesando', updated_at: new Date().toISOString() })
-        .eq('id', periodo.id)
-      setPeriodo(prev => prev ? { ...prev, estado: 'procesando' as const } : prev)
-
       const fechaInicio = periodo.fecha_inicio
       const fechaFin = periodo.fecha_fin
       const semanaNum = periodo.semana
       const anioNum = periodo.anio
       const periodoId = periodo.id
-      // Usar sede_id del período (no depender de sedeActualId que puede ser null)
       const sedeDelPeriodo = periodo.sede_id || sedeActualId
+
+      // 0. Marcar período como 'procesando'
+      await (supabase.from('periodos_facturacion') as any)
+        .update({ estado: 'procesando', updated_at: new Date().toISOString() })
+        .eq('id', periodo.id)
+      setPeriodo(prev => prev ? { ...prev, estado: 'procesando' as const } : prev)
 
       // 1. RESET: Revertir flags de aplicado para registros vinculados a este período
       // Tickets: tienen periodo_aplicado_id
@@ -4021,7 +4020,7 @@ export function ReporteFacturacionTab() {
       pdf.setTextColor(negro)
       pdf.setFont('helvetica', 'normal')
 
-      const cargos = detalleItems.filter(d => !d.es_descuento)
+      const cargos = detalleItems.filter(d => !d.es_descuento && d.total !== 0)
       cargos.forEach(cargo => {
         pdf.text(cargo.concepto_descripcion, margin, y)
         pdf.text(formatCurrency(cargo.total), pageWidth - margin, y, { align: 'right' })
@@ -4050,7 +4049,7 @@ export function ReporteFacturacionTab() {
       y += 10
 
       // DESCUENTOS
-      const descuentos = detalleItems.filter(d => d.es_descuento)
+      const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0)
       if (descuentos.length > 0) {
         pdf.setFontSize(11)
         pdf.setTextColor(verde)
@@ -6575,6 +6574,10 @@ export function ReporteFacturacionTab() {
         const porcentajeCubierto = alquiler > 0 ? Math.min(100, Math.round((ganancia / alquiler) * 100)) : 0
         const cubreCuota = ganancia >= alquiler && ganancia > 0
 
+        if (alquiler === 0) {
+          return <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>-</span>
+        }
+
         return (
           <div style={{ fontSize: '11px', minWidth: '80px' }}>
             <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
@@ -6647,6 +6650,10 @@ export function ReporteFacturacionTab() {
               </span>
             </div>
           )
+        }
+
+        if (garantia === 0) {
+          return <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>-</span>
         }
 
         return (
@@ -7000,16 +7007,7 @@ export function ReporteFacturacionTab() {
           >
             <Eye size={14} />
           </button>
-          {!modoVistaPrevia && row.original.total_a_pagar > 0 && (
-            <button
-              className="dt-btn-action"
-              onClick={(e) => { e.stopPropagation(); registrarPagoFacturacion(row.original) }}
-              data-tooltip="Registrar pago"
-              style={{ padding: '6px', color: '#16a34a' }}
-            >
-              <Banknote size={14} />
-            </button>
-          )}
+          {/* Botón pago individual oculto — pagos se cargan desde semana cerrada */}
         </div>
       )
     }
@@ -7661,6 +7659,7 @@ export function ReporteFacturacionTab() {
               {/* Botones ocultos para mantener funciones */}
               <button style={{ display: 'none' }} onClick={exportarExcel} disabled={exportingExcel}>Excel</button>
               <button style={{ display: 'none' }} onClick={prepareRITPreview} disabled={loadingRITPreview}>RIT</button>
+              <button style={{ display: 'none' }} onClick={() => registrarPagoFacturacion(null as any)}>Pago</button>
             </div>
           </div>
 
@@ -8086,7 +8085,7 @@ export function ReporteFacturacionTab() {
                               </span>
                               <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
                                 {desc}
-                                {item.cantidad > 1 && <span style={{ color: 'var(--text-secondary)', marginLeft: '4px', fontSize: '11px' }}>x{item.cantidad}</span>}
+                                {item.cantidad > 1 && item.concepto_codigo !== 'P003' && <span style={{ color: 'var(--text-secondary)', marginLeft: '4px', fontSize: '11px' }}>x{item.cantidad}</span>}
                               </span>
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
@@ -8350,16 +8349,7 @@ export function ReporteFacturacionTab() {
               <button className="fact-btn-secondary" onClick={() => { setShowDetalle(false); setDetallePagos([]) }}>
                 Cerrar
               </button>
-              {detalleFacturacion && detalleFacturacion.total_a_pagar > 0 && (
-                <button
-                  className="fact-btn-primary"
-                  onClick={() => { setShowDetalle(false); registrarPagoFacturacion(detalleFacturacion) }}
-                  style={{ background: '#16a34a', borderColor: '#16a34a' }}
-                >
-                  <Banknote size={16} />
-                  Registrar Pago
-                </button>
-              )}
+              {/* Botón Registrar Pago oculto — pagos se cargan desde semana cerrada */}
               <button
                 className="fact-btn-primary"
                 onClick={exportarPDF}
