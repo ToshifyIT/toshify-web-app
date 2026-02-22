@@ -222,7 +222,8 @@ export function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [guias, setGuias] = useState<Guia[]>([])
-  const [seguimientoMenuId, setSeguimientoMenuId] = useState<string | null>(null)
+  const [_seguimientoMenuId, setSeguimientoMenuId] = useState<string | null>(null)
+  void _seguimientoMenuId
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
   const [openNestedMenus, setOpenNestedMenus] = useState<Record<string, boolean>>({})
   const [showSedeSelector, setShowSedeSelector] = useState(!sedeActualId)
@@ -399,28 +400,8 @@ export function HomePage() {
 
   const baseVisibleMenus = getVisibleMenus()
 
-  // Si hay guías pero el menú seguimiento-conductores no aparece en los permisos, inyectarlo
-  const visibleMenus = (() => {
-    if (guias.length > 0 && seguimientoMenuId) {
-      const hasSeguimiento = baseVisibleMenus.some(m => m.menu_name === 'seguimiento-conductores')
-      if (!hasSeguimiento) {
-        return [...baseVisibleMenus, {
-          menu_id: seguimientoMenuId,
-          menu_name: 'seguimiento-conductores',
-          menu_label: 'Seguimiento de Conductores',
-          menu_route: '',
-          order_index: 18,
-          can_view: true,
-          can_create: true,
-          can_edit: true,
-          can_delete: false,
-          has_individual_override: false,
-          has_role_permission: true,
-        }].sort((a, b) => a.order_index - b.order_index)
-      }
-    }
-    return baseVisibleMenus
-  })()
+  // Seguimiento de Conductores solo se muestra si el rol del usuario tiene permiso asignado
+  const visibleMenus = baseVisibleMenus
 
   if (loading) {
     return (

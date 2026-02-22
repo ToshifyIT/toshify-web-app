@@ -13,7 +13,7 @@ import {
   // DollarSign,
   Filter,
   Edit3,
-  UserPlus,
+  // UserPlus,
   Trash2,
   // Receipt,
   ArrowUpCircle,
@@ -68,7 +68,7 @@ export function SaldosAbonosTab() {
   // @ts-expect-error todosLosAbonos se carga pero la UI de movimientos fue removida
   const [todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtroSaldo, setFiltroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
+  const [filtroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
   const [cobrosFraccionados, setCobrosFraccionados] = useState<{
     conductor_id: string
     conductor_nombre: string
@@ -209,8 +209,8 @@ export function SaldosAbonosTab() {
     return Math.ceil((days + startOfYear.getDay() + 1) / 7)
   }
 
-  // Función para agregar saldo inicial a un conductor
-  async function agregarSaldoInicial() {
+  // Hidden: botón de agregar saldo removido de la UI
+  async function _agregarSaldoInicial() {
     // Cargar conductores disponibles al momento de abrir el modal
     const { data: todosLosConductores } = await aplicarFiltroSede(supabase
       .from('conductores')
@@ -832,9 +832,17 @@ export function SaldosAbonosTab() {
       if (errorAbono) throw errorAbono
 
       const nuevoSaldo = saldo.saldo_actual + formValues.monto
+      // Si el nuevo saldo >= 0 (sin deuda), resetear dias_mora a 0
+      const updateData: Record<string, unknown> = { 
+        saldo_actual: nuevoSaldo, 
+        ultima_actualizacion: new Date().toISOString() 
+      }
+      if (nuevoSaldo >= 0) {
+        updateData.dias_mora = 0
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
-        .update({ saldo_actual: nuevoSaldo, ultima_actualizacion: new Date().toISOString() })
+        .update(updateData)
         .eq('id', saldo.id)
 
       if (errorUpdate) throw errorUpdate
@@ -848,7 +856,7 @@ export function SaldosAbonosTab() {
   }
 
   // Mantener referencia a funciones ocultas para evitar error TS6133
-  void _registrarAbono; void _editarSaldo;
+  void _registrarAbono; void _editarSaldo; void _agregarSaldoInicial;
 
   async function eliminarSaldo(saldo: SaldoConductor) {
     const result = await Swal.fire({
@@ -1483,29 +1491,7 @@ export function SaldosAbonosTab() {
       <LoadingOverlay show={loading} message="Cargando saldos..." size="lg" />
 
       {/* ===== SALDOS ===== */}
-          {/* Header con filtro y botón agregar */}
-          <div className="fact-header">
-            <div className="fact-header-left">
-              <span className="fact-label">Filtrar:</span>
-              <select className="fact-select" value={filtroSaldo} onChange={(e) => setFiltroSaldo(e.target.value as typeof filtroSaldo)}>
-                <option value="todos">Todos</option>
-                <option value="favor">Con saldo a favor</option>
-                <option value="deuda">Con deuda</option>
-                <option value="mora">En mora</option>
-                <option value="fraccionado">Fraccionado</option>
-              </select>
-            </div>
-            <div className="fact-header-right">
-              <button 
-                className="fact-btn fact-btn-primary"
-                onClick={agregarSaldoInicial}
-                title="Agregar saldo inicial a un conductor"
-              >
-                <UserPlus size={16} />
-                <span>Agregar Saldo</span>
-              </button>
-            </div>
-          </div>
+          {/* Header (filtro removido - se usan los filtros de columna) */}
 
            {/* Stats */}
           <div className="fact-stats">
@@ -1526,6 +1512,44 @@ export function SaldosAbonosTab() {
               </div>
             </div>
           </div>
+
+          {/* Barra de filtros activos */}
+          {(conductorFilter.length > 0 || estadoFilter.length > 0) && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+              background: 'rgba(255, 0, 51, 0.04)', border: '1px solid rgba(255, 0, 51, 0.12)',
+              borderRadius: '6px', marginBottom: '8px', flexWrap: 'wrap', fontSize: '12px'
+            }}>
+              <span style={{ color: '#ff0033', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Filter size={12} /> Filtros activos:
+              </span>
+              {conductorFilter.map(f => (
+                <span key={f} style={{
+                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: '10px',
+                  fontSize: '11px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer'
+                }} onClick={() => setConductorFilter(prev => prev.filter(v => v !== f))}>
+                  {f} <span style={{ fontWeight: 700 }}>&times;</span>
+                </span>
+              ))}
+              {estadoFilter.map(f => (
+                <span key={f} style={{
+                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: '10px',
+                  fontSize: '11px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer'
+                }} onClick={() => setEstadoFilter(prev => prev.filter(v => v !== f))}>
+                  {f === 'favor' ? 'A Favor' : f === 'deuda' ? 'Deuda' : 'Sin Saldo'} <span style={{ fontWeight: 700 }}>&times;</span>
+                </span>
+              ))}
+              <button
+                onClick={() => { setConductorFilter([]); setEstadoFilter([]); setConductorSearch('') }}
+                style={{
+                  marginLeft: 'auto', background: 'transparent', border: '1px solid var(--border-primary)',
+                  borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)'
+                }}
+              >
+                Limpiar todos
+              </button>
+            </div>
+          )}
 
           {/* Tabla de Saldos */}
           <DataTable

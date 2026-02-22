@@ -2821,7 +2821,7 @@ export function GuiasModule() {
           
           return (
             <ActionsMenu
-              maxVisible={4}
+              maxVisible={2}
               actions={[
                 {
                   icon: isCurrent ? <Pencil size={15} /> : <Eye size={15} />,

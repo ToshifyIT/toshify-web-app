@@ -56,7 +56,7 @@ export function GarantiasTab() {
   const [garantias, setGarantias] = useState<GarantiaConductor[]>([])
   const [todosLosPagos, setTodosLosPagos] = useState<PagoGarantiaRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtroEstado, setFiltroEstado] = useState<string>('todos')
+  const [filtroEstado] = useState<string>('todos')
 
   // Estados para filtros Excel - Garantías
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
@@ -110,9 +110,10 @@ export function GarantiasTab() {
   const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
-  const toggleTipoFilter = (val: string) => setTipoFilter(prev =>
+  const _toggleTipoFilter = (val: string) => setTipoFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
+  void _toggleTipoFilter
   const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
@@ -130,7 +131,26 @@ export function GarantiasTab() {
         .order('conductor_nombre')
 
       if (error) throw error
-      setGarantias(data || [])
+
+      // Cargar estado de conductores (Activo/Baja)
+      const conductorIds = (data || []).map((g: any) => g.conductor_id)
+      const ESTADO_ACTIVO = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
+      let estadoConductorMap = new Map<string, string>()
+      if (conductorIds.length > 0) {
+        const { data: conductoresData } = await supabase
+          .from('conductores')
+          .select('id, estado_id')
+          .in('id', conductorIds)
+        ;(conductoresData || []).forEach((c: any) => {
+          estadoConductorMap.set(c.id, c.estado_id === ESTADO_ACTIVO ? 'ACTIVO' : 'BAJA')
+        })
+      }
+
+      const garantiasConEstado = (data || []).map((g: any) => ({
+        ...g,
+        estado_conductor: estadoConductorMap.get(g.conductor_id) || 'ACTIVO'
+      }))
+      setGarantias(garantiasConEstado)
 
       // Cargar todos los pagos para el sub-tab "Movimientos"
       const { data: pagos, error: errorPagos } = await supabase
@@ -788,46 +808,27 @@ export function GarantiasTab() {
       ),
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.original.conductor_nombre}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span className="font-medium">{row.original.conductor_nombre}</span>
+            <span className={`fact-badge ${row.original.tipo_alquiler === 'CARGO' ? 'fact-badge-blue' : 'fact-badge-purple'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
+              {row.original.tipo_alquiler}
+            </span>
+          </div>
           <div className="text-xs text-gray-500">{row.original.conductor_cuit || row.original.conductor_dni}</div>
         </div>
       )
     },
     {
-      accessorKey: 'tipo_alquiler',
-      header: () => (
-        <div className="dt-column-filter">
-          <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'tipo' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {['CARGO', 'TURNO'].map(t => (
-                  <label key={t} className={`dt-column-filter-checkbox ${tipoFilter.includes(t) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={tipoFilter.includes(t)} onChange={() => toggleTipoFilter(t)} />
-                    <span>{t}</span>
-                  </label>
-                ))}
-              </div>
-              {tipoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setTipoFilter([])}>
-                  Limpiar ({tipoFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      cell: ({ row }) => (
-        <span className={`fact-badge ${row.original.tipo_alquiler === 'CARGO' ? 'fact-badge-blue' : 'fact-badge-purple'}`}>
-          {row.original.tipo_alquiler}
-        </span>
-      )
+      id: 'estado_conductor',
+      header: 'Estado Cond.',
+      cell: ({ row }) => {
+        const estado = (row.original as any).estado_conductor || 'ACTIVO'
+        return (
+          <span className={`fact-badge ${estado === 'ACTIVO' ? 'fact-badge-green' : 'fact-badge-red'}`} style={{ fontSize: '10px' }}>
+            {estado}
+          </span>
+        )
+      }
     },
     {
       accessorKey: 'monto_total',
@@ -1066,16 +1067,9 @@ export function GarantiasTab() {
       {/* Contenido Garantías (sub-tab Movimientos removido - no se usa) */}
       {activeSubTab === 'garantias' && (
         <>
-          {/* Header con filtro y botón agregar */}
+          {/* Header (filtro removido - se usan los filtros de columna) */}
           <div className="fact-header">
             <div className="fact-header-left">
-              <span className="fact-label">Filtrar:</span>
-              <select className="fact-select" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
-                <option value="todos">Todos</option>
-                <option value="en_curso">En Curso</option>
-                <option value="completada">Completadas</option>
-                <option value="pendiente">Pendientes</option>
-              </select>
             </div>
             <div className="fact-header-right">
               <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>

@@ -30,7 +30,8 @@ import {
   Play,
   Banknote,
   Upload,
-  Lock
+  Lock,
+  Info
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -137,6 +138,7 @@ interface FacturacionDetalle {
   es_descuento: boolean
   referencia_id: string | null
   referencia_tipo: string | null
+  fecha_referencia?: string | null
 }
 
 // Tipo para excesos de km asociados a cada conductor
@@ -1016,6 +1018,7 @@ export function ReporteFacturacionTab() {
           .gte('fecha', fechaInicio)
           .lte('fecha', format(semanaActual.fin, 'yyyy-MM-dd'))
           .eq('aplicado', false)
+          .neq('rechazado', true)
 
         for (const p of (penalidadesPendientesVP || []) as any[]) {
           const cond = p.conductores
@@ -1286,7 +1289,7 @@ export function ReporteFacturacionTab() {
         cuotas_totales: number;
         tipo_alquiler: string;
         monto_cuota_semanal: number | null;
-      }>((garantias || []).map((g: any) => [g.conductor_nombre?.toLowerCase().trim() || '', g]))
+      }>((garantias || []).filter((g: any) => g.conductor_id).map((g: any) => [g.conductor_id, g]))
 
       // 3.1 Cargar datos de Cabify desde la tabla cabify_historico (peajes de la SEMANA ANTERIOR)
       const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
@@ -1374,6 +1377,7 @@ export function ReporteFacturacionTab() {
         .select('id, conductor_id, monto, detalle, observaciones, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('aplicado', true)
         .eq('fraccionado', false)
+        .neq('rechazado', true)
         .eq('semana_aplicacion', semanaDelPeriodo)
         .eq('anio_aplicacion', anioDelPeriodo)
       
@@ -1530,9 +1534,8 @@ export function ReporteFacturacionTab() {
         // Factor proporcional para garantía (basado en días trabajados)
         const factorProporcional = diasTotales > 0 ? Math.min(1, diasTotales / 7) : 0
 
-        // Garantía
-        const conductorNombreCompleto = `${conductor.nombres || ''} ${conductor.apellidos || ''}`.toLowerCase().trim()
-        const garantia = garantiasMap.get(conductorNombreCompleto)
+        // Garantía (matchear por conductor_id, no por nombre)
+        const garantia = garantiasMap.get(conductorId)
         let subtotalGarantia = 0
         let cuotaGarantiaNumero = ''
         const cuotasTotales = tipoAlquiler === 'CARGO'
@@ -1817,13 +1820,22 @@ export function ReporteFacturacionTab() {
         .update({ aplicado: false, fecha_aplicacion: null })
         .eq('periodo_id', periodoId)
 
-      // Penalidades: por fecha del período (solo NO fraccionadas — las fraccionadas se manejan por cuotas)
+      // Penalidades: revertir las que fueron aplicadas en esta semana/año
+      // Primero por semana_aplicacion/anio_aplicacion (nuevas), luego fallback por rango de fecha (legacy)
+      await (supabase.from('penalidades') as any)
+        .update({ aplicado: false, fecha_aplicacion: null, semana_aplicacion: null, anio_aplicacion: null })
+        .eq('semana_aplicacion', semanaNum)
+        .eq('anio_aplicacion', anioNum)
+        .eq('aplicado', true)
+        .eq('fraccionado', false)
+      // Fallback: penalidades legacy sin semana_aplicacion (por rango de fecha)
       await (supabase.from('penalidades') as any)
         .update({ aplicado: false })
         .gte('fecha', fechaInicio)
         .lte('fecha', fechaFin)
         .eq('aplicado', true)
         .eq('fraccionado', false)
+        .is('semana_aplicacion', null)
 
       // Cobros fraccionados: por semana/anio (todas las cuotas hasta esta semana)
       await (supabase.from('cobros_fraccionados') as any)
@@ -1920,6 +1932,7 @@ export function ReporteFacturacionTab() {
           .gte('fecha', fechaInicio)
           .lte('fecha', fechaFin)
           .eq('aplicado', false)
+          .neq('rechazado', true)
 
         for (const p of (penalidadesPendientesRecalc || []) as any[]) {
           const cond = p.conductores
@@ -2154,7 +2167,7 @@ export function ReporteFacturacionTab() {
       
       // 5. Obtener datos adicionales en paralelo
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
-        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false),
+        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('*').in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
@@ -2282,11 +2295,16 @@ export function ReporteFacturacionTab() {
 
         // Garantía - valor fijo semanal (no proporcional a días trabajados)
         // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
+        // Si garantía completada o cuotas completas, cobrar $0
         const factorProporcional = conductor.total_dias / 7
         const garantiaConductor = (garantias as any[]).find((g: any) => g.conductor_id === conductor.conductor_id)
-        const cuotaGarantiaProporcional = conductor.total_dias === 0 ? 0 : (garantiaConductor?.monto_cuota_semanal || cuotaGarantia)
-        const cuotaActual = (garantiaConductor?.cuotas_pagadas || 0) + 1
-        const totalCuotas = garantiaConductor?.total_cuotas || 16
+        const garantiaCompletada = garantiaConductor?.estado === 'completada' || 
+          (garantiaConductor && garantiaConductor.cuotas_pagadas >= garantiaConductor.cuotas_totales)
+        const cuotaGarantiaProporcional = conductor.total_dias === 0 || garantiaCompletada
+          ? 0 
+          : (garantiaConductor?.monto_cuota_semanal || cuotaGarantia)
+        const cuotaActual = garantiaCompletada ? 0 : (garantiaConductor?.cuotas_pagadas || 0) + 1
+        const totalCuotas = garantiaConductor?.cuotas_totales || 16
 
         // Penalidades - segmentar por categoría de tipo_cobro_descuento
         // Excluir penalidades fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
@@ -2418,9 +2436,11 @@ export function ReporteFacturacionTab() {
         }
 
         // P003 - Garantía
-        const descripcionGarantia = conductor.total_dias < 7
-          ? `Cuota de Garantía ${cuotaActual} de ${totalCuotas} (${conductor.total_dias}/7 días)`
-          : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
+        const descripcionGarantia = garantiaCompletada
+          ? 'Garantía completada'
+          : conductor.total_dias < 7
+            ? `Cuota de Garantía ${cuotaActual} de ${totalCuotas} (${conductor.total_dias}/7 días)`
+            : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
         await (supabase.from('facturacion_detalle') as any).insert({
           facturacion_id: facturacionId,
           concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
@@ -2451,8 +2471,13 @@ export function ReporteFacturacionTab() {
               subtotal: (pen as any).monto, total: (pen as any).monto, es_descuento: grupo.esDescuento,
               referencia_id: (pen as any).id, referencia_tipo: 'penalidad'
             })
-            // Marcar como aplicada
-            await (supabase.from('penalidades') as any).update({ aplicado: true }).eq('id', (pen as any).id)
+            // Marcar como aplicada con semana/anio para trazabilidad
+            await (supabase.from('penalidades') as any).update({ 
+              aplicado: true, 
+              fecha_aplicacion: new Date().toISOString(),
+              semana_aplicacion: semanaNum,
+              anio_aplicacion: anioNum
+            }).eq('id', (pen as any).id)
           }
         }
 
@@ -2892,10 +2917,11 @@ export function ReporteFacturacionTab() {
 
       const { data: penalidades } = await (supabase
         .from('penalidades') as any)
-        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, semana_aplicacion, anio_aplicacion, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
+        .select('id, monto, observaciones, fraccionado, cantidad_cuotas, semana_aplicacion, anio_aplicacion, fecha, created_at, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
         .eq('conductor_id', facturacion.conductor_id)
         .eq('aplicado', true)
         .eq('fraccionado', false)
+        .neq('rechazado', true)
         .eq('semana_aplicacion', semDetalle)
         .eq('anio_aplicacion', anioDetalle)
 
@@ -2909,14 +2935,15 @@ export function ReporteFacturacionTab() {
         if (penConCuotasSet.has(p.id)) return // Tiene cuotas, se cobra por cuota
         const categoria = p.tipos_cobro_descuento?.categoria
         if (!categoria) {
-          detallesSimulados.push({
-            id: `det-pen-pendiente-${facturacion.conductor_id}-${idx}`,
-            facturacion_id: facturacion.id,
-            concepto_codigo: 'PEND',
-            concepto_descripcion: `[PENDIENTE] ${p.observaciones || 'Sin tipo asignado'}`,
-            cantidad: 1, precio_unitario: p.monto, subtotal: p.monto, total: p.monto,
-            es_descuento: false, referencia_id: p.id, referencia_tipo: 'penalidad'
-          })
+        detallesSimulados.push({
+          id: `det-pen-pendiente-${facturacion.conductor_id}-${idx}`,
+          facturacion_id: facturacion.id,
+          concepto_codigo: 'PEND',
+          concepto_descripcion: `[PENDIENTE] ${p.observaciones || 'Sin tipo asignado'}`,
+          cantidad: 1, precio_unitario: p.monto, subtotal: p.monto, total: p.monto,
+          es_descuento: false, referencia_id: p.id, referencia_tipo: 'penalidad',
+          fecha_referencia: p.fecha || p.created_at
+        })
           return
         }
         const tipoNombre = p.tipos_cobro_descuento?.nombre || p.observaciones || 'Sin detalle'
@@ -2928,7 +2955,8 @@ export function ReporteFacturacionTab() {
           concepto_codigo: categoria,
           concepto_descripcion: descripcion,
           cantidad: 1, precio_unitario: p.monto, subtotal: p.monto, total: p.monto,
-          es_descuento: esDescuento, referencia_id: p.id, referencia_tipo: 'penalidad'
+          es_descuento: esDescuento, referencia_id: p.id, referencia_tipo: 'penalidad',
+          fecha_referencia: p.fecha || p.created_at
         })
       })
 
@@ -2949,7 +2977,7 @@ export function ReporteFacturacionTab() {
         let penPadreCuotas: any[] = []
         if (penIdsCuotas.length > 0) {
           const { data } = await (supabase.from('penalidades') as any)
-            .select('id, conductor_id, cantidad_cuotas, observaciones')
+            .select('id, conductor_id, cantidad_cuotas, observaciones, fecha, created_at')
             .in('id', penIdsCuotas)
           penPadreCuotas = data || []
         }
@@ -2964,7 +2992,8 @@ export function ReporteFacturacionTab() {
             concepto_codigo: 'P007',
             concepto_descripcion: `Cuota ${cuota.numero_cuota}/${padre.cantidad_cuotas || '?'}: ${padre.observaciones || 'Cobro fraccionado'}`,
             cantidad: 1, precio_unitario: cuota.monto_cuota, subtotal: cuota.monto_cuota, total: cuota.monto_cuota,
-            es_descuento: false, referencia_id: cuota.id, referencia_tipo: 'penalidad_cuota'
+            es_descuento: false, referencia_id: cuota.id, referencia_tipo: 'penalidad_cuota',
+            fecha_referencia: padre.fecha || padre.created_at
           })
         })
       }
@@ -3097,9 +3126,37 @@ export function ReporteFacturacionTab() {
 
       if (error) throw error
 
-      // Usar directamente los detalles de facturacion_detalle sin modificar
-      // Las penalidades ya están guardadas correctamente en facturacion_detalle cuando se generó el periodo
-      setDetalleItems((detalles || []) as FacturacionDetalle[])
+      // Enriquecer detalles de penalidades con fecha de registro
+      const detallesTyped = (detalles || []) as FacturacionDetalle[]
+      const penReferenciaIds = detallesTyped
+        .filter(d => d.referencia_id && d.referencia_tipo === 'penalidad')
+        .map(d => d.referencia_id!)
+      const cuotaReferenciaIds = detallesTyped
+        .filter(d => d.referencia_id && d.referencia_tipo === 'penalidad_cuota')
+        .map(d => d.referencia_id!)
+
+      // Cargar fechas de penalidades y cuotas en paralelo
+      const [penFechasRes, cuotaFechasRes] = await Promise.all([
+        penReferenciaIds.length > 0
+          ? supabase.from('penalidades').select('id, fecha, created_at').in('id', penReferenciaIds)
+          : { data: [] },
+        cuotaReferenciaIds.length > 0
+          ? supabase.from('penalidades_cuotas').select('id, created_at').in('id', cuotaReferenciaIds)
+          : { data: [] },
+      ])
+
+      const penFechaMap = new Map(((penFechasRes.data || []) as any[]).map((p: any) => [p.id, p.fecha || p.created_at]))
+      const cuotaFechaMap = new Map(((cuotaFechasRes.data || []) as any[]).map((c: any) => [c.id, c.created_at]))
+
+      detallesTyped.forEach(d => {
+        if (d.referencia_id && d.referencia_tipo === 'penalidad') {
+          d.fecha_referencia = penFechaMap.get(d.referencia_id) || null
+        } else if (d.referencia_id && d.referencia_tipo === 'penalidad_cuota') {
+          d.fecha_referencia = cuotaFechaMap.get(d.referencia_id) || null
+        }
+      })
+
+      setDetalleItems(detallesTyped)
 
       // Cargar pagos registrados para esta facturación
       const { data: pagos } = await (supabase.from('pagos_conductores') as any)
@@ -3177,6 +3234,132 @@ export function ReporteFacturacionTab() {
       setDetallePagos([])
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo eliminar el pago', 'error')
+    }
+  }
+
+  // ==========================================
+  // VER DETALLE DE PENALIDAD (sub-modal)
+  // ==========================================
+  async function verDetallePenalidad(referenciaId: string, referenciaTipo: string) {
+    // Helper: resolver nombre de usuario por ID (usa created_by_name o busca en user_profiles)
+    async function resolverNombreUsuario(createdByName: string | null | undefined, createdById: string | null | undefined): Promise<string> {
+      if (createdByName) return createdByName
+      if (!createdById) return '-'
+      const { data: perfil } = await supabase.from('user_profiles').select('full_name, email').eq('id', createdById).single()
+      return perfil?.full_name || perfil?.email || '-'
+    }
+
+    try {
+      if (referenciaTipo === 'penalidad') {
+        const { data: pen } = await (supabase.from('penalidades') as any)
+          .select('*, tipos_cobro_descuento(nombre, categoria), conductores(nombres, apellidos)')
+          .eq('id', referenciaId)
+          .single()
+        if (!pen) { Swal.fire('Error', 'No se encontró la penalidad', 'error'); return }
+
+        const creadoPorNombre = await resolverNombreUsuario(pen.created_by_name, pen.created_by)
+
+        // Buscar quién aplicó: buscar en facturacion_detalle → facturacion_conductores → periodos_facturacion
+        let aplicadoPorNombre = '-'
+        let fechaAplicacionReal = pen.fecha_aplicacion || null
+        {
+          const { data: detRef } = await (supabase.from('facturacion_detalle') as any)
+            .select('facturacion_conductores!inner(periodo_id, periodos_facturacion:periodos_facturacion!inner(cerrado_por_name, fecha_cierre))')
+            .eq('referencia_id', pen.id)
+            .eq('referencia_tipo', 'penalidad')
+            .limit(1)
+          const periodoInfo = (detRef as any)?.[0]?.facturacion_conductores?.periodos_facturacion
+          if (periodoInfo) {
+            aplicadoPorNombre = periodoInfo.cerrado_por_name || '-'
+            if (!fechaAplicacionReal && periodoInfo.fecha_cierre) {
+              fechaAplicacionReal = periodoInfo.fecha_cierre
+            }
+          }
+        }
+
+        const fechaReg = pen.fecha ? format(parseISO(pen.fecha), 'dd/MM/yyyy') : '-'
+        const fechaCreacion = pen.created_at ? format(parseISO(pen.created_at), 'dd/MM/yyyy HH:mm') : '-'
+        const aplicadoSiNo = pen.aplicado ? 'Sí' : 'No'
+        const fechaAplicacionStr = fechaAplicacionReal ? format(parseISO(fechaAplicacionReal), 'dd/MM/yyyy HH:mm') : null
+        const tipoNombre = pen.tipos_cobro_descuento?.nombre || 'Sin tipo'
+        const categoria = pen.tipos_cobro_descuento?.categoria || '-'
+        const conductorNombre = pen.conductores
+          ? `${pen.conductores.nombres || ''} ${pen.conductores.apellidos || ''}`.trim()
+          : pen.conductor_nombre || '-'
+
+        await Swal.fire({
+          title: 'Detalle de Penalidad',
+          html: `
+            <div style="text-align:left; font-size:13px; line-height:1.8">
+              <div style="display:grid; grid-template-columns:130px 1fr; gap:4px 12px">
+                <strong>Conductor:</strong> <span>${conductorNombre}</span>
+                <strong>Tipo:</strong> <span>${tipoNombre} <span style="color:#888; font-size:11px">(${categoria})</span></span>
+                <strong>Monto:</strong> <span style="font-weight:600; color:#ff0033">${formatCurrency(pen.monto || 0)}</span>
+                <strong>Fecha evento:</strong> <span>${fechaReg}</span>
+                <strong>Vehículo:</strong> <span>${pen.vehiculo_patente || '-'}</span>
+                <strong>Turno:</strong> <span>${pen.turno || '-'}</span>
+                ${pen.fraccionado ? `<strong>Fraccionado:</strong> <span>Sí (${pen.cantidad_cuotas || '?'} cuotas)</span>` : ''}
+              </div>
+              <hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb">
+              <div style="display:grid; grid-template-columns:130px 1fr; gap:4px 12px">
+                <strong>Registrado:</strong> <span>${fechaCreacion}</span>
+                <strong>Registrado por:</strong> <span>${creadoPorNombre}</span>
+                <strong>Aplicado:</strong> <span>${aplicadoSiNo}${fechaAplicacionStr ? ` (${fechaAplicacionStr})` : ''}</span>
+                ${pen.aplicado ? `<strong>Aplicado por:</strong> <span>${aplicadoPorNombre}</span>` : ''}
+              </div>
+              ${pen.observaciones ? `<hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb"><strong>Observaciones:</strong><div style="margin-top:4px; padding:8px; background:#f9fafb; border-radius:6px; font-size:12px">${pen.observaciones}</div>` : ''}
+              ${pen.detalle ? `<div style="margin-top:6px"><strong>Detalle:</strong><div style="margin-top:4px; padding:8px; background:#f9fafb; border-radius:6px; font-size:12px">${pen.detalle}</div></div>` : ''}
+              ${pen.nota_administrativa ? `<div style="margin-top:6px"><strong>Nota administrativa:</strong><div style="margin-top:4px; padding:8px; background:#fff3cd; border-radius:6px; font-size:12px">${pen.nota_administrativa}</div></div>` : ''}
+            </div>
+          `,
+          width: 500,
+          confirmButtonText: 'Cerrar',
+          confirmButtonColor: '#ff0033',
+          customClass: { popup: 'fact-modal', title: 'fact-modal-title' }
+        })
+      } else if (referenciaTipo === 'penalidad_cuota') {
+        const { data: cuota } = await (supabase.from('penalidades_cuotas') as any)
+          .select('*, penalidad:penalidades(*, tipos_cobro_descuento(nombre, categoria), conductores(nombres, apellidos))')
+          .eq('id', referenciaId)
+          .single()
+        if (!cuota?.penalidad) { Swal.fire('Error', 'No se encontró la cuota', 'error'); return }
+        const pen = cuota.penalidad
+
+        const creadoPorNombre = await resolverNombreUsuario(pen.created_by_name, pen.created_by)
+
+        const fechaReg = pen.fecha ? format(parseISO(pen.fecha), 'dd/MM/yyyy') : '-'
+        const fechaCreacion = pen.created_at ? format(parseISO(pen.created_at), 'dd/MM/yyyy HH:mm') : '-'
+        const tipoNombre = pen.tipos_cobro_descuento?.nombre || 'Sin tipo'
+        const conductorNombre = pen.conductores
+          ? `${pen.conductores.nombres || ''} ${pen.conductores.apellidos || ''}`.trim()
+          : pen.conductor_nombre || '-'
+
+        await Swal.fire({
+          title: 'Detalle de Cuota',
+          html: `
+            <div style="text-align:left; font-size:13px; line-height:1.8">
+              <div style="padding:8px 12px; background:rgba(255,0,51,0.05); border-radius:6px; margin-bottom:10px; font-weight:600">
+                Cuota ${cuota.numero_cuota} de ${pen.cantidad_cuotas || '?'} — ${formatCurrency(cuota.monto_cuota)}
+              </div>
+              <div style="display:grid; grid-template-columns:130px 1fr; gap:4px 12px">
+                <strong>Conductor:</strong> <span>${conductorNombre}</span>
+                <strong>Tipo:</strong> <span>${tipoNombre}</span>
+                <strong>Monto total:</strong> <span style="font-weight:600">${formatCurrency(pen.monto || 0)}</span>
+                <strong>Fecha evento:</strong> <span>${fechaReg}</span>
+                <strong>Registrado:</strong> <span>${fechaCreacion}</span>
+                <strong>Registrado por:</strong> <span>${creadoPorNombre}</span>
+              </div>
+              ${pen.observaciones ? `<hr style="margin:10px 0; border:none; border-top:1px solid #e5e7eb"><strong>Observaciones:</strong><div style="margin-top:4px; padding:8px; background:#f9fafb; border-radius:6px; font-size:12px">${pen.observaciones}</div>` : ''}
+            </div>
+          `,
+          width: 500,
+          confirmButtonText: 'Cerrar',
+          confirmButtonColor: '#ff0033',
+          customClass: { popup: 'fact-modal', title: 'fact-modal-title' }
+        })
+      }
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo cargar el detalle', 'error')
     }
   }
 
@@ -4475,6 +4658,11 @@ export function ReporteFacturacionTab() {
       const fechaVencimiento = addWeeks(parseISO(periodo.fecha_fin), 1)
       const periodoDesc = `${format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')} al ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`
 
+      // Map de IVA por código de concepto (desde tabla conceptos_nomina)
+      const ivaConceptoMap = new Map<string, number>(
+        conceptosNomina.map(c => [c.codigo, c.iva_porcentaje || 0])
+      )
+
       // Función para crear fila SiFactura (para preview)
       const crearFilaPreview = (
         numero: number,
@@ -4498,11 +4686,9 @@ export function ReporteFacturacionTab() {
         const numeroCuil = fact.conductor_dni || ''
         const numeroDni = fact.conductor_cuit || ''
         
-        // Determinar IVA según concepto
-        // Con IVA 21%: P001, P002, P009
-        // Exentos: P003, P004, P005, P007, P010
-        const conceptosConIva = ['P001', 'P002', 'P009']
-        const tieneIva = conceptosConIva.includes(codigoProducto)
+        // Determinar IVA según concepto (desde tabla conceptos_nomina)
+        const ivaPctConcepto = ivaConceptoMap.get(codigoProducto) || 0
+        const tieneIva = ivaPctConcepto > 0
         
         let netoGravado = 0
         let ivaAmount = 0
@@ -4510,9 +4696,9 @@ export function ReporteFacturacionTab() {
         let ivaPorcentaje = 'IVA_EXENTO'
         
         if (tieneIva) {
-          netoGravado = Math.round((total / 1.21) * 100) / 100
+          netoGravado = Math.round((total / (1 + ivaPctConcepto / 100)) * 100) / 100
           ivaAmount = Math.round((total - netoGravado) * 100) / 100
-          ivaPorcentaje = 'IVA_21'
+          ivaPorcentaje = `IVA_${ivaPctConcepto}`
         } else {
           exento = total
         }
@@ -4531,7 +4717,7 @@ export function ReporteFacturacionTab() {
           fechaVencimiento,
           puntoVenta: 5,
           tipoFactura,
-          tipoDocumento: 'CUIL',
+          tipoDocumento: tieneCuit ? 'CUIT' : 'DNI',
           numeroCuil,
           numeroDni,
           total,
@@ -4998,6 +5184,11 @@ export function ReporteFacturacionTab() {
         if (pc.penalidad?.conductor_id) conductoresConSaldosPendientes.add(pc.penalidad.conductor_id)
       })
 
+      // Map de IVA por código de concepto (desde tabla conceptos_nomina)
+      const ivaConceptoMap = new Map<string, number>(
+        conceptosNomina.map(c => [c.codigo, c.iva_porcentaje || 0])
+      )
+
       // Función para crear fila preview
       const crearFilaPreview = (
         numero: number,
@@ -5017,9 +5208,9 @@ export function ReporteFacturacionTab() {
         const numeroCuil = fact.conductor_dni || ''
         const numeroDni = fact.conductor_cuit || ''
         
-        // IVA según producto
-        const conceptosConIva = ['P001', 'P002', 'P009']
-        const tieneIva = conceptosConIva.includes(codigoProducto)
+        // IVA según producto (desde tabla conceptos_nomina)
+        const ivaPctConcepto = ivaConceptoMap.get(codigoProducto) || 0
+        const tieneIva = ivaPctConcepto > 0
         
         let netoGravado = 0
         let ivaAmount = 0
@@ -5027,9 +5218,9 @@ export function ReporteFacturacionTab() {
         let ivaPorcentaje = 'IVA_EXENTO'
         
         if (tieneIva) {
-          netoGravado = Math.round((total / 1.21) * 100) / 100
+          netoGravado = Math.round((total / (1 + ivaPctConcepto / 100)) * 100) / 100
           ivaAmount = Math.round((total - netoGravado) * 100) / 100
-          ivaPorcentaje = 'IVA_21'
+          ivaPorcentaje = `IVA_${ivaPctConcepto}`
         } else {
           exento = total
         }
@@ -5047,7 +5238,7 @@ export function ReporteFacturacionTab() {
           fechaVencimiento,
           puntoVenta: 5,
           tipoFactura,
-          tipoDocumento: 'CUIL',
+          tipoDocumento: tieneCuit ? 'CUIT' : 'DNI',
           numeroCuil,
           numeroDni,
           total,
@@ -8171,13 +8362,17 @@ export function ReporteFacturacionTab() {
                         if (label && !desc.includes('Alquiler') && !desc.includes('Garantía') && !desc.includes('Telepeaje')) {
                           desc = desc ? `${label} (${desc})` : label;
                         }
+                        const esPenalidad = item.referencia_id && (item.referencia_tipo === 'penalidad' || item.referencia_tipo === 'penalidad_cuota')
+                        const fechaStr = item.fecha_referencia
+                          ? format(parseISO(item.fecha_referencia), 'dd/MM/yy')
+                          : null
                         return (
                           <div key={item.id} style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                             padding: '7px 12px', borderRadius: '6px',
                             background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
                               <span style={{
                                 fontSize: '9px', fontWeight: 600, fontFamily: 'monospace',
                                 padding: '1px 5px', borderRadius: '3px',
@@ -8186,12 +8381,29 @@ export function ReporteFacturacionTab() {
                               }}>
                                 {item.concepto_codigo}
                               </span>
-                              <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
+                              <span style={{ fontSize: '12px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {desc}
                                 {item.cantidad > 1 && item.concepto_codigo !== 'P003' && <span style={{ color: 'var(--text-secondary)', marginLeft: '4px', fontSize: '11px' }}>x{item.cantidad}</span>}
                               </span>
+                              {fechaStr && (
+                                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                                  {fechaStr}
+                                </span>
+                              )}
+                              {esPenalidad && (
+                                <button
+                                  onClick={() => verDetallePenalidad(item.referencia_id!, item.referencia_tipo!)}
+                                  style={{
+                                    background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
+                                    color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
+                                  }}
+                                  title="Ver detalle de penalidad"
+                                >
+                                  <Info size={14} />
+                                </button>
+                              )}
                             </div>
-                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
                               {formatCurrency(item.total)}
                             </span>
                           </div>

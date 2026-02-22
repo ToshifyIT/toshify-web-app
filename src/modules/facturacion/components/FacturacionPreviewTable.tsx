@@ -1025,8 +1025,8 @@ export function FacturacionPreviewTable({
               <th>PV</th>
               <th>Tipo Fact</th>
               <th>Tipo Doc</th>
-              <th>CUIL (DNI)</th>
-              <th>DNI (CUIT)</th>
+              <th>DNI</th>
+              <th>CUIT</th>
               <th className="col-money">Total</th>
               <th>Cobrado</th>
               <th>Cond IVA</th>
@@ -1072,7 +1072,7 @@ export function FacturacionPreviewTable({
                   <td className="col-mono">{row.numeroDni || ''}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'total', row.total)}</td>
                   <td>{row.cobrado}</td>
-                  <td className="col-small">{row.condicionIva === 'RESPONSABLE_INSCRIPTO' ? 'RI' : 'CF'}</td>
+                  <td className="col-small">{row.condicionIva === 'RESPONSABLE_INSCRIPTO' ? 'Responsable Inscripto' : 'Consumidor Final'}</td>
                   <td className="col-small">{row.condicionVenta === 'CTA_CTE' ? 'CC' : row.condicionVenta}</td>
                   <td className="col-nombre" title={row.razonSocial}>{row.razonSocial}</td>
                   <td className="col-small">{row.domicilio || ''}</td>
@@ -1086,7 +1086,7 @@ export function FacturacionPreviewTable({
                   <td className="col-money">{row.ivaAmount ? Math.round(row.ivaAmount * 100) / 100 : ''}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'exento', row.exento || 0)}</td>
                   <td className="col-money col-total">{Math.round(row.total * 100) / 100}</td>
-                  <td><span className={`badge-iva ${row.ivaPorcentaje === 'IVA_21' ? 'iva-21' : 'iva-ex'}`}>{row.ivaPorcentaje === 'IVA_21' ? '21%' : 'EX'}</span></td>
+                  <td><span className={`badge-iva ${row.ivaPorcentaje !== 'IVA_EXENTO' ? 'iva-21' : 'iva-ex'}`}>{row.ivaPorcentaje !== 'IVA_EXENTO' ? row.ivaPorcentaje.replace('IVA_', '') + '%' : 'EX'}</span></td>
                   <td>{row.generarAsiento}</td>
                   <td className="col-mono">{row.cuentaDebito}</td>
                   <td className="col-mono">{row.cuentaCredito}</td>
