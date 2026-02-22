@@ -6518,14 +6518,14 @@ export function ReporteFacturacionTab() {
         </div>
       ),
       enableSorting: true,
-      size: 160,
+      size: 140,
     },
     {
       id: 'dias_trabajados',
       accessorFn: (row) => row.turnos_cobrados,
       header: 'Días',
       enableSorting: true,
-      size: 45,
+      size: 40,
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
         return (
@@ -6548,7 +6548,7 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.subtotal_alquiler,
       header: 'Alquiler',
       enableSorting: true,
-      size: 110,
+      size: 100,
       cell: ({ row }) => {
         const alquiler = row.original.subtotal_alquiler
         const ganancia = row.original.ganancia_cabify || 0
@@ -6599,7 +6599,7 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.subtotal_garantia,
       header: 'Garantía',
       enableSorting: true,
-      size: 100,
+      size: 90,
       cell: ({ row }) => {
         const garantia = row.original.subtotal_garantia
         const cuotaNum = row.original.cuota_garantia_numero || ''
@@ -6673,7 +6673,7 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.monto_cobrado || 0,
       header: 'Cobrado',
       enableSorting: true,
-      size: 90,
+      size: 80,
       cell: ({ row }) => {
         const cobrado = row.original.monto_cobrado || 0
         const total = Math.abs(row.original.total_a_pagar || 0)
@@ -6707,7 +6707,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'peajes',
       header: 'Peajes',
-      size: 85,
+      size: 75,
       accessorFn: (row) => row.monto_peajes || 0,
       cell: ({ row }) => {
         const peajes = row.original.monto_peajes || 0
@@ -6725,7 +6725,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'incidencias',
       header: 'Incidencias',
-      size: 110,
+      size: 90,
       accessorFn: (row) => row.monto_penalidades || 0,
       cell: ({ row }) => {
         const penalidades = row.original.penalidades_detalle || []
@@ -6791,7 +6791,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'tickets_favor',
       header: 'Tickets Fav.',
-      size: 95,
+      size: 90,
       accessorFn: (row) => row.monto_tickets_favor || 0,
       cell: ({ row }) => {
         const tickets = row.original.tickets_detalle || []
@@ -6857,7 +6857,7 @@ export function ReporteFacturacionTab() {
     {
       accessorKey: 'saldo_anterior',
       header: 'Saldo Ant.',
-      size: 85,
+      size: 75,
       cell: ({ row }) => (
         <span style={{
           fontSize: '11px',
@@ -6894,7 +6894,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'estado_billing',
       header: 'Estado',
-      size: 90,
+      size: 70,
       accessorFn: (row) => row.estado_billing || '',
       cell: ({ row }) => {
         const estado = row.original.estado_billing
