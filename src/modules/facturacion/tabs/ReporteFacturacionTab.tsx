@@ -852,6 +852,20 @@ export function ReporteFacturacionTab() {
         .in('facturacion_id', facIds)
         .in('concepto_codigo', ['P005', 'P007'])
 
+      // 2.8 Cargar tickets a favor aprobados pendientes de aplicar
+      const { data: ticketsData } = await (supabase
+        .from('tickets_favor') as any)
+        .select('conductor_id, monto, detalle, tipo')
+        .in('conductor_id', Array.from(new Set(facturacionesTransformadas.map((f: any) => f.conductor_id))))
+        .eq('estado', 'aprobado')
+        .is('periodo_aplicado_id', null)
+
+      const ticketsMap = new Map<string, any[]>()
+      ;(ticketsData || []).forEach((t: any) => {
+        if (!ticketsMap.has(t.conductor_id)) ticketsMap.set(t.conductor_id, [])
+        ticketsMap.get(t.conductor_id)!.push(t)
+      })
+
       // Agrupar por facturacion_id
       const detallesMap = new Map<string, { monto_peajes: number; monto_penalidades: number; penalidades_count: number; penalidades_detalle: Array<{ monto: number; detalle: string }> }>()
       ;(detallesData || []).forEach((d: any) => {
@@ -876,6 +890,8 @@ export function ReporteFacturacionTab() {
         // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI (normalizado)
         const dniNormPeaje = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
         const peajesCabify = dniNormPeaje ? (peajesPorDni.get(dniNormPeaje) || 0) : 0
+        const ticketsConductor = ticketsMap.get(f.conductor_id) || []
+        const montoTickets = ticketsConductor.reduce((sum, t) => sum + (t.monto || 0), 0)
         return {
           ...f,
           monto_cobrado: pago?.monto || 0,
@@ -883,6 +899,8 @@ export function ReporteFacturacionTab() {
           monto_peajes: peajesDetalle > 0 ? peajesDetalle : peajesCabify,
           monto_penalidades: detalle?.monto_penalidades || 0,
           penalidades_detalle: detalle?.penalidades_detalle || [],
+          monto_tickets_favor: montoTickets,
+          tickets_detalle: ticketsConductor,
         }
       })
 
