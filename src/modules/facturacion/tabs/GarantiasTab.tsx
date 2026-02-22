@@ -49,6 +49,7 @@ interface PagoGarantiaRow {
 
 export function GarantiasTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { isAdmin } = usePermissions()
   // Sub-tab activo (Movimientos removido - no se usa)
   const [activeSubTab] = useState<'garantias' | 'movimientos'>('garantias')
   
@@ -357,7 +358,8 @@ export function GarantiasTab() {
     }
   }
 
-  async function editarGarantia(garantia: GarantiaConductor) {
+  // Hidden: botón de editar garantía removido de la UI
+  async function _editarGarantia(garantia: GarantiaConductor) {
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Garantía</span>`,
       html: `
@@ -477,6 +479,7 @@ export function GarantiasTab() {
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo eliminar', 'error')
     }
+    void _editarGarantia
   }
 
   async function registrarPago(garantia: GarantiaConductor) {
@@ -917,17 +920,16 @@ export function GarantiasTab() {
           <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
             <Eye size={14} />
           </button>
-          <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
-            <Edit3 size={14} />
-          </button>
           {row.original.estado !== 'completada' && (
             <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
               <Banknote size={14} />
             </button>
           )}
-          <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarGarantia(row.original)} data-tooltip="Eliminar">
-            <Trash2 size={14} />
-          </button>
+          {isAdmin() && (
+            <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarGarantia(row.original)} data-tooltip="Eliminar">
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       )
     }
