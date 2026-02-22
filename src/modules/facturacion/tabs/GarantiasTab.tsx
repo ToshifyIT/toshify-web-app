@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -11,8 +12,9 @@ import {
   Clock,
   AlertTriangle,
   Eye,
-  Plus,
+  // Plus,
   DollarSign,
+  Banknote,
   Filter,
   Edit3,
   UserPlus,
@@ -919,8 +921,8 @@ export function GarantiasTab() {
             <Edit3 size={14} />
           </button>
           {row.original.estado !== 'completada' && (
-            <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago">
-              <Plus size={14} />
+            <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
+              <Banknote size={14} />
             </button>
           )}
           <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarGarantia(row.original)} data-tooltip="Eliminar">

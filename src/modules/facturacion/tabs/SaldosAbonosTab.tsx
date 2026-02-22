@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -8,13 +9,13 @@ import {
   Users,
   AlertTriangle,
   Eye,
-  Plus,
+  // Plus,
   // DollarSign,
   Filter,
   Edit3,
   UserPlus,
   Trash2,
-  Receipt,
+  // Receipt,
   ArrowUpCircle,
   ArrowDownCircle,
   Banknote
@@ -58,10 +59,13 @@ import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 
 export function SaldosAbonosTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { isAdmin } = usePermissions()
   // Sub-tab activo
-  const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
+  // Sub-tabs removidos — solo se muestra Saldos
+  // const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
   
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
+  // @ts-expect-error todosLosAbonos se carga pero la UI de movimientos fue removida
   const [todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroSaldo, setFiltroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
@@ -609,7 +613,8 @@ export function SaldosAbonosTab() {
     }
   }
 
-  async function registrarAbono(saldo: SaldoConductor) {
+  // Hidden: botón de registrar movimiento removido de la UI
+  async function _registrarAbono(saldo: SaldoConductor) {
     const saldoColor = saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'
 
     // Calcular semana actual
@@ -842,6 +847,9 @@ export function SaldosAbonosTab() {
     }
   }
 
+  // Mantener referencia a funciones ocultas para evitar error TS6133
+  void _registrarAbono; void _editarSaldo;
+
   async function eliminarSaldo(saldo: SaldoConductor) {
     const result = await Swal.fire({
       title: 'Eliminar Saldo',
@@ -883,7 +891,8 @@ export function SaldosAbonosTab() {
     }
   }
 
-  async function editarSaldo(saldo: SaldoConductor) {
+  // Hidden: botón de editar saldo removido de la UI
+  async function _editarSaldo(saldo: SaldoConductor) {
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Saldo</span>`,
       html: `
@@ -1299,18 +1308,14 @@ export function SaldosAbonosTab() {
           <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
             <Eye size={14} />
           </button>
-          <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar">
-            <Edit3 size={14} />
-          </button>
           <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
             <Banknote size={14} />
           </button>
-          <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarAbono(row.original)} data-tooltip="Registrar movimiento">
-            <Plus size={14} />
-          </button>
-          <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarSaldo(row.original)} data-tooltip="Eliminar">
-            <Trash2 size={14} />
-          </button>
+          {isAdmin() && (
+            <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarSaldo(row.original)} data-tooltip="Eliminar">
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       )
     }
@@ -1360,7 +1365,8 @@ export function SaldosAbonosTab() {
     }
   }, [saldos, cobrosFraccionados])
 
-  // Columnas para la tabla de Abonos
+  // Columnas para la tabla de Abonos (UI de movimientos removida)
+  // @ts-expect-error columnsAbonos preservado por si se reactiva la UI de movimientos
   const columnsAbonos = useMemo<ColumnDef<AbonoRow>[]>(() => [
     {
       accessorKey: 'fecha_abono',
@@ -1476,81 +1482,7 @@ export function SaldosAbonosTab() {
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando saldos..." size="lg" />
 
-      {/* Sub-tabs de navegación */}
-      <div className="fact-subtabs" style={{ 
-        display: 'flex', 
-        gap: '4px', 
-        marginBottom: '16px',
-        borderBottom: '1px solid #E5E7EB',
-        paddingBottom: '0'
-      }}>
-        <button
-          className={`fact-subtab ${activeSubTab === 'saldos' ? 'fact-subtab-active' : ''}`}
-          onClick={() => setActiveSubTab('saldos')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 16px',
-            border: 'none',
-            background: activeSubTab === 'saldos' ? '#ff0033' : 'transparent',
-            color: activeSubTab === 'saldos' ? 'white' : '#6B7280',
-            borderRadius: '6px 6px 0 0',
-            cursor: 'pointer',
-            fontWeight: 500,
-            fontSize: '13px',
-            transition: 'all 0.15s',
-            flex: 1
-          }}
-        >
-          <Wallet size={16} />
-          Saldos
-          <span style={{
-            background: activeSubTab === 'saldos' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
-            padding: '2px 6px',
-            borderRadius: '10px',
-            fontSize: '11px'
-          }}>
-            {stats.total}
-          </span>
-        </button>
-        <button
-          className={`fact-subtab ${activeSubTab === 'abonos' ? 'fact-subtab-active' : ''}`}
-          onClick={() => setActiveSubTab('abonos')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 16px',
-            border: 'none',
-            background: activeSubTab === 'abonos' ? '#ff0033' : 'transparent',
-            color: activeSubTab === 'abonos' ? 'white' : '#6B7280',
-            borderRadius: '6px 6px 0 0',
-            cursor: 'pointer',
-            fontWeight: 500,
-            fontSize: '13px',
-            transition: 'all 0.15s',
-            flex: 1
-          }}
-        >
-          <Receipt size={16} />
-          Movimientos
-          <span style={{
-            background: activeSubTab === 'abonos' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
-            padding: '2px 6px',
-            borderRadius: '10px',
-            fontSize: '11px'
-          }}>
-            {todosLosAbonos.length}
-          </span>
-        </button>
-      </div>
-
-      {/* ===== SUB-TAB: SALDOS ===== */}
-      {activeSubTab === 'saldos' && (
-        <>
+      {/* ===== SALDOS ===== */}
           {/* Header con filtro y botón agregar */}
           <div className="fact-header">
             <div className="fact-header-left">
@@ -1607,39 +1539,6 @@ export function SaldosAbonosTab() {
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
           />
-        </>
-      )}
-
-      {/* ===== SUB-TAB: MOVIMIENTOS/ABONOS ===== */}
-      {activeSubTab === 'abonos' && (
-        <>
-          {/* Stats de Movimientos */}
-          <div className="fact-stats" style={{ marginBottom: '16px' }}>
-            <div className="fact-stats-grid">
-              <div className="fact-stat-card">
-                <Receipt size={18} className="fact-stat-icon" />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value">{todosLosAbonos.length}</span>
-                  <span className="fact-stat-label">Total Movimientos</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Tabla de Movimientos */}
-          <DataTable
-            data={todosLosAbonos}
-            columns={columnsAbonos}
-            loading={loading}
-            searchPlaceholder="Buscar por conductor, concepto..."
-            emptyIcon={<Receipt size={48} />}
-            emptyTitle="Sin movimientos"
-            emptyDescription="No hay abonos ni cargos registrados"
-            pageSize={50}
-            pageSizeOptions={[20, 50, 100, 200]}
-          />
-        </>
-      )}
     </>
   )
 }

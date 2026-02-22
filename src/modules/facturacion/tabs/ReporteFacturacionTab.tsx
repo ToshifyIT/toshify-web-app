@@ -243,6 +243,14 @@ export function ReporteFacturacionTab() {
     }[]
   } | null>(null)
 
+  // Popup cobro app Cabify
+  const [cobroAppPopup, setCobroAppPopup] = useState<{
+    nombre: string
+    cobroApp: number
+    alquiler: number
+    garantia: number
+  } | null>(null)
+
   // Modal de detalle
   const [showDetalle, setShowDetalle] = useState(false)
   const [detalleFacturacion, setDetalleFacturacion] = useState<FacturacionConductor | null>(null)
@@ -783,10 +791,10 @@ export function ReporteFacturacionTab() {
       const peajesInicioSemAnt = format(subWeeks(parseISO(periodoInicio), 1), 'yyyy-MM-dd')
       const peajesFinSemAnt = format(subWeeks(parseISO(periodoFin), 1), 'yyyy-MM-dd')
 
-      // Obtener datos de Cabify incluyendo driver_id y company_id para validar peajes con API
+      // Obtener datos de Cabify incluyendo cobro_app para barras de cobertura
       const [{ data: cabifyGanancias }, { data: cabifyPeajes }] = await Promise.all([
         supabase.from('cabify_historico')
-          .select('dni, ganancia_total, cabify_driver_id, cabify_company_id')
+          .select('dni, cobro_app, cabify_driver_id, cabify_company_id')
           .gte('fecha_inicio', periodoInicio + 'T00:00:00')
           .lte('fecha_inicio', periodoFin + 'T23:59:59'),
         supabase.from('cabify_historico')
@@ -795,12 +803,12 @@ export function ReporteFacturacionTab() {
           .lte('fecha_inicio', peajesFinSemAnt + 'T23:59:59')
       ])
 
-      // Agrupar ganancias por DNI (semana actual)
-      const gananciasPorDni = new Map<string, number>()
+      // Agrupar cobro_app por DNI (semana actual) - lo que Cabify cobra al conductor
+      const cobroAppPorDni = new Map<string, number>()
       ;(cabifyGanancias || []).forEach((c: any) => {
         if (c.dni) {
           const dniNorm = String(c.dni).replace(/^0+/, '')
-          gananciasPorDni.set(dniNorm, (gananciasPorDni.get(dniNorm) || 0) + (parseFloat(c.ganancia_total) || 0))
+          cobroAppPorDni.set(dniNorm, (cobroAppPorDni.get(dniNorm) || 0) + (parseFloat(c.cobro_app) || 0))
         }
       })
 
@@ -820,15 +828,15 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Agregar ganancia_cabify a cada facturación
+      // Agregar cobro_app de Cabify a cada facturación (para barras de cobertura)
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const dniNorm = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
-        const ganancia = dniNorm ? (gananciasPorDni.get(dniNorm) || 0) : 0
+        const cobroApp = dniNorm ? (cobroAppPorDni.get(dniNorm) || 0) : 0
         const cuotaFija = f.subtotal_alquiler + f.subtotal_garantia
         return {
           ...f,
-          ganancia_cabify: ganancia,
-          cubre_cuota: ganancia >= cuotaFija
+          ganancia_cabify: cobroApp,
+          cubre_cuota: cobroApp >= cuotaFija
         }
       })
       
@@ -1285,7 +1293,7 @@ export function ReporteFacturacionTab() {
       const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
       const [{ data: cabifyData }, { data: cabifyPeajesData }] = await Promise.all([
         supabase.from('cabify_historico')
-          .select('dni, ganancia_total, cobro_efectivo')
+          .select('dni, cobro_app, cobro_efectivo')
           .gte('fecha_inicio', fechaInicio + 'T00:00:00')
           .lte('fecha_inicio', fechaFin + 'T23:59:59'),
         supabase.from('cabify_historico')
@@ -1294,14 +1302,14 @@ export function ReporteFacturacionTab() {
           .lte('fecha_inicio', peajesFin + 'T23:59:59')
       ])
 
-      // Crear mapa de ganancias Cabify por DNI (sumar si hay múltiples registros)
+      // Crear mapa de cobro_app Cabify por DNI (lo que Cabify cobra al conductor)
       const cabifyMap = new Map<string, number>()
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
           const dniNorm = String(record.dni).replace(/^0+/, '')
-          const actualGanancia = cabifyMap.get(dniNorm) || 0
-          const ganancia = parseFloat(String(record.ganancia_total)) || 0
-          cabifyMap.set(dniNorm, actualGanancia + ganancia)
+          const actual = cabifyMap.get(dniNorm) || 0
+          const cobroApp = parseFloat(String(record.cobro_app)) || 0
+          cabifyMap.set(dniNorm, actual + cobroApp)
         }
       })
       // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
@@ -1583,10 +1591,10 @@ export function ReporteFacturacionTab() {
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior + montoMora
 
-        // Datos de Cabify - ganancia semanal del conductor
-        const gananciaCabify = cabifyMap.get(dniConductor) || 0
+        // Datos de Cabify - cobro_app semanal del conductor (para barras de cobertura)
+        const cobroAppCabify = cabifyMap.get(dniConductor) || 0
         const cuotaFijaSemanal = subtotalAlquiler + subtotalGarantia
-        const cubreCuota = gananciaCabify >= cuotaFijaSemanal
+        const cubreCuota = cobroAppCabify >= cuotaFijaSemanal
 
         facturacionesProyectadas.push({
           id: `preview-${conductorId}`,
@@ -1612,8 +1620,8 @@ export function ReporteFacturacionTab() {
           total_a_pagar: totalAPagar,
           estado: 'borrador',
           created_at: new Date().toISOString(),
-          // Datos de Cabify (Vista Previa)
-          ganancia_cabify: gananciaCabify,
+          // Datos de Cabify - cobro_app (Vista Previa)
+          ganancia_cabify: cobroAppCabify,
           cubre_cuota: cubreCuota,
           cuota_garantia_numero: cuotaGarantiaNumero,
           // Datos detallados para RIT export
@@ -6569,21 +6577,30 @@ export function ReporteFacturacionTab() {
       size: 100,
       cell: ({ row }) => {
         const alquiler = row.original.subtotal_alquiler
-        const ganancia = row.original.ganancia_cabify || 0
-        // Porcentaje de cobertura: cuánto de su alquiler cubrió con ganancia Cabify
-        const porcentajeCubierto = alquiler > 0 ? Math.min(100, Math.round((ganancia / alquiler) * 100)) : 0
-        const cubreCuota = ganancia >= alquiler && ganancia > 0
+        const cobroApp = row.original.ganancia_cabify || 0
+        // Porcentaje de cobertura: cuánto del alquiler cubre el cobro app de Cabify
+        const porcentajeCubierto = alquiler > 0 ? Math.min(100, Math.round((cobroApp / alquiler) * 100)) : 0
+        const cubreCuota = cobroApp >= alquiler && cobroApp > 0
 
         if (alquiler === 0) {
           return <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>-</span>
         }
 
+        const handleClick = () => {
+          setCobroAppPopup({
+            nombre: row.original.conductor_nombre,
+            cobroApp,
+            alquiler,
+            garantia: row.original.subtotal_garantia,
+          })
+        }
+
         return (
-          <div style={{ fontSize: '11px', minWidth: '80px' }}>
+          <div style={{ fontSize: '11px', minWidth: '80px', cursor: 'pointer' }} onClick={handleClick}>
             <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
               {formatCurrency(alquiler)}
             </div>
-            {/* Barra de progreso: cuánto cubrió con Cabify */}
+            {/* Barra de progreso: cobertura con cobro app Cabify */}
             <div style={{ 
               width: '100%', 
               height: '8px', 
@@ -6626,14 +6643,14 @@ export function ReporteFacturacionTab() {
         const garantia = row.original.subtotal_garantia
         const cuotaNum = row.original.cuota_garantia_numero || ''
         const isCompletada = cuotaNum === 'NA'
-        const ganancia = row.original.ganancia_cabify || 0
+        const cobroApp = row.original.ganancia_cabify || 0
         const alquiler = row.original.subtotal_alquiler
         
-        // Calcular restante después de cubrir alquiler
-        const restante = Math.max(0, ganancia - alquiler)
+        // Calcular restante de cobro app después de cubrir alquiler
+        const restante = Math.max(0, cobroApp - alquiler)
         // Porcentaje de cobertura de garantía con el restante
         const porcentajeCubierto = garantia > 0 ? Math.min(100, Math.round((restante / garantia) * 100)) : 0
-        const cubreGarantia = restante >= garantia && ganancia > 0
+        const cubreGarantia = restante >= garantia && cobroApp > 0
 
         if (isCompletada) {
           return (
@@ -7703,6 +7720,85 @@ export function ReporteFacturacionTab() {
         </>
       )}
 
+      {/* Popup cobro app Cabify */}
+      {cobroAppPopup && (() => {
+        const cuotaTotal = cobroAppPopup.alquiler + cobroAppPopup.garantia
+        const pendiente = Math.max(0, cuotaTotal - cobroAppPopup.cobroApp)
+        const porcentaje = cuotaTotal > 0 ? Math.min(100, Math.round((cobroAppPopup.cobroApp / cuotaTotal) * 100)) : 0
+        const cubierto = cobroAppPopup.cobroApp >= cuotaTotal
+        return (
+          <div className="fact-modal-overlay" onClick={() => setCobroAppPopup(null)}>
+            <div className="fact-modal-content" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="fact-modal-header">
+                <h2 style={{ fontSize: '14px' }}>Cobro App Cabify</h2>
+                <button className="fact-modal-close" onClick={() => setCobroAppPopup(null)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="fact-modal-body" style={{ padding: '16px 20px' }}>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '12px' }}>
+                  {cobroAppPopup.nombre}
+                </div>
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', fontSize: '13px' }}>
+                  <span style={{ color: '#16a34a', fontWeight: 600 }}>
+                    Cobro App: {formatCurrency(cobroAppPopup.cobroApp)}
+                  </span>
+                  <span style={{ color: pendiente > 0 ? '#dc2626' : '#6b7280', fontWeight: 600 }}>
+                    Pendiente: {formatCurrency(pendiente)}
+                  </span>
+                </div>
+                {/* Barra de progreso */}
+                <div style={{
+                  width: '100%', height: '14px', backgroundColor: '#e5e7eb',
+                  borderRadius: '7px', overflow: 'hidden', border: '1px solid #d1d5db',
+                  marginBottom: '4px'
+                }}>
+                  <div style={{
+                    width: `${porcentaje}%`, height: '100%',
+                    backgroundColor: cubierto ? '#10b981' : porcentaje >= 70 ? '#f59e0b' : '#ef4444',
+                    borderRadius: '6px', transition: 'width 0.3s ease',
+                    minWidth: porcentaje > 0 ? '6px' : '0'
+                  }} />
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', marginBottom: '16px' }}>
+                  {porcentaje}%
+                </div>
+                {/* Desglose */}
+                <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Concepto</th>
+                      <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cobroAppPopup.alquiler > 0 && (
+                      <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                        <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>Alquiler</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 500 }}>{formatCurrency(cobroAppPopup.alquiler)}</td>
+                      </tr>
+                    )}
+                    {cobroAppPopup.garantia > 0 && (
+                      <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                        <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>Garantía</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 500 }}>{formatCurrency(cobroAppPopup.garantia)}</td>
+                      </tr>
+                    )}
+                    <tr style={{ fontWeight: 700 }}>
+                      <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>Cuota Semanal</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(cuotaTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="fact-modal-footer">
+                <button className="fact-btn-secondary" onClick={() => setCobroAppPopup(null)}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Modal de desglose de días */}
       {showDiasModal && (
         <div className="fact-modal-overlay" onClick={() => setShowDiasModal(false)}>
@@ -7772,16 +7868,20 @@ export function ReporteFacturacionTab() {
 
                     {/* Columna derecha: Asignaciones */}
                     <div>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-                        Asignaciones ({diasModalData.historial.length})
-                      </div>
-                      {diasModalData.historial.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', fontSize: '12px' }}>
-                          Sin asignaciones registradas
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '320px', overflowY: 'auto' }}>
-                          {diasModalData.historial.map((h, i) => {
+                      {(() => {
+                        const asignacionesValidas = diasModalData.historial.filter(h => h.fechaInicio && h.fechaInicio !== 'NULL')
+                        return (
+                          <>
+                            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                              Asignaciones ({asignacionesValidas.length})
+                            </div>
+                            {asignacionesValidas.length === 0 ? (
+                              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                                Sin asignaciones registradas
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '320px', overflowY: 'auto' }}>
+                                {asignacionesValidas.map((h, i) => {
                             const esActiva = h.padreEstado.toLowerCase().includes('activ')
                             const esCancelada = h.padreEstado.toLowerCase().includes('cancel')
                             const esProgramada = h.padreEstado.toLowerCase().includes('program')
@@ -7832,9 +7932,12 @@ export function ReporteFacturacionTab() {
                                 </div>
                               </div>
                             )
-                          })}
-                        </div>
-                      )}
+                           })}
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
                     </div>
                   </div>
                 </div>
