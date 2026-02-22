@@ -6800,9 +6800,12 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.monto_tickets_favor || 0,
       cell: ({ row }) => {
         const tickets = row.original.tickets_detalle || []
-        const montoTickets = row.original.monto_tickets_favor || 0
+        const montoTickets = (row.original.monto_tickets_favor || 0)
 
-        if (tickets.length === 0 && montoTickets === 0) {
+        // DEBUG: force show for testing
+        const debugShow = true
+
+        if (!debugShow || (tickets.length === 0 && montoTickets === 0)) {
           return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
