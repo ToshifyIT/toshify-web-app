@@ -94,6 +94,8 @@ interface FacturacionConductor {
   km_exceso?: number          // KM de exceso
   monto_penalidades?: number  // P007 - Penalidades
   monto_tickets_favor?: number  // Tickets a favor
+  // Detalle de peajes para validar con Cabify
+  peajes_detalle?: Array<{ fecha: string; monto: number }>
   // Detalle de penalidades para el modal
   penalidades_detalle?: Array<{
     monto: number
@@ -787,7 +789,7 @@ export function ReporteFacturacionTab() {
           .gte('fecha_inicio', periodoInicio + 'T00:00:00')
           .lte('fecha_inicio', periodoFin + 'T23:59:59'),
         supabase.from('cabify_historico')
-          .select('dni, peajes')
+          .select('dni, peajes, fecha_inicio')
           .gte('fecha_inicio', peajesInicioSemAnt + 'T00:00:00')
           .lte('fecha_inicio', peajesFinSemAnt + 'T23:59:59')
       ])
@@ -803,10 +805,17 @@ export function ReporteFacturacionTab() {
 
       // Agrupar peajes por DNI (semana anterior)
       const peajesPorDni = new Map<string, number>()
+      const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajes || []).forEach((c: any) => {
         if (c.dni && c.peajes) {
           const dniNorm = String(c.dni).replace(/^0+/, '')
-          peajesPorDni.set(dniNorm, (peajesPorDni.get(dniNorm) || 0) + (parseFloat(String(c.peajes)) || 0))
+          const monto = parseFloat(String(c.peajes)) || 0
+          peajesPorDni.set(dniNorm, (peajesPorDni.get(dniNorm) || 0) + monto)
+          
+          // Guardar detalle por fecha para popup
+          const fecha = c.fecha_inicio ? c.fecha_inicio.split('T')[0] : 's/f'
+          if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
+          peajesDetalleMap.get(dniNorm)!.push({ fecha, monto })
         }
       })
 
@@ -882,15 +891,17 @@ export function ReporteFacturacionTab() {
       facturacionesTransformadas = facturacionesTransformadas.map((f: any) => {
         const pago = pagosMap.get(f.id)
         const detalle = detallesMap.get(f.id)
-        const peajesDetalle = detalle?.monto_peajes || 0
         // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI (normalizado)
         const dniNormPeaje = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
+        const peajesDetalle = detalle?.monto_peajes || 0
         const peajesCabify = dniNormPeaje ? (peajesPorDni.get(dniNormPeaje) || 0) : 0
+        const peajesDetalleList = peajesDetalleMap.get(dniNormPeaje) || []
         return {
           ...f,
           monto_cobrado: pago?.monto || 0,
           fecha_pago: pago?.fecha_pago || null,
           monto_peajes: peajesDetalle > 0 ? peajesDetalle : peajesCabify,
+          peajes_detalle: peajesDetalleList,
           monto_penalidades: detalle?.monto_penalidades || 0,
           penalidades_detalle: detalle?.penalidades_detalle || [],
           monto_tickets_favor: detalle?.monto_tickets || 0,
@@ -1295,12 +1306,18 @@ export function ReporteFacturacionTab() {
       // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
       // Normalizar DNI: quitar ceros adelante para match consistente
       const peajesMap = new Map<string, number>()
+      const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
         if (record.dni && record.peajes) {
           const dniNorm = String(record.dni).replace(/^0+/, '')
           const actualPeajes = peajesMap.get(dniNorm) || 0
           const peajes = parseFloat(String(record.peajes)) || 0
           peajesMap.set(dniNorm, actualPeajes + peajes)
+          
+          // Guardar detalle por fecha para popup
+          const fecha = record.fecha_inicio ? record.fecha_inicio.split('T')[0] : 's/f'
+          if (!peajesDetalleMap.has(dniNorm)) peajesDetalleMap.set(dniNorm, [])
+          peajesDetalleMap.get(dniNorm)!.push({ fecha, monto: peajes })
         }
       })
 
@@ -1600,6 +1617,7 @@ export function ReporteFacturacionTab() {
           cuota_garantia_numero: cuotaGarantiaNumero,
           // Datos detallados para RIT export
             monto_peajes: montoPeajes,       // P005
+            peajes_detalle: peajesDetalleMap.get(conductorId) || [],
             monto_excesos: montoExcesos,     // P006
             km_exceso: kmExceso,
             monto_penalidades: montoPenalidades,  // P007
@@ -6711,13 +6729,49 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.monto_peajes || 0,
       cell: ({ row }) => {
         const peajes = row.original.monto_peajes || 0
+        const peajesDetalle = row.original.peajes_detalle || []
+        
         if (peajes === 0) {
           return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
+        
+        const handleClick = (e: React.MouseEvent) => {
+          e.stopPropagation()
+          const html = peajesDetalle.length > 0
+            ? `<table style="width:100%;text-align:left;font-size:13px;border-collapse:collapse;">
+                <thead><tr style="border-bottom:2px solid var(--border-primary);">
+                  <th style="padding:8px;">Fecha</th>
+                  <th style="padding:8px;text-align:right;">Monto</th>
+                </tr></thead>
+                <tbody>${peajesDetalle.map((p: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${p.fecha}</td><td style="padding:8px;text-align:right;font-weight:600;">${formatCurrency(p.monto)}</td></tr>`).join('')}</tbody>
+                <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
+                  <td style="padding:8px;">Total</td>
+                  <td style="padding:8px;text-align:right;">${formatCurrency(peajes)}</td>
+                </tr></tfoot>
+              </table>`
+            : `<p>Total peajes: <strong>${formatCurrency(peajes)}</strong></p>`
+
+          Swal.fire({
+            title: `Peajes - ${row.original.conductor_nombre}`,
+            html,
+            width: 450,
+            confirmButtonText: 'Cerrar',
+            confirmButtonColor: '#6B7280',
+            customClass: { popup: 'fact-modal' }
+          })
+        }
+
         return (
-          <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          <button
+            onClick={handleClick}
+            style={{
+              fontSize: '11px', fontWeight: 500, color: 'var(--text-primary)',
+              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+              textDecoration: 'underline'
+            }}
+          >
             {formatCurrency(peajes)}
-          </span>
+          </button>
         )
       },
       enableSorting: true,
