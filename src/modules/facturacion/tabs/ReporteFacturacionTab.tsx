@@ -845,34 +845,31 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // 2.7 Cargar detalles de facturación para peajes y penalidades
+      // 2.7 Cargar detalles de facturación para peajes, penalidades Y tickets (P004, P005, P007)
       const { data: detallesData } = await (supabase
         .from('facturacion_detalle') as any)
         .select('facturacion_id, concepto_codigo, concepto_descripcion, total')
         .in('facturacion_id', facIds)
-        .in('concepto_codigo', ['P005', 'P007'])
-
-      // 2.8 Cargar tickets a favor aprobados (todos, sin importar si ya fueron aplicados)
-      const { data: ticketsData } = await (supabase
-        .from('tickets_favor') as any)
-        .select('conductor_id, monto, detalle, tipo, periodo_aplicado_id')
-        .in('conductor_id', Array.from(new Set(facturacionesTransformadas.map((f: any) => f.conductor_id))))
-        .eq('estado', 'aprobado')
-
-      const ticketsMap = new Map<string, any[]>()
-      ;(ticketsData || []).forEach((t: any) => {
-        if (!ticketsMap.has(t.conductor_id)) ticketsMap.set(t.conductor_id, [])
-        ticketsMap.get(t.conductor_id)!.push(t)
-      })
+        .in('concepto_codigo', ['P004', 'P005', 'P007'])
 
       // Agrupar por facturacion_id
-      const detallesMap = new Map<string, { monto_peajes: number; monto_penalidades: number; penalidades_count: number; penalidades_detalle: Array<{ monto: number; detalle: string }> }>()
+      const detallesMap = new Map<string, {
+        monto_peajes: number; monto_penalidades: number; penalidades_count: number;
+        penalidades_detalle: Array<{ monto: number; detalle: string }>;
+        monto_tickets: number; tickets_detalle: Array<{ monto: number; detalle: string }>;
+      }>()
       ;(detallesData || []).forEach((d: any) => {
         if (!detallesMap.has(d.facturacion_id)) {
-          detallesMap.set(d.facturacion_id, { monto_peajes: 0, monto_penalidades: 0, penalidades_count: 0, penalidades_detalle: [] })
+          detallesMap.set(d.facturacion_id, {
+            monto_peajes: 0, monto_penalidades: 0, penalidades_count: 0, penalidades_detalle: [],
+            monto_tickets: 0, tickets_detalle: [],
+          })
         }
         const entry = detallesMap.get(d.facturacion_id)!
-        if (d.concepto_codigo === 'P005') {
+        if (d.concepto_codigo === 'P004') {
+          entry.monto_tickets += Math.abs(parseFloat(d.total) || 0)
+          entry.tickets_detalle.push({ monto: Math.abs(parseFloat(d.total) || 0), detalle: d.concepto_descripcion || 'Ticket' })
+        } else if (d.concepto_codigo === 'P005') {
           entry.monto_peajes += parseFloat(d.total) || 0
         } else if (d.concepto_codigo === 'P007') {
           entry.monto_penalidades += parseFloat(d.total) || 0
@@ -889,8 +886,6 @@ export function ReporteFacturacionTab() {
         // Fallback: si no hay P005 en facturacion_detalle, buscar en cabify_historico por DNI (normalizado)
         const dniNormPeaje = f.conductor_dni ? String(f.conductor_dni).replace(/^0+/, '') : ''
         const peajesCabify = dniNormPeaje ? (peajesPorDni.get(dniNormPeaje) || 0) : 0
-        const ticketsConductor = ticketsMap.get(f.conductor_id) || []
-        const montoTickets = ticketsConductor.reduce((sum, t) => sum + (t.monto || 0), 0)
         return {
           ...f,
           monto_cobrado: pago?.monto || 0,
@@ -898,8 +893,8 @@ export function ReporteFacturacionTab() {
           monto_peajes: peajesDetalle > 0 ? peajesDetalle : peajesCabify,
           monto_penalidades: detalle?.monto_penalidades || 0,
           penalidades_detalle: detalle?.penalidades_detalle || [],
-          monto_tickets_favor: montoTickets,
-          tickets_detalle: ticketsConductor,
+          monto_tickets_favor: detalle?.monto_tickets || 0,
+          tickets_detalle: detalle?.tickets_detalle || [],
         }
       })
 
@@ -6800,12 +6795,9 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.monto_tickets_favor || 0,
       cell: ({ row }) => {
         const tickets = row.original.tickets_detalle || []
-        const montoTickets = (row.original.monto_tickets_favor || 0)
+        const montoTickets = row.original.monto_tickets_favor || 0
 
-        // DEBUG: force show for testing
-        const debugShow = true
-
-        if (!debugShow || (tickets.length === 0 && montoTickets === 0)) {
+        if (tickets.length === 0 && montoTickets === 0) {
           return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
         }
 
