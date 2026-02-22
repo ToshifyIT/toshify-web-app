@@ -4644,12 +4644,6 @@ function PenalidadDetailView({ penalidad, onEdit, historialRechazos = [], loadin
               <span className="detail-item-value">{penalidad.incidencia_descripcion}</span>
             </div>
           )}
-          {penalidad.incidencia_estado && (
-            <div className="detail-item">
-              <span className="detail-item-label">Estado</span>
-              <span className="detail-item-value">{penalidad.incidencia_estado}</span>
-            </div>
-          )}
         </div>
       )}
 
