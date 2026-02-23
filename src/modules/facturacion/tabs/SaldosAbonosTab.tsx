@@ -909,18 +909,10 @@ export function SaldosAbonosTab() {
           <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
             <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Saldo Actual:</label>
-            <input id="swal-saldo" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.saldo_actual}">
-            <span style="font-size: 10px; color: #6B7280;">Positivo = A Favor | Negativo = Deuda</span>
-          </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Días en Mora:</label>
-            <input id="swal-dias-mora" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.dias_mora || 0}">
-          </div>
           <div>
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Mora Acumulada:</label>
-            <input id="swal-mora-acum" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.monto_mora_acumulada || 0}">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Saldo Actual:</label>
+            <input id="swal-saldo" type="number" step="0.01" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.saldo_actual}">
+            <span style="font-size: 10px; color: #6B7280;">Positivo = A Favor | Negativo = Deuda</span>
           </div>
         </div>
       `,
@@ -938,35 +930,27 @@ export function SaldosAbonosTab() {
       },
       preConfirm: () => {
         const saldoActual = parseFloat((document.getElementById('swal-saldo') as HTMLInputElement).value)
-        const diasMora = parseInt((document.getElementById('swal-dias-mora') as HTMLInputElement).value) || 0
-        const moraAcumulada = parseFloat((document.getElementById('swal-mora-acum') as HTMLInputElement).value) || 0
-
         if (isNaN(saldoActual)) {
           Swal.showValidationMessage('Ingrese un saldo válido')
           return false
         }
-        if (diasMora < 0) {
-          Swal.showValidationMessage('Los días de mora no pueden ser negativos')
-          return false
-        }
-        if (moraAcumulada < 0) {
-          Swal.showValidationMessage('La mora acumulada no puede ser negativa')
-          return false
-        }
-
-        return { saldoActual, diasMora, moraAcumulada }
+        return { saldoActual }
       }
     })
 
     if (!formValues) return
 
     try {
+      // Si el nuevo saldo es >= 0, resetear mora
+      const diasMora = formValues.saldoActual >= 0 ? 0 : (saldo.dias_mora || 0)
+      const moraAcum = formValues.saldoActual >= 0 ? 0 : (saldo.monto_mora_acumulada || 0)
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: formValues.saldoActual,
-          dias_mora: formValues.diasMora,
-          monto_mora_acumulada: formValues.moraAcumulada,
+          dias_mora: diasMora,
+          monto_mora_acumulada: moraAcum,
           ultima_actualizacion: new Date().toISOString()
         })
         .eq('id', saldo.id)
@@ -1022,7 +1006,7 @@ export function SaldosAbonosTab() {
                 <span style="color: ${saldoColor}; font-size: 14px; font-weight: 700;">${formatCurrency(saldo.saldo_actual)}</span>
                 <span style="background: ${saldo.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2'}; color: ${saldoColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${saldoLabel}</span>
               </div>
-              ${saldo.dias_mora && saldo.dias_mora > 0 ? `<div style="color: #ff0033; font-size: 11px; margin-top: 4px;">En mora: ${saldo.dias_mora} días</div>` : ''}
+              ${saldo.saldo_actual < 0 && saldo.ultima_actualizacion ? (() => { const d = Math.floor((Date.now() - new Date(saldo.ultima_actualizacion).getTime()) / 864e5); return d > 0 ? `<div style="color: #ff0033; font-size: 11px; margin-top: 4px;">En mora: ${d} días (${formatCurrency(Math.round(Math.abs(saldo.saldo_actual) * 0.01 * d * 100) / 100)})</div>` : '' })() : ''}
             </div>
             <div style="max-height: 220px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px;">
               <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
@@ -1288,7 +1272,12 @@ export function SaldosAbonosTab() {
       accessorKey: 'dias_mora',
       header: 'Días Mora',
       cell: ({ row }) => {
-        const dias = row.original.dias_mora || 0
+        // Calcular días de mora dinámicamente: si tiene deuda, contar días desde última actualización
+        const saldo = row.original.saldo_actual
+        if (saldo >= 0 || !row.original.ultima_actualizacion) return <span className="text-gray-400">-</span>
+        const desde = new Date(row.original.ultima_actualizacion)
+        const hoy = new Date()
+        const dias = Math.max(0, Math.floor((hoy.getTime() - desde.getTime()) / (1000 * 60 * 60 * 24)))
         if (dias === 0) return <span className="text-gray-400">-</span>
         return <span className={`fact-badge ${dias > 3 ? 'fact-badge-red' : 'fact-badge-yellow'}`}>{dias} días</span>
       }
@@ -1297,8 +1286,14 @@ export function SaldosAbonosTab() {
       accessorKey: 'monto_mora_acumulada',
       header: 'Mora Acum.',
       cell: ({ row }) => {
-        const mora = row.original.monto_mora_acumulada || 0
-        if (mora === 0) return <span className="text-gray-400">-</span>
+        // Calcular mora dinámicamente: 1% diario sobre la deuda desde última actualización
+        const saldo = row.original.saldo_actual
+        if (saldo >= 0 || !row.original.ultima_actualizacion) return <span className="text-gray-400">-</span>
+        const desde = new Date(row.original.ultima_actualizacion)
+        const hoy = new Date()
+        const dias = Math.max(0, Math.floor((hoy.getTime() - desde.getTime()) / (1000 * 60 * 60 * 24)))
+        if (dias === 0) return <span className="text-gray-400">-</span>
+        const mora = Math.round(Math.abs(saldo) * 0.01 * dias * 100) / 100
         return <span className="fact-precio fact-precio-negative">{formatCurrency(mora)}</span>
       }
     },
@@ -1345,7 +1340,11 @@ export function SaldosAbonosTab() {
       // Filtros de stats
       if (filtroSaldo === 'favor' && s.saldo_actual <= 0) return false
       if (filtroSaldo === 'deuda' && s.saldo_actual >= 0) return false
-      if (filtroSaldo === 'mora' && (s.dias_mora || 0) === 0) return false
+      if (filtroSaldo === 'mora') {
+        if (s.saldo_actual >= 0 || !s.ultima_actualizacion) return false
+        const diasMora = Math.floor((Date.now() - new Date(s.ultima_actualizacion).getTime()) / (1000 * 60 * 60 * 24))
+        if (diasMora <= 0) return false
+      }
       if (filtroSaldo === 'fraccionado' && !conductoresConFraccionado.has(s.conductor_id)) return false
       // Filtros Excel
       if (conductorFilter.length > 0 && !conductorFilter.includes(s.conductor_nombre || '')) return false
@@ -1361,7 +1360,10 @@ export function SaldosAbonosTab() {
     const total = saldos.length
     const conductoresFavor = saldos.filter(s => s.saldo_actual > 0)
     const conductoresDeuda = saldos.filter(s => s.saldo_actual < 0)
-    const conductoresMora = saldos.filter(s => (s.dias_mora || 0) > 0)
+    const conductoresMora = saldos.filter(s => {
+      if (s.saldo_actual >= 0 || !s.ultima_actualizacion) return false
+      return Math.floor((Date.now() - new Date(s.ultima_actualizacion).getTime()) / (1000 * 60 * 60 * 24)) > 0
+    })
     const conFavor = conductoresFavor.length
     const conDeuda = conductoresDeuda.length
     const enMora = conductoresMora.length
