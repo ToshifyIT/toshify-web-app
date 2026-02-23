@@ -857,7 +857,7 @@ export function SaldosAbonosTab() {
   }
 
   // Mantener referencia a funciones ocultas para evitar error TS6133
-  void _registrarAbono; void _editarSaldo; void _agregarSaldoInicial;
+  void _registrarAbono; void _agregarSaldoInicial;
 
   async function eliminarSaldo(saldo: SaldoConductor) {
     const result = await Swal.fire({
@@ -900,8 +900,8 @@ export function SaldosAbonosTab() {
     }
   }
 
-  // Hidden: botón de editar saldo removido de la UI
-  async function _editarSaldo(saldo: SaldoConductor) {
+  // Editar saldo (solo admin)
+  async function editarSaldo(saldo: SaldoConductor) {
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Saldo</span>`,
       html: `
@@ -1320,6 +1320,11 @@ export function SaldosAbonosTab() {
           <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
             <Banknote size={14} />
           </button>
+          {isAdmin() && (
+            <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar saldo">
+              <Edit3 size={14} />
+            </button>
+          )}
           {isAdmin() && (
             <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarSaldo(row.original)} data-tooltip="Eliminar">
               <Trash2 size={14} />
