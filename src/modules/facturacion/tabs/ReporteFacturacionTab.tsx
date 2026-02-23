@@ -1604,7 +1604,7 @@ export function ReporteFacturacionTab() {
           id: `preview-${conductorId}`,
           periodo_id: 'preview',
           conductor_id: conductorId,
-          conductor_nombre: `${(conductor.apellidos || '').toUpperCase()}, ${(conductor.nombres || '').toUpperCase()}`,
+          conductor_nombre: `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim(),
           conductor_dni: dniConductor,
           conductor_cuit: conductor.numero_cuit || null,
           vehiculo_id: null,
