@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
+import { VerLogsButton } from "../../components/ui/VerLogsButton";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
@@ -2266,17 +2267,20 @@ export function ConductoresModule() {
         }
         disableAutoFilters={true}
         headerAction={
-          <button
-            className="btn-primary"
-            onClick={() => {
-              resetForm();
-              setShowCreateModal(true);
-            }}
-            disabled={!canCreate}
-            title={!canCreate ? "No tienes permisos para crear conductores" : ""}
-          >
-            + Crear Conductor
-          </button>
+          <>
+            <VerLogsButton tablas={['conductores', 'asignaciones', 'asignaciones_conductores']} label="Conductores" />
+            <button
+              className="btn-primary"
+              onClick={() => {
+                resetForm();
+                setShowCreateModal(true);
+              }}
+              disabled={!canCreate}
+              title={!canCreate ? "No tienes permisos para crear conductores" : ""}
+            >
+              + Crear Conductor
+            </button>
+          </>
         }
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}

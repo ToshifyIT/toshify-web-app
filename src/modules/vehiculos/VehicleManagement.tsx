@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2, Undo2 } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
+import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { DriveFilesModal } from '../../components/DriveFilesModal'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
@@ -1278,17 +1279,20 @@ export function VehicleManagement() {
         emptyTitle="No hay vehiculos registrados"
         emptyDescription={canCreate ? 'Crea el primero usando el boton "+ Crear Vehiculo".' : ''}
         headerAction={
-          <button
-            className="btn-primary"
-            onClick={() => {
-              resetForm()
-              setShowCreateModal(true)
-            }}
-            disabled={!canCreate}
-            title={!canCreate ? 'No tienes permisos para crear vehiculos' : ''}
-          >
-            + Crear Vehiculo
-          </button>
+          <>
+            <VerLogsButton tablas={['vehiculos', 'vehiculo_control']} label="Veh\u00edculos" />
+            <button
+              className="btn-primary"
+              onClick={() => {
+                resetForm()
+                setShowCreateModal(true)
+              }}
+              disabled={!canCreate}
+              title={!canCreate ? 'No tienes permisos para crear vehiculos' : ''}
+            >
+              + Crear Vehiculo
+            </button>
+          </>
         }
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}

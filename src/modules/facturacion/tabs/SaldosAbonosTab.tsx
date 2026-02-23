@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -8,18 +9,20 @@ import {
   Users,
   AlertTriangle,
   Eye,
-  Plus,
+  // Plus,
   // DollarSign,
   Filter,
   Edit3,
-  UserPlus,
+  // UserPlus,
   Trash2,
-  Receipt,
+  // Receipt,
   ArrowUpCircle,
-  ArrowDownCircle
+  ArrowDownCircle,
+  Banknote
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { SaldoConductor } from '../../../types/facturacion.types'
 
@@ -55,15 +58,27 @@ interface AbonoRow {
 }
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 
+/** Calcula días calendario entre una fecha y hoy (sin considerar hora) */
+function diasCalendario(desde: string | Date): number {
+  const d = new Date(desde)
+  d.setHours(0, 0, 0, 0)
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.floor((hoy.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)))
+}
+
 export function SaldosAbonosTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { isAdmin } = usePermissions()
   // Sub-tab activo
-  const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
+  // Sub-tabs removidos — solo se muestra Saldos
+  // const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
   
   const [saldos, setSaldos] = useState<SaldoConductor[]>([])
+  // @ts-expect-error todosLosAbonos se carga pero la UI de movimientos fue removida
   const [todosLosAbonos, setTodosLosAbonos] = useState<AbonoRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtroSaldo, setFiltroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
+  const [filtroSaldo] = useState<'todos' | 'favor' | 'deuda' | 'mora' | 'fraccionado'>('todos')
   const [cobrosFraccionados, setCobrosFraccionados] = useState<{
     conductor_id: string
     conductor_nombre: string
@@ -204,8 +219,8 @@ export function SaldosAbonosTab() {
     return Math.ceil((days + startOfYear.getDay() + 1) / 7)
   }
 
-  // Función para agregar saldo inicial a un conductor
-  async function agregarSaldoInicial() {
+  // Hidden: botón de agregar saldo removido de la UI
+  async function _agregarSaldoInicial() {
     // Cargar conductores disponibles al momento de abrir el modal
     const { data: todosLosConductores } = await aplicarFiltroSede(supabase
       .from('conductores')
@@ -608,7 +623,8 @@ export function SaldosAbonosTab() {
     }
   }
 
-  async function registrarAbono(saldo: SaldoConductor) {
+  // Hidden: botón de registrar movimiento removido de la UI
+  async function _registrarAbono(saldo: SaldoConductor) {
     const saldoColor = saldo.saldo_actual >= 0 ? '#16a34a' : '#dc2626'
 
     // Calcular semana actual
@@ -744,6 +760,114 @@ export function SaldosAbonosTab() {
     }
   }
 
+  // Registrar pago — reduce la deuda del conductor (suma al saldo)
+  async function registrarPago(saldo: SaldoConductor) {
+    const saldoColor = saldo.saldo_actual < 0 ? '#DC2626' : saldo.saldo_actual > 0 ? '#16A34A' : '#6B7280'
+
+    const { value: formValues } = await Swal.fire({
+      title: '<span style="font-size: 16px; font-weight: 600;">Registrar Pago</span>',
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
+            <div style="color: ${saldoColor}; font-size: 12px; margin-top: 4px;">
+              Saldo actual: <strong>${formatCurrency(saldo.saldo_actual)}</strong>
+              ${saldo.saldo_actual < 0 ? ' <span style="color: #DC2626;">(DEUDA)</span>' : ''}
+            </div>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto del pago:</label>
+            <input id="swal-pago-monto" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Monto" min="0" step="0.01">
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Concepto:</label>
+            <input id="swal-pago-concepto" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Pago en efectivo" value="Pago en efectivo">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
+            <input id="swal-pago-ref" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Recibo #123">
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Registrar Pago',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#16a34a',
+      cancelButtonColor: '#6B7280',
+      width: 380,
+      customClass: {
+        popup: 'swal-compact',
+        title: 'swal-title-compact',
+        htmlContainer: 'swal-html-compact'
+      },
+      preConfirm: () => {
+        const monto = (document.getElementById('swal-pago-monto') as HTMLInputElement).value
+        const concepto = (document.getElementById('swal-pago-concepto') as HTMLInputElement).value
+        const referencia = (document.getElementById('swal-pago-ref') as HTMLInputElement).value
+
+        if (!monto || parseFloat(monto) <= 0) {
+          Swal.showValidationMessage('Ingrese un monto valido')
+          return false
+        }
+        if (!concepto) {
+          Swal.showValidationMessage('Ingrese un concepto')
+          return false
+        }
+
+        return {
+          monto: parseFloat(monto),
+          concepto,
+          referencia: referencia || null
+        }
+      }
+    })
+
+    if (!formValues) return
+
+    try {
+      // Pago = abono (suma al saldo, reduce deuda)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorAbono } = await (supabase.from('abonos_conductores') as any).insert({
+        conductor_id: saldo.conductor_id,
+        tipo: 'pago',
+        monto: formValues.monto,
+        concepto: formValues.concepto,
+        referencia: formValues.referencia,
+        semana: getWeekNumber(new Date().toISOString().split('T')[0]),
+        anio: new Date().getFullYear(),
+        fecha_abono: new Date().toISOString()
+      })
+
+      if (errorAbono) throw errorAbono
+
+      const nuevoSaldo = saldo.saldo_actual + formValues.monto
+      // Si el nuevo saldo >= 0 (sin deuda), resetear dias_mora a 0
+      const updateData: Record<string, unknown> = { 
+        saldo_actual: nuevoSaldo, 
+        ultima_actualizacion: new Date().toISOString() 
+      }
+      if (nuevoSaldo >= 0) {
+        updateData.dias_mora = 0
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: errorUpdate } = await (supabase.from('saldos_conductores') as any)
+        .update(updateData)
+        .eq('id', saldo.id)
+
+      if (errorUpdate) throw errorUpdate
+
+      showSuccess('Pago Registrado', `Nuevo saldo: ${formatCurrency(nuevoSaldo)}`)
+      cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
+    }
+  }
+
+  // Mantener referencia a funciones ocultas para evitar error TS6133
+  void _registrarAbono; void _agregarSaldoInicial;
+
   async function eliminarSaldo(saldo: SaldoConductor) {
     const result = await Swal.fire({
       title: 'Eliminar Saldo',
@@ -785,6 +909,7 @@ export function SaldosAbonosTab() {
     }
   }
 
+  // Editar saldo (solo admin)
   async function editarSaldo(saldo: SaldoConductor) {
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Saldo</span>`,
@@ -793,18 +918,10 @@ export function SaldosAbonosTab() {
           <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
             <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
           </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Saldo Actual:</label>
-            <input id="swal-saldo" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.saldo_actual}">
-            <span style="font-size: 10px; color: #6B7280;">Positivo = A Favor | Negativo = Deuda</span>
-          </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Días en Mora:</label>
-            <input id="swal-dias-mora" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.dias_mora || 0}">
-          </div>
           <div>
-            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Mora Acumulada:</label>
-            <input id="swal-mora-acum" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.monto_mora_acumulada || 0}">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Saldo Actual:</label>
+            <input id="swal-saldo" type="number" step="0.01" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.saldo_actual}">
+            <span style="font-size: 10px; color: #6B7280;">Positivo = A Favor | Negativo = Deuda</span>
           </div>
         </div>
       `,
@@ -822,35 +939,27 @@ export function SaldosAbonosTab() {
       },
       preConfirm: () => {
         const saldoActual = parseFloat((document.getElementById('swal-saldo') as HTMLInputElement).value)
-        const diasMora = parseInt((document.getElementById('swal-dias-mora') as HTMLInputElement).value) || 0
-        const moraAcumulada = parseFloat((document.getElementById('swal-mora-acum') as HTMLInputElement).value) || 0
-
         if (isNaN(saldoActual)) {
           Swal.showValidationMessage('Ingrese un saldo válido')
           return false
         }
-        if (diasMora < 0) {
-          Swal.showValidationMessage('Los días de mora no pueden ser negativos')
-          return false
-        }
-        if (moraAcumulada < 0) {
-          Swal.showValidationMessage('La mora acumulada no puede ser negativa')
-          return false
-        }
-
-        return { saldoActual, diasMora, moraAcumulada }
+        return { saldoActual }
       }
     })
 
     if (!formValues) return
 
     try {
+      // Si el nuevo saldo es >= 0, resetear mora
+      const diasMora = formValues.saldoActual >= 0 ? 0 : (saldo.dias_mora || 0)
+      const moraAcum = formValues.saldoActual >= 0 ? 0 : (saldo.monto_mora_acumulada || 0)
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from('saldos_conductores') as any)
         .update({
           saldo_actual: formValues.saldoActual,
-          dias_mora: formValues.diasMora,
-          monto_mora_acumulada: formValues.moraAcumulada,
+          dias_mora: diasMora,
+          monto_mora_acumulada: moraAcum,
           ultima_actualizacion: new Date().toISOString()
         })
         .eq('id', saldo.id)
@@ -906,7 +1015,7 @@ export function SaldosAbonosTab() {
                 <span style="color: ${saldoColor}; font-size: 14px; font-weight: 700;">${formatCurrency(saldo.saldo_actual)}</span>
                 <span style="background: ${saldo.saldo_actual >= 0 ? '#DCFCE7' : '#FEE2E2'}; color: ${saldoColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${saldoLabel}</span>
               </div>
-              ${saldo.dias_mora && saldo.dias_mora > 0 ? `<div style="color: #ff0033; font-size: 11px; margin-top: 4px;">En mora: ${saldo.dias_mora} días</div>` : ''}
+              ${saldo.saldo_actual < 0 && saldo.ultima_actualizacion ? (() => { const d = Math.floor((Date.now() - new Date(saldo.ultima_actualizacion).getTime()) / 864e5); return d > 0 ? `<div style="color: #ff0033; font-size: 11px; margin-top: 4px;">En mora: ${d} días (${formatCurrency(Math.round(Math.abs(saldo.saldo_actual) * 0.01 * d * 100) / 100)})</div>` : '' })() : ''}
             </div>
             <div style="max-height: 220px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px;">
               <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
@@ -1172,7 +1281,9 @@ export function SaldosAbonosTab() {
       accessorKey: 'dias_mora',
       header: 'Días Mora',
       cell: ({ row }) => {
-        const dias = row.original.dias_mora || 0
+        const saldo = row.original.saldo_actual
+        if (saldo >= 0 || !row.original.ultima_actualizacion) return <span className="text-gray-400">-</span>
+        const dias = diasCalendario(row.original.ultima_actualizacion)
         if (dias === 0) return <span className="text-gray-400">-</span>
         return <span className={`fact-badge ${dias > 3 ? 'fact-badge-red' : 'fact-badge-yellow'}`}>{dias} días</span>
       }
@@ -1181,8 +1292,11 @@ export function SaldosAbonosTab() {
       accessorKey: 'monto_mora_acumulada',
       header: 'Mora Acum.',
       cell: ({ row }) => {
-        const mora = row.original.monto_mora_acumulada || 0
-        if (mora === 0) return <span className="text-gray-400">-</span>
+        const saldo = row.original.saldo_actual
+        if (saldo >= 0 || !row.original.ultima_actualizacion) return <span className="text-gray-400">-</span>
+        const dias = diasCalendario(row.original.ultima_actualizacion)
+        if (dias === 0) return <span className="text-gray-400">-</span>
+        const mora = Math.round(Math.abs(saldo) * 0.01 * dias * 100) / 100
         return <span className="fact-precio fact-precio-negative">{formatCurrency(mora)}</span>
       }
     },
@@ -1201,15 +1315,19 @@ export function SaldosAbonosTab() {
           <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
             <Eye size={14} />
           </button>
-          <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar">
-            <Edit3 size={14} />
+          <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
+            <Banknote size={14} />
           </button>
-          <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarAbono(row.original)} data-tooltip="Registrar movimiento">
-            <Plus size={14} />
-          </button>
-          <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarSaldo(row.original)} data-tooltip="Eliminar">
-            <Trash2 size={14} />
-          </button>
+          {isAdmin() && (
+            <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar saldo">
+              <Edit3 size={14} />
+            </button>
+          )}
+          {isAdmin() && (
+            <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarSaldo(row.original)} data-tooltip="Eliminar">
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       )
     }
@@ -1225,7 +1343,10 @@ export function SaldosAbonosTab() {
       // Filtros de stats
       if (filtroSaldo === 'favor' && s.saldo_actual <= 0) return false
       if (filtroSaldo === 'deuda' && s.saldo_actual >= 0) return false
-      if (filtroSaldo === 'mora' && (s.dias_mora || 0) === 0) return false
+      if (filtroSaldo === 'mora') {
+        if (s.saldo_actual >= 0 || !s.ultima_actualizacion) return false
+        if (diasCalendario(s.ultima_actualizacion) <= 0) return false
+      }
       if (filtroSaldo === 'fraccionado' && !conductoresConFraccionado.has(s.conductor_id)) return false
       // Filtros Excel
       if (conductorFilter.length > 0 && !conductorFilter.includes(s.conductor_nombre || '')) return false
@@ -1241,7 +1362,10 @@ export function SaldosAbonosTab() {
     const total = saldos.length
     const conductoresFavor = saldos.filter(s => s.saldo_actual > 0)
     const conductoresDeuda = saldos.filter(s => s.saldo_actual < 0)
-    const conductoresMora = saldos.filter(s => (s.dias_mora || 0) > 0)
+    const conductoresMora = saldos.filter(s => {
+      if (s.saldo_actual >= 0 || !s.ultima_actualizacion) return false
+      return diasCalendario(s.ultima_actualizacion) > 0
+    })
     const conFavor = conductoresFavor.length
     const conDeuda = conductoresDeuda.length
     const enMora = conductoresMora.length
@@ -1259,7 +1383,8 @@ export function SaldosAbonosTab() {
     }
   }, [saldos, cobrosFraccionados])
 
-  // Columnas para la tabla de Abonos
+  // Columnas para la tabla de Abonos (UI de movimientos removida)
+  // @ts-expect-error columnsAbonos preservado por si se reactiva la UI de movimientos
   const columnsAbonos = useMemo<ColumnDef<AbonoRow>[]>(() => [
     {
       accessorKey: 'fecha_abono',
@@ -1375,102 +1500,11 @@ export function SaldosAbonosTab() {
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando saldos..." size="lg" />
 
-      {/* Sub-tabs de navegación */}
-      <div className="fact-subtabs" style={{ 
-        display: 'flex', 
-        gap: '4px', 
-        marginBottom: '16px',
-        borderBottom: '1px solid #E5E7EB',
-        paddingBottom: '0'
-      }}>
-        <button
-          className={`fact-subtab ${activeSubTab === 'saldos' ? 'fact-subtab-active' : ''}`}
-          onClick={() => setActiveSubTab('saldos')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 16px',
-            border: 'none',
-            background: activeSubTab === 'saldos' ? '#ff0033' : 'transparent',
-            color: activeSubTab === 'saldos' ? 'white' : '#6B7280',
-            borderRadius: '6px 6px 0 0',
-            cursor: 'pointer',
-            fontWeight: 500,
-            fontSize: '13px',
-            transition: 'all 0.15s',
-            flex: 1
-          }}
-        >
-          <Wallet size={16} />
-          Saldos
-          <span style={{
-            background: activeSubTab === 'saldos' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
-            padding: '2px 6px',
-            borderRadius: '10px',
-            fontSize: '11px'
-          }}>
-            {stats.total}
-          </span>
-        </button>
-        <button
-          className={`fact-subtab ${activeSubTab === 'abonos' ? 'fact-subtab-active' : ''}`}
-          onClick={() => setActiveSubTab('abonos')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 16px',
-            border: 'none',
-            background: activeSubTab === 'abonos' ? '#ff0033' : 'transparent',
-            color: activeSubTab === 'abonos' ? 'white' : '#6B7280',
-            borderRadius: '6px 6px 0 0',
-            cursor: 'pointer',
-            fontWeight: 500,
-            fontSize: '13px',
-            transition: 'all 0.15s',
-            flex: 1
-          }}
-        >
-          <Receipt size={16} />
-          Movimientos
-          <span style={{
-            background: activeSubTab === 'abonos' ? 'rgba(255,255,255,0.2)' : '#E5E7EB',
-            padding: '2px 6px',
-            borderRadius: '10px',
-            fontSize: '11px'
-          }}>
-            {todosLosAbonos.length}
-          </span>
-        </button>
-      </div>
-
-      {/* ===== SUB-TAB: SALDOS ===== */}
-      {activeSubTab === 'saldos' && (
-        <>
-          {/* Header con filtro y botón agregar */}
+      {/* ===== SALDOS ===== */}
           <div className="fact-header">
-            <div className="fact-header-left">
-              <span className="fact-label">Filtrar:</span>
-              <select className="fact-select" value={filtroSaldo} onChange={(e) => setFiltroSaldo(e.target.value as typeof filtroSaldo)}>
-                <option value="todos">Todos</option>
-                <option value="favor">Con saldo a favor</option>
-                <option value="deuda">Con deuda</option>
-                <option value="mora">En mora</option>
-                <option value="fraccionado">Fraccionado</option>
-              </select>
-            </div>
+            <div className="fact-header-left"></div>
             <div className="fact-header-right">
-              <button 
-                className="fact-btn fact-btn-primary"
-                onClick={agregarSaldoInicial}
-                title="Agregar saldo inicial a un conductor"
-              >
-                <UserPlus size={16} />
-                <span>Agregar Saldo</span>
-              </button>
+              <VerLogsButton tablas={['saldos_conductores', 'abonos_conductores', 'cobros_fraccionados']} label="Saldos" />
             </div>
           </div>
 
@@ -1494,6 +1528,44 @@ export function SaldosAbonosTab() {
             </div>
           </div>
 
+          {/* Barra de filtros activos */}
+          {(conductorFilter.length > 0 || estadoFilter.length > 0) && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+              background: 'rgba(255, 0, 51, 0.04)', border: '1px solid rgba(255, 0, 51, 0.12)',
+              borderRadius: '6px', marginBottom: '8px', flexWrap: 'wrap', fontSize: '12px'
+            }}>
+              <span style={{ color: '#ff0033', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Filter size={12} /> Filtros activos:
+              </span>
+              {conductorFilter.map(f => (
+                <span key={f} style={{
+                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: '10px',
+                  fontSize: '11px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer'
+                }} onClick={() => setConductorFilter(prev => prev.filter(v => v !== f))}>
+                  {f} <span style={{ fontWeight: 700 }}>&times;</span>
+                </span>
+              ))}
+              {estadoFilter.map(f => (
+                <span key={f} style={{
+                  background: '#ff0033', color: 'white', padding: '2px 8px', borderRadius: '10px',
+                  fontSize: '11px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer'
+                }} onClick={() => setEstadoFilter(prev => prev.filter(v => v !== f))}>
+                  {f === 'favor' ? 'A Favor' : f === 'deuda' ? 'Deuda' : 'Sin Saldo'} <span style={{ fontWeight: 700 }}>&times;</span>
+                </span>
+              ))}
+              <button
+                onClick={() => { setConductorFilter([]); setEstadoFilter([]); setConductorSearch('') }}
+                style={{
+                  marginLeft: 'auto', background: 'transparent', border: '1px solid var(--border-primary)',
+                  borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)'
+                }}
+              >
+                Limpiar todos
+              </button>
+            </div>
+          )}
+
           {/* Tabla de Saldos */}
           <DataTable
             data={saldosFiltrados}
@@ -1506,39 +1578,6 @@ export function SaldosAbonosTab() {
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
           />
-        </>
-      )}
-
-      {/* ===== SUB-TAB: MOVIMIENTOS/ABONOS ===== */}
-      {activeSubTab === 'abonos' && (
-        <>
-          {/* Stats de Movimientos */}
-          <div className="fact-stats" style={{ marginBottom: '16px' }}>
-            <div className="fact-stats-grid">
-              <div className="fact-stat-card">
-                <Receipt size={18} className="fact-stat-icon" />
-                <div className="fact-stat-content">
-                  <span className="fact-stat-value">{todosLosAbonos.length}</span>
-                  <span className="fact-stat-label">Total Movimientos</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Tabla de Movimientos */}
-          <DataTable
-            data={todosLosAbonos}
-            columns={columnsAbonos}
-            loading={loading}
-            searchPlaceholder="Buscar por conductor, concepto..."
-            emptyIcon={<Receipt size={48} />}
-            emptyTitle="Sin movimientos"
-            emptyDescription="No hay abonos ni cargos registrados"
-            pageSize={50}
-            pageSizeOptions={[20, 50, 100, 200]}
-          />
-        </>
-      )}
     </>
   )
 }

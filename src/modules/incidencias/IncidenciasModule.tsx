@@ -37,6 +37,7 @@ import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import type {
   IncidenciaCompleta,
@@ -2799,6 +2800,7 @@ export function IncidenciasModule() {
               placeholder="Filtrar por fecha"
             />
           )}
+          <VerLogsButton tablas={['incidencias', 'penalidades', 'penalidades_cuotas', 'penalidades_rechazos']} label="Incidencias" />
           <button
             className="btn-secondary"
             onClick={activeTab === 'por_aplicar' || activeTab === 'aplicadas' ? handleExportarPenalidades : handleExportarIncidencias}

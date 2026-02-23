@@ -15,6 +15,7 @@ const app = express()
 const PORT = process.env.PORT || 80
 
 app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 
 // Google Drive service
 function getDriveService(writeAccess = false) {
@@ -135,6 +136,40 @@ app.post('/api/create-drive-folder', async (req, res) => {
     })
   } catch (error) {
     console.error('Error creating folder:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Cabify auth proxy (for production - in dev Vite proxy handles this)
+app.post('/cabify-auth', async (req, res) => {
+  try {
+    const response = await fetch('https://cabify.com/auth/api/authorization', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(req.body),
+    })
+    const data = await response.json()
+    res.status(response.status).json(data)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Cabify GraphQL proxy (for production - in dev Vite proxy handles this)
+app.post('/cabify-graphql', async (req, res) => {
+  try {
+    const headers = { 'Content-Type': 'application/json' }
+    if (req.headers.authorization) {
+      headers['Authorization'] = req.headers.authorization
+    }
+    const response = await fetch('https://partners.cabify.com/api/graphql', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req.body),
+    })
+    const data = await response.json()
+    res.status(response.status).json(data)
+  } catch (error) {
     res.status(500).json({ error: error.message })
   }
 })

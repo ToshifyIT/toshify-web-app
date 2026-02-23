@@ -47,6 +47,11 @@ export interface RITPreviewRow {
   saldoAnterior: number
 }
 
+interface ConceptoIva {
+  codigo: string
+  iva_porcentaje: number
+}
+
 interface RITPreviewTableProps {
   data: RITPreviewRow[]
   semana: number
@@ -56,6 +61,7 @@ interface RITPreviewTableProps {
   periodoAbierto: boolean // true si el período está abierto y se puede editar
   onClose: () => void
   onSync?: (data: RITPreviewRow[]) => Promise<boolean>
+  conceptos?: ConceptoIva[]
 }
 
 export function RITPreviewTable({
@@ -66,7 +72,8 @@ export function RITPreviewTable({
   fechaFin,
   periodoAbierto,
   onClose,
-  onSync
+  onSync,
+  conceptos = []
 }: RITPreviewTableProps) {
   const [data, setData] = useState<RITPreviewRow[]>(initialData)
   const [originalData] = useState<RITPreviewRow[]>(initialData)
@@ -368,16 +375,21 @@ export function RITPreviewTable({
         ]
       ]
 
+      // Helper para IVA dinámico desde conceptos_nomina
+      const getIvaPct = (codigo: string) => conceptos.find(c => c.codigo === codigo)?.iva_porcentaje || 0
+      const extraerNeto = (total: number, ivaPct: number) => ivaPct > 0 ? Math.round((total / (1 + ivaPct / 100)) * 100) / 100 : total
+
       filteredData.forEach(row => {
         const tieneCuit = !!row.cuit
         const tipoFactura = tieneCuit ? 'A' : 'B'
 
-        // Alquiler (P001/P002)
+        // Alquiler (P002=Cargo, P001=Turno Diurno)
         if (row.valorAlquiler > 0) {
-          const codigo = row.tipo === 'CARGO' ? 'P001' : 'P002'
+          const codigo = row.tipo === 'CARGO' ? 'P002' : 'P001'
           const desc = row.tipo === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler a Turno'
-          const neto = Math.round(row.valorAlquiler / 1.21)
-          const iva = row.valorAlquiler - neto
+          const ivaPctAlq = getIvaPct(codigo)
+          const neto = extraerNeto(row.valorAlquiler, ivaPctAlq)
+          const iva = Math.round((row.valorAlquiler - neto) * 100) / 100
           ritData.push([
             'ND', tipoFactura, row.cuit || row.dni, row.conductor,
             fechaInicio, codigo, `${desc} (${row.detalleTurno}/7 días)`,
@@ -396,8 +408,9 @@ export function RITPreviewTable({
 
         // Exceso KM (P006)
         if (row.excesoKm > 0) {
-          const neto = Math.round(row.excesoKm / 1.21)
-          const iva = row.excesoKm - neto
+          const ivaPctExc = getIvaPct('P006')
+          const neto = extraerNeto(row.excesoKm, ivaPctExc)
+          const iva = Math.round((row.excesoKm - neto) * 100) / 100
           ritData.push([
             'ND', tipoFactura, row.cuit || row.dni, row.conductor,
             fechaInicio, 'P006', 'Exceso de Kilometraje',

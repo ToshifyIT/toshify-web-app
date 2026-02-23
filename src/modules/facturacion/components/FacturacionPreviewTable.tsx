@@ -157,6 +157,9 @@ export function FacturacionPreviewTable({
   const [showPendientes, setShowPendientes] = useState(false)
   const [enlazando, setEnlazando] = useState(false)
 
+  // Formateador de números: separador de miles y 2 decimales
+  const fmtNum = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+
   // Campos editables
   const editableFields = ['total', 'netoGravado', 'ivaAmount', 'exento', 'descripcionAdicional']
 
@@ -465,7 +468,7 @@ export function FacturacionPreviewTable({
         const esDescuento = monto < 0 || tipoConcepto === 'descuento'
         const tieneIva = ivaPorcentaje > 0
 
-        return { conductorId, concepto, monto: Math.abs(monto), descripcion, esDescuento, tieneIva }
+        return { conductorId, concepto, monto: Math.abs(monto), descripcion, esDescuento, tieneIva, ivaPorcentaje }
       }
     })
 
@@ -489,14 +492,15 @@ export function FacturacionPreviewTable({
       }
     }
 
-    // Calcular valores IVA
+    // Calcular valores IVA (precio ya incluye IVA, extraer dinámicamente)
     let netoGravado = 0
     let ivaAmount = 0
     let exento = 0
     const total = formValues.monto
+    const ivaPct = formValues.ivaPorcentaje || 0
 
-    if (formValues.tieneIva) {
-      netoGravado = Math.round((total / 1.21) * 100) / 100
+    if (formValues.tieneIva && ivaPct > 0) {
+      netoGravado = Math.round((total / (1 + ivaPct / 100)) * 100) / 100
       ivaAmount = Math.round((total - netoGravado) * 100) / 100
     } else {
       exento = total
@@ -529,7 +533,7 @@ export function FacturacionPreviewTable({
       ivaAmount: formValues.esDescuento ? -ivaAmount : ivaAmount,
       exento: formValues.esDescuento ? -exento : exento,
       totalRepetido: formValues.esDescuento ? -total : total,
-      ivaPorcentaje: formValues.tieneIva ? 'IVA_21' : 'EXENTO',
+      ivaPorcentaje: formValues.tieneIva ? `IVA_${formValues.ivaPorcentaje}` : 'EXENTO',
       generarAsiento: 'NO',
       cuentaDebito: 0,
       cuentaCredito: 0,
@@ -597,9 +601,11 @@ export function FacturacionPreviewTable({
       if (field === 'total') {
         row.total = numValue
         row.totalRepetido = numValue
-        // Recalcular IVA si aplica
-        if (row.ivaPorcentaje === 'IVA_21') {
-          row.netoGravado = Math.round((numValue / 1.21) * 100) / 100
+        // Recalcular IVA dinámicamente según el porcentaje del concepto
+        const ivaPctMatch = row.ivaPorcentaje?.match(/IVA_(\d+\.?\d*)/)
+        const rowIvaPct = ivaPctMatch ? parseFloat(ivaPctMatch[1]) : 0
+        if (rowIvaPct > 0) {
+          row.netoGravado = Math.round((numValue / (1 + rowIvaPct / 100)) * 100) / 100
           row.ivaAmount = Math.round((numValue - row.netoGravado) * 100) / 100
           row.exento = 0
         } else {
@@ -608,8 +614,11 @@ export function FacturacionPreviewTable({
           row.exento = numValue
         }
       } else if (field === 'netoGravado') {
+        // Extraer IVA % del campo ivaPorcentaje para recalcular
+        const ivaPctMatch2 = row.ivaPorcentaje?.match(/IVA_(\d+\.?\d*)/)
+        const rowIvaPct2 = ivaPctMatch2 ? parseFloat(ivaPctMatch2[1]) : 21
         row.netoGravado = numValue
-        row.ivaAmount = Math.round(numValue * 0.21 * 100) / 100
+        row.ivaAmount = Math.round(numValue * (rowIvaPct2 / 100) * 100) / 100
         row.total = numValue + row.ivaAmount
         row.totalRepetido = row.total
       } else if (field === 'exento') {
@@ -751,7 +760,7 @@ export function FacturacionPreviewTable({
         }}
         title={canEdit ? 'Click para editar' : ''}
       >
-        {isNumber ? (typeof value === 'number' ? Math.round(value * 100) / 100 : value) : value || '-'}
+        {isNumber ? (typeof value === 'number' ? fmtNum(value) : value) : value || '-'}
       </span>
     )
   }
@@ -1025,8 +1034,8 @@ export function FacturacionPreviewTable({
               <th>PV</th>
               <th>Tipo Fact</th>
               <th>Tipo Doc</th>
-              <th>CUIL (DNI)</th>
-              <th>DNI (CUIT)</th>
+              <th>DNI</th>
+              <th>CUIT</th>
               <th className="col-money">Total</th>
               <th>Cobrado</th>
               <th>Cond IVA</th>
@@ -1072,7 +1081,7 @@ export function FacturacionPreviewTable({
                   <td className="col-mono">{row.numeroDni || ''}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'total', row.total)}</td>
                   <td>{row.cobrado}</td>
-                  <td className="col-small">{row.condicionIva === 'RESPONSABLE_INSCRIPTO' ? 'RI' : 'CF'}</td>
+                  <td className="col-small">{row.condicionIva === 'RESPONSABLE_INSCRIPTO' ? 'Responsable Inscripto' : 'Consumidor Final'}</td>
                   <td className="col-small">{row.condicionVenta === 'CTA_CTE' ? 'CC' : row.condicionVenta}</td>
                   <td className="col-nombre" title={row.razonSocial}>{row.razonSocial}</td>
                   <td className="col-small">{row.domicilio || ''}</td>
@@ -1083,10 +1092,10 @@ export function FacturacionPreviewTable({
                   <td>{row.moneda}</td>
                   <td>{row.tipoCambio}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'netoGravado', row.netoGravado || 0)}</td>
-                  <td className="col-money">{row.ivaAmount ? Math.round(row.ivaAmount * 100) / 100 : ''}</td>
+                  <td className="col-money">{row.ivaAmount ? fmtNum(row.ivaAmount) : ''}</td>
                   <td className="col-money">{renderEditableCell(row, realIdx, 'exento', row.exento || 0)}</td>
-                  <td className="col-money col-total">{Math.round(row.total * 100) / 100}</td>
-                  <td><span className={`badge-iva ${row.ivaPorcentaje === 'IVA_21' ? 'iva-21' : 'iva-ex'}`}>{row.ivaPorcentaje === 'IVA_21' ? '21%' : 'EX'}</span></td>
+                  <td className="col-money col-total">{fmtNum(row.total)}</td>
+                  <td><span className={`badge-iva ${row.ivaPorcentaje !== 'IVA_EXENTO' ? 'iva-21' : 'iva-ex'}`}>{row.ivaPorcentaje !== 'IVA_EXENTO' ? row.ivaPorcentaje.replace('IVA_', '') + '%' : 'EX'}</span></td>
                   <td>{row.generarAsiento}</td>
                   <td className="col-mono">{row.cuentaDebito}</td>
                   <td className="col-mono">{row.cuentaCredito}</td>

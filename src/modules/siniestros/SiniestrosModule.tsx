@@ -31,6 +31,7 @@ import { DateRangeSelector } from '../../components/ui/DateRangeSelector'
 import * as XLSX from 'xlsx'
 import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
+import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import type {
   SiniestroCompleto,
@@ -1083,6 +1084,7 @@ export function SiniestrosModule() {
         </button>
         </div>
         <div className="tabs-actions">
+          <VerLogsButton tablas={['siniestros', 'siniestros_seguimientos']} label="Siniestros" />
           <button className="btn-secondary" onClick={handleExportarExcel} title="Exportar a Excel">
             <Download size={16} />
             Exportar

@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { usePermissions } from '../../../contexts/PermissionsContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import {
@@ -11,8 +12,9 @@ import {
   Clock,
   AlertTriangle,
   Eye,
-  Plus,
+  // Plus,
   DollarSign,
+  Banknote,
   Filter,
   Edit3,
   UserPlus,
@@ -22,6 +24,7 @@ import {
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
+import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import type { GarantiaConductor } from '../../../types/facturacion.types'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
@@ -47,13 +50,14 @@ interface PagoGarantiaRow {
 
 export function GarantiasTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
+  const { isAdmin } = usePermissions()
   // Sub-tab activo (Movimientos removido - no se usa)
   const [activeSubTab] = useState<'garantias' | 'movimientos'>('garantias')
   
   const [garantias, setGarantias] = useState<GarantiaConductor[]>([])
   const [todosLosPagos, setTodosLosPagos] = useState<PagoGarantiaRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtroEstado, setFiltroEstado] = useState<string>('todos')
+  const [filtroEstado] = useState<string>('todos')
 
   // Estados para filtros Excel - Garantías
   const [openColumnFilter, setOpenColumnFilter] = useState<string | null>(null)
@@ -107,9 +111,10 @@ export function GarantiasTab() {
   const toggleConductorFilter = (val: string) => setConductorFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
-  const toggleTipoFilter = (val: string) => setTipoFilter(prev =>
+  const _toggleTipoFilter = (val: string) => setTipoFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
+  void _toggleTipoFilter
   const toggleEstadoFilter = (val: string) => setEstadoFilter(prev =>
     prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
   )
@@ -127,7 +132,26 @@ export function GarantiasTab() {
         .order('conductor_nombre')
 
       if (error) throw error
-      setGarantias(data || [])
+
+      // Cargar estado de conductores (Activo/Baja)
+      const conductorIds = (data || []).map((g: any) => g.conductor_id)
+      const ESTADO_ACTIVO = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
+      let estadoConductorMap = new Map<string, string>()
+      if (conductorIds.length > 0) {
+        const { data: conductoresData } = await supabase
+          .from('conductores')
+          .select('id, estado_id')
+          .in('id', conductorIds)
+        ;(conductoresData || []).forEach((c: any) => {
+          estadoConductorMap.set(c.id, c.estado_id === ESTADO_ACTIVO ? 'ACTIVO' : 'BAJA')
+        })
+      }
+
+      const garantiasConEstado = (data || []).map((g: any) => ({
+        ...g,
+        estado_conductor: estadoConductorMap.get(g.conductor_id) || 'ACTIVO'
+      }))
+      setGarantias(garantiasConEstado)
 
       // Cargar todos los pagos para el sub-tab "Movimientos"
       const { data: pagos, error: errorPagos } = await supabase
@@ -355,7 +379,8 @@ export function GarantiasTab() {
     }
   }
 
-  async function editarGarantia(garantia: GarantiaConductor) {
+  // Hidden: botón de editar garantía removido de la UI
+  async function _editarGarantia(garantia: GarantiaConductor) {
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Garantía</span>`,
       html: `
@@ -475,6 +500,7 @@ export function GarantiasTab() {
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo eliminar', 'error')
     }
+    void _editarGarantia
   }
 
   async function registrarPago(garantia: GarantiaConductor) {
@@ -783,46 +809,27 @@ export function GarantiasTab() {
       ),
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.original.conductor_nombre}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span className="font-medium">{row.original.conductor_nombre}</span>
+            <span className={`fact-badge ${row.original.tipo_alquiler === 'CARGO' ? 'fact-badge-blue' : 'fact-badge-purple'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
+              {row.original.tipo_alquiler}
+            </span>
+          </div>
           <div className="text-xs text-gray-500">{row.original.conductor_cuit || row.original.conductor_dni}</div>
         </div>
       )
     },
     {
-      accessorKey: 'tipo_alquiler',
-      header: () => (
-        <div className="dt-column-filter">
-          <span>Tipo {tipoFilter.length > 0 && `(${tipoFilter.length})`}</span>
-          <button
-            className={`dt-column-filter-btn ${tipoFilter.length > 0 ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpenColumnFilter(openColumnFilter === 'tipo' ? null : 'tipo') }}
-          >
-            <Filter size={12} />
-          </button>
-          {openColumnFilter === 'tipo' && (
-            <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-              <div className="dt-excel-filter-list">
-                {['CARGO', 'TURNO'].map(t => (
-                  <label key={t} className={`dt-column-filter-checkbox ${tipoFilter.includes(t) ? 'selected' : ''}`}>
-                    <input type="checkbox" checked={tipoFilter.includes(t)} onChange={() => toggleTipoFilter(t)} />
-                    <span>{t}</span>
-                  </label>
-                ))}
-              </div>
-              {tipoFilter.length > 0 && (
-                <button className="dt-column-filter-clear" onClick={() => setTipoFilter([])}>
-                  Limpiar ({tipoFilter.length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      cell: ({ row }) => (
-        <span className={`fact-badge ${row.original.tipo_alquiler === 'CARGO' ? 'fact-badge-blue' : 'fact-badge-purple'}`}>
-          {row.original.tipo_alquiler}
-        </span>
-      )
+      id: 'estado_conductor',
+      header: 'Estado Cond.',
+      cell: ({ row }) => {
+        const estado = (row.original as any).estado_conductor || 'ACTIVO'
+        return (
+          <span className={`fact-badge ${estado === 'ACTIVO' ? 'fact-badge-green' : 'fact-badge-red'}`} style={{ fontSize: '10px' }}>
+            {estado}
+          </span>
+        )
+      }
     },
     {
       accessorKey: 'monto_total',
@@ -915,17 +922,16 @@ export function GarantiasTab() {
           <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
             <Eye size={14} />
           </button>
-          <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
-            <Edit3 size={14} />
-          </button>
           {row.original.estado !== 'completada' && (
-            <button className="fact-table-btn fact-table-btn-success" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago">
-              <Plus size={14} />
+            <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
+              <Banknote size={14} />
             </button>
           )}
-          <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarGarantia(row.original)} data-tooltip="Eliminar">
-            <Trash2 size={14} />
-          </button>
+          {isAdmin() && (
+            <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarGarantia(row.original)} data-tooltip="Eliminar">
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       )
     }
@@ -1062,18 +1068,12 @@ export function GarantiasTab() {
       {/* Contenido Garantías (sub-tab Movimientos removido - no se usa) */}
       {activeSubTab === 'garantias' && (
         <>
-          {/* Header con filtro y botón agregar */}
+          {/* Header (filtro removido - se usan los filtros de columna) */}
           <div className="fact-header">
             <div className="fact-header-left">
-              <span className="fact-label">Filtrar:</span>
-              <select className="fact-select" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
-                <option value="todos">Todos</option>
-                <option value="en_curso">En Curso</option>
-                <option value="completada">Completadas</option>
-                <option value="pendiente">Pendientes</option>
-              </select>
             </div>
             <div className="fact-header-right">
+              <VerLogsButton tablas={['garantias_conductores', 'garantias_pagos']} label="Garant\u00edas" />
               <button className="fact-btn fact-btn-primary" onClick={agregarGarantia}>
                 <UserPlus size={16} />
                 Agregar Garantía
