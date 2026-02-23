@@ -2439,9 +2439,7 @@ export function ReporteFacturacionTab() {
         // P003 - Garantía
         const descripcionGarantia = garantiaCompletada
           ? 'Garantía completada'
-          : conductor.total_dias < 7
-            ? `Cuota de Garantía ${cuotaActual} de ${totalCuotas} (${conductor.total_dias}/7 días)`
-            : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
+          : `Cuota de Garantía ${cuotaActual} de ${totalCuotas}`
         await (supabase.from('facturacion_detalle') as any).insert({
           facturacion_id: facturacionId,
           concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
@@ -2790,8 +2788,6 @@ export function ReporteFacturacionTab() {
     // En modo Vista Previa, generar detalles simulados desde los datos calculados
     if (modoVistaPrevia || facturacion.id.startsWith('preview-')) {
       const detallesSimulados: FacturacionDetalle[] = []
-      const totalDias = facturacion.turnos_cobrados
-      const diasDesc = totalDias < 7 ? ` (${totalDias}/7 días)` : ''
 
       // === CARGOS (A PAGAR) ===
 
@@ -2858,7 +2854,7 @@ export function ReporteFacturacionTab() {
           id: `det-garantia-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P003',
-          concepto_descripcion: `Cuota de Garantía${facturacion.cuota_garantia_numero ? ` ${facturacion.cuota_garantia_numero}` : ''}${diasDesc}`,
+          concepto_descripcion: `Cuota de Garantía${facturacion.cuota_garantia_numero ? ` ${facturacion.cuota_garantia_numero}` : ''}`,
           cantidad: 1,
           precio_unitario: facturacion.subtotal_garantia,
           subtotal: facturacion.subtotal_garantia,
@@ -4135,16 +4131,15 @@ export function ReporteFacturacionTab() {
       const negro = '#111827'
       const verde = '#059669'
 
-      // Header con logo
-      pdf.setFontSize(24)
+      // Header
+      pdf.setFontSize(22)
       pdf.setTextColor(rojo)
       pdf.setFont('helvetica', 'bold')
       pdf.text('TOSHIFY', margin, y)
-
-      pdf.setFontSize(10)
+      pdf.setFontSize(8)
       pdf.setTextColor(gris)
       pdf.setFont('helvetica', 'normal')
-      pdf.text('Sistema de Gestión de Flota', margin, y + 6)
+      pdf.text('Sistema de Gestión de Flota', margin, y + 5)
 
       // Título del documento
       pdf.setFontSize(14)
@@ -4199,7 +4194,7 @@ export function ReporteFacturacionTab() {
       pdf.setFontSize(11)
       pdf.setTextColor(rojo)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('CARGOS (A PAGAR)', margin, y)
+      pdf.text('CARGOS', margin, y)
       y += 7
 
       pdf.setFontSize(10)
@@ -4229,18 +4224,21 @@ export function ReporteFacturacionTab() {
 
       y += 3
       pdf.setFont('helvetica', 'bold')
+      const subtotalCargosReal = cargos.reduce((sum, c) => sum + c.total, 0)
+        + Math.max(0, detalleFacturacion.saldo_anterior)
+        + (tieneP009 ? 0 : detalleFacturacion.monto_mora)
       pdf.text('SUBTOTAL CARGOS', margin, y)
-      const moraExtra = tieneP009 ? 0 : detalleFacturacion.monto_mora
-      pdf.text(formatCurrency(detalleFacturacion.subtotal_cargos + detalleFacturacion.saldo_anterior + moraExtra), pageWidth - margin, y, { align: 'right' })
+      pdf.text(formatCurrency(subtotalCargosReal), pageWidth - margin, y, { align: 'right' })
       y += 10
 
       // DESCUENTOS
       const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0)
-      if (descuentos.length > 0) {
+      const tieneSaldoFavor = detalleFacturacion.saldo_anterior < 0
+      if (descuentos.length > 0 || tieneSaldoFavor) {
         pdf.setFontSize(11)
         pdf.setTextColor(verde)
         pdf.setFont('helvetica', 'bold')
-        pdf.text('DESCUENTOS (A FAVOR)', margin, y)
+        pdf.text('DESCUENTOS / CRÉDITOS', margin, y)
         y += 7
 
         pdf.setFontSize(10)
@@ -4253,11 +4251,19 @@ export function ReporteFacturacionTab() {
           y += 5
         })
 
+        // Saldo a favor como línea de descuento
+        if (tieneSaldoFavor) {
+          pdf.text('Saldo a Favor', margin, y)
+          pdf.text(`-${formatCurrency(Math.abs(detalleFacturacion.saldo_anterior))}`, pageWidth - margin, y, { align: 'right' })
+          y += 5
+        }
+
         y += 3
         pdf.setFont('helvetica', 'bold')
         pdf.setTextColor(verde)
+        const subtotalDescReal = descuentos.reduce((sum, d) => sum + d.total, 0) + Math.abs(Math.min(0, detalleFacturacion.saldo_anterior))
         pdf.text('SUBTOTAL DESCUENTOS', margin, y)
-        pdf.text(`-${formatCurrency(detalleFacturacion.subtotal_descuentos)}`, pageWidth - margin, y, { align: 'right' })
+        pdf.text(`-${formatCurrency(subtotalDescReal)}`, pageWidth - margin, y, { align: 'right' })
         y += 10
       }
 
@@ -4267,7 +4273,8 @@ export function ReporteFacturacionTab() {
       pdf.line(margin, y, pageWidth - margin, y)
       y += 8
 
-      const totalFinal = detalleFacturacion.total_a_pagar
+      const subtotalDescPdf = descuentos.reduce((sum, d) => sum + d.total, 0) + Math.abs(Math.min(0, detalleFacturacion.saldo_anterior))
+      const totalFinal = subtotalCargosReal - subtotalDescPdf
       const saldoColor = totalFinal > 0 ? rojo : verde
 
       pdf.setFontSize(14)
@@ -6125,7 +6132,7 @@ export function ReporteFacturacionTab() {
           ritData.push([
             fechaInicio, fechaFin, 5, tipoFactura,
             f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
-            'P003', 'Cuota de Garantía' + diasDesc, f.turnos_cobrados, f.subtotal_garantia, 0, f.subtotal_garantia,
+            'P003', 'Cuota de Garantía', f.turnos_cobrados, f.subtotal_garantia, 0, f.subtotal_garantia,
             0, 'ND', 'Peso', 1
           ])
         }
@@ -8393,14 +8400,7 @@ export function ReporteFacturacionTab() {
                             background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                              <span style={{
-                                fontSize: '9px', fontWeight: 600, fontFamily: 'monospace',
-                                padding: '1px 5px', borderRadius: '3px',
-                                background: 'rgba(255, 0, 51, 0.08)', color: '#ff0033',
-                                flexShrink: 0,
-                              }}>
-                                {item.concepto_codigo}
-                              </span>
+                              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff0033', flexShrink: 0 }} />
                               <span style={{ fontSize: '12px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {desc}
                                 {item.cantidad > 1 && item.concepto_codigo !== 'P003' && <span style={{ color: 'var(--text-secondary)', marginLeft: '4px', fontSize: '11px' }}>x{item.cantidad}</span>}
@@ -8477,7 +8477,7 @@ export function ReporteFacturacionTab() {
                         </span>
                         <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
                           {formatCurrency(
-                            detalleFacturacion.subtotal_cargos
+                            detalleCargos.reduce((sum, d) => sum + d.total, 0)
                             + Math.max(0, detalleFacturacion.saldo_anterior)
                             + (detalleCargos.some(d => d.concepto_codigo === 'P009') ? 0 : detalleFacturacion.monto_mora)
                           )}
@@ -8512,14 +8512,7 @@ export function ReporteFacturacionTab() {
                               background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.12)',
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{
-                                  fontSize: '9px', fontWeight: 600, fontFamily: 'monospace',
-                                  padding: '1px 5px', borderRadius: '3px',
-                                  background: 'rgba(16, 185, 129, 0.1)', color: '#059669',
-                                  flexShrink: 0,
-                                }}>
-                                  {item.concepto_codigo}
-                                </span>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
                                 <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{desc}</span>
                               </div>
                               <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
