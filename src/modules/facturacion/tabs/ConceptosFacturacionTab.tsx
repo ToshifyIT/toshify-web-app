@@ -6,7 +6,7 @@ import { Plus, Edit2, Trash2, Filter } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
 import type { ConceptoFacturacion } from '../../../types/facturacion.types'
-import { formatCurrency, TIPOS_CONCEPTO } from '../../../types/facturacion.types'
+import { formatCurrency, TIPOS_CONCEPTO, TIPOS_PARAMETRO } from '../../../types/facturacion.types'
 
 export function ConceptosFacturacionTab() {
   const [conceptos, setConceptos] = useState<ConceptoFacturacion[]>([])
@@ -75,6 +75,9 @@ export function ConceptosFacturacionTab() {
     const tiposOptions = TIPOS_CONCEPTO.map(t =>
       `<option value="${t.value}">${t.label}</option>`
     ).join('')
+    const tiposParamOptions = TIPOS_PARAMETRO.map(t =>
+      `<option value="${t.value}">${t.label}</option>`
+    ).join('')
 
     const { value: formValues } = await Swal.fire({
       title: 'Nuevo Concepto',
@@ -88,11 +91,19 @@ export function ConceptosFacturacionTab() {
             <label class="fact-form-label">Descripción</label>
             <input id="swal-desc" type="text" class="fact-form-input" placeholder="Descripción del concepto">
           </div>
-          <div class="fact-form-group">
-            <label class="fact-form-label">Tipo</label>
-            <select id="swal-tipo" class="fact-form-select">
-              ${tiposOptions}
-            </select>
+          <div class="fact-form-row">
+            <div class="fact-form-group">
+              <label class="fact-form-label">Tipo</label>
+              <select id="swal-tipo" class="fact-form-select">
+                ${tiposOptions}
+              </select>
+            </div>
+            <div class="fact-form-group">
+              <label class="fact-form-label">Tipo Parámetro</label>
+              <select id="swal-tipo-param" class="fact-form-select">
+                ${tiposParamOptions}
+              </select>
+            </div>
           </div>
           <div class="fact-form-row">
             <div class="fact-form-group">
@@ -135,6 +146,7 @@ export function ConceptosFacturacionTab() {
         const codigo = (document.getElementById('swal-codigo') as HTMLInputElement).value
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
+        const tipoParametro = (document.getElementById('swal-tipo-param') as HTMLSelectElement).value
         const precioBase = parseFloat((document.getElementById('swal-precio') as HTMLInputElement).value) || 0
         const ivaPorcentaje = parseFloat((document.getElementById('swal-iva') as HTMLInputElement).value) || 0
         const esVariable = (document.getElementById('swal-variable') as HTMLInputElement).checked
@@ -150,6 +162,7 @@ export function ConceptosFacturacionTab() {
           codigo: codigo.toUpperCase(),
           descripcion,
           tipo,
+          tipo_parametro: tipoParametro,
           precio_base: ivaPorcentaje === 0 ? precioBase : Number((precioBase / (1 + ivaPorcentaje / 100)).toFixed(2)),
           iva_porcentaje: ivaPorcentaje,
           precio_final: precioBase,
@@ -178,6 +191,9 @@ export function ConceptosFacturacionTab() {
     const tiposOptions = TIPOS_CONCEPTO.map(t =>
       `<option value="${t.value}" ${concepto.tipo === t.value ? 'selected' : ''}>${t.label}</option>`
     ).join('')
+    const tiposParamOptions = TIPOS_PARAMETRO.map(t =>
+      `<option value="${t.value}" ${concepto.tipo_parametro === t.value ? 'selected' : ''}>${t.label}</option>`
+    ).join('')
 
     // Fecha por defecto para vigencia: hoy
     const hoyStr = new Date().toISOString().split('T')[0]
@@ -194,11 +210,19 @@ export function ConceptosFacturacionTab() {
             <label class="fact-form-label">Descripción</label>
             <input id="swal-desc" type="text" class="fact-form-input" value="${concepto.descripcion}">
           </div>
-          <div class="fact-form-group">
-            <label class="fact-form-label">Tipo</label>
-            <select id="swal-tipo" class="fact-form-select">
-              ${tiposOptions}
-            </select>
+          <div class="fact-form-row">
+            <div class="fact-form-group">
+              <label class="fact-form-label">Tipo</label>
+              <select id="swal-tipo" class="fact-form-select">
+                ${tiposOptions}
+              </select>
+            </div>
+            <div class="fact-form-group">
+              <label class="fact-form-label">Tipo Parámetro</label>
+              <select id="swal-tipo-param" class="fact-form-select">
+                ${tiposParamOptions}
+              </select>
+            </div>
           </div>
           <div class="fact-form-row">
             <div class="fact-form-group">
@@ -261,6 +285,7 @@ export function ConceptosFacturacionTab() {
       preConfirm: () => {
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value
         const tipo = (document.getElementById('swal-tipo') as HTMLSelectElement).value
+        const tipoParametro = (document.getElementById('swal-tipo-param') as HTMLSelectElement).value
         const precioBase = parseFloat((document.getElementById('swal-precio') as HTMLInputElement).value) || 0
         const ivaPorcentaje = parseFloat((document.getElementById('swal-iva') as HTMLInputElement).value) || 0
         const esVariable = (document.getElementById('swal-variable') as HTMLInputElement).checked
@@ -287,6 +312,7 @@ export function ConceptosFacturacionTab() {
         return {
           descripcion,
           tipo,
+          tipo_parametro: tipoParametro,
           precio_base: newBase,
           iva_porcentaje: ivaPorcentaje,
           precio_final: newFinal,
@@ -436,6 +462,26 @@ export function ConceptosFacturacionTab() {
             color: style.color
           }}>
             {label}
+          </span>
+        )
+      }
+    },
+    {
+      accessorKey: 'tipo_parametro',
+      header: 'Tipo Param.',
+      cell: ({ row }) => {
+        const tp = row.original.tipo_parametro || 'monto'
+        const info = TIPOS_PARAMETRO.find(t => t.value === tp)
+        return (
+          <span style={{
+            padding: '3px 7px',
+            borderRadius: '4px',
+            fontSize: '11px',
+            fontWeight: 500,
+            backgroundColor: `${info?.color || '#6B7280'}18`,
+            color: info?.color || '#6B7280'
+          }}>
+            {info?.label || tp}
           </span>
         )
       }

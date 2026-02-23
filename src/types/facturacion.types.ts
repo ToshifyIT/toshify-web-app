@@ -309,6 +309,7 @@ export interface ConceptoFacturacion {
   iva_porcentaje: number
   precio_final: number
   tipo: 'alquiler' | 'cargo' | 'descuento' | 'penalidad' | 'ingreso'
+  tipo_parametro: 'monto_fijo' | 'monto' | 'porcentaje' | 'valor'
   es_variable: boolean
   aplica_turno: boolean
   aplica_cargo: boolean
@@ -337,6 +338,13 @@ export const TIPOS_CONCEPTO = [
   { value: 'descuento', label: 'Descuento', color: '#059669' },
   { value: 'penalidad', label: 'Penalidad', color: '#D97706' },
   { value: 'ingreso', label: 'Ingreso', color: '#8B5CF6' }
+] as const
+
+export const TIPOS_PARAMETRO = [
+  { value: 'monto_fijo', label: 'Monto Fijo', color: '#3B82F6' },
+  { value: 'monto', label: 'Monto', color: '#6B7280' },
+  { value: 'porcentaje', label: 'Porcentaje', color: '#D97706' },
+  { value: 'valor', label: 'Valor', color: '#8B5CF6' },
 ] as const
 
 // =====================================================

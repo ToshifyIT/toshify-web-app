@@ -1348,7 +1348,7 @@ export function DataTable<T>({
                                 ${isActionsColumn ? "dt-sticky-col" : ""}
                                 ${isExpandColumn ? "dt-expand-col" : ""}
                               `}
-                              style={cell.column.columnDef.size ? { maxWidth: `${cell.column.columnDef.size}px` } : undefined}
+                              style={cell.column.columnDef.size ? { width: `${cell.column.columnDef.size}px`, maxWidth: `${cell.column.columnDef.size}px` } : undefined}
                             >
                               {flexRender(
                                 cell.column.columnDef.cell,

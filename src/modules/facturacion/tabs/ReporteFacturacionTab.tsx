@@ -6760,7 +6760,7 @@ export function ReporteFacturacionTab() {
       accessorFn: (row) => row.turnos_cobrados,
       header: 'Días',
       enableSorting: true,
-      size: 40,
+      size: 45,
       cell: ({ row }) => {
         const cobrados = row.original.turnos_cobrados ?? 0
         return (
@@ -7013,7 +7013,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'incidencias',
       header: 'Incidencias',
-      size: 90,
+      size: 75,
       accessorFn: (row) => row.monto_penalidades || 0,
       cell: ({ row }) => {
         const penalidades = row.original.penalidades_detalle || []
@@ -7079,7 +7079,7 @@ export function ReporteFacturacionTab() {
     {
       id: 'tickets_favor',
       header: 'Tickets Fav.',
-      size: 90,
+      size: 75,
       accessorFn: (row) => row.monto_tickets_favor || 0,
       cell: ({ row }) => {
         const tickets = row.original.tickets_detalle || []
