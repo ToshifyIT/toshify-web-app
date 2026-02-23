@@ -107,7 +107,7 @@ export function ConceptosFacturacionTab() {
           </div>
           <div class="fact-form-row">
             <div class="fact-form-group">
-              <label class="fact-form-label">Precio</label>
+              <label id="swal-precio-label" class="fact-form-label">Precio</label>
               <input id="swal-precio" type="number" class="fact-form-input" placeholder="0" step="0.01">
             </div>
             <div class="fact-form-group">
@@ -141,6 +141,16 @@ export function ConceptosFacturacionTab() {
         htmlContainer: 'fact-modal-content',
         confirmButton: 'fact-btn-confirm',
         cancelButton: 'fact-btn-cancel'
+      },
+      didOpen: () => {
+        const tipoParamSelect = document.getElementById('swal-tipo-param') as HTMLSelectElement
+        const precioLabel = document.getElementById('swal-precio-label') as HTMLLabelElement
+        const updatePrecioLabel = () => {
+          const val = tipoParamSelect.value
+          precioLabel.textContent = val === 'porcentaje' ? 'Valor (%)' : val === 'valor' ? 'Valor' : 'Precio'
+        }
+        updatePrecioLabel()
+        tipoParamSelect.addEventListener('change', updatePrecioLabel)
       },
       preConfirm: () => {
         const codigo = (document.getElementById('swal-codigo') as HTMLInputElement).value
@@ -226,7 +236,7 @@ export function ConceptosFacturacionTab() {
           </div>
           <div class="fact-form-row">
             <div class="fact-form-group">
-              <label class="fact-form-label">Precio</label>
+              <label id="swal-precio-label" class="fact-form-label">Precio</label>
               <input id="swal-precio" type="number" class="fact-form-input" value="${concepto.precio_final || 0}" step="0.01">
             </div>
             <div class="fact-form-group">
@@ -281,6 +291,16 @@ export function ConceptosFacturacionTab() {
         }
         precioInput.addEventListener('input', checkPriceChange)
         ivaInput.addEventListener('input', checkPriceChange)
+
+        // Dynamic label: Precio vs Valor based on tipo_parametro
+        const tipoParamSelect = document.getElementById('swal-tipo-param') as HTMLSelectElement
+        const precioLabel = document.getElementById('swal-precio-label') as HTMLLabelElement
+        const updatePrecioLabel = () => {
+          const val = tipoParamSelect.value
+          precioLabel.textContent = val === 'porcentaje' ? 'Valor (%)' : val === 'valor' ? 'Valor' : 'Precio'
+        }
+        updatePrecioLabel()
+        tipoParamSelect.addEventListener('change', updatePrecioLabel)
       },
       preConfirm: () => {
         const descripcion = (document.getElementById('swal-desc') as HTMLInputElement).value

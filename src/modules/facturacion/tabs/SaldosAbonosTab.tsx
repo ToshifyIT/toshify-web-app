@@ -58,6 +58,15 @@ interface AbonoRow {
 }
 import { formatCurrency, formatDate } from '../../../types/facturacion.types'
 
+/** Calcula días calendario entre una fecha y hoy (sin considerar hora) */
+function diasCalendario(desde: string | Date): number {
+  const d = new Date(desde)
+  d.setHours(0, 0, 0, 0)
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.floor((hoy.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)))
+}
+
 export function SaldosAbonosTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
   const { isAdmin } = usePermissions()
@@ -1272,12 +1281,9 @@ export function SaldosAbonosTab() {
       accessorKey: 'dias_mora',
       header: 'Días Mora',
       cell: ({ row }) => {
-        // Calcular días de mora dinámicamente: si tiene deuda, contar días desde última actualización
         const saldo = row.original.saldo_actual
         if (saldo >= 0 || !row.original.ultima_actualizacion) return <span className="text-gray-400">-</span>
-        const desde = new Date(row.original.ultima_actualizacion)
-        const hoy = new Date()
-        const dias = Math.max(0, Math.floor((hoy.getTime() - desde.getTime()) / (1000 * 60 * 60 * 24)))
+        const dias = diasCalendario(row.original.ultima_actualizacion)
         if (dias === 0) return <span className="text-gray-400">-</span>
         return <span className={`fact-badge ${dias > 3 ? 'fact-badge-red' : 'fact-badge-yellow'}`}>{dias} días</span>
       }
@@ -1286,12 +1292,9 @@ export function SaldosAbonosTab() {
       accessorKey: 'monto_mora_acumulada',
       header: 'Mora Acum.',
       cell: ({ row }) => {
-        // Calcular mora dinámicamente: 1% diario sobre la deuda desde última actualización
         const saldo = row.original.saldo_actual
         if (saldo >= 0 || !row.original.ultima_actualizacion) return <span className="text-gray-400">-</span>
-        const desde = new Date(row.original.ultima_actualizacion)
-        const hoy = new Date()
-        const dias = Math.max(0, Math.floor((hoy.getTime() - desde.getTime()) / (1000 * 60 * 60 * 24)))
+        const dias = diasCalendario(row.original.ultima_actualizacion)
         if (dias === 0) return <span className="text-gray-400">-</span>
         const mora = Math.round(Math.abs(saldo) * 0.01 * dias * 100) / 100
         return <span className="fact-precio fact-precio-negative">{formatCurrency(mora)}</span>
@@ -1342,8 +1345,7 @@ export function SaldosAbonosTab() {
       if (filtroSaldo === 'deuda' && s.saldo_actual >= 0) return false
       if (filtroSaldo === 'mora') {
         if (s.saldo_actual >= 0 || !s.ultima_actualizacion) return false
-        const diasMora = Math.floor((Date.now() - new Date(s.ultima_actualizacion).getTime()) / (1000 * 60 * 60 * 24))
-        if (diasMora <= 0) return false
+        if (diasCalendario(s.ultima_actualizacion) <= 0) return false
       }
       if (filtroSaldo === 'fraccionado' && !conductoresConFraccionado.has(s.conductor_id)) return false
       // Filtros Excel
@@ -1362,7 +1364,7 @@ export function SaldosAbonosTab() {
     const conductoresDeuda = saldos.filter(s => s.saldo_actual < 0)
     const conductoresMora = saldos.filter(s => {
       if (s.saldo_actual >= 0 || !s.ultima_actualizacion) return false
-      return Math.floor((Date.now() - new Date(s.ultima_actualizacion).getTime()) / (1000 * 60 * 60 * 24)) > 0
+      return diasCalendario(s.ultima_actualizacion) > 0
     })
     const conFavor = conductoresFavor.length
     const conDeuda = conductoresDeuda.length
