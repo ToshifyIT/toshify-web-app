@@ -56,23 +56,6 @@ function toISODateLocal(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-function getCurrentWeekRange(): DateRange {
-  const today = new Date()
-  const dayOfWeek = today.getDay()
-  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-  const monday = new Date(today)
-  monday.setDate(today.getDate() + diffToMonday)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-
-  return {
-    startDate: toISODateLocal(monday),
-    endDate: toISODateLocal(sunday),
-    label: 'Semana actual',
-    type: 'week'
-  }
-}
-
 function parseFechaSiniestro(fechaStr: string | undefined | null) {
   if (!fechaStr) return null
   const raw = fechaStr.split('T')[0]
@@ -102,7 +85,7 @@ function parseFechaSiniestro(fechaStr: string | undefined | null) {
 export function SiniestrosModule() {
   const { user, profile } = useAuth()
   const { canCreateInSubmenu, canEditInSubmenu, isAdmin } = usePermissions()
-  const { sedeActualId, aplicarFiltroSede, sedeUsuario, sedes } = useSede()
+  const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
 
   // Permisos específicos para el submenú de siniestros
   // Admin siempre tiene acceso completo
@@ -126,7 +109,12 @@ export function SiniestrosModule() {
   const [conductores, setConductores] = useState<ConductorSimple[]>([])
   const [vehiculosEstados, setVehiculosEstados] = useState<VehiculoEstado[]>([])
   const [stats, setStats] = useState<SiniestroStats | null>(null)
-  const [dateRangeSemana, setDateRangeSemana] = useState<DateRange | null>(getCurrentWeekRange())
+  const [dateRangeSemana, setDateRangeSemana] = useState<DateRange | null>({
+    startDate: '',
+    endDate: '',
+    label: 'Todo el historial',
+    type: 'all'
+  })
 
   // Filtros por columna tipo Excel con Portal
   const { openFilterId, setOpenFilterId } = useExcelFilters()
@@ -178,7 +166,7 @@ export function SiniestrosModule() {
         supabase.from('siniestros_categorias' as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('siniestros_estados' as any).select('*').eq('is_active', true).order('orden'),
         supabase.from('seguros' as any).select('*').eq('is_active', true).order('nombre'),
-        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo').is('deleted_at', null)).order('patente'),
+        aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo')).order('patente'),
         estadoActivoId
           ? aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos').eq('estado_id', estadoActivoId)).order('apellidos')
           : aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
@@ -445,22 +433,6 @@ export function SiniestrosModule() {
     setEstadoFilter([])
   }
 
-  // Conductores con más siniestros (para alertas)
-  const conductoresReincidentes = useMemo(() => {
-    const conteo: Record<string, { nombre: string; cantidad: number }> = {}
-    siniestros.forEach(s => {
-      const nombre = s.conductor_display || 'Sin conductor'
-      if (!conteo[nombre]) {
-        conteo[nombre] = { nombre, cantidad: 0 }
-      }
-      conteo[nombre].cantidad++
-    })
-    return Object.values(conteo)
-      .filter(c => c.cantidad >= 3)
-      .sort((a, b) => b.cantidad - a.cantidad)
-      .slice(0, 5)
-  }, [siniestros])
-
   // Columnas para DataTable con filtros tipo Excel
   const siniestrosColumns = useMemo<ColumnDef<SiniestroCompleto>[]>(() => [
     {
@@ -693,8 +665,7 @@ export function SiniestrosModule() {
       habilitado_circular: (siniestro as any).habilitado_circular ?? true,
       costos_reparacion: (siniestro as any).costos_reparacion || undefined,
       total_reparacion_pagada: (siniestro as any).total_reparacion_pagada || undefined,
-      fecha_cierre: (siniestro as any).fecha_cierre || undefined,
-      sede_id: (siniestro as any).sede_id || undefined,
+      fecha_cierre: (siniestro as any).fecha_cierre || undefined
     })
     setModalMode('edit')
     setShowModal(true)
@@ -1126,18 +1097,7 @@ export function SiniestrosModule() {
         </div>
       </div>
 
-      {/* Alertas de conductores reincidentes */}
-      {conductoresReincidentes.length > 0 && (
-        <div className="siniestros-alerts">
-          <div className="alert-item">
-            <AlertTriangle size={16} />
-            <span>
-              <strong>Atención:</strong> {conductoresReincidentes.length} conductor(es) con 3+ siniestros: {' '}
-              {conductoresReincidentes.map(c => `${c.nombre} (${c.cantidad})`).join(', ')}
-            </span>
-          </div>
-        </div>
-      )}
+      
 
       {/* Tabla de siniestros */}
       <DataTable
@@ -1200,7 +1160,6 @@ export function SiniestrosModule() {
                   onVehiculoChange={handleVehiculoChange}
                   disabled={modalMode === 'view'}
                   isEditMode={modalMode === 'edit'}
-                  sedes={sedes}
                 />
               )}
             </div>
@@ -1242,7 +1201,6 @@ interface SiniestroFormProps {
   onVehiculoChange: (id: string) => void
   disabled?: boolean
   isEditMode?: boolean // Solo permite editar estado y responsable
-  sedes?: any[]
 }
 
 function SiniestroForm({
@@ -1256,8 +1214,7 @@ function SiniestroForm({
   onVehiculoChange,
   disabled,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  isEditMode: _isEditMode = false,
-  sedes,
+  isEditMode: _isEditMode = false
 }: SiniestroFormProps) {
   // Todos los campos son editables en modo edición
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1445,21 +1402,6 @@ function SiniestroForm({
               <option value="">Seleccionar estado</option>
               {estados.map(e => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label>Sede</label>
-            <select
-              value={formData.sede_id || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, sede_id: e.target.value || undefined }))}
-              disabled={isFieldDisabled('other')}
-            >
-              <option value="">Seleccionar sede</option>
-              {(sedes || []).map((s: any) => (
-                <option key={s.id} value={s.id}>{s.nombre}</option>
               ))}
             </select>
           </div>

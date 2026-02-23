@@ -116,6 +116,7 @@ export function GuiasModule() {
   const [historyRows, setHistoryRows] = useState<any[]>([])
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [seguimientoRules, setSeguimientoRules] = useState<any[]>([])
+  const [seguimientoLoaded, setSeguimientoLoaded] = useState(false)
   const [accionesImplementadas, setAccionesImplementadas] = useState<any[]>([])
   
   // Estado para filtro por métricas (solo semana actual)
@@ -590,6 +591,8 @@ export function GuiasModule() {
       }
     } catch (err) {
       console.error("Error loading seguimiento rules:", err);
+    } finally {
+      setSeguimientoLoaded(true);
     }
   };
 
@@ -600,20 +603,26 @@ export function GuiasModule() {
   }, [urlGuiaId, guias])
 
   useEffect(() => {
-    if (selectedGuiaId) {
-      loadDrivers(selectedGuiaId)
-    } else {
-      setDrivers([])
+    if (!seguimientoLoaded) {
+      return;
     }
-  }, [selectedGuiaId, selectedWeek, sedeActualId])
+    if (selectedGuiaId) {
+      loadDrivers(selectedGuiaId);
+    } else {
+      setDrivers([]);
+    }
+  }, [selectedGuiaId, selectedWeek, sedeActualId, seguimientoLoaded])
 
   useEffect(() => {
-    if (selectedGuiaId) {
-      loadCurrentWeekMetrics(selectedGuiaId)
-    } else {
-      setCurrentWeekDrivers([])
+    if (!seguimientoLoaded) {
+      return;
     }
-  }, [selectedGuiaId, sedeActualId])
+    if (selectedGuiaId) {
+      loadCurrentWeekMetrics(selectedGuiaId);
+    } else {
+      setCurrentWeekDrivers([]);
+    }
+  }, [selectedGuiaId, sedeActualId, seguimientoLoaded])
 
   const fetchDriversData = async (guiaId: string, targetWeek: string) => {
     const isCurrentWeek = targetWeek === getCurrentWeek();
@@ -1007,6 +1016,65 @@ export function GuiasModule() {
       } catch {
       }
 
+      if (isCurrentWeek && historialData && historialData.length > 0 && prevWeekLabel) {
+        const conductoresSinFecha = historialData
+          .filter((h: any) => !h.fecha_llamada && h.id_conductor)
+          .map((h: any) => h.id_conductor as string);
+
+        const uniqueIds = Array.from(new Set(conductoresSinFecha));
+
+        if (uniqueIds.length > 0) {
+          const altPrevWeekLabel = prevWeekLabel.replace('W', '');
+
+          try {
+            const { data: prevCalls } = await supabase
+              .from('guias_historial_semanal')
+              .select('id_conductor, fecha_llamada')
+              .or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`)
+              .eq('id_guia', guiaId)
+              .in('id_conductor', uniqueIds)
+              .not('fecha_llamada', 'is', null)
+              .order('semana', { ascending: false })
+              .order('created_at', { ascending: false });
+
+            if (prevCalls && prevCalls.length > 0) {
+              const bestFechaByConductor = new Map<string, string>();
+
+              prevCalls.forEach((row: any) => {
+                const idConductor = row.id_conductor as string | null;
+                if (!idConductor || !row.fecha_llamada) return;
+                if (!bestFechaByConductor.has(idConductor)) {
+                  bestFechaByConductor.set(idConductor, row.fecha_llamada as string);
+                }
+              });
+
+              if (bestFechaByConductor.size > 0) {
+                const updatePromises = Array.from(bestFechaByConductor.entries()).map(
+                  ([idConductor, fecha]) =>
+                    supabase
+                      .from('guias_historial_semanal')
+                      .update({ fecha_llamada: fecha })
+                      .eq('semana', targetWeek)
+                      .eq('id_guia', guiaId)
+                      .eq('id_conductor', idConductor)
+                      .is('fecha_llamada', null),
+                );
+
+                await Promise.all(updatePromises);
+
+                historialData.forEach((h: any) => {
+                  const fecha = bestFechaByConductor.get(h.id_conductor as string);
+                  if (!h.fecha_llamada && fecha) {
+                    h.fecha_llamada = fecha;
+                  }
+                });
+              }
+            }
+          } catch {
+          }
+        }
+      }
+
       // Procesar conductores desde el historial
       if (historialData && historialData.length > 0) {
         const processedDrivers: any[] = [];
@@ -1382,109 +1450,7 @@ export function GuiasModule() {
   const syncWeeklyHistory = async () => {
     const currentWeek = getCurrentWeek();
     try {
-      // A. Verificar si ya hay datos para la semana actual
-      const { count, error: countError } = await supabase
-        .from('guias_historial_semanal')
-        .select('*', { count: 'exact', head: true })
-        .eq('semana', currentWeek);
-
-      if (countError) throw countError;
-
-      // Si ya hay registros significativos (> 0), asumimos que la semana ya fue inicializada.
-      // Podríamos poner un umbral bajo, pero >0 es lo más seguro para no duplicar.
-      if (count !== null && count > 0) {
-        return;
-      }
-
-      // B. Calcular semana anterior
-      // Formato esperado "YYYY-Www"
-      const [yearStr, weekStr] = currentWeek.split('-W');
-      const year = parseInt(yearStr);
-      const week = parseInt(weekStr);
-      
-      // Usar date-fns para restar una semana de forma segura
-      // Creamos una fecha arbitraria en la semana actual
-      const currentWeekDate = setISOWeek(new Date(year, 0, 4), week);
-      const prevWeekDate = addHours(currentWeekDate, -24 * 7); // Restar 7 días
-      const prevWeek = format(prevWeekDate, "R-'W'II");
-      
-
-
-      // C. Obtener candidatos de la semana anterior
-      // - Semana anterior
-      // - Conductores ACTIVOS (estado_id específico)
-      // - Con asignación activa (vehículo)
-      // Nota: Filtramos por estado_id en la query principal y luego verificaremos asignación
-      const { data: prevData, error: prevError } = await supabase
-        .from('guias_historial_semanal')
-        .select(`
-          id_conductor,
-          id_guia,
-          fecha_llamada,
-          conductores!inner (
-            id,
-            estado_id,
-            asignaciones_conductores!inner (
-              asignaciones!inner (
-                estado
-              )
-            )
-          )
-        `)
-        .eq('semana', prevWeek)
-        .eq('conductores.estado_id', '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'); // ID Activo
-
-      if (prevError) throw prevError;
-
-      if (!prevData || prevData.length === 0) {
-        return;
-      }
-
-      // D. Filtrar y Preparar nuevos registros
-      const newRecords = prevData
-        .filter((item: any) => {
-          // Validar asignación activa
-          const hasActiveAsignacion = item.conductores.asignaciones_conductores.some((ac: any) => 
-            ac.asignaciones?.estado === 'activo' || ac.asignaciones?.estado === 'activa'
-          );
-          return hasActiveAsignacion;
-        })
-        .map((item: any) => ({
-          id_conductor: item.id_conductor,
-          id_guia: item.id_guia, // Mantenemos el mismo guía
-          semana: currentWeek,
-          id_accion_imp: item.id_accion_imp || 1, // Persistir acción o usar default
-          fecha_llamada: item.fecha_llamada,
-          
-          created_at: new Date().toISOString()
-        }));
-
-      if (newRecords.length === 0) {
-        return;
-      }
-
-      // E. Insertar masivamente
-      const { error: insertError } = await supabase
-        .from('guias_historial_semanal')
-        .insert(newRecords);
-
-      if (insertError) throw insertError;
-
-      // Mostrar notificación discreta
-      const Toast = Swal.mixin({
-        toast: true,
-        position: 'top-end',
-        showConfirmButton: false,
-        timer: 3000,
-        timerProgressBar: true
-      });
-      Toast.fire({
-        icon: 'success',
-        title: `Se inició la semana con ${newRecords.length} conductores`
-      });
-
-    } catch {
-      // No bloqueamos la UI, la distribución continua servirá de fallback
+      await supabase.rpc('sync_weekly_history', { p_semana: currentWeek });
     } finally {
       setSyncFinished(true);
     }

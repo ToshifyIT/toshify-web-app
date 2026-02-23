@@ -18,6 +18,7 @@ import logoToshify from '../assets/logo-toshify.png'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { Spinner } from '../components/ui/LoadingOverlay'
+import { DashboardPage } from '../modules/dashboard/DashboardPage'
 
 // Mapeo de iconos por nombre de menú
 const menuIcons: Record<string, LucideIcon> = {
@@ -181,6 +182,7 @@ import { USSPage } from './integraciones/uss/USSPage'
 import { BitacoraPage } from './integraciones/uss/BitacoraPage'
 import { CabifyPage } from './integraciones/cabify/CabifyPage'
 import { ReportesPage } from './reportes/ReportesPage'
+import { DashboardKpisPage } from './reportes/DashboardKpisPage'
 import { RolesPage } from './administracion/RolesPage'
 import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
 import { MenuPorRolPage } from './administracion/MenuPorRolPage'
@@ -1776,6 +1778,11 @@ export function HomePage() {
                   <VehiculosPage />
                 </ProtectedRoute>
               } />
+              <Route path="/dashboard" element={
+                <ProtectedRoute menuName="dashboard-ejecutivo" action="view">
+                  <DashboardPage />
+                </ProtectedRoute>
+              } />
               <Route path="/conductores" element={
                 <ProtectedRoute menuName="conductores" action="view">
                   <LazyPage>
@@ -1890,6 +1897,11 @@ export function HomePage() {
               <Route path="/reportes" element={
                 <ProtectedRoute menuName="reportes" action="view">
                   <ReportesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/reportes/dashboard-kpis" element={
+                <ProtectedRoute menuName="reportes" submenuName="dashboard-kpis" action="view">
+                  <DashboardKpisPage />
                 </ProtectedRoute>
               } />
 

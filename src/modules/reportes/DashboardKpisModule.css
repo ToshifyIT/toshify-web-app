@@ -1,0 +1,99 @@
+/* src/modules/reportes/DashboardKpisModule.css */
+
+.dkpis-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dkpis-header {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border-primary);
+}
+
+.dkpis-header-title {
+  border-left: 4px solid var(--color-primary);
+  padding-left: 16px;
+}
+
+.dkpis-header-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.dkpis-header-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}
+
+.dkpis-stats {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
+}
+
+.dkpis-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .dkpis-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .dkpis-stats-grid {
+    grid-template-columns: repeat(7, 1fr);
+  }
+}
+
+.dkpis-stats .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.dkpis-stats .stat-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.dkpis-stats .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dkpis-stats .stat-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dkpis-stats .stat-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dkpis-stats .stat-subtitle {
+  font-size: 9px;
+  color: var(--text-tertiary);
+}
