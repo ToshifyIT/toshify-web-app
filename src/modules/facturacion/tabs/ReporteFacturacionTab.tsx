@@ -2795,63 +2795,57 @@ export function ReporteFacturacionTab() {
 
       // === CARGOS (A PAGAR) ===
 
-      // P002 - Alquiler a Cargo
+      // P002 - Alquiler a Cargo (monto ya incluye IVA)
       const cargoDias = facturacion.prorrateo_cargo_dias || 0
       const cargoMonto = facturacion.prorrateo_cargo_monto || 0
       if (cargoDias > 0 && cargoMonto > 0) {
-        let montoConIva = cargoMonto
-        if (facturacion.conductor_cuit) montoConIva = Math.round(cargoMonto * 1.21)
         detallesSimulados.push({
           id: `det-cargo-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P002',
           concepto_descripcion: `Alquiler a Cargo (${cargoDias}/7 días)`,
           cantidad: cargoDias,
-          precio_unitario: Math.round(montoConIva / cargoDias),
-          subtotal: montoConIva,
-          total: montoConIva,
+          precio_unitario: Math.round(cargoMonto / cargoDias),
+          subtotal: cargoMonto,
+          total: cargoMonto,
           es_descuento: false,
           referencia_id: null,
           referencia_tipo: null
         })
       }
 
-      // P001 - Alquiler Turno Diurno
+      // P001 - Alquiler Turno Diurno (monto ya incluye IVA)
       const diurnoDias = facturacion.prorrateo_diurno_dias || 0
       const diurnoMonto = facturacion.prorrateo_diurno_monto || 0
       if (diurnoDias > 0 && diurnoMonto > 0) {
-        let montoConIva = diurnoMonto
-        if (facturacion.conductor_cuit) montoConIva = Math.round(diurnoMonto * 1.21)
         detallesSimulados.push({
           id: `det-diurno-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P001',
           concepto_descripcion: `Alquiler Turno Diurno (${diurnoDias}/7 días)`,
           cantidad: diurnoDias,
-          precio_unitario: Math.round(montoConIva / diurnoDias),
-          subtotal: montoConIva,
-          total: montoConIva,
+          precio_unitario: Math.round(diurnoMonto / diurnoDias),
+          subtotal: diurnoMonto,
+          total: diurnoMonto,
           es_descuento: false,
           referencia_id: null,
           referencia_tipo: null
         })
       }
 
-      // P013 - Alquiler Turno Nocturno
+      // P013 - Alquiler Turno Nocturno (monto ya incluye IVA)
       const nocturnoDias = facturacion.prorrateo_nocturno_dias || 0
       const nocturnoMonto = facturacion.prorrateo_nocturno_monto || 0
       if (nocturnoDias > 0 && nocturnoMonto > 0) {
-        let montoConIva = nocturnoMonto
-        if (facturacion.conductor_cuit) montoConIva = Math.round(nocturnoMonto * 1.21)
         detallesSimulados.push({
           id: `det-nocturno-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P013',
           concepto_descripcion: `Alquiler Turno Nocturno (${nocturnoDias}/7 días)`,
           cantidad: nocturnoDias,
-          precio_unitario: Math.round(montoConIva / nocturnoDias),
-          subtotal: montoConIva,
-          total: montoConIva,
+          precio_unitario: Math.round(nocturnoMonto / nocturnoDias),
+          subtotal: nocturnoMonto,
+          total: nocturnoMonto,
           es_descuento: false,
           referencia_id: null,
           referencia_tipo: null
@@ -4767,12 +4761,23 @@ export function ReporteFacturacionTab() {
             if (det.total <= 0) continue
 
             let descripcionAdicional = ''
-            if (det.concepto_codigo === 'P001' || det.concepto_codigo === 'P002') {
-              descripcionAdicional = String(fact.turnos_cobrados || 7)
+            const dias = fact.turnos_cobrados || 7
+            if (det.concepto_codigo === 'P001') {
+              descripcionAdicional = `Alquiler Turno Diurno (${dias}/7 días)`
+            } else if (det.concepto_codigo === 'P002') {
+              descripcionAdicional = `Alquiler a Cargo (${dias}/7 días)`
+            } else if (det.concepto_codigo === 'P013') {
+              descripcionAdicional = `Alquiler Turno Nocturno (${dias}/7 días)`
             } else if (det.concepto_codigo === 'P003') {
-              descripcionAdicional = fact.cuota_garantia_numero || '1 de 16'
+              descripcionAdicional = `Cuota de Garantía ${fact.cuota_garantia_numero || '1 de 16'}`
             } else if (det.concepto_codigo === 'P005') {
-              descripcionAdicional = periodoDesc
+              descripcionAdicional = `Telepeajes ${periodoDesc}`
+            } else if (det.concepto_codigo === 'P006') {
+              descripcionAdicional = det.concepto_descripcion || 'Exceso de Kilometraje'
+            } else if (det.concepto_codigo === 'P007') {
+              descripcionAdicional = det.concepto_descripcion || 'Penalidades'
+            } else if (det.concepto_codigo === 'P004') {
+              descripcionAdicional = det.concepto_descripcion || 'Tickets/Descuentos a Favor'
             } else if (det.concepto_descripcion) {
               descripcionAdicional = det.concepto_descripcion
             }
@@ -4789,14 +4794,18 @@ export function ReporteFacturacionTab() {
           }
         } else {
           // Sin detalles, crear filas basadas en subtotales (sin IDs de detalle)
+          const diasFallback = fact.turnos_cobrados || 7
           if (fact.subtotal_alquiler > 0) {
             const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
+            const descAlquiler = fact.tipo_alquiler === 'CARGO'
+              ? `Alquiler a Cargo (${diasFallback}/7 días)`
+              : `Alquiler Turno Diurno (${diasFallback}/7 días)`
             filasPreview.push(crearFilaPreview(
               numeroFactura++,
               fact,
               fact.subtotal_alquiler,
               codigoAlquiler,
-              String(fact.turnos_cobrados || 7),
+              descAlquiler,
               fact.id
             ))
           }
@@ -4807,7 +4816,7 @@ export function ReporteFacturacionTab() {
               fact,
               fact.subtotal_garantia,
               'P003',
-              fact.cuota_garantia_numero || '1 de 16',
+              `Cuota de Garantía ${fact.cuota_garantia_numero || '1 de 16'}`,
               fact.id
             ))
           }
@@ -5276,15 +5285,19 @@ export function ReporteFacturacionTab() {
       let numeroFactura = 1
 
       for (const fact of vistaPreviaData) {
+        const diasVP = fact.turnos_cobrados || 7
         // P001/P002 - Alquiler (TURNO/CARGO)
         if (fact.subtotal_alquiler > 0) {
           const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
+          const descAlquilerVP = fact.tipo_alquiler === 'CARGO'
+            ? `Alquiler a Cargo (${diasVP}/7 días)`
+            : `Alquiler Turno Diurno (${diasVP}/7 días)`
           filasPreview.push(crearFilaPreview(
             numeroFactura++,
             fact,
             fact.subtotal_alquiler,
             codigoAlquiler,
-            String(fact.turnos_cobrados || 7)
+            descAlquilerVP
           ))
         }
 
@@ -5292,7 +5305,7 @@ export function ReporteFacturacionTab() {
         const garantia = garantiasMap.get(fact.conductor_id)
         if (garantia && garantia.cuotas_pagadas < garantia.cuotas_totales) {
           const cuotaActual = garantia.cuotas_pagadas + 1
-          const descripcionGarantia = `${cuotaActual} de ${garantia.cuotas_totales}`
+          const descripcionGarantia = `Cuota de Garantía ${cuotaActual} de ${garantia.cuotas_totales}`
           filasPreview.push(crearFilaPreview(
             numeroFactura++,
             fact,
@@ -5327,7 +5340,7 @@ export function ReporteFacturacionTab() {
             fact,
             fact.monto_peajes,
             'P005',
-            periodoDesc
+            `Telepeajes ${periodoDesc}`
           ))
         }
 
@@ -5627,10 +5640,11 @@ export function ReporteFacturacionTab() {
           }
         }
 
-        // 3. Upsert detalles - P006 Exceso KM
+        // 3. Upsert detalles - P006 Exceso KM (precio ya incluye IVA, extraer dinámicamente)
         if (row.excesoKm > 0) {
-          const netoExceso = Math.round(row.excesoKm / 1.21)
-          const ivaExceso = row.excesoKm - netoExceso
+          const ivaPctP006 = conceptosNomina.find(c => c.codigo === 'P006')?.iva_porcentaje || 0
+          const netoExceso = ivaPctP006 > 0 ? Math.round((row.excesoKm / (1 + ivaPctP006 / 100)) * 100) / 100 : row.excesoKm
+          const ivaExceso = Math.round((row.excesoKm - netoExceso) * 100) / 100
 
           const { data: existeP006 } = await (supabase
             .from('facturacion_detalle') as any)
@@ -5641,7 +5655,7 @@ export function ReporteFacturacionTab() {
 
           if (existeP006) {
             await (supabase.from('facturacion_detalle') as any)
-              .update({ total: row.excesoKm, subtotal: netoExceso, iva_monto: ivaExceso })
+              .update({ total: row.excesoKm, subtotal: netoExceso, iva_porcentaje: ivaPctP006, iva_monto: ivaExceso })
               .eq('id', existeP006.id)
           } else {
             await (supabase.from('facturacion_detalle') as any)
@@ -5652,7 +5666,7 @@ export function ReporteFacturacionTab() {
                 cantidad: 1,
                 precio_unitario: row.excesoKm,
                 subtotal: netoExceso,
-                iva_porcentaje: 21,
+                iva_porcentaje: ivaPctP006,
                 iva_monto: ivaExceso,
                 total: row.excesoKm,
                 es_credito: false
@@ -5925,7 +5939,7 @@ export function ReporteFacturacionTab() {
             cantidad: 1,
             precio_unitario: montoAbsoluto,
             subtotal: netoAbsoluto > 0 ? netoAbsoluto : montoAbsoluto,
-            iva_porcentaje: row.ivaPorcentaje === 'IVA_21' ? 21 : 0,
+            iva_porcentaje: parseFloat(row.ivaPorcentaje?.replace('IVA_', '') || '0') || 0,
             iva_monto: ivaAbsoluto,
             total: montoAbsoluto,
             es_descuento: esDescuento,
@@ -5989,11 +6003,10 @@ export function ReporteFacturacionTab() {
         return false
       }
 
-      // Determinar si tiene IVA
-      const conceptosConIva = ['P001', 'P002', 'P009']
-      const tieneIva = conceptosConIva.includes(codigoProducto)
-      const subtotal = tieneIva ? Math.round((pendiente.monto / 1.21) * 100) / 100 : pendiente.monto
-      const ivaMonto = tieneIva ? pendiente.monto - subtotal : 0
+      // Determinar IVA dinámicamente desde conceptos_nomina
+      const ivaPct = conceptosNomina.find(c => c.codigo === codigoProducto)?.iva_porcentaje || 0
+      const subtotal = ivaPct > 0 ? Math.round((pendiente.monto / (1 + ivaPct / 100)) * 100) / 100 : pendiente.monto
+      const ivaMonto = Math.round((pendiente.monto - subtotal) * 100) / 100
 
       // Insertar en facturacion_detalle
       const { error: insertError } = await (supabase
@@ -6005,7 +6018,7 @@ export function ReporteFacturacionTab() {
           cantidad: 1,
           precio_unitario: pendiente.monto,
           subtotal: subtotal,
-          iva_porcentaje: tieneIva ? 21 : 0,
+          iva_porcentaje: ivaPct,
           iva_monto: ivaMonto,
           total: pendiente.monto,
           es_descuento: pendiente.tipo === 'ticket',
@@ -6081,8 +6094,9 @@ export function ReporteFacturacionTab() {
         ]
       ]
 
-      // Productos sin IVA (exentos): P003, P004, P005, P007, P010
-      // Productos con IVA 21%: P001, P002, P006
+      // IVA dinámico por concepto desde conceptos_nomina
+      const getIvaPct = (codigo: string) => conceptosNomina.find(c => c.codigo === codigo)?.iva_porcentaje || 0
+      const extraerNeto = (total: number, ivaPct: number) => ivaPct > 0 ? Math.round((total / (1 + ivaPct / 100)) * 100) / 100 : total
 
       dataToExport.forEach(f => {
         const tieneCuit = !!f.conductor_cuit
@@ -6090,12 +6104,13 @@ export function ReporteFacturacionTab() {
         const condicionIva = tieneCuit ? 'Responsable Inscripto' : 'Consumidor Final'
         const diasDesc = f.turnos_cobrados < 7 ? ` (${f.turnos_cobrados}/7 días)` : ''
 
-        // P001/P002 - Alquiler (con IVA 21%)
+        // P001/P002 - Alquiler (IVA dinámico desde conceptos_nomina)
         if (f.subtotal_alquiler > 0) {
-          const codigoAlquiler = f.tipo_alquiler === 'CARGO' ? 'P001' : 'P002'
+          const codigoAlquiler = f.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
           const descAlquiler = f.tipo_alquiler === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler a Turno'
-          const netoAlquiler = Math.round(f.subtotal_alquiler / 1.21)
-          const ivaAlquiler = f.subtotal_alquiler - netoAlquiler
+          const ivaPctAlq = getIvaPct(codigoAlquiler)
+          const netoAlquiler = extraerNeto(f.subtotal_alquiler, ivaPctAlq)
+          const ivaAlquiler = Math.round((f.subtotal_alquiler - netoAlquiler) * 100) / 100
 
           ritData.push([
             fechaInicio, fechaFin, 5, tipoFactura,
@@ -6135,14 +6150,16 @@ export function ReporteFacturacionTab() {
           ])
         }
 
-        // P006 - Exceso de Kilometraje (con IVA 21%)
+        // P006 - Exceso de Kilometraje (IVA dinámico desde conceptos_nomina)
         if ((f.monto_excesos || 0) > 0) {
-          const netoExceso = Math.round((f.monto_excesos || 0) / 1.21)
-          const ivaExceso = (f.monto_excesos || 0) - netoExceso
+          const ivaPctExc = getIvaPct('P006')
+          const montoExc = f.monto_excesos || 0
+          const netoExceso = extraerNeto(montoExc, ivaPctExc)
+          const ivaExceso = Math.round((montoExc - netoExceso) * 100) / 100
           ritData.push([
             fechaInicio, fechaFin, 5, tipoFactura,
             f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
-            'P006', `Exceso KM (${f.km_exceso || 0} km)`, 1, netoExceso, ivaExceso, f.monto_excesos || 0,
+            'P006', `Exceso KM (${f.km_exceso || 0} km)`, 1, netoExceso, ivaExceso, montoExc,
             0, 'ND', 'Peso', 1
           ])
         }
@@ -7281,6 +7298,7 @@ export function ReporteFacturacionTab() {
           setRitPreviewData([])
         }}
         onSync={undefined}
+        conceptos={conceptosNomina}
       />
     )
   }

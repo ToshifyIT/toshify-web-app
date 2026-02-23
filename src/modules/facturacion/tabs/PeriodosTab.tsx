@@ -631,10 +631,7 @@ export function PeriodosTab() {
           })
         }
 
-        // IVA 21% solo si el conductor tiene CUIT
-        if (conductor.conductor_cuit && alquilerTotal > 0) {
-          alquilerTotal = Math.round(alquilerTotal * 1.21)
-        }
+        // Precios ya incluyen IVA - no se agrega IVA adicional
 
         // Garantía prorrateada según días totales
         const factorProporcional = conductor.total_dias / 7
