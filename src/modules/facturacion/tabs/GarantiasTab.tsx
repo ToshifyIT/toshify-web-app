@@ -379,8 +379,7 @@ export function GarantiasTab() {
     }
   }
 
-  // Hidden: botón de editar garantía removido de la UI
-  async function _editarGarantia(garantia: GarantiaConductor) {
+  async function editarGarantia(garantia: GarantiaConductor) {
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Garantía</span>`,
       html: `
@@ -500,7 +499,6 @@ export function GarantiasTab() {
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo eliminar', 'error')
     }
-    void _editarGarantia
   }
 
   async function registrarPago(garantia: GarantiaConductor) {
@@ -928,6 +926,11 @@ export function GarantiasTab() {
             </button>
           )}
           {(isAdmin() || isAdministrativo()) && (
+            <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
+              <Edit3 size={14} />
+            </button>
+          )}
+          {isAdmin() && (
             <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarGarantia(row.original)} data-tooltip="Eliminar">
               <Trash2 size={14} />
             </button>
