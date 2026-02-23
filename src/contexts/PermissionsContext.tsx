@@ -95,6 +95,7 @@ interface PermissionsContextType {
   // Función general para verificar permisos
   canAccess: (menuOrSubmenuName: string, action?: 'view' | 'create' | 'edit' | 'delete') => boolean
   isAdmin: () => boolean
+  isAdministrativo: () => boolean
   // Obtener menús/submenús visibles
   getVisibleMenus: () => MenuPermission[]
   getVisibleSubmenus: () => SubmenuPermission[]
@@ -522,6 +523,10 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     return userPermissions?.role?.name === 'admin'
   }, [userPermissions?.role?.name])
 
+  const isAdministrativo = useCallback((): boolean => {
+    return userPermissions?.role?.name === 'administrativo'
+  }, [userPermissions?.role?.name])
+
   // Retornan caches pre-calculados - O(1)
   const getVisibleMenus = useCallback((): MenuPermission[] => {
     return visibleMenusCache
@@ -562,6 +567,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     getVisibleTabs,
     canAccess,
     isAdmin,
+    isAdministrativo,
     getVisibleMenus,
     getVisibleSubmenus,
     canCreate,

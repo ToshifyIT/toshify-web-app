@@ -50,7 +50,7 @@ interface PagoGarantiaRow {
 
 export function GarantiasTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
-  const { isAdmin } = usePermissions()
+  const { isAdmin, isAdministrativo } = usePermissions()
   // Sub-tab activo (Movimientos removido - no se usa)
   const [activeSubTab] = useState<'garantias' | 'movimientos'>('garantias')
   
@@ -927,7 +927,7 @@ export function GarantiasTab() {
               <Banknote size={14} />
             </button>
           )}
-          {isAdmin() && (
+          {(isAdmin() || isAdministrativo()) && (
             <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarGarantia(row.original)} data-tooltip="Eliminar">
               <Trash2 size={14} />
             </button>

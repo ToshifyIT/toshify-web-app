@@ -69,7 +69,7 @@ function diasCalendario(desde: string | Date): number {
 
 export function SaldosAbonosTab() {
   const { sedeActualId, aplicarFiltroSede } = useSede()
-  const { isAdmin } = usePermissions()
+  const { isAdmin, isAdministrativo } = usePermissions()
   // Sub-tab activo
   // Sub-tabs removidos — solo se muestra Saldos
   // const [activeSubTab, setActiveSubTab] = useState<'saldos' | 'abonos'>('saldos')
@@ -1318,7 +1318,7 @@ export function SaldosAbonosTab() {
           <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
             <Banknote size={14} />
           </button>
-          {isAdmin() && (
+          {(isAdmin() || isAdministrativo()) && (
             <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarSaldo(row.original)} data-tooltip="Editar saldo">
               <Edit3 size={14} />
             </button>
