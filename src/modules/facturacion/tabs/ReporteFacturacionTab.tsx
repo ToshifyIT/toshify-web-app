@@ -477,14 +477,19 @@ export function ReporteFacturacionTab() {
         }
 
         // Normalizar fechas a timezone Argentina para conteo correcto de días
-        // Usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
+        // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
         const conductorInicioD = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const padreInicioD = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const acInicio = conductorInicioD && padreInicioD
           ? (conductorInicioD > padreInicioD ? conductorInicioD : padreInicioD)
           : (conductorInicioD || padreInicioD || semanaInicio)
-        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
-          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : semanaFin)
+        // Fin: usar la fecha MÁS TEMPRANA entre conductor y padre
+        // para no cobrar más allá de cuando terminó la asignación padre
+        const conductorFinD = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const padreFinD = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        const acFin = conductorFinD && padreFinD
+          ? (conductorFinD < padreFinD ? conductorFinD : padreFinD)
+          : (conductorFinD || padreFinD || semanaFin)
 
         if (acFin < semanaInicio || acInicio > limiteConteo) {
           historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango' })
@@ -1141,15 +1146,19 @@ export function ReporteFacturacionTab() {
         
         // Calcular días que este registro se solapa con la semana
         // Normalizar a solo fecha (sin hora) — timestamps de asignaciones tienen hora que rompe el conteo
-        // Usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
+        // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
         // para no cobrar antes de que el vehículo fuera realmente entregado
         const conductorInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const padreInicio = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const acInicio = conductorInicio && padreInicio
           ? (conductorInicio > padreInicio ? conductorInicio : padreInicio)
           : (conductorInicio || padreInicio || fechaInicioSemana)
-        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) 
-          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : fechaFinSemana)
+        // Fin: usar la fecha MÁS TEMPRANA entre conductor y padre
+        const conductorFinVP = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const padreFinVP = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        const acFin = conductorFinVP && padreFinVP
+          ? (conductorFinVP < padreFinVP ? conductorFinVP : padreFinVP)
+          : (conductorFinVP || padreFinVP || fechaFinSemana)
         
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
@@ -2018,15 +2027,19 @@ export function ReporteFacturacionTab() {
         // Skip orphan: padre finalizado/cancelado sin fecha_fin
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
 
-        // Fechas: usar la MÁS TARDÍA entre conductor y padre (Entrega Real)
+        // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
         // para no cobrar antes de que el vehículo fuera realmente entregado
         const conductorInicioR = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const padreInicioR = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const acInicio = conductorInicioR && padreInicioR
           ? (conductorInicioR > padreInicioR ? conductorInicioR : padreInicioR)
           : (conductorInicioR || padreInicioR || fechaInicioSemanaRecalc)
-        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
-          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : fechaFinSemanaRecalc)
+        // Fin: usar la fecha MÁS TEMPRANA entre conductor y padre
+        const conductorFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const padreFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        const acFin = conductorFinR && padreFinR
+          ? (conductorFinR < padreFinR ? conductorFinR : padreFinR)
+          : (conductorFinR || padreFinR || fechaFinSemanaRecalc)
 
         if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
 
@@ -2371,10 +2384,10 @@ export function ReporteFacturacionTab() {
         const diasTurnoTotal = conductor.dias_turno_diurno + conductor.dias_turno_nocturno
         const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'CARGO' : 'TURNO'
 
-        // INSERT facturacion_conductores
+        // UPSERT facturacion_conductores (actualiza si ya existe)
         const { data: factConductor, error: errFact } = await (supabase
           .from('facturacion_conductores') as any)
-          .insert({
+          .upsert({
             periodo_id: periodoId,
             conductor_id: conductor.conductor_id,
             conductor_nombre: conductor.conductor_nombre,
@@ -2396,7 +2409,7 @@ export function ReporteFacturacionTab() {
             monto_mora: montoMora,
             total_a_pagar: totalAPagar,
             estado: 'calculado'
-          })
+          }, { onConflict: 'periodo_id,conductor_id' })
           .select()
           .single()
 
@@ -2413,6 +2426,9 @@ export function ReporteFacturacionTab() {
         erroresConsecutivos = 0 // Reset al tener un éxito
 
         const facturacionId = (factConductor as any).id
+
+        // Limpiar detalle viejo antes de insertar el nuevo
+        await supabase.from('facturacion_detalle').delete().eq('facturacion_id', facturacionId)
 
         // INSERT detalles de alquiler (P001/P002/P013)
         for (const detalle of detallesAlquiler) {
