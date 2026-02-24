@@ -576,8 +576,9 @@ export function AsignacionesActivasModule() {
         header: 'Programación',
         cell: ({ getValue }) => {
           const fecha = getValue() as string | null
-          if (!fecha) return <span style={{ color: 'var(--text-tertiary)' }}>No definida</span>
-          return new Date(fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+          if (!fecha) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          const d = new Date(fecha)
+          return `${d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })} ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}`
         },
         enableSorting: true,
       },
@@ -586,8 +587,9 @@ export function AsignacionesActivasModule() {
         header: 'Entrega Real',
         cell: ({ getValue }) => {
           const fecha = getValue() as string
-          if (!fecha || fecha === '-') return <span style={{ color: 'var(--text-tertiary)' }}>Pendiente</span>
-          return new Date(fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+          if (!fecha || fecha === '-') return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          const d = new Date(fecha)
+          return `${d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })} ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}`
         },
         enableSorting: true,
       },
