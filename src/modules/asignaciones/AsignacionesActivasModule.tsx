@@ -716,9 +716,8 @@ export function AsignacionesActivasModule() {
       <div className="asig-stats">
         <div className="asig-stats-grid">
           <div
-            className={`stat-card stat-card-clickable ${activeStatFilter === 'totalFlota' ? 'stat-card-active' : ''}`}
+            className="stat-card"
             title="Total de vehículos en la flota (excluye robos, destruidos, jubilados)"
-            onClick={() => handleStatCardClick('totalFlota')}
           >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">
