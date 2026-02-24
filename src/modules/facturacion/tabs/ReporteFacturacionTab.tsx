@@ -438,7 +438,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
           `)
           .eq('conductor_id', realConductorId)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado']),
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
         supabase.from('conductores').select('fecha_terminacion').eq('id', realConductorId).maybeSingle()
       ])
 
@@ -729,7 +729,7 @@ export function ReporteFacturacionTab() {
         .from('asignaciones_conductores') as any)
         .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin)')
         .in('conductor_id', conductorIdsLoad)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
       : { data: [] }
 
       const conductoresConAsignacionAlCierreLoad = new Set<string>()
@@ -995,7 +995,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
         const semInicioVP = parseISO(fechaInicio)
         const semFinVP = parseISO(fechaFin)
@@ -1088,7 +1088,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIds)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
       // Crear mapa de prorrateo con días y montos para precios históricos
       interface ProrrateoVistaPrevia {
@@ -1895,7 +1895,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
         const semInicioRecalc = parseISO(fechaInicio)
         const semFinRecalc = parseISO(fechaFin)
@@ -1988,7 +1988,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIdsTemp)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
       // Rastrear la fecha_fin más tardía de asignaciones por conductor
       const maxAsigFinRecalc = new Map<string, string>()

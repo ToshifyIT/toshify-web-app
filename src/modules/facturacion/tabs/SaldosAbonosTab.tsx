@@ -94,9 +94,21 @@ export function SaldosAbonosTab() {
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
   const [conductorSearch, setConductorSearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
+  const [tasaMoraPct, setTasaMoraPct] = useState(1) // default 1% diario desde P009
 
   useEffect(() => {
     cargarSaldos()
+    // Cargar tasa de mora desde P009
+    ;(async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: p009 } = await (supabase.from('conceptos_nomina') as any)
+          .select('precio_base')
+          .eq('codigo', 'P009')
+          .single()
+        if (p009?.precio_base) setTasaMoraPct(parseFloat(p009.precio_base))
+      } catch { /* usar default */ }
+    })()
   }, [sedeActualId])
 
   // Cerrar dropdown al hacer click fuera
@@ -911,6 +923,17 @@ export function SaldosAbonosTab() {
 
   // Editar saldo (solo admin)
   async function editarSaldo(saldo: SaldoConductor) {
+    // Obtener tasa de mora desde P009
+    let tasaMora = 1 // default 1%
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: p009 } = await (supabase.from('conceptos_nomina') as any)
+        .select('precio_base')
+        .eq('codigo', 'P009')
+        .single()
+      if (p009?.precio_base) tasaMora = parseFloat(p009.precio_base)
+    } catch { /* usar default */ }
+
     const { value: formValues } = await Swal.fire({
       title: `<span style="font-size: 16px; font-weight: 600;">Editar Saldo</span>`,
       html: `
@@ -945,6 +968,22 @@ export function SaldosAbonosTab() {
         title: 'swal-title-compact',
         htmlContainer: 'swal-html-compact'
       },
+      didOpen: () => {
+        const saldoInput = document.getElementById('swal-saldo') as HTMLInputElement
+        const diasInput = document.getElementById('swal-dias-mora') as HTMLInputElement
+        const moraInput = document.getElementById('swal-mora-acum') as HTMLInputElement
+        const calcMora = () => {
+          const s = parseFloat(saldoInput.value) || 0
+          const d = parseInt(diasInput.value) || 0
+          if (d > 0) {
+            moraInput.value = (Math.round(Math.abs(s) * (tasaMora / 100) * d * 100) / 100).toFixed(2)
+          } else {
+            moraInput.value = '0'
+          }
+        }
+        saldoInput.addEventListener('input', calcMora)
+        diasInput.addEventListener('input', calcMora)
+      },
       preConfirm: () => {
         const saldoActual = parseFloat((document.getElementById('swal-saldo') as HTMLInputElement).value)
         if (isNaN(saldoActual)) {
@@ -960,9 +999,9 @@ export function SaldosAbonosTab() {
     if (!formValues) return
 
     try {
-      // Si el nuevo saldo es >= 0, resetear mora
-      const diasMora = formValues.saldoActual >= 0 ? 0 : formValues.diasMora
-      const moraAcum = formValues.saldoActual >= 0 ? 0 : formValues.moraAcum
+      // Guardar lo que el usuario ingresó (sin auto-resetear)
+      const diasMora = formValues.diasMora
+      const moraAcum = formValues.moraAcum
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from('saldos_conductores') as any)
@@ -1356,9 +1395,10 @@ export function SaldosAbonosTab() {
       header: 'Días Mora',
       cell: ({ row }) => {
         const s = row.original
-        if (s.saldo_actual >= 0) return <span className="text-gray-400">-</span>
-        // Usar valor de BD si existe, sino calcular desde ultima_actualizacion
-        const dias = (s.dias_mora && s.dias_mora > 0) ? s.dias_mora : (s.ultima_actualizacion ? diasCalendario(s.ultima_actualizacion) : 0)
+        // Mostrar valor de BD si existe, sino calcular solo si hay deuda
+        const diasBD = s.dias_mora && s.dias_mora > 0 ? s.dias_mora : 0
+        const diasCalc = s.saldo_actual < 0 && s.ultima_actualizacion ? diasCalendario(s.ultima_actualizacion) : 0
+        const dias = diasBD || diasCalc
         if (dias === 0) return <span className="text-gray-400">-</span>
         return <span className={`fact-badge ${dias > 7 ? 'fact-badge-red' : dias > 3 ? 'fact-badge-yellow' : 'fact-badge-gray'}`}>{dias} días</span>
       }
@@ -1368,10 +1408,13 @@ export function SaldosAbonosTab() {
       header: 'Mora Acum.',
       cell: ({ row }) => {
         const s = row.original
-        if (s.saldo_actual >= 0) return <span className="text-gray-400">-</span>
-        // Usar valor de BD si existe, sino calcular: |saldo| * 1% * dias
-        const dias = (s.dias_mora && s.dias_mora > 0) ? s.dias_mora : (s.ultima_actualizacion ? diasCalendario(s.ultima_actualizacion) : 0)
-        const mora = (s.monto_mora_acumulada && s.monto_mora_acumulada > 0) ? s.monto_mora_acumulada : Math.round(Math.abs(s.saldo_actual) * 0.01 * dias * 100) / 100
+        // Mostrar valor de BD si existe, sino calcular solo si hay deuda
+        const diasBD = s.dias_mora && s.dias_mora > 0 ? s.dias_mora : 0
+        const diasCalc = s.saldo_actual < 0 && s.ultima_actualizacion ? diasCalendario(s.ultima_actualizacion) : 0
+        const dias = diasBD || diasCalc
+        const moraBD = s.monto_mora_acumulada && s.monto_mora_acumulada > 0 ? s.monto_mora_acumulada : 0
+        const moraCalc = dias > 0 ? Math.round(Math.abs(s.saldo_actual) * (tasaMoraPct / 100) * dias * 100) / 100 : 0
+        const mora = moraBD || moraCalc
         if (mora === 0) return <span className="text-gray-400">-</span>
         return (
           <span
