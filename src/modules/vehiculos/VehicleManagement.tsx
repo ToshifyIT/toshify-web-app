@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/vehiculos/VehicleManagement.tsx
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2, Undo2 } from 'lucide-react'
+import { AlertTriangle, Eye, Edit, Trash2, Info, Car, Wrench, Briefcase, PaintBucket, Warehouse, FolderOpen, FolderPlus, Loader2, Undo2, History } from 'lucide-react'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { DriveFilesModal } from '../../components/DriveFilesModal'
+import { HistorialModal } from '../../components/ui/HistorialModal'
 import { supabase } from '../../lib/supabase'
 import { ExcelColumnFilter, useExcelFilters } from '../../components/ui/DataTable/ExcelColumnFilter'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -59,6 +60,7 @@ export function VehicleManagement() {
   const [saving, setSaving] = useState(false)
   const [selectedVehiculo, setSelectedVehiculo] = useState<VehiculoWithRelations | null>(null)
   const [creatingDriveFolder, setCreatingDriveFolder] = useState<string | null>(null)
+  const [historialVehiculo, setHistorialVehiculo] = useState<{ id: string; patente: string } | null>(null)
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
 
   // Drive Files Modal
@@ -96,7 +98,7 @@ export function VehicleManagement() {
   // Excel filter hook for portal-based dropdowns
   const { openFilterId, setOpenFilterId } = useExcelFilters()
 
-  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions()
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin } = usePermissions()
   const { profile } = useAuth()
 
   // Permisos específicos para el menú de vehículos
@@ -1221,6 +1223,13 @@ export function VehicleManagement() {
                   variant: driveUrl ? 'success' : 'default'
                 },
                 {
+                  icon: <History size={15} />,
+                  label: 'Historial',
+                  onClick: () => setHistorialVehiculo({ id: row.original.id, patente: row.original.patente }),
+                  hidden: !isAdmin(),
+                  variant: 'info'
+                },
+                {
                   icon: <Trash2 size={15} />,
                   label: 'Eliminar',
                   onClick: () => openDeleteModal(row.original),
@@ -1950,6 +1959,16 @@ export function VehicleManagement() {
         files={driveFiles}
         loading={loadingDriveFiles}
       />
+
+      {/* Modal Historial */}
+      {historialVehiculo && (
+        <HistorialModal
+          tipo="vehiculo"
+          entityId={historialVehiculo.id}
+          entityLabel={historialVehiculo.patente}
+          onClose={() => setHistorialVehiculo(null)}
+        />
+      )}
     </div>
   )
 }

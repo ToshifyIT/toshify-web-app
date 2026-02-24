@@ -1,10 +1,11 @@
 // src/modules/conductores/ConductoresModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2 } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
+import { HistorialModal } from "../../components/ui/HistorialModal";
 import { supabase } from "../../lib/supabase";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -141,6 +142,7 @@ export function ConductoresModule() {
 
   // Estado para creación de carpeta de Drive
   const [creatingDriveFolder, setCreatingDriveFolder] = useState<string | null>(null);
+  const [historialConductor, setHistorialConductor] = useState<{ id: string; nombre: string } | null>(null);
 
   // Drive Files Modal
   const [showDriveModal, setShowDriveModal] = useState(false);
@@ -158,7 +160,7 @@ export function ConductoresModule() {
   const [driveModalTitle, setDriveModalTitle] = useState('');
   const [driveModalUrl, setDriveModalUrl] = useState('');
 
-  const { canCreateInMenu, canEditInMenu, canDeleteInMenu } = usePermissions();
+  const { canCreateInMenu, canEditInMenu, canDeleteInMenu, isAdmin } = usePermissions();
   const { profile } = useAuth();
 
   // Permisos específicos para el menú de conductores
@@ -2310,6 +2312,13 @@ export function ConductoresModule() {
                   variant: driveUrl ? 'success' : 'default'
                 },
                 {
+                  icon: <History size={15} />,
+                  label: 'Historial',
+                  onClick: () => setHistorialConductor({ id: row.original.id, nombre: `${row.original.apellidos}, ${row.original.nombres}` }),
+                  hidden: !isAdmin(),
+                  variant: 'info'
+                },
+                {
                   icon: <Trash2 size={15} />,
                   label: 'Eliminar',
                   onClick: () => openDeleteModal(row.original),
@@ -2493,6 +2502,16 @@ export function ConductoresModule() {
         files={driveFiles}
         loading={loadingDriveFiles}
       />
+
+      {/* Modal Historial */}
+      {historialConductor && (
+        <HistorialModal
+          tipo="conductor"
+          entityId={historialConductor.id}
+          entityLabel={historialConductor.nombre}
+          onClose={() => setHistorialConductor(null)}
+        />
+      )}
     </div>
   );
 }
