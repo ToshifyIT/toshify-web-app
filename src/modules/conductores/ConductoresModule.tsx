@@ -2404,7 +2404,6 @@ export function ConductoresModule() {
             ? 'Crea el primero usando el boton "+ Crear Conductor".'
             : ""
         }
-        disableAutoFilters={true}
         headerAction={
           <>
             <VerLogsButton tablas={['conductores', 'asignaciones', 'asignaciones_conductores']} label="Conductores" />

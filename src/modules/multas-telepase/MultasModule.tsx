@@ -868,7 +868,6 @@ export default function MultasModule() {
         data={multasFiltradas}
         columns={columns}
         searchPlaceholder="Buscar por patente, conductor, lugar..."
-        disableAutoFilters={true}
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
         headerAction={

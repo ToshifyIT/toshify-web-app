@@ -56,6 +56,7 @@ interface Conductor {
   licencia_vencimiento: string
   estado_id: string
   preferencia_turno?: string
+  zona?: string | null
   direccion?: string | null
   direccion_lat?: number | null
   direccion_lng?: number | null
@@ -416,6 +417,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             licencia_vencimiento,
             estado_id,
             preferencia_turno,
+            zona,
             direccion,
             direccion_lat,
             direccion_lng,
@@ -942,7 +944,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         ...formData,
         conductor_id: conductorId,
         conductor_nombre: `${conductor.nombres} ${conductor.apellidos}`,
-        conductor_dni: conductor.numero_dni || ''
+        conductor_dni: conductor.numero_dni || '',
+        zona_cargo: conductor.zona || '',
+        distancia_cargo: 0,
       })
     }
   }
@@ -956,7 +960,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           ...prev,
           conductor_diurno_id: conductorId,
           conductor_diurno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
-          conductor_diurno_dni: conductor.numero_dni || ''
+          conductor_diurno_dni: conductor.numero_dni || '',
+          zona_diurno: conductor.zona || '',
         }
         // Si viene de un par y el compañero ya está asignado como nocturno, auto-rellenar distancia
         if (pairTiempo && pairPartnerId && prev.conductor_nocturno_id === pairPartnerId) {
@@ -977,7 +982,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           ...prev,
           conductor_nocturno_id: conductorId,
           conductor_nocturno_nombre: `${conductor.nombres} ${conductor.apellidos}`,
-          conductor_nocturno_dni: conductor.numero_dni || ''
+          conductor_nocturno_dni: conductor.numero_dni || '',
+          zona_nocturno: conductor.zona || '',
         }
         // Si viene de un par y el compañero ya está asignado como diurno, auto-rellenar distancia
         if (pairTiempo && pairPartnerId && prev.conductor_diurno_id === pairPartnerId) {
@@ -996,21 +1002,27 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         ...formData,
         conductor_diurno_id: '',
         conductor_diurno_nombre: '',
-        conductor_diurno_dni: ''
+        conductor_diurno_dni: '',
+        zona_diurno: '',
+        distancia_diurno: '',
       })
     } else if (tipo === 'nocturno') {
       setFormData({
         ...formData,
         conductor_nocturno_id: '',
         conductor_nocturno_nombre: '',
-        conductor_nocturno_dni: ''
+        conductor_nocturno_dni: '',
+        zona_nocturno: '',
+        distancia_nocturno: '',
       })
     } else {
       setFormData({
         ...formData,
         conductor_id: '',
         conductor_nombre: '',
-        conductor_dni: ''
+        conductor_dni: '',
+        zona_cargo: '',
+        distancia_cargo: '',
       })
     }
   }
