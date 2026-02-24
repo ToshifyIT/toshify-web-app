@@ -43,6 +43,22 @@ import { formatCurrency, formatDate, FACTURACION_CONFIG, calcularMora } from '..
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
+import logoToshifyUrl from '../../../assets/logo-toshify.png'
+
+// Pre-cargar logo como base64 para jsPDF (mejor calidad que URL directo)
+let logoBase64: string | null = null
+let logoAspectRatio = 3
+const _logoPreload = new Image()
+_logoPreload.src = logoToshifyUrl
+_logoPreload.onload = () => {
+  const c = document.createElement('canvas')
+  c.width = _logoPreload.naturalWidth
+  c.height = _logoPreload.naturalHeight
+  logoAspectRatio = c.width / c.height
+  const ctx = c.getContext('2d')!
+  ctx.drawImage(_logoPreload, 0, 0)
+  logoBase64 = c.toDataURL('image/png')
+}
 import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
 import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyPreviewTable'
 
@@ -4131,15 +4147,17 @@ export function ReporteFacturacionTab() {
       const negro = '#111827'
       const verde = '#059669'
 
-      // Header
-      pdf.setFontSize(22)
-      pdf.setTextColor(rojo)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('TOSHIFY', margin, y)
-      pdf.setFontSize(8)
-      pdf.setTextColor(gris)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text('Sistema de Gestión de Flota', margin, y + 5)
+      // Header con logo
+      if (logoBase64) {
+        const logoH = 10
+        const logoW = logoH * logoAspectRatio
+        pdf.addImage(logoBase64, 'PNG', margin, y - 8, logoW, logoH)
+      } else {
+        pdf.setFontSize(22)
+        pdf.setTextColor(rojo)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('TOSHIFY', margin, y)
+      }
 
       // Título del documento
       pdf.setFontSize(14)
