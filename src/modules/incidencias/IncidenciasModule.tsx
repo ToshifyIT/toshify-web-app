@@ -2675,33 +2675,58 @@ export function IncidenciasModule() {
   const countAplicadas = penalidades.filter(p => p.aplicado && !p.rechazado).length
   const countRechazados = penalidades.filter(p => p.rechazado).length
 
+  // Stats: filtrar por semana actual y pestaña seleccionada
+  const semanaActual = useMemo(() => {
+    const hoy = new Date()
+    const dateStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    return getWeekNumber(dateStr)
+  }, [])
+  const anioActualStats = new Date().getFullYear()
+
+  const statsIncidencias = useMemo(() => {
+    // Filtrar por semana actual y año
+    let filtered = incidencias.filter(i => {
+      if (!i.fecha) return false
+      const anioFecha = parseInt(i.fecha.substring(0, 4), 10)
+      return i.semana === semanaActual && anioFecha === anioActualStats
+    })
+    // Filtrar por pestaña activa
+    if (activeTab === 'logistica') {
+      filtered = filtered.filter(i => !i.tipo || i.tipo === 'logistica')
+    } else if (activeTab === 'cobro') {
+      filtered = filtered.filter(i => i.tipo === 'cobro')
+    }
+    // Para pestañas de penalidades, mostrar todas las incidencias de la semana
+    return filtered
+  }, [incidencias, semanaActual, anioActualStats, activeTab])
+
   return (
     <div className="incidencias-module">
       {/* Loading Overlay - bloquea toda la pantalla */}
       <LoadingOverlay show={loading} message="Cargando incidencias..." size="lg" />
 
-      {/* Stats rápidos - Arriba de todo (igual que Siniestros) */}
+      {/* Stats rápidos - Semana actual, filtrado por pestaña */}
       <div className="incidencias-stats">
         <div className="stats-grid">
           <div className="stat-card">
             <FileText size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{incidencias.length}</span>
-              <span className="stat-label">Total</span>
+              <span className="stat-value">{statsIncidencias.length}</span>
+              <span className="stat-label">Total · Sem {semanaActual}</span>
             </div>
           </div>
           <div className="stat-card">
             <Car size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{new Set(incidencias.map(i => i.patente_display)).size}</span>
-              <span className="stat-label">Vehículos</span>
+              <span className="stat-value">{new Set(statsIncidencias.map(i => i.patente_display)).size}</span>
+              <span className="stat-label">Vehículos · Sem {semanaActual}</span>
             </div>
           </div>
           <div className="stat-card">
             <Users size={20} className="stat-icon" />
             <div className="stat-content">
-              <span className="stat-value">{new Set(incidencias.map(i => i.conductor_display)).size}</span>
-              <span className="stat-label">Conductores</span>
+              <span className="stat-value">{new Set(statsIncidencias.map(i => i.conductor_display)).size}</span>
+              <span className="stat-label">Conductores · Sem {semanaActual}</span>
             </div>
           </div>
         </div>
