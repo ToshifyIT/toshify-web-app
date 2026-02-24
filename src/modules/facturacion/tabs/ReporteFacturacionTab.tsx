@@ -4149,9 +4149,9 @@ export function ReporteFacturacionTab() {
 
       // Header con logo
       if (logoBase64) {
-        const logoH = 10
+        const logoH = 18
         const logoW = logoH * logoAspectRatio
-        pdf.addImage(logoBase64, 'PNG', margin, y - 8, logoW, logoH)
+        pdf.addImage(logoBase64, 'PNG', margin, y - 12, logoW, logoH)
       } else {
         pdf.setFontSize(22)
         pdf.setTextColor(rojo)
