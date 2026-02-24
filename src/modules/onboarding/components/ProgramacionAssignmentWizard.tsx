@@ -4,8 +4,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/exhaustive-deps */
 
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2 } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { X, Calendar, User, ChevronRight, Check, Sun, Moon, Route, Loader2, MapPin, Building2, Map as MapIcon } from 'lucide-react'
+import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
@@ -174,6 +175,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     tiempoMinutos?: number
   }>>([])
   const [loadingPares, setLoadingPares] = useState(false)
+
+  // Estado para submodal de mapa
+  const [showMapModal, setShowMapModal] = useState(false)
 
   const [formData, setFormData] = useState<ProgramacionData>(() => {
     // Si hay datos de edición, pre-cargar
@@ -626,7 +630,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           conductor_a:conductor_a_id(id, nombres, apellidos, numero_dni, preferencia_turno),
           conductor_b:conductor_b_id(id, nombres, apellidos, numero_dni, preferencia_turno)
         `)
-        .gte('score', 50)
+        .gte('score', 20)
+        .lte('tiempo_minutos', 30)
         .order('score', { ascending: false })
         .limit(50)
 
@@ -2569,34 +2574,58 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                   <div className="conductores-column">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', paddingBottom: '8px', borderBottom: '2px solid rgba(0,0,0,0.1)' }}>
                       <h4 style={{ margin: 0, border: 'none', paddingBottom: 0 }}>Conductores Disponibles</h4>
-                      {isTurnoMode && (
-                        <button
-                          type="button"
-                          onClick={toggleVistaPares}
-                          disabled={loadingPares}
-                          title={mostrarParesCercanos ? 'Ver lista normal' : 'Ver pares cercanos'}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 8px',
-                            fontSize: '10px',
-                            fontWeight: '600',
-                            background: mostrarParesCercanos ? '#10B981' : '#F3F4F6',
-                            color: mostrarParesCercanos ? 'white' : '#6B7280',
-                            border: mostrarParesCercanos ? 'none' : '1px solid #E5E7EB',
-                            borderRadius: '6px',
-                            cursor: loadingPares ? 'wait' : 'pointer',
-                            transition: 'all 0.2s'
-                          }}
-                        >
-                          {loadingPares ? (
-                            <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
-                          ) : (
-                            <MapPin size={10} />
-                          )}
-                          Pares
-                        </button>
+                       {isTurnoMode && (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={toggleVistaPares}
+                            disabled={loadingPares}
+                            title={mostrarParesCercanos ? 'Ver lista normal' : 'Ver pares cercanos'}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 8px',
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              background: mostrarParesCercanos ? '#10B981' : '#F3F4F6',
+                              color: mostrarParesCercanos ? 'white' : '#6B7280',
+                              border: mostrarParesCercanos ? 'none' : '1px solid #E5E7EB',
+                              borderRadius: '6px',
+                              cursor: loadingPares ? 'wait' : 'pointer',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            {loadingPares ? (
+                              <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <MapPin size={10} />
+                            )}
+                            Pares
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowMapModal(true)}
+                            title="Ver conductores en mapa"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 8px',
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              background: '#F3F4F6',
+                              color: '#6B7280',
+                              border: '1px solid #E5E7EB',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <MapIcon size={10} />
+                            Mapa
+                          </button>
+                        </div>
                       )}
                     </div>
 
@@ -3032,6 +3061,32 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
               </div>
             )}
 
+            {/* Submodal Mapa de Conductores */}
+            {showMapModal && (
+              <ConductoresMapModal
+                conductores={conductores.filter(c => c.direccion_lat && c.direccion_lng && !c.tieneAsignacionActiva)}
+                onSelect={(conductor: Conductor) => {
+                  setShowMapModal(false)
+                  const preferencia = conductor.preferencia_turno
+                  if (isTurnoMode) {
+                    if ((preferencia === 'DIURNO' || preferencia === 'SIN_PREFERENCIA' || !preferencia) && !formData.conductor_diurno_id) {
+                      setFormData(prev => ({ ...prev, conductor_diurno_id: conductor.id }))
+                    } else if ((preferencia === 'NOCTURNO' || preferencia === 'SIN_PREFERENCIA' || !preferencia) && !formData.conductor_nocturno_id) {
+                      setFormData(prev => ({ ...prev, conductor_nocturno_id: conductor.id }))
+                    } else if (!formData.conductor_diurno_id) {
+                      setFormData(prev => ({ ...prev, conductor_diurno_id: conductor.id }))
+                    } else if (!formData.conductor_nocturno_id) {
+                      setFormData(prev => ({ ...prev, conductor_nocturno_id: conductor.id }))
+                    }
+                  } else {
+                    setFormData(prev => ({ ...prev, conductor_id: conductor.id }))
+                  }
+                }}
+                onClose={() => setShowMapModal(false)}
+                apiKey={GOOGLE_MAPS_API_KEY}
+              />
+            )}
+
             {/* Step 4: Detalles */}
             {step === 4 && (
               <div>
@@ -3333,5 +3388,157 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         </div>
       </div>
     </>
+  )
+}
+
+// ─── Submodal: Mapa de Conductores ────────────────────────────────────────────
+const LIBRARIES: ('places')[] = ['places']
+const MAP_CENTER = { lat: -34.6037, lng: -58.3816 } // Buenos Aires
+
+function ConductoresMapModal({ conductores, onSelect, onClose, apiKey }: {
+  conductores: Conductor[]
+  onSelect: (c: Conductor) => void
+  onClose: () => void
+  apiKey: string
+}) {
+  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: apiKey, libraries: LIBRARIES })
+  const [activeMarker, setActiveMarker] = useState<string | null>(null)
+  const mapRef = useRef<google.maps.Map | null>(null)
+
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map
+    if (conductores.length > 0) {
+      const bounds = new google.maps.LatLngBounds()
+      conductores.forEach(c => {
+        if (c.direccion_lat && c.direccion_lng) {
+          bounds.extend({ lat: c.direccion_lat, lng: c.direccion_lng })
+        }
+      })
+      map.fitBounds(bounds, 60)
+    }
+  }, [conductores])
+
+  const getMarkerColor = (c: Conductor) => {
+    if (c.preferencia_turno === 'DIURNO') return '#F59E0B'
+    if (c.preferencia_turno === 'NOCTURNO') return '#3B82F6'
+    return '#10B981'
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 10000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,0.6)',
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{
+        background: '#fff', borderRadius: 12, width: '90%', maxWidth: 800,
+        height: '80vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 25px 50px rgba(0,0,0,0.3)',
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 16px', borderBottom: '1px solid #E5E7EB',
+        }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Conductores Disponibles</h3>
+            <span style={{ fontSize: 11, color: '#6B7280' }}>
+              {conductores.length} conductores con ubicación — Click en un marker para seleccionar
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', display: 'inline-block' }} /> Diurno
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3B82F6', display: 'inline-block' }} /> Nocturno
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} /> Sin pref.
+            </span>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, marginLeft: 8 }}>
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Mapa */}
+        <div style={{ flex: 1 }}>
+          {!isLoaded ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9CA3AF' }}>
+              <Loader2 size={24} style={{ animation: 'spin 1s linear infinite', marginRight: 8 }} /> Cargando mapa...
+            </div>
+          ) : (
+            <GoogleMap
+              mapContainerStyle={{ width: '100%', height: '100%', borderRadius: '0 0 12px 12px' }}
+              center={MAP_CENTER}
+              zoom={11}
+              onLoad={onMapLoad}
+              options={{
+                streetViewControl: false,
+                mapTypeControl: false,
+                fullscreenControl: false,
+              }}
+            >
+              {conductores.map(c => {
+                if (!c.direccion_lat || !c.direccion_lng) return null
+                const color = getMarkerColor(c)
+                return (
+                  <MarkerF
+                    key={c.id}
+                    position={{ lat: c.direccion_lat, lng: c.direccion_lng }}
+                    onClick={() => setActiveMarker(c.id)}
+                    icon={{
+                      path: google.maps.SymbolPath.CIRCLE,
+                      fillColor: color,
+                      fillOpacity: 1,
+                      strokeColor: '#fff',
+                      strokeWeight: 2,
+                      scale: 10,
+                    }}
+                  >
+                    {activeMarker === c.id && (
+                      <InfoWindowF
+                        position={{ lat: c.direccion_lat, lng: c.direccion_lng }}
+                        onCloseClick={() => setActiveMarker(null)}
+                      >
+                        <div style={{ padding: '4px 2px', minWidth: 160 }}>
+                          <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>
+                            {c.nombres} {c.apellidos}
+                          </p>
+                          <p style={{ margin: '2px 0', fontSize: 11, color: '#6B7280' }}>
+                            DNI: {c.numero_dni || '-'}
+                          </p>
+                          <p style={{ margin: '2px 0', fontSize: 11, color: '#6B7280' }}>
+                            Turno: {c.preferencia_turno === 'DIURNO' ? 'Diurno' : c.preferencia_turno === 'NOCTURNO' ? 'Nocturno' : 'Sin pref.'}
+                          </p>
+                          {c.direccion && (
+                            <p style={{ margin: '2px 0', fontSize: 10, color: '#9CA3AF' }}>{c.direccion}</p>
+                          )}
+                          <button
+                            onClick={() => onSelect(c)}
+                            style={{
+                              marginTop: 6, width: '100%', padding: '6px',
+                              background: '#ff0033', color: '#fff', border: 'none',
+                              borderRadius: 6, fontSize: 12, fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Seleccionar
+                          </button>
+                        </div>
+                      </InfoWindowF>
+                    )}
+                  </MarkerF>
+                )
+              })}
+            </GoogleMap>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
