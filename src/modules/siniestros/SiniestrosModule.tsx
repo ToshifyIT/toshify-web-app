@@ -33,6 +33,7 @@ import { type ColumnDef, type FilterFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/ui/DataTable'
 import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
+import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import type {
   SiniestroCompleto,
   SiniestroCategoria,
@@ -713,6 +714,21 @@ export function SiniestrosModule() {
               .eq('id', formDataClean.vehiculo_id)
           }
 
+          // Historial: registrar cambio de estado del vehículo por siniestro
+          registrarHistorialVehiculo({
+            vehiculoId: formDataClean.vehiculo_id,
+            tipoEvento: 'siniestro',
+            estadoNuevo: estado_vehiculo,
+            detalles: {
+              accion: 'crear_siniestro',
+              categoria_id: formDataClean.categoria_id,
+              responsable: formDataClean.responsable,
+              fecha_siniestro: formDataClean.fecha_siniestro,
+            },
+            modulo: 'siniestros',
+            sedeId: sedeActualId || sedeUsuario?.id,
+          })
+
           // Estados que finalizan asignaciones
           const estadosFinalizanAsignacion = [
             'SINIESTRADO',
@@ -729,7 +745,7 @@ export function SiniestrosModule() {
           if (estadosFinalizanAsignacion.includes(estado_vehiculo)) {
             const { data: asignacionesActivas } = await (supabase as any)
               .from('asignaciones')
-              .select('id')
+              .select('id, asignaciones_conductores(conductor_id)')
               .eq('vehiculo_id', formDataClean.vehiculo_id)
               .in('estado', ['activa', 'programado'])
 
@@ -753,6 +769,27 @@ export function SiniestrosModule() {
                   updated_by: profile?.full_name || 'Sistema'
                 })
                 .in('id', asignacionIds)
+
+              // Historial: registrar siniestro para cada conductor afectado
+              for (const asig of asignacionesActivas as any[]) {
+                const conductoresAsig = asig.asignaciones_conductores || []
+                for (const ac of conductoresAsig) {
+                  if (ac.conductor_id) {
+                    registrarHistorialConductor({
+                      conductorId: ac.conductor_id,
+                      tipoEvento: 'siniestro',
+                      detalles: {
+                        accion: 'asignacion_finalizada_por_siniestro',
+                        vehiculo_id: formDataClean.vehiculo_id,
+                        estado_vehiculo: estado_vehiculo,
+                        asignacion_id: asig.id,
+                      },
+                      modulo: 'siniestros',
+                      sedeId: sedeActualId || sedeUsuario?.id,
+                    })
+                  }
+                }
+              }
             }
           }
         }
@@ -780,6 +817,21 @@ export function SiniestrosModule() {
               .eq('id', formDataClean.vehiculo_id)
           }
 
+          // Historial: registrar cambio de estado del vehículo por siniestro (edición)
+          registrarHistorialVehiculo({
+            vehiculoId: formDataClean.vehiculo_id,
+            tipoEvento: 'siniestro',
+            estadoNuevo: estado_vehiculo,
+            detalles: {
+              accion: 'editar_siniestro',
+              siniestro_id: selectedSiniestro.id,
+              categoria_id: formDataClean.categoria_id,
+              responsable: formDataClean.responsable,
+            },
+            modulo: 'siniestros',
+            sedeId: sedeActualId || sedeUsuario?.id,
+          })
+
           // Estados que finalizan asignaciones
           const estadosFinalizanAsignacion = [
             'SINIESTRADO',
@@ -796,7 +848,7 @@ export function SiniestrosModule() {
           if (estadosFinalizanAsignacion.includes(estado_vehiculo)) {
             const { data: asignacionesActivas } = await (supabase as any)
               .from('asignaciones')
-              .select('id')
+              .select('id, asignaciones_conductores(conductor_id)')
               .eq('vehiculo_id', formDataClean.vehiculo_id)
               .in('estado', ['activa', 'programado'])
 
@@ -820,6 +872,28 @@ export function SiniestrosModule() {
                   updated_by: profile?.full_name || 'Sistema'
                 })
                 .in('id', asignacionIds)
+
+              // Historial: registrar siniestro para cada conductor afectado
+              for (const asig of asignacionesActivas as any[]) {
+                const conductoresAsig = asig.asignaciones_conductores || []
+                for (const ac of conductoresAsig) {
+                  if (ac.conductor_id) {
+                    registrarHistorialConductor({
+                      conductorId: ac.conductor_id,
+                      tipoEvento: 'siniestro',
+                      detalles: {
+                        accion: 'asignacion_finalizada_por_siniestro',
+                        vehiculo_id: formDataClean.vehiculo_id,
+                        estado_vehiculo: estado_vehiculo,
+                        siniestro_id: selectedSiniestro.id,
+                        asignacion_id: asig.id,
+                      },
+                      modulo: 'siniestros',
+                      sedeId: sedeActualId || sedeUsuario?.id,
+                    })
+                  }
+                }
+              }
             }
           }
         }
@@ -871,6 +945,20 @@ export function SiniestrosModule() {
         }).eq('id', siniestro.vehiculo_id)
 
         if (error) throw error
+
+        // Historial: registrar habilitación del vehículo
+        registrarHistorialVehiculo({
+          vehiculoId: siniestro.vehiculo_id,
+          tipoEvento: 'cambio_estado',
+          estadoNuevo: 'PKG_ON_BASE',
+          detalles: {
+            accion: 'habilitar_vehiculo_desde_siniestro',
+            patente: siniestro.vehiculo_patente,
+            siniestro_id: siniestro.id,
+          },
+          modulo: 'siniestros',
+          sedeId: sedeActualId || sedeUsuario?.id,
+        })
       }
 
       showSuccess('Vehículo habilitado', `${siniestro.vehiculo_patente} ahora puede circular`)

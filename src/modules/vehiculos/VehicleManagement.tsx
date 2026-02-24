@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
+import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import type {
   VehiculoWithRelations,
   VehiculoEstado
@@ -352,6 +353,25 @@ export function VehicleManagement() {
 
       if (insertError) throw insertError
 
+      // Registrar historial: vehículo creado con estado inicial
+      const estadoInicial = vehiculosEstados.find((e: VehiculoEstado) => e.id === formData.estado_id)
+      // Obtener el ID del vehículo recién creado
+      const { data: vehiculoCreado } = await (supabase as any)
+        .from('vehiculos')
+        .select('id')
+        .eq('patente', formData.patente.toUpperCase())
+        .single()
+      if (vehiculoCreado) {
+        registrarHistorialVehiculo({
+          vehiculoId: vehiculoCreado.id,
+          tipoEvento: 'cambio_estado',
+          estadoNuevo: estadoInicial?.codigo || 'SIN_ESTADO',
+          detalles: { patente: formData.patente.toUpperCase(), accion: 'vehiculo_creado' },
+          modulo: 'vehiculos',
+          sedeId: formData.sede_id,
+        })
+      }
+
       showSuccess('Vehículo creado')
       setShowCreateModal(false)
       resetForm()
@@ -389,6 +409,7 @@ export function VehicleManagement() {
 
       // Verificar si el nuevo estado requiere finalizar asignaciones
       let nuevoEstadoCodigo = ''
+      let motivoFinalizacion = ''
       const estadoAnteriorCodigo = (selectedVehiculo as any).vehiculos_estados?.codigo || ''
       
       if (formData.estado_id) {
@@ -439,7 +460,8 @@ export function VehicleManagement() {
             return
           }
 
-          const motivo = result.value || 'Sin motivo especificado'
+          motivoFinalizacion = result.value || 'Sin motivo especificado'
+          const motivo = motivoFinalizacion
 
           // Finalizar asignaciones activas
           const ahora = new Date().toISOString()
@@ -500,6 +522,50 @@ export function VehicleManagement() {
         .eq('id', selectedVehiculo.id)
 
       if (updateError) throw updateError
+
+      // Registrar historial: cambio de estado del vehículo
+      if (estadoAnteriorCodigo !== nuevoEstadoCodigo && nuevoEstadoCodigo) {
+        registrarHistorialVehiculo({
+          vehiculoId: selectedVehiculo.id,
+          tipoEvento: 'cambio_estado',
+          estadoAnterior: estadoAnteriorCodigo || null,
+          estadoNuevo: nuevoEstadoCodigo,
+          detalles: {
+            patente: formData.patente.toUpperCase(),
+            asignaciones_finalizadas: debeFinalizarAsignaciones,
+          },
+          modulo: 'vehiculos',
+          sedeId: formData.sede_id,
+        })
+      }
+
+      // Registrar historial para conductores cuyas asignaciones fueron finalizadas
+      if (debeFinalizarAsignaciones) {
+        const { data: asignacionesFinalizadas } = await (supabase as any)
+          .from('asignaciones')
+          .select('id, vehiculo_id, asignaciones_conductores(conductor_id)')
+          .eq('vehiculo_id', selectedVehiculo.id)
+          .eq('estado', 'finalizada')
+          .eq('notas', `[FINALIZADA] Cambio de estado a ${ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivoFinalizacion}`)
+        if (asignacionesFinalizadas) {
+          for (const asig of asignacionesFinalizadas) {
+            for (const ac of (asig.asignaciones_conductores || [])) {
+              registrarHistorialConductor({
+                conductorId: ac.conductor_id,
+                tipoEvento: 'asignacion_completada',
+                detalles: {
+                  patente: formData.patente.toUpperCase(),
+                  vehiculo_id: selectedVehiculo.id,
+                  asignacion_id: asig.id,
+                  motivo: `Vehículo cambió a ${nuevoEstadoCodigo}`,
+                },
+                modulo: 'vehiculos',
+                sedeId: formData.sede_id,
+              })
+            }
+          }
+        }
+      }
 
       showSuccess('Vehículo actualizado', debeFinalizarAsignaciones ? 'Asignaciones finalizadas' : undefined)
       setShowEditModal(false)

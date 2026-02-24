@@ -29,6 +29,7 @@ import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
+import { registrarHistorialConductor, registrarHistorialVehiculo } from "../../services/historialService";
 
 // Función para actualizar estado en tabla de control de facturación
 async function actualizarEstadoControlFacturacion(
@@ -924,6 +925,20 @@ export function ConductoresModule() {
       }
 
       showSuccess("Conductor creado");
+
+      // Registrar historial de creación del conductor
+      if (newConductor && newConductor.length > 0) {
+        const estadoInicial = estadosConductor.find((e: any) => e.id === formData.estado_id);
+        registrarHistorialConductor({
+          conductorId: newConductor[0].id,
+          tipoEvento: 'cambio_estado',
+          estadoNuevo: estadoInicial?.codigo || 'ACTIVO',
+          detalles: { nombre: `${formData.nombres} ${formData.apellidos}`, accion: 'conductor_creado' },
+          modulo: 'conductores',
+          sedeId: formData.sede_id || sedeActualId || sedeUsuario?.id,
+        });
+      }
+
       setShowCreateModal(false);
       resetForm();
       await loadConductores(true);
@@ -1136,6 +1151,37 @@ export function ConductoresModule() {
       .from('vehiculos_turnos_ocupados')
       .delete()
       .eq('asignacion_conductor_id', asignacionConductor.id);
+
+    // Registrar historial para vehículo (vuelve a DISPONIBLE)
+    if (asignacion.vehiculo_id) {
+      registrarHistorialVehiculo({
+        vehiculoId: asignacion.vehiculo_id,
+        tipoEvento: 'asignacion_cancelada',
+        estadoNuevo: 'DISPONIBLE',
+        detalles: {
+          asignacion_id: asignacion.id,
+          asignacion_codigo: asignacion.codigo,
+          patente: asignacion.vehiculos?.patente,
+          motivo: motivoBaja,
+          modo: 'CARGO',
+        },
+        modulo: 'conductores',
+      });
+    }
+
+    // Registrar historial para conductor (asignación cancelada)
+    registrarHistorialConductor({
+      conductorId: asignacionConductor.conductor_id,
+      tipoEvento: 'asignacion_cancelada',
+      detalles: {
+        asignacion_id: asignacion.id,
+        asignacion_codigo: asignacion.codigo,
+        patente: asignacion.vehiculos?.patente,
+        motivo: motivoBaja,
+        modo: 'CARGO',
+      },
+      modulo: 'conductores',
+    });
   };
 
   // Cancelación para modo TURNO
@@ -1191,6 +1237,39 @@ export function ConductoresModule() {
           .update({ estado_id: estadoDisponible.id })
           .eq('id', asignacion.vehiculo_id);
       }
+
+      // Registrar historial para vehículo (vuelve a DISPONIBLE)
+      if (asignacion.vehiculo_id) {
+        registrarHistorialVehiculo({
+          vehiculoId: asignacion.vehiculo_id,
+          tipoEvento: 'asignacion_cancelada',
+          estadoNuevo: 'DISPONIBLE',
+          detalles: {
+            asignacion_id: asignacion.id,
+            asignacion_codigo: asignacion.codigo,
+            patente: asignacion.vehiculos?.patente,
+            motivo: motivoBaja,
+            modo: 'TURNO',
+            sin_otros_conductores: true,
+          },
+          modulo: 'conductores',
+        });
+      }
+
+      // Registrar historial para conductor (asignación cancelada)
+      registrarHistorialConductor({
+        conductorId: asignacionConductor.conductor_id,
+        tipoEvento: 'asignacion_cancelada',
+        detalles: {
+          asignacion_id: asignacion.id,
+          asignacion_codigo: asignacion.codigo,
+          patente: asignacion.vehiculos?.patente,
+          motivo: motivoBaja,
+          modo: 'TURNO',
+          horario: asignacionConductor.horario,
+        },
+        modulo: 'conductores',
+      });
     } else {
       // Hay otro conductor - solo agregar nota de vacante
       const turnoVacante = asignacionConductor.horario === 'diurno' ? 'Turno Diurno' : 'Turno Nocturno';
@@ -1206,6 +1285,23 @@ export function ConductoresModule() {
           updated_at: ahora
         })
         .eq('id', asignacion.id);
+
+      // Registrar historial para conductor (removido del turno, asignación continúa)
+      registrarHistorialConductor({
+        conductorId: asignacionConductor.conductor_id,
+        tipoEvento: 'asignacion_cancelada',
+        detalles: {
+          asignacion_id: asignacion.id,
+          asignacion_codigo: asignacion.codigo,
+          patente: asignacion.vehiculos?.patente,
+          motivo: motivoBaja,
+          modo: 'TURNO',
+          horario: asignacionConductor.horario,
+          turno_vacante: turnoVacante,
+          asignacion_continua: true,
+        },
+        modulo: 'conductores',
+      });
     }
   };
 
@@ -1252,6 +1348,24 @@ export function ConductoresModule() {
       .eq("id", selectedConductor!.id);
 
     if (updateError) throw updateError;
+
+    // Registrar historial si cambió el estado
+    if (selectedConductor!.estado_id !== formData.estado_id) {
+      const estadoAnterior = estadosConductor.find((e: any) => e.id === selectedConductor!.estado_id);
+      const estadoNuevo = estadosConductor.find((e: any) => e.id === formData.estado_id);
+      registrarHistorialConductor({
+        conductorId: selectedConductor!.id,
+        tipoEvento: 'cambio_estado',
+        estadoAnterior: estadoAnterior?.codigo || null,
+        estadoNuevo: estadoNuevo?.codigo || null,
+        detalles: {
+          nombre: `${formData.nombres} ${formData.apellidos}`,
+          accion: 'actualizacion_conductor',
+        },
+        modulo: 'conductores',
+        sedeId: formData.sede_id || null,
+      });
+    }
 
     // Actualizar categorías de licencia
     await (supabase as any)
@@ -1301,6 +1415,22 @@ export function ConductoresModule() {
       setSelectedConductor(null);
       resetForm();
       await loadConductores(true);
+
+      // Registrar historial de baja del conductor
+      registrarHistorialConductor({
+        conductorId: selectedConductor.id,
+        tipoEvento: 'baja',
+        estadoAnterior: 'ACTIVO',
+        estadoNuevo: 'BAJA',
+        detalles: {
+          nombre: `${selectedConductor.nombres} ${selectedConductor.apellidos}`,
+          motivo_baja: motivoBaja,
+          fecha_terminacion: formData.fecha_terminacion,
+          asignaciones_afectadas: affectedAssignments?.length || 0,
+        },
+        modulo: 'conductores',
+        sedeId: selectedConductor.sede_id,
+      });
 
       showSuccess("Baja procesada", "El conductor y sus asignaciones fueron actualizados");
     } catch (err: any) {
