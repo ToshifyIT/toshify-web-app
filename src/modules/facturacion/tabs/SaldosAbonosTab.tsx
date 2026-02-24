@@ -918,10 +918,18 @@ export function SaldosAbonosTab() {
           <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
             <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
           </div>
-          <div>
+          <div style="margin-bottom: 10px;">
             <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Saldo Actual:</label>
             <input id="swal-saldo" type="number" step="0.01" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.saldo_actual}">
             <span style="font-size: 10px; color: #6B7280;">Positivo = A Favor | Negativo = Deuda</span>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Días de Mora:</label>
+            <input id="swal-dias-mora" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.dias_mora || 0}">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Mora Acumulada:</label>
+            <input id="swal-mora-acum" type="number" step="0.01" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${saldo.monto_mora_acumulada || 0}">
           </div>
         </div>
       `,
@@ -943,7 +951,9 @@ export function SaldosAbonosTab() {
           Swal.showValidationMessage('Ingrese un saldo válido')
           return false
         }
-        return { saldoActual }
+        const diasMora = parseInt((document.getElementById('swal-dias-mora') as HTMLInputElement).value) || 0
+        const moraAcum = parseFloat((document.getElementById('swal-mora-acum') as HTMLInputElement).value) || 0
+        return { saldoActual, diasMora, moraAcum }
       }
     })
 
@@ -951,8 +961,8 @@ export function SaldosAbonosTab() {
 
     try {
       // Si el nuevo saldo es >= 0, resetear mora
-      const diasMora = formValues.saldoActual >= 0 ? 0 : (saldo.dias_mora || 0)
-      const moraAcum = formValues.saldoActual >= 0 ? 0 : (saldo.monto_mora_acumulada || 0)
+      const diasMora = formValues.saldoActual >= 0 ? 0 : formValues.diasMora
+      const moraAcum = formValues.saldoActual >= 0 ? 0 : formValues.moraAcum
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from('saldos_conductores') as any)
@@ -972,6 +982,70 @@ export function SaldosAbonosTab() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo actualizar el saldo', 'error')
+    }
+  }
+
+  // Editar mora acumulada inline (click en celda)
+  async function editarMoraAcumulada(saldo: SaldoConductor) {
+    const diasActual = (saldo.dias_mora && saldo.dias_mora > 0) ? saldo.dias_mora : (saldo.ultima_actualizacion ? diasCalendario(saldo.ultima_actualizacion) : 0)
+    const moraActual = (saldo.monto_mora_acumulada && saldo.monto_mora_acumulada > 0) ? saldo.monto_mora_acumulada : Math.round(Math.abs(saldo.saldo_actual) * 0.01 * diasActual * 100) / 100
+
+    const { value: formValues } = await Swal.fire({
+      title: '<span style="font-size: 16px; font-weight: 600;">Editar Mora</span>',
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #F3F4F6; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #111827;">${saldo.conductor_nombre}</div>
+            <div style="color: #DC2626; font-size: 12px; margin-top: 4px;">Saldo: <strong>${formatCurrency(saldo.saldo_actual)}</strong></div>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Días de Mora:</label>
+            <input id="swal-dias-mora" type="number" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${diasActual}">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">Mora Acumulada:</label>
+            <input id="swal-mora-acum" type="number" step="0.01" min="0" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${moraActual}">
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ff0033',
+      cancelButtonColor: '#6B7280',
+      width: 340,
+      customClass: {
+        popup: 'swal-compact',
+        title: 'swal-title-compact',
+        htmlContainer: 'swal-html-compact'
+      },
+      preConfirm: () => {
+        const diasMora = parseInt((document.getElementById('swal-dias-mora') as HTMLInputElement).value) || 0
+        const moraAcum = parseFloat((document.getElementById('swal-mora-acum') as HTMLInputElement).value) || 0
+        return { diasMora, moraAcum }
+      }
+    })
+
+    if (!formValues) return
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from('saldos_conductores') as any)
+        .update({
+          dias_mora: formValues.diasMora,
+          monto_mora_acumulada: formValues.moraAcum,
+          ultima_actualizacion: new Date().toISOString()
+        })
+        .eq('id', saldo.id)
+
+      if (error) throw error
+
+      showSuccess('Actualizado', 'Mora actualizada correctamente')
+      cargarSaldos()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo actualizar la mora', 'error')
     }
   }
 
@@ -1281,23 +1355,34 @@ export function SaldosAbonosTab() {
       accessorKey: 'dias_mora',
       header: 'Días Mora',
       cell: ({ row }) => {
-        const saldo = row.original.saldo_actual
-        if (saldo >= 0 || !row.original.ultima_actualizacion) return <span className="text-gray-400">-</span>
-        const dias = diasCalendario(row.original.ultima_actualizacion)
+        const s = row.original
+        if (s.saldo_actual >= 0) return <span className="text-gray-400">-</span>
+        // Usar valor de BD si existe, sino calcular desde ultima_actualizacion
+        const dias = (s.dias_mora && s.dias_mora > 0) ? s.dias_mora : (s.ultima_actualizacion ? diasCalendario(s.ultima_actualizacion) : 0)
         if (dias === 0) return <span className="text-gray-400">-</span>
-        return <span className={`fact-badge ${dias > 3 ? 'fact-badge-red' : 'fact-badge-yellow'}`}>{dias} días</span>
+        return <span className={`fact-badge ${dias > 7 ? 'fact-badge-red' : dias > 3 ? 'fact-badge-yellow' : 'fact-badge-gray'}`}>{dias} días</span>
       }
     },
     {
       accessorKey: 'monto_mora_acumulada',
       header: 'Mora Acum.',
       cell: ({ row }) => {
-        const saldo = row.original.saldo_actual
-        if (saldo >= 0 || !row.original.ultima_actualizacion) return <span className="text-gray-400">-</span>
-        const dias = diasCalendario(row.original.ultima_actualizacion)
-        if (dias === 0) return <span className="text-gray-400">-</span>
-        const mora = Math.round(Math.abs(saldo) * 0.01 * dias * 100) / 100
-        return <span className="fact-precio fact-precio-negative">{formatCurrency(mora)}</span>
+        const s = row.original
+        if (s.saldo_actual >= 0) return <span className="text-gray-400">-</span>
+        // Usar valor de BD si existe, sino calcular: |saldo| * 1% * dias
+        const dias = (s.dias_mora && s.dias_mora > 0) ? s.dias_mora : (s.ultima_actualizacion ? diasCalendario(s.ultima_actualizacion) : 0)
+        const mora = (s.monto_mora_acumulada && s.monto_mora_acumulada > 0) ? s.monto_mora_acumulada : Math.round(Math.abs(s.saldo_actual) * 0.01 * dias * 100) / 100
+        if (mora === 0) return <span className="text-gray-400">-</span>
+        return (
+          <span
+            className="fact-precio fact-precio-negative"
+            style={{ cursor: (isAdmin() || isAdministrativo()) ? 'pointer' : 'default', textDecoration: (isAdmin() || isAdministrativo()) ? 'underline dotted' : 'none' }}
+            onClick={() => { if (isAdmin() || isAdministrativo()) editarMoraAcumulada(s) }}
+            title={(isAdmin() || isAdministrativo()) ? 'Click para editar' : ''}
+          >
+            {formatCurrency(mora)}
+          </span>
+        )
       }
     },
     {
