@@ -635,7 +635,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         .gte('score', 20)
         .lte('tiempo_minutos', 30)
         .order('score', { ascending: false })
-        .limit(50)
+        .limit(500)
 
       if (!errorDB && emparajamientosDB && emparajamientosDB.length > 0) {
         const paresDB: any[] = []
@@ -672,7 +672,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
 
         if (paresDB.length > 0) {
-          setParesCercanos(paresDB.slice(0, 10))
+          setParesCercanos(paresDB)
           setMostrarParesCercanos(true)
           setLoadingPares(false)
           return
@@ -740,12 +740,12 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
       }
 
-      // Top 10 pares
-      const top10 = paresUnicos.slice(0, 10)
+      // Top pares (todos los unicos)
+      const topPares = paresUnicos.slice(0, 50)
 
-      // Obtener distancia y tiempo en auto para los top 10 (llamadas a Distance Matrix API)
+      // Obtener distancia y tiempo en auto via Distance Matrix API
       const paresConTiempo = await Promise.all(
-        top10.map(async (par) => {
+        topPares.map(async (par) => {
           const resultado = await obtenerDistanciaEnAuto(
             { lat: par.diurno.direccion_lat!, lng: par.diurno.direccion_lng! },
             { lat: par.nocturno.direccion_lat!, lng: par.nocturno.direccion_lng! }
