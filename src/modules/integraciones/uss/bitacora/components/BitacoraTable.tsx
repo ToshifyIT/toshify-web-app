@@ -142,9 +142,12 @@ export function BitacoraTable({
     }
   }
 
-  const formatTime = (time: string | null) => {
+  const formatDateTime = (fecha: string, time: string | null) => {
     if (!time) return '-'
-    return time.substring(0, 5)
+    const d = new Date(fecha + 'T00:00:00')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    return `${dd}/${mm} ${time.substring(0, 5)}`
   }
 
   // Columnas con filtros Excel
@@ -260,7 +263,7 @@ export function BitacoraTable({
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => formatTime(row.original.hora_inicio),
+      cell: ({ row }) => formatDateTime(row.original.fecha_turno, row.original.hora_inicio),
       enableSorting: true,
     },
     {
@@ -276,7 +279,7 @@ export function BitacoraTable({
           onOpenChange={setOpenFilterId}
         />
       ),
-      cell: ({ row }) => formatTime(row.original.hora_cierre),
+      cell: ({ row }) => formatDateTime(row.original.fecha_turno, row.original.hora_cierre),
       enableSorting: true,
     },
     {
