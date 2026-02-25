@@ -1505,7 +1505,11 @@ export function HomePage() {
               title="Ver mi perfil"
             >
               <div className="user-avatar">
-                {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                {(profile as any)?.avatar_url ? (
+                  <img src={(profile as any).avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  profile?.full_name?.charAt(0).toUpperCase() || 'U'
+                )}
               </div>
               <div className="user-info">
                 <div className="user-name">{profile?.full_name || 'Usuario'}</div>
