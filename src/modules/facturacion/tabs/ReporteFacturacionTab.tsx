@@ -6665,7 +6665,7 @@ export function ReporteFacturacionTab() {
           >
             {row.original.conductor_nombre}
           </strong>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
               {row.original.vehiculo_patente || '-'}
             </span>
@@ -6683,6 +6683,9 @@ export function ReporteFacturacionTab() {
               else if (diurno > 0 && nocturno > 0) label = 'D+N'
               return <span className="dt-badge dt-badge-solid-gray" style={{ fontSize: '9px', padding: '1px 5px' }}>{label}</span>
             })()}
+            {['AG558DZ', 'AG304XD'].includes((row.original.vehiculo_patente || '').replace(/\s/g, '').toUpperCase()) && (
+              <span className="dt-badge dt-badge-orange" style={{ fontSize: '9px', padding: '1px 5px' }}>Sin GNC</span>
+            )}
           </div>
         </div>
       ),
