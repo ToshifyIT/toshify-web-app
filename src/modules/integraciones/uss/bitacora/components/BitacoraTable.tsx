@@ -47,7 +47,6 @@ export function BitacoraTable({
 
   // Estados para filtros Excel - TODAS las columnas
   const { openFilterId, setOpenFilterId } = useExcelFilters()
-  const [fechaFilter, setFechaFilter] = useState<string[]>([])
   const [patenteFilter, setPatenteFilter] = useState<string[]>([])
   const [ibuttonFilter, setIbuttonFilter] = useState<string[]>([])
   const [conductorFilter, setConductorFilter] = useState<string[]>([])
@@ -61,17 +60,7 @@ export function BitacoraTable({
   const [naftaFilter, setNaftaFilter] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<string[]>([])
 
-  // Función para formatear fecha
-  const formatDateStr = (date: string) => {
-    const d = new Date(date + 'T00:00:00')
-    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  }
-
   // Listas únicas para filtros
-  const fechasUnicas = useMemo(() =>
-    [...new Set(registros.map(r => formatDateStr(r.fecha_turno)))].sort().reverse()
-  , [registros])
-
   const patentesUnicas = useMemo(() =>
     [...new Set(registros.map(r => r.patente.replace(/\s/g, '')))].filter(Boolean).sort()
   , [registros])
@@ -115,7 +104,6 @@ export function BitacoraTable({
   // Datos filtrados
   const registrosFiltrados = useMemo(() => {
     return registros.filter(r => {
-      if (fechaFilter.length > 0 && !fechaFilter.includes(formatDateStr(r.fecha_turno))) return false
       if (patenteFilter.length > 0 && !patenteFilter.includes(r.patente.replace(/\s/g, ''))) return false
       if (ibuttonFilter.length > 0 && !ibuttonFilter.includes(r.ibutton || '-')) return false
       if (conductorFilter.length > 0 && !conductorFilter.includes(r.conductor_wialon || '-')) return false
@@ -139,7 +127,7 @@ export function BitacoraTable({
       if (estadoFilter.length > 0 && !estadoFilter.includes(r.estado)) return false
       return true
     })
-  }, [registros, fechaFilter, patenteFilter, ibuttonFilter, conductorFilter, tipoFilter, turnoFilter, inicioFilter, cierreFilter, kmFilter, gncFilter, lavadoFilter, naftaFilter, estadoFilter])
+  }, [registros, patenteFilter, ibuttonFilter, conductorFilter, tipoFilter, turnoFilter, inicioFilter, cierreFilter, kmFilter, gncFilter, lavadoFilter, naftaFilter, estadoFilter])
 
   const handleCheckboxChange = async (
     id: string,
@@ -159,33 +147,10 @@ export function BitacoraTable({
     return time.substring(0, 5)
   }
 
-  const formatDate = (date: string) => {
-    const d = new Date(date + 'T00:00:00')
-    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  }
-
-  // Columnas con filtros Excel en TODAS
+  // Columnas con filtros Excel
   const columns = useMemo<ColumnDef<BitacoraRegistroTransformado, unknown>[]>(() => [
     {
-      accessorKey: 'fecha_turno',
-      size: 90,
-      header: () => (
-        <ExcelColumnFilter
-          label="Fecha"
-          options={fechasUnicas}
-          selectedValues={fechaFilter}
-          onSelectionChange={setFechaFilter}
-          filterId="fecha"
-          openFilterId={openFilterId}
-          onOpenChange={setOpenFilterId}
-        />
-      ),
-      cell: ({ row }) => formatDate(row.original.fecha_turno),
-      enableSorting: true,
-    },
-    {
       accessorKey: 'patente',
-      size: 80,
       header: () => (
         <ExcelColumnFilter
           label="Patente"
@@ -206,7 +171,6 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'ibutton',
-      size: 50,
       header: () => (
         <ExcelColumnFilter
           label="iButton"
@@ -243,7 +207,6 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'tipo_turno',
-      size: 70,
       header: () => (
         <ExcelColumnFilter
           label="Tipo"
@@ -264,7 +227,6 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'turno_indicador',
-      size: 85,
       header: () => (
         <ExcelColumnFilter
           label="Turno"
@@ -287,7 +249,6 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'hora_inicio',
-      size: 60,
       header: () => (
         <ExcelColumnFilter
           label="Inicio"
@@ -304,7 +265,6 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'hora_cierre',
-      size: 60,
       header: () => (
         <ExcelColumnFilter
           label="Cierre"
@@ -321,7 +281,6 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'kilometraje',
-      size: 60,
       header: () => (
         <ExcelColumnFilter
           label="Km"
@@ -349,7 +308,6 @@ export function BitacoraTable({
     },
     {
       id: 'gnc_cargado',
-      size: 45,
       header: () => (
         <ExcelColumnFilter
           label="GNC"
@@ -376,7 +334,6 @@ export function BitacoraTable({
     },
     {
       id: 'lavado_realizado',
-      size: 55,
       header: () => (
         <ExcelColumnFilter
           label="Lavado"
@@ -403,7 +360,6 @@ export function BitacoraTable({
     },
     {
       id: 'nafta_cargada',
-      size: 50,
       header: () => (
         <ExcelColumnFilter
           label="Nafta"
@@ -430,7 +386,6 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'estado',
-      size: 130,
       header: () => (
         <ExcelColumnFilter
           label="Estado"
@@ -453,7 +408,6 @@ export function BitacoraTable({
       enableSorting: false,
     },
   ], [
-    fechasUnicas, fechaFilter,
     patentesUnicas, patenteFilter,
     ibuttonsUnicos, ibuttonFilter,
     conductoresUnicos, conductorFilter,
