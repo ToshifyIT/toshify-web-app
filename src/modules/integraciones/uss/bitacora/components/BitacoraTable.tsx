@@ -168,6 +168,7 @@ export function BitacoraTable({
   const columns = useMemo<ColumnDef<BitacoraRegistroTransformado, unknown>[]>(() => [
     {
       accessorKey: 'fecha_turno',
+      size: 90,
       header: () => (
         <ExcelColumnFilter
           label="Fecha"
@@ -184,6 +185,7 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'patente',
+      size: 80,
       header: () => (
         <ExcelColumnFilter
           label="Patente"
@@ -204,6 +206,7 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'ibutton',
+      size: 50,
       header: () => (
         <ExcelColumnFilter
           label="iButton"
@@ -240,6 +243,7 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'tipo_turno',
+      size: 70,
       header: () => (
         <ExcelColumnFilter
           label="Tipo"
@@ -260,6 +264,7 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'turno_indicador',
+      size: 85,
       header: () => (
         <ExcelColumnFilter
           label="Turno"
@@ -275,13 +280,14 @@ export function BitacoraTable({
         const tipo = row.original.tipo_turno
         const turno = row.original.turno_indicador
         if (tipo !== 'TURNO' || !turno) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
-        const badgeClass = turno === 'Diurno' ? 'dt-badge-yellow' : 'dt-badge-solid-purple'
+        const badgeClass = turno === 'Diurno' ? 'dt-badge-yellow' : 'dt-badge-blue'
         return <span className={`dt-badge ${badgeClass}`}>{turno}</span>
       },
       enableSorting: false,
     },
     {
       accessorKey: 'hora_inicio',
+      size: 60,
       header: () => (
         <ExcelColumnFilter
           label="Inicio"
@@ -298,6 +304,7 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'hora_cierre',
+      size: 60,
       header: () => (
         <ExcelColumnFilter
           label="Cierre"
@@ -314,6 +321,7 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'kilometraje',
+      size: 60,
       header: () => (
         <ExcelColumnFilter
           label="Km"
@@ -341,6 +349,7 @@ export function BitacoraTable({
     },
     {
       id: 'gnc_cargado',
+      size: 45,
       header: () => (
         <ExcelColumnFilter
           label="GNC"
@@ -367,6 +376,7 @@ export function BitacoraTable({
     },
     {
       id: 'lavado_realizado',
+      size: 55,
       header: () => (
         <ExcelColumnFilter
           label="Lavado"
@@ -393,6 +403,7 @@ export function BitacoraTable({
     },
     {
       id: 'nafta_cargada',
+      size: 50,
       header: () => (
         <ExcelColumnFilter
           label="Nafta"
@@ -419,6 +430,7 @@ export function BitacoraTable({
     },
     {
       accessorKey: 'estado',
+      size: 130,
       header: () => (
         <ExcelColumnFilter
           label="Estado"
@@ -436,7 +448,7 @@ export function BitacoraTable({
         if (estado === 'Turno Finalizado') badgeClass = 'dt-badge-green'
         else if (estado === 'Poco Km') badgeClass = 'dt-badge-red'
         else if (estado === 'En Curso') badgeClass = 'dt-badge-blue'
-        return <span className={`dt-badge ${badgeClass}`}>{estado}</span>
+        return <div style={{ textAlign: 'center' }}><span className={`dt-badge ${badgeClass}`}>{estado}</span></div>
       },
       enableSorting: false,
     },

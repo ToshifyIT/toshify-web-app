@@ -8,7 +8,7 @@ export const BITACORA_CONSTANTS = {
   POCO_KM_THRESHOLD: 100,
 
   // Paginación
-  DEFAULT_PAGE_SIZE: 25,
+  DEFAULT_PAGE_SIZE: 100,
   PAGE_SIZE_OPTIONS: [10, 25, 50, 100],
 
   // Estados y sus colores
