@@ -1,7 +1,14 @@
 import { useMemo, useState } from 'react'
-import type { ChangeEvent } from 'react'
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react'
+import { format, subDays, subWeeks, subMonths, subYears, getWeek } from 'date-fns'
+import { es } from 'date-fns/locale'
 import { getMockPeriodData } from '../mockData'
+import { useMultasStats } from '../../../hooks/useMultasStats'
+import { useTelepaseStats } from '../../../hooks/useTelepaseStats'
+import { useIncidenciasStats } from '../../../hooks/useIncidenciasStats'
+import { usePermanenciaStats } from '../../../hooks/usePermanenciaStats'
+import { PeriodPicker } from './PeriodPicker'
+import './PeriodComparison.css'
 
 type Granularity = 'dia' | 'semana' | 'mes' | 'ano'
 
@@ -20,72 +27,49 @@ interface MetricView {
   variationSign: 'positive' | 'negative'
 }
 
-const WEEK_OPTIONS = Array.from({ length: 52 }, (_, index) => {
-  const number = index + 1
-  return `Sem ${number.toString().padStart(2, '0')}`
-})
-
 const MONTH_NAMES = [
-  'Ene',
-  'Feb',
-  'Mar',
-  'Abr',
-  'May',
-  'Jun',
-  'Jul',
-  'Ago',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dic'
+  'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+  'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
 ]
-
-const MONTH_OPTIONS: string[] = []
-;[2024, 2025, 2026].forEach(year => {
-  MONTH_NAMES.forEach(month => {
-    MONTH_OPTIONS.push(`${month} ${year}`)
-  })
-})
-
-const YEAR_OPTIONS = ['2024', '2025', '2026']
-
-function getDayOptions(): string[] {
-  const today = new Date()
-  const options: string[] = []
-
-  for (let index = 0; index < 30; index += 1) {
-    const date = new Date(today)
-    date.setDate(today.getDate() - index)
-    const day = date.getDate().toString().padStart(2, '0')
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    options.push(`${day}/${month}`)
-  }
-
-  return options
-}
 
 export function PeriodComparison() {
   const [granularity, setGranularity] = useState<Granularity>('semana')
-  const [periodA, setPeriodA] = useState<string>('Sem 08')
-  const [periodB, setPeriodB] = useState<string>('Sem 06')
+  
+  // Initialize with current week/prev week by default
+  const [periodA, setPeriodA] = useState<string>(() => {
+    const now = new Date()
+    const week = getWeek(now, { weekStartsOn: 1 })
+    return `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
+  })
+  
+  const [periodB, setPeriodB] = useState<string>(() => {
+    const prevWeekDate = subWeeks(new Date(), 1)
+    const week = getWeek(prevWeekDate, { weekStartsOn: 1 })
+    return `Sem ${week.toString().padStart(2, '0')} ${prevWeekDate.getFullYear()}`
+  })
+
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('personalizado')
 
-  const periodOptions = granularity === 'dia'
-    ? getDayOptions()
-    : granularity === 'semana'
-      ? WEEK_OPTIONS
-      : granularity === 'mes'
-        ? MONTH_OPTIONS
-        : YEAR_OPTIONS
+  const multasStats = useMultasStats(granularity, periodA, periodB)
+  const telepaseStats = useTelepaseStats(granularity, periodA, periodB)
+  const incidenciasStats = useIncidenciasStats(granularity, periodA, periodB)
+  const permanenciaStats = usePermanenciaStats(granularity, periodA, periodB)
 
   const currencyFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat('es-AR', {
-        style: 'currency',
-        currency: 'ARS',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      }),
+    () => ({
+      format: (value: number) => {
+        return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+      }
+    }),
+    []
+  )
+
+  const telepaseFormatter = useMemo(
+    () => ({
+      format: (value: number) => {
+        return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+      }
+    }),
     []
   )
 
@@ -121,37 +105,44 @@ export function PeriodComparison() {
       })
     }
 
-    const addPercentageMetric = (
+
+
+    const addTelepaseMetric = (
       id: string,
       name: string,
       valueA: number,
-      valueB: number,
-      asPoints: boolean
+      valueB: number
     ) => {
-      if (asPoints) {
-        const diff = valueA - valueB
-        const isPositive = diff >= 0
-        metricList.push({
-          id,
-          name,
-          valueA: `${valueA.toFixed(1)}%`,
-          valueB: `${valueB.toFixed(1)}%`,
-          variationLabel: `${isPositive ? '+' : '-'}${Math.abs(diff).toFixed(1)}pp`,
-          variationSign: isPositive ? 'positive' : 'negative'
-        })
-      } else {
-        const diff = valueA - valueB
-        const base = valueB === 0 ? 0 : (diff / valueB) * 100
-        const isPositive = base >= 0
-        metricList.push({
-          id,
-          name,
-          valueA: `${valueA.toFixed(0)}%`,
-          valueB: `${valueB.toFixed(0)}%`,
-          variationLabel: `${isPositive ? '+' : '-'}${Math.abs(base).toFixed(0)}%`,
-          variationSign: isPositive ? 'positive' : 'negative'
-        })
-      }
+      const diff = valueA - valueB
+      const base = valueB === 0 ? 0 : (diff / valueB) * 100
+      const isPositive = base >= 0
+      metricList.push({
+        id,
+        name,
+        valueA: telepaseFormatter.format(valueA),
+        valueB: telepaseFormatter.format(valueB),
+        variationLabel: `${isPositive ? '+' : '-'}${Math.abs(base).toFixed(0)}%`,
+        variationSign: isPositive ? 'positive' : 'negative'
+      })
+    }
+
+    const addIntegerMetric = (
+      id: string,
+      name: string,
+      valueA: number,
+      valueB: number
+    ) => {
+      const diff = valueA - valueB
+      const base = valueB === 0 ? 0 : (diff / valueB) * 100
+      const isPositive = base >= 0
+      metricList.push({
+        id,
+        name,
+        valueA: valueA.toFixed(0),
+        valueB: valueB.toFixed(0),
+        variationLabel: `${isPositive ? '+' : '-'}${Math.abs(base).toFixed(0)}%`,
+        variationSign: isPositive ? 'positive' : 'negative'
+      })
     }
 
     addCurrencyMetric(
@@ -161,108 +152,126 @@ export function PeriodComparison() {
       periodDataB.cobroPendiente
     )
 
-    addPercentageMetric(
-      'metric-efectividad-cobro',
-      'EFECTIVIDAD DE COBRO',
-      periodDataA.efectividadCobro,
-      periodDataB.efectividadCobro,
-      false
+    addIntegerMetric(
+      'metric-permanencia',
+      'PROM. DIAS PERMANENCIA',
+      permanenciaStats.avgDaysA,
+      permanenciaStats.avgDaysB
     )
 
     addCurrencyMetric(
       'metric-total-multas',
       'TOTAL MULTAS',
-      periodDataA.totalMultas,
-      periodDataB.totalMultas
+      multasStats.totalA,
+      multasStats.totalB
+    )
+
+    addTelepaseMetric(
+      'metric-total-telepase',
+      'TOTAL TELEPASE',
+      telepaseStats.totalA,
+      telepaseStats.totalB
     )
 
     addCurrencyMetric(
-      'metric-total-telepase',
-      'TOTAL TELEPASE',
-      periodDataA.totalTelepase,
-      periodDataB.totalTelepase
+      'metric-total-incidencias',
+      'TOTAL DE INCIDENCIAS',
+      incidenciasStats.totalA,
+      incidenciasStats.totalB
     )
 
-    addPercentageMetric(
-      'metric-porcentaje-siniestros',
-      '% INGRESO EN SINIESTROS',
-      periodDataA.ingresoSiniestros,
-      periodDataB.ingresoSiniestros,
-      true
-    )
+
 
     return metricList
-  }, [currencyFormatter, periodDataA, periodDataB])
+  }, [
+    currencyFormatter,
+    telepaseFormatter,
+    periodDataA,
+    periodDataB,
+    multasStats,
+    telepaseStats,
+    incidenciasStats,
+    permanenciaStats
+  ])
 
   const handleGranularityChange = (value: Granularity) => {
     setGranularity(value)
     setQuickFilter('personalizado')
 
-    const options = value === 'dia'
-      ? getDayOptions()
-      : value === 'semana'
-        ? WEEK_OPTIONS
-        : value === 'mes'
-          ? MONTH_OPTIONS
-          : YEAR_OPTIONS
+    const now = new Date()
+    let nextA = ''
+    let nextB = ''
 
-    const nextPeriodA = options[0] ?? ''
-    const nextPeriodB = options[1] ?? nextPeriodA
+    if (value === 'dia') {
+        nextA = format(now, 'dd/MM/yyyy')
+        nextB = format(subDays(now, 1), 'dd/MM/yyyy')
+    } else if (value === 'semana') {
+        const week = getWeek(now, { weekStartsOn: 1 })
+        nextA = `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
+        
+        const prev = subWeeks(now, 1)
+        const prevWeek = getWeek(prev, { weekStartsOn: 1 })
+        nextB = `Sem ${prevWeek.toString().padStart(2, '0')} ${prev.getFullYear()}`
+    } else if (value === 'mes') {
+        const monthName = format(now, 'MMM', { locale: es })
+        const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+        nextA = `${capMonth} ${now.getFullYear()}`
+        
+        const prev = subMonths(now, 1)
+        const prevMonthName = format(prev, 'MMM', { locale: es })
+        const capPrev = prevMonthName.charAt(0).toUpperCase() + prevMonthName.slice(1)
+        nextB = `${capPrev} ${prev.getFullYear()}`
+    } else if (value === 'ano') {
+        nextA = format(now, 'yyyy')
+        nextB = format(subYears(now, 1), 'yyyy')
+    }
 
-    setPeriodA(nextPeriodA)
-    setPeriodB(nextPeriodB)
+    setPeriodA(nextA)
+    setPeriodB(nextB)
   }
 
   const handleQuickFilterClick = (filter: QuickFilter) => {
     setQuickFilter(filter)
-
-    const today = new Date()
+    const now = new Date()
 
     if (filter === 'hoy-ayer') {
-      const options = getDayOptions()
-      const todayLabel = options[0] ?? ''
-      const yesterdayLabel = options[1] ?? todayLabel
       setGranularity('dia')
-      setPeriodA(todayLabel)
-      setPeriodB(yesterdayLabel)
+      setPeriodA(format(now, 'dd/MM/yyyy'))
+      setPeriodB(format(subDays(now, 1), 'dd/MM/yyyy'))
       return
     }
 
     if (filter === 'semana-actual-anterior') {
       setGranularity('semana')
-      setPeriodA('Sem 08')
-      setPeriodB('Sem 07')
+      const week = getWeek(now, { weekStartsOn: 1 })
+      setPeriodA(`Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`)
+      
+      const prev = subWeeks(now, 1)
+      const prevWeek = getWeek(prev, { weekStartsOn: 1 })
+      setPeriodB(`Sem ${prevWeek.toString().padStart(2, '0')} ${prev.getFullYear()}`)
       return
     }
 
     if (filter === 'mes-actual-anterior') {
-      const monthIndex = today.getMonth()
-      const year = today.getFullYear()
-
-      let previousMonthIndex = monthIndex - 1
-      let previousYear = year
-
-      if (previousMonthIndex < 0) {
-        previousMonthIndex = 11
-        previousYear = year - 1
-      }
-
-      const currentLabel = `${MONTH_NAMES[monthIndex]} ${year}`
-      const previousLabel = `${MONTH_NAMES[previousMonthIndex]} ${previousYear}`
-
       setGranularity('mes')
-      setPeriodA(currentLabel)
-      setPeriodB(previousLabel)
+      const monthName = format(now, 'MMM', { locale: es })
+      const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+      setPeriodA(`${capMonth} ${now.getFullYear()}`)
+      
+      const prev = subMonths(now, 1)
+      const prevMonthName = format(prev, 'MMM', { locale: es })
+      const capPrev = prevMonthName.charAt(0).toUpperCase() + prevMonthName.slice(1)
+      setPeriodB(`${capPrev} ${prev.getFullYear()}`)
     }
   }
 
-  const handleChangePeriodA = (event: ChangeEvent<HTMLSelectElement>) => {
-    setPeriodA(event.target.value)
+  const handleChangePeriodA = (val: string) => {
+    setPeriodA(val)
     setQuickFilter('personalizado')
   }
 
-  const handleChangePeriodB = (event: ChangeEvent<HTMLSelectElement>) => {
-    setPeriodB(event.target.value)
+  const handleChangePeriodB = (val: string) => {
+    setPeriodB(val)
     setQuickFilter('personalizado')
   }
 
@@ -271,7 +280,7 @@ export function PeriodComparison() {
       <h2 className="dashboard-section-title">
         COMPARACIÓN DE PERÍODOS
       </h2>
-      <div className="dashboard-comparison-controls">
+      <div className="dashboard-comparison-controls flex-col md:flex-row gap-4 items-start md:items-center">
         <div className="dashboard-granularity-group">
           <button
             type="button"
@@ -318,72 +327,25 @@ export function PeriodComparison() {
             Año
           </button>
         </div>
-        <div className="dashboard-period-selects">
-          <select
-            className="dashboard-select"
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <PeriodPicker
+            granularity={granularity}
             value={periodA}
             onChange={handleChangePeriodA}
-          >
-            {periodOptions.map(option => (
-              <option
-                key={option}
-                value={option}
-              >
-                {option}
-              </option>
-            ))}
-          </select>
-          <span className="dashboard-period-separator">VS</span>
-          <select
-            className="dashboard-select"
+            label="Período A"
+            className="w-full md:w-48 period-picker--a"
+          />
+          <span className="dashboard-period-separator mt-5">VS</span>
+          <PeriodPicker
+            granularity={granularity}
             value={periodB}
             onChange={handleChangePeriodB}
-          >
-            {periodOptions.map(option => (
-              <option
-                key={option}
-                value={option}
-              >
-                {option}
-              </option>
-            ))}
-          </select>
+            label="Período B"
+            className="w-full md:w-48 period-picker--b"
+          />
         </div>
       </div>
-      <div className="dashboard-quick-filters">
-        <button
-          type="button"
-          className="dashboard-quick-filter"
-          onClick={() => handleQuickFilterClick('hoy-ayer')}
-        >
-          Hoy vs Ayer
-        </button>
-        <button
-          type="button"
-          className="dashboard-quick-filter"
-          onClick={() => handleQuickFilterClick('semana-actual-anterior')}
-        >
-          Sem actual vs anterior
-        </button>
-        <button
-          type="button"
-          className="dashboard-quick-filter"
-          onClick={() => handleQuickFilterClick('mes-actual-anterior')}
-        >
-          Mes actual vs anterior
-        </button>
-        <button
-          type="button"
-          className={
-            quickFilter === 'personalizado'
-              ? 'dashboard-quick-filter dashboard-quick-filter--custom'
-              : 'dashboard-quick-filter'
-          }
-          onClick={() => handleQuickFilterClick('personalizado')}
-        >
-          Personalizado
-        </button>
-      </div>
+      
       <div className="dashboard-metrics-grid">
         {metrics.map(metric => {
           const isPositive = metric.variationSign === 'positive'

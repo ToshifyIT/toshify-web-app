@@ -1759,11 +1759,7 @@ export function HomePage() {
                   <VehiculosPage />
                 </ProtectedRoute>
               } />
-              <Route path="/dashboard" element={
-                <ProtectedRoute menuName="dashboard-ejecutivo" action="view">
-                  <DashboardPage />
-                </ProtectedRoute>
-              } />
+              
               <Route path="/conductores" element={
                 <ProtectedRoute menuName="conductores" action="view">
                   <LazyPage>

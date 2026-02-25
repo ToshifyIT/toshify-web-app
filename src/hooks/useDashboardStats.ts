@@ -151,12 +151,16 @@ export function useDashboardStats() {
         let operativos = 0
         let pkgOn = 0
         let enUso = 0
-        let enTaller = 0
+        let tallerCount = 0
+        let dispCount = 0
         const pkgOnSinAsignacion: any[] = []
 
         for (const v of vehiculos) {
           const estadoCodigo = v.vehiculos_estados?.codigo || ''
+          const estadoDescripcion = v.vehiculos_estados?.descripcion || ''
+          
           if (!ESTADOS_EXCLUIDOS.includes(estadoCodigo)) totalFlota++
+          
           if (estadoCodigo === 'PKG_ON_BASE') {
             pkgOn++
             if (!vehiculosConAsignacion.has(v.id)) pkgOnSinAsignacion.push(v)
@@ -164,8 +168,16 @@ export function useDashboardStats() {
           } else if (estadoCodigo === 'EN_USO') {
             enUso++
             operativos++
-          } else if (estadoCodigo === 'REPARACION' || estadoCodigo === 'MANTENIMIENTO') {
-            enTaller++
+          }
+
+          // Lógica solicitada para Taller: descripción contiene "Taller"
+          if (estadoDescripcion.toLowerCase().includes('taller')) {
+            tallerCount++
+          }
+
+          // Lógica solicitada para Disp: ID específico
+          if (v.estado_id === 'f3dc8cca-45cd-4d46-aa28-72bde0ead8a8') {
+            dispCount++
           }
         }
 
@@ -243,7 +255,7 @@ export function useDashboardStats() {
         setStats({
           totalFlota: {
             value: String(totalFlota),
-            subtitle: `${enUso} activos · ${enTaller} taller · ${pkgOnSinAsignacion.length} disp.`,
+            subtitle: `${enUso} activos · ${tallerCount} taller · ${dispCount} disp.`,
           },
           vehiculosActivos: {
             value: String(vehiculosConAsignacion.size),
@@ -270,8 +282,8 @@ export function useDashboardStats() {
             subtitle: `${conductoresGarantiaActiva} conductores activos`,
           },
           pendienteDevolucion: {
-            value: '$600K',
-            subtitle: '2 en proceso de baja',
+            value: 'N/A',
+            subtitle: 'N/A',
           },
           diasSinSiniestro: {
             value: diasDesdeUltimoSiniestro !== null ? String(diasDesdeUltimoSiniestro) : '-',

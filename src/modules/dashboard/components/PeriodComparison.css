@@ -1,0 +1,432 @@
+/* ============================================ 
+    PERIOD PICKER — Selectores Período A / B 
+    ============================================ */ 
+  
+ /* Wrapper que contiene ambos pickers + VS */ 
+ .flex.items-center.gap-2 { 
+   background: #f8f9fb; 
+   border: 1px solid #e8ecf1; 
+   border-radius: 12px; 
+   padding: 12px 20px; 
+   gap: 16px !important; 
+ } 
+  
+ /* --- Separador VS --- */ 
+ .dashboard-period-separator { 
+   display: flex; 
+   align-items: center; 
+   justify-content: center; 
+   width: 36px; 
+   height: 36px; 
+   min-width: 36px; 
+   border-radius: 50%; 
+   background: #ffffff; 
+   border: 1.5px solid #e0e4ea; 
+   font-size: 11px; 
+   font-weight: 700; 
+   color: #8b95a5; 
+   letter-spacing: 0.5px; 
+   margin-top: 0 !important; 
+ } 
+  
+ /* --- Cada PeriodPicker wrapper --- */ 
+ .period-picker { 
+   display: flex; 
+   flex-direction: column; 
+   gap: 6px; 
+ } 
+  
+ /* Labels: PERÍODO A / PERÍODO B */ 
+ .period-picker__label, 
+ .period-picker label { 
+   font-size: 10px; 
+   font-weight: 600; 
+   letter-spacing: 0.8px; 
+   text-transform: uppercase; 
+   color: #8b95a5; 
+   margin-bottom: 2px; 
+ } 
+  
+ /* Label Período A en rojo */ 
+ .period-picker--a label, 
+ .period-picker--a .period-picker__label { 
+   color: #e63946; 
+ } 
+  
+ /* --- El select/input dentro del picker --- */ 
+ .period-picker select, 
+ .period-picker__select { 
+   appearance: none; 
+   -webkit-appearance: none; 
+   -moz-appearance: none; 
+   padding: 10px 36px 10px 38px; 
+   background-color: #ffffff; 
+   background-image: 
+     /* Ícono calendario izquierda */ 
+     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e63946' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E"), 
+     /* Flecha dropdown derecha */ 
+     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23b0b8c4' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); 
+   background-position: 12px center, calc(100% - 12px) center; 
+   background-repeat: no-repeat; 
+   background-size: 16px, 12px; 
+   border: 1.5px solid #e0e4ea; 
+   border-radius: 8px; 
+   font-size: 14px; 
+   font-weight: 500; 
+   color: #1a2332; 
+   cursor: pointer; 
+   transition: all 0.2s ease; 
+   min-width: 180px; 
+   height: 42px; 
+   line-height: 1; 
+ } 
+  
+ .period-picker select:hover, 
+ .period-picker__select:hover { 
+   border-color: #c5cbd4; 
+   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); 
+ } 
+  
+ .period-picker select:focus, 
+ .period-picker__select:focus { 
+   border-color: #e63946; 
+   box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1); 
+   outline: none; 
+ } 
+  
+ /* --- Si el PeriodPicker tiene ícono SVG propio, ocultarlo --- */ 
+ .period-picker .calendar-icon, 
+ .period-picker svg.lucide-calendar { 
+   display: none; /* El ícono ya está en el background del select */ 
+ }
+ 
+ /* Also hide the rendered chevron if we are using the background image chevron */
+ .period-picker .chevron-icon,
+ .period-picker svg.lucide-chevron-down {
+   display: none;
+ }
+  
+ /* ============================================ 
+    Responsive 
+    ============================================ */ 
+ @media (max-width: 768px) { 
+   .flex.items-center.gap-2 { 
+     flex-direction: column; 
+     align-items: stretch; 
+     padding: 12px 16px; 
+   } 
+  
+   .dashboard-period-separator { 
+     align-self: center; 
+   } 
+  
+   .period-picker select, 
+   .period-picker__select { 
+     min-width: 100%; 
+     width: 100%; 
+   } 
+   
+ }
+ /* ============================================
+   GRANULARITY GROUP — Día | Semana | Mes | Año
+   ============================================ */
+
+.dashboard-granularity-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f8f9fb;
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.dashboard-granularity-button {
+  padding: 7px 18px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.dashboard-granularity-button:hover {
+  color: #374151;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.dashboard-granularity-button--active {
+  background: #e63946;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(230, 57, 70, 0.3);
+}
+
+.dashboard-granularity-button--active:hover {
+  background: #d32f2f;
+  color: #ffffff;
+}
+
+/* ============================================
+   CONTROLS ROW — Separación entre grupos
+   ============================================ */
+
+.dashboard-comparison-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ============================================
+   PERIOD PICKER — Popover / Calendar
+   ============================================ */
+
+/* --- Popover container --- */
+.period-picker .absolute {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 12px 24px -4px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  min-width: 300px;
+}
+
+/* --- Header nav (< Febrero 2026 >) --- */
+.period-picker .absolute > div:first-child {
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+
+/* Header title */
+.period-picker .absolute > div:first-child > span {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* Nav arrows */
+.period-picker .absolute > div:first-child > button {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #9ca3af;
+  transition: all 0.15s ease;
+}
+
+.period-picker .absolute > div:first-child > button:hover {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+/* --- Weekday headers (LU MA MI ...) --- */
+.period-picker .grid.grid-cols-7.mb-2 > div {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  padding: 6px 0;
+  letter-spacing: 0.3px;
+}
+
+/* --- Calendar day cells --- */
+.period-picker .grid.grid-cols-7.gap-y-1 > div {
+  height: 36px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.12s ease;
+}
+
+/* Day hover */
+.period-picker .grid.grid-cols-7.gap-y-1 > div:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+/* Selected day */
+.period-picker .grid.grid-cols-7.gap-y-1 > div.bg-\[\#ef4444\] {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+}
+
+/* Week hover row (semana mode) */
+.period-picker .grid.grid-cols-7.gap-y-1 > div.bg-red-50 {
+  background: #fef2f2 !important;
+  color: #ef4444 !important;
+  font-weight: 500;
+}
+
+/* Out-of-month days */
+.period-picker .grid.grid-cols-7.gap-y-1 > div.text-gray-300 {
+  color: #d1d5db;
+  opacity: 0.6;
+}
+
+.period-picker .grid.grid-cols-7.gap-y-1 > div.text-gray-300:hover {
+  background: transparent;
+  color: #d1d5db;
+}
+
+/* --- Month grid (Mes mode) --- */
+.period-picker .grid.grid-cols-3 {
+  gap: 8px;
+}
+
+.period-picker .grid.grid-cols-3 > button {
+  padding: 12px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 10px;
+  color: #4b5563;
+  transition: all 0.15s ease;
+}
+
+.period-picker .grid.grid-cols-3 > button:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+/* Selected month/year */
+.period-picker .grid.grid-cols-3 > button.bg-\[\#ef4444\] {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+}
+
+/* --- Trigger button refinement --- */
+.period-picker__select {
+  height: 42px;
+  border-radius: 10px !important;
+  padding: 8px 14px !important;
+  border-width: 1.5px !important;
+  border-color: #e5e7eb !important;
+  transition: all 0.2s ease !important;
+}
+
+.period-picker__select:hover {
+  border-color: #d1d5db !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+.period-picker__select.border-\[\#ef4444\],
+.period-picker__select:focus {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Calendar icon */
+.period-picker__select .calendar-icon {
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+/* Chevron */
+.period-picker__select .chevron-icon {
+  color: #b0b8c4;
+  flex-shrink: 0;
+}
+
+/* --- Label --- */
+.period-picker__label {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.8px !important;
+  color: #8b95a5 !important;
+  margin-bottom: 6px !important;
+}
+
+/* Período A label in red */
+.period-picker:first-child .period-picker__label {
+  color: #ef4444 !important;
+}
+
+/* --- Smooth entrance animation --- */
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.period-picker .absolute {
+  animation: popoverIn 0.15s ease-out;
+}
+
+/* ============================================
+   CONTROLS — Contenedor unificado
+   ============================================ */
+
+.dashboard-comparison-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: #f8f9fb;
+  border: 1px solid #e8ecf1;
+  border-radius: 14px;
+  padding: 14px 20px;
+}
+
+/* --- Granularity group: quitar fondo propio --- */
+.dashboard-granularity-group {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  border-right: 1.5px solid #e0e4ea;
+  padding-right: 20px;
+  margin-right: 4px;
+}
+
+/* --- Period pickers wrapper: quitar fondo propio --- */
+.dashboard-comparison-controls > .flex.items-center.gap-2 {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0;
+  padding: 0 !important;
+}
+
+/* ============================================
+   Responsive
+   ============================================ */
+@media (max-width: 768px) {
+  .dashboard-comparison-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .dashboard-granularity-group {
+    border-right: none;
+    border-bottom: 1.5px solid #e0e4ea;
+    padding-right: 0;
+    padding-bottom: 14px;
+    justify-content: center;
+  }
+}
+
+.dashboard-comparison-controls {
+  width: fit-content;
+}
+

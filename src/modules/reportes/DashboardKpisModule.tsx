@@ -1,6 +1,7 @@
 import { useDashboardStats } from '../../hooks/useDashboardStats'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { PeriodComparison } from '../dashboard/components/PeriodComparison'
+import { FleetDonut } from '../dashboard/components/FleetDonut'
 import './DashboardKpisModule.css'
 import '../dashboard/DashboardModule.css'
 
@@ -66,6 +67,10 @@ export function DashboardKpisModule() {
         )}
       </div>
       <PeriodComparison />
+      
+      <div className="dashboard-charts-row">
+        <FleetDonut />
+      </div>
     </div>
   )
 }
