@@ -18,8 +18,6 @@ import logoToshify from '../assets/logo-toshify.png'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { Spinner } from '../components/ui/LoadingOverlay'
-import { DashboardPage } from '../modules/dashboard/DashboardPage'
-
 // Mapeo de iconos por nombre de menú
 const menuIcons: Record<string, LucideIcon> = {
   'estado-de-flota': Activity,
