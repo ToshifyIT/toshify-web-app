@@ -16,6 +16,7 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSede } from '../../contexts/SedeContext'
 
+import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import { ProgramacionAssignmentWizard } from './components/ProgramacionAssignmentWizard'
 import type { ProgramacionOnboardingCompleta } from '../../types/onboarding.types'
 import Swal from 'sweetalert2'
@@ -905,6 +906,39 @@ export function ProgramacionModule() {
               updated_by: profile?.full_name || 'Sistema'
             })
             .eq('id', asigPrevia.id)
+
+          // Historial: registrar asignación completada para cada conductor de la asignación anterior
+          for (const ac of (asigPrevia.asignaciones_conductores || []) as any[]) {
+            if (ac.conductor_id && ['asignado', 'activo'].includes(ac.estado)) {
+              registrarHistorialConductor({
+                conductorId: ac.conductor_id,
+                tipoEvento: 'asignacion_completada',
+                detalles: {
+                  accion: 'pasa_turno',
+                  asignacion_id: asigPrevia.id,
+                  vehiculo_id: prog.vehiculo_entregar_id,
+                  patente: prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema,
+                  horario: ac.horario,
+                },
+                modulo: 'programacion',
+                sedeId: sedeActualId || sedeUsuario?.id,
+              })
+            }
+          }
+
+          // Historial: registrar asignación finalizada para el vehículo
+          registrarHistorialVehiculo({
+            vehiculoId: prog.vehiculo_entregar_id!,
+            tipoEvento: 'asignacion_finalizada',
+            detalles: {
+              accion: 'pasa_turno',
+              asignacion_id: asigPrevia.id,
+              patente: prog.vehiculo_entregar_patente || prog.vehiculo_entregar_patente_sistema,
+              conductores_al_cierre: conductoresAnteriores,
+            },
+            modulo: 'programacion',
+            sedeId: sedeActualId || sedeUsuario?.id,
+          })
         }
       }
 

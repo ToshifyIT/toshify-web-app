@@ -7,6 +7,11 @@
   gap: 16px;
 }
 
+/* Table scrolls internally, fits screen */
+.bitacora-module .dt-table-wrapper {
+  max-height: calc(100vh - 340px);
+}
+
 /* =====================================================
    HEADER
    ===================================================== */

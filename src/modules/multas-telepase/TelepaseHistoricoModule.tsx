@@ -632,7 +632,6 @@ export default function TelepaseHistoricoModule() {
         data={registrosFiltrados}
         columns={columns}
         searchPlaceholder="Buscar por patente, conductor..."
-        disableAutoFilters={true}
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
         headerAction={

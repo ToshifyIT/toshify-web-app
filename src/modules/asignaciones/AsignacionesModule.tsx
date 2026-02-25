@@ -14,6 +14,7 @@ import { AssignmentWizard } from '../../components/AssignmentWizard'
 // KanbanBoard y ProgramacionWizard movidos a /onboarding/programacion
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
+import { registrarHistorialVehiculo, registrarHistorialConductor } from '../../services/historialService'
 import { getWeek, getYear } from 'date-fns'
 import './AsignacionesModule.css'
 
@@ -939,6 +940,29 @@ export function AsignacionesModule() {
       }
 
       showSuccess('Devolución Confirmada', `${asig.vehiculos?.patente} ahora está en PKG ON BASE`)
+
+      // Historial: vehículo devuelto
+      if (asig.vehiculo_id) {
+        registrarHistorialVehiculo({
+          vehiculoId: asig.vehiculo_id,
+          tipoEvento: 'devolucion',
+          estadoNuevo: 'PKG_ON_BASE',
+          detalles: { patente: asig.vehiculos?.patente, codigo: asig.codigo },
+          modulo: 'asignaciones',
+          sedeId: sedeActualId,
+        })
+      }
+      // Historial: conductores completados por devolución
+      for (const cond of conductores) {
+        registrarHistorialConductor({
+          conductorId: cond.id,
+          tipoEvento: 'devolucion',
+          detalles: { patente: asig.vehiculos?.patente, codigo: asig.codigo, nombre: cond.nombre },
+          modulo: 'asignaciones',
+          sedeId: sedeActualId,
+        })
+      }
+
       loadAsignaciones()
     } catch (err: any) {
       console.error('Error confirmando devolución:', err)
@@ -1012,6 +1036,19 @@ export function AsignacionesModule() {
         }
 
         showSuccess('Eliminado', 'La asignación ha sido eliminada. Puedes re-enviar desde Programaciones.')
+
+        // Historial: asignación eliminada
+        if (asignacion?.vehiculo_id) {
+          registrarHistorialVehiculo({
+            vehiculoId: asignacion.vehiculo_id,
+            tipoEvento: 'eliminacion_asignacion',
+            estadoNuevo: 'DISPONIBLE',
+            detalles: { patente: asignacion.vehiculos?.patente, codigo: asignacion.codigo },
+            modulo: 'asignaciones',
+            sedeId: sedeActualId,
+          })
+        }
+
         loadAsignaciones()
       } catch (err: any) {
         Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
@@ -1079,6 +1116,37 @@ export function AsignacionesModule() {
         }
 
         showSuccess('Devolución Confirmada', `${selectedAsignacion.vehiculos?.patente} ahora está en PKG ON BASE`)
+
+        // Historial: vehículo devuelto (programacion)
+        if (selectedAsignacion.vehiculo_id) {
+          registrarHistorialVehiculo({
+            vehiculoId: selectedAsignacion.vehiculo_id,
+            tipoEvento: 'devolucion',
+            estadoNuevo: 'PKG_ON_BASE',
+            detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
+            modulo: 'asignaciones',
+            sedeId: sedeActualId,
+          })
+        }
+        // Historial: conductores completados por devolución
+        if (selectedAsignacion.asignaciones_conductores) {
+          for (const ac of selectedAsignacion.asignaciones_conductores) {
+            if (ac.conductor_id) {
+              registrarHistorialConductor({
+                conductorId: ac.conductor_id,
+                tipoEvento: 'devolucion',
+                detalles: {
+                  patente: selectedAsignacion.vehiculos?.patente,
+                  codigo: selectedAsignacion.codigo,
+                  nombre: ac.conductores ? `${ac.conductores.nombres} ${ac.conductores.apellidos}`.trim() : undefined,
+                },
+                modulo: 'asignaciones',
+                sedeId: sedeActualId,
+              })
+            }
+          }
+        }
+
         setShowConfirmModal(false)
         setSelectedAsignacion(null)
         setConductoresToConfirm([])
@@ -1317,6 +1385,20 @@ export function AsignacionesModule() {
                   .update({ estado: 'completado', fecha_fin: ahora })
                   .eq('id', conflicto.conductorActual.asignacionConductorId)
                 reemplazosTraza.push(`${conflicto.conductorActual.nombre} reemplazado por ${conflicto.conductorNuevo.nombre} en turno ${conflicto.turno}`)
+
+                // Historial: conductor reemplazado completado
+                registrarHistorialConductor({
+                  conductorId: conflicto.conductorActual.id,
+                  tipoEvento: 'asignacion_completada',
+                  detalles: {
+                    patente: selectedAsignacion.vehiculos?.patente,
+                    codigo: selectedAsignacion.codigo,
+                    reemplazadoPor: conflicto.conductorNuevo.nombre,
+                    flujo: 'companero',
+                  },
+                  modulo: 'asignaciones',
+                  sedeId: sedeActualId,
+                })
               }
               // Agregar traza de reemplazos a la asignación existente
               if (reemplazosTraza.length > 0) {
@@ -1381,6 +1463,18 @@ export function AsignacionesModule() {
             .eq('id', selectedAsignacion.id)
 
           showSuccess('Confirmado', 'Los conductores nuevos fueron agregados a la asignación existente.')
+
+          // Historial: nuevos conductores asignados (companero flow)
+          for (const conductorNuevo of conductoresNuevos) {
+            registrarHistorialConductor({
+              conductorId: conductorNuevo.conductor_id,
+              tipoEvento: 'asignacion_activada',
+              estadoNuevo: 'activo',
+              detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo, flujo: 'companero' },
+              modulo: 'asignaciones',
+              sedeId: sedeActualId,
+            })
+          }
 
         } else {
           // Lógica normal (sin companeros)
@@ -1519,6 +1613,50 @@ export function AsignacionesModule() {
           }
 
           showSuccess('Confirmado', 'Todos los conductores han confirmado. La asignación está ACTIVA.')
+
+          // Historial: asignación activada - vehículo EN_USO
+          if (selectedAsignacion.vehiculo_id) {
+            registrarHistorialVehiculo({
+              vehiculoId: selectedAsignacion.vehiculo_id,
+              tipoEvento: 'asignacion_activada',
+              estadoNuevo: 'EN_USO',
+              detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
+              modulo: 'asignaciones',
+              sedeId: sedeActualId,
+            })
+          }
+          // Historial: conductores activados
+          for (const conductorId of conductoresIds) {
+            registrarHistorialConductor({
+              conductorId,
+              tipoEvento: 'asignacion_activada',
+              estadoNuevo: 'activo',
+              detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
+              modulo: 'asignaciones',
+              sedeId: sedeActualId,
+            })
+          }
+          // Historial: conductores de asignaciones anteriores del vehículo finalizados
+          if (asignacionesVehiculo && asignacionesVehiculo.length > 0) {
+            for (const asigAnterior of asignacionesVehiculo as any[]) {
+              for (const ac of (asigAnterior.asignaciones_conductores || []) as any[]) {
+                if (ac.conductor_id && (ac.estado === 'asignado' || ac.estado === 'activo' || ac.estado === 'completado')) {
+                  registrarHistorialConductor({
+                    conductorId: ac.conductor_id,
+                    tipoEvento: 'asignacion_completada',
+                    detalles: {
+                      patente: selectedAsignacion.vehiculos?.patente,
+                      codigoAnterior: asigAnterior.codigo,
+                      codigoNuevo: selectedAsignacion.codigo,
+                      motivo: 'nueva_asignacion_activada',
+                    },
+                    modulo: 'asignaciones',
+                    sedeId: sedeActualId,
+                  })
+                }
+              }
+            }
+          }
         }
       } else {
         // Confirmación parcial: aún así poner vehículo en EN_USO
@@ -1577,6 +1715,37 @@ export function AsignacionesModule() {
       }
 
       showSuccess('Cancelada', 'La programación ha sido cancelada')
+
+      // Historial: asignación cancelada - vehículo a DISPONIBLE
+      if (selectedAsignacion.vehiculo_id) {
+        registrarHistorialVehiculo({
+          vehiculoId: selectedAsignacion.vehiculo_id,
+          tipoEvento: 'asignacion_cancelada',
+          estadoNuevo: 'DISPONIBLE',
+          detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo, motivo: cancelMotivo },
+          modulo: 'asignaciones',
+          sedeId: sedeActualId,
+        })
+      }
+      // Historial: conductores cancelados
+      if (selectedAsignacion.asignaciones_conductores) {
+        for (const ac of selectedAsignacion.asignaciones_conductores) {
+          if (ac.conductor_id) {
+            registrarHistorialConductor({
+              conductorId: ac.conductor_id,
+              tipoEvento: 'asignacion_cancelada',
+              detalles: {
+                patente: selectedAsignacion.vehiculos?.patente,
+                codigo: selectedAsignacion.codigo,
+                motivo: cancelMotivo,
+              },
+              modulo: 'asignaciones',
+              sedeId: sedeActualId,
+            })
+          }
+        }
+      }
+
       setShowCancelModal(false)
       setCancelMotivo('')
       setSelectedAsignacion(null)
@@ -1820,6 +1989,37 @@ export function AsignacionesModule() {
       }
 
       showSuccess('Regularizado', 'Los datos de la asignación han sido actualizados correctamente.')
+
+      // Historial: regularización del vehículo
+      if (regularizarAsignacion.vehiculo_id) {
+        registrarHistorialVehiculo({
+          vehiculoId: regularizarAsignacion.vehiculo_id,
+          tipoEvento: 'regularizacion',
+          detalles: {
+            patente: regularizarAsignacion.vehiculos?.patente,
+            codigo: regularizarAsignacion.codigo,
+            cambios,
+          },
+          modulo: 'asignaciones',
+          sedeId: regularizarData.sede_id || sedeActualId,
+        })
+      }
+      // Historial: conductores anteriores completados por regularización
+      for (const ac of conductoresAsig) {
+        if (ac.conductor_id && esActivoCond(ac)) {
+          registrarHistorialConductor({
+            conductorId: ac.conductor_id,
+            tipoEvento: 'regularizacion',
+            detalles: {
+              patente: regularizarAsignacion.vehiculos?.patente,
+              codigo: regularizarAsignacion.codigo,
+              cambios,
+            },
+            modulo: 'asignaciones',
+            sedeId: regularizarData.sede_id || sedeActualId,
+          })
+        }
+      }
 
       setShowRegularizarModal(false)
       setRegularizarAsignacion(null)
@@ -2490,6 +2690,34 @@ export function AsignacionesModule() {
                       }
 
                       showSuccess('Activado', 'La asignación está ahora ACTIVA.')
+
+                      // Historial: activación directa - vehículo EN_USO
+                      if (selectedAsignacion.vehiculo_id) {
+                        registrarHistorialVehiculo({
+                          vehiculoId: selectedAsignacion.vehiculo_id,
+                          tipoEvento: 'asignacion_activada',
+                          estadoNuevo: 'EN_USO',
+                          detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
+                          modulo: 'asignaciones',
+                          sedeId: sedeActualId,
+                        })
+                      }
+                      // Historial: conductores activados
+                      if (selectedAsignacion.asignaciones_conductores) {
+                        for (const ac of selectedAsignacion.asignaciones_conductores) {
+                          if (ac.conductor_id) {
+                            registrarHistorialConductor({
+                              conductorId: ac.conductor_id,
+                              tipoEvento: 'asignacion_activada',
+                              estadoNuevo: 'activo',
+                              detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
+                              modulo: 'asignaciones',
+                              sedeId: sedeActualId,
+                            })
+                          }
+                        }
+                      }
+
                       setShowConfirmModal(false)
                       setConfirmComentarios('')
                       setSelectedAsignacion(null)

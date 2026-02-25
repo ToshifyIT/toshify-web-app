@@ -447,16 +447,14 @@
   position: relative;
 }
 
-/* Table Wrapper for horizontal scroll */
+/* Table Wrapper for horizontal + vertical scroll with sticky header */
 .dt-table-wrapper {
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px; /* Espacio para evitar corte del scrollbar */
-  /* Smooth horizontal scrolling on mobile */
+  padding-bottom: 4px;
   scrollbar-width: thin;
-  /* Asegurar que el scroll funcione correctamente */
   max-width: 100%;
+  max-height: 70vh;
 }
 
 .dt-table-wrapper::-webkit-scrollbar {
@@ -488,20 +486,27 @@
 
 /* Sticky column for actions */
 .dt-sticky-col {
-  /* position: sticky; */
-  position: static;
+  position: sticky;
   right: 0;
-  background: transparent;
+  background: var(--bg-primary);
   z-index: 2;
-  box-shadow: none;
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.06);
 }
 
 .dt-table thead .dt-sticky-col {
   background: var(--table-header-bg);
-  z-index: 3;
+  z-index: 5; /* Above sticky header + sticky column */
 }
 
 .dt-table tbody tr:hover .dt-sticky-col {
+  background: var(--table-row-hover);
+}
+
+.dt-table tbody tr:nth-child(even) .dt-sticky-col {
+  background: var(--bg-primary);
+}
+
+.dt-table tbody tr:nth-child(even):hover .dt-sticky-col {
   background: var(--table-row-hover);
 }
 
@@ -522,7 +527,9 @@
   border-bottom: 1px solid var(--border-primary);
   white-space: nowrap;
   user-select: none;
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 4;
   overflow: visible;
 }
 

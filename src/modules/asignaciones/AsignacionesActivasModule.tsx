@@ -498,16 +498,6 @@ export function AsignacionesActivasModule() {
   const columns = useMemo<ColumnDef<AsignacionActiva>[]>(
     () => [
       {
-        accessorKey: 'codigo',
-        header: 'Número',
-        cell: ({ getValue }) => (
-          <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
-            {getValue() as string}
-          </span>
-        ),
-        enableSorting: true,
-      },
-      {
         accessorKey: 'vehiculos.patente',
         header: 'Vehículo',
         cell: ({ row }) => {
@@ -583,19 +573,23 @@ export function AsignacionesActivasModule() {
       },
       {
         accessorKey: 'fecha_programada',
-        header: 'Fecha Entrega',
+        header: 'Programación',
         cell: ({ getValue }) => {
           const fecha = getValue() as string | null
-          return fecha ? new Date(fecha).toLocaleDateString('es-AR') : 'No definida'
+          if (!fecha) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          const d = new Date(fecha)
+          return `${d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })} ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}`
         },
         enableSorting: true,
       },
       {
         accessorKey: 'fecha_inicio',
-        header: 'Fecha Activación',
+        header: 'Entrega Real',
         cell: ({ getValue }) => {
           const fecha = getValue() as string
-          return fecha ? new Date(fecha).toLocaleDateString('es-AR') : 'No activada'
+          if (!fecha || fecha === '-') return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          const d = new Date(fecha)
+          return `${d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })} ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}`
         },
         enableSorting: true,
       },
@@ -716,9 +710,8 @@ export function AsignacionesActivasModule() {
       <div className="asig-stats">
         <div className="asig-stats-grid">
           <div
-            className={`stat-card stat-card-clickable ${activeStatFilter === 'totalFlota' ? 'stat-card-active' : ''}`}
+            className="stat-card"
             title="Total de vehículos en la flota (excluye robos, destruidos, jubilados)"
-            onClick={() => handleStatCardClick('totalFlota')}
           >
             <Car size={18} className="stat-icon" />
             <div className="stat-content">

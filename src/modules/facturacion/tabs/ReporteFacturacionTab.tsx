@@ -39,10 +39,26 @@ import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useSede } from '../../../contexts/SedeContext'
-import { formatCurrency, formatDate, FACTURACION_CONFIG, calcularMora } from '../../../types/facturacion.types'
+import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { RITPreviewTable, type RITPreviewRow } from '../components/RITPreviewTable'
+import logoToshifyUrl from '../../../assets/logo-toshify.png'
+
+// Pre-cargar logo como base64 para jsPDF (mejor calidad que URL directo)
+let logoBase64: string | null = null
+let logoAspectRatio = 3
+const _logoPreload = new Image()
+_logoPreload.src = logoToshifyUrl
+_logoPreload.onload = () => {
+  const c = document.createElement('canvas')
+  c.width = _logoPreload.naturalWidth
+  c.height = _logoPreload.naturalHeight
+  logoAspectRatio = c.width / c.height
+  const ctx = c.getContext('2d')!
+  ctx.drawImage(_logoPreload, 0, 0)
+  logoBase64 = c.toDataURL('image/png')
+}
 import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
 import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyPreviewTable'
 
@@ -422,7 +438,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
           `)
           .eq('conductor_id', realConductorId)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado']),
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
         supabase.from('conductores').select('fecha_terminacion').eq('id', realConductorId).maybeSingle()
       ])
 
@@ -461,14 +477,19 @@ export function ReporteFacturacionTab() {
         }
 
         // Normalizar fechas a timezone Argentina para conteo correcto de días
-        // Usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
+        // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
         const conductorInicioD = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const padreInicioD = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const acInicio = conductorInicioD && padreInicioD
           ? (conductorInicioD > padreInicioD ? conductorInicioD : padreInicioD)
           : (conductorInicioD || padreInicioD || semanaInicio)
-        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
-          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : semanaFin)
+        // Fin: usar la fecha MÁS TEMPRANA entre conductor y padre
+        // para no cobrar más allá de cuando terminó la asignación padre
+        const conductorFinD = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const padreFinD = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        const acFin = conductorFinD && padreFinD
+          ? (conductorFinD < padreFinD ? conductorFinD : padreFinD)
+          : (conductorFinD || padreFinD || semanaFin)
 
         if (acFin < semanaInicio || acInicio > limiteConteo) {
           historial.push({ fechaInicio: acInicioStr, fechaFin: acFinStr, padreEstado: estadoPadre, horario, dias: 0, nota: 'Fuera de rango' })
@@ -708,7 +729,7 @@ export function ReporteFacturacionTab() {
         .from('asignaciones_conductores') as any)
         .select('conductor_id, horario, fecha_inicio, fecha_fin, asignaciones!inner(estado, horario, fecha_inicio, fecha_fin)')
         .in('conductor_id', conductorIdsLoad)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
       : { data: [] }
 
       const conductoresConAsignacionAlCierreLoad = new Set<string>()
@@ -974,7 +995,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
         const semInicioVP = parseISO(fechaInicio)
         const semFinVP = parseISO(fechaFin)
@@ -1067,7 +1088,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIds)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
       // Crear mapa de prorrateo con días y montos para precios históricos
       interface ProrrateoVistaPrevia {
@@ -1125,15 +1146,19 @@ export function ReporteFacturacionTab() {
         
         // Calcular días que este registro se solapa con la semana
         // Normalizar a solo fecha (sin hora) — timestamps de asignaciones tienen hora que rompe el conteo
-        // Usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
+        // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
         // para no cobrar antes de que el vehículo fuera realmente entregado
         const conductorInicio = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const padreInicio = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const acInicio = conductorInicio && padreInicio
           ? (conductorInicio > padreInicio ? conductorInicio : padreInicio)
           : (conductorInicio || padreInicio || fechaInicioSemana)
-        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) 
-          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : fechaFinSemana)
+        // Fin: usar la fecha MÁS TEMPRANA entre conductor y padre
+        const conductorFinVP = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const padreFinVP = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        const acFin = conductorFinVP && padreFinVP
+          ? (conductorFinVP < padreFinVP ? conductorFinVP : padreFinVP)
+          : (conductorFinVP || padreFinVP || fechaFinSemana)
         
         // Rango efectivo dentro de la semana
         const efectivoInicio = acInicio < fechaInicioSemana ? fechaInicioSemana : acInicio
@@ -1267,12 +1292,12 @@ export function ReporteFacturacionTab() {
         prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO)
       }
 
-      // 2. Cargar saldos de conductores
+      // 2. Cargar saldos de conductores (solo LECTURA — facturación no modifica saldos)
       const { data: saldos } = await (supabase
         .from('saldos_conductores') as any)
-        .select('conductor_id, saldo_actual, dias_mora')
+        .select('conductor_id, saldo_actual')
 
-      const saldosMap = new Map<string, { conductor_id: string; saldo_actual: number; dias_mora: number }>(
+      const saldosMap = new Map<string, { conductor_id: string; saldo_actual: number }>(
         (saldos || []).map((s: any) => [s.conductor_id, s])
       )
 
@@ -1585,15 +1610,15 @@ export function ReporteFacturacionTab() {
         // Tickets a favor (descuentos) + P004 de penalidades
         const subtotalDescuentos = (ticketsMap.get(conductorId) || 0) + montoPenalidadesDescuento
 
-        // Saldo anterior y mora - no aplica si tiene 0 días (solo penalidades)
+        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
         const saldo = saldosMap.get(conductorId)
         const saldoAnterior = diasTotales === 0 ? 0 : -(saldo?.saldo_actual || 0)
-        const diasMora = diasTotales === 0 ? 0 : (saldo?.dias_mora || 0)
-        const montoMora = calcularMora(saldoAnterior, diasMora)
+        const diasMora = 0
+        const montoMora = 0
 
         // Total a pagar
         const subtotalNeto = subtotalCargos - subtotalDescuentos
-        const totalAPagar = subtotalNeto + saldoAnterior + montoMora
+        const totalAPagar = subtotalNeto + saldoAnterior
 
         // Datos de Cabify - cobro_app semanal del conductor (para barras de cobertura)
         const cobroAppCabify = cabifyMap.get(dniConductor) || 0
@@ -1845,33 +1870,14 @@ export function ReporteFacturacionTab() {
         .eq('anio', anioNum)
 
       // 2. BORRAR toda la facturación existente del período
-      // Primero leer los totales para revertir las deudas en saldos_conductores
       const { data: factExistentes } = await supabase
         .from('facturacion_conductores')
-        .select('id, conductor_id, subtotal_neto, saldo_aplicado')
+        .select('id')
         .eq('periodo_id', periodoId)
 
       if (factExistentes && factExistentes.length > 0) {
         const factIds = factExistentes.map((f: any) => f.id)
         await supabase.from('facturacion_detalle').delete().in('facturacion_id', factIds)
-
-        // Revertir solo registros donde saldo_aplicado=true (generados con código nuevo)
-        // La facturación vieja nunca escribió al saldo, así que no hay nada que revertir
-        for (const fact of factExistentes as any[]) {
-          if (!fact.conductor_id || !fact.subtotal_neto || !fact.saldo_aplicado) continue
-          const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
-            .select('id, saldo_actual')
-            .eq('conductor_id', fact.conductor_id)
-            .maybeSingle()
-          if (saldoExistente) {
-            await (supabase.from('saldos_conductores') as any)
-              .update({
-                saldo_actual: (saldoExistente.saldo_actual || 0) + fact.subtotal_neto,
-                ultima_actualizacion: new Date().toISOString()
-              })
-              .eq('id', saldoExistente.id)
-          }
-        }
       }
       await supabase.from('facturacion_conductores').delete().eq('periodo_id', periodoId)
 
@@ -1889,7 +1895,7 @@ export function ReporteFacturacionTab() {
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
         const semInicioRecalc = parseISO(fechaInicio)
         const semFinRecalc = parseISO(fechaFin)
@@ -1982,7 +1988,7 @@ export function ReporteFacturacionTab() {
           asignaciones!inner(id, horario, estado, fecha_inicio, fecha_fin)
         `)
         .in('conductor_id', conductorIdsTemp)
-        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado'])
+        .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
 
       // Rastrear la fecha_fin más tardía de asignaciones por conductor
       const maxAsigFinRecalc = new Map<string, string>()
@@ -2021,15 +2027,19 @@ export function ReporteFacturacionTab() {
         // Skip orphan: padre finalizado/cancelado sin fecha_fin
         if (['finalizada', 'cancelada', 'finalizado', 'cancelado'].includes(estadoPadre) && !asignacion.fecha_fin) continue
 
-        // Fechas: usar la MÁS TARDÍA entre conductor y padre (Entrega Real)
+        // Inicio: usar la fecha MÁS TARDÍA entre conductor y padre (Entrega Real)
         // para no cobrar antes de que el vehículo fuera realmente entregado
         const conductorInicioR = ac.fecha_inicio ? parseISO(toArgDate(ac.fecha_inicio)) : null
         const padreInicioR = asignacion.fecha_inicio ? parseISO(toArgDate(asignacion.fecha_inicio)) : null
         const acInicio = conductorInicioR && padreInicioR
           ? (conductorInicioR > padreInicioR ? conductorInicioR : padreInicioR)
           : (conductorInicioR || padreInicioR || fechaInicioSemanaRecalc)
-        const acFin = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin))
-          : (asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : fechaFinSemanaRecalc)
+        // Fin: usar la fecha MÁS TEMPRANA entre conductor y padre
+        const conductorFinR = ac.fecha_fin ? parseISO(toArgDate(ac.fecha_fin)) : null
+        const padreFinR = asignacion.fecha_fin ? parseISO(toArgDate(asignacion.fecha_fin)) : null
+        const acFin = conductorFinR && padreFinR
+          ? (conductorFinR < padreFinR ? conductorFinR : padreFinR)
+          : (conductorFinR || padreFinR || fechaFinSemanaRecalc)
 
         if (acFin < fechaInicioSemanaRecalc || acInicio > fechaFinSemanaRecalc) continue
 
@@ -2170,7 +2180,7 @@ export function ReporteFacturacionTab() {
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
-        (supabase.from('saldos_conductores') as any).select('*').in('conductor_id', conductorIds),
+        (supabase.from('saldos_conductores') as any).select('conductor_id, saldo_actual').in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
         // Peajes de la SEMANA ANTERIOR
         (() => {
@@ -2356,14 +2366,14 @@ export function ReporteFacturacionTab() {
         const montoMultas = multasVehiculo?.monto || 0
         const cantidadMultas = multasVehiculo?.cantidad || 0
 
-        // Saldo anterior y mora - no aplica si tiene 0 días (solo penalidades)
+        // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
         const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
         const saldoAnterior = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_actual || 0)
-        const diasMora = conductor.total_dias === 0 ? 0 : (saldoAnterior > 0 ? Math.min(saldoConductor?.dias_mora || 0, 7) : 0)
-        const montoMora = conductor.total_dias === 0 ? 0 : (saldoAnterior > 0 ? Math.round(saldoAnterior * 0.01 * diasMora) : 0)
+        const diasMora = 0
+        const montoMora = 0
 
         // Totales
-        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMora + montoMultas + totalCobros + totalCuotasPenalidades
+        const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMultas + totalCobros + totalCuotasPenalidades
         const subtotalDescuentos = totalTickets + totalPenP004
         const subtotalNeto = subtotalCargos - subtotalDescuentos
         const totalAPagar = subtotalNeto + saldoAnterior
@@ -2374,10 +2384,10 @@ export function ReporteFacturacionTab() {
         const diasTurnoTotal = conductor.dias_turno_diurno + conductor.dias_turno_nocturno
         const tipoAlquilerPrincipal = conductor.dias_cargo >= diasTurnoTotal ? 'CARGO' : 'TURNO'
 
-        // INSERT facturacion_conductores
+        // UPSERT facturacion_conductores (actualiza si ya existe)
         const { data: factConductor, error: errFact } = await (supabase
           .from('facturacion_conductores') as any)
-          .insert({
+          .upsert({
             periodo_id: periodoId,
             conductor_id: conductor.conductor_id,
             conductor_nombre: conductor.conductor_nombre,
@@ -2398,9 +2408,8 @@ export function ReporteFacturacionTab() {
             dias_mora: diasMora,
             monto_mora: montoMora,
             total_a_pagar: totalAPagar,
-            estado: 'calculado',
-            saldo_aplicado: true
-          })
+            estado: 'calculado'
+          }, { onConflict: 'periodo_id,conductor_id' })
           .select()
           .single()
 
@@ -2417,6 +2426,9 @@ export function ReporteFacturacionTab() {
         erroresConsecutivos = 0 // Reset al tener un éxito
 
         const facturacionId = (factConductor as any).id
+
+        // Limpiar detalle viejo antes de insertar el nuevo
+        await supabase.from('facturacion_detalle').delete().eq('facturacion_id', facturacionId)
 
         // INSERT detalles de alquiler (P001/P002/P013)
         for (const detalle of detallesAlquiler) {
@@ -2584,36 +2596,6 @@ export function ReporteFacturacionTab() {
             referencia_id: cuota.id, referencia_tipo: 'penalidad_cuota'
           })
           // NO marcar como aplicado — eso se hace cuando se PAGA, no cuando se factura
-        }
-
-        // Registrar cargos nuevos en saldos_conductores: restar subtotalNeto del saldo
-        // IMPORTANTE: solo restar subtotalNeto (cargos nuevos de esta semana), NO totalAPagar
-        // porque totalAPagar incluye saldoAnterior que ya está reflejado en el saldo
-        if (subtotalNeto !== 0) {
-          const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
-            .select('id, saldo_actual')
-            .eq('conductor_id', conductor.conductor_id)
-            .maybeSingle()
-
-          if (saldoExistente) {
-            await (supabase.from('saldos_conductores') as any)
-              .update({
-                saldo_actual: (saldoExistente.saldo_actual || 0) - subtotalNeto,
-                ultima_actualizacion: new Date().toISOString()
-              })
-              .eq('id', saldoExistente.id)
-          } else {
-            await (supabase.from('saldos_conductores') as any)
-              .insert({
-                conductor_id: conductor.conductor_id,
-                conductor_nombre: conductor.conductor_nombre,
-                conductor_dni: conductor.conductor_dni,
-                conductor_cuit: conductor.conductor_cuit || null,
-                saldo_actual: -subtotalNeto,
-                dias_mora: 0,
-                ultima_actualizacion: new Date().toISOString()
-              })
-          }
         }
 
         conductoresProcesadosCount++
@@ -3064,7 +3046,7 @@ export function ReporteFacturacionTab() {
         })
       }
 
-      // Saldo anterior (deuda pendiente)
+      // Saldo anterior (deuda pendiente) — se lee del tab Saldos
       if (facturacion.saldo_anterior > 0) {
         detallesSimulados.push({
           id: `det-saldo-${facturacion.conductor_id}`,
@@ -3084,19 +3066,6 @@ export function ReporteFacturacionTab() {
           cantidad: 1, precio_unitario: Math.abs(facturacion.saldo_anterior),
           subtotal: Math.abs(facturacion.saldo_anterior), total: Math.abs(facturacion.saldo_anterior),
           es_descuento: true, referencia_id: null, referencia_tipo: null
-        })
-      }
-
-      // Mora (1% diario)
-      if (facturacion.monto_mora > 0) {
-        detallesSimulados.push({
-          id: `det-mora-${facturacion.conductor_id}`,
-          facturacion_id: facturacion.id,
-          concepto_codigo: 'MORA',
-          concepto_descripcion: `Mora (${facturacion.dias_mora} días al 1%)`,
-          cantidad: facturacion.dias_mora, precio_unitario: Math.round(facturacion.monto_mora / facturacion.dias_mora),
-          subtotal: facturacion.monto_mora, total: facturacion.monto_mora,
-          es_descuento: false, referencia_id: null, referencia_tipo: null
         })
       }
 
@@ -3494,31 +3463,9 @@ export function ReporteFacturacionTab() {
         </div>`
     }
 
-    // Saldo anterior
-    let saldoHtml = ''
-    if (facturacion.saldo_anterior !== 0) {
-      const saldoColor = facturacion.saldo_anterior > 0 ? '#ff0033' : '#16a34a'
-      const saldoPrefix = facturacion.saldo_anterior > 0 ? '' : '-'
-      const saldoType = facturacion.saldo_anterior > 0 ? 'cargo' : 'descuento'
-      saldoHtml = `
-        <div class="pago-row" data-monto="${Math.abs(facturacion.saldo_anterior)}" data-type="${saldoType}" style="display:flex;align-items:center;gap:8px;padding:4px 0;">
-          <span class="pago-ind" style="${indStyle}background:#16a34a;color:white;">✓</span>
-          <span style="flex:1;font-size:12px;color:${saldoColor};">Saldo Anterior</span>
-          <span style="font-size:12px;font-weight:600;color:${saldoColor};">${saldoPrefix}${formatCurrency(Math.abs(facturacion.saldo_anterior))}</span>
-        </div>`
-    }
-
-    // Mora - solo mostrar si no existe P009 en los detalles (evitar duplicado)
-    const tieneP009Detalle = cargos.some((d: { concepto_codigo: string }) => d.concepto_codigo === 'P009')
-    let moraHtml = ''
-    if (facturacion.monto_mora > 0 && !tieneP009Detalle) {
-      moraHtml = `
-        <div class="pago-row" data-monto="${facturacion.monto_mora}" data-type="cargo" style="display:flex;align-items:center;gap:8px;padding:4px 0;">
-          <span class="pago-ind" style="${indStyle}background:#16a34a;color:white;">✓</span>
-          <span style="flex:1;font-size:12px;">Mora (${facturacion.dias_mora} días)</span>
-          <span style="font-size:12px;font-weight:600;">${formatCurrency(facturacion.monto_mora)}</span>
-        </div>`
-    }
+    // Saldo anterior y mora: NO se muestran en facturación (se manejan en tab Saldos)
+    const saldoHtml = ''
+    const moraHtml = ''
 
     const totalAbsoluto = Math.abs(facturacion.total_a_pagar)
     const yaCobrado = facturacion.monto_cobrado || 0
@@ -4131,15 +4078,17 @@ export function ReporteFacturacionTab() {
       const negro = '#111827'
       const verde = '#059669'
 
-      // Header
-      pdf.setFontSize(22)
-      pdf.setTextColor(rojo)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('TOSHIFY', margin, y)
-      pdf.setFontSize(8)
-      pdf.setTextColor(gris)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text('Sistema de Gestión de Flota', margin, y + 5)
+      // Header con logo
+      if (logoBase64) {
+        const logoH = 35
+        const logoW = logoH * logoAspectRatio
+        pdf.addImage(logoBase64, 'PNG', margin, y - 16, logoW, logoH)
+      } else {
+        pdf.setFontSize(22)
+        pdf.setTextColor(rojo)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('TOSHIFY', margin, y)
+      }
 
       // Título del documento
       pdf.setFontSize(14)
@@ -4208,33 +4157,18 @@ export function ReporteFacturacionTab() {
         y += 5
       })
 
-      // Saldo anterior y mora
-      if (detalleFacturacion.saldo_anterior > 0) {
-        pdf.text('Saldo Anterior', margin, y)
-        pdf.text(formatCurrency(detalleFacturacion.saldo_anterior), pageWidth - margin, y, { align: 'right' })
-        y += 5
-      }
-
-      const tieneP009 = detalleItems.some(d => d.concepto_codigo === 'P009' && !d.es_descuento)
-      if (detalleFacturacion.monto_mora > 0 && !tieneP009) {
-        pdf.text(`Mora (${detalleFacturacion.dias_mora} días)`, margin, y)
-        pdf.text(formatCurrency(detalleFacturacion.monto_mora), pageWidth - margin, y, { align: 'right' })
-        y += 5
-      }
+      // Saldo anterior y mora: NO se muestran en factura (se manejan en tab Saldos)
 
       y += 3
       pdf.setFont('helvetica', 'bold')
       const subtotalCargosReal = cargos.reduce((sum, c) => sum + c.total, 0)
-        + Math.max(0, detalleFacturacion.saldo_anterior)
-        + (tieneP009 ? 0 : detalleFacturacion.monto_mora)
       pdf.text('SUBTOTAL CARGOS', margin, y)
       pdf.text(formatCurrency(subtotalCargosReal), pageWidth - margin, y, { align: 'right' })
       y += 10
 
       // DESCUENTOS
       const descuentos = detalleItems.filter(d => d.es_descuento && d.total !== 0)
-      const tieneSaldoFavor = detalleFacturacion.saldo_anterior < 0
-      if (descuentos.length > 0 || tieneSaldoFavor) {
+      if (descuentos.length > 0) {
         pdf.setFontSize(11)
         pdf.setTextColor(verde)
         pdf.setFont('helvetica', 'bold')
@@ -4251,17 +4185,10 @@ export function ReporteFacturacionTab() {
           y += 5
         })
 
-        // Saldo a favor como línea de descuento
-        if (tieneSaldoFavor) {
-          pdf.text('Saldo a Favor', margin, y)
-          pdf.text(`-${formatCurrency(Math.abs(detalleFacturacion.saldo_anterior))}`, pageWidth - margin, y, { align: 'right' })
-          y += 5
-        }
-
         y += 3
         pdf.setFont('helvetica', 'bold')
         pdf.setTextColor(verde)
-        const subtotalDescReal = descuentos.reduce((sum, d) => sum + d.total, 0) + Math.abs(Math.min(0, detalleFacturacion.saldo_anterior))
+        const subtotalDescReal = descuentos.reduce((sum, d) => sum + d.total, 0)
         pdf.text('SUBTOTAL DESCUENTOS', margin, y)
         pdf.text(`-${formatCurrency(subtotalDescReal)}`, pageWidth - margin, y, { align: 'right' })
         y += 10
@@ -4273,7 +4200,7 @@ export function ReporteFacturacionTab() {
       pdf.line(margin, y, pageWidth - margin, y)
       y += 8
 
-      const subtotalDescPdf = descuentos.reduce((sum, d) => sum + d.total, 0) + Math.abs(Math.min(0, detalleFacturacion.saldo_anterior))
+      const subtotalDescPdf = descuentos.reduce((sum, d) => sum + d.total, 0)
       const totalFinal = subtotalCargosReal - subtotalDescPdf
       const saldoColor = totalFinal > 0 ? rojo : verde
 
@@ -6664,7 +6591,7 @@ export function ReporteFacturacionTab() {
     if (modoVistaPrevia && vistaPreviaData.length > 0) {
       return {
         total_conductores: vistaPreviaData.length,
-        total_cargos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_cargos + f.saldo_anterior + f.monto_mora, 0),
+        total_cargos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_cargos + Math.max(0, f.saldo_anterior), 0),
         total_descuentos: vistaPreviaData.reduce((sum, f) => sum + f.subtotal_descuentos, 0),
         total_neto: vistaPreviaData.reduce((sum, f) => sum + f.total_a_pagar, 0),
         conductores_deben: vistaPreviaData.filter(f => f.total_a_pagar > 0).length,
@@ -8430,41 +8357,7 @@ export function ReporteFacturacionTab() {
                         );
                       })}
 
-                      {/* Saldo anterior positivo = deuda */}
-                      {detalleFacturacion.saldo_anterior > 0 && (
-                        <div style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '7px 12px', borderRadius: '6px',
-                          background: 'rgba(245, 158, 11, 0.06)', border: '1px solid rgba(245, 158, 11, 0.15)',
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
-                            <span style={{ fontSize: '12px', color: '#92400E' }}>Saldo Anterior (Deuda)</span>
-                          </div>
-                          <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#ff0033' }}>
-                            {formatCurrency(detalleFacturacion.saldo_anterior)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Mora */}
-                      {detalleFacturacion.monto_mora > 0 && !detalleCargos.some(d => d.concepto_codigo === 'P009') && (
-                        <div style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '7px 12px', borderRadius: '6px',
-                          background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff0033', flexShrink: 0 }} />
-                            <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
-                              Mora <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>({detalleFacturacion.dias_mora} días al 1%)</span>
-                            </span>
-                          </div>
-                          <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                            {formatCurrency(detalleFacturacion.monto_mora)}
-                          </span>
-                        </div>
-                      )}
+                      {/* Saldo anterior y mora: se manejan en tab Saldos, no en facturación */}
 
                       {/* Subtotal Cargos */}
                       <div style={{
@@ -8476,18 +8369,14 @@ export function ReporteFacturacionTab() {
                           Subtotal Cargos
                         </span>
                         <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                          {formatCurrency(
-                            detalleCargos.reduce((sum, d) => sum + d.total, 0)
-                            + Math.max(0, detalleFacturacion.saldo_anterior)
-                            + (detalleCargos.some(d => d.concepto_codigo === 'P009') ? 0 : detalleFacturacion.monto_mora)
-                          )}
+                          {formatCurrency(detalleCargos.reduce((sum, d) => sum + d.total, 0))}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Sección: Descuentos / Créditos */}
-                  {(detalleDescuentos.length > 0 || detalleFacturacion.saldo_anterior < 0) && (
+                  {detalleDescuentos.length > 0 && (
                     <div style={{ marginBottom: '12px' }}>
                       <div style={{
                         fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
@@ -8522,23 +8411,6 @@ export function ReporteFacturacionTab() {
                           );
                         })}
 
-                        {/* Saldo anterior negativo = crédito a favor */}
-                        {detalleFacturacion.saldo_anterior < 0 && (
-                          <div style={{
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            padding: '7px 12px', borderRadius: '6px',
-                            background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.15)',
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
-                              <span style={{ fontSize: '12px', color: '#065F46' }}>Saldo a Favor</span>
-                            </div>
-                            <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'monospace', color: '#059669' }}>
-                              -{formatCurrency(Math.abs(detalleFacturacion.saldo_anterior))}
-                            </span>
-                          </div>
-                        )}
-
                         {/* Subtotal Descuentos */}
                         <div style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -8549,7 +8421,7 @@ export function ReporteFacturacionTab() {
                             Subtotal Descuentos
                           </span>
                           <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: '#059669' }}>
-                            -{formatCurrency(detalleFacturacion.subtotal_descuentos + Math.abs(Math.min(0, detalleFacturacion.saldo_anterior)))}
+                            -{formatCurrency(detalleDescuentos.reduce((sum, d) => sum + d.total, 0))}
                           </span>
                         </div>
                       </div>

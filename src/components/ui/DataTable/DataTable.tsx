@@ -275,7 +275,7 @@ export function DataTable<T>({
   globalFilterFn: customGlobalFilterFn,
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
-  enableHorizontalScroll = false,
+  enableHorizontalScroll = true,
 }: DataTableProps<T>) {
   const [internalGlobalFilter, setInternalGlobalFilter] = useState("");
   const isControlled = controlledGlobalFilter !== undefined;
@@ -623,15 +623,18 @@ export function DataTable<T>({
     }
 
     return visibleColumns.map(col => {
-      const colDef = col as { accessorKey?: string; id?: string; header?: unknown };
+      const colDef = col as { accessorKey?: string; id?: string; header?: unknown; enableSorting?: boolean };
       const colId = colDef.accessorKey || colDef.id || "";
 
       // Skip if no accessorKey (custom columns like expand)
       if (!colId) return col;
 
-      // Skip if header is already a custom function (module has its own filter)
+      // Force enableSorting on all data columns
+      const sortingOverride = colDef.enableSorting === false ? { enableSorting: true } : {};
+
+      // Skip filter wrapping if header is already a custom function (module has its own filter)
       if (typeof colDef.header === 'function') {
-        return col;
+        return { ...col, ...sortingOverride } as ColumnDef<T, unknown>;
       }
 
       // Get original header label
@@ -649,6 +652,7 @@ export function DataTable<T>({
 
       return {
         ...col,
+        ...sortingOverride,
         header: () => (
           <FilterHeader
             colId={colId}
