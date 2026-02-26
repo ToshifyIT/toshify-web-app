@@ -1193,8 +1193,6 @@ export function ProgramacionModule() {
             <option value="entrega_auto">Entrega de auto</option>
             <option value="asignacion_companero">Asignación compañero</option>
             <option value="cambio_auto">Cambio de auto</option>
-            <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
-            <option value="entrega_auto_cargo">Entrega auto a cargo</option>
             <option value="cambio_turno">Cambio de turno</option>
             <option value="devolucion_vehiculo">Devolución vehículo</option>
           </select>

@@ -1027,6 +1027,47 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     }
   }
 
+  // Auto-rellenar zona desde datos del conductor al entrar al paso 4
+  useEffect(() => {
+    if (step !== 4) return
+
+    setFormData(prev => {
+      const updates: any = { ...prev }
+      let changed = false
+
+      if (prev.modalidad === 'CARGO' && prev.conductor_id) {
+        const c = conductores.find(x => x.id === prev.conductor_id)
+        if (c?.zona && !prev.zona_cargo) {
+          updates.zona_cargo = c.zona
+          changed = true
+        }
+        if (prev.distancia_cargo === '' || prev.distancia_cargo === undefined) {
+          updates.distancia_cargo = 0
+          changed = true
+        }
+      }
+
+      if (prev.modalidad === 'TURNO') {
+        if (prev.conductor_diurno_id) {
+          const c = conductores.find(x => x.id === prev.conductor_diurno_id)
+          if (c?.zona && !prev.zona_diurno) {
+            updates.zona_diurno = c.zona
+            changed = true
+          }
+        }
+        if (prev.conductor_nocturno_id) {
+          const c = conductores.find(x => x.id === prev.conductor_nocturno_id)
+          if (c?.zona && !prev.zona_nocturno) {
+            updates.zona_nocturno = c.zona
+            changed = true
+          }
+        }
+      }
+
+      return changed ? updates : prev
+    })
+  }, [step])
+
   // Auto-calcular distancia en auto cuando ambos conductores están asignados
   // (solo si no se auto-rellenó desde un par arrastrado)
   useEffect(() => {
@@ -3145,8 +3186,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
-                            <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
-                            <option value="entrega_auto_cargo">Entrega auto a cargo</option>
                             <option value="cambio_turno">Cambio de turno</option>
                             <option value="devolucion_vehiculo">Devolucion vehiculo</option>
                           </select>
@@ -3220,8 +3259,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
-                            <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
-                            <option value="entrega_auto_cargo">Entrega auto a cargo</option>
                             <option value="cambio_turno">Cambio de turno</option>
                             <option value="devolucion_vehiculo">Devolucion vehiculo</option>
                           </select>
@@ -3297,8 +3334,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                             <option value="entrega_auto">Entrega de auto</option>
                             <option value="asignacion_companero">Asignacion companero</option>
                             <option value="cambio_auto">Cambio de auto</option>
-                            <option value="asignacion_auto_cargo">Asig. auto a cargo</option>
-                            <option value="entrega_auto_cargo">Entrega auto a cargo</option>
                             <option value="cambio_turno">Cambio de turno</option>
                             <option value="devolucion_vehiculo">Devolucion vehiculo</option>
                           </select>

@@ -13,7 +13,6 @@ import { useState, useMemo, useCallback } from 'react'
 import { Users, UserX, ChevronDown, ChevronUp, Database } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable/DataTable'
-import { ExcelColumnFilter, useExcelFilters } from '../../../components/ui/DataTable/ExcelColumnFilter'
 
 // Tipos
 import type { CabifyDriver, AccordionKey, WeekOption } from './types/cabify.types'
@@ -26,7 +25,7 @@ import { useCabifyRankings } from './hooks/useCabifyRankings'
 import { CabifyHeader, type DateRange, StatsAccordion, TopDriversSection } from './components'
 
 // Utilidades y constantes
-import { getScoreLevel, getRateLevel, buildLoadingMessage } from './utils/cabify.utils'
+import { getScoreLevel, getRateLevel, buildLoadingMessage, getDriverPatente } from './utils/cabify.utils'
 import {
   INITIAL_ACCORDION_STATE,
   ACCEPTANCE_RATE_THRESHOLDS,
@@ -98,44 +97,13 @@ export function CabifyModule() {
   // Estado local de UI
   const [accordionState, setAccordionState] = useState(INITIAL_ACCORDION_STATE)
 
-  // Column filter states - Multiselect tipo Excel
-  const [estadoFilter, setEstadoFilter] = useState<string[]>([])
-
-  // Excel filter hook for portal-based dropdowns
-  const { openFilterId, setOpenFilterId } = useExcelFilters()
-
-  const estadoOptions = ['activo', 'inactivo']
-
-  // Filtrar drivers según los filtros de columna
-  const filteredDrivers = useMemo(() => {
-    let result = drivers
-
-    if (estadoFilter.length > 0) {
-      result = result.filter(d => {
-        const estadoValue = d.disabled ? 'inactivo' : 'activo'
-        return estadoFilter.includes(estadoValue)
-      })
-    }
-
-    return result
-  }, [drivers, estadoFilter])
-
   // Handlers
   const handleToggleAccordion = useCallback((key: AccordionKey) => {
     setAccordionState((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
-  // Columnas de la tabla con filtros Excel
-  const columns = useTableColumns(
-    asignaciones,
-    {
-      estadoFilter,
-      setEstadoFilter,
-      estadoOptions,
-      openFilterId,
-      setOpenFilterId
-    }
-  )
+  // Columnas de la tabla
+  const columns = useTableColumns(asignaciones)
 
   // Mensaje de carga
   const loadingMessage = buildLoadingMessage(
@@ -163,13 +131,19 @@ export function CabifyModule() {
     return `${startDate} - ${endDate}`
   }, [effectiveDateRange])
 
-  // Conductores sin asignación activa
-  const driversWithoutAssignment = useMemo(() => {
-    if (!drivers.length || !asignaciones) return []
-    return drivers.filter(driver => {
-      if (!driver.nationalIdNumber) return true // Sin DNI = sin asignación
-      return !asignaciones.has(driver.nationalIdNumber)
-    })
+  // Separar conductores con y sin asignación activa
+  const { driversWithAssignment, driversWithoutAssignment } = useMemo(() => {
+    if (!drivers.length || !asignaciones) return { driversWithAssignment: [], driversWithoutAssignment: [] }
+    const withAssignment: CabifyDriver[] = []
+    const withoutAssignment: CabifyDriver[] = []
+    for (const driver of drivers) {
+      if (!driver.nationalIdNumber || !asignaciones.has(driver.nationalIdNumber)) {
+        withoutAssignment.push(driver)
+      } else {
+        withAssignment.push(driver)
+      }
+    }
+    return { driversWithAssignment: withAssignment, driversWithoutAssignment: withoutAssignment }
   }, [drivers, asignaciones])
 
   // Estado para expandir/colapsar la sección de sin asignación
@@ -204,28 +178,12 @@ export function CabifyModule() {
       />
 
       {!isLoading && hasDrivers && (
-        <div className="cabify-dashboard">
-          <StatsAccordion
-            estadisticas={estadisticas}
-            isExpanded={accordionState.estadisticas}
-            onToggle={() => handleToggleAccordion('estadisticas')}
-          />
-        </div>
-      )}
-
-      {/* Top Drivers - siempre visible cuando hay datos de rankings */}
-      {(topMejores.length > 0 || topPeores.length > 0) && (
-        <TopDriversSection
-          topMejores={topMejores}
-          topPeores={topPeores}
-          accordionState={accordionState}
-          onToggleAccordion={handleToggleAccordion}
-        />
+        <StatsAccordion estadisticas={estadisticas} />
       )}
 
       <div className="cabify-table-container">
         <DataTable
-          data={filteredDrivers}
+          data={driversWithAssignment}
           columns={columns}
           loading={isLoading && !hasDrivers}
           error={null}
@@ -237,6 +195,16 @@ export function CabifyModule() {
           pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
         />
       </div>
+
+      {/* Top Drivers - debajo de la tabla */}
+      {(topMejores.length > 0 || topPeores.length > 0) && (
+        <TopDriversSection
+          topMejores={topMejores}
+          topPeores={topPeores}
+          accordionState={accordionState}
+          onToggleAccordion={handleToggleAccordion}
+        />
+      )}
 
       {/* Sección de conductores sin asignación */}
       {!isLoading && driversWithoutAssignment.length > 0 && (
@@ -387,32 +355,20 @@ function DriversWithoutAssignmentSection({
 
 import type { AsignacionActiva } from '../../../services/asignacionesService'
 
-interface FilterState {
-  estadoFilter: string[]
-  setEstadoFilter: (filters: string[]) => void
-  estadoOptions: string[]
-  openFilterId: string | null
-  setOpenFilterId: (filterId: string | null) => void
-}
-
 function useTableColumns(
   asignaciones: Map<string, AsignacionActiva>,
-  filters: FilterState
 ): ColumnDef<CabifyDriver, unknown>[] {
   return useMemo<ColumnDef<CabifyDriver, unknown>[]>(
     () => [
-      // COMPANYNAME column hidden per user request
-      // Columnas principales (visibles)
       { ...createConductorColumn(), size: 180, minSize: 140 },
       { ...createTextColumn('nationalIdNumber', 'DNI'), size: 100, minSize: 90 },
       { ...createModalidadColumn(asignaciones), size: 130, minSize: 110 },
-      { ...createTextColumn('vehicleRegPlate', 'Patente', 'cabify-plate'), size: 90, minSize: 80 },
-      { ...createEstadoColumnWithFilter(filters), size: 100, minSize: 90 },
+      { ...createPatenteColumn(asignaciones), size: 90, minSize: 80 },
+      { ...createEstadoColumn(), size: 100, minSize: 90 },
       { ...createScoreColumn(), size: 75, minSize: 65 },
       { ...createNumericColumn('viajesFinalizados', 'V. Finalizados', 'cabify-trips-completed'), size: 110, minSize: 90 },
       { ...createMoneyColumn('gananciaTotal', 'Total', 'cabify-money total'), size: 120, minSize: 100 },
       { ...createMoneyColumn('gananciaPorHora', '$/Hora', 'cabify-money per-hour'), size: 100, minSize: 85 },
-      // Columnas secundarias (se muestran en expand si no caben)
       { ...createTextColumn('email', 'Email'), size: 200, minSize: 150 },
       { ...createTelefonoColumn(), size: 130, minSize: 110 },
       { ...createTextColumn('driverLicense', 'Licencia'), size: 100, minSize: 80 },
@@ -427,31 +383,22 @@ function useTableColumns(
       { ...createMoneyColumn('peajes', 'Peajes', 'cabify-money tolls'), size: 100, minSize: 85 },
       { ...createPermisoEfectivoColumn(), size: 110, minSize: 95 },
     ],
-    [asignaciones, filters]
+    [asignaciones]
   )
 }
 
-// Columna de Estado con filtro Excel
-function createEstadoColumnWithFilter(filters: FilterState): ColumnDef<CabifyDriver, unknown> {
+// Columna de Estado - usa accessorFn para que el auto-filter muestre "Activo"/"Inactivo"
+function createEstadoColumn(): ColumnDef<CabifyDriver, unknown> {
   return {
-    accessorKey: 'disabled',
-    header: () => (
-      <ExcelColumnFilter
-        label="Estado"
-        options={filters.estadoOptions}
-        selectedValues={filters.estadoFilter}
-        onSelectionChange={filters.setEstadoFilter}
-        filterId="estado"
-        openFilterId={filters.openFilterId}
-        onOpenChange={filters.setOpenFilterId}
-      />
-    ),
+    id: 'estado',
+    header: 'Estado',
+    accessorFn: (row) => row.disabled ? 'Inactivo' : 'Activo',
     cell: ({ getValue }) => {
-      const disabled = getValue() as boolean
-      const badgeClass = disabled ? 'dt-badge-solid-gray' : 'dt-badge-solid-green'
+      const estado = getValue() as string
+      const badgeClass = estado === 'Inactivo' ? 'dt-badge-solid-gray' : 'dt-badge-solid-green'
       return (
         <span className={`dt-badge ${badgeClass}`}>
-          {disabled ? 'Inactivo' : 'Activo'}
+          {estado}
         </span>
       )
     },
@@ -461,6 +408,19 @@ function createEstadoColumnWithFilter(filters: FilterState): ColumnDef<CabifyDri
 // =====================================================
 // FACTORY FUNCTIONS PARA COLUMNAS
 // =====================================================
+
+function createPatenteColumn(
+  asignaciones: Map<string, AsignacionActiva>
+): ColumnDef<CabifyDriver, unknown> {
+  return {
+    id: 'patente',
+    header: 'Patente',
+    accessorFn: (row) => getDriverPatente(row, asignaciones),
+    cell: ({ getValue }) => (
+      <span className="cabify-plate">{getValue() as string}</span>
+    ),
+  }
+}
 
 function createTextColumn(
   key: keyof CabifyDriver,

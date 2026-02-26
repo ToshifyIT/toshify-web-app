@@ -13,15 +13,13 @@ import {
   getSortedRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
-  getExpandedRowModel,
   flexRender,
   type ColumnDef,
   type SortingState,
   type Table,
-  type ExpandedState,
   type FilterFn,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight, Check, Calendar } from "lucide-react";
+import { Calendar } from "lucide-react";
 
 // Icono de filtro estilo Excel - dropdown arrow pequeño y sutil
 const FilterIcon = ({ size = 8 }: { size?: number }) => (
@@ -231,8 +229,6 @@ export interface DataTableProps<T> {
   headerAction?: ReactNode;
   /** IDs de columnas que siempre deben estar visibles (ej: ['acciones']) */
   alwaysVisibleColumns?: string[];
-  /** Número máximo de columnas a mostrar antes de colapsar (sin contar acciones) @default 6 */
-  maxVisibleColumns?: number;
   /** Key para resetear filtros internos - cuando cambia, se limpian todos los filtros */
   resetFiltersKey?: number | string;
   /** Desactiva los filtros automáticos de columna (para módulos con filtros personalizados) */
@@ -247,8 +243,6 @@ export interface DataTableProps<T> {
   globalFilter?: string;
   /** Callback al cambiar el filtro global (modo controlado) */
   onGlobalFilterChange?: (value: string) => void;
-  /** Habilita el scroll horizontal en lugar de ocultar columnas @default false */
-  enableHorizontalScroll?: boolean;
 }
 
 export function DataTable<T>({
@@ -267,7 +261,6 @@ export function DataTable<T>({
   onTableReady,
   headerAction,
   alwaysVisibleColumns = ["acciones", "actions"],
-  maxVisibleColumns = 0, // 0 = show all columns that fit
   resetFiltersKey,
   disableAutoFilters = false,
   externalFilters = [],
@@ -275,7 +268,6 @@ export function DataTable<T>({
   globalFilterFn: customGlobalFilterFn,
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
-  enableHorizontalScroll = true,
 }: DataTableProps<T>) {
   const [internalGlobalFilter, setInternalGlobalFilter] = useState("");
   const isControlled = controlledGlobalFilter !== undefined;
@@ -284,8 +276,6 @@ export function DataTable<T>({
 
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [expanded, setExpanded] = useState<ExpandedState>({});
-  const [visibleColumnCount, setVisibleColumnCount] = useState(100); // Start high, resize will adjust
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -512,50 +502,7 @@ export function DataTable<T>({
     return () => clearTimeout(timer);
   }, [globalFilter]);
 
-  // Adjust visible columns based on container width
-  useEffect(() => {
-    function handleResize() {
-      // If horizontal scroll is enabled, show all columns
-      if (enableHorizontalScroll) {
-        setVisibleColumnCount(1000); // Large enough number to show all
-        return;
-      }
-
-      if (!tableWrapperRef.current) return;
-      const width = tableWrapperRef.current.offsetWidth;
-
-      // Calculate how many columns can fit
-      // Use conservative width estimate (100px) to show more columns
-      const avgColWidth = 100;
-      const actionsWidth = 140;
-      const expandBtnWidth = 50;
-      const availableWidth = width - actionsWidth - expandBtnWidth;
-      const fittingColumns = Math.floor(availableWidth / avgColWidth);
-
-      // Show all columns that fit, minimum 2, maximum is total columns or maxVisibleColumns
-      const totalRegularCols = columns.filter(col => {
-        const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
-                      (col as { id?: string }).id || "";
-        return !alwaysVisibleColumns.includes(colId);
-      }).length;
-
-      // maxVisibleColumns = 0 means show all that fit, otherwise use as limit
-      const maxToShow = maxVisibleColumns > 0 ? maxVisibleColumns : totalRegularCols;
-      const newCount = Math.max(2, Math.min(fittingColumns, maxToShow, totalRegularCols));
-      setVisibleColumnCount(newCount);
-    }
-
-    // Run on mount and after a small delay to ensure container is sized
-    handleResize();
-    const timer = setTimeout(handleResize, 100);
-    window.addEventListener("resize", handleResize);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [maxVisibleColumns, columns, alwaysVisibleColumns, enableHorizontalScroll]);
-
-  // Separate columns into visible and hidden - memoized to prevent unnecessary re-renders
+  // Separate columns into regular and actions - memoized to prevent unnecessary re-renders
   const { regularColumns, actionsColumn } = useMemo(() => {
     const regular = columns.filter(col => {
       const colId = (col as { accessorKey?: string; id?: string }).accessorKey ||
@@ -571,10 +518,6 @@ export function DataTable<T>({
 
     return { regularColumns: regular, actionsColumn: actions };
   }, [columns, alwaysVisibleColumns]);
-
-  const visibleColumns = useMemo(() => regularColumns.slice(0, visibleColumnCount), [regularColumns, visibleColumnCount]);
-  const hiddenColumns = useMemo(() => regularColumns.slice(visibleColumnCount), [regularColumns, visibleColumnCount]);
-  const hasHiddenColumns = hiddenColumns.length > 0;
 
   // Filter header callbacks - stable references for FilterHeader component
   const handleFilterToggle = useCallback((colId: string) => {
@@ -619,10 +562,10 @@ export function DataTable<T>({
   const columnsWithFilters = useMemo(() => {
     // If auto-filters are disabled, return columns as-is
     if (disableAutoFilters) {
-      return visibleColumns;
+      return regularColumns;
     }
 
-    return visibleColumns.map(col => {
+    return regularColumns.map(col => {
       const colDef = col as { accessorKey?: string; id?: string; header?: unknown; enableSorting?: boolean };
       const colId = colDef.accessorKey || colDef.id || "";
 
@@ -671,41 +614,15 @@ export function DataTable<T>({
         ),
       } as ColumnDef<T, unknown>;
     });
-  }, [visibleColumns, disableAutoFilters, isDateColumn, openFilterId, dateFilters, columnFilters, getUniqueValues, handleFilterToggle, handleSelectValue, handleDateChange, handleClearFilter]);
+  }, [regularColumns, disableAutoFilters, isDateColumn, openFilterId, dateFilters, columnFilters, getUniqueValues, handleFilterToggle, handleSelectValue, handleDateChange, handleClearFilter]);
 
-  // Memoize final columns to prevent unnecessary re-renders that reset expand state
+  // Memoize final columns — all regular columns with filters + actions
   const finalColumns = useMemo<ColumnDef<T, unknown>[]>(() => {
-    // Build the expandable column if there are hidden columns
-    const expandColumn: ColumnDef<T, unknown> = {
-      id: "expand",
-      header: "",
-      cell: ({ row }) => (
-        <button
-          className={`dt-expand-btn ${row.getIsExpanded() ? 'expanded' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            row.toggleExpanded();
-          }}
-          title={row.getIsExpanded() ? "Ocultar detalles" : "Ver más"}
-        >
-          {row.getIsExpanded() ? (
-            <ChevronDown size={16} />
-          ) : (
-            <ChevronRight size={16} />
-          )}
-        </button>
-      ),
-      size: 40,
-      enableSorting: false,
-    };
-
-    // Final column order: expand (if needed) + visible with filters + actions
     return [
-      ...(hasHiddenColumns ? [expandColumn] : []),
       ...columnsWithFilters,
       ...actionsColumn,
     ];
-  }, [hasHiddenColumns, columnsWithFilters, actionsColumn]);
+  }, [columnsWithFilters, actionsColumn]);
 
   // Función de filtro global que busca en TODOS los valores string del objeto
   // Optimizada: concatena todo en un string y busca
@@ -751,17 +668,14 @@ export function DataTable<T>({
     state: {
       sorting,
       globalFilter: debouncedSearch,
-      expanded,
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setDebouncedSearch,
-    onExpandedChange: setExpanded,
     globalFilterFn: customGlobalFilterFn || defaultGlobalFilterFn,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getExpandedRowModel: getExpandedRowModel(),
     initialState: {
       pagination: {
         pageSize,
@@ -775,146 +689,6 @@ export function DataTable<T>({
       onTableReady(table);
     }
   }, [table, onTableReady]);
-
-  // Helper to get nested value from object using dot notation (e.g., "vehiculos_estados.codigo")
-  const getNestedValue = (obj: Record<string, unknown>, path: string): unknown => {
-    const keys = path.split('.');
-    let value: unknown = obj;
-    for (const key of keys) {
-      if (value && typeof value === 'object' && key in (value as Record<string, unknown>)) {
-        value = (value as Record<string, unknown>)[key];
-      } else {
-        return undefined;
-      }
-    }
-    return value;
-  };
-
-  // Render expanded row content - use original columns to access data
-  // For columns with custom cell renderers (like checkboxes), use flexRender
-  const renderExpandedContent = (rowData: T, rowIndex: number) => {
-    if (!hasHiddenColumns) return null;
-
-    const data = rowData as Record<string, unknown>;
-
-    // Create a mock row object for flexRender - matches TanStack Table row structure
-    const mockRow = {
-      original: rowData,
-      index: rowIndex,
-      id: String(rowIndex),
-      depth: 0,
-      getIsExpanded: () => true,
-      getCanExpand: () => false,
-      toggleExpanded: () => {},
-      getVisibleCells: () => [],
-      getAllCells: () => [],
-      getValue: (columnId: string) => {
-        const colDef = hiddenColumns.find(col => {
-          const def = col as { accessorKey?: string; id?: string };
-          return def.accessorKey === columnId || def.id === columnId;
-        });
-        if (colDef) {
-          const def = colDef as { accessorKey?: string; id?: string; accessorFn?: (row: T) => unknown };
-          if (def.accessorFn) {
-            return def.accessorFn(rowData);
-          }
-          const key = def.accessorKey || def.id || "";
-          return key.includes('.') ? getNestedValue(data, key) : data[key];
-        }
-        return undefined;
-      },
-    };
-
-    return (
-      <div className="dt-expanded-content">
-        <div className="dt-expanded-grid">
-          {hiddenColumns.map((col) => {
-            const colDef = col as { accessorKey?: string; id?: string; header?: unknown; cell?: unknown };
-            const colId = colDef.accessorKey || colDef.id || "";
-
-            // Get header text - try to extract from header function/string
-            let headerText = colId.split('.').pop() || colId;
-            headerText = headerText.charAt(0).toUpperCase() + headerText.slice(1).replace(/_/g, ' ').replace(/([A-Z])/g, ' $1');
-            if (typeof colDef.header === "string") {
-              headerText = colDef.header;
-            }
-
-            // If column has a custom cell renderer, use it (for checkboxes, custom badges, etc.)
-            let displayValue: React.ReactNode;
-            if (typeof colDef.cell === 'function') {
-              // Use flexRender with the column's cell definition
-              // Wrap in try-catch to prevent crashes from incompatible cell renderers
-              try {
-                // Create a getValue function specific to THIS column
-                // Cell renderers call getValue() without arguments, expecting the value for their column
-                const cellGetValue = () => mockRow.getValue(colId);
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                displayValue = flexRender(colDef.cell as ColumnDef<T>['cell'], { row: mockRow, getValue: cellGetValue } as any);
-              } catch (e) {
-                console.warn('Error rendering expanded cell:', colId, e);
-                // Fallback to raw value
-                const rawValue = colId.includes('.') ? getNestedValue(data, colId) : data[colId];
-                displayValue = rawValue !== null && rawValue !== undefined ? String(rawValue) : '-';
-              }
-            } else {
-              // Fallback to generic value formatting
-              const rawValue = colId.includes('.') ? getNestedValue(data, colId) : data[colId];
-
-              displayValue = "-";
-              if (rawValue !== null && rawValue !== undefined) {
-                if (typeof rawValue === 'boolean') {
-                  displayValue = (
-                    <span className={`dt-boolean-indicator ${rawValue ? 'dt-boolean-true' : 'dt-boolean-false'}`}>
-                      {rawValue ? <Check size={14} /> : <span className="dt-boolean-x">×</span>}
-                      <span>{rawValue ? 'Sí' : 'No'}</span>
-                    </span>
-                  );
-                } else if (rawValue instanceof Date) {
-                  displayValue = rawValue.toLocaleDateString('es-AR');
-                } else if (typeof rawValue === 'object') {
-                  // Format objects in a user-friendly way
-                  const obj = rawValue as Record<string, unknown>;
-                  // Vehicle-like objects (have patente, marca, modelo)
-                  if (obj.patente && obj.marca && obj.modelo) {
-                    displayValue = (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{String(obj.patente)}</span>
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{String(obj.marca)} {String(obj.modelo)}</span>
-                      </div>
-                    );
-                  // Person-like objects (have nombre or full_name)
-                  } else if (obj.nombre || obj.full_name) {
-                    displayValue = String(obj.nombre || obj.full_name);
-                  // Array of items
-                  } else if (Array.isArray(rawValue)) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    displayValue = rawValue.length > 0 ? rawValue.map((item: any) =>
-                      typeof item === 'object' ? item.nombre || item.descripcion || JSON.stringify(item) : String(item)
-                    ).join(', ') : '-';
-                  // Generic object - show values in a readable format
-                  } else {
-                    const values = Object.entries(obj)
-                      .filter(([key, val]) => val !== null && val !== undefined && key !== 'id')
-                      .map(([, val]) => String(val));
-                    displayValue = values.length > 0 ? values.join(' - ') : '-';
-                  }
-                } else {
-                  displayValue = String(rawValue);
-                }
-              }
-            }
-
-            return (
-              <div key={colId} className="dt-expanded-item">
-                <span className="dt-expanded-label">{headerText}</span>
-                <span className="dt-expanded-value">{displayValue}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
 
   // Get active filters info for display
   const activeFiltersInfo = useMemo(() => {
@@ -1207,9 +981,7 @@ export function DataTable<T>({
                 
                 row.getVisibleCells().forEach((cell) => {
                   const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
-                  const isExpandColumn = cell.column.id === "expand";
                   
-                  if (isExpandColumn) return;
                   if (isActionsColumn) {
                     actionsCells.push(cell);
                   } else {
@@ -1289,13 +1061,12 @@ export function DataTable<T>({
         ) : (
           /* Desktop Table View */
           <div className="dt-table-wrapper" ref={tableWrapperRef}>
-            <table className="dt-table dt-table-responsive">
+            <table className="dt-table">
               <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>
                     {headerGroup.headers.map((header) => {
                       const isActionsColumn = alwaysVisibleColumns.includes(header.id);
-                      const isExpandColumn = header.id === "expand";
                       return (
                         <th
                           key={header.id}
@@ -1303,9 +1074,8 @@ export function DataTable<T>({
                           className={`
                             ${header.column.getCanSort() ? "dt-sortable" : ""}
                             ${isActionsColumn ? "dt-sticky-col" : ""}
-                            ${isExpandColumn ? "dt-expand-col" : ""}
                           `}
-                          style={isExpandColumn ? { width: '40px' } : header.column.columnDef.size ? { width: `${header.column.columnDef.size}px`, maxWidth: `${header.column.columnDef.size}px` } : undefined}
+                          style={header.column.columnDef.size ? { width: `${header.column.columnDef.size}px`, maxWidth: `${header.column.columnDef.size}px` } : undefined}
                         >
                           <div
                             className={`dt-header-content ${
@@ -1340,36 +1110,23 @@ export function DataTable<T>({
                   </tr>
                 ) : (
                   table.getRowModel().rows.map((row) => (
-                    <React.Fragment key={row.id}>
-                      <tr className={row.getIsExpanded() ? "dt-row-expanded" : ""}>
-                        {row.getVisibleCells().map((cell) => {
-                          const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
-                          const isExpandColumn = cell.column.id === "expand";
-                          return (
-                            <td
-                              key={cell.id}
-                              className={`
-                                ${isActionsColumn ? "dt-sticky-col" : ""}
-                                ${isExpandColumn ? "dt-expand-col" : ""}
-                              `}
-                              style={cell.column.columnDef.size ? { width: `${cell.column.columnDef.size}px`, maxWidth: `${cell.column.columnDef.size}px` } : undefined}
-                            >
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext()
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                      {row.getIsExpanded() && hasHiddenColumns && (
-                        <tr className="dt-expanded-row">
-                          <td colSpan={finalColumns.length}>
-                            {renderExpandedContent(row.original, row.index)}
+                    <tr key={row.id}>
+                      {row.getVisibleCells().map((cell) => {
+                        const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
+                        return (
+                          <td
+                            key={cell.id}
+                            className={isActionsColumn ? "dt-sticky-col" : ""}
+                            style={cell.column.columnDef.size ? { width: `${cell.column.columnDef.size}px`, maxWidth: `${cell.column.columnDef.size}px` } : undefined}
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
                           </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
+                        );
+                      })}
+                    </tr>
                   ))
                 )}
               </tbody>

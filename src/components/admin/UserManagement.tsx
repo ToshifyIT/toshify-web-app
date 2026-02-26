@@ -5,7 +5,7 @@ import { LoadingOverlay } from '../ui/LoadingOverlay'
 import type { UserWithRole, Role } from '../../types/database.types'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../ui/DataTable/DataTable'
-import { Users, UserCheck, UserX, Shield, KeyRound } from 'lucide-react'
+import { Users, UserCheck, UserX, Shield, KeyRound, Pencil, ToggleLeft, ToggleRight } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import './UserManagement.css'
@@ -191,6 +191,45 @@ export function UserManagement() {
         icon: 'error',
         title: 'Error',
         text: 'Error al cambiar estado: ' + message
+      })
+    }
+  }
+
+  const editUserName = async (userId: string, currentName: string) => {
+    const { value: newName } = await Swal.fire({
+      title: 'Editar Nombre',
+      input: 'text',
+      inputValue: currentName || '',
+      inputPlaceholder: 'Nombre completo',
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#FF0033',
+      reverseButtons: true,
+      inputValidator: (value) => {
+        if (!value?.trim()) return 'El nombre no puede estar vacío'
+        return null
+      }
+    })
+
+    if (!newName) return
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ full_name: newName.trim() })
+        .eq('id', userId)
+
+      if (error) throw error
+
+      await loadData()
+      showSuccess('Nombre Actualizado', `Nombre cambiado a "${newName.trim()}"`)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al actualizar nombre: ' + message
       })
     }
   }
@@ -407,19 +446,27 @@ export function UserManagement() {
       {
         accessorKey: 'full_name',
         header: 'Usuario',
-        cell: ({ getValue }) => (
-          <strong className="um-user-name">{(getValue() as string) || 'Sin nombre'}</strong>
-        ),
-      },
-      {
-        accessorKey: 'id',
-        header: 'ID',
-        enableSorting: false,
-        cell: ({ getValue }) => (
-          <span className="um-user-id">
-            {(getValue() as string).substring(0, 8)}...
-          </span>
-        ),
+        cell: ({ row }) => {
+          const name = (row.original.full_name as string) || 'Sin nombre'
+          const email = row.original.email as string
+          const avatarUrl = row.original.avatar_url as string | null
+          const initials = name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
+          return (
+            <div className="um-user-cell">
+              <div className="um-avatar">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={name} className="um-avatar-img" />
+                ) : (
+                  <span className="um-avatar-initials">{initials}</span>
+                )}
+              </div>
+              <div className="um-user-info">
+                <span className="um-user-name">{name}</span>
+                {email && <span className="um-user-email">{email}</span>}
+              </div>
+            </div>
+          )
+        },
       },
       {
         accessorKey: 'role_id',
@@ -438,6 +485,10 @@ export function UserManagement() {
             ))}
           </select>
         ),
+        filterFn: (row, _columnId, filterValue) => {
+          const roleName = ((row.original.roles as Role)?.name || 'sin rol').toLowerCase()
+          return roleName.includes(String(filterValue).toLowerCase())
+        },
       },
       {
         accessorKey: 'is_active',
@@ -445,40 +496,55 @@ export function UserManagement() {
         cell: ({ getValue }) => {
           const isActive = getValue() as boolean
           return (
-            <span className={`dt-badge ${isActive ? 'dt-badge-green' : 'dt-badge-red'}`}>
-              {isActive ? 'Activo' : 'Inactivo'}
+            <span className={`dt-badge ${isActive !== false ? 'dt-badge-green' : 'dt-badge-red'}`}>
+              {isActive !== false ? 'Activo' : 'Inactivo'}
             </span>
           )
         },
       },
       {
         accessorKey: 'created_at',
-        header: 'Fecha Registro',
-        cell: ({ getValue }) => (
-          <span>{new Date(getValue() as string).toLocaleDateString('es-ES')}</span>
-        ),
+        header: 'Registro',
+        cell: ({ getValue }) => {
+          const date = new Date(getValue() as string)
+          return (
+            <span className="um-date">{date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+          )
+        },
       },
       {
         id: 'acciones',
         header: 'Acciones',
         enableSorting: false,
-        cell: ({ row }) => (
-          <div className="dt-actions">
-            <button
-              className="dt-btn-action dt-btn-warning"
-              onClick={() => forcePasswordChange(row.original.id, (row.original.full_name || row.original.email || 'Usuario') as string, row.original.email ?? undefined)}
-              title="Forzar cambio de contraseña"
-            >
-              <KeyRound size={14} />
-            </button>
-            <button
-              className="dt-btn-action"
-              onClick={() => toggleUserStatus(row.original.id, row.original.is_active)}
-            >
-              {row.original.is_active ? 'Desactivar' : 'Activar'}
-            </button>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isActive = row.original.is_active !== false
+          const userName = (row.original.full_name || row.original.email || 'Usuario') as string
+          return (
+            <div className="dt-actions">
+              <button
+                className="dt-btn-action dt-btn-edit"
+                onClick={() => editUserName(row.original.id, (row.original.full_name || '') as string)}
+                data-tooltip="Editar nombre"
+              >
+                <Pencil size={15} />
+              </button>
+              <button
+                className="dt-btn-action dt-btn-warning"
+                onClick={() => forcePasswordChange(row.original.id, userName, row.original.email ?? undefined)}
+                data-tooltip="Resetear contraseña"
+              >
+                <KeyRound size={15} />
+              </button>
+              <button
+                className={`dt-btn-action ${isActive ? 'dt-btn-danger' : 'dt-btn-success'}`}
+                onClick={() => toggleUserStatus(row.original.id, isActive)}
+                data-tooltip={isActive ? 'Desactivar' : 'Activar'}
+              >
+                {isActive ? <ToggleRight size={17} /> : <ToggleLeft size={17} />}
+              </button>
+            </div>
+          )
+        },
       },
     ],
     [roles]

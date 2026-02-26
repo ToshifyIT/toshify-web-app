@@ -1,7 +1,7 @@
 // src/modules/conductores/ConductoresModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
@@ -28,6 +28,7 @@ import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
 import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
+import { cabifyService } from "../../services/cabifyService";
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 import { registrarHistorialConductor, registrarHistorialVehiculo } from "../../services/historialService";
@@ -251,10 +252,10 @@ export function ConductoresModule() {
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
   const calculatedStats = useMemo(() => {
     const hoy = new Date();
-    const en30Dias = new Date();
-    en30Dias.setDate(en30Dias.getDate() + 30);
+    const en10Dias = new Date();
+    en10Dias.setDate(en10Dias.getDate() + 10);
     const hoyStr = hoy.toISOString().split('T')[0];
-    const en30DiasStr = en30Dias.toISOString().split('T')[0];
+    const en10DiasStr = en10Dias.toISOString().split('T')[0];
     
     // Rango de la semana actual + semana anterior (para bajas)
     const { inicio: inicioSemana, fin: finSemana } = getWeekRange(true);
@@ -288,9 +289,9 @@ export function ConductoresModule() {
         conductoresAsignados++;
       }
 
-      // Licencias por vencer (solo conductores activos CON asignación)
+      // Licencias por vencer (solo conductores activos, próximos 10 días)
       const vencimiento = c.licencia_vencimiento;
-      if (estadoCodigo === 'activo' && (c as any).vehiculo_asignado && vencimiento && vencimiento >= hoyStr && vencimiento <= en30DiasStr) {
+      if (estadoCodigo === 'activo' && vencimiento && vencimiento >= hoyStr && vencimiento <= en10DiasStr) {
         licenciasPorVencer++;
       }
     }
@@ -2379,7 +2380,7 @@ export function ConductoresModule() {
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('licencias')}
-            title="Licencias por vencer en los próximos 30 días (solo conductores con asignación)"
+            title="Licencias por vencer en los próximos 10 días (solo conductores activos)"
           >
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
@@ -2477,6 +2478,7 @@ export function ConductoresModule() {
           setShowDetailsModal={setShowDetailsModal}
           getEstadoBadgeClass={getEstadoBadgeClass}
           getEstadoLabel={getEstadoLabel}
+          onConductorUpdated={() => loadConductores(true)}
         />
       )}
       {showBajaConfirmModal && selectedConductor && (
@@ -2590,6 +2592,62 @@ function ModalEditar({
   editErrors,
   setEditErrors,
 }: any) {
+  const [syncingEmail, setSyncingEmail] = useState(false);
+
+  const syncEmailFromCabify = async () => {
+    setSyncingEmail(true);
+    try {
+      const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
+
+      const dni = formData.numero_dni?.trim();
+      const nombreCompleto = `${formData.nombres} ${formData.apellidos}`.trim().toUpperCase();
+
+      let match = dni
+        ? cabifyDrivers.find((d: any) => d.nationalIdNumber?.trim() === dni)
+        : null;
+
+      if (!match && nombreCompleto) {
+        match = cabifyDrivers.find((d: any) => {
+          const cabifyName = `${d.name || ''} ${d.surname || ''}`.trim().toUpperCase();
+          return cabifyName === nombreCompleto;
+        });
+      }
+
+      if (!match) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin coincidencia',
+          text: `No se encontró en Cabify con DNI "${dni || 'N/A'}" ni nombre "${nombreCompleto}"`,
+          confirmButtonColor: '#FF0033',
+        });
+        return;
+      }
+
+      if (!match.email) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin email en Cabify',
+          text: 'Se encontró al conductor pero no tiene email registrado en Cabify',
+          confirmButtonColor: '#FF0033',
+        });
+        return;
+      }
+
+      setFormData({ ...formData, email: match.email });
+      showSuccess('Email sincronizado', match.email);
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : String(err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al sincronizar con Cabify: ' + message,
+        confirmButtonColor: '#FF0033',
+      });
+    } finally {
+      setSyncingEmail(false);
+    }
+  };
+
   return (
     <div
       className="modal-overlay"
@@ -2921,15 +2979,28 @@ function ModalEditar({
           </div>
           <div className="form-group">
             <label className="form-label">Email</label>
-            <input
-              type="email"
-              className="form-input"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
-              disabled={saving}
-            />
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="email"
+                className="form-input"
+                style={{ flex: 1 }}
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                disabled={saving}
+              />
+              <button
+                type="button"
+                className="dt-btn-action dt-btn-info"
+                onClick={syncEmailFromCabify}
+                disabled={syncingEmail || saving}
+                title="Sincronizar email desde Cabify"
+                style={{ flexShrink: 0 }}
+              >
+                <RefreshCw size={14} className={syncingEmail ? 'spin-animation' : ''} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -3280,9 +3351,79 @@ function ModalEliminar({
 function ModalDetalles({
   selectedConductor,
   setShowDetailsModal,
+  onConductorUpdated,
 }: any) {
   const [vehiculosAsignados, setVehiculosAsignados] = useState<any[]>([]);
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
+  const [syncingEmail, setSyncingEmail] = useState(false);
+  const [conductorEmail, setConductorEmail] = useState<string>(selectedConductor?.email || '');
+
+  const syncEmailFromCabify = async () => {
+    if (!selectedConductor) return;
+
+    setSyncingEmail(true);
+    try {
+      const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
+
+      const dni = selectedConductor.numero_dni?.trim();
+      const nombreCompleto = `${selectedConductor.nombres || ''} ${selectedConductor.apellidos || ''}`.trim().toUpperCase();
+
+      // Match by DNI first, then by name
+      let match = dni
+        ? cabifyDrivers.find((d: any) => d.nationalIdNumber?.trim() === dni)
+        : null;
+
+      if (!match && nombreCompleto) {
+        match = cabifyDrivers.find((d: any) => {
+          const cabifyName = `${d.name || ''} ${d.surname || ''}`.trim().toUpperCase();
+          return cabifyName === nombreCompleto;
+        });
+      }
+
+      if (!match) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin coincidencia',
+          text: `No se encontró conductor en Cabify con DNI ${dni || 'N/A'} ni nombre "${nombreCompleto}"`,
+          confirmButtonColor: '#FF0033',
+        });
+        return;
+      }
+
+      if (!match.email) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin email en Cabify',
+          text: `Se encontró al conductor en Cabify pero no tiene email registrado`,
+          confirmButtonColor: '#FF0033',
+        });
+        return;
+      }
+
+      // Update in DB
+      const { error } = await supabase
+        .from('conductores')
+        .update({ email: match.email })
+        .eq('id', selectedConductor.id);
+
+      if (error) throw error;
+
+      setConductorEmail(match.email);
+      selectedConductor.email = match.email;
+      onConductorUpdated?.();
+      showSuccess('Email Actualizado', `Email sincronizado: ${match.email}`);
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : String(err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al sincronizar con Cabify: ' + message,
+        confirmButtonColor: '#FF0033',
+      });
+    } finally {
+      setSyncingEmail(false);
+    }
+  };
 
   // Cargar historial de vehículos asignados
   useEffect(() => {
@@ -3493,8 +3634,17 @@ function ModalDetalles({
           </div>
           <div>
             <label className="detail-label">EMAIL</label>
-            <div className="detail-value">
-              {selectedConductor.email || "N/A"}
+            <div className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>{conductorEmail || "N/A"}</span>
+              <button
+                className="dt-btn-action dt-btn-info"
+                onClick={syncEmailFromCabify}
+                disabled={syncingEmail}
+                title="Sincronizar email desde Cabify"
+                style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
+              >
+                <RefreshCw size={13} className={syncingEmail ? 'spin-animation' : ''} />
+              </button>
             </div>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
