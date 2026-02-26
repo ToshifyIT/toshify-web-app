@@ -664,7 +664,7 @@ export function PortalPage() {
                           />
                           <YAxis hide />
                           <Tooltip
-                            formatter={(value: number) => [formatCurrency(value), 'Total']}
+                            formatter={(value: string | number) => formatCurrency(Number(value))}
                             contentStyle={{
                               background: '#1f2937',
                               border: 'none',
