@@ -212,7 +212,9 @@ export function MenuHierarchyManager() {
           name: submenuForm.name,
           label: submenuForm.label,
           route: submenuForm.route,
-          order_index: submenuForm.order_index
+          order_index: submenuForm.order_index,
+          menu_id: submenuForm.menu_id,
+          parent_id: submenuForm.parent_id || null
         })
         .eq('id', editingSubmenu.id)
 
@@ -536,7 +538,7 @@ pageSize={100}
                 className="mhm-form-input"
                 value={submenuForm.menu_id}
                 onChange={(e) => setSubmenuForm({ ...submenuForm, menu_id: e.target.value, parent_id: '' })}
-                disabled={saving || !!editingSubmenu}
+                disabled={saving}
               >
                 <option value="">Seleccionar menú...</option>
                 {menus.map(menu => (
