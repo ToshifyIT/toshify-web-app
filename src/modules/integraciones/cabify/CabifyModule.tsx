@@ -360,19 +360,12 @@ function useTableColumns(
 ): ColumnDef<CabifyDriver, unknown>[] {
   return useMemo<ColumnDef<CabifyDriver, unknown>[]>(
     () => [
-      { ...createConductorColumn(), size: 180, minSize: 140 },
-      { ...createTextColumn('nationalIdNumber', 'DNI'), size: 100, minSize: 90 },
-      { ...createModalidadColumn(asignaciones), size: 130, minSize: 110 },
+      { ...createConductorCompactColumn(asignaciones), size: 240, minSize: 200 },
       { ...createPatenteColumn(asignaciones), size: 90, minSize: 80 },
-      { ...createEstadoColumn(), size: 100, minSize: 90 },
-      { ...createScoreColumn(), size: 75, minSize: 65 },
       { ...createNumericColumn('viajesFinalizados', 'V. Finalizados', 'cabify-trips-completed'), size: 110, minSize: 90 },
       { ...createMoneyColumn('gananciaTotal', 'Total', 'cabify-money total'), size: 120, minSize: 100 },
-      { ...createMoneyColumn('gananciaPorHora', '$/Hora', 'cabify-money per-hour'), size: 100, minSize: 85 },
+      { ...createMoneyColumn('gananciaPorHora', '$/Hora', 'cabify-money per-hour'), size: 120, minSize: 105 },
       { ...createTextColumn('email', 'Email'), size: 200, minSize: 150 },
-      { ...createTelefonoColumn(), size: 130, minSize: 110 },
-      { ...createTextColumn('driverLicense', 'Licencia'), size: 100, minSize: 80 },
-      { ...createVehiculoColumn(), size: 150, minSize: 120 },
       { ...createNumericColumn('viajesRechazados', 'V. Rechazados', 'cabify-trips-rejected'), size: 110, minSize: 90 },
       { ...createNumericColumn('viajesPerdidos', 'V. Perdidos', 'cabify-trips-lost'), size: 100, minSize: 85 },
       { ...createTasaAceptacionColumn(), size: 100, minSize: 85 },
@@ -387,23 +380,7 @@ function useTableColumns(
   )
 }
 
-// Columna de Estado - usa accessorFn para que el auto-filter muestre "Activo"/"Inactivo"
-function createEstadoColumn(): ColumnDef<CabifyDriver, unknown> {
-  return {
-    id: 'estado',
-    header: 'Estado',
-    accessorFn: (row) => row.disabled ? 'Inactivo' : 'Activo',
-    cell: ({ getValue }) => {
-      const estado = getValue() as string
-      const badgeClass = estado === 'Inactivo' ? 'dt-badge-solid-gray' : 'dt-badge-solid-green'
-      return (
-        <span className={`dt-badge ${badgeClass}`}>
-          {estado}
-        </span>
-      )
-    },
-  }
-}
+
 
 // =====================================================
 // FACTORY FUNCTIONS PARA COLUMNAS
@@ -474,82 +451,55 @@ function createMoneyColumn(
   }
 }
 
-function createConductorColumn(): ColumnDef<CabifyDriver, unknown> {
+function createConductorCompactColumn(
+  asignaciones: Map<string, AsignacionActiva>
+): ColumnDef<CabifyDriver, unknown> {
   return {
     id: 'conductor',
     header: 'Conductor',
     accessorFn: (row) => `${row.name || ''} ${row.surname || ''}`.trim() || '-',
-    cell: ({ getValue }) => (
-      <span className="cabify-driver-name">{getValue() as string}</span>
-    ),
-  }
-}
-
-function createTelefonoColumn(): ColumnDef<CabifyDriver, unknown> {
-  return {
-    id: 'telefono',
-    header: 'Teléfono',
-    accessorFn: (row) =>
-      row.mobileCc && row.mobileNum ? `${row.mobileCc} ${row.mobileNum}` : '-',
-    cell: ({ getValue }) => getValue() as string,
-  }
-}
-
-function createVehiculoColumn(): ColumnDef<CabifyDriver, unknown> {
-  return {
-    id: 'vehiculo',
-    header: 'Vehículo',
-    accessorFn: (row) =>
-      row.vehiculo ||
-      (row.vehicleMake && row.vehicleModel
-        ? `${row.vehicleMake} ${row.vehicleModel}`
-        : '-'),
-    cell: ({ getValue }) => getValue() as string,
-  }
-}
-
-function createModalidadColumn(
-  asignaciones: Map<string, AsignacionActiva>
-): ColumnDef<CabifyDriver, unknown> {
-  return {
-    id: 'modalidad',
-    header: 'Modalidad',
-    accessorFn: (row) => {
-      const asig = row.nationalIdNumber
-        ? asignaciones.get(row.nationalIdNumber)
-        : null
-      return asig?.horario || 'Sin asignación'
-    },
     cell: ({ row }) => {
-      const asig = row.original.nationalIdNumber
-        ? asignaciones.get(row.original.nationalIdNumber)
+      const driver = row.original
+      const fullName = `${driver.name || ''} ${driver.surname || ''}`.trim() || '-'
+      const dni = driver.nationalIdNumber || '-'
+      const asig = driver.nationalIdNumber
+        ? asignaciones.get(driver.nationalIdNumber)
         : null
 
-      if (!asig) {
-        return <span className="dt-badge dt-badge-gray">Sin asignación</span>
-      }
+      const modalidadClass = !asig
+        ? 'dt-badge-gray'
+        : asig.horario === 'TURNO' ? 'dt-badge-blue' : 'dt-badge-yellow'
+      const modalidadLabel = !asig
+        ? 'S/A'
+        : asig.horario || '?'
 
-      const badgeClass = asig.horario === 'TURNO' ? 'dt-badge-blue' : 'dt-badge-yellow'
-      return (
-        <span className={`dt-badge ${badgeClass}`}>
-          {asig.horario || 'Desconocido'}
-        </span>
-      )
-    },
-  }
-}
+      const isActive = !driver.disabled
+      const estadoClass = isActive ? 'dt-badge-solid-green' : 'dt-badge-solid-gray'
+      const estadoLabel = isActive ? 'Activo' : 'Inactivo'
 
-function createScoreColumn(): ColumnDef<CabifyDriver, unknown> {
-  return {
-    accessorKey: 'score',
-    header: 'Score',
-    cell: ({ getValue }) => {
-      const score = getValue() as number
-      const level = getScoreLevel(score)
+      const score = driver.score as number | undefined
+      const scoreLevel = getScoreLevel(score)
+
       return (
-        <span className={`cabify-score ${level}`}>
-          {score ? Number(score).toFixed(2) : '-'}
-        </span>
+        <div className="cabify-driver-compact">
+          <div className="cabify-driver-compact-top">
+            <span className="cabify-driver-compact-name">{fullName}</span>
+            {score != null && (
+              <span className={`cabify-score ${scoreLevel}`} style={{ fontSize: '11px' }}>
+                {Number(score).toFixed(2)}
+              </span>
+            )}
+          </div>
+          <div className="cabify-driver-compact-meta">
+            <span className="cabify-driver-compact-dni">{dni}</span>
+            <span className={`dt-badge ${modalidadClass}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
+              {modalidadLabel}
+            </span>
+            <span className={`dt-badge ${estadoClass}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
+              {estadoLabel}
+            </span>
+          </div>
+        </div>
       )
     },
   }

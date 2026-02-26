@@ -3358,6 +3358,28 @@ function ModalDetalles({
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
   const [syncingEmail, setSyncingEmail] = useState(false);
   const [conductorEmail, setConductorEmail] = useState<string>(selectedConductor?.email || '');
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  const saveEmail = async () => {
+    if (!selectedConductor) return;
+    setSavingEmail(true);
+    try {
+      const { error } = await supabase
+        .from('conductores')
+        .update({ email: conductorEmail || null })
+        .eq('id', selectedConductor.id);
+      if (error) throw error;
+      selectedConductor.email = conductorEmail;
+      onConductorUpdated?.();
+      setEditingEmail(false);
+      showSuccess('Email Actualizado', conductorEmail || 'Email eliminado');
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar el email', confirmButtonColor: '#FF0033' });
+    } finally {
+      setSavingEmail(false);
+    }
+  };
 
   const syncEmailFromCabify = async () => {
     if (!selectedConductor) return;
@@ -3635,17 +3657,65 @@ function ModalDetalles({
           </div>
           <div>
             <label className="detail-label">EMAIL</label>
-            <div className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>{conductorEmail || "N/A"}</span>
-              <button
-                className="dt-btn-action dt-btn-info"
-                onClick={syncEmailFromCabify}
-                disabled={syncingEmail}
-                title="Sincronizar email desde Cabify"
-                style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
-              >
-                <RefreshCw size={13} className={syncingEmail ? 'spin-animation' : ''} />
-              </button>
+            <div className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {editingEmail ? (
+                <>
+                  <input
+                    type="email"
+                    className="form-input"
+                    style={{ flex: 1, padding: '4px 8px', fontSize: '13px' }}
+                    value={conductorEmail}
+                    onChange={(e) => setConductorEmail(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveEmail(); if (e.key === 'Escape') { setConductorEmail(selectedConductor?.email || ''); setEditingEmail(false); } }}
+                    autoFocus
+                    disabled={savingEmail}
+                  />
+                  <button
+                    className="dt-btn-action dt-btn-success"
+                    onClick={saveEmail}
+                    disabled={savingEmail}
+                    title="Guardar"
+                    style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
+                  >
+                    {savingEmail ? <Loader2 size={13} className="spin-animation" /> : '✓'}
+                  </button>
+                  <button
+                    className="dt-btn-action"
+                    onClick={() => { setConductorEmail(selectedConductor?.email || ''); setEditingEmail(false); }}
+                    title="Cancelar"
+                    style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
+                  >
+                    ✕
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setEditingEmail(true)}
+                    title="Click para editar"
+                  >
+                    {conductorEmail || "N/A"}
+                  </span>
+                  <button
+                    className="dt-btn-action dt-btn-info"
+                    onClick={() => setEditingEmail(true)}
+                    title="Editar email"
+                    style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                  <button
+                    className="dt-btn-action dt-btn-info"
+                    onClick={syncEmailFromCabify}
+                    disabled={syncingEmail}
+                    title="Sincronizar email desde Cabify"
+                    style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
+                  >
+                    <RefreshCw size={13} className={syncingEmail ? 'spin-animation' : ''} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>

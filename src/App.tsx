@@ -10,6 +10,7 @@ import { HomePage } from './pages/HomePage'
 import { UnauthorizedPage } from './pages/UnauthorizedPage'
 import PermissionsDebugPage from './pages/PermissionsDebugPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { PortalPage } from './modules/portal/PortalPage'
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal'
 import { useDeviceType } from './hooks/useDeviceType'
 
@@ -73,6 +74,7 @@ function App() {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
+                <Route path="/mi-facturacion" element={<PortalPage />} />
 
                 {/* Debug de permisos (solo desarrollo) */}
                 <Route
