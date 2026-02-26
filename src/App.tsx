@@ -65,43 +65,50 @@ function App() {
   return (
     <BrowserRouter>
       <DeviceTypeInitializer>
-        <RecoveryRedirect>
-          <AuthProvider>
-            <ForcePasswordChangeWrapper>
-              <PermissionsProvider>
-              <SedeProvider>
-                <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/reset-password" element={<ResetPasswordPage />} />
-                <Route path="/unauthorized" element={<UnauthorizedPage />} />
-                <Route path="/mi-facturacion" element={<PortalPage />} />
+        <Routes>
+          {/* Portal público - fuera de auth providers */}
+          <Route path="/mi-facturacion" element={<PortalPage />} />
 
-                {/* Debug de permisos (solo desarrollo) */}
-                <Route
-                  path="/debug/permisos"
-                  element={
-                    <ProtectedRoute>
-                      <PermissionsDebugPage />
-                    </ProtectedRoute>
-                  }
-                />            
+          {/* App principal - con auth */}
+          <Route path="/*" element={
+            <RecoveryRedirect>
+              <AuthProvider>
+                <ForcePasswordChangeWrapper>
+                  <PermissionsProvider>
+                  <SedeProvider>
+                    <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/reset-password" element={<ResetPasswordPage />} />
+                    <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-                {/* HomePage como layout principal para todos los usuarios autenticados */}
-                <Route
-                  path="/*"
-                  element={
-                    <ProtectedRoute>
-                      <HomePage />
-                    </ProtectedRoute>
-                  }
-                />
-              </Routes>
-              </SedeProvider>
-            </PermissionsProvider>
-          </ForcePasswordChangeWrapper>
-        </AuthProvider>
-      </RecoveryRedirect>
-    </DeviceTypeInitializer>
+                    {/* Debug de permisos (solo desarrollo) */}
+                    <Route
+                      path="/debug/permisos"
+                      element={
+                        <ProtectedRoute>
+                          <PermissionsDebugPage />
+                        </ProtectedRoute>
+                      }
+                    />            
+
+                    {/* HomePage como layout principal para todos los usuarios autenticados */}
+                    <Route
+                      path="/*"
+                      element={
+                        <ProtectedRoute>
+                          <HomePage />
+                        </ProtectedRoute>
+                      }
+                    />
+                  </Routes>
+                  </SedeProvider>
+                </PermissionsProvider>
+              </ForcePasswordChangeWrapper>
+            </AuthProvider>
+          </RecoveryRedirect>
+          } />
+        </Routes>
+      </DeviceTypeInitializer>
     </BrowserRouter>
   )
 }
