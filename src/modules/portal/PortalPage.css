@@ -167,6 +167,95 @@
   padding: 20px;
 }
 
+/* Dashboard panel */
+.portal-dashboard {
+  margin-bottom: 24px;
+}
+
+.portal-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.portal-stat-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.portal-stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+
+.portal-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+.portal-stat-value.debit {
+  color: #dc2626;
+}
+
+.portal-stat-change {
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.portal-stat-change.up {
+  color: #dc2626;
+}
+
+.portal-stat-change.down {
+  color: #059669;
+}
+
+.portal-stat-sub {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.portal-chart-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.portal-chart-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 8px;
+}
+
+.portal-chart-container {
+  width: 100%;
+  height: 180px;
+}
+
+.portal-weeks-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 10px;
+}
+
 .portal-welcome {
   margin-bottom: 24px;
 }
@@ -557,6 +646,19 @@
   .portal-content,
   .portal-detail {
     padding: 14px;
+  }
+
+  .portal-stats {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .portal-stat-value {
+    font-size: 16px;
+  }
+
+  .portal-chart-container {
+    height: 140px;
   }
 
   .portal-week-card {
