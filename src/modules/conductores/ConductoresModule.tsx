@@ -33,6 +33,9 @@ import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 import { registrarHistorialConductor, registrarHistorialVehiculo } from "../../services/historialService";
 
+// Umbral configurable: días para considerar una licencia "por vencer"
+const DIAS_LICENCIA_POR_VENCER = 10;
+
 // Función para actualizar estado en tabla de control de facturación
 async function actualizarEstadoControlFacturacion(
   conductorDni: string,
@@ -252,10 +255,10 @@ export function ConductoresModule() {
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
   const calculatedStats = useMemo(() => {
     const hoy = new Date();
-    const en10Dias = new Date();
-    en10Dias.setDate(en10Dias.getDate() + 10);
+    const enXDias = new Date();
+    enXDias.setDate(enXDias.getDate() + DIAS_LICENCIA_POR_VENCER);
     const hoyStr = hoy.toISOString().split('T')[0];
-    const en10DiasStr = en10Dias.toISOString().split('T')[0];
+    const enXDiasStr = enXDias.toISOString().split('T')[0];
     
     // Rango de la semana actual + semana anterior (para bajas)
     const { inicio: inicioSemana, fin: finSemana } = getWeekRange(true);
@@ -289,9 +292,9 @@ export function ConductoresModule() {
         conductoresAsignados++;
       }
 
-      // Licencias por vencer (solo conductores activos, próximos 10 días)
+      // Licencias por vencer (solo conductores activos, próximos N días)
       const vencimiento = c.licencia_vencimiento;
-      if (estadoCodigo === 'activo' && vencimiento && vencimiento >= hoyStr && vencimiento <= en10DiasStr) {
+      if (estadoCodigo === 'activo' && vencimiento && vencimiento >= hoyStr && vencimiento <= enXDiasStr) {
         licenciasPorVencer++;
       }
     }
@@ -1740,15 +1743,14 @@ export function ConductoresModule() {
 
     if (licenciaVencerFilter) {
       const hoy = new Date();
-      const en30Dias = new Date();
-      en30Dias.setDate(en30Dias.getDate() + 30);
+      const enXDias = new Date();
+      enXDias.setDate(enXDias.getDate() + DIAS_LICENCIA_POR_VENCER);
       result = result.filter(c => {
         const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
         if (estadoCodigo !== 'activo') return false;
-        if (!(c as any).vehiculo_asignado) return false;
         if (!c.licencia_vencimiento) return false;
         const fechaVenc = new Date(c.licencia_vencimiento);
-        return fechaVenc >= hoy && fechaVenc <= en30Dias;
+        return fechaVenc >= hoy && fechaVenc <= enXDias;
       });
     }
 
@@ -1786,15 +1788,14 @@ export function ConductoresModule() {
 
     if (statCardLicenciaFilter) {
       const hoy = new Date();
-      const en30Dias = new Date();
-      en30Dias.setDate(en30Dias.getDate() + 30);
+      const enXDias = new Date();
+      enXDias.setDate(enXDias.getDate() + DIAS_LICENCIA_POR_VENCER);
       result = result.filter(c => {
         const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
         if (estadoCodigo !== 'activo') return false;
-        if (!(c as any).vehiculo_asignado) return false;
         if (!c.licencia_vencimiento) return false;
         const fechaVenc = new Date(c.licencia_vencimiento);
-        return fechaVenc >= hoy && fechaVenc <= en30Dias;
+        return fechaVenc >= hoy && fechaVenc <= enXDias;
       });
     }
 
@@ -2380,7 +2381,7 @@ export function ConductoresModule() {
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('licencias')}
-            title="Licencias por vencer en los próximos 10 días (solo conductores activos)"
+            title={`Licencias por vencer en los próximos ${DIAS_LICENCIA_POR_VENCER} días (solo conductores activos)`}
           >
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
