@@ -121,14 +121,14 @@ export function PortalPage() {
       if (error) throw error
 
       if (!data || data.length === 0) {
-        setLoginError('No se encontr\u00f3 un conductor con ese DNI o CUIT')
+        setLoginError('No se encontró un conductor con ese DNI o CUIT')
         return
       }
 
       setConductor(data[0] as PortalConductor)
       setView('dashboard')
     } catch {
-      setLoginError('Error de conexi\u00f3n. Intent\u00e1 de nuevo.')
+      setLoginError('Error de conexión. Intentá de nuevo.')
     } finally {
       setLoginLoading(false)
     }
@@ -226,11 +226,11 @@ export function PortalPage() {
         pdf.text('TOSHIFY', margin, y)
       }
 
-      // T\u00edtulo
+      // Título
       pdf.setFontSize(14)
       pdf.setTextColor(negro)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('FACTURACI\u00d3N', pageWidth - margin, y, { align: 'right' })
+      pdf.text('FACTURACIÓN', pageWidth - margin, y, { align: 'right' })
 
       pdf.setFontSize(10)
       pdf.setTextColor(rojo)
@@ -245,7 +245,7 @@ export function PortalPage() {
 
       y += 25
 
-      // L\u00ednea separadora
+      // Línea separadora
       pdf.setDrawColor(220, 38, 38)
       pdf.setLineWidth(0.5)
       pdf.line(margin, y, pageWidth - margin, y)
@@ -266,13 +266,13 @@ export function PortalPage() {
       if (selectedFactura.conductor_cuit) {
         pdf.text(`CUIT: ${selectedFactura.conductor_cuit}`, margin, y)
       }
-      pdf.text(`Veh\u00edculo: ${selectedFactura.vehiculo_patente || '-'}`, pageWidth / 2, y)
+      pdf.text(`Vehículo: ${selectedFactura.vehiculo_patente || '-'}`, pageWidth / 2, y)
       y += 5
       pdf.text(`Tipo: ${selectedFactura.tipo_alquiler}`, margin, y)
       pdf.text(`Turnos: ${selectedFactura.turnos_cobrados}/${selectedFactura.turnos_base}`, pageWidth / 2, y)
       y += 10
 
-      // L\u00ednea separadora
+      // Línea separadora
       pdf.setDrawColor(200, 200, 200)
       pdf.setLineWidth(0.2)
       pdf.line(margin, y, pageWidth - margin, y)
@@ -308,7 +308,7 @@ export function PortalPage() {
         pdf.setFontSize(11)
         pdf.setTextColor(verde)
         pdf.setFont('helvetica', 'bold')
-        pdf.text('DESCUENTOS / CR\u00c9DITOS', margin, y)
+        pdf.text('DESCUENTOS / CRÉDITOS', margin, y)
         y += 7
 
         pdf.setFontSize(10)
@@ -345,11 +345,11 @@ export function PortalPage() {
       pdf.text('TOTAL A PAGAR', margin, y)
       pdf.text(formatCurrency(totalFinal), pageWidth - margin, y, { align: 'right' })
 
-      // Pie de p\u00e1gina
+      // Pie de página
       pdf.setFontSize(8)
       pdf.setTextColor(gris)
       pdf.text(`Generado el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, margin, pdf.internal.pageSize.getHeight() - 10)
-      pdf.text('TOSHIFY - Sistema de Gesti\u00f3n de Flota', pageWidth - margin, pdf.internal.pageSize.getHeight() - 10, { align: 'right' })
+      pdf.text('TOSHIFY - Sistema de Gestión de Flota', pageWidth - margin, pdf.internal.pageSize.getHeight() - 10, { align: 'right' })
 
       // Guardar
       const nombreArchivo = `Facturacion_${selectedFactura.conductor_nombre.replace(/\s+/g, '_')}_Semana${periodo.semana}_${periodo.anio}.pdf`
@@ -384,8 +384,8 @@ export function PortalPage() {
       <div className="portal portal-login">
         <form className="portal-login-card" onSubmit={handleLogin}>
           <img src={logoToshifyUrl} alt="Toshify" className="portal-login-logo" />
-          <h1 className="portal-login-title">Mi Facturaci\u00f3n</h1>
-          <p className="portal-login-subtitle">Ingres\u00e1 tu DNI o CUIT para ver tu liquidaci\u00f3n</p>
+          <h1 className="portal-login-title">Mi Facturación</h1>
+          <p className="portal-login-subtitle">Ingresá tu DNI o CUIT para ver tu liquidación</p>
 
           <input
             type="text"
@@ -444,7 +444,7 @@ export function PortalPage() {
 
         <div className="portal-detail">
           <button className="portal-back-btn" onClick={() => setView('dashboard')}>
-            \u2190 Volver
+            ← Volver
           </button>
 
           {loadingDetalle ? (
@@ -470,7 +470,7 @@ export function PortalPage() {
               {/* Info bar */}
               <div className="portal-detail-info">
                 <div className="portal-detail-info-item">
-                  <span className="portal-detail-info-label">Veh\u00edculo</span>
+                  <span className="portal-detail-info-label">Vehículo</span>
                   <span className="portal-detail-info-value">{selectedFactura.vehiculo_patente || '-'}</span>
                 </div>
                 <div className="portal-detail-info-item">
@@ -510,7 +510,7 @@ export function PortalPage() {
                 {/* DESCUENTOS */}
                 {descuentos.length > 0 && (
                   <div className="portal-detail-section">
-                    <div className="portal-detail-section-title descuentos">Descuentos / Cr\u00e9ditos</div>
+                    <div className="portal-detail-section-title descuentos">Descuentos / Créditos</div>
                     <div className="portal-detail-items">
                       {descuentos.map((item) => (
                         <div key={item.id} className="portal-detail-item">
@@ -550,7 +550,7 @@ export function PortalPage() {
                   onClick={exportarPDF}
                   disabled={exportingPdf}
                 >
-                  {exportingPdf ? 'Generando...' : '\u2193 Descargar PDF'}
+                  {exportingPdf ? 'Generando...' : '↓ Descargar PDF'}
                 </button>
               </div>
             </div>
@@ -583,16 +583,16 @@ export function PortalPage() {
 
       <div className="portal-content">
         <div className="portal-welcome">
-          <h2>Mi Facturaci\u00f3n</h2>
-          <p>Seleccion\u00e1 una semana para ver el detalle de tu liquidaci\u00f3n</p>
+          <h2>Mi Facturación</h2>
+          <p>Seleccioná una semana para ver el detalle de tu liquidación</p>
         </div>
 
         {loadingFacturas ? (
-          <div className="portal-loading">Cargando facturaci\u00f3n...</div>
+          <div className="portal-loading">Cargando facturación...</div>
         ) : facturas.length === 0 ? (
           <div className="portal-empty">
-            <div className="portal-empty-icon">\ud83d\udccb</div>
-            <p>No hay facturaci\u00f3n registrada todav\u00eda</p>
+            <div className="portal-empty-icon">📋</div>
+            <p>No hay facturación registrada todavía</p>
           </div>
         ) : (
           <div className="portal-weeks">
@@ -610,14 +610,14 @@ export function PortalPage() {
                       {format(parseISO(p.fecha_inicio), 'dd/MM/yyyy')} - {format(parseISO(p.fecha_fin), 'dd/MM/yyyy')}
                     </div>
                     <div className="portal-week-info">
-                      {f.vehiculo_patente || '-'} \u00b7 {f.tipo_alquiler} \u00b7 {f.turnos_cobrados}/{f.turnos_base} turnos
+                      {f.vehiculo_patente || '-'} · {f.tipo_alquiler} · {f.turnos_cobrados}/{f.turnos_base} turnos
                     </div>
                   </div>
                   <div className="portal-week-right">
                     <div className={`portal-week-total ${f.total_a_pagar > 0 ? 'debit' : 'credit'}`}>
                       {formatCurrency(f.total_a_pagar)}
                     </div>
-                    <span className="portal-week-arrow">\u203a</span>
+                    <span className="portal-week-arrow">›</span>
                   </div>
                 </div>
               )
