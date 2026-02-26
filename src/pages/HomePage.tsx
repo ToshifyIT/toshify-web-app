@@ -1533,7 +1533,7 @@ export function HomePage() {
               {sedes.length > 0 && (
                 <div style={{ position: 'relative' }}>
                   <button
-                    onClick={() => puedeVerTodasSedes && sedes.length > 1 ? setSedeDropdownOpen(!sedeDropdownOpen) : undefined}
+                    onClick={() => sedes.length > 1 ? setSedeDropdownOpen(!sedeDropdownOpen) : undefined}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1542,7 +1542,7 @@ export function HomePage() {
                       borderRadius: '8px',
                       border: '1px solid var(--border-primary)',
                       background: 'var(--bg-secondary)',
-                      cursor: puedeVerTodasSedes && sedes.length > 1 ? 'pointer' : 'default',
+                      cursor: sedes.length > 1 ? 'pointer' : 'default',
                       color: 'var(--text-primary)',
                       fontSize: '13px',
                       fontWeight: 600,
@@ -1568,7 +1568,7 @@ export function HomePage() {
                         {sedeActual.codigo}
                       </span>
                     )}
-                    {puedeVerTodasSedes && sedes.length > 1 && (
+                    {sedes.length > 1 && (
                       <ChevronRight size={14} style={{
                         color: 'var(--text-secondary)',
                         transform: sedeDropdownOpen ? 'rotate(90deg)' : 'rotate(0deg)',
@@ -1578,7 +1578,7 @@ export function HomePage() {
                   </button>
 
                   {/* Dropdown */}
-                  {sedeDropdownOpen && puedeVerTodasSedes && (
+                  {sedeDropdownOpen && (
                     <>
                       <div
                         style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
@@ -1607,8 +1607,8 @@ export function HomePage() {
                         }}>
                           Cambiar Sede
                         </div>
-                        {/* Opción: Todas las sedes */}
-                        <button
+                        {/* Opción: Todas las sedes (solo admins) */}
+                        {puedeVerTodasSedes && <button
                           onClick={() => { cambiarSede('todas'); setSedeDropdownOpen(false) }}
                           style={{
                             display: 'flex',
@@ -1659,13 +1659,13 @@ export function HomePage() {
                               <Check size={18} />
                             </div>
                           )}
-                        </button>
-                        {/* Separador */}
-                        <div style={{
+                        </button>}
+                        {/* Separador (solo si se muestra "Todas las sedes") */}
+                        {puedeVerTodasSedes && <div style={{
                           height: '1px',
                           background: 'var(--border-primary)',
                           margin: '4px 12px',
-                        }} />
+                        }} />}
                         {sedes.map(s => (
                           <button
                             key={s.id}
