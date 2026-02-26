@@ -377,6 +377,32 @@ export function PortalPage() {
   }
 
   // =====================================================
+  // STATS & CHART DATA (must be before early returns - rules of hooks)
+  // =====================================================
+
+  const stats = useMemo(() => {
+    if (facturas.length === 0) return null
+
+    const totales = facturas.map(f => f.total_a_pagar)
+    const sum = totales.reduce((a, b) => a + b, 0)
+    const promedio = sum / totales.length
+    const ultima = totales[0] || 0
+    const anterior = totales[1] || 0
+    const variacion = anterior > 0 ? ((ultima - anterior) / anterior) * 100 : 0
+
+    // Chart data: últimas 12 semanas en orden cronológico
+    const chartData = facturas
+      .slice(0, 12)
+      .map(f => ({
+        label: `S${f.periodos_facturacion.semana}`,
+        total: f.total_a_pagar,
+      }))
+      .reverse()
+
+    return { sum, promedio, ultima, variacion, totalSemanas: facturas.length, chartData }
+  }, [facturas])
+
+  // =====================================================
   // RENDER: LOGIN
   // =====================================================
 
@@ -560,32 +586,6 @@ export function PortalPage() {
       </div>
     )
   }
-
-  // =====================================================
-  // STATS & CHART DATA
-  // =====================================================
-
-  const stats = useMemo(() => {
-    if (facturas.length === 0) return null
-
-    const totales = facturas.map(f => f.total_a_pagar)
-    const sum = totales.reduce((a, b) => a + b, 0)
-    const promedio = sum / totales.length
-    const ultima = totales[0] || 0
-    const anterior = totales[1] || 0
-    const variacion = anterior > 0 ? ((ultima - anterior) / anterior) * 100 : 0
-
-    // Chart data: últimas 12 semanas en orden cronológico
-    const chartData = facturas
-      .slice(0, 12)
-      .map(f => ({
-        label: `S${f.periodos_facturacion.semana}`,
-        total: f.total_a_pagar,
-      }))
-      .reverse()
-
-    return { sum, promedio, ultima, variacion, totalSemanas: facturas.length, chartData }
-  }, [facturas])
 
   // =====================================================
   // RENDER: DASHBOARD
