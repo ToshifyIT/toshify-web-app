@@ -148,10 +148,26 @@ export function GarantiasTab() {
         })
       }
 
-      const garantiasConEstado = (data || []).map((g: any) => ({
-        ...g,
-        estado_conductor: estadoConductorMap.get(g.conductor_id) || 'ACTIVO'
-      }))
+      // Auto-transicionar a en_devolucion si conductor es BAJA y garantía no está ya en ese estado
+      const idsParaDevolucion: string[] = []
+      const garantiasConEstado = (data || []).map((g: any) => {
+        const estadoCond = estadoConductorMap.get(g.conductor_id) || 'ACTIVO'
+        const necesitaDevolucion = estadoCond === 'BAJA' && g.monto_pagado > 0 && g.estado !== 'en_devolucion' && g.estado !== 'cancelada'
+        if (necesitaDevolucion) idsParaDevolucion.push(g.id)
+        return {
+          ...g,
+          estado: necesitaDevolucion ? 'en_devolucion' : g.estado,
+          estado_conductor: estadoCond
+        }
+      })
+
+      // Actualizar en BD los que cambiaron a en_devolucion
+      if (idsParaDevolucion.length > 0) {
+        await (supabase.from('garantias_conductores') as any)
+          .update({ estado: 'en_devolucion', updated_at: new Date().toISOString() })
+          .in('id', idsParaDevolucion)
+      }
+
       setGarantias(garantiasConEstado)
 
       // Cargar todos los pagos para el sub-tab "Movimientos"
@@ -621,64 +637,98 @@ export function GarantiasTab() {
     }
   }
 
-  async function gestionarDevolucion(garantia: GarantiaConductor) {
-    const porcentaje = Math.round((garantia.monto_pagado / garantia.monto_total) * 100)
+  async function registrarDevolucion(garantia: GarantiaConductor) {
+    const devuelto = (garantia as any).monto_devuelto || 0
+    const pendienteDevolver = garantia.monto_pagado - devuelto
+    const porcentajeDevuelto = garantia.monto_pagado > 0 ? Math.round((devuelto / garantia.monto_pagado) * 100) : 0
 
-    const result = await Swal.fire({
-      title: '<span style="font-size: 16px; font-weight: 600;">Gestionar Devolución de Garantía</span>',
+    const { value: formValues } = await Swal.fire({
+      title: '<span style="font-size: 16px; font-weight: 600;">Registrar Devolución de Garantía</span>',
       html: `
         <div style="text-align: left; font-size: 13px;">
           <div style="background: #FEF2F2; padding: 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #FECACA;">
             <div style="font-weight: 600; color: #111827; font-size: 14px;">${garantia.conductor_nombre}</div>
-            <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
-              <span style="background: #ff0033; color: white; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">BAJA</span>
-            </div>
+            <span style="background: #ff0033; color: white; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">BAJA</span>
           </div>
           <div style="background: #F9FAFB; padding: 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #E5E7EB;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
               <div>
-                <div style="font-size: 11px; color: #6B7280;">Total garantía</div>
-                <div style="font-weight: 600; color: #111827;">${formatCurrency(garantia.monto_total)}</div>
+                <div style="font-size: 11px; color: #6B7280;">Total pagado</div>
+                <div style="font-weight: 600; color: #111827;">${formatCurrency(garantia.monto_pagado)}</div>
               </div>
               <div>
-                <div style="font-size: 11px; color: #6B7280;">Cuotas pagadas</div>
-                <div style="font-weight: 600; color: #111827;">${garantia.cuotas_pagadas}/${garantia.cuotas_totales}</div>
+                <div style="font-size: 11px; color: #6B7280;">Ya devuelto</div>
+                <div style="font-weight: 600; color: #16a34a;">${formatCurrency(devuelto)}</div>
               </div>
             </div>
             <div style="background: #E5E7EB; height: 6px; border-radius: 3px; margin-top: 10px; overflow: hidden;">
-              <div style="background: #16a34a; height: 100%; width: ${porcentaje}%;"></div>
+              <div style="background: #2563eb; height: 100%; width: ${porcentajeDevuelto}%;"></div>
             </div>
-            <div style="text-align: center; font-size: 11px; color: #6B7280; margin-top: 2px;">${porcentaje}%</div>
+            <div style="text-align: center; font-size: 11px; color: #6B7280; margin-top: 2px;">Devuelto: ${porcentajeDevuelto}%</div>
           </div>
-          <div style="background: #F0FDF4; padding: 12px; border-radius: 8px; border: 1px solid #BBF7D0;">
-            <div style="font-size: 11px; color: #6B7280; margin-bottom: 2px;">Monto a devolver</div>
-            <div style="font-size: 20px; font-weight: 700; color: #16a34a;">${formatCurrency(garantia.monto_pagado)}</div>
+          <div style="background: #EFF6FF; padding: 10px 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #BFDBFE;">
+            <div style="font-size: 11px; color: #6B7280;">Pendiente de devolver</div>
+            <div style="font-size: 18px; font-weight: 700; color: #2563eb;">${formatCurrency(pendienteDevolver)}</div>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Monto a devolver:</label>
+            <input id="swal-monto-dev" type="number" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" value="${pendienteDevolver}">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px;">Referencia (opcional):</label>
+            <input id="swal-ref-dev" type="text" class="swal2-input" style="font-size: 14px; margin: 0; width: 100%;" placeholder="Ej: Transferencia bancaria">
           </div>
         </div>
       `,
+      focusConfirm: false,
       showCancelButton: true,
-      confirmButtonText: 'Iniciar Devolución',
+      confirmButtonText: 'Registrar Devolución',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#ff0033',
+      confirmButtonColor: '#2563eb',
       width: 380,
+      preConfirm: () => {
+        const monto = (document.getElementById('swal-monto-dev') as HTMLInputElement).value
+        const referencia = (document.getElementById('swal-ref-dev') as HTMLInputElement).value
+        if (!monto || parseFloat(monto) <= 0) {
+          Swal.showValidationMessage('Ingrese un monto válido')
+          return false
+        }
+        if (parseFloat(monto) > pendienteDevolver) {
+          Swal.showValidationMessage(`El monto no puede superar ${formatCurrency(pendienteDevolver)}`)
+          return false
+        }
+        return { monto: parseFloat(monto), referencia }
+      }
     })
 
-    if (!result.isConfirmed) return
+    if (!formValues) return
 
     try {
-      const { error } = await (supabase.from('garantias_conductores') as any)
+      // 1. Insertar registro en garantias_devoluciones
+      const { error: errorDev } = await (supabase.from('garantias_devoluciones') as any)
+        .insert({
+          garantia_id: garantia.id,
+          conductor_id: garantia.conductor_id,
+          monto: formValues.monto,
+          referencia: formValues.referencia || null,
+          created_by_name: null
+        })
+      if (errorDev) throw errorDev
+
+      // 2. Actualizar monto_devuelto en garantias_conductores
+      const nuevoDevuelto = devuelto + formValues.monto
+      const { error: errorUpdate } = await (supabase.from('garantias_conductores') as any)
         .update({
-          estado: 'en_devolucion',
+          monto_devuelto: nuevoDevuelto,
           updated_at: new Date().toISOString()
         })
         .eq('id', garantia.id)
+      if (errorUpdate) throw errorUpdate
 
-      if (error) throw error
-
-      showSuccess('Devolución Iniciada', `Se marcó la garantía de ${garantia.conductor_nombre} en devolución por ${formatCurrency(garantia.monto_pagado)}`)
+      showSuccess('Devolución Registrada', `Se devolvieron ${formatCurrency(formValues.monto)} a ${garantia.conductor_nombre}`)
       cargarGarantias()
     } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo iniciar la devolución', 'error')
+      Swal.fire('Error', error.message || 'No se pudo registrar la devolución', 'error')
     }
   }
 
@@ -973,6 +1023,18 @@ export function GarantiasTab() {
           pendiente: { class: 'fact-badge-gray', label: 'Pendiente' }
         }
         const { class: badgeClass, label } = config[estado] || { class: 'fact-badge-gray', label: estado }
+        if (estado === 'en_devolucion') {
+          const devuelto = (row.original as any).monto_devuelto || 0
+          const porDev = row.original.monto_pagado - devuelto
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+              <span className={`fact-badge ${badgeClass}`}>{label}</span>
+              <span style={{ fontSize: '10px', color: porDev > 0 ? '#2563eb' : '#16a34a', fontWeight: 600 }}>
+                {porDev > 0 ? `Pend: ${formatCurrency(porDev)}` : 'Devuelto'}
+              </span>
+            </div>
+          )
+        }
         return <span className={`fact-badge ${badgeClass}`}>{label}</span>
       }
     },
@@ -980,21 +1042,21 @@ export function GarantiasTab() {
       id: 'acciones',
       header: '',
       cell: ({ row }) => {
-        const estadoConductor = (row.original as any).estado_conductor
-        const esBaja = estadoConductor === 'BAJA'
-        const puedeDevolucion = esBaja && row.original.monto_pagado > 0 && row.original.estado !== 'en_devolucion'
+        const esBaja = (row.original as any).estado_conductor === 'BAJA'
+        const esDevolucion = row.original.estado === 'en_devolucion'
+        const pendienteDevolver = esDevolucion && row.original.monto_pagado > (row.original as any).monto_devuelto
         return (
           <div className="fact-table-actions">
             <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
               <Eye size={14} />
             </button>
-            {row.original.estado !== 'completada' && row.original.estado !== 'en_devolucion' && (
+            {!esBaja && row.original.estado !== 'completada' && !esDevolucion && (
               <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
                 <Banknote size={14} />
               </button>
             )}
-            {puedeDevolucion && (isAdmin() || isAdministrativo()) && (
-              <button className="fact-table-btn" onClick={() => gestionarDevolucion(row.original)} data-tooltip="Gestionar devolución" style={{ color: '#2563eb' }}>
+            {pendienteDevolver && (isAdmin() || isAdministrativo()) && (
+              <button className="fact-table-btn" onClick={() => registrarDevolucion(row.original)} data-tooltip="Registrar devolución" style={{ color: '#2563eb' }}>
                 <RotateCcw size={14} />
               </button>
             )}
