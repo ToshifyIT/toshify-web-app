@@ -401,7 +401,7 @@
   table-layout: auto;
 }
 
-/* Sticky column for actions */
+/* Sticky column for actions (right) */
 .dt-sticky-col {
   position: sticky;
   right: 0;
@@ -429,6 +429,36 @@
 
 [data-theme="dark"] .dt-sticky-col {
   box-shadow: -4px 0 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Sticky column for first column (left) */
+.dt-sticky-col-left {
+  position: sticky;
+  left: 0;
+  background: var(--bg-primary);
+  z-index: 2;
+  box-shadow: 4px 0 8px rgba(0, 0, 0, 0.06);
+}
+
+.dt-table thead .dt-sticky-col-left {
+  background: var(--table-header-bg);
+  z-index: 5;
+}
+
+.dt-table tbody tr:hover .dt-sticky-col-left {
+  background: var(--table-row-hover);
+}
+
+.dt-table tbody tr:nth-child(even) .dt-sticky-col-left {
+  background: var(--bg-primary);
+}
+
+.dt-table tbody tr:nth-child(even):hover .dt-sticky-col-left {
+  background: var(--table-row-hover);
+}
+
+[data-theme="dark"] .dt-sticky-col-left {
+  box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
 }
 
 /* Header - Toshify Design System */

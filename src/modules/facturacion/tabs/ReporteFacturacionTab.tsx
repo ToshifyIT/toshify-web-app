@@ -62,6 +62,21 @@ _logoPreload.onload = () => {
 import { FacturacionPreviewTable, type FacturacionPreviewRow, type ConceptoPendiente, type ConceptoNomina } from '../components/FacturacionPreviewTable'
 import { CabifyPreviewTable, type CabifyPreviewRow } from '../components/CabifyPreviewTable'
 
+// Helper: parsear importe de multas_historico (formato argentino "$119.776,50" o US "$59,888.25")
+function parseImporteMulta(val: string): number {
+  let s = val.replace(/[$\s]/g, '')
+  const lastDot = s.lastIndexOf('.')
+  const lastComma = s.lastIndexOf(',')
+  if (lastComma > lastDot) {
+    // Formato argentino: puntos = miles, coma = decimal → "$119.776,50" → 119776.50
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else {
+    // Formato US: comas = miles, punto = decimal → "$59,888.25" → 59888.25
+    s = s.replace(/,/g, '')
+  }
+  return parseFloat(s) || 0
+}
+
 // Helper: extraer fecha (yyyy-MM-dd) en timezone Argentina desde un timestamp
 const ARG_TZ = 'America/Argentina/Buenos_Aires'
 const argDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARG_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -2252,7 +2267,7 @@ export function ReporteFacturacionTab() {
         if (m.patente) {
           const p = m.patente.toUpperCase().replace(/\s+/g, '')
           const actual = multasMap.get(p) || { monto: 0, cantidad: 0 }
-          const importe = typeof m.importe === 'string' ? parseFloat(m.importe.replace(/[^\d.-]/g, '')) || 0 : parseFloat(m.importe) || 0
+          const importe = typeof m.importe === 'string' ? parseImporteMulta(m.importe) : parseFloat(m.importe) || 0
           multasMap.set(p, { monto: actual.monto + importe, cantidad: actual.cantidad + 1 })
         }
       })
@@ -2547,7 +2562,8 @@ export function ReporteFacturacionTab() {
             concepto_descripcion: `Multas de Tránsito (${cantidadMultas})`,
             cantidad: cantidadMultas,
             precio_unitario: Math.round(montoMultas / cantidadMultas),
-            subtotal: montoMultas, total: montoMultas, es_descuento: false
+            subtotal: montoMultas, total: montoMultas, es_descuento: false,
+            referencia_tipo: 'multa_transito'
           })
         }
 
@@ -3320,6 +3336,73 @@ export function ReporteFacturacionTab() {
       }
     } catch (error: any) {
       Swal.fire('Error', error.message || 'No se pudo cargar el detalle', 'error')
+    }
+  }
+
+  // ==========================================
+  // VER DETALLE DE MULTAS DE TRÁNSITO
+  // ==========================================
+  async function verDetalleMultas(patente: string, fechaInicio: string, fechaFin: string) {
+    try {
+      const { data: multas, error } = await (supabase.from('multas_historico') as any)
+        .select('importe, fecha_infraccion, lugar, detalle')
+        .eq('patente', patente)
+        .gte('fecha_infraccion', fechaInicio)
+        .lte('fecha_infraccion', fechaFin + 'T23:59:59')
+        .order('fecha_infraccion', { ascending: true })
+
+      if (error) throw error
+      if (!multas || multas.length === 0) {
+        Swal.fire('Sin multas', `No se encontraron multas para ${patente} en el período`, 'info')
+        return
+      }
+
+      const rows = multas.map((m: any) => {
+        const fecha = m.fecha_infraccion ? format(parseISO(m.fecha_infraccion), 'dd/MM/yyyy HH:mm') : '-'
+        const monto = parseImporteMulta(typeof m.importe === 'string' ? m.importe : String(m.importe || 0))
+        return `
+          <tr>
+            <td style="padding:4px 8px; font-size:12px; border-bottom:1px solid #e5e7eb">${fecha}</td>
+            <td style="padding:4px 8px; font-size:12px; border-bottom:1px solid #e5e7eb; font-weight:600; font-family:monospace; text-align:right">${formatCurrency(monto)}</td>
+            <td style="padding:4px 8px; font-size:12px; border-bottom:1px solid #e5e7eb">${m.lugar || '-'}</td>
+            <td style="padding:4px 8px; font-size:11px; border-bottom:1px solid #e5e7eb; color:#666; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${m.detalle || '-'}</td>
+          </tr>`
+      }).join('')
+
+      const totalMonto = multas.reduce((sum: number, m: any) => {
+        return sum + parseImporteMulta(typeof m.importe === 'string' ? m.importe : String(m.importe || 0))
+      }, 0)
+
+      await Swal.fire({
+        title: 'Multas de Tránsito',
+        html: `
+          <div style="text-align:left; font-size:13px">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding:8px 12px; background:rgba(255,0,51,0.05); border-radius:6px">
+              <span><strong>Patente:</strong> ${patente}</span>
+              <span><strong>${multas.length}</strong> multa${multas.length > 1 ? 's' : ''} — <strong style="color:#ff0033">${formatCurrency(totalMonto)}</strong></span>
+            </div>
+            <div style="max-height:300px; overflow-y:auto">
+              <table style="width:100%; border-collapse:collapse">
+                <thead>
+                  <tr style="background:#f9fafb">
+                    <th style="padding:6px 8px; font-size:10px; text-transform:uppercase; text-align:left; color:#666">Fecha</th>
+                    <th style="padding:6px 8px; font-size:10px; text-transform:uppercase; text-align:right; color:#666">Monto</th>
+                    <th style="padding:6px 8px; font-size:10px; text-transform:uppercase; text-align:left; color:#666">Lugar</th>
+                    <th style="padding:6px 8px; font-size:10px; text-transform:uppercase; text-align:left; color:#666">Detalle</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>
+        `,
+        width: 650,
+        confirmButtonText: 'Cerrar',
+        confirmButtonColor: '#ff0033',
+        customClass: { popup: 'fact-modal', title: 'fact-modal-title' }
+      })
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo cargar las multas', 'error')
     }
   }
 
@@ -8320,6 +8403,7 @@ export function ReporteFacturacionTab() {
                           desc = desc ? `${label} (${desc})` : label;
                         }
                         const esPenalidad = item.referencia_id && (item.referencia_tipo === 'penalidad' || item.referencia_tipo === 'penalidad_cuota')
+                        const esMulta = item.concepto_codigo === 'P008' || item.referencia_tipo === 'multa_transito'
                         const fechaStr = item.fecha_referencia
                           ? format(parseISO(item.fecha_referencia), 'dd/MM/yy')
                           : null
@@ -8348,6 +8432,18 @@ export function ReporteFacturacionTab() {
                                     color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
                                   }}
                                   title="Ver detalle de penalidad"
+                                >
+                                  <Info size={14} />
+                                </button>
+                              )}
+                              {esMulta && detalleFacturacion?.vehiculo_patente && periodo && (
+                                <button
+                                  onClick={() => verDetalleMultas(detalleFacturacion.vehiculo_patente!, periodo.fecha_inicio, periodo.fecha_fin)}
+                                  style={{
+                                    background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
+                                    color: 'var(--text-secondary)', flexShrink: 0, display: 'flex', alignItems: 'center',
+                                  }}
+                                  title="Ver detalle de multas"
                                 >
                                   <Info size={14} />
                                 </button>
@@ -8427,6 +8523,41 @@ export function ReporteFacturacionTab() {
                             -{formatCurrency(detalleDescuentos.reduce((sum, d) => sum + d.total, 0))}
                           </span>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Saldo Anterior (si existe y no está ya incluido en los items) */}
+                  {detalleFacturacion.saldo_anterior !== 0 && !detalleItems.some(d => d.concepto_codigo === 'SALDO') && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{
+                        fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
+                        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
+                      }}>
+                        Saldo Anterior
+                      </div>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '7px 12px', borderRadius: '6px',
+                        background: detalleFacturacion.saldo_anterior > 0 ? 'rgba(255, 0, 51, 0.04)' : 'rgba(16, 185, 129, 0.04)',
+                        border: `1px solid ${detalleFacturacion.saldo_anterior > 0 ? 'rgba(255, 0, 51, 0.12)' : 'rgba(16, 185, 129, 0.12)'}`,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '6px', height: '6px', borderRadius: '50%',
+                            background: detalleFacturacion.saldo_anterior > 0 ? '#ff0033' : '#10b981',
+                            flexShrink: 0,
+                          }} />
+                          <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
+                            {detalleFacturacion.saldo_anterior > 0 ? 'Deuda pendiente semana anterior' : 'Saldo a favor semana anterior'}
+                          </span>
+                        </div>
+                        <span style={{
+                          fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
+                          color: detalleFacturacion.saldo_anterior > 0 ? '#ff0033' : '#059669',
+                        }}>
+                          {detalleFacturacion.saldo_anterior > 0 ? '+' : '-'}{formatCurrency(Math.abs(detalleFacturacion.saldo_anterior))}
+                        </span>
                       </div>
                     </div>
                   )}

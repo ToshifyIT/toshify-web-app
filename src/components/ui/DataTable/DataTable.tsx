@@ -233,6 +233,8 @@ export interface DataTableProps<T> {
   resetFiltersKey?: number | string;
   /** Desactiva los filtros automáticos de columna (para módulos con filtros personalizados) */
   disableAutoFilters?: boolean;
+  /** Fija la primera columna a la izquierda durante scroll horizontal */
+  stickyFirstColumn?: boolean;
   /** Filtros externos (ej: desde stat cards) para mostrar en la barra de filtros activos */
   externalFilters?: Array<{ id: string; label: string; onClear: () => void }>;
   /** Callback para limpiar todos los filtros (internos y externos) */
@@ -261,6 +263,7 @@ export function DataTable<T>({
   onTableReady,
   headerAction,
   alwaysVisibleColumns = ["acciones", "actions"],
+  stickyFirstColumn = false,
   resetFiltersKey,
   disableAutoFilters = false,
   externalFilters = [],
@@ -1065,8 +1068,9 @@ export function DataTable<T>({
               <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
+                    {headerGroup.headers.map((header, headerIndex) => {
                       const isActionsColumn = alwaysVisibleColumns.includes(header.id);
+                      const isFirstColumn = stickyFirstColumn && headerIndex === 0;
                       return (
                         <th
                           key={header.id}
@@ -1074,6 +1078,7 @@ export function DataTable<T>({
                           className={`
                             ${header.column.getCanSort() ? "dt-sortable" : ""}
                             ${isActionsColumn ? "dt-sticky-col" : ""}
+                            ${isFirstColumn ? "dt-sticky-col-left" : ""}
                           `}
                           style={header.column.columnDef.size ? { width: `${header.column.columnDef.size}px`, maxWidth: `${header.column.columnDef.size}px` } : undefined}
                         >
@@ -1111,12 +1116,13 @@ export function DataTable<T>({
                 ) : (
                   table.getRowModel().rows.map((row) => (
                     <tr key={row.id}>
-                      {row.getVisibleCells().map((cell) => {
+                      {row.getVisibleCells().map((cell, cellIndex) => {
                         const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
+                        const isFirstColumn = stickyFirstColumn && cellIndex === 0;
                         return (
                           <td
                             key={cell.id}
-                            className={isActionsColumn ? "dt-sticky-col" : ""}
+                            className={`${isActionsColumn ? "dt-sticky-col" : ""} ${isFirstColumn ? "dt-sticky-col-left" : ""}`}
                             style={cell.column.columnDef.size ? { width: `${cell.column.columnDef.size}px`, maxWidth: `${cell.column.columnDef.size}px` } : undefined}
                           >
                             {flexRender(

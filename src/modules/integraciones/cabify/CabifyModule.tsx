@@ -193,6 +193,7 @@ export function CabifyModule() {
           emptyDescription={UI_TEXT.SELECT_WEEK}
           pageSize={DEFAULT_PAGE_SIZE}
           pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+          stickyFirstColumn
         />
       </div>
 
