@@ -12,12 +12,6 @@ import './PeriodComparison.css'
 
 type Granularity = 'dia' | 'semana' | 'mes' | 'ano'
 
-type QuickFilter =
-  | 'hoy-ayer'
-  | 'semana-actual-anterior'
-  | 'mes-actual-anterior'
-  | 'personalizado'
-
 interface MetricView {
   id: string
   name: string
@@ -26,11 +20,6 @@ interface MetricView {
   variationLabel: string
   variationSign: 'positive' | 'negative'
 }
-
-const MONTH_NAMES = [
-  'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-  'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
-]
 
 export function PeriodComparison() {
   const [granularity, setGranularity] = useState<Granularity>('semana')
@@ -46,8 +35,6 @@ export function PeriodComparison() {
     const week = getWeek(prevWeekDate, { weekStartsOn: 1 })
     return `Sem ${week.toString().padStart(2, '0')} ${prevWeekDate.getFullYear()}`
   })
-
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>('personalizado')
 
   const multasStats = useMultasStats(granularity, periodA, periodB)
   const telepaseStats = useTelepaseStats(granularity, periodA, periodB)
@@ -234,7 +221,6 @@ export function PeriodComparison() {
 
   const handleGranularityChange = (value: Granularity) => {
     setGranularity(value)
-    setQuickFilter('personalizado')
 
     const now = new Date()
     let nextA = ''
@@ -268,49 +254,12 @@ export function PeriodComparison() {
     setPeriodB(nextB)
   }
 
-  const handleQuickFilterClick = (filter: QuickFilter) => {
-    setQuickFilter(filter)
-    const now = new Date()
-
-    if (filter === 'hoy-ayer') {
-      setGranularity('dia')
-      setPeriodA(format(now, 'dd/MM/yyyy'))
-      setPeriodB(format(subDays(now, 1), 'dd/MM/yyyy'))
-      return
-    }
-
-    if (filter === 'semana-actual-anterior') {
-      setGranularity('semana')
-      const week = getWeek(now, { weekStartsOn: 1 })
-      setPeriodA(`Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`)
-      
-      const prev = subWeeks(now, 1)
-      const prevWeek = getWeek(prev, { weekStartsOn: 1 })
-      setPeriodB(`Sem ${prevWeek.toString().padStart(2, '0')} ${prev.getFullYear()}`)
-      return
-    }
-
-    if (filter === 'mes-actual-anterior') {
-      setGranularity('mes')
-      const monthName = format(now, 'MMM', { locale: es })
-      const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
-      setPeriodA(`${capMonth} ${now.getFullYear()}`)
-      
-      const prev = subMonths(now, 1)
-      const prevMonthName = format(prev, 'MMM', { locale: es })
-      const capPrev = prevMonthName.charAt(0).toUpperCase() + prevMonthName.slice(1)
-      setPeriodB(`${capPrev} ${prev.getFullYear()}`)
-    }
-  }
-
   const handleChangePeriodA = (val: string) => {
     setPeriodA(val)
-    setQuickFilter('personalizado')
   }
 
   const handleChangePeriodB = (val: string) => {
     setPeriodB(val)
-    setQuickFilter('personalizado')
   }
 
   return (

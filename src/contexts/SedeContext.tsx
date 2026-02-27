@@ -102,13 +102,13 @@ export function SedeProvider({ children }: { children: ReactNode }) {
 
         setSedeUsuario(sedeDelUsuario)
 
-        // Recuperar sede guardada en localStorage (solo si puede ver todas)
+        // Recuperar sede guardada en localStorage
         const storedSedeId = localStorage.getItem(SEDE_KEY)
-        if (puedeVerTodasSedes && storedSedeId) {
-          if (storedSedeId === TODAS_VALUE) {
+        if (storedSedeId) {
+          if (storedSedeId === TODAS_VALUE && puedeVerTodasSedes) {
             setSedeActual(null)
             setVerTodas(true)
-          } else {
+          } else if (storedSedeId !== TODAS_VALUE) {
             const storedSede = sedesData.find(s => s.id === storedSedeId)
             if (storedSede) {
               setSedeActual(storedSede)
@@ -117,6 +117,9 @@ export function SedeProvider({ children }: { children: ReactNode }) {
               setSedeActual(sedeDelUsuario)
               setVerTodas(false)
             }
+          } else {
+            setSedeActual(sedeDelUsuario)
+            setVerTodas(false)
           }
         } else {
           setSedeActual(sedeDelUsuario)
@@ -133,8 +136,8 @@ export function SedeProvider({ children }: { children: ReactNode }) {
   }, [profile, puedeVerTodasSedes])
 
   const cambiarSede = useCallback((sedeId: string) => {
-    // Solo admins pueden cambiar de sede
-    if (!puedeVerTodasSedes) return
+    // "Todas las sedes" solo para admins
+    if (sedeId === TODAS_VALUE && !puedeVerTodasSedes) return
 
     if (sedeId === TODAS_VALUE) {
       setSedeActual(null)

@@ -3474,7 +3474,6 @@ export function GuiasModule() {
                     showSearch={false}
                     globalFilter={globalSearch}
                     onGlobalFilterChange={setGlobalSearch}
-                    enableHorizontalScroll={true}
                     emptyIcon={<Users size={64} />}
                     emptyTitle="No hay conductores asignados"
                     emptyDescription="Este guía no tiene conductores asignados o no cumplen con los filtros."

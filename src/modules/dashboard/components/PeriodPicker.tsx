@@ -15,7 +15,6 @@ import {
   subYears, 
   parse,
   isValid,
-  isSameDay
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
@@ -249,7 +248,7 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
             className="grid grid-cols-7 gap-y-1" 
             onMouseLeave={() => setHoveredDate(null)}
         >
-          {calendarDays.map((day, idx) => {
+          {calendarDays.map((day) => {
             const isCurrentMonth = isSameMonth(day, viewDate)
             const selected = isSelected(day)
             const weekHovered = isWeekHovered(day)

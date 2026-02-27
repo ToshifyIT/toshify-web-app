@@ -1,7 +1,7 @@
 // src/modules/conductores/ConductoresModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
@@ -28,9 +28,13 @@ import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
 import { ExcelColumnFilter } from "../../components/ui/DataTable/ExcelColumnFilter";
 import "./ConductoresModule.css";
 import { ConductorWizard } from "./components/ConductorWizard";
+import { cabifyService } from "../../services/cabifyService";
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 import { registrarHistorialConductor, registrarHistorialVehiculo } from "../../services/historialService";
+
+// Umbral configurable: días para considerar una licencia "por vencer"
+const DIAS_LICENCIA_POR_VENCER = 10;
 
 // Función para actualizar estado en tabla de control de facturación
 async function actualizarEstadoControlFacturacion(
@@ -251,10 +255,10 @@ export function ConductoresModule() {
   // ✅ OPTIMIZADO: Calcular stats desde datos ya cargados (evita queries extra)
   const calculatedStats = useMemo(() => {
     const hoy = new Date();
-    const en30Dias = new Date();
-    en30Dias.setDate(en30Dias.getDate() + 30);
+    const enXDias = new Date();
+    enXDias.setDate(enXDias.getDate() + DIAS_LICENCIA_POR_VENCER);
     const hoyStr = hoy.toISOString().split('T')[0];
-    const en30DiasStr = en30Dias.toISOString().split('T')[0];
+    const enXDiasStr = enXDias.toISOString().split('T')[0];
     
     // Rango de la semana actual + semana anterior (para bajas)
     const { inicio: inicioSemana, fin: finSemana } = getWeekRange(true);
@@ -288,9 +292,9 @@ export function ConductoresModule() {
         conductoresAsignados++;
       }
 
-      // Licencias por vencer (solo conductores activos CON asignación)
+      // Licencias por vencer (solo conductores activos, próximos N días)
       const vencimiento = c.licencia_vencimiento;
-      if (estadoCodigo === 'activo' && (c as any).vehiculo_asignado && vencimiento && vencimiento >= hoyStr && vencimiento <= en30DiasStr) {
+      if (estadoCodigo === 'activo' && vencimiento && vencimiento >= hoyStr && vencimiento <= enXDiasStr) {
         licenciasPorVencer++;
       }
     }
@@ -1739,15 +1743,14 @@ export function ConductoresModule() {
 
     if (licenciaVencerFilter) {
       const hoy = new Date();
-      const en30Dias = new Date();
-      en30Dias.setDate(en30Dias.getDate() + 30);
+      const enXDias = new Date();
+      enXDias.setDate(enXDias.getDate() + DIAS_LICENCIA_POR_VENCER);
       result = result.filter(c => {
         const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
         if (estadoCodigo !== 'activo') return false;
-        if (!(c as any).vehiculo_asignado) return false;
         if (!c.licencia_vencimiento) return false;
         const fechaVenc = new Date(c.licencia_vencimiento);
-        return fechaVenc >= hoy && fechaVenc <= en30Dias;
+        return fechaVenc >= hoy && fechaVenc <= enXDias;
       });
     }
 
@@ -1785,15 +1788,14 @@ export function ConductoresModule() {
 
     if (statCardLicenciaFilter) {
       const hoy = new Date();
-      const en30Dias = new Date();
-      en30Dias.setDate(en30Dias.getDate() + 30);
+      const enXDias = new Date();
+      enXDias.setDate(enXDias.getDate() + DIAS_LICENCIA_POR_VENCER);
       result = result.filter(c => {
         const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
         if (estadoCodigo !== 'activo') return false;
-        if (!(c as any).vehiculo_asignado) return false;
         if (!c.licencia_vencimiento) return false;
         const fechaVenc = new Date(c.licencia_vencimiento);
-        return fechaVenc >= hoy && fechaVenc <= en30Dias;
+        return fechaVenc >= hoy && fechaVenc <= enXDias;
       });
     }
 
@@ -2379,7 +2381,7 @@ export function ConductoresModule() {
           <div
             className={`stat-card stat-card-clickable ${activeStatCard === 'licencias' ? 'stat-card-active' : ''}`}
             onClick={() => handleStatCardClick('licencias')}
-            title="Licencias por vencer en los próximos 30 días (solo conductores con asignación)"
+            title={`Licencias por vencer en los próximos ${DIAS_LICENCIA_POR_VENCER} días (solo conductores activos)`}
           >
             <AlertTriangle size={18} className="stat-icon" />
             <div className="stat-content">
@@ -2477,6 +2479,7 @@ export function ConductoresModule() {
           setShowDetailsModal={setShowDetailsModal}
           getEstadoBadgeClass={getEstadoBadgeClass}
           getEstadoLabel={getEstadoLabel}
+          onConductorUpdated={() => loadConductores(true)}
         />
       )}
       {showBajaConfirmModal && selectedConductor && (
@@ -2590,6 +2593,62 @@ function ModalEditar({
   editErrors,
   setEditErrors,
 }: any) {
+  const [syncingEmail, setSyncingEmail] = useState(false);
+
+  const syncEmailFromCabify = async () => {
+    setSyncingEmail(true);
+    try {
+      const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
+
+      const dni = formData.numero_dni?.trim();
+      const nombreCompleto = `${formData.nombres} ${formData.apellidos}`.trim().toUpperCase();
+
+      let match = dni
+        ? cabifyDrivers.find((d: any) => d.nationalIdNumber?.trim() === dni)
+        : null;
+
+      if (!match && nombreCompleto) {
+        match = cabifyDrivers.find((d: any) => {
+          const cabifyName = `${d.name || ''} ${d.surname || ''}`.trim().toUpperCase();
+          return cabifyName === nombreCompleto;
+        });
+      }
+
+      if (!match) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin coincidencia',
+          text: `No se encontró en Cabify con DNI "${dni || 'N/A'}" ni nombre "${nombreCompleto}"`,
+          confirmButtonColor: '#FF0033',
+        });
+        return;
+      }
+
+      if (!match.email) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin email en Cabify',
+          text: 'Se encontró al conductor pero no tiene email registrado en Cabify',
+          confirmButtonColor: '#FF0033',
+        });
+        return;
+      }
+
+      setFormData({ ...formData, email: match.email });
+      showSuccess('Email sincronizado', match.email);
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : String(err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al sincronizar con Cabify: ' + message,
+        confirmButtonColor: '#FF0033',
+      });
+    } finally {
+      setSyncingEmail(false);
+    }
+  };
+
   return (
     <div
       className="modal-overlay"
@@ -2921,15 +2980,28 @@ function ModalEditar({
           </div>
           <div className="form-group">
             <label className="form-label">Email</label>
-            <input
-              type="email"
-              className="form-input"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
-              disabled={saving}
-            />
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="email"
+                className="form-input"
+                style={{ flex: 1 }}
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                disabled={saving}
+              />
+              <button
+                type="button"
+                className="dt-btn-action dt-btn-info"
+                onClick={syncEmailFromCabify}
+                disabled={syncingEmail || saving}
+                title="Sincronizar email desde Cabify"
+                style={{ flexShrink: 0 }}
+              >
+                <RefreshCw size={14} className={syncingEmail ? 'spin-animation' : ''} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -3280,9 +3352,101 @@ function ModalEliminar({
 function ModalDetalles({
   selectedConductor,
   setShowDetailsModal,
+  onConductorUpdated,
 }: any) {
   const [vehiculosAsignados, setVehiculosAsignados] = useState<any[]>([]);
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
+  const [syncingEmail, setSyncingEmail] = useState(false);
+  const [conductorEmail, setConductorEmail] = useState<string>(selectedConductor?.email || '');
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  const saveEmail = async () => {
+    if (!selectedConductor) return;
+    setSavingEmail(true);
+    try {
+      const { error } = await supabase
+        .from('conductores')
+        .update({ email: conductorEmail || null })
+        .eq('id', selectedConductor.id);
+      if (error) throw error;
+      selectedConductor.email = conductorEmail;
+      onConductorUpdated?.();
+      setEditingEmail(false);
+      showSuccess('Email Actualizado', conductorEmail || 'Email eliminado');
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar el email', confirmButtonColor: '#FF0033' });
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
+  const syncEmailFromCabify = async () => {
+    if (!selectedConductor) return;
+
+    setSyncingEmail(true);
+    try {
+      const cabifyDrivers = await cabifyService.getAllDriversWithoutCompanyFilter();
+
+      const dni = selectedConductor.numero_dni?.trim();
+      const nombreCompleto = `${selectedConductor.nombres || ''} ${selectedConductor.apellidos || ''}`.trim().toUpperCase();
+
+      // Match by DNI first, then by name
+      let match = dni
+        ? cabifyDrivers.find((d: any) => d.nationalIdNumber?.trim() === dni)
+        : null;
+
+      if (!match && nombreCompleto) {
+        match = cabifyDrivers.find((d: any) => {
+          const cabifyName = `${d.name || ''} ${d.surname || ''}`.trim().toUpperCase();
+          return cabifyName === nombreCompleto;
+        });
+      }
+
+      if (!match) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin coincidencia',
+          text: `No se encontró conductor en Cabify con DNI ${dni || 'N/A'} ni nombre "${nombreCompleto}"`,
+          confirmButtonColor: '#FF0033',
+        });
+        return;
+      }
+
+      if (!match.email) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin email en Cabify',
+          text: `Se encontró al conductor en Cabify pero no tiene email registrado`,
+          confirmButtonColor: '#FF0033',
+        });
+        return;
+      }
+
+      // Update in DB
+      const { error } = await supabase
+        .from('conductores')
+        .update({ email: match.email })
+        .eq('id', selectedConductor.id);
+
+      if (error) throw error;
+
+      setConductorEmail(match.email);
+      selectedConductor.email = match.email;
+      onConductorUpdated?.();
+      showSuccess('Email Actualizado', `Email sincronizado: ${match.email}`);
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : String(err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al sincronizar con Cabify: ' + message,
+        confirmButtonColor: '#FF0033',
+      });
+    } finally {
+      setSyncingEmail(false);
+    }
+  };
 
   // Cargar historial de vehículos asignados
   useEffect(() => {
@@ -3493,8 +3657,65 @@ function ModalDetalles({
           </div>
           <div>
             <label className="detail-label">EMAIL</label>
-            <div className="detail-value">
-              {selectedConductor.email || "N/A"}
+            <div className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {editingEmail ? (
+                <>
+                  <input
+                    type="email"
+                    className="form-input"
+                    style={{ flex: 1, padding: '4px 8px', fontSize: '13px' }}
+                    value={conductorEmail}
+                    onChange={(e) => setConductorEmail(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveEmail(); if (e.key === 'Escape') { setConductorEmail(selectedConductor?.email || ''); setEditingEmail(false); } }}
+                    autoFocus
+                    disabled={savingEmail}
+                  />
+                  <button
+                    className="dt-btn-action dt-btn-success"
+                    onClick={saveEmail}
+                    disabled={savingEmail}
+                    title="Guardar"
+                    style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
+                  >
+                    {savingEmail ? <Loader2 size={13} className="spin-animation" /> : '✓'}
+                  </button>
+                  <button
+                    className="dt-btn-action"
+                    onClick={() => { setConductorEmail(selectedConductor?.email || ''); setEditingEmail(false); }}
+                    title="Cancelar"
+                    style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
+                  >
+                    ✕
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setEditingEmail(true)}
+                    title="Click para editar"
+                  >
+                    {conductorEmail || "N/A"}
+                  </span>
+                  <button
+                    className="dt-btn-action dt-btn-info"
+                    onClick={() => setEditingEmail(true)}
+                    title="Editar email"
+                    style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                  <button
+                    className="dt-btn-action dt-btn-info"
+                    onClick={syncEmailFromCabify}
+                    disabled={syncingEmail}
+                    title="Sincronizar email desde Cabify"
+                    style={{ padding: '4px', minWidth: '24px', minHeight: '24px' }}
+                  >
+                    <RefreshCw size={13} className={syncingEmail ? 'spin-animation' : ''} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
