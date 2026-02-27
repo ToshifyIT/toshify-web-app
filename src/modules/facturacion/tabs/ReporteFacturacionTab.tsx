@@ -2192,6 +2192,8 @@ export function ReporteFacturacionTab() {
       const cuotaGarantia = Math.round(preciosActuales['P003'] * 7)
       
       // 5. Obtener datos adicionales en paralelo
+      // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
+      const MULTAS_HABILITADAS = false
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
         (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
@@ -2205,7 +2207,10 @@ export function ReporteFacturacionTab() {
         })(),
         (supabase.from('garantias_conductores') as any).select('*').in('conductor_id', conductorIds),
         (supabase.from('cobros_fraccionados') as any).select('*').in('conductor_id', conductorIds).lte('semana', semanaNum).eq('anio', anioNum),
-        (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin),
+        // Multas: se consulta pero solo se usa si MULTAS_HABILITADAS = true
+        MULTAS_HABILITADAS
+          ? (supabase.from('multas_historico') as any).select('patente, importe, fecha_infraccion').gte('fecha_infraccion', fechaInicio).lte('fecha_infraccion', fechaFin)
+          : Promise.resolve({ data: [] }),
       ])
 
       // 5b. Cargar penalidades_cuotas (cuotas de penalidades fraccionadas) hasta esta semana + pagos para cruzar
@@ -2377,7 +2382,8 @@ export function ReporteFacturacionTab() {
 
         // Multas (P008)
         const patenteNorm = (conductor.vehiculo_patente || '').toUpperCase().replace(/\s+/g, '')
-        const multasVehiculo = multasMap.get(patenteNorm)
+        // Multas: desactivado temporalmente (MULTAS_HABILITADAS = false)
+        const multasVehiculo = MULTAS_HABILITADAS ? multasMap.get(patenteNorm) : undefined
         const montoMultas = multasVehiculo?.monto || 0
         const cantidadMultas = multasVehiculo?.cantidad || 0
 
@@ -2387,7 +2393,7 @@ export function ReporteFacturacionTab() {
         const diasMora = 0
         const montoMora = 0
 
-        // Totales
+        // Totales (montoMultas será 0 mientras MULTAS_HABILITADAS = false)
         const subtotalCargos = alquilerTotal + cuotaGarantiaProporcional + totalPenalidades + totalExcesos + totalPeajes + montoMultas + totalCobros + totalCuotasPenalidades
         const subtotalDescuentos = totalTickets + totalPenP004
         const subtotalNeto = subtotalCargos - subtotalDescuentos
