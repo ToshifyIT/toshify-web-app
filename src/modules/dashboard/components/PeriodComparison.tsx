@@ -110,25 +110,6 @@ export function PeriodComparison() {
       })
     }
 
-    const addIntegerMetric = (
-      id: string,
-      name: string,
-      valueA: number,
-      valueB: number
-    ) => {
-      const diff = valueA - valueB
-      const base = valueB === 0 ? 0 : (diff / valueB) * 100
-      const isPositive = base >= 0
-      metricList.push({
-        id,
-        name,
-        valueA: valueA.toFixed(0),
-        valueB: valueB.toFixed(0),
-        variationLabel: `${isPositive ? '+' : '-'}${Math.abs(base).toFixed(0)}%`,
-        variationSign: isPositive ? 'positive' : 'negative'
-      })
-    }
-
     const addDaysMetric = (
       id: string,
       name: string,

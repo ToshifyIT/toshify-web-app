@@ -2,6 +2,7 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
+import { Spinner } from './ui/LoadingOverlay'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -30,9 +31,9 @@ export function ProtectedRoute({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: 'system-ui'
+        background: 'var(--bg-primary, #f9fafb)',
       }}>
-        <div>Cargando...</div>
+        <Spinner size="lg" />
       </div>
     )
   }

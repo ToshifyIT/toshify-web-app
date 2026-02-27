@@ -36,7 +36,7 @@ export function ZonesAssignmentsChart() {
               radius={[4, 4, 4, 4]} 
               background={{ fill: '#f8fafc', radius: 4 }}
             >
-              {data.map((entry, index) => (
+              {data.map((_entry, index) => (
                 <Cell key={`cell-${index}`} fill="#dc2626" />
               ))}
               <LabelList 

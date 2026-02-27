@@ -71,7 +71,7 @@ const getMenuIcon = (menuName: string): LucideIcon => {
   return menuIcons[menuName] || Activity
 }
 
-// Loading component for lazy-loaded pages
+// Loading component for lazy-loaded pages (sin mensaje, solo spinner discreto)
 const PageLoader = () => (
   <div style={{
     display: 'flex',
@@ -79,7 +79,7 @@ const PageLoader = () => (
     justifyContent: 'center',
     height: '50vh'
   }}>
-    <Spinner size="lg" message="Cargando..." />
+    <Spinner size="md" />
   </div>
 )
 

@@ -2297,7 +2297,7 @@ export function ReporteFacturacionTab() {
           alquilerTotal += montoDiurno
           detallesAlquiler.push({
             codigo: 'P001', 
-            descripcion: conductor.dias_turno_diurno < 7 ? `Alquiler Turno Diurno (${conductor.dias_turno_diurno}/7 días)` : 'Alquiler Turno Diurno',
+            descripcion: 'Alquiler Turno Diurno',
             dias: conductor.dias_turno_diurno, monto: montoDiurno
           })
         }
@@ -2307,7 +2307,7 @@ export function ReporteFacturacionTab() {
           alquilerTotal += montoNocturno
           detallesAlquiler.push({
             codigo: 'P013', 
-            descripcion: conductor.dias_turno_nocturno < 7 ? `Alquiler Turno Nocturno (${conductor.dias_turno_nocturno}/7 días)` : 'Alquiler Turno Nocturno',
+            descripcion: 'Alquiler Turno Nocturno',
             dias: conductor.dias_turno_nocturno, monto: montoNocturno
           })
         }
@@ -2317,7 +2317,7 @@ export function ReporteFacturacionTab() {
           alquilerTotal += montoCargo
           detallesAlquiler.push({
             codigo: 'P002', 
-            descripcion: conductor.dias_cargo < 7 ? `Alquiler a Cargo (${conductor.dias_cargo}/7 días)` : 'Alquiler a Cargo',
+            descripcion: 'Alquiler a Cargo',
             dias: conductor.dias_cargo, monto: montoCargo
           })
         }
@@ -2550,7 +2550,7 @@ export function ReporteFacturacionTab() {
 
         // P005 - Peajes de Cabify
         if (totalPeajes > 0) {
-          const descPeaje = `Telepeajes (${format(parseISO(fechaInicio), 'dd/MM', { locale: es })} al ${format(parseISO(fechaFin), 'dd/MM/yyyy', { locale: es })})`
+          const descPeaje = 'Peajes'
           await (supabase.from('facturacion_detalle') as any).insert({
             facturacion_id: facturacionId,
             concepto_codigo: 'P005', concepto_descripcion: descPeaje,
@@ -2803,7 +2803,7 @@ export function ReporteFacturacionTab() {
           id: `det-cargo-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P002',
-          concepto_descripcion: `Alquiler a Cargo (${cargoDias}/7 días)`,
+          concepto_descripcion: 'Alquiler a Cargo',
           cantidad: cargoDias,
           precio_unitario: Math.round(cargoMonto / cargoDias),
           subtotal: cargoMonto,
@@ -2822,7 +2822,7 @@ export function ReporteFacturacionTab() {
           id: `det-diurno-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P001',
-          concepto_descripcion: `Alquiler Turno Diurno (${diurnoDias}/7 días)`,
+          concepto_descripcion: 'Alquiler Turno Diurno',
           cantidad: diurnoDias,
           precio_unitario: Math.round(diurnoMonto / diurnoDias),
           subtotal: diurnoMonto,
@@ -2841,7 +2841,7 @@ export function ReporteFacturacionTab() {
           id: `det-nocturno-${facturacion.conductor_id}`,
           facturacion_id: facturacion.id,
           concepto_codigo: 'P013',
-          concepto_descripcion: `Alquiler Turno Nocturno (${nocturnoDias}/7 días)`,
+          concepto_descripcion: 'Alquiler Turno Nocturno',
           cantidad: nocturnoDias,
           precio_unitario: Math.round(nocturnoMonto / nocturnoDias),
           subtotal: nocturnoMonto,
@@ -3511,14 +3511,14 @@ export function ReporteFacturacionTab() {
     // Labels para códigos de concepto
     const conceptoLabels: Record<string, string> = {
       'P001': 'Alquiler a Cargo', 'P002': 'Alquiler Turno', 'P003': 'Cuota de Garantía',
-      'P004': 'Tickets/Descuentos', 'P005': 'Telepeajes', 'P006': 'Exceso KM',
+      'P004': 'Tickets/Descuentos', 'P005': 'Peajes', 'P006': 'Exceso KM',
       'P007': 'Penalidades', 'P008': 'Multas de Tránsito', 'P009': 'Mora', 'P010': 'Plan de Pagos',
     }
 
     const formatDesc = (codigo: string, desc: string) => {
       const label = conceptoLabels[codigo]
       if (!label) return desc
-      if (desc.includes('Alquiler') || desc.includes('Garantía') || desc.includes('Telepeaje') ||
+      if (desc.includes('Alquiler') || desc.includes('Garantía') || desc.includes('Peaje') ||
           desc.includes('Ticket') || desc.includes('Exceso') || desc.includes('Penalidad') ||
           desc.includes('Multa') || desc.includes('Mora') || desc.includes('Cuota') ||
           desc.includes('Comisión') || desc.includes('Descuento')) return desc
@@ -4674,8 +4674,6 @@ export function ReporteFacturacionTab() {
       // Fechas del período
       const fechaEmision = parseISO(periodo.fecha_fin)
       const fechaVencimiento = addWeeks(parseISO(periodo.fecha_fin), 1)
-      const periodoDesc = `${format(parseISO(periodo.fecha_inicio), 'dd/MM/yyyy')} al ${format(parseISO(periodo.fecha_fin), 'dd/MM/yyyy')}`
-
       // Map de IVA por código de concepto (desde tabla conceptos_nomina)
       const ivaConceptoMap = new Map<string, number>(
         conceptosNomina.map(c => [c.codigo, c.iva_porcentaje || 0])
@@ -4784,17 +4782,16 @@ export function ReporteFacturacionTab() {
             if (det.total <= 0) continue
 
             let descripcionAdicional = ''
-            const dias = fact.turnos_cobrados || 7
             if (det.concepto_codigo === 'P001') {
-              descripcionAdicional = `Alquiler Turno Diurno (${dias}/7 días)`
+              descripcionAdicional = 'Alquiler Turno Diurno'
             } else if (det.concepto_codigo === 'P002') {
-              descripcionAdicional = `Alquiler a Cargo (${dias}/7 días)`
+              descripcionAdicional = 'Alquiler a Cargo'
             } else if (det.concepto_codigo === 'P013') {
-              descripcionAdicional = `Alquiler Turno Nocturno (${dias}/7 días)`
+              descripcionAdicional = 'Alquiler Turno Nocturno'
             } else if (det.concepto_codigo === 'P003') {
               descripcionAdicional = `Cuota de Garantía ${fact.cuota_garantia_numero || '1 de 16'}`
             } else if (det.concepto_codigo === 'P005') {
-              descripcionAdicional = `Telepeajes ${periodoDesc}`
+              descripcionAdicional = 'Peajes'
             } else if (det.concepto_codigo === 'P006') {
               descripcionAdicional = det.concepto_descripcion || 'Exceso de Kilometraje'
             } else if (det.concepto_codigo === 'P007') {
@@ -4817,12 +4814,11 @@ export function ReporteFacturacionTab() {
           }
         } else {
           // Sin detalles, crear filas basadas en subtotales (sin IDs de detalle)
-          const diasFallback = fact.turnos_cobrados || 7
           if (fact.subtotal_alquiler > 0) {
             const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
             const descAlquiler = fact.tipo_alquiler === 'CARGO'
-              ? `Alquiler a Cargo (${diasFallback}/7 días)`
-              : `Alquiler Turno Diurno (${diasFallback}/7 días)`
+              ? 'Alquiler a Cargo'
+              : 'Alquiler Turno Diurno'
             filasPreview.push(crearFilaPreview(
               numeroFactura++,
               fact,
@@ -5206,8 +5202,6 @@ export function ReporteFacturacionTab() {
       // Fechas del período
       const fechaEmision = semanaActual.fin
       const fechaVencimiento = addWeeks(semanaActual.fin, 1)
-      const periodoDesc = `${format(semanaActual.inicio, 'dd/MM/yyyy')} al ${format(semanaActual.fin, 'dd/MM/yyyy')}`
-
       // Crear Set de conductores con saldos pendientes (penalidades, tickets, cobros fraccionados, penalidades_cuotas)
       const conductoresConSaldosPendientes = new Set<string>()
       penalidadesFiltradas.forEach((p: any) => conductoresConSaldosPendientes.add(p.conductor_id))
@@ -5308,13 +5302,12 @@ export function ReporteFacturacionTab() {
       let numeroFactura = 1
 
       for (const fact of vistaPreviaData) {
-        const diasVP = fact.turnos_cobrados || 7
         // P001/P002 - Alquiler (TURNO/CARGO)
         if (fact.subtotal_alquiler > 0) {
           const codigoAlquiler = fact.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
           const descAlquilerVP = fact.tipo_alquiler === 'CARGO'
-            ? `Alquiler a Cargo (${diasVP}/7 días)`
-            : `Alquiler Turno Diurno (${diasVP}/7 días)`
+            ? 'Alquiler a Cargo'
+            : 'Alquiler Turno Diurno'
           filasPreview.push(crearFilaPreview(
             numeroFactura++,
             fact,
@@ -5363,7 +5356,7 @@ export function ReporteFacturacionTab() {
             fact,
             fact.monto_peajes,
             'P005',
-            `Telepeajes ${periodoDesc}`
+            'Peajes'
           ))
         }
 
@@ -5651,7 +5644,7 @@ export function ReporteFacturacionTab() {
               .insert({
                 facturacion_id: row.id,
                 concepto_codigo: 'P005',
-                concepto_descripcion: 'Telepeajes (Cabify)',
+                concepto_descripcion: 'Peajes',
                 cantidad: 1,
                 precio_unitario: row.valorPeaje,
                 subtotal: row.valorPeaje,
@@ -6125,12 +6118,11 @@ export function ReporteFacturacionTab() {
         const tieneCuit = !!f.conductor_cuit
         const tipoFactura = tieneCuit ? 'A' : 'B'
         const condicionIva = tieneCuit ? 'Responsable Inscripto' : 'Consumidor Final'
-        const diasDesc = f.turnos_cobrados < 7 ? ` (${f.turnos_cobrados}/7 días)` : ''
 
         // P001/P002 - Alquiler (IVA dinámico desde conceptos_nomina)
         if (f.subtotal_alquiler > 0) {
           const codigoAlquiler = f.tipo_alquiler === 'CARGO' ? 'P002' : 'P001'
-          const descAlquiler = f.tipo_alquiler === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler a Turno'
+          const descAlquiler = f.tipo_alquiler === 'CARGO' ? 'Alquiler a Cargo' : 'Alquiler Turno Diurno'
           const ivaPctAlq = getIvaPct(codigoAlquiler)
           const netoAlquiler = extraerNeto(f.subtotal_alquiler, ivaPctAlq)
           const ivaAlquiler = Math.round((f.subtotal_alquiler - netoAlquiler) * 100) / 100
@@ -6138,7 +6130,7 @@ export function ReporteFacturacionTab() {
           ritData.push([
             fechaInicio, fechaFin, 5, tipoFactura,
             f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
-            codigoAlquiler, descAlquiler + diasDesc, f.turnos_cobrados, netoAlquiler, ivaAlquiler, f.subtotal_alquiler,
+            codigoAlquiler, descAlquiler, f.turnos_cobrados, netoAlquiler, ivaAlquiler, f.subtotal_alquiler,
             0, 'ND', 'Peso', 1
           ])
         }
@@ -6163,12 +6155,12 @@ export function ReporteFacturacionTab() {
           ])
         }
 
-        // P005 - Telepeajes (exento IVA)
+        // P005 - Peajes (exento IVA)
         if ((f.monto_peajes || 0) > 0) {
           ritData.push([
             fechaInicio, fechaFin, 5, tipoFactura,
             f.conductor_cuit || '', f.conductor_dni || '', condicionIva, 'Cuenta Corriente', f.conductor_nombre,
-            'P005', 'Telepeajes (Cabify)', 1, f.monto_peajes || 0, 0, f.monto_peajes || 0,
+            'P005', 'Peajes', 1, f.monto_peajes || 0, 0, f.monto_peajes || 0,
             0, 'ND', 'Peso', 1
           ])
         }
@@ -8401,11 +8393,11 @@ export function ReporteFacturacionTab() {
                           'P001': 'Alquiler a Cargo',
                           'P002': 'Alquiler Turno',
                           'P003': 'Cuota de Garantía',
-                          'P005': 'Telepeajes',
+                          'P005': 'Peajes',
                         };
                         const label = conceptoLabels[item.concepto_codigo];
                         let desc = item.concepto_descripcion;
-                        if (label && !desc.includes('Alquiler') && !desc.includes('Garantía') && !desc.includes('Telepeaje')) {
+                        if (label && !desc.includes('Alquiler') && !desc.includes('Garantía') && !desc.includes('Peaje')) {
                           desc = desc ? `${label} (${desc})` : label;
                         }
                         const esPenalidad = item.referencia_id && (item.referencia_tipo === 'penalidad' || item.referencia_tipo === 'penalidad_cuota')

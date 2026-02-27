@@ -9,7 +9,7 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts'
-import { startOfWeek, endOfWeek, addDays, subWeeks, format, setWeek, setYear, startOfMonth, endOfMonth, setMonth, parseISO, getWeek, getYear } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, format, setWeek, setYear, startOfMonth, endOfMonth, setMonth, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'

@@ -20,7 +20,8 @@ import {
   UserPlus,
   Trash2,
   Receipt,
-  ArrowUpCircle
+  ArrowUpCircle,
+  RotateCcw
 } from 'lucide-react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../../components/ui/DataTable'
@@ -620,6 +621,67 @@ export function GarantiasTab() {
     }
   }
 
+  async function gestionarDevolucion(garantia: GarantiaConductor) {
+    const porcentaje = Math.round((garantia.monto_pagado / garantia.monto_total) * 100)
+
+    const result = await Swal.fire({
+      title: '<span style="font-size: 16px; font-weight: 600;">Gestionar Devolución de Garantía</span>',
+      html: `
+        <div style="text-align: left; font-size: 13px;">
+          <div style="background: #FEF2F2; padding: 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #FECACA;">
+            <div style="font-weight: 600; color: #111827; font-size: 14px;">${garantia.conductor_nombre}</div>
+            <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+              <span style="background: #ff0033; color: white; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">BAJA</span>
+            </div>
+          </div>
+          <div style="background: #F9FAFB; padding: 12px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #E5E7EB;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div>
+                <div style="font-size: 11px; color: #6B7280;">Total garantía</div>
+                <div style="font-weight: 600; color: #111827;">${formatCurrency(garantia.monto_total)}</div>
+              </div>
+              <div>
+                <div style="font-size: 11px; color: #6B7280;">Cuotas pagadas</div>
+                <div style="font-weight: 600; color: #111827;">${garantia.cuotas_pagadas}/${garantia.cuotas_totales}</div>
+              </div>
+            </div>
+            <div style="background: #E5E7EB; height: 6px; border-radius: 3px; margin-top: 10px; overflow: hidden;">
+              <div style="background: #16a34a; height: 100%; width: ${porcentaje}%;"></div>
+            </div>
+            <div style="text-align: center; font-size: 11px; color: #6B7280; margin-top: 2px;">${porcentaje}%</div>
+          </div>
+          <div style="background: #F0FDF4; padding: 12px; border-radius: 8px; border: 1px solid #BBF7D0;">
+            <div style="font-size: 11px; color: #6B7280; margin-bottom: 2px;">Monto a devolver</div>
+            <div style="font-size: 20px; font-weight: 700; color: #16a34a;">${formatCurrency(garantia.monto_pagado)}</div>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Iniciar Devolución',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ff0033',
+      width: 380,
+    })
+
+    if (!result.isConfirmed) return
+
+    try {
+      const { error } = await (supabase.from('garantias_conductores') as any)
+        .update({
+          estado: 'en_devolucion',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', garantia.id)
+
+      if (error) throw error
+
+      showSuccess('Devolución Iniciada', `Se marcó la garantía de ${garantia.conductor_nombre} en devolución por ${formatCurrency(garantia.monto_pagado)}`)
+      cargarGarantias()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo iniciar la devolución', 'error')
+    }
+  }
+
   async function verHistorial(garantia: GarantiaConductor) {
     try {
       const { data: pagos, error } = await supabase
@@ -884,6 +946,7 @@ export function GarantiasTab() {
                 {[
                   { value: 'completada', label: 'Completada' },
                   { value: 'en_curso', label: 'En Curso' },
+                  { value: 'en_devolucion', label: 'En Devolución' },
                   { value: 'pendiente', label: 'Pendiente' }
                 ].map(e => (
                   <label key={e.value} className={`dt-column-filter-checkbox ${estadoFilter.includes(e.value) ? 'selected' : ''}`}>
@@ -906,6 +969,7 @@ export function GarantiasTab() {
         const config: Record<string, { class: string; label: string }> = {
           completada: { class: 'fact-badge-green', label: 'Completada' },
           en_curso: { class: 'fact-badge-yellow', label: 'En Curso' },
+          en_devolucion: { class: 'fact-badge-blue', label: 'En Devolución' },
           pendiente: { class: 'fact-badge-gray', label: 'Pendiente' }
         }
         const { class: badgeClass, label } = config[estado] || { class: 'fact-badge-gray', label: estado }
@@ -915,28 +979,38 @@ export function GarantiasTab() {
     {
       id: 'acciones',
       header: '',
-      cell: ({ row }) => (
-        <div className="fact-table-actions">
-          <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
-            <Eye size={14} />
-          </button>
-          {row.original.estado !== 'completada' && (
-            <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
-              <Banknote size={14} />
+      cell: ({ row }) => {
+        const estadoConductor = (row.original as any).estado_conductor
+        const esBaja = estadoConductor === 'BAJA'
+        const puedeDevolucion = esBaja && row.original.monto_pagado > 0 && row.original.estado !== 'en_devolucion'
+        return (
+          <div className="fact-table-actions">
+            <button className="fact-table-btn fact-table-btn-view" onClick={() => verHistorial(row.original)} data-tooltip="Ver historial">
+              <Eye size={14} />
             </button>
-          )}
-          {(isAdmin() || isAdministrativo()) && (
-            <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
-              <Edit3 size={14} />
-            </button>
-          )}
-          {isAdmin() && (
-            <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarGarantia(row.original)} data-tooltip="Eliminar">
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      )
+            {row.original.estado !== 'completada' && row.original.estado !== 'en_devolucion' && (
+              <button className="fact-table-btn" onClick={() => registrarPago(row.original)} data-tooltip="Registrar pago" style={{ color: '#16a34a' }}>
+                <Banknote size={14} />
+              </button>
+            )}
+            {puedeDevolucion && (isAdmin() || isAdministrativo()) && (
+              <button className="fact-table-btn" onClick={() => gestionarDevolucion(row.original)} data-tooltip="Gestionar devolución" style={{ color: '#2563eb' }}>
+                <RotateCcw size={14} />
+              </button>
+            )}
+            {(isAdmin() || isAdministrativo()) && (
+              <button className="fact-table-btn fact-table-btn-edit" onClick={() => editarGarantia(row.original)} data-tooltip="Editar">
+                <Edit3 size={14} />
+              </button>
+            )}
+            {isAdmin() && (
+              <button className="fact-table-btn fact-table-btn-danger" onClick={() => eliminarGarantia(row.original)} data-tooltip="Eliminar">
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        )
+      }
     }
   ], [conductorFilter, conductorSearch, conductoresFiltrados, tipoFilter, estadoFilter, openColumnFilter])
 
@@ -1056,9 +1130,11 @@ export function GarantiasTab() {
     const total = garantias.length
     const completadas = garantias.filter(g => g.estado === 'completada').length
     const enCurso = garantias.filter(g => g.estado === 'en_curso').length
+    const enDevolucion = garantias.filter(g => g.estado === 'en_devolucion').length
     const totalRecaudado = garantias.reduce((sum, g) => sum + g.monto_pagado, 0)
     const totalPorRecaudar = garantias.reduce((sum, g) => sum + (g.monto_total - g.monto_pagado), 0)
-    return { total, completadas, enCurso, totalRecaudado, totalPorRecaudar }
+    const totalADevolver = garantias.filter(g => g.estado === 'en_devolucion').reduce((sum, g) => sum + g.monto_pagado, 0)
+    return { total, completadas, enCurso, enDevolucion, totalRecaudado, totalPorRecaudar, totalADevolver }
   }, [garantias])
 
   // ========== RENDER ==========
@@ -1122,6 +1198,15 @@ export function GarantiasTab() {
                   <span className="fact-stat-label">Por Recaudar</span>
                 </div>
               </div>
+              {stats.enDevolucion > 0 && (
+                <div className="fact-stat-card">
+                  <RotateCcw size={18} className="fact-stat-icon" />
+                  <div className="fact-stat-content">
+                    <span className="fact-stat-value">{stats.enDevolucion}</span>
+                    <span className="fact-stat-label">En Devolución</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
