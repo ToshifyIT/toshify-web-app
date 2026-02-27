@@ -2,6 +2,9 @@ import { useDashboardStats } from '../../hooks/useDashboardStats'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { PeriodComparison } from '../dashboard/components/PeriodComparison'
 import { FleetDonut } from '../dashboard/components/FleetDonut'
+import { CobroTeoricoVsReal } from '../dashboard/components/CobroTeoricoVsReal'
+import { PermanenciaChart } from '../dashboard/components/PermanenciaChart'
+import { ZonesAssignmentsChart } from '../dashboard/components/ZonesAssignmentsChart'
 import './DashboardKpisModule.css'
 import '../dashboard/DashboardModule.css'
 
@@ -63,13 +66,31 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.diasSinRobo.subtitle}</span>
               </div>
             </div>
+            <div className="stat-card">
+              <div className="stat-content">
+                <span className="stat-value">{stats.totalSaldo.value}</span>
+                <span className="stat-label">TOTAL SALDO</span>
+                <span className="stat-subtitle">{stats.totalSaldo.subtitle}</span>
+              </div>
+            </div>
           </div>
         )}
       </div>
       <PeriodComparison />
       
-      <div className="dashboard-charts-row">
-        <FleetDonut />
+      <div className="flex flex-col gap-4">
+        <div className="dkpis-charts-container">
+          <FleetDonut />
+          <CobroTeoricoVsReal />
+        </div>
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="w-full lg:w-1/2">
+            <PermanenciaChart />
+          </div>
+          <div className="w-full lg:w-1/2">
+            <ZonesAssignmentsChart />
+          </div>
+        </div>
       </div>
     </div>
   )

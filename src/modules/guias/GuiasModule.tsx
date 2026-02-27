@@ -23,11 +23,11 @@ import {
   Target,
   GraduationCap,
   Triangle,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react'
 import { DataTable } from '../../components/ui/DataTable'
 import { ActionsMenu } from '../../components/ui/ActionsMenu'
-import { VerLogsButton } from '../../components/ui/VerLogsButton'
 import { type ColumnDef } from '@tanstack/react-table'
 import type { ConductorWithRelations } from '../../types/database.types'
 import Swal from 'sweetalert2'
@@ -89,6 +89,7 @@ export function GuiasModule() {
   const hasDistributedRef = useRef(false)
   const hasSyncedRef = useRef(false)
   const [syncFinished, setSyncFinished] = useState(false)
+  const [actualizandoData, setActualizandoData] = useState(false)
 
   // Estados para filtros (replicados de ConductoresModule)
   const [nombreFilter, setNombreFilter] = useState<string[]>([])
@@ -2834,6 +2835,201 @@ export function GuiasModule() {
     ]
   );
 
+  const handleActualizarData = async () => {
+    try {
+      if (actualizandoData) return;
+      setActualizandoData(true);
+      const currentWeek = getCurrentWeek();
+      console.log("=== INICIO ACTUALIZACION DE DATA ===");
+      console.log("Semana actual:", currentWeek);
+
+      // 1. Obtener datos de guias_historial_semanal (semanas anteriores)
+      const { data: historialData, error: historialError } = await supabase
+        .from('guias_historial_semanal')
+        .select('id_conductor, semana')
+        .neq('semana', currentWeek);
+
+      if (historialError) {
+        console.error("Error al obtener historial semanal:", historialError);
+        throw historialError;
+      }
+
+      console.log(`Registros históricos encontrados (semanas != ${currentWeek}):`, historialData?.length);
+
+      // 2. Obtener id_conductor únicos
+      // Filtrar nulls/undefineds y obtener únicos
+      const uniqueDriverIds = [...new Set(
+        (historialData || [])
+          .map(d => d.id_conductor)
+          .filter(id => id !== null && id !== undefined)
+      )];
+      
+      console.log("IDs de conductores únicos encontrados:", uniqueDriverIds.length);
+      console.log("Lista de IDs:", uniqueDriverIds);
+
+      // 3. Loop por conductores
+      for (const driverId of uniqueDriverIds) {
+        console.log(`\n--- Procesando Conductor ID: ${driverId} ---`);
+
+        // 3a. Buscar datos del conductor
+        const { data: driverData, error: driverError } = await supabase
+          .from('conductores')
+          .select('*')
+          .eq('id', driverId)
+          .single();
+
+        if (driverError) {
+          console.error(`Error obteniendo datos del conductor ${driverId}:`, driverError);
+          // Continuamos con el siguiente conductor aunque falle la obtención de sus datos personales
+        } else {
+          console.log(`Conductor: ${driverData?.nombres} ${driverData?.apellidos} (DNI: ${driverData?.numero_dni})`);
+        }
+
+        // 3b. Buscar historial del conductor (semanas anteriores)
+        // Reutilizamos la lógica de filtro: id_conductor = driverId AND semana != currentWeek
+        const { data: driverHistory, error: driverHistoryError } = await supabase
+          .from('guias_historial_semanal')
+          .select('*')
+          .eq('id_conductor', driverId)
+          .neq('semana', currentWeek);
+
+        if (driverHistoryError) {
+          console.error(`Error obteniendo historial específico para conductor ${driverId}:`, driverHistoryError);
+        } else {
+          console.log(`Historial encontrado para este conductor (semanas pasadas): ${driverHistory?.length} registros.`);
+          
+          // 4. Segundo loop por resultados del historial
+          if (driverHistory && driverHistory.length > 0) {
+            for (const historyRecord of driverHistory) {
+              const weekStr = historyRecord.semana; // Format: "YYYY-Www"
+              console.log(`    [Procesando Registro] Semana: ${weekStr}, ID Registro: ${historyRecord.id}`);
+
+              // 5. Calcular la última fecha de la semana
+              // Parseamos "YYYY-Www"
+              const [yearStr, weekNumStr] = weekStr.split('-W');
+              const year = parseInt(yearStr);
+              const week = parseInt(weekNumStr);
+
+              // Usamos date-fns para obtener el fin de la semana ISO
+              // 4 de enero siempre cae en la primera semana ISO o cerca
+              const baseDate = new Date(year, 0, 4);
+              const weekDate = setISOWeek(baseDate, week);
+              // endOfISOWeek nos da el domingo a las 23:59:59.999
+              const sundayDate = endOfISOWeek(weekDate);
+              
+              // Ajustamos a UTC para coincidir con el formato de la DB
+              // El formato de la DB es "2025-11-22 23:59:59.999+00" (UTC).
+              const endDateUTC = new Date(Date.UTC(
+                sundayDate.getFullYear(),
+                sundayDate.getMonth(),
+                sundayDate.getDate(),
+                23, 59, 59, 999
+              )).toISOString().replace('Z', '+00');
+              
+              console.log(`    [Fecha Fin Calculada] Semana ${weekStr} -> Domingo ${sundayDate.toLocaleDateString()} -> UTC String: ${endDateUTC}`);
+
+              // 6. Filtro en cabify_historico por fecha_fin y conductor
+              // Intentamos primero por DNI
+              let cabifyRecord = null;
+              const dniOriginal = driverData?.numero_dni ? String(driverData.numero_dni).trim() : '';
+              const dniClean = dniOriginal.replace(/\./g, '');
+
+              // Búsqueda por DNI
+              if (dniClean) {
+                  const { data: dataDni, error: errorDni } = await supabase
+                      .from('cabify_historico')
+                      .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
+                      .eq('dni', dniClean)
+                      .eq('fecha_fin', endDateUTC) // Usamos el string con formato +00
+                      .maybeSingle();
+                  
+                  if (errorDni) {
+                      console.error("    Error buscando Cabify por DNI:", errorDni);
+                  }
+                  if (dataDni) {
+                      cabifyRecord = dataDni;
+                      console.log(`    [Cabify Match] Encontrado por DNI: ${dniClean}`);
+                  }
+              }
+
+              // 7. Si no encuentra, buscar por Nombre
+              if (!cabifyRecord && driverData?.nombres && driverData?.apellidos) {
+                  const nombre = driverData.nombres.trim();
+                  const apellido = driverData.apellidos.trim();
+                  
+                  // Intentamos ilike
+                  const { data: dataName, error: errorName } = await supabase
+                      .from('cabify_historico')
+                      .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
+                      .ilike('nombre', `%${nombre}%`)
+                      .ilike('apellido', `%${apellido}%`)
+                      .eq('fecha_fin', endDateUTC)
+                      .maybeSingle();
+
+                  if (errorName) {
+                      console.error("    Error buscando Cabify por Nombre:", errorName);
+                  }
+                  if (dataName) {
+                      cabifyRecord = dataName;
+                      console.log(`    [Cabify Match] Encontrado por Nombre: ${nombre} ${apellido}`);
+                  }
+              }
+
+              // 8. Obtener datos y log
+              if (cabifyRecord) {
+                  console.log(`    [Datos Cabify] APP: ${cabifyRecord.cobro_app}, EFECTIVO: ${cabifyRecord.cobro_efectivo}`);
+
+                  // 9. Actualizar datos en guias_historial_semanal
+                  // Ya no filtramos por semana 8, aplicamos a todas las semanas históricas encontradas
+                  console.log(`    [Update] Intentando actualizar registro ${weekStr}...`);
+                  
+                  const appValue = Number(cabifyRecord.cobro_app) || 0;
+                  const efectivoValue = Number(cabifyRecord.cobro_efectivo) || 0;
+                  const totalValue = appValue + efectivoValue;
+
+                  const updateData = {
+                      app: appValue,
+                      efectivo: efectivoValue,
+                      total: totalValue
+                  };
+
+                  const { error: updateError } = await supabase
+                      .from('guias_historial_semanal')
+                      .update(updateData)
+                      .eq('id', historyRecord.id);
+
+                  if (updateError) {
+                      console.error(`    [Update Error] No se pudo actualizar el registro ${historyRecord.id}:`, updateError);
+                  } else {
+                      console.log(`    [Update Success] Registro actualizado. APP: ${appValue}, EFECTIVO: ${efectivoValue}, TOTAL: ${totalValue}`);
+                  }
+
+              } else {
+                  console.log(`    [Datos Cabify] No se encontraron registros para esta semana y conductor.`);
+              }
+            }
+          } else {
+            console.log("    Sin historial en semanas anteriores.");
+          }
+        }
+      }
+
+      console.log("\n=== FIN ACTUALIZACION DE DATA ===");
+      Swal.fire({
+        title: 'Actualización Completada',
+        text: 'Se ha procesado la data y generado los logs en la consola.',
+        icon: 'success',
+        confirmButtonColor: 'var(--color-primary)'
+      });
+
+    } catch (error) {
+      console.error("Error general en actualizar data:", error);
+      Swal.fire('Error', 'Hubo un error al actualizar la data. Revise la consola para más detalles.', 'error');
+    } finally {
+      setActualizandoData(false);
+    }
+  };
+
   return (
     <div className="guias-module">
       {/* Header */}
@@ -3143,7 +3339,30 @@ export function GuiasModule() {
                     <Users size={16} />
                     <span>Gestión de Conductores</span>
                   </button>
-                  <VerLogsButton tablas={['guias_seguimiento', 'guias_historial_semanal', 'guias_acciones_implementadas']} label="Gu\u00edas" />
+                  <button 
+                    onClick={handleActualizarData}
+                    disabled={actualizandoData}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      height: '42px',
+                      padding: '0 16px',
+                      background: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s',
+                      opacity: actualizandoData ? 0.7 : 1,
+                    }}
+                  >
+                    <RefreshCw size={16} className={actualizandoData ? 'animate-spin' : ''} />
+                    <span>{actualizandoData ? 'Actualizando...' : 'Actualizar Data'}</span>
+                  </button>
                 </div>
 
                 {/* Filtros Activos */}

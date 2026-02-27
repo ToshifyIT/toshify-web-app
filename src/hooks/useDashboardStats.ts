@@ -20,6 +20,16 @@ interface DashboardStats {
   pendienteDevolucion: DashboardCardValue
   diasSinSiniestro: DashboardCardValue
   diasSinRobo: DashboardCardValue
+  totalSaldo: DashboardCardValue
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(value)
 }
 
 function parseFechaSiniestro(fechaStr: string | undefined | null) {
@@ -71,7 +81,7 @@ export function useDashboardStats() {
     const fetchData = async () => {
       setLoading(true)
       try {
-        const [asignacionesRes, vehiculosRes, siniestrosRes, garantiasRes] = await Promise.all([
+        const [asignacionesRes, vehiculosRes, siniestrosRes, garantiasRes, saldosRes] = await Promise.all([
           aplicarFiltroSede(
             supabase
               .from('asignaciones')
@@ -133,18 +143,25 @@ export function useDashboardStats() {
             supabase
               .from('garantias_conductores')
               .select('*')
-          ).order('conductor_nombre')
+          ).order('conductor_nombre'),
+          aplicarFiltroSede(
+            supabase
+              .from('saldos_conductores')
+              .select('saldo_actual, monto_mora_acumulada')
+          )
         ])
 
         if (asignacionesRes.error) throw asignacionesRes.error
         if (vehiculosRes.error) throw vehiculosRes.error
         if (siniestrosRes.error) throw siniestrosRes.error
         if (garantiasRes.error) throw garantiasRes.error
+        if (saldosRes.error) throw saldosRes.error
 
         const asignaciones = (asignacionesRes.data || []) as any[]
         const vehiculos = (vehiculosRes.data || []) as any[]
         const siniestros = (siniestrosRes.data || []) as any[]
         const garantias = (garantiasRes.data || []) as any[]
+        const saldos = (saldosRes.data || []) as any[]
 
         const vehiculosConAsignacion = new Set(asignaciones.map(a => a.vehiculo_id))
         let totalFlota = 0
@@ -252,6 +269,11 @@ export function useDashboardStats() {
           (g: any) => g.estado === 'en_curso'
         ).length
 
+        // Calcular Total Saldo
+        const totalSaldoActual = saldos.reduce((sum, item) => sum + Math.abs(item.saldo_actual || 0), 0)
+        const totalMora = saldos.reduce((sum, item) => sum + (item.monto_mora_acumulada || 0), 0)
+        const totalSaldoFinal = totalSaldoActual + totalMora
+
         setStats({
           totalFlota: {
             value: String(totalFlota),
@@ -293,6 +315,10 @@ export function useDashboardStats() {
             value: diasDesdeUltimoRobo !== null ? String(diasDesdeUltimoRobo) : '-',
             subtitle: `Último: ${formatDateEs(ultimoRobo)}`,
           },
+          totalSaldo: {
+            value: formatCurrency(totalSaldoFinal),
+            subtitle: 'Saldo Actual + Mora'
+          }
         })
       } catch (error) {
         console.error('Error cargando estadísticas del dashboard:', error)

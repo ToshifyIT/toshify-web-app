@@ -53,7 +53,7 @@
 
 @media (min-width: 1024px) {
   .dkpis-stats-grid {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -96,4 +96,31 @@
 .dkpis-stats .stat-subtitle {
   font-size: 9px;
   color: var(--text-tertiary);
+}
+
+/* Nuevo layout para gráficos: Dona + Cobro Teórico */
+.dkpis-charts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .dkpis-charts-container {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  /* La dona mantiene su ancho natural */
+  .dkpis-charts-container > :first-child {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 420px; /* Asegurar espacio suficiente para dona + leyenda */
+  }
+
+  /* El gráfico de cobro ocupa todo el espacio restante */
+  .dkpis-charts-container > :last-child {
+    flex: 1;
+    min-width: 0; /* Previene desbordamiento en flex items */
+  }
 }

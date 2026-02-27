@@ -21,8 +21,8 @@ type QuickFilter =
 interface MetricView {
   id: string
   name: string
-  valueA: string
-  valueB: string
+  valueA: string | React.ReactNode
+  valueB: string | React.ReactNode
   variationLabel: string
   variationSign: 'positive' | 'negative'
 }
@@ -35,7 +35,6 @@ const MONTH_NAMES = [
 export function PeriodComparison() {
   const [granularity, setGranularity] = useState<Granularity>('semana')
   
-  // Initialize with current week/prev week by default
   const [periodA, setPeriodA] = useState<string>(() => {
     const now = new Date()
     const week = getWeek(now, { weekStartsOn: 1 })
@@ -58,7 +57,7 @@ export function PeriodComparison() {
   const currencyFormatter = useMemo(
     () => ({
       format: (value: number) => {
-        return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+        return `$ ${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`
       }
     }),
     []
@@ -67,7 +66,7 @@ export function PeriodComparison() {
   const telepaseFormatter = useMemo(
     () => ({
       format: (value: number) => {
-        return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+        return `$ ${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`
       }
     }),
     []
@@ -104,8 +103,6 @@ export function PeriodComparison() {
         variationSign: isPositive ? 'positive' : 'negative'
       })
     }
-
-
 
     const addTelepaseMetric = (
       id: string,
@@ -145,6 +142,42 @@ export function PeriodComparison() {
       })
     }
 
+    const addDaysMetric = (
+      id: string,
+      name: string,
+      valueA: number,
+      valueB: number
+    ) => {
+      const diff = valueA - valueB
+      const base = valueB === 0 ? 0 : (diff / valueB) * 100
+      const isPositive = base >= 0
+      
+      const formatWithDays = (val: number) => (
+        <>
+          {val.toFixed(0)}{' '}
+          <span style={{ 
+            fontSize: '0.65em', 
+            fontWeight: 400, 
+            color: '#64748b',
+            textTransform: 'uppercase',
+            marginLeft: '2px',
+            letterSpacing: '0.05em'
+          }}>
+            Días
+          </span>
+        </>
+      )
+
+      metricList.push({
+        id,
+        name,
+        valueA: formatWithDays(valueA),
+        valueB: formatWithDays(valueB),
+        variationLabel: `${isPositive ? '+' : '-'}${Math.abs(base).toFixed(0)}%`,
+        variationSign: isPositive ? 'positive' : 'negative'
+      })
+    }
+
     addCurrencyMetric(
       'metric-cobro-pendiente',
       'COBRO PENDIENTE (ARRASTRE)',
@@ -152,9 +185,16 @@ export function PeriodComparison() {
       periodDataB.cobroPendiente
     )
 
-    addIntegerMetric(
+    // Override values for COBRO PENDIENTE (ARRASTRE) to 'N/A'
+    const cobroPendienteMetric = metricList.find(m => m.id === 'metric-cobro-pendiente')
+    if (cobroPendienteMetric) {
+      cobroPendienteMetric.valueA = 'N/A'
+      cobroPendienteMetric.valueB = 'N/A'
+    }
+
+    addDaysMetric(
       'metric-permanencia',
-      'PROM. DIAS PERMANENCIA',
+      'PROM. PERMANENCIA',
       permanenciaStats.avgDaysA,
       permanenciaStats.avgDaysB
     )
@@ -179,8 +219,6 @@ export function PeriodComparison() {
       incidenciasStats.totalA,
       incidenciasStats.totalB
     )
-
-
 
     return metricList
   }, [
@@ -280,70 +318,72 @@ export function PeriodComparison() {
       <h2 className="dashboard-section-title">
         COMPARACIÓN DE PERÍODOS
       </h2>
-      <div className="dashboard-comparison-controls flex-col md:flex-row gap-4 items-start md:items-center">
-        <div className="dashboard-granularity-group">
-          <button
-            type="button"
-            className={
-              granularity === 'dia'
-                ? 'dashboard-granularity-button dashboard-granularity-button--active'
-                : 'dashboard-granularity-button'
-            }
-            onClick={() => handleGranularityChange('dia')}
-          >
-            Día
-          </button>
-          <button
-            type="button"
-            className={
-              granularity === 'semana'
-                ? 'dashboard-granularity-button dashboard-granularity-button--active'
-                : 'dashboard-granularity-button'
-            }
-            onClick={() => handleGranularityChange('semana')}
-          >
-            Semana
-          </button>
-          <button
-            type="button"
-            className={
-              granularity === 'mes'
-                ? 'dashboard-granularity-button dashboard-granularity-button--active'
-                : 'dashboard-granularity-button'
-            }
-            onClick={() => handleGranularityChange('mes')}
-          >
-            Mes
-          </button>
-          <button
-            type="button"
-            className={
-              granularity === 'ano'
-                ? 'dashboard-granularity-button dashboard-granularity-button--active'
-                : 'dashboard-granularity-button'
-            }
-            onClick={() => handleGranularityChange('ano')}
-          >
-            Año
-          </button>
-        </div>
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <PeriodPicker
-            granularity={granularity}
-            value={periodA}
-            onChange={handleChangePeriodA}
-            label="Período A"
-            className="w-full md:w-48 period-picker--a"
-          />
-          <span className="dashboard-period-separator mt-5">VS</span>
-          <PeriodPicker
-            granularity={granularity}
-            value={periodB}
-            onChange={handleChangePeriodB}
-            label="Período B"
-            className="w-full md:w-48 period-picker--b"
-          />
-        </div>
+
+      <div className="dashboard-granularity-buttons-container">
+        <button
+          type="button"
+          className={
+            granularity === 'dia'
+              ? 'dashboard-granularity-button dashboard-granularity-button--active'
+              : 'dashboard-granularity-button'
+          }
+          onClick={() => handleGranularityChange('dia')}
+        >
+          Día
+        </button>
+        <button
+          type="button"
+          className={
+            granularity === 'semana'
+              ? 'dashboard-granularity-button dashboard-granularity-button--active'
+              : 'dashboard-granularity-button'
+          }
+          onClick={() => handleGranularityChange('semana')}
+        >
+          Semana
+        </button>
+        <button
+          type="button"
+          className={
+            granularity === 'mes'
+              ? 'dashboard-granularity-button dashboard-granularity-button--active'
+              : 'dashboard-granularity-button'
+          }
+          onClick={() => handleGranularityChange('mes')}
+        >
+          Mes
+        </button>
+        <button
+          type="button"
+          className={
+            granularity === 'ano'
+              ? 'dashboard-granularity-button dashboard-granularity-button--active'
+              : 'dashboard-granularity-button'
+          }
+          onClick={() => handleGranularityChange('ano')}
+        >
+          Año
+        </button>
+      </div>
+
+      {/* Períodos: FUERA del contenedor gris */}
+      
+      <div className="dashboard-periods-row">
+        <PeriodPicker
+          granularity={granularity}
+          value={periodA}
+          onChange={handleChangePeriodA}
+          label="Período A"
+          className="dashboard-period-picker period-picker--a"
+        />
+        <span className="dashboard-period-separator">VS</span>
+        <PeriodPicker
+          granularity={granularity}
+          value={periodB}
+          onChange={handleChangePeriodB}
+          label="Período B"
+          className="dashboard-period-picker period-picker--b"
+        />
       </div>
       
       <div className="dashboard-metrics-grid">
@@ -368,7 +408,7 @@ export function PeriodComparison() {
                     className="dashboard-metric-label"
                     style={{ color: '#E53935' }}
                   >
-                    PER. A
+                    Periodo A
                   </span>
                   <span className="dashboard-metric-value-main">
                     {metric.valueA}
@@ -376,7 +416,7 @@ export function PeriodComparison() {
                 </div>
                 <div className="dashboard-metric-value">
                   <span className="dashboard-metric-label">
-                    PER. B
+                    Periodo B
                   </span>
                   <span className="dashboard-metric-value-secondary">
                     {metric.valueB}
@@ -394,4 +434,3 @@ export function PeriodComparison() {
     </div>
   )
 }
-

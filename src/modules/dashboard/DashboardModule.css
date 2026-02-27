@@ -293,6 +293,8 @@
 
 .dashboard-metric-card {
   background-color: #f9fafb;
+  border: 1px solid #f3f4f6;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
   border-radius: 8px;
   padding: 16px;
   display: flex;
@@ -315,7 +317,7 @@
   align-items: baseline;
   justify-content: center;
   gap: 16px;
-  margin-top: 8px;
+  margin-top: 12px;
   width: 100%;
 }
 
@@ -323,26 +325,31 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 
 .dashboard-metric-label {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #8b95a5;
+  color: #94a3b8;
 }
 
 .dashboard-metric-value-main {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1a2332;
+  font-size: 15px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  letter-spacing: -0.02em;
 }
 
 .dashboard-metric-value-secondary {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1a2332;
+  font-size: 15px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  letter-spacing: -0.02em;
 }
 
 .dashboard-metric-badge {
@@ -351,9 +358,9 @@
   gap: 4px;
   border-radius: 9999px;
   padding: 4px 8px;
-  margin-top: 8px;
-  font-size: 12px;
-  font-weight: 500;
+  margin-top: 12px;
+  font-size: 10px;
+  font-weight: 400;
 }
 
 .dashboard-metric-badge--positive {
