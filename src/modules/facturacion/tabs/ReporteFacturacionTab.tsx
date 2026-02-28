@@ -3724,32 +3724,33 @@ export function ReporteFacturacionTab() {
       if (errorPago) throw errorPago
 
       // 2. Actualizar saldo_actual en saldos_conductores
-      // La deuda ya fue registrada al GENERAR (saldo -= total_a_pagar)
-      // El pago simplemente suma al saldo
+      // total_a_pagar ya incluye el saldo anterior, así que el nuevo saldo
+      // es simplemente lo que queda sin pagar (negativo = deuda, 0 = saldado)
+      const pendienteAntesPago = totalAbsoluto - yaCobrado
+      const nuevoSaldo = -(pendienteAntesPago - formValues.monto)
+
       const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
         .select('id, saldo_actual')
         .eq('conductor_id', facturacion.conductor_id)
         .maybeSingle()
 
       if (saldoExistente) {
-        const saldoAcumulado = (saldoExistente.saldo_actual || 0) + formValues.monto
         const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
           .update({
-            saldo_actual: saldoAcumulado,
+            saldo_actual: nuevoSaldo,
             dias_mora: 0,
             ultima_actualizacion: new Date().toISOString()
           })
           .eq('id', saldoExistente.id)
         if (errorSaldo) throw errorSaldo
       } else {
-        // Crear entrada de saldo si no existe (edge case: pago sin GENERAR previo)
         const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
           .insert({
             conductor_id: facturacion.conductor_id,
             conductor_nombre: facturacion.conductor_nombre,
             conductor_dni: facturacion.conductor_dni,
             conductor_cuit: facturacion.conductor_cuit || null,
-            saldo_actual: formValues.monto,
+            saldo_actual: nuevoSaldo,
             dias_mora: 0,
             ultima_actualizacion: new Date().toISOString()
           })
@@ -3998,17 +3999,20 @@ export function ReporteFacturacionTab() {
         if (errorPago) throw errorPago
 
         // 2. Actualizar saldo en saldos_conductores
-        // La deuda ya fue registrada al GENERAR — el pago simplemente suma al saldo
+        // total_a_pagar ya incluye el saldo anterior, así que el nuevo saldo
+        // es lo que queda sin pagar (negativo = deuda, 0 = saldado)
+        const pendienteCabify = pago.total_a_pagar - yaCobrado
+        const nuevoSaldoCabify = -(pendienteCabify - monto)
+
         const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
           .select('id, saldo_actual')
           .eq('conductor_id', pago.conductor_id)
           .maybeSingle()
 
         if (saldoExistente) {
-          const saldoAcumulado = (saldoExistente.saldo_actual || 0) + monto
           const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
             .update({
-              saldo_actual: saldoAcumulado,
+              saldo_actual: nuevoSaldoCabify,
               dias_mora: 0,
               ultima_actualizacion: hoy.toISOString()
             })
@@ -4021,7 +4025,7 @@ export function ReporteFacturacionTab() {
               conductor_nombre: pago.conductor_nombre,
               conductor_dni: pago.conductor_dni,
               conductor_cuit: pago.conductor_cuit || null,
-              saldo_actual: monto,
+              saldo_actual: nuevoSaldoCabify,
               dias_mora: 0,
               ultima_actualizacion: hoy.toISOString()
             })
