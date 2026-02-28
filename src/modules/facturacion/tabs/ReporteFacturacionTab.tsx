@@ -31,6 +31,7 @@ import {
   Banknote,
   Upload,
   Lock,
+  Unlock,
   Info
 } from 'lucide-react'
 import { type ColumnDef, type Table } from '@tanstack/react-table'
@@ -38,6 +39,7 @@ import { DataTable } from '../../../components/ui/DataTable'
 import { VerLogsButton } from '../../../components/ui/VerLogsButton'
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay'
 import { useAuth } from '../../../contexts/AuthContext'
+import { usePermissions } from '../../../contexts/PermissionsContext'
 import { useSede } from '../../../contexts/SedeContext'
 import { formatCurrency, formatDate, FACTURACION_CONFIG } from '../../../types/facturacion.types'
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, getWeek, getYear, parseISO } from 'date-fns'
@@ -208,6 +210,7 @@ function getSemanaArgentina(date: Date) {
 
 export function ReporteFacturacionTab() {
   const { profile } = useAuth()
+  const { isAdmin } = usePermissions()
   const { sedeActualId, sedeUsuario } = useSede()
   
   // Ref para auto-recalcular después de crear un nuevo período
@@ -2780,6 +2783,50 @@ export function ReporteFacturacionTab() {
       Swal.fire('Error', error.message || 'No se pudo cerrar el período', 'error')
     } finally {
       setCerrando(false)
+    }
+  }
+
+  // Reabrir período cerrado (solo admin)
+  async function reabrirPeriodo() {
+    if (!periodo || periodo.estado !== 'cerrado') return
+
+    const result = await Swal.fire({
+      title: 'Reabrir Período',
+      html: `
+        <p>¿Reabrir el período <strong>Semana ${periodo.semana} - ${periodo.anio}</strong>?</p>
+        <p style="color: #f59e0b; margin-top: 10px;">Esto permitirá editar y recalcular el período nuevamente.</p>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#f59e0b',
+      confirmButtonText: 'Sí, reabrir',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
+
+    try {
+      const { error } = await (supabase
+        .from('periodos_facturacion') as any)
+        .update({
+          estado: 'abierto',
+          fecha_cierre: null,
+          cerrado_por_name: null
+        })
+        .eq('id', periodo.id)
+
+      if (error) throw error
+
+      setPeriodo(prev => prev ? {
+        ...prev,
+        estado: 'abierto' as const,
+        fecha_cierre: null,
+        cerrado_por_name: null
+      } : prev)
+
+      showSuccess('Período Reabierto', `Semana ${periodo.semana}/${periodo.anio} está abierta nuevamente`)
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo reabrir el período', 'error')
     }
   }
 
@@ -7584,6 +7631,19 @@ export function ReporteFacturacionTab() {
             >
               <Lock size={14} className={cerrando ? 'spinning' : ''} />
               {cerrando ? 'Cerrando...' : 'Cerrar Período'}
+            </button>
+          )}
+          {/* Botón Reabrir Período - SOLO admin, SOLO período cerrado */}
+          {periodo?.estado === 'cerrado' && isAdmin() && (
+            <button
+              className="fact-btn-primary"
+              onClick={reabrirPeriodo}
+              disabled={loading}
+              title="Reabrir período cerrado (solo administradores)"
+              style={{ background: '#f59e0b', borderColor: '#f59e0b' }}
+            >
+              <Unlock size={14} />
+              Reabrir Período
             </button>
           )}
         </div>
