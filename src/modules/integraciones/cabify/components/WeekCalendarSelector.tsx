@@ -164,27 +164,20 @@ export function WeekCalendarSelector({
     e.stopPropagation()
 
     if (selectionMode === 'day') {
-      // Modo día: seleccionar ese día pero usar el rango de la semana que lo contiene
-      // (cabify_historico almacena registros semanales con fecha_inicio = lunes)
+      // Modo día: seleccionar ese día exacto (cabify_historico almacena registros DIARIOS)
       setSelectedDay({ year: dayInfo.year, month: dayInfo.month, day: dayInfo.day })
 
-      const clickedDate = new Date(dayInfo.year, dayInfo.month, dayInfo.day)
-      const dow = clickedDate.getDay()
-      const daysToMonday = dow === 0 ? 6 : dow - 1
-      const monday = new Date(dayInfo.year, dayInfo.month, dayInfo.day - daysToMonday)
-      const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)
+      const dayStart = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day, 0, 0, 0, 0))
+      const dayEnd = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day, 23, 59, 59, 999))
 
-      const weekStart = new Date(Date.UTC(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0, 0))
-      const weekEnd = new Date(Date.UTC(sunday.getFullYear(), sunday.getMonth(), sunday.getDate(), 23, 59, 59, 999))
-
-      const customDayWeek: WeekOption = {
+      const customDay: WeekOption = {
         weeksAgo: -1,
         label: `${dayInfo.day}/${dayInfo.month + 1}/${dayInfo.year}`,
-        startDate: weekStart.toISOString(),
-        endDate: weekEnd.toISOString()
+        startDate: dayStart.toISOString(),
+        endDate: dayEnd.toISOString()
       }
 
-      onWeekChange(customDayWeek)
+      onWeekChange(customDay)
       setIsOpen(false)
     } else {
       // Modo semana: encontrar el LUNES de esa semana
