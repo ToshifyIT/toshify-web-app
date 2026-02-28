@@ -2683,7 +2683,7 @@ export function ReporteFacturacionTab() {
       title: 'Cerrar Período',
       html: `
         <p>¿Cerrar el período <strong>Semana ${periodo.semana} - ${periodo.anio}</strong>?</p>
-        <p style="margin-top: 10px;">Los conductores del reporte serán copiados a la semana siguiente.</p>
+        <p style="margin-top: 10px;">Los conductores de la tabla de control serán copiados a la semana siguiente.</p>
         <p style="color: #ff0033; margin-top: 10px;">Esta acción bloqueará las ediciones del período.</p>
       `,
       icon: 'warning',
