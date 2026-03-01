@@ -32,7 +32,7 @@ interface PeriodPickerProps {
   align?: 'left' | 'right'
 }
 
-export function PeriodPicker({ granularity, value, onChange, label, className = '', align = 'left' }: PeriodPickerProps) {
+export function PeriodPicker({ granularity, value, onChange, label, className = '', align: _align = 'left' }: PeriodPickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   
