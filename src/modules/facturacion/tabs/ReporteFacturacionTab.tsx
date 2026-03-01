@@ -1544,7 +1544,7 @@ export function ReporteFacturacionTab() {
       // 6. Calcular facturación proyectada para cada conductor
       const facturacionesProyectadas: FacturacionConductor[] = []
 
-      // Deduplicar por DNI (en caso de duplicados en la tabla de control)
+      // Deduplicar por DNI (en caso de duplicados en asignaciones)
       const dnisYaProcesados = new Set<string>()
 
       for (const control of (conductoresControl || [])) {
@@ -2683,7 +2683,6 @@ export function ReporteFacturacionTab() {
       title: 'Cerrar Período',
       html: `
         <p>¿Cerrar el período <strong>Semana ${periodo.semana} - ${periodo.anio}</strong>?</p>
-        <p style="margin-top: 10px;">Los conductores de la tabla de control serán copiados a la semana siguiente.</p>
         <p style="color: #ff0033; margin-top: 10px;">Esta acción bloqueará las ediciones del período.</p>
       `,
       icon: 'warning',
@@ -2709,69 +2708,9 @@ export function ReporteFacturacionTab() {
 
       if (error) throw error
 
-      // 2. Calcular semana siguiente
-      const fechaInicioActual = parseISO(periodo.fecha_inicio)
-      const fechaSiguiente = addWeeks(fechaInicioActual, 1)
-      const semanaSiguiente = getWeek(fechaSiguiente, { weekStartsOn: 1 })
-      const anioSiguiente = getYear(fechaSiguiente)
+      showSuccess('Período Cerrado')
 
-      // 3. Obtener conductores de la semana que se cierra
-      // Usar sede_id del período (no depender de sedeActualId)
-      const sedeCierre = periodo.sede_id || sedeActualId
-      let qCopy = (supabase
-        .from('conductores_semana_facturacion') as any)
-        .select('numero_dni, estado, patente, modalidad, valor_alquiler')
-        .eq('semana', periodo.semana)
-        .eq('anio', periodo.anio)
-      if (sedeCierre) qCopy = qCopy.eq('sede_id', sedeCierre)
-      const { data: conductoresActuales } = await qCopy
-
-      let conductoresCopiados = 0
-      if (conductoresActuales && conductoresActuales.length > 0) {
-        // 4. Verificar cuáles ya existen en la semana siguiente
-        const dnis = conductoresActuales.map((c: any) => c.numero_dni)
-        let qExist = (supabase
-          .from('conductores_semana_facturacion') as any)
-          .select('numero_dni')
-          .eq('semana', semanaSiguiente)
-          .eq('anio', anioSiguiente)
-        if (sedeCierre) qExist = qExist.eq('sede_id', sedeCierre)
-        const { data: yaExistentes } = await qExist
-          .in('numero_dni', dnis)
-
-        const dnisExistentes = new Set((yaExistentes || []).map((c: any) => c.numero_dni))
-        const nuevos = conductoresActuales.filter((c: any) => !dnisExistentes.has(c.numero_dni))
-
-        // 5. Insertar conductores nuevos en la semana siguiente
-        if (nuevos.length > 0) {
-          const registros = nuevos.map((c: any) => ({
-            numero_dni: c.numero_dni,
-            semana: semanaSiguiente,
-            anio: anioSiguiente,
-            estado: c.estado,
-            patente: c.patente,
-            modalidad: c.modalidad,
-            valor_alquiler: c.valor_alquiler,
-            sede_id: sedeCierre || sedeUsuario?.id,
-          }))
-
-          const { error: insertError } = await (supabase
-            .from('conductores_semana_facturacion') as any)
-            .insert(registros)
-          
-          if (insertError) {
-            throw new Error(`Error copiando conductores: ${insertError.message}`)
-          }
-          
-          conductoresCopiados = nuevos.length
-        }
-
-        showSuccess('Período Cerrado', `${conductoresCopiados} conductores copiados a semana ${semanaSiguiente}/${anioSiguiente}`)
-      } else {
-        showSuccess('Período Cerrado', 'No había conductores para copiar')
-      }
-
-      // 6. Actualizar estado local
+      // Actualizar estado local
       setPeriodo(prev => prev ? { 
         ...prev, 
         estado: 'cerrado' as const, 
@@ -7861,7 +7800,7 @@ export function ReporteFacturacionTab() {
             searchPlaceholder="Buscar..."
             emptyIcon={<Calculator size={48} />}
              emptyTitle="Sin conductores registrados"
-             emptyDescription="No hay conductores en la tabla de control para esta semana"
+             emptyDescription="No hay conductores con asignación activa para esta semana"
             pageSize={100}
             pageSizeOptions={[10, 20, 50, 100]}
             onTableReady={setTableInstance}
