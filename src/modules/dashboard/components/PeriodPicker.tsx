@@ -412,7 +412,7 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
         onClick={() => setIsOpen(!isOpen)}
         className={`
           period-picker__select
-          flex items-center gap-2 px-3 py-2 bg-white border rounded-lg text-sm font-medium transition-all w-full justify-between shadow-sm
+          flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium transition-all w-full justify-between shadow-sm
           ${isOpen ? 'border-[#ef4444] ring-1 ring-[#ef4444]/20' : 'border-gray-200 hover:border-gray-300 hover:shadow'}
         `}
       >
@@ -424,7 +424,9 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
       </button>
 
       {isOpen && (
-        <div className={`absolute top-full mt-2 z-50 bg-white rounded-lg shadow-xl border border-gray-100 p-4 animate-in fade-in zoom-in-95 duration-100 min-w-[280px] ${align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}`}>
+
+        <div className="absolute top-full left-0 mt-2 z-50 rounded-lg shadow-xl border p-4 animate-in fade-in zoom-in-95 duration-100 origin-top-left min-w-[280px]" style={{ background: 'var(--card-bg, #ffffff)', borderColor: 'var(--border-primary, #f3f4f6)' }}>
+
           {renderHeader()}
           
           {(granularity === 'dia' || granularity === 'semana') && renderCalendar()}

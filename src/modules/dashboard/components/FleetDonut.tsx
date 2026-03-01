@@ -45,7 +45,7 @@ export function FleetDonut() {
     if (active && payload && payload.length) {
       const data = payload[0].payload
       return (
-        <div className="bg-white p-3 border border-gray-100 shadow-lg rounded-lg z-50">
+        <div className="p-3 border shadow-lg rounded-lg z-50" style={{ background: 'var(--card-bg, #ffffff)', borderColor: 'var(--border-primary, #f3f4f6)' }}>
           <p className="font-semibold text-gray-800 mb-1">{data.name}</p>
           <div className="flex flex-col gap-1 text-sm">
             <span className="text-gray-600">
@@ -92,10 +92,10 @@ export function FleetDonut() {
                       const { cx, cy } = viewBox
                       return (
                         <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle">
-                          <tspan x={cx} y={cy - 5} fontSize="32" fontWeight="800" fill="#1a2332">
+                          <tspan x={cx} y={cy - 5} fontSize="32" fontWeight="800" fill="var(--text-primary, #1a2332)">
                             {totalVehicles}
                           </tspan>
-                          <tspan x={cx} y={cy + 25} fontSize="10" fill="#8b95a5" fontWeight="500" letterSpacing="1px" style={{ textTransform: 'uppercase' }}>
+                          <tspan x={cx} y={cy + 25} fontSize="10" fill="var(--text-tertiary, #8b95a5)" fontWeight="500" letterSpacing="1px" style={{ textTransform: 'uppercase' }}>
                             TOTAL VEHICULOS
                           </tspan>
                         </text>
