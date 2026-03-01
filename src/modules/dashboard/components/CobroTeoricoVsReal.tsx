@@ -9,7 +9,7 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts'
-import { startOfWeek, endOfWeek, addDays, format, setWeek, setYear, startOfMonth, endOfMonth, setMonth, parseISO } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, format, setWeek, setYear, startOfMonth, endOfMonth, setMonth, parseISO, getWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
@@ -93,12 +93,28 @@ export function CobroTeoricoVsReal() {
     }
   }, [periodType, selectedYear])
 
-  // Reiniciar selección específica al cambiar tipo
+  // Seleccionar periodo actual al cambiar tipo o año
   useEffect(() => {
     if (periodOptions.length > 0) {
-      setSpecificPeriod(periodOptions[0])
+      const now = new Date();
+      const currentYear = now.getFullYear();
+
+      if (periodType === 'Semana' && selectedYear === currentYear) {
+        const weekNum = getWeek(now, { weekStartsOn: 1, firstWeekContainsDate: 4 });
+        const idx = Math.min(weekNum - 1, periodOptions.length - 1);
+        setSpecificPeriod(periodOptions[Math.max(0, idx)]);
+      } else if (periodType === 'Mes' && selectedYear === currentYear) {
+        const monthIdx = now.getMonth();
+        setSpecificPeriod(periodOptions[Math.min(monthIdx, periodOptions.length - 1)]);
+      } else if (periodType === 'Año') {
+        const yearStr = currentYear.toString();
+        const found = periodOptions.find(o => o === yearStr);
+        setSpecificPeriod(found || periodOptions[periodOptions.length - 1]);
+      } else {
+        setSpecificPeriod(periodOptions[0]);
+      }
     }
-  }, [periodType, periodOptions])
+  }, [periodType, periodOptions, selectedYear])
 
   // Cargar datos cuando cambia el periodo específico
   useEffect(() => {
