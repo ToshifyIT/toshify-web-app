@@ -40,8 +40,8 @@
 }
 
 .dashboard-granularity-button:hover {
-  color: #334155; /* Slate-700 */
-  background: #e2e8f0; /* Slate-200 */
+  color: var(--text-primary, #334155);
+  background: var(--border-primary, #e2e8f0);
 }
 
 .dashboard-granularity-button--active {
@@ -204,13 +204,13 @@
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  color: #9ca3af;
+  color: var(--text-tertiary, #9ca3af);
   transition: all 0.15s ease;
 }
 
 .period-picker .absolute > div:first-child > button:hover {
-  background: #f3f4f6;
-  color: #4b5563;
+  background: var(--border-primary, #f3f4f6);
+  color: var(--text-primary, #4b5563);
 }
 
 /* Weekday headers */
@@ -232,7 +232,7 @@
 }
 
 .period-picker .grid.grid-cols-7.gap-y-1 > div:hover {
-  background: #fef2f2;
+  background: var(--color-danger-light, #fef2f2);
   color: #ef4444;
 }
 
@@ -251,7 +251,7 @@
 }
 
 .period-picker .grid.grid-cols-7.gap-y-1 > div.text-gray-300 {
-  color: #d1d5db;
+  color: var(--text-tertiary, #d1d5db);
   opacity: 0.6;
 }
 
@@ -270,12 +270,12 @@
   font-size: 13px;
   font-weight: 500;
   border-radius: 10px;
-  color: #4b5563;
+  color: var(--text-secondary, #4b5563);
   transition: all 0.15s ease;
 }
 
 .period-picker .grid.grid-cols-3 > button:hover {
-  background: #fef2f2;
+  background: var(--color-danger-light, #fef2f2);
   color: #ef4444;
 }
 
@@ -347,8 +347,8 @@
 }
 
 .period-comparison-card {
-  background: #ffffff;
-  border: 1px solid #f1f5f9; /* Slate-100 */
+  background: var(--bg-secondary, #ffffff);
+  border: 1px solid var(--border-primary, #f1f5f9);
   border-radius: 12px;
   padding: 20px;
   display: flex;
@@ -366,7 +366,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #64748b; /* Slate-500 */
+  color: var(--text-secondary, #64748b);
   margin-bottom: 12px;
 }
 
@@ -388,20 +388,20 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #94a3b8; /* Slate-400 */
+  color: var(--text-tertiary, #94a3b8);
 }
 
 .period-comparison-value-main {
   font-size: 18px;
   font-weight: 700;
-  color: #1e293b; /* Slate-800 */
+  color: var(--text-primary, #1e293b);
   line-height: 1;
 }
 
 .period-comparison-value-secondary {
   font-size: 18px;
   font-weight: 700;
-  color: #1e293b; /* Slate-800 */
+  color: var(--text-primary, #1e293b);
   line-height: 1;
 }
 
@@ -417,13 +417,13 @@
 }
 
 .period-comparison-badge--positive {
-  background: #ecfdf5; /* Emerald-50 */
-  color: #10b981; /* Emerald-500 */
+  background: var(--color-success-light, #ecfdf5);
+  color: var(--color-success, #10b981);
 }
 
 .period-comparison-badge--negative {
-  background: #fef2f2; /* Red-50 */
-  color: #ef4444; /* Red-500 */
+  background: var(--color-danger-light, #fef2f2);
+  color: var(--color-danger, #ef4444);
 }
 
 .period-comparison-badge-icon {
