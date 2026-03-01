@@ -729,23 +729,23 @@ export function CobroTeoricoVsReal() {
               data={chartData}
               margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
             >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-primary, #e5e7eb)" />
               <XAxis 
                 dataKey="dia" 
                 axisLine={false} 
                 tickLine={false} 
-                tick={{ fill: '#6b7280', fontSize: 12 }}
+                tick={{ fill: 'var(--text-tertiary, #6b7280)', fontSize: 12 }}
                 dy={10}
               />
               <YAxis 
                 axisLine={false} 
                 tickLine={false} 
-                tick={{ fill: '#6b7280', fontSize: 12 }}
+                tick={{ fill: 'var(--text-tertiary, #6b7280)', fontSize: 12 }}
                 tickFormatter={formatCurrencyK}
                 domain={['auto', 'auto']}
                 width={40}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '4 4' }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--text-tertiary, #9ca3af)', strokeWidth: 1, strokeDasharray: '4 4' }} />
               <Legend 
                 verticalAlign="top" 
                 height={36}
@@ -768,8 +768,8 @@ export function CobroTeoricoVsReal() {
                 name="INGRESO PERCIBIDO"
                 stroke="#2563eb"
                 strokeWidth={2.5}
-                dot={{ r: 4, fill: '#ffffff', stroke: '#2563eb', strokeWidth: 2 }}
-                activeDot={{ r: 6, fill: '#2563eb', stroke: '#ffffff', strokeWidth: 2 }}
+                dot={{ r: 4, fill: 'var(--card-bg, #ffffff)', stroke: '#2563eb', strokeWidth: 2 }}
+                activeDot={{ r: 6, fill: '#2563eb', stroke: 'var(--card-bg, #ffffff)', strokeWidth: 2 }}
                 isAnimationActive={false}
               />
             </LineChart>

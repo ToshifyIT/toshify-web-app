@@ -1,9 +1,10 @@
 /* FleetDonut.css */
 
 .fleet-donut-card {
-  background-color: #ffffff;
+  background-color: var(--card-bg, #ffffff);
   border-radius: 16px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
+  border: 1px solid var(--border-primary, #f3f4f6);
   padding: 24px;
   min-height: 280px;
   display: flex;
@@ -15,7 +16,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #374151;
+  color: var(--text-secondary, #374151);
   margin-bottom: 0;
 }
 
@@ -74,19 +75,19 @@
 .fleet-donut-legend-text {
   font-size: 13px;
   font-weight: 500;
-  color: #4b5563;
+  color: var(--text-secondary, #4b5563);
 }
 
 .fleet-donut-legend-value {
   font-weight: 700;
-  color: #1a2332;
+  color: var(--text-primary, #1a2332);
   margin-left: 16px;
 }
 
 .fleet-donut-footer {
   width: 100%;
   text-align: center;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--border-primary, #f3f4f6);
   margin-top: 16px;
   padding-top: 16px;
 }
@@ -108,14 +109,14 @@
 .fleet-donut-excluded-value {
   font-size: 16px;
   font-weight: 700;
-  color: #1a2332;
+  color: var(--text-primary, #1a2332);
   line-height: 1;
 }
 
 .fleet-donut-excluded-label {
   font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--text-secondary, #64748b);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   text-align: center;
@@ -138,7 +139,7 @@
   }
 
   .fleet-donut-legend-item {
-    background-color: #f9fafb;
+    background-color: var(--bg-secondary, #f9fafb);
     border-radius: 6px;
     padding: 4px 8px;
   }
