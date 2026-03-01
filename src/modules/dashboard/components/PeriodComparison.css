@@ -347,7 +347,7 @@
 }
 
 .period-comparison-card {
-  background: var(--bg-secondary, #ffffff);
+  background: var(--card-bg, #ffffff);
   border: 1px solid var(--border-primary, #f1f5f9);
   border-radius: 12px;
   padding: 20px;
