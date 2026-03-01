@@ -12,7 +12,7 @@
   margin-bottom: 24px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-primary, #e2e8f0);
 }
 
 .dashboard-granularity-button {
@@ -20,11 +20,11 @@
   min-width: 0 !important;
   padding: 12px 0;
   border: none;
-  background: #f8fafc; /* Slate-50 */
+  background: var(--bg-secondary, #f8fafc);
   border-radius: 0;
   font-size: 14px;
   font-weight: 500;
-  color: #64748b; /* Slate-500 */
+  color: var(--text-secondary, #64748b);
   cursor: pointer;
   transition: all 0.2s ease;
   line-height: 1;
@@ -36,7 +36,7 @@
 
 /* Add borders between buttons */
 .dashboard-granularity-button:not(:last-child) {
-  border-right: 1px solid #e2e8f0; /* Slate-200 */
+  border-right: 1px solid var(--border-primary, #e2e8f0);
 }
 
 .dashboard-granularity-button:hover {
@@ -124,16 +124,16 @@
   height: 44px !important;
   border-radius: 10px !important;
   padding: 8px 16px !important;
-  border: 1.5px solid #d1d5db !important;
+  border: 1.5px solid var(--border-primary, #d1d5db) !important;
   font-size: 14px !important;
   font-weight: 500;
-  color: #1a2332;
+  color: var(--text-primary, #1a2332);
   cursor: pointer;
   transition: all 0.2s ease !important;
   width: 100% !important;
   min-width: 0 !important;
   line-height: 1;
-  background-color: #ffffff;
+  background-color: var(--card-bg, #ffffff);
 }
 
 .period-picker__select:hover {
@@ -174,9 +174,9 @@
    ============================================ */
 
 .period-picker .absolute {
-  background: #ffffff;
+  background: var(--card-bg, #ffffff);
   border-radius: 16px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--border-primary, #f0f0f0);
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.05),
     0 12px 24px -4px rgba(0, 0, 0, 0.1);
@@ -193,7 +193,7 @@
 .period-picker .absolute > div:first-child > span {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary, #1f2937);
 }
 
 .period-picker .absolute > div:first-child > button {
