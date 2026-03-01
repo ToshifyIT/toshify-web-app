@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react'
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts'
-import { startOfWeek, endOfWeek, isWithinInterval, parseISO, getWeek, setWeek } from 'date-fns'
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, LabelList, Cell } from 'recharts'
+import { startOfWeek, endOfWeek, isWithinInterval, parseISO, getWeek, setWeek, startOfDay } from 'date-fns'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
 import './ZonesAssignmentsChart.css'
+
+const DEFAULT_ZONES = [
+  'Palermo',
+  'Belgrano',
+  'Recoleta',
+  'Caballito',
+  'Flores',
+  'San Telmo'
+]
 
 export function ZonesAssignmentsChart() {
   const { sedeActualId } = useSede()
