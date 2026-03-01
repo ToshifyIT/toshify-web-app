@@ -8,21 +8,22 @@ function parseImporte(importe: string | number | null | undefined): number {
   return isNaN(num) ? 0 : num
 }
 
-export function useMultasStats(granularity: Granularity, periodA: string, periodB: string) {
+export function useMultasStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
   const [stats, setStats] = useState({
     totalA: 0,
     totalB: 0,
     loading: true
   })
 
-  const lastParams = useRef({ granularity, periodA, periodB })
+  const lastParams = useRef({ granularity, periodA, periodB, sedeId })
   const paramsChanged = 
     lastParams.current.granularity !== granularity ||
     lastParams.current.periodA !== periodA ||
-    lastParams.current.periodB !== periodB
+    lastParams.current.periodB !== periodB ||
+    lastParams.current.sedeId !== sedeId
 
   useEffect(() => {
-    lastParams.current = { granularity, periodA, periodB }
+    lastParams.current = { granularity, periodA, periodB, sedeId }
 
     let isMounted = true
 
@@ -33,18 +34,24 @@ export function useMultasStats(granularity: Granularity, periodA: string, period
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
-        const [resA, resB] = await Promise.all([
-          supabase
-            .from('multas_historico')
-            .select('importe')
-            .gte('fecha_infraccion', rangeA.start.toISOString())
-            .lte('fecha_infraccion', rangeA.end.toISOString()),
-          supabase
-            .from('multas_historico')
-            .select('importe')
-            .gte('fecha_infraccion', rangeB.start.toISOString())
-            .lte('fecha_infraccion', rangeB.end.toISOString())
-        ])
+        let queryA = supabase
+          .from('multas_historico')
+          .select('importe')
+          .gte('fecha_infraccion', rangeA.start.toISOString())
+          .lte('fecha_infraccion', rangeA.end.toISOString())
+
+        let queryB = supabase
+          .from('multas_historico')
+          .select('importe')
+          .gte('fecha_infraccion', rangeB.start.toISOString())
+          .lte('fecha_infraccion', rangeB.end.toISOString())
+
+        if (sedeId) {
+          queryA = queryA.eq('sede_id', sedeId)
+          queryB = queryB.eq('sede_id', sedeId)
+        }
+
+        const [resA, resB] = await Promise.all([queryA, queryB])
 
         if (isMounted) {
           const totalA = (resA.data || []).reduce((sum, item) => sum + parseImporte(item.importe), 0)
@@ -65,7 +72,7 @@ export function useMultasStats(granularity: Granularity, periodA: string, period
     return () => {
       isMounted = false
     }
-  }, [granularity, periodA, periodB])
+  }, [granularity, periodA, periodB, sedeId])
 
   if (paramsChanged) {
     return { ...stats, loading: true }

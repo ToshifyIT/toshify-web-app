@@ -2,18 +2,19 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 
-export function useTelepaseStats(granularity: Granularity, periodA: string, periodB: string) {
+export function useTelepaseStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
   const [stats, setStats] = useState({
     totalA: 0,
     totalB: 0,
     loading: true
   })
 
-  const lastParams = useRef({ granularity, periodA, periodB })
+  const lastParams = useRef({ granularity, periodA, periodB, sedeId })
   const paramsChanged = 
     lastParams.current.granularity !== granularity ||
     lastParams.current.periodA !== periodA ||
-    lastParams.current.periodB !== periodB
+    lastParams.current.periodB !== periodB ||
+    lastParams.current.sedeId !== sedeId
 
   const parseImporte = (importe: any): number => {
     if (!importe) return 0
@@ -57,6 +58,8 @@ export function useTelepaseStats(granularity: Granularity, periodA: string, peri
   }
 
   useEffect(() => {
+    lastParams.current = { granularity, periodA, periodB, sedeId }
+
     let isMounted = true
 
     async function fetchStats() {
@@ -66,22 +69,47 @@ export function useTelepaseStats(granularity: Granularity, periodA: string, peri
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
+        let dnisFilter: string[] | null = null
+
+        if (sedeId) {
+          const { data: conductores } = await supabase
+            .from('conductores')
+            .select('numero_dni')
+            .eq('sede_id', sedeId)
+          
+          if (conductores && conductores.length > 0) {
+            dnisFilter = conductores.map(c => c.numero_dni)
+          } else {
+            // Sede seleccionada pero sin conductores
+            if (isMounted) {
+              setStats({ totalA: 0, totalB: 0, loading: false })
+            }
+            return
+          }
+        }
+
         // Run queries in parallel
         // Table: cabify_historico
         // Field: fecha_guardado (timestamp with timezone)
         // Value: peajes (float/numeric)
-        const [resA, resB] = await Promise.all([
-          supabase
-            .from('cabify_historico')
-            .select('peajes')
-            .gte('fecha_guardado', rangeA.start.toISOString())
-            .lte('fecha_guardado', rangeA.end.toISOString()),
-          supabase
-            .from('cabify_historico')
-            .select('peajes')
-            .gte('fecha_guardado', rangeB.start.toISOString())
-            .lte('fecha_guardado', rangeB.end.toISOString())
-        ])
+        let queryA = supabase
+          .from('cabify_historico')
+          .select('peajes')
+          .gte('fecha_guardado', rangeA.start.toISOString())
+          .lte('fecha_guardado', rangeA.end.toISOString())
+
+        let queryB = supabase
+          .from('cabify_historico')
+          .select('peajes')
+          .gte('fecha_guardado', rangeB.start.toISOString())
+          .lte('fecha_guardado', rangeB.end.toISOString())
+
+        if (dnisFilter) {
+          queryA = queryA.in('dni', dnisFilter)
+          queryB = queryB.in('dni', dnisFilter)
+        }
+
+        const [resA, resB] = await Promise.all([queryA, queryB])
 
         if (isMounted) {
           const totalA = (resA.data || []).reduce((sum, item) => sum + parseImporte(item.peajes), 0)
@@ -102,7 +130,7 @@ export function useTelepaseStats(granularity: Granularity, periodA: string, peri
     return () => {
       isMounted = false
     }
-  }, [granularity, periodA, periodB])
+  }, [granularity, periodA, periodB, sedeId])
 
   if (paramsChanged) {
     return { ...stats, loading: true }

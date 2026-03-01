@@ -7,6 +7,7 @@ import { useMultasStats } from '../../../hooks/useMultasStats'
 import { useTelepaseStats } from '../../../hooks/useTelepaseStats'
 import { useIncidenciasStats } from '../../../hooks/useIncidenciasStats'
 import { usePermanenciaStats } from '../../../hooks/usePermanenciaStats'
+import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
 import './PeriodComparison.css'
 
@@ -36,10 +37,12 @@ export function PeriodComparison() {
     return `Sem ${week.toString().padStart(2, '0')} ${prevWeekDate.getFullYear()}`
   })
 
-  const multasStats = useMultasStats(granularity, periodA, periodB)
-  const telepaseStats = useTelepaseStats(granularity, periodA, periodB)
-  const incidenciasStats = useIncidenciasStats(granularity, periodA, periodB)
-  const permanenciaStats = usePermanenciaStats(granularity, periodA, periodB)
+  const { sedeActual } = useSede()
+
+  const multasStats = useMultasStats(granularity, periodA, periodB, sedeActual?.id)
+  const telepaseStats = useTelepaseStats(granularity, periodA, periodB, sedeActual?.id)
+  const incidenciasStats = useIncidenciasStats(granularity, periodA, periodB, sedeActual?.id)
+  const permanenciaStats = usePermanenciaStats(granularity, periodA, periodB, sedeActual?.id)
 
   const currencyFormatter = useMemo(
     () => ({
@@ -78,8 +81,8 @@ export function PeriodComparison() {
       valueA: number,
       valueB: number
     ) => {
-      const diff = valueA - valueB
-      const base = valueB === 0 ? 0 : (diff / valueB) * 100
+      const diff = valueB - valueA
+      const base = valueA === 0 ? 0 : (diff / valueA) * 100
       const isPositive = base >= 0
       metricList.push({
         id,
@@ -97,8 +100,8 @@ export function PeriodComparison() {
       valueA: number,
       valueB: number
     ) => {
-      const diff = valueA - valueB
-      const base = valueB === 0 ? 0 : (diff / valueB) * 100
+      const diff = valueB - valueA
+      const base = valueA === 0 ? 0 : (diff / valueA) * 100
       const isPositive = base >= 0
       metricList.push({
         id,
@@ -116,8 +119,8 @@ export function PeriodComparison() {
       valueA: number,
       valueB: number
     ) => {
-      const diff = valueA - valueB
-      const base = valueB === 0 ? 0 : (diff / valueB) * 100
+      const diff = valueB - valueA
+      const base = valueA === 0 ? 0 : (diff / valueA) * 100
       const isPositive = base >= 0
       
       const formatWithDays = (val: number) => (
@@ -144,20 +147,6 @@ export function PeriodComparison() {
         variationLabel: `${isPositive ? '+' : '-'}${Math.abs(base).toFixed(0)}%`,
         variationSign: isPositive ? 'positive' : 'negative'
       })
-    }
-
-    addCurrencyMetric(
-      'metric-cobro-pendiente',
-      'COBRO PENDIENTE (ARRASTRE)',
-      periodDataA.cobroPendiente,
-      periodDataB.cobroPendiente
-    )
-
-    // Override values for COBRO PENDIENTE (ARRASTRE) to 'N/A'
-    const cobroPendienteMetric = metricList.find(m => m.id === 'metric-cobro-pendiente')
-    if (cobroPendienteMetric) {
-      cobroPendienteMetric.valueA = 'N/A'
-      cobroPendienteMetric.valueB = 'N/A'
     }
 
     addDaysMetric(
@@ -316,45 +305,45 @@ export function PeriodComparison() {
         />
       </div>
       
-      <div className="dashboard-metrics-grid">
+      <div className="period-comparison-grid">
         {metrics.map(metric => {
           const isPositive = metric.variationSign === 'positive'
           const Icon = isPositive ? ArrowUpRight : ArrowDownRight
           const badgeClassName = isPositive
-            ? 'dashboard-metric-badge dashboard-metric-badge--positive'
-            : 'dashboard-metric-badge dashboard-metric-badge--negative'
+            ? 'period-comparison-badge period-comparison-badge--positive'
+            : 'period-comparison-badge period-comparison-badge--negative'
 
           return (
             <div
               key={metric.id}
-              className="dashboard-metric-card"
+              className="period-comparison-card"
             >
-              <span className="dashboard-metric-name">
+              <span className="period-comparison-name">
                 {metric.name}
               </span>
-              <div className="dashboard-metric-values">
-                <div className="dashboard-metric-value">
+              <div className="period-comparison-values">
+                <div className="period-comparison-value">
                   <span
-                    className="dashboard-metric-label"
+                    className="period-comparison-label"
                     style={{ color: '#E53935' }}
                   >
                     Periodo A
                   </span>
-                  <span className="dashboard-metric-value-main">
+                  <span className="period-comparison-value-main">
                     {metric.valueA}
                   </span>
                 </div>
-                <div className="dashboard-metric-value">
-                  <span className="dashboard-metric-label">
+                <div className="period-comparison-value">
+                  <span className="period-comparison-label">
                     Periodo B
                   </span>
-                  <span className="dashboard-metric-value-secondary">
+                  <span className="period-comparison-value-secondary">
                     {metric.valueB}
                   </span>
                 </div>
               </div>
               <span className={badgeClassName}>
-                <Icon className="dashboard-metric-badge-icon" />
+                <Icon className="period-comparison-badge-icon" />
                 {metric.variationLabel}
               </span>
             </div>

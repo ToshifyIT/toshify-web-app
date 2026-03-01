@@ -20,8 +20,9 @@ import {
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
+import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
-import './PermanenciaChart.css'
+import './PermanenciaStyles.css'
 
 interface WeeklyData {
   name: string
@@ -30,6 +31,7 @@ interface WeeklyData {
 }
 
 export function PermanenciaChart() {
+  const { sedeActual } = useSede()
   const [data, setData] = useState<WeeklyData[]>([])
   const [loading, setLoading] = useState(true)
   
@@ -68,11 +70,17 @@ export function PermanenciaChart() {
           const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
           const weekNumber = getWeek(weekStart, { weekStartsOn: 1 })
           
-          const { data: weeklyConductors, error: conductorError } = await supabase
+          let query = supabase
             .from('conductores')
             .select('id, nombres, apellidos, fecha_terminacion')
             .gte('fecha_terminacion', weekStart.toISOString())
             .lte('fecha_terminacion', weekEnd.toISOString())
+          
+          if (sedeActual?.id) {
+            query = query.eq('sede_id', sedeActual.id)
+          }
+
+          const { data: weeklyConductors, error: conductorError } = await query
             
           if (conductorError || !weeklyConductors || weeklyConductors.length === 0) {
             return {
@@ -145,7 +153,7 @@ export function PermanenciaChart() {
 
     fetchData()
     return () => { isMounted = false }
-  }, [selectedMonth])
+  }, [selectedMonth, sedeActual?.id])
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {

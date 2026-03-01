@@ -18,6 +18,7 @@ interface DashboardStats {
   porcentajeOperatividad: DashboardCardValue
   fondoGarantia: DashboardCardValue
   pendienteDevolucion: DashboardCardValue
+  cobroPendiente: DashboardCardValue
   diasSinSiniestro: DashboardCardValue
   diasSinRobo: DashboardCardValue
   totalSaldo: DashboardCardValue
@@ -81,7 +82,7 @@ export function useDashboardStats() {
     const fetchData = async () => {
       setLoading(true)
       try {
-        const [asignacionesRes, vehiculosRes, siniestrosRes, garantiasRes, saldosRes] = await Promise.all([
+        const [asignacionesRes, vehiculosRes, siniestrosRes, garantiasRes, saldosRes, conductoresRes] = await Promise.all([
           aplicarFiltroSede(
             supabase
               .from('asignaciones')
@@ -148,6 +149,11 @@ export function useDashboardStats() {
             supabase
               .from('saldos_conductores')
               .select('saldo_actual, monto_mora_acumulada')
+          ),
+          aplicarFiltroSede(
+            supabase
+              .from('conductores')
+              .select('id, estado_id')
           )
         ])
 
@@ -156,12 +162,14 @@ export function useDashboardStats() {
         if (siniestrosRes.error) throw siniestrosRes.error
         if (garantiasRes.error) throw garantiasRes.error
         if (saldosRes.error) throw saldosRes.error
+        if (conductoresRes.error) throw conductoresRes.error
 
         const asignaciones = (asignacionesRes.data || []) as any[]
         const vehiculos = (vehiculosRes.data || []) as any[]
         const siniestros = (siniestrosRes.data || []) as any[]
         const garantias = (garantiasRes.data || []) as any[]
         const saldos = (saldosRes.data || []) as any[]
+        const conductores = (conductoresRes.data || []) as any[]
 
         const vehiculosConAsignacion = new Set(asignaciones.map(a => a.vehiculo_id))
         let totalFlota = 0
@@ -233,9 +241,11 @@ export function useDashboardStats() {
         const turnosDisp = vacantesD + vacantesN + pkgOnSinAsignacion.length * 2
         const cuposDisponibles = cuposTotales - cuposOcupados
         const porcentajeOcupacionGeneral =
-          totalidadTurnos > 0 ? (((totalidadTurnos - turnosDisp) / totalidadTurnos) * 100).toFixed(1) : '0'
+          totalidadTurnos > 0
+            ? Number((((totalidadTurnos - turnosDisp) / totalidadTurnos) * 100).toFixed(1))
+            : 0
         const porcentajeOperatividad =
-          totalFlota > 0 ? ((operativos / totalFlota) * 100).toFixed(1) : '0'
+          totalFlota > 0 ? Number(((operativos / totalFlota) * 100).toFixed(1)) : 0
 
         const today = new Date()
         const robosFechas = siniestros
@@ -268,6 +278,32 @@ export function useDashboardStats() {
         const conductoresGarantiaActiva = garantias.filter(
           (g: any) => g.estado === 'en_curso'
         ).length
+
+        // Calcular Reintegro de Garantía (Pendiente de Devolución)
+        const conductoresMap = new Map(conductores.map((c: any) => [c.id, c.estado_id]))
+        const ESTADO_ACTIVO = '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2'
+        
+        const garantiasEnDevolucion = garantias.filter((g: any) => {
+          // Si ya está marcado como en_devolucion en BD
+          if (g.estado === 'en_devolucion') return true
+          
+          // Si está cancelada, ignorar
+          if (g.estado === 'cancelada') return false
+
+          // Verificar lógica: Conductor BAJA + Saldo pagado > 0
+          const estadoConductor = conductoresMap.get(g.conductor_id)
+          const esBaja = estadoConductor && estadoConductor !== ESTADO_ACTIVO
+          const montoPagado = g.monto_pagado || 0
+          
+          return esBaja && montoPagado > 0
+        })
+
+        const totalReintegroPendiente = garantiasEnDevolucion.reduce((sum: number, g: any) => {
+          const pagado = g.monto_pagado || 0
+          const devuelto = g.monto_devuelto || 0
+          const pendiente = pagado - devuelto
+          return sum + (pendiente > 0 ? pendiente : 0)
+        }, 0)
 
         // Calcular Total Saldo
         const totalSaldoActual = saldos.reduce((sum, item) => sum + Math.abs(item.saldo_actual || 0), 0)
@@ -304,6 +340,10 @@ export function useDashboardStats() {
             subtitle: `${conductoresGarantiaActiva} conductores activos`,
           },
           pendienteDevolucion: {
+            value: formatCurrencyArs(totalReintegroPendiente),
+            subtitle: `${garantiasEnDevolucion.length} en devolución`,
+          },
+          cobroPendiente: {
             value: 'N/A',
             subtitle: 'N/A',
           },

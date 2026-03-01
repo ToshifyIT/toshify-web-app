@@ -22,7 +22,7 @@ const COLORS = [
 ]
 
 export function FleetDonut() {
-  const { data, totalVehicles, loading, returnedToProviderCount } = useVehicleStatusStats()
+  const { data, totalVehicles, loading, excludedStats } = useVehicleStatusStats()
 
   // Asignar colores dinámicamente si no vienen del hook o para asegurar variedad
   const chartData = useMemo(() => {
@@ -127,14 +127,16 @@ export function FleetDonut() {
           </div>
         </div>
         
-        {/* Returned to provider note */}
-        {returnedToProviderCount > 0 && (
+        {/* Excluded Stats Footer */}
+        {excludedStats && excludedStats.length > 0 && (
           <div className="fleet-donut-footer">
-            <div className="fleet-donut-footer-value">
-              {returnedToProviderCount}
-            </div>
-            <div className="fleet-donut-footer-label">
-              Vehículos devueltos a proveedor
+            <div className="fleet-donut-excluded-grid">
+              {excludedStats.map((stat, index) => (
+                <div key={`excluded-${index}`} className="fleet-donut-excluded-item">
+                  <span className="fleet-donut-excluded-value">{stat.value}</span>
+                  <span className="fleet-donut-excluded-label">{stat.name}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}

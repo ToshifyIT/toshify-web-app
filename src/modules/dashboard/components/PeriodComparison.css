@@ -64,6 +64,7 @@
   align-items: flex-end;
   gap: 16px;
   width: 100%;
+  margin-bottom: 24px;
   /* margin-top removed, using granularity-group margin-bottom instead */
 }
 
@@ -320,4 +321,112 @@
   .period-picker__select {
     width: 100% !important;
   }
+}
+
+/* ============================================
+   METRICS GRID
+   ============================================ */
+
+.period-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .period-comparison-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .period-comparison-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.period-comparison-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9; /* Slate-100 */
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: all 0.2s ease;
+  min-height: 160px;
+}
+
+.period-comparison-name {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b; /* Slate-500 */
+  margin-bottom: 12px;
+}
+
+.period-comparison-values {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 12px;
+}
+
+.period-comparison-value {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.period-comparison-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8; /* Slate-400 */
+}
+
+.period-comparison-value-main {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b; /* Slate-800 */
+  line-height: 1;
+}
+
+.period-comparison-value-secondary {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b; /* Slate-800 */
+  line-height: 1;
+}
+
+.period-comparison-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.period-comparison-badge--positive {
+  background: #ecfdf5; /* Emerald-50 */
+  color: #10b981; /* Emerald-500 */
+}
+
+.period-comparison-badge--negative {
+  background: #fef2f2; /* Red-50 */
+  color: #ef4444; /* Red-500 */
+}
+
+.period-comparison-badge-icon {
+  width: 12px;
+  height: 12px;
 }

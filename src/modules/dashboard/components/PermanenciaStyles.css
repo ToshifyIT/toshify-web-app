@@ -1,0 +1,99 @@
+.permanencia-chart {
+  background-color: #ffffff !important;
+  border-radius: 16px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  padding: 24px;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.permanencia-chart__header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  gap: 12px;
+}
+
+.permanencia-chart__title {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  color: #374151 !important;
+  margin: 0;
+}
+
+.permanencia-chart__picker {
+  display: block;
+  min-width: 200px;
+}
+
+.permanencia-chart__body {
+  flex: 1;
+  width: 100%;
+  min-height: 0; /* Important for flex child with height 100% children */
+  position: relative;
+}
+
+/* Tooltip styles */
+.permanencia-chart__tooltip {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.permanencia-chart__tooltip-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+  margin-top: 0;
+}
+
+.permanencia-chart__tooltip-value {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b5563;
+  margin: 0;
+}
+
+.permanencia-chart__tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #dc2626;
+  display: inline-block;
+}
+
+/* Loading state */
+.permanencia-chart__loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  min-height: 280px;
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.permanencia-chart__spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f4f6;
+  border-top-color: #dc2626;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

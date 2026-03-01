@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useSede } from '../contexts/SedeContext'
 
 export interface VehicleStatusStat {
   name: string
@@ -28,12 +29,15 @@ const PALETTE = [
   '#64748B', // Slate 500
 ]
 
+const EXCLUDED_CODES = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PROVEEDOR']
+
 export function useVehicleStatusStats() {
+  const { aplicarFiltroSede, sedeActualId } = useSede()
   const [data, setData] = useState<VehicleStatusStat[]>([])
   const [totalVehicles, setTotalVehicles] = useState(0)
+  const [excludedStats, setExcludedStats] = useState<VehicleStatusStat[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [returnedToProviderCount, setReturnedToProviderCount] = useState(0)
 
   useEffect(() => {
     async function fetchStats() {
@@ -41,7 +45,7 @@ export function useVehicleStatusStats() {
         setLoading(true)
         
         // 1. Fetch all vehicles with their status
-        const { data: vehicles, error: vehiclesError } = await supabase
+        const { data: vehicles, error: vehiclesError } = await aplicarFiltroSede(supabase
           .from('vehiculos')
           .select(`
             id,
@@ -52,62 +56,81 @@ export function useVehicleStatusStats() {
               descripcion
             )
           `)
-          .is('deleted_at', null)
+          .is('deleted_at', null))
 
         if (vehiclesError) throw vehiclesError
 
         if (!vehicles || vehicles.length === 0) {
           setData([])
+          setExcludedStats([])
           setTotalVehicles(0)
-          setReturnedToProviderCount(0)
           return
         }
 
-        // 2. Filter out "Devuelto a proveedor"
-        const activeVehicles = vehicles.filter((v: any) => {
-          const descripcion = v.vehiculos_estados?.descripcion?.toUpperCase() || ''
-          return !descripcion.includes('DEVUELTO') && !descripcion.includes('PROVEEDOR')
-        })
+        // 2. Separate included and excluded vehicles
+        const includedVehicles: any[] = []
+        const excludedVehicles: any[] = []
 
-        const returnedCount = vehicles.length - activeVehicles.length
-        setReturnedToProviderCount(returnedCount)
-        setTotalVehicles(activeVehicles.length)
-
-        // 3. Group by status for active vehicles
-        const statusMap = new Map<string, { count: number; codigo: string }>()
-
-        activeVehicles.forEach((v: any) => {
-          const estado = v.vehiculos_estados
-          const descripcion = estado?.descripcion || 'Sin Estado'
-          const codigo = estado?.codigo || ''
-          
-          const current = statusMap.get(descripcion) || { count: 0, codigo }
-          statusMap.set(descripcion, { count: current.count + 1, codigo })
-        })
-
-        // 4. Transform to chart data
-        let chartData: VehicleStatusStat[] = Array.from(statusMap.entries()).map(([name, info]) => {
-          const percentage = (info.count / activeVehicles.length) * 100
-          return {
-            name,
-            value: info.count,
-            color: '#9CA3AF', // Will be assigned after sort
-            percentage
+        vehicles.forEach((v: any) => {
+          const codigo = v.vehiculos_estados?.codigo || ''
+          if (EXCLUDED_CODES.includes(codigo)) {
+            excludedVehicles.push(v)
+          } else {
+            includedVehicles.push(v)
           }
         })
 
-        // Sort by value descending
-        chartData.sort((a, b) => b.value - a.value)
+        setTotalVehicles(includedVehicles.length)
 
-        // Assign colors from palette
-        chartData = chartData.map((item, index) => ({
-          ...item,
-          color: PALETTE[index % PALETTE.length]
-        }))
+        // 3. Process Included Stats (Chart Data)
+        const includedMap = new Map<string, number>()
+        includedVehicles.forEach((v: any) => {
+          const descripcion = v.vehiculos_estados?.descripcion || 'Sin Estado'
+          includedMap.set(descripcion, (includedMap.get(descripcion) || 0) + 1)
+        })
+
+        const chartData: VehicleStatusStat[] = Array.from(includedMap.entries()).map(([name, count]) => {
+          return {
+            name,
+            value: count,
+            color: '#9CA3AF', // Will be assigned later
+            percentage: (count / includedVehicles.length) * 100
+          }
+        })
+
+        // Sort included by value descending
+        chartData.sort((a, b) => b.value - a.value)
+        
+        // Assign colors
+        chartData.forEach((item, index) => {
+          item.color = PALETTE[index % PALETTE.length]
+        })
 
         setData(chartData)
+
+        // 4. Process Excluded Stats (Footer Data)
+        const excludedMap = new Map<string, number>()
+        excludedVehicles.forEach((v: any) => {
+          const descripcion = v.vehiculos_estados?.descripcion || 'Sin Estado'
+          excludedMap.set(descripcion, (excludedMap.get(descripcion) || 0) + 1)
+        })
+
+        const footerData: VehicleStatusStat[] = Array.from(excludedMap.entries()).map(([name, count]) => {
+          return {
+            name,
+            value: count,
+            color: '#64748B', // Default slate color for excluded
+            percentage: 0 // Not needed for footer
+          }
+        })
+        
+        // Sort excluded by value descending
+        footerData.sort((a, b) => b.value - a.value)
+
+        setExcludedStats(footerData)
+
       } catch (err: any) {
-        console.error('Error fetching vehicle status stats:', err)
+        console.error('Error fetching vehicle stats:', err)
         setError(err.message)
       } finally {
         setLoading(false)
@@ -115,7 +138,7 @@ export function useVehicleStatusStats() {
     }
 
     fetchStats()
-  }, [])
+  }, [sedeActualId])
 
-  return { data, totalVehicles, loading, error, returnedToProviderCount }
+  return { data, totalVehicles, excludedStats, loading, error }
 }

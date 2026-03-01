@@ -2,31 +2,38 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 
-export function usePermanenciaStats(granularity: Granularity, periodA: string, periodB: string) {
+export function usePermanenciaStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
   const [stats, setStats] = useState({
     avgDaysA: 0,
     avgDaysB: 0,
     loading: true
   })
 
-  const lastParams = useRef({ granularity, periodA, periodB })
+  const lastParams = useRef({ granularity, periodA, periodB, sedeId })
   const paramsChanged = 
     lastParams.current.granularity !== granularity ||
     lastParams.current.periodA !== periodA ||
-    lastParams.current.periodB !== periodB
+    lastParams.current.periodB !== periodB ||
+    lastParams.current.sedeId !== sedeId
 
   useEffect(() => {
-    lastParams.current = { granularity, periodA, periodB }
+    lastParams.current = { granularity, periodA, periodB, sedeId }
     
     let isMounted = true
 
     async function calculateAveragePermanencia(range: { start: Date; end: Date }, periodLabel: string) {
       // 1. Buscar conductores dados de baja en el periodo
-      const { data: conductores, error } = await supabase
+      let query = supabase
         .from('conductores')
         .select('id, nombres, apellidos, fecha_terminacion')
         .gte('fecha_terminacion', range.start.toISOString())
         .lte('fecha_terminacion', range.end.toISOString())
+      
+      if (sedeId) {
+        query = query.eq('sede_id', sedeId)
+      }
+
+      const { data: conductores, error } = await query
 
       if (error) {
         console.error(`Error fetching conductores for ${periodLabel}:`, error)
@@ -129,7 +136,7 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
     return () => {
       isMounted = false
     }
-  }, [granularity, periodA, periodB])
+  }, [granularity, periodA, periodB, sedeId])
 
   if (paramsChanged) {
     return { ...stats, loading: true }

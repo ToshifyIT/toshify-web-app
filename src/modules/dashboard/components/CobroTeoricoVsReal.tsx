@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import {
   LineChart,
   Line,
@@ -9,13 +9,14 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts'
-import { startOfWeek, endOfWeek, addDays, format, setWeek, setYear, startOfMonth, endOfMonth, setMonth, parseISO } from 'date-fns'
+import { startOfWeek, endOfWeek, addDays, format, setWeek, startOfMonth, endOfMonth, parseISO, parse, isValid, getWeek, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
+import { PeriodPicker } from './PeriodPicker'
 import './CobroTeoricoVsReal.css'
 
-type PeriodType = 'Semana' | 'Mes' | 'Año'
+type Granularity = 'semana' | 'mes' | 'ano'
 
 // Helpers de fecha para consistencia con Facturación (Timezone Argentina)
 const ARG_TZ = 'America/Argentina/Buenos_Aires'
@@ -69,75 +70,61 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export function CobroTeoricoVsReal() {
   const { sedeActualId } = useSede()
-  const [periodType, setPeriodType] = useState<PeriodType>('Semana')
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
-  const [specificPeriod, setSpecificPeriod] = useState<string>('')
+  const [granularity, setGranularity] = useState<Granularity>('semana')
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
+    const now = new Date()
+    const week = getWeek(now, { weekStartsOn: 1 })
+    return `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
+  })
   const [chartData, setChartData] = useState(INITIAL_DATA)
   const [loading, setLoading] = useState(false)
 
-  // Generar opciones dinámicas
-  const periodOptions = useMemo(() => {
-    switch (periodType) {
-      case 'Semana':
-        return Array.from({ length: 52 }, (_, i) => `Semana ${i + 1} - ${selectedYear}`)
-      case 'Mes':
-        return [
-          `Enero ${selectedYear}`, `Febrero ${selectedYear}`, `Marzo ${selectedYear}`, `Abril ${selectedYear}`,
-          `Mayo ${selectedYear}`, `Junio ${selectedYear}`, `Julio ${selectedYear}`, `Agosto ${selectedYear}`,
-          `Septiembre ${selectedYear}`, `Octubre ${selectedYear}`, `Noviembre ${selectedYear}`, `Diciembre ${selectedYear}`
-        ]
-      case 'Año':
-        return ['2023', '2024', '2025', '2026']
-      default:
-        return []
-    }
-  }, [periodType, selectedYear])
-
-  // Reiniciar selección específica al cambiar tipo
-  useEffect(() => {
-    if (periodOptions.length > 0) {
-      setSpecificPeriod(periodOptions[0])
-    }
-  }, [periodType, periodOptions])
-
   // Cargar datos cuando cambia el periodo específico
   useEffect(() => {
-    if (!specificPeriod) return
+    if (!selectedPeriod) return
 
     const fetchData = async () => {
       setLoading(true)
       try {
         let startDate: Date, endDate: Date
-        let semanaNum: number = 0
-        let anioNum: number = selectedYear
+        let anioNum: number = new Date().getFullYear()
 
-        if (periodType === 'Semana') {
-          // Formato "Semana X - YYYY"
-          const parts = specificPeriod.split(' - ')
-          semanaNum = parseInt(parts[0].replace('Semana ', ''))
-          anioNum = parseInt(parts[1])
-          
-          // Calcular fecha inicio de la semana (Lunes)
-          const dateWithWeek = setWeek(new Date(anioNum, 0, 4), semanaNum, { weekStartsOn: 1, firstWeekContainsDate: 4 })
-          startDate = startOfWeek(dateWithWeek, { weekStartsOn: 1 })
-          endDate = endOfWeek(dateWithWeek, { weekStartsOn: 1 })
-        } else if (periodType === 'Mes') {
-          const parts = specificPeriod.split(' ')
-          const monthName = parts[0]
-          anioNum = parseInt(parts[1])
-          const monthIndex = [
-            'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
-            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-          ].indexOf(monthName)
-          
-          const dateWithMonth = setMonth(setYear(new Date(), anioNum), monthIndex)
-          startDate = startOfMonth(dateWithMonth)
-          endDate = endOfMonth(dateWithMonth)
-        } else {
-          // Año
-          anioNum = parseInt(specificPeriod)
+        if (granularity === 'semana') {
+          // Formato PeriodPicker: "Sem XX YYYY"
+          const match = selectedPeriod.match(/Sem (\d+) (\d{4})/)
+          if (match) {
+            const semanaNum = parseInt(match[1])
+            anioNum = parseInt(match[2])
+            
+            // Calcular fecha inicio de la semana (Lunes)
+            const dateWithWeek = setWeek(new Date(anioNum, 0, 4), semanaNum, { weekStartsOn: 1, firstWeekContainsDate: 4 })
+            startDate = startOfWeek(dateWithWeek, { weekStartsOn: 1 })
+            endDate = endOfWeek(dateWithWeek, { weekStartsOn: 1 })
+          } else {
+             // Fallback
+             startDate = startOfWeek(new Date(), { weekStartsOn: 1 })
+             endDate = endOfWeek(new Date(), { weekStartsOn: 1 })
+          }
+        } else if (granularity === 'mes') {
+          // Formato PeriodPicker: "Mmm YYYY" (e.g. Ene 2026)
+          const parsedDate = parse(selectedPeriod, 'MMM yyyy', new Date(), { locale: es })
+          if (isValid(parsedDate)) {
+             startDate = startOfMonth(parsedDate)
+             endDate = endOfMonth(parsedDate)
+             anioNum = parsedDate.getFullYear()
+          } else {
+             startDate = startOfMonth(new Date())
+             endDate = endOfMonth(new Date())
+          }
+        } else if (granularity === 'ano') {
+          // Formato PeriodPicker: "YYYY"
+          anioNum = parseInt(selectedPeriod) || new Date().getFullYear()
           startDate = new Date(anioNum, 0, 1)
           endDate = new Date(anioNum, 11, 31)
+        } else {
+           // Default fallback
+           startDate = startOfWeek(new Date(), { weekStartsOn: 1 })
+           endDate = endOfWeek(new Date(), { weekStartsOn: 1 })
         }
 
         console.log(`[CobroTeorico] Analizando periodo: ${format(startDate, 'yyyy-MM-dd')} a ${format(endDate, 'yyyy-MM-dd')}`)
@@ -152,8 +139,9 @@ export function CobroTeoricoVsReal() {
           alquiler: number
         }>()
 
-        for (let i = 0; i < 7; i++) {
-          const d = addDays(startDate, i)
+        const daysInterval = eachDayOfInterval({ start: startDate, end: endDate })
+
+        daysInterval.forEach(d => {
           const key = format(d, 'yyyy-MM-dd')
           diasMap.set(key, {
             fecha: d,
@@ -162,7 +150,7 @@ export function CobroTeoricoVsReal() {
             garantiaReal: 0,
             alquiler: 0
           })
-        }
+        })
 
         // ---------------------------------------------------------
         // 1. OBTENER CONDUCTORES Y ASIGNACIONES (Lógica Reporte)
@@ -255,12 +243,11 @@ export function CobroTeoricoVsReal() {
              // Inicializar log detallado si no existe
              if (!logsPorConductor.has(cond.id)) {
                  const diasObj: any = {}
-                 // Inicializar todos los días de la semana en 0
-                 for(let i=0; i<7; i++) {
-                     const d = addDays(startDate, i)
-                     const dayKey = format(d, 'EEEE', { locale: es }).replace(/^\w/, c => c.toUpperCase()) // Lunes, Martes, etc.
-                      diasObj[dayKey] = 0 // Inicializar monto en 0
-                 }
+                 // Inicializar todos los días del periodo en 0
+                 daysInterval.forEach(d => {
+                     const dayKey = format(d, 'yyyy-MM-dd') // Usar fecha completa como key interna
+                     diasObj[dayKey] = 0
+                 })
                  logsPorConductor.set(cond.id, {
                      ID: cond.id,
                      Conductor: `${cond.nombres} ${cond.apellidos}`,
@@ -292,7 +279,6 @@ export function CobroTeoricoVsReal() {
              let current = new Date(efInicio)
              while (current <= efFin) {
                const diaStr = format(current, 'yyyy-MM-dd')
-               const dayName = format(current, 'EEEE', { locale: es }).replace(/^\w/, c => c.toUpperCase())
 
                if (!diasSet.has(diaStr)) {
                  diasSet.add(diaStr)
@@ -302,9 +288,12 @@ export function CobroTeoricoVsReal() {
                  alquilerPorConductor.set(cond.id, currentAlquiler + precioDiario)
                  
                  // Actualizar log detallado
-                 if (logEntry && logEntry[dayName] !== undefined) {
-                     logEntry[dayName] += precioDiario
-                     logEntry.Total += precioDiario
+                 if (logEntry) {
+                     // Usar key de fecha YYYY-MM-DD
+                     if (logEntry[diaStr] !== undefined) {
+                         logEntry[diaStr] += precioDiario
+                         logEntry.Total += precioDiario
+                     }
                  }
 
                  // Acumular alquiler por día (para gráfico)
@@ -400,7 +389,7 @@ export function CobroTeoricoVsReal() {
         })
         
         const totalGarantiaTeoricaSemanal = 50000 * conductoresConGarantia50k.length
-        const garantiaTeoricaDiaria = totalGarantiaTeoricaSemanal / 7
+        const garantiaTeoricaDiaria = totalGarantiaTeoricaSemanal / 7 // Mantener base semanal de 50k / 7
 
         console.log(`[Garantía TEÓRICA - Green] Conductores con 50k: ${conductoresConGarantia50k.length}`)
         console.log(`[Garantía TEÓRICA - Green] Total Semanal: ${totalGarantiaTeoricaSemanal} / 7 = ${garantiaTeoricaDiaria.toFixed(2)} por día`)
@@ -417,12 +406,9 @@ export function CobroTeoricoVsReal() {
         const debugSumaDiaria: any[] = []
         
         // Mapear nombres de días a fechas para sumar desde los logs
-        const diasSemanaMap = new Map<string, string>() 
-        for (let i = 0; i < 7; i++) {
-             const d = addDays(startDate, i)
+        daysInterval.forEach(d => {
              const dayName = format(d, 'EEEE', { locale: es }).replace(/^\w/, c => c.toUpperCase())
              const diaStr = format(d, 'yyyy-MM-dd')
-             diasSemanaMap.set(dayName, diaStr)
              alquilerTeoricoPorDia.set(diaStr, 0)
              
              debugSumaDiaria.push({
@@ -431,11 +417,13 @@ export function CobroTeoricoVsReal() {
                  'Conductores que suman': [],
                  Total: 0
              })
-        }
+        })
 
         logsFiltrados.forEach((log: any) => {
-             diasSemanaMap.forEach((diaStr, dayName) => {
-                 const monto = log[dayName] || 0
+             daysInterval.forEach(d => {
+                 const diaStr = format(d, 'yyyy-MM-dd')
+                 const monto = log[diaStr] || 0 // Usar key fecha
+                 
                  const current = alquilerTeoricoPorDia.get(diaStr) || 0
                  alquilerTeoricoPorDia.set(diaStr, current + monto)
                  
@@ -486,7 +474,8 @@ export function CobroTeoricoVsReal() {
         const cobroRealPorDia = new Map<string, number>()
         
         // Inicializar mapa de cobro real por día
-        diasSemanaMap.forEach((diaStr) => {
+        daysInterval.forEach((d) => {
+            const diaStr = format(d, 'yyyy-MM-dd')
             cobroRealPorDia.set(diaStr, 0)
         })
 
@@ -536,8 +525,9 @@ export function CobroTeoricoVsReal() {
                 // Inicializar estructura para logs
                 conductoresConGarantia50k.forEach(c => {
                     const diasObj: any = {}
-                    diasSemanaMap.forEach((_, dayName) => {
-                        diasObj[dayName] = 0
+                    daysInterval.forEach(d => {
+                        const diaStr = format(d, 'yyyy-MM-dd')
+                        diasObj[diaStr] = 0
                     })
                     
                     cobroAppPorConductor.set(c.dni, {
@@ -563,14 +553,8 @@ export function CobroTeoricoVsReal() {
                     // Actualizar log por conductor
                     const logEntry = cobroAppPorConductor.get(record.dni)
                     if (logEntry) {
-                        // Buscar el nombre del día para esa fecha
-                        let dayNameFound = ''
-                        diasSemanaMap.forEach((val, key) => {
-                            if (val === fechaDia) dayNameFound = key
-                        })
-
-                        if (dayNameFound && logEntry[dayNameFound] !== undefined) {
-                            logEntry[dayNameFound] += monto
+                        if (logEntry[fechaDia] !== undefined) {
+                            logEntry[fechaDia] += monto
                             logEntry.Total += monto
                         }
                     }
@@ -597,19 +581,13 @@ export function CobroTeoricoVsReal() {
         // ---------------------------------------------------------
         // 3. CONSOLIDAR DATOS
         // ---------------------------------------------------------
-        const finalData = Array.from(diasMap.values()).map(d => {
+        // Datos diarios base
+        const dailyData = Array.from(diasMap.values()).map(d => {
           const diaStr = format(d.fecha, 'yyyy-MM-dd')
           const alquilerTeorico = alquilerTeoricoPorDia.get(diaStr) || 0
           
           const totalTeorico = d.garantiaTeorica + alquilerTeorico
-          // Blue Line: Solo Cobro App (según solicitud "este resultado afectara a la linea azul")
-          // Nota: Si se requiere sumar el Alquiler Real también, descomentar:
-          // const totalReal = d.garantiaReal + d.alquiler 
-          const totalReal = d.garantiaReal // Solo Cobro App por ahora
-          
-          console.log(`Día ${d.dia} (${diaStr}):`)
-          console.log(`  - Teórico (Green): Garantía=${d.garantiaTeorica.toFixed(2)} + Alquiler=${alquilerTeorico.toFixed(2)} = ${totalTeorico.toFixed(2)}`)
-          console.log(`  - Real (Blue):     Cobro App=${d.garantiaReal.toFixed(2)}`)
+          const totalReal = d.garantiaReal 
           
           return {
             ...d,
@@ -618,7 +596,60 @@ export function CobroTeoricoVsReal() {
           }
         })
 
-        console.groupEnd()
+        // Agregación según granularidad
+        let finalData: any[] = []
+
+        if (granularity === 'semana') {
+             finalData = dailyData
+        } else if (granularity === 'mes') {
+            // Agrupar por Semana (Sem 01, Sem 02...)
+            const grouped = new Map<string, { label: string, teorico: number, real: number, count: number }>()
+            
+            dailyData.forEach(d => {
+                const weekNum = getWeek(d.fecha, { weekStartsOn: 1 })
+                const key = `Sem ${weekNum.toString().padStart(2, '0')}`
+                
+                if (!grouped.has(key)) {
+                    grouped.set(key, { label: key, teorico: 0, real: 0, count: 0 })
+                }
+                const g = grouped.get(key)!
+                g.teorico += d.teorico
+                g.real += d.real
+                g.count++
+            })
+            
+            finalData = Array.from(grouped.values()).map(g => ({
+                dia: g.label, // Eje X
+                teorico: g.teorico,
+                real: g.real
+            }))
+        } else if (granularity === 'ano') {
+            // Agrupar por Mes (Ene, Feb...)
+            const grouped = new Map<string, { label: string, order: number, teorico: number, real: number }>()
+            
+            dailyData.forEach(d => {
+                const monthName = format(d.fecha, 'MMM', { locale: es })
+                const label = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+                const order = d.fecha.getMonth()
+                
+                if (!grouped.has(label)) {
+                    grouped.set(label, { label, order, teorico: 0, real: 0 })
+                }
+                const g = grouped.get(label)!
+                g.teorico += d.teorico
+                g.real += d.real
+            })
+            
+            finalData = Array.from(grouped.values())
+                .sort((a, b) => a.order - b.order)
+                .map(g => ({
+                    dia: g.label, // Eje X
+                    teorico: g.teorico,
+                    real: g.real
+                }))
+        }
+
+        console.log(`[CobroTeorico] Datos finales generados (${granularity}): ${finalData.length} puntos`)
         setChartData(finalData)
 
       } catch (error) {
@@ -629,7 +660,23 @@ export function CobroTeoricoVsReal() {
     }
 
     fetchData()
-  }, [specificPeriod, periodType, periodOptions, sedeActualId, selectedYear])
+  }, [selectedPeriod, granularity, sedeActualId])
+
+  const handleGranularityChange = (val: Granularity) => {
+    setGranularity(val)
+    const now = new Date()
+    // Reset to current period for that granularity
+    if (val === 'semana') {
+      const week = getWeek(now, { weekStartsOn: 1 })
+      setSelectedPeriod(`Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`)
+    } else if (val === 'mes') {
+      const monthName = format(now, 'MMM', { locale: es })
+      const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+      setSelectedPeriod(`${capMonth} ${now.getFullYear()}`)
+    } else if (val === 'ano') {
+      setSelectedPeriod(now.getFullYear().toString())
+    }
+  }
 
   return (
     <div className="cobro-teorico-container">
@@ -637,37 +684,37 @@ export function CobroTeoricoVsReal() {
         <h2 className="cobro-teorico-title">INGRESO ESPERADO VS PERCIBIDO</h2>
         
         <div className="cobro-teorico-controls">
-          <select 
-            className="cobro-teorico-select"
-            value={periodType}
-            onChange={(e) => setPeriodType(e.target.value as PeriodType)}
-          >
-            <option value="Semana">Semana</option>
-            <option value="Mes">Mes</option>
-            <option value="Año">Año</option>
-          </select>
-
-          {periodType !== 'Año' && (
-            <select
-              className="cobro-teorico-select"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
+           <div className="dashboard-granularity-buttons-container">
+            <button
+              type="button"
+              className={granularity === 'semana' ? 'dashboard-granularity-button dashboard-granularity-button--active' : 'dashboard-granularity-button'}
+              onClick={() => handleGranularityChange('semana')}
             >
-              {[2023, 2024, 2025, 2026].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          )}
+              Semana
+            </button>
+            <button
+              type="button"
+              className={granularity === 'mes' ? 'dashboard-granularity-button dashboard-granularity-button--active' : 'dashboard-granularity-button'}
+              onClick={() => handleGranularityChange('mes')}
+            >
+              Mes
+            </button>
+            <button
+              type="button"
+              className={granularity === 'ano' ? 'dashboard-granularity-button dashboard-granularity-button--active' : 'dashboard-granularity-button'}
+              onClick={() => handleGranularityChange('ano')}
+            >
+              Año
+            </button>
+          </div>
 
-          <select 
-            className="cobro-teorico-select cobro-teorico-select-specific"
-            value={specificPeriod}
-            onChange={(e) => setSpecificPeriod(e.target.value)}
-          >
-            {periodOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
+          <PeriodPicker 
+              granularity={granularity}
+              value={selectedPeriod}
+              onChange={setSelectedPeriod}
+              className="cobro-teorico-picker"
+              align="right"
+            />
         </div>
       </div>
 

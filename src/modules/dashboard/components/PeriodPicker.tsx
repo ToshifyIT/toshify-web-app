@@ -15,6 +15,8 @@ import {
   subYears, 
   parse,
   isValid,
+  startOfDay,
+  isAfter,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
@@ -27,14 +29,17 @@ interface PeriodPickerProps {
   onChange: (value: string) => void
   label?: string
   className?: string
+  align?: 'left' | 'right'
 }
 
-export function PeriodPicker({ granularity, value, onChange, label, className = '' }: PeriodPickerProps) {
+export function PeriodPicker({ granularity, value, onChange, label, className = '', align = 'left' }: PeriodPickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   
   // State for week hover effect
   const [hoveredDate, setHoveredDate] = useState<Date | null>(null)
+  
+  const today = startOfDay(new Date())
 
   // Parse initial view date from value string
   const getInitialViewDate = () => {
@@ -253,10 +258,25 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
             const selected = isSelected(day)
             const weekHovered = isWeekHovered(day)
             
+            // Check if disabled (future)
+            let isDisabled = false
+            if (granularity === 'dia') {
+                isDisabled = isAfter(day, today)
+            } else if (granularity === 'semana') {
+                const weekStart = startOfWeek(day, { weekStartsOn: 1 })
+                const currentWeekStart = startOfWeek(today, { weekStartsOn: 1 })
+                isDisabled = isAfter(weekStart, currentWeekStart)
+            }
+
             let bgClass = 'hover:bg-gray-100'
             let textClass = 'text-gray-700'
+            let cursorClass = 'cursor-pointer'
             
-            if (selected) {
+            if (isDisabled) {
+                textClass = 'text-gray-300'
+                bgClass = ''
+                cursorClass = 'cursor-not-allowed'
+            } else if (selected) {
                 bgClass = 'bg-[#ef4444] text-white hover:bg-[#dc2626]'
                 textClass = 'text-white'
             } else if (weekHovered && granularity === 'semana') {
@@ -269,7 +289,7 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
 
             // Rounded corners for week range
             let roundedClass = 'rounded-md'
-            if (granularity === 'semana' && (selected || weekHovered)) {
+            if (granularity === 'semana' && (selected || weekHovered) && !isDisabled) {
                 const dayOfWeek = day.getDay() // 0=Sun, 1=Mon...
                 // Adjust for ISO week (Mon=1 ... Sun=7)
                 const isoDay = dayOfWeek === 0 ? 7 : dayOfWeek
@@ -284,12 +304,14 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
                 key={day.toString()}
                 onClick={(e) => {
                     e.stopPropagation()
+                    if (isDisabled) return
                     if (granularity === 'dia') handleDaySelect(day)
                     else handleWeekSelect(day)
                 }}
-                onMouseEnter={() => setHoveredDate(day)}
+                onMouseEnter={() => !isDisabled && setHoveredDate(day)}
                 className={`
-                  relative h-8 w-full flex items-center justify-center text-sm cursor-pointer transition-colors
+                  relative h-8 w-full flex items-center justify-center text-sm transition-colors
+                  ${cursorClass}
                   ${textClass}
                   ${bgClass}
                   ${roundedClass}
@@ -320,15 +342,21 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
                 // Check selection loosely
                 const isSel = value.toLowerCase().includes(monthStr.toLowerCase()) && value.includes(currentYear.toString())
                 
+                // Check if disabled (future month)
+                const isDisabled = isAfter(startOfMonth(date), startOfMonth(today))
+
                 return (
                     <button
                         key={m}
+                        disabled={isDisabled}
                         onClick={(e) => { e.stopPropagation(); handleMonthSelect(date) }}
                         className={`
                             py-2 px-1 text-sm rounded-md transition-colors
-                            ${isSel 
-                                ? 'bg-[#ef4444] text-white shadow-sm' 
-                                : 'hover:bg-gray-100 text-gray-700'
+                            ${isDisabled
+                                ? 'text-gray-300 cursor-not-allowed'
+                                : isSel 
+                                    ? 'bg-[#ef4444] text-white shadow-sm' 
+                                    : 'hover:bg-gray-100 text-gray-700'
                             }
                         `}
                     >
@@ -351,15 +379,20 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
         <div className="grid grid-cols-3 gap-2 w-64 select-none">
             {years.map(y => {
                 const isSel = value === y.toString()
+                const isDisabled = y > today.getFullYear()
+
                 return (
                     <button
                         key={y}
+                        disabled={isDisabled}
                         onClick={(e) => { e.stopPropagation(); handleYearSelect(y) }}
                         className={`
                             py-2 px-1 text-sm rounded-md transition-colors
-                            ${isSel 
-                                ? 'bg-[#ef4444] text-white shadow-sm' 
-                                : 'hover:bg-gray-100 text-gray-700'
+                            ${isDisabled
+                                ? 'text-gray-300 cursor-not-allowed'
+                                : isSel 
+                                    ? 'bg-[#ef4444] text-white shadow-sm' 
+                                    : 'hover:bg-gray-100 text-gray-700'
                             }
                         `}
                     >
@@ -391,7 +424,7 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 z-50 bg-white rounded-lg shadow-xl border border-gray-100 p-4 animate-in fade-in zoom-in-95 duration-100 origin-top-left min-w-[280px]">
+        <div className={`absolute top-full mt-2 z-50 bg-white rounded-lg shadow-xl border border-gray-100 p-4 animate-in fade-in zoom-in-95 duration-100 min-w-[280px] ${align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}`}>
           {renderHeader()}
           
           {(granularity === 'dia' || granularity === 'semana') && renderCalendar()}
