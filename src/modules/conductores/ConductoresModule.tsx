@@ -1,7 +1,7 @@
 // src/modules/conductores/ConductoresModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo } from "react";
-import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw } from "lucide-react";
+import { Eye, Edit2, Trash2, AlertTriangle, Users, UserCheck, UserX, Clock, Filter, FolderOpen, FolderPlus, Loader2, History, RefreshCw, ShieldX } from "lucide-react";
 import { ActionsMenu } from "../../components/ui/ActionsMenu";
 import { VerLogsButton } from "../../components/ui/VerLogsButton";
 import { DriveFilesModal } from "../../components/DriveFilesModal";
@@ -120,6 +120,7 @@ export function ConductoresModule() {
   const [statCardEstadoFilter, setStatCardEstadoFilter] = useState<string[]>([]);
   const [statCardAsignacionFilter, setStatCardAsignacionFilter] = useState<string[]>([]);
   const [statCardLicenciaFilter, setStatCardLicenciaFilter] = useState(false);
+  const [statCardLicenciaVencidaFilter, setStatCardLicenciaVencidaFilter] = useState(false);
 
   // Estados para modal de confirmación de baja
   const [showBajaConfirmModal, setShowBajaConfirmModal] = useState(false);
@@ -251,6 +252,7 @@ export function ConductoresModule() {
     let conductoresBajaSemana = 0; // Bajas de la semana actual
     let conductoresAsignados = 0;
     let licenciasPorVencer = 0;
+    let licenciasVencidas = 0;
 
     for (const c of conductores) {
       totalConductores++;
@@ -274,10 +276,17 @@ export function ConductoresModule() {
         conductoresAsignados++;
       }
 
-      // Licencias por vencer (solo conductores activos, próximos N días)
+      // Licencias (solo conductores NO baja)
       const vencimiento = c.licencia_vencimiento;
-      if (estadoCodigo === 'activo' && vencimiento && vencimiento >= hoyStr && vencimiento <= enXDiasStr) {
-        licenciasPorVencer++;
+      if (estadoCodigo !== 'baja' && vencimiento) {
+        // Vencidas: fecha < hoy
+        if (vencimiento < hoyStr) {
+          licenciasVencidas++;
+        }
+        // Por vencer: entre hoy y N días
+        if (estadoCodigo === 'activo' && vencimiento >= hoyStr && vencimiento <= enXDiasStr) {
+          licenciasPorVencer++;
+        }
       }
     }
 
@@ -290,6 +299,7 @@ export function ConductoresModule() {
       conductoresAsignados,
       conductoresBaja: conductoresBajaSemana,
       licenciasPorVencer,
+      licenciasVencidas,
     };
   }, [conductores]);
 
@@ -310,6 +320,7 @@ export function ConductoresModule() {
     setStatCardEstadoFilter([]);
     setStatCardAsignacionFilter([]);
     setStatCardLicenciaFilter(false);
+    setStatCardLicenciaVencidaFilter(false);
 
     // Aplicar filtro según el tipo de card (usando filtros de stat card)
     setActiveStatCard(cardType);
@@ -334,6 +345,9 @@ export function ConductoresModule() {
       case 'licencias':
         setStatCardLicenciaFilter(true);
         break;
+      case 'licenciasVencidas':
+        setStatCardLicenciaVencidaFilter(true);
+        break;
     }
   };
 
@@ -349,7 +363,8 @@ export function ConductoresModule() {
         disponibles: 'Disponibles',
         asignados: 'Asignados',
         baja: 'De Baja',
-        licencias: 'Licencias por Vencer'
+        licencias: 'Licencias por Vencer',
+        licenciasVencidas: 'Licencias Vencidas'
       };
       filters.push({
         id: activeStatCard,
@@ -359,6 +374,7 @@ export function ConductoresModule() {
           setStatCardEstadoFilter([]);
           setStatCardAsignacionFilter([]);
           setStatCardLicenciaFilter(false);
+          setStatCardLicenciaVencidaFilter(false);
         }
       });
     }
@@ -1776,6 +1792,15 @@ export function ConductoresModule() {
       });
     }
 
+    if (statCardLicenciaVencidaFilter) {
+      const hoyStr = new Date().toISOString().split('T')[0];
+      result = result.filter(c => {
+        const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
+        if (estadoCodigo === 'baja') return false;
+        return c.licencia_vencimiento && c.licencia_vencimiento < hoyStr;
+      });
+    }
+
     // Ordenar: primero activos, luego baja
     return result.sort((a, b) => {
       const estadoA = a.conductores_estados?.codigo?.toLowerCase();
@@ -1784,7 +1809,7 @@ export function ConductoresModule() {
       const prioridadB = estadoB === 'activo' ? 0 : estadoB === 'baja' ? 1 : 2;
       return prioridadA - prioridadB;
     });
-  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter]);
+  }, [conductores, nombreFilter, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, asignacionFilter, licenciaVencerFilter, statCardEstadoFilter, statCardAsignacionFilter, statCardLicenciaFilter, statCardLicenciaVencidaFilter]);
 
   // Obtener lista única de estados para el filtro
   const uniqueEstados = useMemo(() => {
@@ -2364,6 +2389,17 @@ export function ConductoresModule() {
             <div className="stat-content">
               <span className="stat-value">{calculatedStats.licenciasPorVencer}</span>
               <span className="stat-label">Lic. por Vencer</span>
+            </div>
+          </div>
+          <div
+            className={`stat-card stat-card-clickable ${activeStatCard === 'licenciasVencidas' ? 'stat-card-active' : ''}`}
+            onClick={() => handleStatCardClick('licenciasVencidas')}
+            title="Conductores con licencia vencida (todos excepto baja)"
+          >
+            <ShieldX size={18} className="stat-icon" />
+            <div className="stat-content">
+              <span className="stat-value">{calculatedStats.licenciasVencidas}</span>
+              <span className="stat-label">Lic. Vencidas</span>
             </div>
           </div>
         </div>

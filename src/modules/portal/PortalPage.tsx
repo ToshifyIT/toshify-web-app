@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { jsPDF } from 'jspdf'
 import { format, parseISO } from 'date-fns'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/facturacion.types'
 import logoToshifyUrl from '../../assets/logo-toshify.png'
@@ -57,6 +57,24 @@ interface PortalDetalle {
   es_descuento: boolean
 }
 
+interface PortalSaldo {
+  saldo_actual: number
+  dias_mora: number
+  monto_mora_acumulada: number
+}
+
+interface PortalFraccionamiento {
+  id: string
+  monto_total: number
+  monto_cuota: number
+  numero_cuota: number
+  total_cuotas: number
+  descripcion: string
+  aplicado: boolean
+  semana: number
+  anio: number
+}
+
 type View = 'login' | 'dashboard' | 'detail'
 
 // =====================================================
@@ -88,6 +106,9 @@ export function PortalPage() {
   const [facturas, setFacturas] = useState<PortalFacturacion[]>([])
   const [selectedFactura, setSelectedFactura] = useState<PortalFacturacion | null>(null)
   const [detalleItems, setDetalleItems] = useState<PortalDetalle[]>([])
+  const [saldo, setSaldo] = useState<PortalSaldo | null>(null)
+  const [fraccionamientos, setFraccionamientos] = useState<PortalFraccionamiento[]>([])
+  const [cabifyPorSemana, setCabifyPorSemana] = useState<Record<string, number>>({})
 
   // UI state
   const [loginInput, setLoginInput] = useState('')
@@ -165,6 +186,49 @@ export function PortalPage() {
   useEffect(() => {
     if (conductor && view === 'dashboard') {
       loadFacturas(conductor.id)
+
+      // Cargar saldo
+      supabase
+        .from('saldos_conductores')
+        .select('saldo_actual, dias_mora, monto_mora_acumulada')
+        .eq('conductor_id', conductor.id)
+        .limit(1)
+        .then(({ data }) => {
+          if (data && data.length > 0) setSaldo(data[0] as PortalSaldo)
+        })
+
+      // Cargar fraccionamientos pendientes
+      supabase
+        .from('cobros_fraccionados')
+        .select('id, monto_total, monto_cuota, numero_cuota, total_cuotas, descripcion, aplicado, semana, anio')
+        .eq('conductor_id', conductor.id)
+        .eq('aplicado', false)
+        .order('anio', { ascending: true })
+        .order('semana', { ascending: true })
+        .then(({ data }) => {
+          setFraccionamientos((data || []) as PortalFraccionamiento[])
+        })
+
+      // Cargar ganancias Cabify - buscar por DNI o por primer nombre+apellido
+      // Cabify guarda solo primer nombre/apellido (ej: "gerardo", "millan")
+      // Conductor puede tener nombre compuesto (ej: "GERARDO RAMON", "MILLAN URBANO")
+      const primerNombre = conductor.nombres.split(' ')[0]
+      const primerApellido = conductor.apellidos.split(' ')[0]
+      supabase
+        .from('cabify_historico')
+        .select('fecha_inicio, ganancia_total')
+        .or(`dni.eq.${conductor.numero_dni},and(nombre.ilike.%${primerNombre}%,apellido.ilike.%${primerApellido}%)`)
+        .order('fecha_inicio', { ascending: true })
+        .then(({ data }) => {
+          if (!data || data.length === 0) return
+          // Agrupar ganancia por fecha (para cruzar con períodos)
+          const porDia: Record<string, number> = {}
+          for (const row of data) {
+            const dia = (row.fecha_inicio as string).slice(0, 10)
+            porDia[dia] = (porDia[dia] || 0) + (Number(row.ganancia_total) || 0)
+          }
+          setCabifyPorSemana(porDia)
+        })
     }
   }, [conductor, view, loadFacturas])
 
@@ -371,6 +435,9 @@ export function PortalPage() {
     setFacturas([])
     setSelectedFactura(null)
     setDetalleItems([])
+    setSaldo(null)
+    setFraccionamientos([])
+    setCabifyPorSemana({})
     setLoginInput('')
     setLoginError('')
     setView('login')
@@ -390,17 +457,38 @@ export function PortalPage() {
     const anterior = totales[1] || 0
     const variacion = anterior > 0 ? ((ultima - anterior) / anterior) * 100 : 0
 
-    // Chart data: últimas 12 semanas en orden cronológico
+    // Chart data: últimas 12 semanas con facturación + ganancia Cabify
+    // cabifyPorSemana tiene datos diarios: { "2026-01-26": 1500, "2026-01-27": 2000, ... }
+    // Necesitamos sumar los días que caen dentro de cada período
+    const cabifyDates = Object.keys(cabifyPorSemana)
     const chartData = facturas
       .slice(0, 12)
-      .map(f => ({
-        label: `S${f.periodos_facturacion.semana}`,
-        total: f.total_a_pagar,
-      }))
+      .map(f => {
+        const p = f.periodos_facturacion
+        const inicio = p.fecha_inicio.slice(0, 10)
+        const fin = p.fecha_fin.slice(0, 10)
+        // Sumar ganancias cabify de días dentro del rango [inicio, fin]
+        let ganancia = 0
+        for (const dia of cabifyDates) {
+          if (dia >= inicio && dia <= fin) {
+            ganancia += cabifyPorSemana[dia]
+          }
+        }
+        return {
+          label: `S${p.semana}`,
+          facturacion: f.total_a_pagar,
+          ganancia,
+        }
+      })
       .reverse()
 
-    return { sum, promedio, ultima, variacion, totalSemanas: facturas.length, chartData }
-  }, [facturas])
+    // Ganancia Cabify última semana (la más reciente = último elemento del chart)
+    const ultimaGanancia = chartData.length > 0 ? chartData[chartData.length - 1].ganancia : 0
+
+    return { sum, promedio, ultima, variacion, totalSemanas: facturas.length, chartData, ultimaGanancia }
+  }, [facturas, cabifyPorSemana])
+
+
 
   // =====================================================
   // RENDER: LOGIN
@@ -616,110 +704,159 @@ export function PortalPage() {
             <div className="portal-empty-icon">📋</div>
             <p>No hay facturación registrada todavía</p>
           </div>
-        ) : (
+        ) : stats && (
           <>
-            {/* Dashboard panel */}
-            {stats && (
-              <div className="portal-dashboard">
-                {/* Stats row */}
-                <div className="portal-stats">
-                  <div className="portal-stat-card">
-                    <div className="portal-stat-label">Última semana</div>
-                    <div className="portal-stat-value debit">{formatCurrency(stats.ultima)}</div>
-                    {stats.variacion !== 0 && (
-                      <div className={`portal-stat-change ${stats.variacion > 0 ? 'up' : 'down'}`}>
-                        {stats.variacion > 0 ? '↑' : '↓'} {Math.abs(stats.variacion).toFixed(1)}%
-                      </div>
-                    )}
+            {/* Stats row */}
+            <div className="portal-stats-grid">
+              <div className="portal-stat-card">
+                <div className="portal-stat-label">Última semana</div>
+                <div className="portal-stat-value debit">{formatCurrency(stats.ultima)}</div>
+                {stats.variacion !== 0 && (
+                  <div className={`portal-stat-change ${stats.variacion > 0 ? 'up' : 'down'}`}>
+                    {stats.variacion > 0 ? '↑' : '↓'} {Math.abs(stats.variacion).toFixed(1)}%
                   </div>
-                  <div className="portal-stat-card">
-                    <div className="portal-stat-label">Promedio semanal</div>
-                    <div className="portal-stat-value">{formatCurrency(stats.promedio)}</div>
-                    <div className="portal-stat-sub">{stats.totalSemanas} semanas</div>
+                )}
+              </div>
+              <div className="portal-stat-card">
+                <div className="portal-stat-label">Promedio semanal</div>
+                <div className="portal-stat-value">{formatCurrency(stats.promedio)}</div>
+                <div className="portal-stat-sub">{stats.totalSemanas} semanas</div>
+              </div>
+              <div className="portal-stat-card">
+                <div className="portal-stat-label">Ganancia Cabify</div>
+                <div className="portal-stat-value" style={{ color: '#059669' }}>{formatCurrency(stats.ultimaGanancia)}</div>
+                <div className="portal-stat-sub">última semana</div>
+              </div>
+              <div className="portal-stat-card">
+                <div className="portal-stat-label">Saldo actual</div>
+                {saldo ? (
+                  <>
+                    <div className={`portal-stat-value ${saldo.saldo_actual < 0 ? 'debit' : ''}`}>
+                      {saldo.saldo_actual < 0 ? '-' : ''}{formatCurrency(Math.abs(saldo.saldo_actual))}
+                    </div>
+                    <div className="portal-stat-sub">
+                      {saldo.saldo_actual > 0 ? 'A favor' : saldo.saldo_actual < 0 ? 'Deuda' : 'Sin saldo'}
+                    </div>
+                  </>
+                ) : (
+                  <div className="portal-stat-value">-</div>
+                )}
+              </div>
+            </div>
+
+            {/* Mora banner */}
+            {saldo && saldo.dias_mora > 0 && (
+              <div className="portal-mora-banner">
+                <span className="portal-mora-label">Mora: {saldo.dias_mora} días</span>
+                <span className="portal-mora-amount">Acumulada: {formatCurrency(saldo.monto_mora_acumulada)}</span>
+              </div>
+            )}
+
+            {/* 2 columnas: Chart + Semanas */}
+            <div className="portal-layout">
+              <div className="portal-left">
+                {/* Chart */}
+                <div className="portal-chart-card">
+                  <div className="portal-chart-header">
+                    <div className="portal-chart-title">Facturación vs Ganancia Cabify</div>
+                    <div className="portal-chart-legend">
+                      <span className="portal-legend-item"><span className="portal-legend-dot" style={{ background: '#ff0033' }} /> Facturación</span>
+                      <span className="portal-legend-item"><span className="portal-legend-dot" style={{ background: '#059669' }} /> Ganancia</span>
+                    </div>
                   </div>
-                  <div className="portal-stat-card">
-                    <div className="portal-stat-label">Total acumulado</div>
-                    <div className="portal-stat-value">{formatCurrency(stats.sum)}</div>
+                  <div className="portal-chart-container">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={stats.chartData} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`}
+                        />
+                        <Tooltip
+                          formatter={(value: string | number, name: string) => [formatCurrency(Number(value)), name === 'facturacion' ? 'Facturación' : 'Ganancia Cabify']}
+                          contentStyle={{
+                            background: 'var(--bg-tertiary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            color: 'var(--text-primary)',
+                          }}
+                          labelStyle={{ color: 'var(--text-secondary)' }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="facturacion"
+                          stroke="#ff0033"
+                          strokeWidth={2}
+                          dot={{ r: 4, fill: '#ff0033', strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                          activeDot={{ r: 6, fill: '#ff0033', strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="ganancia"
+                          stroke="#059669"
+                          strokeWidth={2}
+                          dot={{ r: 4, fill: '#059669', strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                          activeDot={{ r: 6, fill: '#059669', strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
 
-                {/* Chart */}
-                {stats.chartData.length > 2 && (
-                  <div className="portal-chart-card">
-                    <div className="portal-chart-title">Evolución semanal</div>
-                    <div className="portal-chart-container">
-                      <ResponsiveContainer width="100%" height={180}>
-                        <AreaChart data={stats.chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="portalGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#ff0033" stopOpacity={0.15} />
-                              <stop offset="95%" stopColor="#ff0033" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <XAxis
-                            dataKey="label"
-                            tick={{ fontSize: 11, fill: '#9ca3af' }}
-                            axisLine={false}
-                            tickLine={false}
-                          />
-                          <YAxis hide />
-                          <Tooltip
-                            formatter={(value: string | number) => formatCurrency(Number(value))}
-                            contentStyle={{
-                              background: '#1f2937',
-                              border: 'none',
-                              borderRadius: '8px',
-                              fontSize: '12px',
-                              color: '#fff',
-                            }}
-                            labelStyle={{ color: '#9ca3af' }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="total"
-                            stroke="#ff0033"
-                            strokeWidth={2}
-                            fill="url(#portalGrad)"
-                            dot={{ r: 3, fill: '#ff0033', strokeWidth: 0 }}
-                            activeDot={{ r: 5, fill: '#ff0033', strokeWidth: 2, stroke: '#fff' }}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
+                {/* Fraccionamientos */}
+                {fraccionamientos.length > 0 && (
+                  <div className="portal-fraccionamientos-card">
+                    <div className="portal-chart-title">Fraccionamientos pendientes</div>
+                    <div className="portal-fraccionamientos-list">
+                      {fraccionamientos.map((f) => (
+                        <div key={f.id} className="portal-fraccionamiento-item">
+                          <div className="portal-fraccionamiento-desc">{f.descripcion}</div>
+                          <div className="portal-fraccionamiento-detail">
+                            Cuota {f.numero_cuota}/{f.total_cuotas} · {formatCurrency(f.monto_cuota)} · S{f.semana}/{f.anio}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
-            )}
 
-            {/* Week list */}
-            <div className="portal-weeks-header">Historial de liquidaciones</div>
-            <div className="portal-weeks">
-              {facturas.map((f) => {
-                const p = f.periodos_facturacion
-                return (
-                  <div
-                    key={f.id}
-                    className="portal-week-card"
-                    onClick={() => openDetail(f)}
-                  >
-                    <div className="portal-week-left">
-                      <div className="portal-week-title">Semana {p.semana} / {p.anio}</div>
-                      <div className="portal-week-dates">
-                        {format(parseISO(p.fecha_inicio), 'dd/MM/yyyy')} - {format(parseISO(p.fecha_fin), 'dd/MM/yyyy')}
+              <div className="portal-right">
+                <div className="portal-weeks-header">Historial de liquidaciones</div>
+                <div className="portal-weeks">
+                  {facturas.map((f) => {
+                    const p = f.periodos_facturacion
+                    return (
+                      <div key={f.id} className="portal-week-card" onClick={() => openDetail(f)}>
+                        <div className="portal-week-left">
+                          <div className="portal-week-title">Semana {p.semana} / {p.anio}</div>
+                          <div className="portal-week-dates">
+                            {format(parseISO(p.fecha_inicio), 'dd/MM/yyyy')} - {format(parseISO(p.fecha_fin), 'dd/MM/yyyy')}
+                          </div>
+                          <div className="portal-week-info">
+                            {f.vehiculo_patente || '-'} · {f.tipo_alquiler} · {f.turnos_cobrados}/{f.turnos_base} turnos
+                          </div>
+                        </div>
+                        <div className="portal-week-right">
+                          <div className={`portal-week-total ${f.total_a_pagar > 0 ? 'debit' : 'credit'}`}>
+                            {formatCurrency(f.total_a_pagar)}
+                          </div>
+                          <span className="portal-week-arrow">›</span>
+                        </div>
                       </div>
-                      <div className="portal-week-info">
-                        {f.vehiculo_patente || '-'} · {f.tipo_alquiler} · {f.turnos_cobrados}/{f.turnos_base} turnos
-                      </div>
-                    </div>
-                    <div className="portal-week-right">
-                      <div className={`portal-week-total ${f.total_a_pagar > 0 ? 'debit' : 'credit'}`}>
-                        {formatCurrency(f.total_a_pagar)}
-                      </div>
-                      <span className="portal-week-arrow">›</span>
-                    </div>
-                  </div>
-                )
-              })}
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           </>
         )}
