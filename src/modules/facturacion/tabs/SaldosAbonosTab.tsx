@@ -145,21 +145,44 @@ export function SaldosAbonosTab() {
   async function cargarSaldos() {
     setLoading(true)
     try {
-      // Cargar saldos con estado del conductor
-      const { data, error } = await aplicarFiltroSede(supabase
-        .from('saldos_conductores')
-        .select(`
-          *,
-          conductor:conductores(
-            estado:conductores_estados(codigo)
-          )
-        `))
-        .order('conductor_nombre')
+      // Cargar las 3 fuentes en paralelo (son independientes entre sí)
+      const [saldosRes, fraccionadosRes, abonosRes] = await Promise.all([
+        aplicarFiltroSede(supabase
+          .from('saldos_conductores')
+          .select(`
+            *,
+            conductor:conductores(
+              estado:conductores_estados(codigo)
+            )
+          `))
+          .order('conductor_nombre'),
+        aplicarFiltroSede(supabase
+          .from('cobros_fraccionados')
+          .select(`
+            id,
+            conductor_id,
+            monto_cuota,
+            numero_cuota,
+            total_cuotas,
+            semana,
+            anio,
+            aplicado,
+            conductor:conductores(nombres, apellidos)
+          `))
+          .eq('aplicado', false)
+          .order('semana'),
+        aplicarFiltroSede(supabase
+          .from('abonos_conductores')
+          .select('id, conductor_id, fecha_abono, tipo, monto, concepto, referencia, semana, anio'))
+          .order('fecha_abono', { ascending: false })
+          .limit(500),
+      ])
 
-      if (error) throw error
-      
-      // Mapear para incluir el estado del conductor
-      const saldosConEstado = (data || []).map((s: {
+      if (saldosRes.error) throw saldosRes.error
+      if (fraccionadosRes.error) throw fraccionadosRes.error
+
+      // Procesar saldos
+      const saldosConEstado = (saldosRes.data || []).map((s: {
         conductor?: { estado?: { codigo: string } | null } | null
       } & SaldoConductor) => ({
         ...s,
@@ -167,26 +190,8 @@ export function SaldosAbonosTab() {
       }))
       setSaldos(saldosConEstado)
 
-      // Cargar cobros fraccionados pendientes (solo de saldos iniciales)
-      const { data: fraccionados, error: errorFrac } = await aplicarFiltroSede(supabase
-        .from('cobros_fraccionados')
-        .select(`
-          id,
-          conductor_id,
-          monto_cuota,
-          numero_cuota,
-          total_cuotas,
-          semana,
-          anio,
-          aplicado,
-          conductor:conductores(nombres, apellidos)
-        `))
-        .eq('aplicado', false)
-        .order('semana')
-
-      if (errorFrac) throw errorFrac
-      
-      const fraccionadosConNombre = ((fraccionados || []) as unknown as CobroFraccionadoRow[]).map((f) => ({
+      // Procesar fraccionados
+      const fraccionadosConNombre = ((fraccionadosRes.data || []) as unknown as CobroFraccionadoRow[]).map((f) => ({
         conductor_id: f.conductor_id,
         conductor_nombre: f.conductor ? `${f.conductor.apellidos}, ${f.conductor.nombres}` : 'N/A',
         monto_cuota: f.monto_cuota,
@@ -197,21 +202,12 @@ export function SaldosAbonosTab() {
       }))
       setCobrosFraccionados(fraccionadosConNombre)
 
-      // Cargar todos los abonos para el sub-tab "Abonos"
-      const { data: abonos, error: errorAbonos } = await aplicarFiltroSede(supabase
-        .from('abonos_conductores')
-        .select('*'))
-        .order('fecha_abono', { ascending: false })
-        .limit(500)
-
-      if (errorAbonos) {
-        console.error('Error cargando abonos:', errorAbonos)
+      // Procesar abonos (usa nombres de conductores ya cargados)
+      if (abonosRes.error) {
+        console.error('Error cargando abonos:', abonosRes.error)
       }
-
-      // Obtener nombres de conductores desde saldos ya cargados
       const conductorNombres = new Map(saldosConEstado.map((s: SaldoConductor) => [s.conductor_id, s.conductor_nombre]))
-
-      const abonosConNombre = ((abonos || []) as AbonoRow[]).map((a) => ({
+      const abonosConNombre = ((abonosRes.data || []) as AbonoRow[]).map((a) => ({
         ...a,
         conductor_nombre: conductorNombres.get(a.conductor_id) || 'N/A'
       }))

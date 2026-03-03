@@ -1067,22 +1067,31 @@ export function ConductoresModule() {
       return [];
     }
 
-    // Para cada asignación, obtener los otros conductores (para determinar si queda vacante)
-    const assignmentsWithOthers = await Promise.all(
-      (data || []).map(async (ac: any) => {
-        const { data: otherConductors } = await (supabase as any)
-          .from('asignaciones_conductores')
-          .select('id, conductor_id, horario, estado')
-          .eq('asignacion_id', ac.asignacion_id)
-          .neq('conductor_id', conductorId)
-          .in('estado', ['asignado', 'activo']);
+    // Una sola query para todos los otros conductores (evita N+1)
+    const asignacionIds = (data || []).map((ac: any) => ac.asignacion_id)
+    let allOtherConductors: any[] = []
+    if (asignacionIds.length > 0) {
+      const { data: othersData } = await (supabase as any)
+        .from('asignaciones_conductores')
+        .select('id, conductor_id, horario, estado, asignacion_id')
+        .in('asignacion_id', asignacionIds)
+        .neq('conductor_id', conductorId)
+        .in('estado', ['asignado', 'activo'])
+      allOtherConductors = othersData || []
+    }
 
-        return {
-          ...ac,
-          otherConductors: otherConductors || []
-        };
-      })
-    );
+    // Agrupar en memoria por asignacion_id
+    const othersByAsignacion = new Map<string, any[]>()
+    for (const oc of allOtherConductors) {
+      const arr = othersByAsignacion.get(oc.asignacion_id) || []
+      arr.push(oc)
+      othersByAsignacion.set(oc.asignacion_id, arr)
+    }
+
+    const assignmentsWithOthers = (data || []).map((ac: any) => ({
+      ...ac,
+      otherConductors: othersByAsignacion.get(ac.asignacion_id) || []
+    }))
 
     return assignmentsWithOthers;
   };

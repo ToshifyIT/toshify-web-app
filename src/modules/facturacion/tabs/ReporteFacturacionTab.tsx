@@ -882,13 +882,25 @@ export function ReporteFacturacionTab() {
         }
       })
       
-      // 2.6 Cargar pagos registrados para este período
+      // 2.6 + 2.7 + 3. Cargar pagos, detalles y excesos en paralelo (independientes entre sí)
       const facIds = facturacionesTransformadas.map((f: any) => f.id)
-      const { data: pagosData } = await (supabase
-        .from('pagos_conductores') as any)
-        .select('referencia_id, monto, fecha_pago')
-        .eq('tipo_cobro', 'facturacion_semanal')
-        .in('referencia_id', facIds)
+      const [
+        { data: pagosData },
+        { data: detallesData },
+        { data: excesosData },
+      ] = await Promise.all([
+        (supabase.from('pagos_conductores') as any)
+          .select('referencia_id, monto, fecha_pago')
+          .eq('tipo_cobro', 'facturacion_semanal')
+          .in('referencia_id', facIds),
+        (supabase.from('facturacion_detalle') as any)
+          .select('facturacion_id, concepto_codigo, concepto_descripcion, total')
+          .in('facturacion_id', facIds)
+          .in('concepto_codigo', ['P004', 'P005', 'P007']),
+        (supabase.from('excesos_kilometraje') as any)
+          .select('id, conductor_id, km_exceso, monto_total, aplicado')
+          .eq('periodo_id', (periodoData as any).id),
+      ])
 
       // Agrupar pagos por referencia_id (puede haber pagos parciales)
       const pagosMap = new Map<string, { monto: number; fecha_pago: string | null }>()
@@ -904,13 +916,6 @@ export function ReporteFacturacionTab() {
           })
         }
       })
-
-      // 2.7 Cargar detalles de facturación para peajes, penalidades Y tickets (P004, P005, P007)
-      const { data: detallesData } = await (supabase
-        .from('facturacion_detalle') as any)
-        .select('facturacion_id, concepto_codigo, concepto_descripcion, total')
-        .in('facturacion_id', facIds)
-        .in('concepto_codigo', ['P004', 'P005', 'P007'])
 
       // Agrupar por facturacion_id
       const detallesMap = new Map<string, {
@@ -964,15 +969,8 @@ export function ReporteFacturacionTab() {
       facturacionesTransformadas.sort((a: any, b: any) => 
         (a.conductor_nombre || '').localeCompare(b.conductor_nombre || '')
       )
-      
+
       setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
-
-      // 3. Cargar excesos de kilometraje para este período
-      const { data: excesosData } = await (supabase
-        .from('excesos_kilometraje') as any)
-        .select('id, conductor_id, km_exceso, monto_total, aplicado')
-        .eq('periodo_id', (periodoData as any).id)
-
       setExcesos((excesosData || []) as ExcesoKm[])
 
     } catch (error) {
@@ -1004,17 +1002,25 @@ export function ReporteFacturacionTab() {
       const conductoresControl: { numero_dni: string; estado: string; patente: string; modalidad: string; valor_alquiler: number | null }[] = []
       const dnisAgregadosVP = new Set<string>()
 
-      // 1a. Conductores con asignaciones activas/finalizadas que se solapan con la semana
-      {
-        const { data: asignacionesSemanaVP } = await (supabase
-          .from('asignaciones_conductores') as any)
+      // 1a + 1b en paralelo (son independientes entre sí)
+      const [{ data: asignacionesSemanaVP }, { data: penalidadesPendientesVP }] = await Promise.all([
+        (supabase.from('asignaciones_conductores') as any)
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
             asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
             conductores!inner(numero_dni, sede_id)
           `)
-          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
+          .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada']),
+        (supabase.from('penalidades') as any)
+          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
+          .gte('fecha', fechaInicio)
+          .lte('fecha', format(semanaActual.fin, 'yyyy-MM-dd'))
+          .eq('aplicado', false)
+          .neq('rechazado', true),
+      ])
 
+      // Procesar 1a: asignaciones
+      {
         const semInicioVP = parseISO(fechaInicio)
         const semFinVP = parseISO(fechaFin)
 
@@ -1049,17 +1055,9 @@ export function ReporteFacturacionTab() {
         }
       }
 
-      // 1b. Conductores con penalidades pendientes (cobros de incidencias) en la semana
+      // Procesar 1b: penalidades pendientes
       const dnisConPenalidadesVP = new Set<string>()
       {
-        const { data: penalidadesPendientesVP } = await (supabase
-          .from('penalidades') as any)
-          .select('conductor_id, conductores!inner(numero_dni, sede_id)')
-          .gte('fecha', fechaInicio)
-          .lte('fecha', format(semanaActual.fin, 'yyyy-MM-dd'))
-          .eq('aplicado', false)
-          .neq('rechazado', true)
-
         for (const p of (penalidadesPendientesVP || []) as any[]) {
           const cond = p.conductores
           if (!cond || !cond.numero_dni) continue
@@ -1250,20 +1248,19 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // Cargar historial de precios para la semana
-      const { data: historialPreciosVP } = await (supabase
-        .from('conceptos_facturacion_historial') as any)
-        .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
-        .in('codigo', ['P001', 'P002', 'P003', 'P013'])
-        .lte('fecha_vigencia_desde', fechaFin)
-        .gte('fecha_vigencia_hasta', fechaInicio)
-      
-      // Cargar precios base directamente (evita race condition con preciosAlquiler state)
-      const { data: conceptosNominaVP } = await supabase
-        .from('conceptos_nomina')
-        .select('codigo, precio_base, precio_final')
-        .eq('activo', true)
-        .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+      // Cargar historial de precios y conceptos nomina en paralelo
+      const [{ data: historialPreciosVP }, { data: conceptosNominaVP }] = await Promise.all([
+        (supabase.from('conceptos_facturacion_historial') as any)
+          .select('codigo, precio_base, precio_final, fecha_vigencia_desde, fecha_vigencia_hasta')
+          .in('codigo', ['P001', 'P002', 'P003', 'P013'])
+          .lte('fecha_vigencia_desde', fechaFin)
+          .gte('fecha_vigencia_hasta', fechaInicio),
+        supabase
+          .from('conceptos_nomina')
+          .select('codigo, precio_base, precio_final')
+          .eq('activo', true)
+          .in('codigo', ['P001', 'P002', 'P003', 'P013']),
+      ])
       const preciosBaseVP = new Map<string, number>()
       ;(conceptosNominaVP || []).forEach((c: any) => {
         preciosBaseVP.set(c.codigo, c.precio_final ?? c.precio_base ?? 0)
@@ -1310,20 +1307,47 @@ export function ReporteFacturacionTab() {
         prorrateo.monto_TURNO_NOCTURNO = Math.round(prorrateo.monto_TURNO_NOCTURNO)
       }
 
-      // 2. Cargar saldos de conductores (solo LECTURA — facturación no modifica saldos)
-      const { data: saldos } = await (supabase
-        .from('saldos_conductores') as any)
-        .select('conductor_id, saldo_actual')
+      // 2 + 3 + 3.1 + 4 + 5. Cargar saldos, garantías, cabify, tickets y excesos en paralelo
+      // Se filtran por conductorIds para evitar traer toda la tabla
+      const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
+      const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
+      const [
+        { data: saldos },
+        { data: garantias },
+        [{ data: cabifyData }, { data: cabifyPeajesData }],
+        { data: tickets },
+        { data: excesosData },
+      ] = await Promise.all([
+        (supabase.from('saldos_conductores') as any)
+          .select('conductor_id, saldo_actual')
+          .in('conductor_id', conductorIds),
+        (supabase.from('garantias_conductores') as any)
+          .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal')
+          .in('conductor_id', conductorIds),
+        Promise.all([
+          supabase.from('cabify_historico')
+            .select('dni, cobro_app, cobro_efectivo')
+            .gte('fecha_inicio', fechaInicio + 'T00:00:00')
+            .lte('fecha_inicio', fechaFin + 'T23:59:59'),
+          supabase.from('cabify_historico')
+            .select('dni, peajes')
+            .gte('fecha_inicio', peajesInicio + 'T00:00:00')
+            .lte('fecha_inicio', peajesFin + 'T23:59:59'),
+        ]),
+        (supabase.from('tickets_favor') as any)
+          .select('conductor_id, monto, estado, detalle')
+          .eq('estado', 'aprobado')
+          .in('conductor_id', conductorIds),
+        (supabase.from('excesos_kilometraje') as any)
+          .select('conductor_id, km_exceso, monto_total, aplicado')
+          .eq('aplicado', false)
+          .in('conductor_id', conductorIds),
+      ])
 
+      // Construir mapas
       const saldosMap = new Map<string, { conductor_id: string; saldo_actual: number }>(
         (saldos || []).map((s: any) => [s.conductor_id, s])
       )
-
-      // 3. Cargar garantías (TODAS para saber el estado de cuotas)
-      // Nota: conductor_id puede ser NULL (importado desde histórico), usamos conductor_nombre como clave
-      const { data: garantias } = await (supabase
-        .from('garantias_conductores') as any)
-        .select('conductor_id, conductor_nombre, estado, cuotas_pagadas, cuotas_totales, tipo_alquiler, monto_cuota_semanal')
 
       const garantiasMap = new Map<string, {
         conductor_id: string | null;
@@ -1335,21 +1359,7 @@ export function ReporteFacturacionTab() {
         monto_cuota_semanal: number | null;
       }>((garantias || []).filter((g: any) => g.conductor_id).map((g: any) => [g.conductor_id, g]))
 
-      // 3.1 Cargar datos de Cabify desde la tabla cabify_historico (peajes de la SEMANA ANTERIOR)
-      const peajesInicio = format(subWeeks(parseISO(fechaInicio), 1), 'yyyy-MM-dd')
-      const peajesFin = format(subWeeks(parseISO(fechaFin), 1), 'yyyy-MM-dd')
-      const [{ data: cabifyData }, { data: cabifyPeajesData }] = await Promise.all([
-        supabase.from('cabify_historico')
-          .select('dni, cobro_app, cobro_efectivo')
-          .gte('fecha_inicio', fechaInicio + 'T00:00:00')
-          .lte('fecha_inicio', fechaFin + 'T23:59:59'),
-        supabase.from('cabify_historico')
-          .select('dni, peajes')
-          .gte('fecha_inicio', peajesInicio + 'T00:00:00')
-          .lte('fecha_inicio', peajesFin + 'T23:59:59')
-      ])
-
-      // Crear mapa de cobro_app Cabify por DNI (lo que Cabify cobra al conductor)
+      // Crear mapa de cobro_app Cabify por DNI
       const cabifyMap = new Map<string, number>()
       ;(cabifyData || []).forEach((record: any) => {
         if (record.dni) {
@@ -1360,7 +1370,6 @@ export function ReporteFacturacionTab() {
         }
       })
       // Crear mapa de peajes Cabify por DNI (P005) - semana anterior, SIN redondeo
-      // Normalizar DNI: quitar ceros adelante para match consistente
       const peajesMap = new Map<string, number>()
       const peajesDetalleMap = new Map<string, Array<{ fecha: string; monto: number }>>()
       ;(cabifyPeajesData || []).forEach((record: any) => {
@@ -1377,12 +1386,6 @@ export function ReporteFacturacionTab() {
         }
       })
 
-      // 4. Cargar tickets a favor aprobados (no aplicados)
-      const { data: tickets } = await (supabase
-        .from('tickets_favor') as any)
-        .select('conductor_id, monto, estado, detalle')
-        .eq('estado', 'aprobado')
-
       const ticketsMap = new Map<string, number>()
       const ticketsDetalleMap = new Map<string, Array<{ monto: number; detalle: string }>>()
       ;(tickets || []).forEach((t: any) => {
@@ -1392,12 +1395,6 @@ export function ReporteFacturacionTab() {
         if (!ticketsDetalleMap.has(t.conductor_id)) ticketsDetalleMap.set(t.conductor_id, [])
         ticketsDetalleMap.get(t.conductor_id)!.push({ monto: t.monto, detalle: t.detalle || 'Ticket' })
       })
-
-      // 5. Cargar excesos de km pendientes
-      const { data: excesosData } = await (supabase
-        .from('excesos_kilometraje') as any)
-        .select('conductor_id, km_exceso, monto_total, aplicado')
-        .eq('aplicado', false)
 
       const excesosMap = new Map<string, { kmExceso: number; monto: number }>()
       ;(excesosData || []).forEach((e: any) => {

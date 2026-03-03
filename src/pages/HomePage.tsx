@@ -155,48 +155,45 @@ const LazyPage = ({ children }: { children: ReactNode }) => (
   </LazyErrorBoundary>
 )
 
-// Lazy-loaded pages (largest modules first for biggest impact)
+// Todas las páginas son lazy — el bundle inicial solo carga el shell de navegación
 const ConductoresPage = lazy(() => import('./conductores/ConductoresPage').then(m => ({ default: m.ConductoresPage })))
 const FacturacionPage = lazy(() => import('./facturacion/FacturacionPage').then(m => ({ default: m.FacturacionPage })))
 const IncidenciasPage = lazy(() => import('./incidencias/IncidenciasPage').then(m => ({ default: m.IncidenciasPage })))
 const ProgramacionPage = lazy(() => import('./onboarding/ProgramacionPage'))
 const MovimientosPage = lazy(() => import('./inventario/MovimientosPage').then(m => ({ default: m.MovimientosPage })))
 const AsignacionesPage = lazy(() => import('./asignaciones/AsignacionesPage').then(m => ({ default: m.AsignacionesPage })))
-
-// Regular imports for smaller/frequently used pages
-import { UsuariosPage } from './usuarios/UsuariosPage'
-import { VehiculosPage } from './vehiculos/VehiculosPage'
-import { SiniestrosPage } from './siniestros/SiniestrosPage'
-import { VencimientosPage } from './vencimientos/VencimientosPage'
-import { InformesPage } from './informes/InformesPage'
-import { AsignacionesActivasPage } from './asignaciones/AsignacionesActivasPage'
-import { ProductosPage } from './productos/ProductosPage'
-import { ProveedoresPage } from './proveedores/ProveedoresPage'
-import { InventarioDashboardPage } from './inventario/InventarioDashboardPage'
-import { AsignacionesActivasPage as AsignacionesActivasInventarioPage } from './inventario/AsignacionesActivasPage'
-import { HistorialMovimientosPage } from './inventario/HistorialMovimientosPage'
-import { PedidosPage } from './inventario/PedidosPage'
-import { USSPage } from './integraciones/uss/USSPage'
-import { BitacoraPage } from './integraciones/uss/BitacoraPage'
-import { CabifyPage } from './integraciones/cabify/CabifyPage'
-import { ReportesPage } from './reportes/ReportesPage'
-import { DashboardKpisPage } from './reportes/DashboardKpisPage'
-import { RolesPage } from './administracion/RolesPage'
-import { GestionUsuariosPage } from './administracion/GestionUsuariosPage'
-import { MenuPorRolPage } from './administracion/MenuPorRolPage'
-import { MenuPorUsuarioPage } from './administracion/MenuPorUsuarioPage'
-import { GestorMenusPage } from './administracion/GestorMenusPage'
-import { AuditoriaPage } from './administracion/AuditoriaPage'
-import { ZonasPage } from './administracion/ZonasPage'
-import { SedesPage } from './administracion/SedesPage'
-import { ProfilePage } from './profile/ProfilePage'
-// Multas/Telepase
-import { TelepaseHistoricoPage } from './multas-telepase/TelepaseHistoricoPage'
-import { MultasPage } from './multas-telepase/MultasPage'
-import { ConceptosFacturacionPage } from './parametros/ConceptosFacturacionPage'
-import { RangoSeguimientoPage } from './parametros/RangoSeguimientoPage'
-import { GuiasPage } from './GuiasPage'
-import { EscuelaPage } from './EscuelaPage'
+const UsuariosPage = lazy(() => import('./usuarios/UsuariosPage').then(m => ({ default: m.UsuariosPage })))
+const VehiculosPage = lazy(() => import('./vehiculos/VehiculosPage').then(m => ({ default: m.VehiculosPage })))
+const SiniestrosPage = lazy(() => import('./siniestros/SiniestrosPage').then(m => ({ default: m.SiniestrosPage })))
+const VencimientosPage = lazy(() => import('./vencimientos/VencimientosPage').then(m => ({ default: m.VencimientosPage })))
+const InformesPage = lazy(() => import('./informes/InformesPage').then(m => ({ default: m.InformesPage })))
+const AsignacionesActivasPage = lazy(() => import('./asignaciones/AsignacionesActivasPage').then(m => ({ default: m.AsignacionesActivasPage })))
+const ProductosPage = lazy(() => import('./productos/ProductosPage').then(m => ({ default: m.ProductosPage })))
+const ProveedoresPage = lazy(() => import('./proveedores/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })))
+const InventarioDashboardPage = lazy(() => import('./inventario/InventarioDashboardPage').then(m => ({ default: m.InventarioDashboardPage })))
+const AsignacionesActivasInventarioPage = lazy(() => import('./inventario/AsignacionesActivasPage').then(m => ({ default: m.AsignacionesActivasPage })))
+const HistorialMovimientosPage = lazy(() => import('./inventario/HistorialMovimientosPage').then(m => ({ default: m.HistorialMovimientosPage })))
+const PedidosPage = lazy(() => import('./inventario/PedidosPage').then(m => ({ default: m.PedidosPage })))
+const USSPage = lazy(() => import('./integraciones/uss/USSPage').then(m => ({ default: m.USSPage })))
+const BitacoraPage = lazy(() => import('./integraciones/uss/BitacoraPage').then(m => ({ default: m.BitacoraPage })))
+const CabifyPage = lazy(() => import('./integraciones/cabify/CabifyPage').then(m => ({ default: m.CabifyPage })))
+const ReportesPage = lazy(() => import('./reportes/ReportesPage').then(m => ({ default: m.ReportesPage })))
+const DashboardKpisPage = lazy(() => import('./reportes/DashboardKpisPage').then(m => ({ default: m.DashboardKpisPage })))
+const RolesPage = lazy(() => import('./administracion/RolesPage').then(m => ({ default: m.RolesPage })))
+const GestionUsuariosPage = lazy(() => import('./administracion/GestionUsuariosPage').then(m => ({ default: m.GestionUsuariosPage })))
+const MenuPorRolPage = lazy(() => import('./administracion/MenuPorRolPage').then(m => ({ default: m.MenuPorRolPage })))
+const MenuPorUsuarioPage = lazy(() => import('./administracion/MenuPorUsuarioPage').then(m => ({ default: m.MenuPorUsuarioPage })))
+const GestorMenusPage = lazy(() => import('./administracion/GestorMenusPage').then(m => ({ default: m.GestorMenusPage })))
+const AuditoriaPage = lazy(() => import('./administracion/AuditoriaPage').then(m => ({ default: m.AuditoriaPage })))
+const ZonasPage = lazy(() => import('./administracion/ZonasPage').then(m => ({ default: m.ZonasPage })))
+const SedesPage = lazy(() => import('./administracion/SedesPage').then(m => ({ default: m.SedesPage })))
+const ProfilePage = lazy(() => import('./profile/ProfilePage').then(m => ({ default: m.ProfilePage })))
+const TelepaseHistoricoPage = lazy(() => import('./multas-telepase/TelepaseHistoricoPage').then(m => ({ default: m.TelepaseHistoricoPage })))
+const MultasPage = lazy(() => import('./multas-telepase/MultasPage').then(m => ({ default: m.MultasPage })))
+const ConceptosFacturacionPage = lazy(() => import('./parametros/ConceptosFacturacionPage').then(m => ({ default: m.ConceptosFacturacionPage })))
+const RangoSeguimientoPage = lazy(() => import('./parametros/RangoSeguimientoPage').then(m => ({ default: m.RangoSeguimientoPage })))
+const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
+const EscuelaPage = lazy(() => import('./EscuelaPage').then(m => ({ default: m.EscuelaPage })))
 import { fetchGuias, distributeDriversService, type Guia } from '../modules/guias/guiasService'
 
 // Tipo para submenús con jerarquía
@@ -1753,12 +1750,12 @@ export function HomePage() {
               {/* Módulos principales */}
               <Route path="/usuarios" element={
                 <ProtectedRoute menuName="usuarios" action="view">
-                  <UsuariosPage />
+                  <LazyPage><UsuariosPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/vehiculos" element={
                 <ProtectedRoute submenuName="gestion-vehiculos" action="view">
-                  <VehiculosPage />
+                  <LazyPage><VehiculosPage /></LazyPage>
                 </ProtectedRoute>
               } />
               
@@ -1771,19 +1768,19 @@ export function HomePage() {
               } />
               <Route path="/productos" element={
                 <ProtectedRoute submenuName="productos" action="view">
-                  <ProductosPage />
+                  <LazyPage><ProductosPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/proveedores" element={
                 <ProtectedRoute submenuName="proveedores" action="view">
-                  <ProveedoresPage />
+                  <LazyPage><ProveedoresPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
               {/* Inventario */}
               <Route path="/inventario/dashboard" element={
                 <ProtectedRoute submenuName="inventario-dashboard" action="view">
-                  <InventarioDashboardPage />
+                  <LazyPage><InventarioDashboardPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/inventario/movimientos" element={
@@ -1795,28 +1792,28 @@ export function HomePage() {
               } />
               <Route path="/inventario/asignaciones-activas" element={
                 <ProtectedRoute submenuName="inventario-asignaciones" action="view">
-                  <AsignacionesActivasInventarioPage />
+                  <LazyPage><AsignacionesActivasInventarioPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/inventario/historial" element={
                 <ProtectedRoute submenuName="inventario-historial" action="view">
-                  <HistorialMovimientosPage />
+                  <LazyPage><HistorialMovimientosPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/inventario/pedidos" element={
                 <ProtectedRoute submenuName="inventario-pedidos" action="view">
-                  <PedidosPage />
+                  <LazyPage><PedidosPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
               <Route path="/siniestros" element={
                 <ProtectedRoute menuName="siniestros" action="view">
-                  <SiniestrosPage />
+                  <LazyPage><SiniestrosPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/vencimientos" element={
                 <ProtectedRoute submenuName="registro-vencimientos" action="view">
-                  <VencimientosPage />
+                  <LazyPage><VencimientosPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/incidencias" element={
@@ -1828,7 +1825,7 @@ export function HomePage() {
               } />
               <Route path="/informes" element={
                 <ProtectedRoute menuName="informes" action="view">
-                  <InformesPage />
+                  <LazyPage><InformesPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/programacion" element={
@@ -1838,7 +1835,7 @@ export function HomePage() {
                   </LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/estado-de-flota" element={<AsignacionesActivasPage />} />
+              <Route path="/estado-de-flota" element={<LazyPage><AsignacionesActivasPage /></LazyPage>} />
               <Route path="/asignaciones" element={
                 <ProtectedRoute submenuName="asignaciones" action="view">
                   <LazyPage>
@@ -1858,29 +1855,29 @@ export function HomePage() {
               {/* Integraciones */}
               <Route path="/uss" element={
                 <ProtectedRoute submenuName="ctrl-exceso-vel" action="view">
-                  <USSPage />
+                  <LazyPage><USSPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/uss/bitacora" element={
                 <ProtectedRoute submenuName="bitacora-uss" action="view">
-                  <BitacoraPage />
+                  <LazyPage><BitacoraPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/cabify" element={
                 <ProtectedRoute submenuName="cabify" action="view">
-                  <CabifyPage />
+                  <LazyPage><CabifyPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
               {/* Reportes */}
               <Route path="/reportes" element={
                 <ProtectedRoute menuName="reportes" action="view">
-                  <ReportesPage />
+                  <LazyPage><ReportesPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/reportes/dashboard-kpis" element={
                 <ProtectedRoute menuName="reportes" submenuName="dashboard-kpis" action="view">
-                  <DashboardKpisPage />
+                  <LazyPage><DashboardKpisPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
@@ -1896,90 +1893,90 @@ export function HomePage() {
               {/* Administración */}
               <Route path="/gestion-usuarios" element={
                 <ProtectedRoute submenuName="gestion-usuarios" action="view">
-                  <GestionUsuariosPage />
+                  <LazyPage><GestionUsuariosPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/roles" element={
                 <ProtectedRoute submenuName="roles" action="view">
-                  <RolesPage />
+                  <LazyPage><RolesPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/menu-por-rol" element={
                 <ProtectedRoute submenuName="menu-por-rol" action="view">
-                  <MenuPorRolPage />
+                  <LazyPage><MenuPorRolPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/administracion/menu-por-usuario" element={
                 <ProtectedRoute submenuName="menu-por-usuario" action="view">
-                  <MenuPorUsuarioPage />
+                  <LazyPage><MenuPorUsuarioPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/gestor-menus" element={
                 <ProtectedRoute submenuName="gestor-menus" action="view">
-                  <GestorMenusPage />
+                  <LazyPage><GestorMenusPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/auditoria" element={
                 <ProtectedRoute submenuName="auditoria" action="view">
-                  <AuditoriaPage />
+                  <LazyPage><AuditoriaPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/administracion/zonas" element={
                 <ProtectedRoute submenuName="zonas-peligrosas" action="view">
-                  <ZonasPage />
+                  <LazyPage><ZonasPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/administracion/sedes" element={
                 <ProtectedRoute submenuName="sedes" action="view">
-                  <SedesPage />
+                  <LazyPage><SedesPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
               {/* Multas/Telepase */}
               <Route path="/telepase-historico" element={
                 <ProtectedRoute submenuName="telepase-historico" action="view">
-                  <TelepaseHistoricoPage />
+                  <LazyPage><TelepaseHistoricoPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/multas" element={
                 <ProtectedRoute submenuName="multas" action="view">
-                  <MultasPage />
+                  <LazyPage><MultasPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
               {/* Parámetros */}
               <Route path="/conceptos-facturacion" element={
                 <ProtectedRoute submenuName="conceptos-facturacion" action="view">
-                  <ConceptosFacturacionPage />
+                  <LazyPage><ConceptosFacturacionPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/rango-seguimiento-guias" element={
                 <ProtectedRoute submenuName="rango-seguimiento-guias" action="view">
-                  <RangoSeguimientoPage />
+                  <LazyPage><RangoSeguimientoPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
               {/* Guias */}
               <Route path="/guias" element={
                 <ProtectedRoute>
-                  <GuiasPage />
+                  <LazyPage><GuiasPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/guias/:id" element={
                 <ProtectedRoute>
-                  <GuiasPage />
+                  <LazyPage><GuiasPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
               {/* Escuela Conductores (submenú de Seguimiento de Conductores) */}
               <Route path="/escuela-conductores" element={
                 <ProtectedRoute menuName="seguimiento-conductores" submenuName="escuela-conductores" action="view">
-                  <EscuelaPage />
+                  <LazyPage><EscuelaPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
               {/* Perfil de usuario */}
-              <Route path="/perfil" element={<ProfilePage />} />
+              <Route path="/perfil" element={<LazyPage><ProfilePage /></LazyPage>} />
 
               {/* Ruta por defecto - redirige a Estado de Flota */}
               <Route path="/" element={<Navigate to="/estado-de-flota" replace />} />
