@@ -181,6 +181,23 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   // Estado para submodal de mapa
   const [showMapModal, setShowMapModal] = useState(false)
 
+  // Zonas peligrosas activas (para alertar si conductor vive en una)
+  const [zonasPeligrosas, setZonasPeligrosas] = useState<Array<{
+    id: string
+    nombre: string
+    poligono: { lat: number; lng: number }[]
+  }>>([])
+
+  useEffect(() => {
+    supabase
+      .from('zonas_peligrosas')
+      .select('id, nombre, poligono')
+      .eq('activo', true)
+      .then(({ data }) => {
+        setZonasPeligrosas((data || []) as Array<{ id: string; nombre: string; poligono: { lat: number; lng: number }[] }>)
+      })
+  }, [])
+
   const [formData, setFormData] = useState<ProgramacionData>(() => {
     // Si hay datos de edición, pre-cargar
     if (editData) {
@@ -1390,6 +1407,35 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
   // Modo TURNO o CARGO
   const isTurnoMode = formData.modalidad === 'TURNO'
+
+  // Ray casting - verifica si un punto está dentro de un polígono
+  const isPointInPolygon = (lat: number, lng: number, polygon: { lat: number; lng: number }[]): boolean => {
+    let inside = false
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].lng, yi = polygon[i].lat
+      const xj = polygon[j].lng, yj = polygon[j].lat
+      const intersect = ((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)
+      if (intersect) inside = !inside
+    }
+    return inside
+  }
+
+  // Mapa de conductor.id -> nombre de zona peligrosa (null si no está en ninguna)
+  const conductoresEnZona = useMemo(() => {
+    const map = new Map<string, string>()
+    if (zonasPeligrosas.length === 0) return map
+    for (const conductor of conductores) {
+      if (!conductor.direccion_lat || !conductor.direccion_lng) continue
+      for (const zona of zonasPeligrosas) {
+        if (zona.poligono && zona.poligono.length >= 3 &&
+          isPointInPolygon(conductor.direccion_lat, conductor.direccion_lng, zona.poligono)) {
+          map.set(conductor.id, zona.nombre)
+          break
+        }
+      }
+    }
+    return map
+  }, [conductores, zonasPeligrosas])
 
   // Filtrar conductores disponibles con useMemo
   const filteredConductores = useMemo(() => {
@@ -2786,57 +2832,79 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                 )}
                               </div>
                               {/* Conductor Diurno */}
-                              <div
-                                className="conductor-item"
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData('conductorId', par.diurno.id)
-                                  e.dataTransfer.setData('pairPartnerId', par.nocturno.id)
-                                  if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
-                                  e.currentTarget.classList.add('dragging')
-                                }}
-                                onDragEnd={(e) => {
-                                  e.currentTarget.classList.remove('dragging')
-                                }}
-                                style={{ marginBottom: '6px', background: '#FFFBEB', borderColor: '#FCD34D' }}
-                              >
-                                <div className="conductor-avatar" style={{ background: '#F59E0B' }}>
-                                  {par.diurno.nombres.charAt(0)}{par.diurno.apellidos.charAt(0)}
-                                </div>
-                                <div className="conductor-info">
-                                  <p className="conductor-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <Sun size={10} style={{ color: '#F59E0B' }} />
-                                    {par.diurno.nombres} {par.diurno.apellidos}
-                                  </p>
-                                  <p className="conductor-license">DNI: {par.diurno.numero_dni || '-'}</p>
-                                </div>
-                              </div>
+                              {(() => {
+                                const zonaDiurno = conductoresEnZona.get(par.diurno.id)
+                                return (
+                                  <div
+                                    className="conductor-item"
+                                    draggable
+                                    onDragStart={(e) => {
+                                      e.dataTransfer.setData('conductorId', par.diurno.id)
+                                      e.dataTransfer.setData('pairPartnerId', par.nocturno.id)
+                                      if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
+                                      e.currentTarget.classList.add('dragging')
+                                    }}
+                                    onDragEnd={(e) => {
+                                      e.currentTarget.classList.remove('dragging')
+                                    }}
+                                    title={zonaDiurno ? `⚠ Zona peligrosa: ${zonaDiurno}` : undefined}
+                                    style={{ marginBottom: '6px', background: zonaDiurno ? '#FFF1F2' : '#FFFBEB', borderColor: zonaDiurno ? '#FF0033' : '#FCD34D' }}
+                                  >
+                                    <div className="conductor-avatar" style={{ background: zonaDiurno ? '#FF0033' : '#F59E0B' }}>
+                                      {par.diurno.nombres.charAt(0)}{par.diurno.apellidos.charAt(0)}
+                                    </div>
+                                    <div className="conductor-info">
+                                      <p className="conductor-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Sun size={10} style={{ color: zonaDiurno ? '#FF0033' : '#F59E0B' }} />
+                                        {par.diurno.nombres} {par.diurno.apellidos}
+                                      </p>
+                                      <p className="conductor-license">DNI: {par.diurno.numero_dni || '-'}</p>
+                                      {zonaDiurno && (
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: '#FFE4E6', color: '#BE123C' }}>
+                                          ⚠ Zona peligrosa
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
                               {/* Conductor Nocturno */}
-                              <div
-                                className="conductor-item"
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData('conductorId', par.nocturno.id)
-                                  e.dataTransfer.setData('pairPartnerId', par.diurno.id)
-                                  if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
-                                  e.currentTarget.classList.add('dragging')
-                                }}
-                                onDragEnd={(e) => {
-                                  e.currentTarget.classList.remove('dragging')
-                                }}
-                                style={{ background: '#EFF6FF', borderColor: '#93C5FD' }}
-                              >
-                                <div className="conductor-avatar" style={{ background: '#3B82F6' }}>
-                                  {par.nocturno.nombres.charAt(0)}{par.nocturno.apellidos.charAt(0)}
-                                </div>
-                                <div className="conductor-info">
-                                  <p className="conductor-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <Moon size={10} style={{ color: '#3B82F6' }} />
-                                    {par.nocturno.nombres} {par.nocturno.apellidos}
-                                  </p>
-                                  <p className="conductor-license">DNI: {par.nocturno.numero_dni || '-'}</p>
-                                </div>
-                              </div>
+                              {(() => {
+                                const zonanocturno = conductoresEnZona.get(par.nocturno.id)
+                                return (
+                                  <div
+                                    className="conductor-item"
+                                    draggable
+                                    onDragStart={(e) => {
+                                      e.dataTransfer.setData('conductorId', par.nocturno.id)
+                                      e.dataTransfer.setData('pairPartnerId', par.diurno.id)
+                                      if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
+                                      e.currentTarget.classList.add('dragging')
+                                    }}
+                                    onDragEnd={(e) => {
+                                      e.currentTarget.classList.remove('dragging')
+                                    }}
+                                    title={zonanocturno ? `⚠ Zona peligrosa: ${zonanocturno}` : undefined}
+                                    style={{ background: zonanocturno ? '#FFF1F2' : '#EFF6FF', borderColor: zonanocturno ? '#FF0033' : '#93C5FD' }}
+                                  >
+                                    <div className="conductor-avatar" style={{ background: zonanocturno ? '#FF0033' : '#3B82F6' }}>
+                                      {par.nocturno.nombres.charAt(0)}{par.nocturno.apellidos.charAt(0)}
+                                    </div>
+                                    <div className="conductor-info">
+                                      <p className="conductor-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Moon size={10} style={{ color: zonanocturno ? '#FF0033' : '#3B82F6' }} />
+                                        {par.nocturno.nombres} {par.nocturno.apellidos}
+                                      </p>
+                                      <p className="conductor-license">DNI: {par.nocturno.numero_dni || '-'}</p>
+                                      {zonanocturno && (
+                                        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', fontWeight: '600', display: 'inline-block', background: '#FFE4E6', color: '#BE123C' }}>
+                                          ⚠ Zona peligrosa
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           ))
                         )
@@ -2847,6 +2915,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       ) : (
                         filteredConductores.map((conductor) => {
                           const algunoOcupado = conductor.tieneAsignacionDiurna || conductor.tieneAsignacionNocturna
+                          const zonaPeligrosa = conductoresEnZona.get(conductor.id)
                           let infoMsg = ''
                           if (conductor.tieneAsignacionDiurna && !conductor.tieneAsignacionNocturna) {
                             infoMsg = 'Diurno ocupado'
@@ -2868,12 +2937,13 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               onDragEnd={(e) => {
                                 e.currentTarget.classList.remove('dragging')
                               }}
+                              title={zonaPeligrosa ? `⚠ Zona peligrosa: ${zonaPeligrosa}` : undefined}
                               style={{
-                                background: algunoOcupado ? '#FFFBEB' : undefined,
-                                borderColor: algunoOcupado ? '#FCD34D' : undefined
+                                background: zonaPeligrosa ? '#FFF1F2' : algunoOcupado ? '#FFFBEB' : undefined,
+                                borderColor: zonaPeligrosa ? '#FF0033' : algunoOcupado ? '#FCD34D' : undefined
                               }}
                             >
-                              <div className="conductor-avatar">
+                              <div className="conductor-avatar" style={zonaPeligrosa ? { background: '#FF0033' } : undefined}>
                                 {conductor.nombres.charAt(0)}{conductor.apellidos.charAt(0)}
                               </div>
                               <div className="conductor-info">
@@ -2893,6 +2963,20 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                     {formatPreferencia(conductor.preferencia_turno)}
                                   </span>
                                 </p>
+                                {zonaPeligrosa && (
+                                  <span style={{
+                                    fontSize: '9px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '600',
+                                    marginTop: '2px',
+                                    display: 'inline-block',
+                                    background: '#FFE4E6',
+                                    color: '#BE123C'
+                                  }}>
+                                    ⚠ Zona peligrosa
+                                  </span>
+                                )}
                                 {infoMsg && (
                                   <span style={{
                                     fontSize: '9px',
