@@ -60,7 +60,7 @@ export function DashboardKpisModule() {
                 <span className="stat-subtitle">{stats.pendienteDevolucion.subtitle}</span>
               </div>
             </div>
-            <div className="stat-card">
+            {/* <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.cobroPendiente.value}</span>
                 <span className="stat-label">COBRO PENDIENTE (ARRASTRE)</span>
@@ -78,7 +78,7 @@ export function DashboardKpisModule() {
                   <span className="stat-subtitle">{stats.cobroPendiente.subtitle}</span>
                 )}
               </div>
-            </div>
+            </div> */}
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.diasSinSiniestro.value}</span>
