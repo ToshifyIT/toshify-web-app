@@ -1,7 +1,8 @@
 .permanencia-chart {
-  background-color: #ffffff !important;
+  background-color: var(--card-bg, #ffffff) !important;
   border-radius: 16px !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: var(--shadow-sm, 0 4px 6px -1px rgba(0, 0, 0, 0.1)) !important;
+  border: 1px solid var(--border-primary, #f3f4f6);
   padding: 24px;
   min-height: 280px;
   display: flex;
@@ -22,7 +23,7 @@
   font-weight: 700 !important;
   text-transform: uppercase !important;
   letter-spacing: 0.08em !important;
-  color: #374151 !important;
+  color: var(--text-primary, #374151) !important;
   margin: 0;
 }
 
@@ -40,17 +41,17 @@
 
 /* Tooltip styles */
 .permanencia-chart__tooltip {
-  background-color: #ffffff;
-  border: 1px solid #e5e7eb;
+  background-color: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-primary, #e5e7eb);
   border-radius: 8px;
   padding: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }
 
 .permanencia-chart__tooltip-label {
   font-size: 14px;
   font-weight: 600;
-  color: #374151;
+  color: var(--text-primary, #374151);
   margin-bottom: 4px;
   margin-top: 0;
 }
@@ -60,7 +61,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #4b5563;
+  color: var(--text-secondary, #4b5563);
   margin: 0;
 }
 
@@ -80,15 +81,15 @@
   height: 100%;
   width: 100%;
   min-height: 280px;
-  background-color: #ffffff;
+  background-color: var(--card-bg, #ffffff);
   border-radius: 16px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }
 
 .permanencia-chart__spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #f3f4f6;
+  border: 3px solid var(--border-primary, #f3f4f6);
   border-top-color: #dc2626;
   border-radius: 50%;
   animation: spin 1s linear infinite;

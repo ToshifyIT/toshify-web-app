@@ -12,13 +12,37 @@ import {
   X,
   Save,
   RotateCcw,
-  UserPlus
+  UserPlus,
+  Info,
+  Eye
 } from 'lucide-react'
 import { formatCurrency } from '../../../types/facturacion.types'
 import { supabase } from '../../../lib/supabase'
 import { useSede } from '../../../contexts/SedeContext'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
+
+// Detalle del cálculo por conductor
+export interface CabifyPreviewRowDetalle {
+  diasTrabajados: number
+  prorrateoCargoDias: number
+  prorrateoCargoMonto: number
+  prorrateoDiurnoDias: number
+  prorrateoDiurnoMonto: number
+  prorrateoNocturnoDias: number
+  prorrateoNocturnoMonto: number
+  subtotalAlquiler: number
+  subtotalGarantia: number
+  cuotaGarantia: string
+  montoPeajes: number
+  montoExcesos: number
+  montoPenalidades: number
+  ticketsFavor: number
+  subtotalCargos: number
+  subtotalDescuentos: number
+  saldoAnterior: number
+  totalAPagar: number
+}
 
 // Tipo para cada fila del preview Cabify
 export interface CabifyPreviewRow {
@@ -41,6 +65,8 @@ export interface CabifyPreviewRow {
   // Para tracking de cambios
   id?: string // ID en facturacion_cabify si existe
   isModified?: boolean
+  // Detalle del cálculo (opcional)
+  detalle?: CabifyPreviewRowDetalle
 }
 
 interface CabifyPreviewTableProps {
@@ -426,6 +452,99 @@ export function CabifyPreviewTable({
     )
   }
 
+  // Mostrar info general de cómo se calcula
+  const showInfoGeneral = useCallback(() => {
+    Swal.fire({
+      title: 'Cómo se calcula el Preview',
+      html: `
+        <div style="text-align: left; font-size: 13px; line-height: 1.7; color: var(--text-primary, #333);">
+          <p style="margin-bottom: 12px;">Cada fila muestra dos valores principales:</p>
+          <div style="background: rgba(124,58,237,0.08); border-left: 3px solid #7C3AED; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px;">
+            <strong>Importe Contrato</strong> = Suma de alquileres según los días trabajados en cada turno (Diurno, Nocturno, Cargo).
+          </div>
+          <div style="background: rgba(124,58,237,0.08); border-left: 3px solid #7C3AED; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px;">
+            <strong>Excedentes</strong> = Garantía + Peajes + Excesos KM + Penalidades − Tickets a favor + Saldo anterior.
+          </div>
+          <p style="margin-bottom: 8px; font-size: 12px; color: #666;">Detalle de componentes:</p>
+          <ul style="font-size: 12px; color: #555; padding-left: 18px; margin: 0;">
+            <li><strong>Alquiler</strong>: precio diario × días trabajados por turno</li>
+            <li><strong>Garantía</strong>: cuota semanal fija ($50.000)</li>
+            <li><strong>Peajes</strong>: telepeajes de la semana anterior</li>
+            <li><strong>Excesos KM</strong>: km excedidos sobre el límite</li>
+            <li><strong>Penalidades</strong>: multas internas por incumplimiento</li>
+            <li><strong>Tickets a favor</strong>: descuentos a favor del conductor</li>
+            <li><strong>Saldo anterior</strong>: saldo pendiente de semanas previas</li>
+          </ul>
+          <p style="margin-top: 12px; font-size: 11px; color: #888;">
+            Hacé click en el ícono <strong>👁</strong> de cada fila para ver el desglose individual.
+          </p>
+        </div>
+      `,
+      width: 520,
+      confirmButtonText: 'Entendido',
+      confirmButtonColor: '#7C3AED',
+    });
+  }, []);
+
+  // Mostrar detalle de un conductor
+  const showDetalleRow = useCallback((row: CabifyPreviewRow) => {
+    const d = row.detalle;
+    if (!d) {
+      Swal.fire('Sin detalle', 'No hay información de cálculo disponible para este conductor.', 'info');
+      return;
+    }
+
+    const fmt = (n: number) => formatCurrency(n);
+    const total = row.importeContrato + row.excedentes;
+
+    Swal.fire({
+      title: row.conductor,
+      html: `
+        <div style="text-align: left; font-size: 13px; line-height: 1.6; color: var(--text-primary, #333);">
+          <div style="font-size: 11px; color: #888; margin-bottom: 10px;">${row.dni} · ${row.patente || 'Sin patente'} · ${row.email || 'Sin email'}</div>
+          
+          <div style="background: rgba(124,58,237,0.06); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+            <div style="font-weight: 700; font-size: 12px; text-transform: uppercase; color: #7C3AED; margin-bottom: 8px;">Días trabajados: ${d.diasTrabajados}</div>
+            <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+              <tbody>
+                ${d.prorrateoCargoDias > 0 ? `<tr><td style="padding: 3px 0;">Cargo</td><td style="text-align: center;">${d.prorrateoCargoDias} días</td><td style="text-align: right; font-family: monospace;">${fmt(d.prorrateoCargoMonto)}</td></tr>` : ''}
+                ${d.prorrateoDiurnoDias > 0 ? `<tr><td style="padding: 3px 0;">Diurno</td><td style="text-align: center;">${d.prorrateoDiurnoDias} días</td><td style="text-align: right; font-family: monospace;">${fmt(d.prorrateoDiurnoMonto)}</td></tr>` : ''}
+                ${d.prorrateoNocturnoDias > 0 ? `<tr><td style="padding: 3px 0;">Nocturno</td><td style="text-align: center;">${d.prorrateoNocturnoDias} días</td><td style="text-align: right; font-family: monospace;">${fmt(d.prorrateoNocturnoMonto)}</td></tr>` : ''}
+                <tr style="border-top: 1px solid rgba(124,58,237,0.2);"><td style="padding: 5px 0; font-weight: 600;" colspan="2">Subtotal Alquiler</td><td style="text-align: right; font-family: monospace; font-weight: 600;">${fmt(d.subtotalAlquiler)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <table style="width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 12px;">
+            <tbody>
+              <tr><td style="padding: 4px 0;">Garantía <span style="color: #888; font-size: 11px;">(${d.cuotaGarantia})</span></td><td style="text-align: right; font-family: monospace;">${fmt(d.subtotalGarantia)}</td></tr>
+              <tr><td style="padding: 4px 0;">Peajes</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoPeajes)}</td></tr>
+              <tr><td style="padding: 4px 0;">Excesos KM</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoExcesos)}</td></tr>
+              <tr><td style="padding: 4px 0;">Penalidades</td><td style="text-align: right; font-family: monospace;">${fmt(d.montoPenalidades)}</td></tr>
+              <tr><td style="padding: 4px 0; color: #16a34a;">Tickets a favor</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.ticketsFavor)}</td></tr>
+              <tr style="border-top: 1px solid #ddd;"><td style="padding: 4px 0;">Subtotal Cargos</td><td style="text-align: right; font-family: monospace;">${fmt(d.subtotalCargos)}</td></tr>
+              <tr><td style="padding: 4px 0;">Subtotal Descuentos</td><td style="text-align: right; font-family: monospace; color: #16a34a;">-${fmt(d.subtotalDescuentos)}</td></tr>
+              <tr><td style="padding: 4px 0;">Saldo anterior</td><td style="text-align: right; font-family: monospace; ${d.saldoAnterior > 0 ? 'color: #16a34a;' : d.saldoAnterior < 0 ? 'color: #dc2626;' : ''}">${d.saldoAnterior > 0 ? '-' : ''}${fmt(Math.abs(d.saldoAnterior))}</td></tr>
+            </tbody>
+          </table>
+
+          <div style="background: var(--bg-secondary, #f8f9fa); border-radius: 6px; padding: 12px; border: 1px solid var(--border-color, #e5e7eb);">
+            <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+              <tbody>
+                <tr><td style="padding: 4px 0; font-weight: 700;">Importe Contrato</td><td style="text-align: right; font-family: monospace; font-weight: 700;">${fmt(row.importeContrato)}</td></tr>
+                <tr><td style="padding: 4px 0; font-weight: 700;">Excedentes</td><td style="text-align: right; font-family: monospace; font-weight: 700;">${fmt(row.excedentes)}</td></tr>
+                <tr style="border-top: 2px solid #7C3AED;"><td style="padding: 6px 0; font-weight: 700; font-size: 14px; color: #7C3AED;">TOTAL</td><td style="text-align: right; font-family: monospace; font-weight: 700; font-size: 14px; color: #7C3AED;">${fmt(total)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `,
+      width: 480,
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#7C3AED',
+    });
+  }, []);
+
   return (
     <div className="fact-preview-container">
       {/* Header */}
@@ -436,7 +555,16 @@ export function CabifyPreviewTable({
             Volver
           </button>
           <div className="fact-preview-title">
-            <h2>Preview Facturación Cabify</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2>Preview Facturación Cabify</h2>
+              <button
+                className="cabify-info-btn"
+                onClick={showInfoGeneral}
+                title="Cómo se calcula"
+              >
+                <Info size={16} />
+              </button>
+            </div>
             <span className="fact-preview-subtitle">
               Semana {semana}/{anio} - {fechaInicio} al {fechaFin}
             </span>
@@ -528,6 +656,7 @@ export function CabifyPreviewTable({
         <table className="fact-preview-table cabify-table">
           <thead>
             <tr>
+              <th className="col-center col-detalle"></th>
               <th>Año</th>
               <th>Semana Fact.</th>
               <th>Fecha Inicial</th>
@@ -551,6 +680,17 @@ export function CabifyPreviewTable({
               const realIdx = data.findIndex(d => d.conductorId === row.conductorId)
               return (
                 <tr key={row.conductorId || idx} className={row.isModified ? 'row-modified' : ''}>
+                  <td className="col-center col-detalle">
+                    {row.detalle && (
+                      <button
+                        className="cabify-eye-btn"
+                        onClick={() => showDetalleRow(row)}
+                        title="Ver detalle del cálculo"
+                      >
+                        <Eye size={14} />
+                      </button>
+                    )}
+                  </td>
                   <td className="col-center">{row.anio}</td>
                   <td className="col-center">{row.semana}</td>
                   <td className="col-center">{row.fechaInicial.toLocaleDateString('es-AR')}</td>
@@ -572,7 +712,7 @@ export function CabifyPreviewTable({
           </tbody>
           <tfoot>
             <tr className="totals-row">
-              <td colSpan={8} className="col-right"><strong>TOTALES:</strong></td>
+              <td colSpan={9} className="col-right"><strong>TOTALES:</strong></td>
               <td className="col-money"><strong>{formatCurrency(totales.importeContrato)}</strong></td>
               <td className="col-money"><strong>{formatCurrency(totales.excedentes)}</strong></td>
               <td></td>
@@ -647,6 +787,13 @@ export function CabifyPreviewTable({
         
         .spinning { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* Info & Eye buttons */
+        .cabify-info-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(124, 58, 237, 0.3); background: rgba(124, 58, 237, 0.08); color: #7C3AED; cursor: pointer; transition: all 0.15s; }
+        .cabify-info-btn:hover { background: rgba(124, 58, 237, 0.2); border-color: #7C3AED; }
+        .col-detalle { width: 32px; min-width: 32px; max-width: 32px; padding: 0 4px !important; }
+        .cabify-eye-btn { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 4px; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; transition: all 0.15s; }
+        .cabify-eye-btn:hover { background: rgba(124, 58, 237, 0.15); color: #7C3AED; }
         
         /* Dark Mode */
         [data-theme="dark"] .cabify-col-th { background: rgba(124, 58, 237, 0.15) !important; border-left-color: rgba(124, 58, 237, 0.4) !important; }

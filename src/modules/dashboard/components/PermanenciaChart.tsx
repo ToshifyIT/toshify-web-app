@@ -205,7 +205,7 @@ export function PermanenciaChart() {
                 <stop offset="95%" stopColor="#dc2626" stopOpacity={0.01}/>
               </linearGradient>
             </defs>
-            <CartesianGrid vertical={false} stroke="#f1f5f9" />
+            <CartesianGrid vertical={false} stroke="var(--border-primary, #f1f5f9)" />
             <XAxis 
               dataKey="name" 
               axisLine={false}
@@ -218,7 +218,7 @@ export function PermanenciaChart() {
               tickFormatter={(value) => `${value}d`}
               allowDecimals={false}
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#e2e8f0', strokeDasharray: '4 4' }} />
+            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--border-primary, #e2e8f0)', strokeDasharray: '4 4' }} />
             <Area 
               type="monotone" 
               dataKey="value" 
@@ -226,8 +226,8 @@ export function PermanenciaChart() {
               strokeWidth={2.5}
               fillOpacity={1} 
               fill="url(#permanenciaGradient)" 
-              dot={{ r: 5, stroke: '#dc2626', strokeWidth: 2.5, fill: '#ffffff' }}
-              activeDot={{ r: 7, stroke: '#dc2626', strokeWidth: 2.5, fill: '#ffffff' }}
+              dot={{ r: 5, stroke: '#dc2626', strokeWidth: 2.5, fill: 'var(--card-bg, #ffffff)' }}
+              activeDot={{ r: 7, stroke: '#dc2626', strokeWidth: 2.5, fill: 'var(--card-bg, #ffffff)' }}
             />
           </AreaChart>
         </ResponsiveContainer>

@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { AlertTriangle, Edit2, Trash2, Plus, MapPin, Shield, Ban, Eye, Settings } from 'lucide-react'
-import { GoogleMap, useJsApiLoader, Polygon, DrawingManager } from '@react-google-maps/api'
+import { GoogleMap, useJsApiLoader, Polygon, DrawingManager, Autocomplete, Marker } from '@react-google-maps/api'
 import { supabase } from '../../lib/supabase'
 import { LoadingOverlay, Spinner } from '../ui/LoadingOverlay'
 import { DataTable } from '../ui/DataTable/DataTable'
@@ -104,6 +104,11 @@ export function ZonasManagement() {
   // Filters
   const [filterTipo, setFilterTipo] = useState<string>('')
   const [filterEstado, setFilterEstado] = useState<string>('')
+
+  // Map search
+  const [searchMarker, setSearchMarker] = useState<{ lat: number; lng: number } | null>(null)
+  const [autocompleteRef, setAutocompleteRef] = useState<google.maps.places.Autocomplete | null>(null)
+  const [generalMapRef, setGeneralMapRef] = useState<google.maps.Map | null>(null)
 
   // Google Maps loader
   const { isLoaded } = useJsApiLoader({
@@ -481,6 +486,22 @@ export function ZonasManagement() {
     }
   ], [])
 
+  // Handle place selected from autocomplete
+  const onPlaceSelected = useCallback(() => {
+    if (!autocompleteRef) return
+    const place = autocompleteRef.getPlace()
+    if (!place?.geometry?.location) return
+
+    const lat = place.geometry.location.lat()
+    const lng = place.geometry.location.lng()
+    setSearchMarker({ lat, lng })
+
+    if (generalMapRef) {
+      generalMapRef.panTo({ lat, lng })
+      generalMapRef.setZoom(15)
+    }
+  }, [autocompleteRef, generalMapRef])
+
   // Render map with all zones
   const renderGeneralMap = () => {
     if (!isLoaded) {
@@ -495,31 +516,56 @@ export function ZonasManagement() {
     const activeZones = zonas.filter(z => z.activo && z.poligono?.length > 0)
 
     return (
-      <GoogleMap
-        mapContainerStyle={mapContainerStyle}
-        center={mapCenter}
-        zoom={12}
-        options={{
-          streetViewControl: false,
-          mapTypeControl: false,
-          fullscreenControl: true,
-          zoomControl: true
-        }}
-      >
-        {activeZones.map(zona => (
-          <Polygon
-            key={zona.id}
-            paths={zona.poligono}
-            options={{
-              fillColor: getZonaColor(zona),
-              fillOpacity: 0.35,
-              strokeColor: getZonaColor(zona),
-              strokeOpacity: 0.8,
-              strokeWeight: 2
-            }}
-          />
-        ))}
-      </GoogleMap>
+      <>
+        <div className="zona-map-search">
+          <MapPin size={16} />
+          <Autocomplete
+            onLoad={setAutocompleteRef}
+            onPlaceChanged={onPlaceSelected}
+          >
+            <input
+              type="text"
+              placeholder="Buscar direccion para ver en el mapa..."
+              className="zona-map-search-input"
+            />
+          </Autocomplete>
+        </div>
+        <GoogleMap
+          mapContainerStyle={mapContainerStyle}
+          center={mapCenter}
+          zoom={12}
+          onLoad={setGeneralMapRef}
+          options={{
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: true,
+            zoomControl: true
+          }}
+        >
+          {activeZones.map(zona => (
+            <Polygon
+              key={zona.id}
+              paths={zona.poligono}
+              options={{
+                fillColor: getZonaColor(zona),
+                fillOpacity: 0.35,
+                strokeColor: getZonaColor(zona),
+                strokeOpacity: 0.8,
+                strokeWeight: 2
+              }}
+            />
+          ))}
+          {searchMarker && (
+            <Marker
+              position={searchMarker}
+              icon={{
+                url: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="#ff0033" stroke="white" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>'),
+                scaledSize: new google.maps.Size(36, 36),
+              }}
+            />
+          )}
+        </GoogleMap>
+      </>
     )
   }
 

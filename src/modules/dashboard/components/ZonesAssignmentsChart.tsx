@@ -6,6 +6,7 @@ import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
 import './ZonesAssignmentsChart.css'
 
+
 /* const DEFAULT_ZONES = [
   'Palermo',
   'Belgrano',
@@ -14,6 +15,7 @@ import './ZonesAssignmentsChart.css'
   'Flores',
   'San Telmo'
 ] */
+
 
 export function ZonesAssignmentsChart() {
   const { sedeActualId } = useSede()

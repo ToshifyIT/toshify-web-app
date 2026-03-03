@@ -6364,7 +6364,27 @@ export function ReporteFacturacionTab() {
           horasConexion: cabifyInfo.horas,
           importeGenerado: cabifyInfo.ganancia,
           importeGeneradoConBonos: cabifyInfo.cobroApp,
-          generadoEfectivo: cabifyInfo.efectivo
+          generadoEfectivo: cabifyInfo.efectivo,
+          detalle: {
+            diasTrabajados: Math.min(7, (f.prorrateo_cargo_dias || 0) + (f.prorrateo_diurno_dias || 0) + (f.prorrateo_nocturno_dias || 0)),
+            prorrateoCargoDias: f.prorrateo_cargo_dias || 0,
+            prorrateoCargoMonto: f.prorrateo_cargo_monto || 0,
+            prorrateoDiurnoDias: f.prorrateo_diurno_dias || 0,
+            prorrateoDiurnoMonto: f.prorrateo_diurno_monto || 0,
+            prorrateoNocturnoDias: f.prorrateo_nocturno_dias || 0,
+            prorrateoNocturnoMonto: f.prorrateo_nocturno_monto || 0,
+            subtotalAlquiler: f.subtotal_alquiler || 0,
+            subtotalGarantia: f.subtotal_garantia || 0,
+            cuotaGarantia: f.cuota_garantia_numero || '',
+            montoPeajes: f.monto_peajes || 0,
+            montoExcesos: f.monto_excesos || 0,
+            montoPenalidades: f.monto_penalidades || 0,
+            ticketsFavor: f.monto_tickets_favor || 0,
+            subtotalCargos: f.subtotal_cargos || 0,
+            subtotalDescuentos: f.subtotal_descuentos || 0,
+            saldoAnterior: f.saldo_anterior || 0,
+            totalAPagar: f.total_a_pagar || 0,
+          }
         }
       })
 
@@ -6483,7 +6503,27 @@ export function ReporteFacturacionTab() {
           horasConexion: cabifyInfo.horas,
           importeGenerado: cabifyInfo.ganancia,
           importeGeneradoConBonos: cabifyInfo.cobroApp,
-          generadoEfectivo: cabifyInfo.efectivo
+          generadoEfectivo: cabifyInfo.efectivo,
+          detalle: {
+            diasTrabajados: Math.min(7, (f.prorrateo_cargo_dias || 0) + (f.prorrateo_diurno_dias || 0) + (f.prorrateo_nocturno_dias || 0)),
+            prorrateoCargoDias: f.prorrateo_cargo_dias || 0,
+            prorrateoCargoMonto: f.prorrateo_cargo_monto || 0,
+            prorrateoDiurnoDias: f.prorrateo_diurno_dias || 0,
+            prorrateoDiurnoMonto: f.prorrateo_diurno_monto || 0,
+            prorrateoNocturnoDias: f.prorrateo_nocturno_dias || 0,
+            prorrateoNocturnoMonto: f.prorrateo_nocturno_monto || 0,
+            subtotalAlquiler: f.subtotal_alquiler || 0,
+            subtotalGarantia: f.subtotal_garantia || 0,
+            cuotaGarantia: f.cuota_garantia_numero || '',
+            montoPeajes: f.monto_peajes || 0,
+            montoExcesos: f.monto_excesos || 0,
+            montoPenalidades: f.monto_penalidades || 0,
+            ticketsFavor: f.monto_tickets_favor || 0,
+            subtotalCargos: f.subtotal_cargos || 0,
+            subtotalDescuentos: f.subtotal_descuentos || 0,
+            saldoAnterior: f.saldo_anterior || 0,
+            totalAPagar: f.total_a_pagar || 0,
+          }
         }
       })
 

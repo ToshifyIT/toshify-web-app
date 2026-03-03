@@ -27,6 +27,6 @@
 
 /* Adjust label list text color if bar is too short */
 .recharts-label-list text {
-  fill: #ffffff;
+  fill: var(--text-primary, #ffffff);
   font-weight: 600;
 }
