@@ -65,12 +65,21 @@ export function ExcelColumnFilter({
     }
   }, [isOpen])
 
-  // Normalizar opciones
+  // Normalizar opciones + siempre incluir los valores ya seleccionados
+  // para que el usuario pueda deseleccionar aunque no haya resultados
   const normalizedOptions = useMemo(() => {
-    return options.map(opt => 
+    const base = options.map(opt =>
       typeof opt === 'string' ? { label: opt, value: opt } : opt
     )
-  }, [options])
+    // Agregar valores seleccionados que no estén ya en la lista
+    const values = new Set(base.map(o => o.value))
+    for (const sel of selectedValues) {
+      if (!values.has(sel)) {
+        base.push({ label: sel, value: sel })
+      }
+    }
+    return base
+  }, [options, selectedValues])
 
   // Filtrar opciones por búsqueda
   const filteredOptions = searchTerm

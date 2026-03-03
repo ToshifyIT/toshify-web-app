@@ -944,10 +944,15 @@ export function VehicleManagement() {
     return [...new Set(patentes)].sort()
   }, [vehiculos])
 
-  // Mostrar labels formateados en el filtro (en vez de códigos como EN_USO)
+  // Opciones de estado únicas derivadas de los vehículos reales (no del catálogo completo)
   const estadosUnicos = useMemo(() => {
-    return vehiculosEstados.map(e => ESTADO_LABELS[e.codigo] || e.codigo).sort()
-  }, [vehiculosEstados])
+    const labels = new Set<string>()
+    vehiculos.forEach(v => {
+      const codigo = v.vehiculos_estados?.codigo
+      if (codigo) labels.add(ESTADO_LABELS[codigo] || codigo)
+    })
+    return Array.from(labels).sort()
+  }, [vehiculos])
 
   // Filtrar vehículos según los filtros de columna (multiselect tipo Excel) Y stat cards
   const filteredVehiculos = useMemo(() => {
