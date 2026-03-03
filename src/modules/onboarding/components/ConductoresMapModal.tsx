@@ -57,8 +57,16 @@ const formatPreferencia = (preferencia?: string): string => {
 }
 
 export default function ConductoresMapModal({ conductores, onConfirmPair, onClose, apiKey }: Props) {
-  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: apiKey, libraries: LIBRARIES })
+  const { isLoaded, loadError } = useJsApiLoader({ googleMapsApiKey: apiKey, libraries: LIBRARIES })
+  const [mapTimeout, setMapTimeout] = useState(false)
   const [activeMarker, setActiveMarker] = useState<string | null>(null)
+
+  // Si Google Maps no carga en 10s, mostrar error con opción de reintentar
+  useEffect(() => {
+    if (isLoaded) return
+    const t = setTimeout(() => setMapTimeout(true), 10000)
+    return () => clearTimeout(t)
+  }, [isLoaded])
   const [searchMap, setSearchMap] = useState('')
   const [selectedDiurno, setSelectedDiurno] = useState<Conductor | null>(null)
   const [selectedNocturno, setSelectedNocturno] = useState<Conductor | null>(null)
@@ -321,7 +329,17 @@ export default function ConductoresMapModal({ conductores, onConfirmPair, onClos
 
           {/* Mapa */}
           <div style={{ flex: 1, position: 'relative', borderRadius: '0 0 16px 0', overflow: 'hidden' }}>
-            {!isLoaded ? (
+            {(loadError || (!isLoaded && mapTimeout)) ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No se pudo cargar Google Maps</span>
+                <button
+                  onClick={() => window.location.reload()}
+                  style={{ padding: '8px 20px', background: '#ff0033', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                >
+                  Reintentar
+                </button>
+              </div>
+            ) : !isLoaded ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)' }}>
                 <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', marginRight: 8 }} /> Cargando mapa...
               </div>

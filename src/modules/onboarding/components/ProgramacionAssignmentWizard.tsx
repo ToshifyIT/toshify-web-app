@@ -10,6 +10,8 @@ import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 // Lazy import para que un fallo de Google Maps no tumbe todo el wizard
 const ConductoresMapModal = lazy(() => import('./ConductoresMapModal'))
+// Precargar el chunk inmediatamente (no esperar al click del usuario)
+import('./ConductoresMapModal').catch(() => { /* ignorar si falla, se reintentará al abrir */ })
 import { useSede } from '../../../contexts/SedeContext'
 import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
@@ -3201,7 +3203,21 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
             {/* Submodal Mapa de Pares - lazy para que un fallo del mapa no tumbe el wizard */}
             {showMapModal && (
-              <Suspense fallback={null}>
+              <Suspense fallback={
+                <div style={{
+                  position: 'fixed', inset: 0, zIndex: 10000,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.5)',
+                }}>
+                  <div style={{
+                    background: 'var(--bg-primary)', borderRadius: 16, padding: '40px 60px',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+                  }}>
+                    <Loader2 size={32} style={{ color: '#ff0033', animation: 'spin 1s linear infinite' }} />
+                    <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Cargando mapa...</span>
+                  </div>
+                </div>
+              }>
                 <ConductoresMapModal
                   conductores={conductores}
                   onConfirmPair={(diurno, nocturno) => {
