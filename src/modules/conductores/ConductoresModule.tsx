@@ -1682,124 +1682,77 @@ export function ConductoresModule() {
 
   // Filtrar conductores según filtros de columna Y stat cards (ambos se aplican)
   const filteredConductores = useMemo(() => {
-    let result = conductores;
+    // ─── Sets para O(1) lookup — antes: .includes() O(k) por cada conductor ────
+    const nombreSet = new Set(nombreFilter)
+    const dniSet = new Set(dniFilter)
+    const cbuSet = new Set(cbuFilter)
+    const estadoSet = new Set(estadoFilter)
+    const turnoSet = new Set(turnoFilter)
+    const categoriaSet = new Set(categoriaFilter)
+    const asignacionSet = new Set(asignacionFilter)
+    const statCardEstadoSet = new Set(statCardEstadoFilter)
+    const statCardAsigSet = new Set(statCardAsignacionFilter)
 
-    // === FILTROS DE COLUMNA (desde ExcelColumnFilter) ===
-    if (nombreFilter.length > 0) {
-      result = result.filter(c =>
-        nombreFilter.includes(`${c.nombres} ${c.apellidos}`)
-      );
-    }
+    // Calcular fechas de licencia UNA sola vez (no por conductor)
+    const hoy = new Date()
+    const enXDias = new Date()
+    enXDias.setDate(hoy.getDate() + DIAS_LICENCIA_POR_VENCER)
+    const hoyStr = hoy.toISOString().split('T')[0]
+    const { inicio: inicioSemana, fin: finSemana } = (statCardEstadoSet.has('BAJA') || statCardEstadoFilter.length > 0)
+      ? getWeekRange(true)
+      : { inicio: new Date(0), fin: new Date(0) }
 
-    if (dniFilter.length > 0) {
-      result = result.filter(c =>
-        dniFilter.includes(c.numero_dni || '')
-      );
-    }
+    // ─── Una sola pasada O(n) con early-return — antes: 8+ pasadas O(n) cada una ─
+    const result = conductores.filter(c => {
+      const estadoCodigo = c.conductores_estados?.codigo || ''
+      const estadoCodigoLower = estadoCodigo.toLowerCase()
+      const tieneAsignacion = !!(c as any).vehiculo_asignado
+      const esActivo = estadoCodigoLower === 'activo'
 
-    if (cbuFilter.length > 0) {
-      result = result.filter(c =>
-        cbuFilter.includes(c.numero_cuit || '')
-      );
-    }
-
-    if (estadoFilter.length > 0) {
-      result = result.filter(c => {
-        const codigo = c.conductores_estados?.codigo || '';
-        return estadoFilter.includes(codigo);
-      });
-    }
-
-    if (turnoFilter.length > 0) {
-      result = result.filter(c =>
-        turnoFilter.includes((c as any).preferencia_turno || 'SIN_PREFERENCIA')
-      );
-    }
-
-    if (categoriaFilter.length > 0) {
-      result = result.filter(c => {
-        const categorias = c.licencias_categorias;
-        if (!Array.isArray(categorias) || categorias.length === 0) return false;
-        return categorias.some((cat: any) => categoriaFilter.includes(cat.codigo));
-      });
-    }
-
-    if (asignacionFilter.length > 0) {
-      result = result.filter(c => {
-        const tieneAsignacion = !!(c as any).vehiculo_asignado;
-        const esActivo = c.conductores_estados?.codigo?.toLowerCase() === 'activo';
-        if (asignacionFilter.includes('asignado') && tieneAsignacion && esActivo) return true;
-        if (asignacionFilter.includes('disponible') && !tieneAsignacion && esActivo) return true;
-        return false;
-      });
-    }
-
-    if (licenciaVencerFilter) {
-      const hoy = new Date();
-      const enXDias = new Date();
-      enXDias.setDate(enXDias.getDate() + DIAS_LICENCIA_POR_VENCER);
-      result = result.filter(c => {
-        const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
-        if (estadoCodigo !== 'activo') return false;
-        if (!c.licencia_vencimiento) return false;
-        const fechaVenc = new Date(c.licencia_vencimiento);
-        return fechaVenc >= hoy && fechaVenc <= enXDias;
-      });
-    }
-
-    // === FILTROS DE STAT CARDS (adicionales, se aplican EN CONJUNTO con filtros de columna) ===
-    if (statCardEstadoFilter.length > 0) {
-      // Filtro especial para BAJA: solo bajas con fecha_terminacion en semana actual o anterior
-      if (statCardEstadoFilter.includes('BAJA')) {
-        const { inicio: inicioSemana, fin: finSemana } = getWeekRange(true);
-        result = result.filter(c => {
-          const estadoCodigo = c.conductores_estados?.codigo?.toUpperCase() || '';
-          if (estadoCodigo !== 'BAJA') return false;
-          // Solo contar si tiene fecha_terminacion
-          if (!c.fecha_terminacion) return false;
-          const fechaBaja = new Date(c.fecha_terminacion + 'T12:00:00');
-          return fechaBaja >= inicioSemana && fechaBaja <= finSemana;
-        });
-      } else {
-        result = result.filter(c =>
-          statCardEstadoFilter.includes(c.conductores_estados?.codigo || '')
-        );
+      // Filtros de columna
+      if (nombreSet.size > 0 && !nombreSet.has(`${c.nombres} ${c.apellidos}`)) return false
+      if (dniSet.size > 0 && !dniSet.has(c.numero_dni || '')) return false
+      if (cbuSet.size > 0 && !cbuSet.has(c.numero_cuit || '')) return false
+      if (estadoSet.size > 0 && !estadoSet.has(estadoCodigo)) return false
+      if (turnoSet.size > 0 && !turnoSet.has((c as any).preferencia_turno || 'SIN_PREFERENCIA')) return false
+      if (categoriaSet.size > 0) {
+        const cats = c.licencias_categorias
+        if (!Array.isArray(cats) || cats.length === 0) return false
+        if (!cats.some((cat: any) => categoriaSet.has(cat.codigo))) return false
       }
-    }
+      if (asignacionSet.size > 0) {
+        const okAsignado = asignacionSet.has('asignado') && tieneAsignacion && esActivo
+        const okDisponible = asignacionSet.has('disponible') && !tieneAsignacion && esActivo
+        if (!okAsignado && !okDisponible) return false
+      }
+      if (licenciaVencerFilter || statCardLicenciaFilter) {
+        if (estadoCodigoLower !== 'activo' || !c.licencia_vencimiento) return false
+        const fechaVenc = new Date(c.licencia_vencimiento)
+        if (!(fechaVenc >= hoy && fechaVenc <= enXDias)) return false
+      }
 
-    if (statCardAsignacionFilter.length > 0) {
-      result = result.filter(c => {
-        const tieneAsignacion = !!(c as any).vehiculo_asignado;
-        const esActivo = c.conductores_estados?.codigo?.toLowerCase() === 'activo';
-        // "asignado" = activo + tiene asignación
-        if (statCardAsignacionFilter.includes('asignado') && tieneAsignacion && esActivo) return true;
-        // "disponible" = activo + sin asignación
-        if (statCardAsignacionFilter.includes('disponible') && !tieneAsignacion && esActivo) return true;
-        return false;
-      });
-    }
+      // Filtros de stat cards
+      if (statCardEstadoSet.size > 0) {
+        if (statCardEstadoSet.has('BAJA')) {
+          if (estadoCodigo.toUpperCase() !== 'BAJA' || !c.fecha_terminacion) return false
+          const fechaBaja = new Date(c.fecha_terminacion + 'T12:00:00')
+          if (!(fechaBaja >= inicioSemana && fechaBaja <= finSemana)) return false
+        } else {
+          if (!statCardEstadoSet.has(estadoCodigo)) return false
+        }
+      }
+      if (statCardAsigSet.size > 0) {
+        const okAsignado = statCardAsigSet.has('asignado') && tieneAsignacion && esActivo
+        const okDisponible = statCardAsigSet.has('disponible') && !tieneAsignacion && esActivo
+        if (!okAsignado && !okDisponible) return false
+      }
+      if (statCardLicenciaVencidaFilter) {
+        if (estadoCodigoLower === 'baja') return false
+        if (!c.licencia_vencimiento || c.licencia_vencimiento >= hoyStr) return false
+      }
 
-    if (statCardLicenciaFilter) {
-      const hoy = new Date();
-      const enXDias = new Date();
-      enXDias.setDate(enXDias.getDate() + DIAS_LICENCIA_POR_VENCER);
-      result = result.filter(c => {
-        const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
-        if (estadoCodigo !== 'activo') return false;
-        if (!c.licencia_vencimiento) return false;
-        const fechaVenc = new Date(c.licencia_vencimiento);
-        return fechaVenc >= hoy && fechaVenc <= enXDias;
-      });
-    }
-
-    if (statCardLicenciaVencidaFilter) {
-      const hoyStr = new Date().toISOString().split('T')[0];
-      result = result.filter(c => {
-        const estadoCodigo = c.conductores_estados?.codigo?.toLowerCase();
-        if (estadoCodigo === 'baja') return false;
-        return c.licencia_vencimiento && c.licencia_vencimiento < hoyStr;
-      });
-    }
+      return true
+    })
 
     // Ordenar: primero activos, luego baja
     return result.sort((a, b) => {

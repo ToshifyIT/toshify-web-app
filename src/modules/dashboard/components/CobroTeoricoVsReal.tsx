@@ -452,21 +452,23 @@ export function CobroTeoricoVsReal() {
              })
         })
 
+        // Map por fecha para O(1) en vez de .find() O(7) dentro del loop doble
+        const debugSumaDiariaMap = new Map(debugSumaDiaria.map(x => [x.Fecha, x]))
+
         logsFiltrados.forEach((log: any) => {
              daysInterval.forEach(d => {
                  const diaStr = format(d, 'yyyy-MM-dd')
-                 const monto = log[diaStr] || 0 // Usar key fecha
-                 
+                 const monto = log[diaStr] || 0
+
                  const current = alquilerTeoricoPorDia.get(diaStr) || 0
                  alquilerTeoricoPorDia.set(diaStr, current + monto)
-                 
-                 // Debug
+
                  if (monto > 0) {
-                     const debugItem = debugSumaDiaria.find(x => x.Fecha === diaStr)
-                    if (debugItem) {
-                        debugItem['Conductores que suman'].push(`[${log.ID}] ${log.Conductor}: $${monto}`)
-                        debugItem.Total += monto
-                    }
+                     const debugItem = debugSumaDiariaMap.get(diaStr)
+                     if (debugItem) {
+                         debugItem['Conductores que suman'].push(`[${log.ID}] ${log.Conductor}: $${monto}`)
+                         debugItem.Total += monto
+                     }
                  }
              })
         })

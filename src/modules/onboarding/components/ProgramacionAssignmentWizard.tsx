@@ -475,10 +475,21 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
         const todasAsignaciones = [...(asignacionesActivas || []), ...(asignacionesProgramadas || [])]
 
+        // ─── O(1) lookup structures — construidas una vez antes del .map() ──────
+        const asignacionesPorConductor = new Map<string, typeof todasAsignaciones>()
+        todasAsignaciones.forEach(a => {
+          const arr = asignacionesPorConductor.get(a.conductor_id) || []
+          arr.push(a)
+          asignacionesPorConductor.set(a.conductor_id, arr)
+        })
+        const conductoresActivosSet = new Set((asignacionesActivas || []).map(a => a.conductor_id))
+        const conductoresProgramadosSet = new Set((asignacionesProgramadas || []).map(a => a.conductor_id))
+        // ─────────────────────────────────────────────────────────────────────────
+
         const conductoresConEstado = conductoresActivos.map(conductor => {
-          const asignacionesConductor = todasAsignaciones.filter(a => a.conductor_id === conductor.id)
-          const tieneAsignacionActiva = asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false
-          const tieneAsignacionProgramada = asignacionesProgramadas?.some((a: any) => a.conductor_id === conductor.id) || false
+          const asignacionesConductor = asignacionesPorConductor.get(conductor.id) || []
+          const tieneAsignacionActiva = conductoresActivosSet.has(conductor.id)
+          const tieneAsignacionProgramada = conductoresProgramadosSet.has(conductor.id)
           const tieneAsignacionDiurna = asignacionesConductor.some(a => a.horario === 'diurno')
           const tieneAsignacionNocturna = asignacionesConductor.some(a => a.horario === 'nocturno')
           const tieneAsignacionCargo = asignacionesConductor.some(a => a.horario !== 'diurno' && a.horario !== 'nocturno')
@@ -1442,6 +1453,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   // Filtrar conductores disponibles con useMemo
   const filteredConductores = useMemo(() => {
     const searchLower = conductorSearch.toLowerCase()
+    // Set para O(1) en .filter() y .sort() — evita O(k) .includes() por cada comparación
+    const conductoresDelVehiculoSet = new Set(conductoresDelVehiculoActual)
+
     return conductores
       .filter(c => {
         // Excluir conductores ya seleccionados en los slots
@@ -1453,8 +1467,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           (c.numero_dni || '').includes(searchLower)
 
         // Si el conductor ya está asignado al vehículo seleccionado, SIEMPRE mostrarlo
-        // (solo respetando la búsqueda, ignorando otros filtros)
-        const esDelVehiculoActual = conductoresDelVehiculoActual.includes(c.id)
+        const esDelVehiculoActual = conductoresDelVehiculoSet.has(c.id)
         if (esDelVehiculoActual && matchesSearch) {
           return true
         }
@@ -1482,9 +1495,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         return matchesSearch && matchesStatus && matchesTurno
       })
       .sort((a, b) => {
-        // Conductores del vehículo actual primero
-        const aEsDelVehiculo = conductoresDelVehiculoActual.includes(a.id)
-        const bEsDelVehiculo = conductoresDelVehiculoActual.includes(b.id)
+        // O(1) con Set — antes O(k) con .includes() en cada comparación del sort
+        const aEsDelVehiculo = conductoresDelVehiculoSet.has(a.id)
+        const bEsDelVehiculo = conductoresDelVehiculoSet.has(b.id)
         if (aEsDelVehiculo && !bEsDelVehiculo) return -1
         if (!aEsDelVehiculo && bEsDelVehiculo) return 1
         // Disponibles segundo

@@ -562,6 +562,18 @@ export function IncidenciasModule() {
     return filtered
   }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, dateRangeLogistica])
 
+  // Maps para O(1) lookup — evitan .find() O(n) dentro de useMemos que se recalculan seguido
+  const penalidadesPorIncidencia = useMemo(
+    () => new Map<string, (typeof penalidades)[0]>(
+      penalidades.filter(p => p.incidencia_id).map(p => [p.incidencia_id!, p])
+    ),
+    [penalidades]
+  )
+  const tiposCobroDescuentoMap = useMemo(
+    () => new Map<string, (typeof tiposCobroDescuento)[0]>(tiposCobroDescuento.map(t => [t.id, t])),
+    [tiposCobroDescuento]
+  )
+
   // Filtrar incidencias de COBRO (tipo='cobro')
   const incidenciasCobro = useMemo(() => {
     let filtered = incidencias.filter(i => i.tipo === 'cobro')
@@ -576,12 +588,8 @@ export function IncidenciasModule() {
     
     // Filtro de pendientes de enviar a facturación
     if (soloPendientesEnviar) {
-      filtered = filtered.filter(i => {
-        const penalidad = penalidades.find(p => p.incidencia_id === i.id)
-        // Puede enviarse SOLO si no tiene penalidad asociada
-        // Si ya tiene penalidad (aplicada o rechazada/no aplica), ya no esta pendiente
-        return !penalidad
-      })
+      // O(1) con Map en vez de O(n) con .find() por cada incidencia
+      filtered = filtered.filter(i => !penalidadesPorIncidencia.has(i.id))
     }
 
     if (patenteFilter.length > 0) {
@@ -602,24 +610,22 @@ export function IncidenciasModule() {
     if (tipoIncFilter.length > 0) {
       filtered = filtered.filter(i => {
         if (!i.tipo_cobro_descuento_id) return false
-        const tipoNombre = tiposCobroDescuento.find(t => t.id === i.tipo_cobro_descuento_id)?.nombre
+        // O(1) con Map en vez de O(n) con .find()
+        const tipoNombre = tiposCobroDescuentoMap.get(i.tipo_cobro_descuento_id)?.nombre
         return tipoNombre && tipoIncFilter.includes(tipoNombre)
       })
     }
 
     return filtered
-  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, tipoIncFilter, dateRangeCobro, soloPendientesEnviar, penalidades, tiposCobroDescuento])
+  }, [incidencias, patenteFilter, conductorFilter, estadoFilter, turnoFilter, areaFilter, tipoIncFilter, dateRangeCobro, soloPendientesEnviar, penalidadesPorIncidencia, tiposCobroDescuentoMap])
 
   // Incidencias que pueden enviarse a facturación (no tienen penalidad y tienen monto)
   const incidenciasEnviables = useMemo(() => {
-    return incidenciasCobro.filter(i => {
-      const penalidad = penalidades.find(p => p.incidencia_id === i.id)
-      // Solo puede enviarse si NO tiene penalidad asociada (ni aplicada ni rechazada)
-      const puedeEnviar = !penalidad
-      const tieneMonto = (i.monto || 0) > 0
-      return puedeEnviar && tieneMonto
-    })
-  }, [incidenciasCobro, penalidades])
+    return incidenciasCobro.filter(i =>
+      // O(1) con Map en vez de O(n) con .find()
+      !penalidadesPorIncidencia.has(i.id) && (i.monto || 0) > 0
+    )
+  }, [incidenciasCobro, penalidadesPorIncidencia])
 
   // Handlers para selección masiva
   const handleToggleSeleccion = (id: string) => {

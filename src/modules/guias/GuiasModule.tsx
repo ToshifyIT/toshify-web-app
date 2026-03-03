@@ -1098,6 +1098,21 @@ export function GuiasModule() {
         const processedDrivers: any[] = [];
         const updatesToPerform: any[] = [];
         
+        // Pre-agrupar seguimientoRules por turno dominante — O(1) por conductor en vez de O(rules) c/u
+        // Clave especial '__ALL__' para reglas sin sub_rango (aplican a todos los turnos)
+        const seguimientoRulesByTurno = new Map<string, any[]>()
+        ;(seguimientoRules || []).forEach((rule: any) => {
+          let sub = (rule.sub_rango_nombre || '').toString().toUpperCase().trim()
+          if (sub) {
+            sub = sub.replace(/[_\s]+/g, ' ').trim()
+            if (sub === 'A CARGO') sub = 'CARGO'
+          }
+          const key = sub || '__ALL__'
+          const arr = seguimientoRulesByTurno.get(key) || []
+          arr.push(rule)
+          seguimientoRulesByTurno.set(key, arr)
+        })
+
         for (const historial of historialData) {
           const conductor = historial.conductores;
           
@@ -1177,14 +1192,11 @@ export function GuiasModule() {
 
           let matchingSeguimientoRules: any[] = [];
           if (dominantTurno && seguimientoRules && seguimientoRules.length > 0) {
-            matchingSeguimientoRules = seguimientoRules.filter((rule: any) => {
-              let sub = (rule.sub_rango_nombre || '').toString().toUpperCase().trim();
-              if (sub) {
-                sub = sub.replace(/[_\s]+/g, ' ').trim();
-                if (sub === 'A CARGO') sub = 'CARGO';
-              }
-              return !sub || sub === dominantTurno;
-            });
+            // O(1) lookup en Map pre-agrupado — antes: O(rules) con .filter() por conductor
+            matchingSeguimientoRules = [
+              ...(seguimientoRulesByTurno.get(dominantTurno) || []),
+              ...(seguimientoRulesByTurno.get('__ALL__') || []),
+            ]
           }
 
           const totalPrevWeek = typeof prevWeekStats.total === 'number'

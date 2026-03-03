@@ -2237,11 +2237,14 @@ export function ReporteFacturacionTab() {
         (pagosCuotasRecalcRes.data || []).map((p: any) => p.referencia_id).filter(Boolean)
       )
 
+      // Set para O(1) en lugar de O(n) con .includes()
+      const conductorIdsSet = new Set<string>(conductorIds)
+
       // Filtrar por año correcto (o sin año), conductores del período, y excluir cuotas pagadas (aplicado=true O en pagos_conductores)
       const penalidadesCuotas = (penalidadesCuotasResult.data || []).filter((pc: any) =>
         (!pc.anio || pc.anio <= anioNum) &&
         pc.penalidad?.conductor_id &&
-        conductorIds.includes(pc.penalidad.conductor_id) &&
+        conductorIdsSet.has(pc.penalidad.conductor_id) &&
         pc.aplicado !== true &&
         !cuotasPagadasRecalcIds.has(pc.id)
       )
@@ -2259,6 +2262,49 @@ export function ReporteFacturacionTab() {
       const garantias = garantiasRes.data || []
       // Filtrar cobros fraccionados: excluir pagados (aplicado=true O en pagos_conductores)
       const cobros = (cobrosRes.data || []).filter((c: any) => c.aplicado !== true && !cuotasPagadasRecalcIds.has(c.id))
+
+      // ─── O(1) lookup Maps — construidos una vez, usados en el loop por conductor ───
+      // Antes: cada iteración hacía .find()/.filter() sobre el array completo → O(n²)
+      // Ahora: lookup en O(1) por conductor_id → O(n) total
+      const garantiasMapById = new Map<string, any>(
+        (garantias as any[]).map((g: any) => [g.conductor_id, g])
+      )
+      const penalidadesGrouped = new Map<string, any[]>()
+      ;(penalidades as any[]).forEach((p: any) => {
+        const arr = penalidadesGrouped.get(p.conductor_id) || []
+        arr.push(p)
+        penalidadesGrouped.set(p.conductor_id, arr)
+      })
+      const ticketsGrouped = new Map<string, any[]>()
+      ;(tickets as any[]).forEach((t: any) => {
+        const arr = ticketsGrouped.get(t.conductor_id) || []
+        arr.push(t)
+        ticketsGrouped.set(t.conductor_id, arr)
+      })
+      const excesosGrouped = new Map<string, any[]>()
+      ;(excesosArr as any[]).forEach((e: any) => {
+        const arr = excesosGrouped.get(e.conductor_id) || []
+        arr.push(e)
+        excesosGrouped.set(e.conductor_id, arr)
+      })
+      const cobrosGrouped = new Map<string, any[]>()
+      ;(cobros as any[]).forEach((c: any) => {
+        const arr = cobrosGrouped.get(c.conductor_id) || []
+        arr.push(c)
+        cobrosGrouped.set(c.conductor_id, arr)
+      })
+      const cuotasGrouped = new Map<string, any[]>()
+      ;(penalidadesCuotas as any[]).forEach((pc: any) => {
+        const cid = pc.penalidad?.conductor_id
+        if (!cid) return
+        const arr = cuotasGrouped.get(cid) || []
+        arr.push(pc)
+        cuotasGrouped.set(cid, arr)
+      })
+      const saldosMapById = new Map<string, any>(
+        (saldos as any[]).map((s: any) => [s.conductor_id, s])
+      )
+      // ─────────────────────────────────────────────────────────────────────────────
 
       // Mapear peajes por DNI (normalizado sin ceros adelante)
       const peajesMap = new Map<string, number>()
@@ -2331,7 +2377,7 @@ export function ReporteFacturacionTab() {
         // Si tiene 0 días (entró solo por penalidades), no cobrar garantía
         // Si garantía completada o cuotas completas, cobrar $0
         const factorProporcional = conductor.total_dias / 7
-        const garantiaConductor = (garantias as any[]).find((g: any) => g.conductor_id === conductor.conductor_id)
+        const garantiaConductor = garantiasMapById.get(conductor.conductor_id)
         const garantiaCompletada = garantiaConductor?.estado === 'completada' || 
           (garantiaConductor && garantiaConductor.cuotas_pagadas >= garantiaConductor.cuotas_totales)
         const cuotaGarantiaProporcional = conductor.total_dias === 0 || garantiaCompletada
@@ -2342,8 +2388,7 @@ export function ReporteFacturacionTab() {
 
         // Penalidades - segmentar por categoría de tipo_cobro_descuento
         // Excluir penalidades fraccionadas: por ID en penalidades_cuotas O por cantidad_cuotas > 1
-        const pensConductor = (penalidades as any[]).filter((p: any) =>
-          p.conductor_id === conductor.conductor_id &&
+        const pensConductor = (penalidadesGrouped.get(conductor.conductor_id) || []).filter((p: any) =>
           !penIdsConCuotas.has(p.id) &&
           !(p.cantidad_cuotas && p.cantidad_cuotas > 1)
         )
@@ -2357,18 +2402,18 @@ export function ReporteFacturacionTab() {
         const totalPenalidades = totalPenP006 + totalPenP007 // solo cargos
 
         // Tickets (descuentos)
-        const ticketsConductor = (tickets as any[]).filter((t: any) => t.conductor_id === conductor.conductor_id)
+        const ticketsConductor = ticketsGrouped.get(conductor.conductor_id) || []
         const totalTickets = ticketsConductor.reduce((sum: number, t: any) => sum + (t.monto || 0), 0)
 
         // Excesos (P006) - no aplica si tiene 0 días
-        const excesosConductor = (excesosArr as any[]).filter((e: any) => e.conductor_id === conductor.conductor_id)
+        const excesosConductor = excesosGrouped.get(conductor.conductor_id) || []
         const totalExcesos = conductor.total_dias === 0 ? 0 : excesosConductor.reduce((sum: number, e: any) => sum + (e.monto_total || 0), 0)
 
         // Peajes (P005) - no aplica si tiene 0 días
         const totalPeajes = conductor.total_dias === 0 ? 0 : (conductor.conductor_dni ? (peajesMap.get(String(conductor.conductor_dni).replace(/^0+/, '')) || 0) : 0)
 
         // Cobros fraccionados (P010) - calcular monto real de la cuota
-        const cobrosConductor = (cobros as any[]).filter((c: any) => c.conductor_id === conductor.conductor_id)
+        const cobrosConductor = cobrosGrouped.get(conductor.conductor_id) || []
         // Usar monto_cuota solo si es razonable (menor que monto_total), sino calcular desde monto_total/total_cuotas
         const calcularMontoCuota = (c: any) => {
           const mt = c.monto_total || 0
@@ -2380,7 +2425,7 @@ export function ReporteFacturacionTab() {
         const totalCobros = cobrosConductor.reduce((sum: number, c: any) => sum + calcularMontoCuota(c), 0)
 
         // Penalidades cuotas (cuotas de penalidades fraccionadas no pagadas hasta esta semana)
-        const cuotasConductor = penalidadesCuotas.filter((pc: any) => pc.penalidad?.conductor_id === conductor.conductor_id)
+        const cuotasConductor = cuotasGrouped.get(conductor.conductor_id) || []
         const totalCuotasPenalidades = cuotasConductor.reduce((sum: number, pc: any) => sum + (pc.monto_cuota || 0), 0)
 
         // Multas (P008)
@@ -2391,7 +2436,7 @@ export function ReporteFacturacionTab() {
         const cantidadMultas = multasVehiculo?.cantidad || 0
 
         // Saldo anterior: se LEE del tab Saldos (solo lectura, no se escribe de vuelta)
-        const saldoConductor = (saldos as any[]).find((s: any) => s.conductor_id === conductor.conductor_id)
+        const saldoConductor = saldosMapById.get(conductor.conductor_id)
         const saldoAnterior = conductor.total_dias === 0 ? 0 : -(saldoConductor?.saldo_actual || 0)
         const diasMora = 0
         const montoMora = 0
@@ -3874,8 +3919,15 @@ export function ReporteFacturacionTab() {
       const matched: typeof cabifyPagosData = []
       const noMatch: string[] = []
 
+      // Map por DNI normalizado — O(1) lookup en vez de O(n) por cada fila del Excel
+      const facturacionesPorDNI = new Map<string, typeof facturaciones[0]>(
+        facturaciones
+          .filter(f => f.conductor_dni)
+          .map(f => [String(f.conductor_dni || '').replace(/[.,\s]/g, '').trim(), f])
+      )
+
       for (const exRow of excelData) {
-        const fact = facturaciones.find(f => String(f.conductor_dni || '').replace(/[.,\s]/g, '').trim() === exRow.dni)
+        const fact = facturacionesPorDNI.get(exRow.dni)
         if (!fact) {
           noMatch.push(`${exRow.nombre} (DNI: ${exRow.dni})`)
           continue
@@ -4452,6 +4504,8 @@ export function ReporteFacturacionTab() {
       // Cargar conceptos pendientes (no aplicados y no en facturacion_detalle)
       const conductorIds = facturacionesFiltradas.map(f => f.conductor_id).filter(Boolean)
       const pendientes: ConceptoPendiente[] = []
+      // Set paralelo para deduplicación O(1) — evita .some() O(n) dentro de loops
+      const pendientesIdsGenerado = new Set<string>()
 
       // 1. Tickets pendientes
       const { data: ticketsPendientes } = await (supabase
@@ -4477,6 +4531,7 @@ export function ReporteFacturacionTab() {
             creadoPor: t.created_by_name,
             origenDetalle: `Ticket ${t.tipo || ''} - Creado ${t.created_at ? format(parseISO(t.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`
           })
+          pendientesIdsGenerado.add(t.id)
         }
       }
 
@@ -4505,15 +4560,14 @@ export function ReporteFacturacionTab() {
             fechaCreacion: p.created_at,
             creadoPor: p.created_by_name,
             origenDetalle: `Penalidad completa - ${p.tipos_cobro_descuento?.nombre || 'Sin tipo'} - Creado ${p.created_at ? format(parseISO(p.created_at), 'dd/MM/yyyy', { locale: es }) : ''}`,
-            // Datos adicionales
             penalidadId: p.id,
             tipoPenalidad: p.tipos_cobro_descuento?.nombre,
             motivoPenalidad: p.motivo,
             notasPenalidad: p.notas,
             fechaPenalidad: p.fecha,
-            // Origen siniestro si existe (se cargará el código después)
             siniestroId: p.siniestro_id
           })
+          pendientesIdsGenerado.add(p.id)
         }
       }
 
@@ -4531,8 +4585,8 @@ export function ReporteFacturacionTab() {
         // Solo incluir las que NO tienen categoria (null o el tipo no existe)
         const categoria = p.tipos_cobro_descuento?.categoria
         if (categoria) continue
-        // Evitar duplicados con los pendientes ya cargados en sección 2
-        if (pendientes.some(pend => pend.id === p.id)) continue
+        // Evitar duplicados — O(1) con Set en lugar de O(n) con .some()
+        if (pendientesIdsGenerado.has(p.id)) continue
         if (!detallesReferencias.has(p.id)) {
           pendientes.push({
             id: p.id,
@@ -4554,6 +4608,7 @@ export function ReporteFacturacionTab() {
             fechaPenalidad: p.fecha,
             siniestroId: p.siniestro_id
           })
+          pendientesIdsGenerado.add(p.id)
         }
       }
 
@@ -4761,11 +4816,19 @@ export function ReporteFacturacionTab() {
       const filasPreview: FacturacionPreviewRow[] = []
       let numeroFactura = 1
 
+      // Agrupar detalles por facturacion_id — O(n) en vez de O(n×m) en el loop
+      const detallesPorFacturacion = new Map<string, any[]>()
+      ;(detallesTyped as any[]).forEach((d: any) => {
+        const id = d.facturacion_conductores?.id
+        if (!id) return
+        const arr = detallesPorFacturacion.get(id) || []
+        arr.push(d)
+        detallesPorFacturacion.set(id, arr)
+      })
+
       // Procesar cada facturación
       for (const fact of facturacionesFiltradas) {
-        const detallesConductor = detallesTyped.filter(
-          (d: any) => d.facturacion_conductores?.id === fact.id
-        )
+        const detallesConductor = detallesPorFacturacion.get(fact.id) || []
 
         if (detallesConductor.length > 0) {
           for (const det of detallesConductor) {
@@ -5007,10 +5070,20 @@ export function ReporteFacturacionTab() {
         .eq('semana', semana)
       
       const todasPenalidadesFiltradas = todasPenalidadesData || []
-      
-      // Separar penalidades incluidas (conductores en Vista Previa) de las no incluidas
-      const penalidadesFiltradas = todasPenalidadesFiltradas.filter((p: any) => conductorIds.includes(p.conductor_id))
-      const penalidadesNoIncluidas = todasPenalidadesFiltradas.filter((p: any) => !conductorIds.includes(p.conductor_id))
+
+      // Set para O(1) lookups — evita dos pasadas O(n×m) con .includes()
+      const conductorIdsSetPreview = new Set<string>(conductorIds)
+
+      // Separar penalidades incluidas/no-incluidas en una sola pasada O(n)
+      const penalidadesFiltradas: any[] = []
+      const penalidadesNoIncluidas: any[] = []
+      todasPenalidadesFiltradas.forEach((p: any) => {
+        if (conductorIdsSetPreview.has(p.conductor_id)) {
+          penalidadesFiltradas.push(p)
+        } else {
+          penalidadesNoIncluidas.push(p)
+        }
+      })
       
       // Agrupar penalidades por conductor
       const penalidadesMap = new Map<string, any[]>()
@@ -5065,7 +5138,7 @@ export function ReporteFacturacionTab() {
       
       // Identificar penalidades_cuotas no incluidas (de conductores fuera de Vista Previa)
       const penalidadesCuotasNoIncluidas = penalidadesCuotasFiltradas.filter(
-        (pc: any) => pc.penalidad?.conductor_id && !conductorIds.includes(pc.penalidad.conductor_id)
+        (pc: any) => pc.penalidad?.conductor_id && !conductorIdsSetPreview.has(pc.penalidad.conductor_id)
       )
 
       // 8. Cargar tickets a favor de conductores NO en Vista Previa
@@ -5076,7 +5149,7 @@ export function ReporteFacturacionTab() {
         .is('periodo_aplicado_id', null)
       
       const ticketsNoIncluidos = (todosTicketsData || []).filter(
-        (t: any) => !conductorIds.includes(t.conductor_id)
+        (t: any) => !conductorIdsSetPreview.has(t.conductor_id)
       )
 
       // 9. Cargar cobros fraccionados de conductores NO en Vista Previa (hasta esta semana) — ya tenemos pagosFraccionadosIds
@@ -5087,18 +5160,25 @@ export function ReporteFacturacionTab() {
         .eq('anio', anio)
       
       const cobrosNoIncluidos = ((todosCobrosData || []).filter(
-        (c: any) => !conductorIds.includes(c.conductor_id) && c.aplicado !== true && !pagosFraccionadosIds.has(c.id)
+        (c: any) => !conductorIdsSetPreview.has(c.conductor_id) && c.aplicado !== true && !pagosFraccionadosIds.has(c.id)
       ))
 
       // Crear lista de conceptos NO incluidos para mostrar en el panel
       const pendientes: ConceptoPendiente[] = []
-      
+      // Set paralelo para deduplicación en O(1) — evita .some() O(n) dentro de loops
+      const pendientesIds = new Set<string>()
+
+      const pushPendiente = (item: ConceptoPendiente) => {
+        pendientes.push(item)
+        pendientesIds.add(item.id)
+      }
+
       // Penalidades no incluidas
       for (const p of penalidadesNoIncluidas as any[]) {
         const conductorNombre = p.conductor?.nombres && p.conductor?.apellidos
           ? `${p.conductor.nombres} ${p.conductor.apellidos}`
           : p.conductor_nombre || 'Sin nombre'
-        pendientes.push({
+        pushPendiente({
           id: p.id,
           tipo: 'penalidad',
           conductorId: p.conductor_id,
@@ -5114,7 +5194,7 @@ export function ReporteFacturacionTab() {
         const conductorNombre = pc.penalidad?.conductor?.nombres && pc.penalidad?.conductor?.apellidos
           ? `${pc.penalidad.conductor.nombres} ${pc.penalidad.conductor.apellidos}`
           : pc.penalidad?.conductor_nombre || 'Sin nombre'
-        pendientes.push({
+        pushPendiente({
           id: pc.id,
           tipo: 'cobro_fraccionado',
           conductorId: pc.penalidad?.conductor_id || '',
@@ -5130,7 +5210,7 @@ export function ReporteFacturacionTab() {
         const conductorNombre = t.conductor?.nombres && t.conductor?.apellidos
           ? `${t.conductor.nombres} ${t.conductor.apellidos}`
           : t.conductor_nombre || 'Sin nombre'
-        pendientes.push({
+        pushPendiente({
           id: t.id,
           tipo: 'ticket',
           conductorId: t.conductor_id,
@@ -5146,7 +5226,7 @@ export function ReporteFacturacionTab() {
         const conductorNombre = c.conductor?.nombres && c.conductor?.apellidos
           ? `${c.conductor.nombres} ${c.conductor.apellidos}`
           : 'Sin nombre'
-        pendientes.push({
+        pushPendiente({
           id: c.id,
           tipo: 'cobro_fraccionado',
           conductorId: c.conductor_id,
@@ -5169,13 +5249,13 @@ export function ReporteFacturacionTab() {
       for (const p of (penalidadesSinTipoData || []) as any[]) {
         const categoria = p.tipos_cobro_descuento?.categoria
         if (categoria) continue
-        // Evitar duplicados
-        if (pendientes.some(pend => pend.id === p.id)) continue
-        const enPreview = conductorIds.includes(p.conductor_id)
+        // Evitar duplicados — O(1) con Set en lugar de O(n) con .some()
+        if (pendientesIds.has(p.id)) continue
+        const enPreview = conductorIdsSetPreview.has(p.conductor_id)
         const conductorNombre = p.conductor?.nombres && p.conductor?.apellidos
           ? `${p.conductor.nombres} ${p.conductor.apellidos}`
           : p.conductor_nombre || 'Sin nombre'
-        pendientes.push({
+        pushPendiente({
           id: p.id,
           tipo: 'penalidad',
           conductorId: p.conductor_id,

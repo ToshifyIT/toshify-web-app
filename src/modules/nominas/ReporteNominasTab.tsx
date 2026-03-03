@@ -255,6 +255,27 @@ export function ReporteNominasTab() {
       const precioTurno = conceptos.find(c => c.codigo === 'P001')?.precio_final || 35000
       const precioCargo = conceptos.find(c => c.codigo === 'P002')?.precio_final || 51428.57
 
+      // ─── O(1) lookup Maps — construidos una vez antes del .map() ───────────────
+      const penalidadesPorConductor = new Map<string, PenalidadDB[]>()
+      ;(penalidades || []).forEach(p => {
+        const arr = penalidadesPorConductor.get(p.conductor_id) || []
+        arr.push(p)
+        penalidadesPorConductor.set(p.conductor_id, arr)
+      })
+      const siniestrosPorConductor = new Map<string, SiniestroDB[]>()
+      ;(siniestros || []).forEach(s => {
+        const arr = siniestrosPorConductor.get(s.conductor_id) || []
+        arr.push(s)
+        siniestrosPorConductor.set(s.conductor_id, arr)
+      })
+      const cabifyPorDNI = new Map<string, CabifyDB[]>()
+      ;(cabifyData || []).forEach(c => {
+        const arr = cabifyPorDNI.get(c.dni) || []
+        arr.push(c)
+        cabifyPorDNI.set(c.dni, arr)
+      })
+      // ─────────────────────────────────────────────────────────────────────────────
+
       // 7. Procesar nóminas por conductor
       const nominasCalculadas: NominaResumen[] = asignaciones.map(asig => {
         const conductor = asig.conductores
@@ -269,19 +290,18 @@ export function ReporteNominasTab() {
         const alquilerSemanal = tipoHorario === 'CARGO' ? precioCargo : precioTurno
 
         // Sumar penalidades del conductor
-        const penConductor = (penalidades || []).filter(p => p.conductor_id === conductor.id)
+        const penConductor = penalidadesPorConductor.get(conductor.id) || []
         const totalPenalidades = penConductor.reduce((sum, p) => sum + (parseFloat(String(p.monto)) || 0), 0)
 
         // Sumar siniestros del conductor (solo si es responsable)
-        const sinConductor = (siniestros || []).filter(s => s.conductor_id === conductor.id)
+        const sinConductor = siniestrosPorConductor.get(conductor.id) || []
         const totalSiniestros = sinConductor.reduce((sum, s) => {
           const presupuesto = parseFloat(String(s.presupuesto_real)) || 0
-          // Si es compartida, solo 50%
           return sum + (s.responsable === 'compartida' ? presupuesto * 0.5 : presupuesto)
         }, 0)
 
         // Datos de Cabify
-        const cabConductor = (cabifyData || []).filter(c => c.dni === conductor.numero_dni)
+        const cabConductor = cabifyPorDNI.get(conductor.numero_dni) || []
         const efectivoCabify = cabConductor.reduce((sum, c) => sum + (parseFloat(String(c.cobro_efectivo)) || 0), 0)
         const peajesCabify = cabConductor.reduce((sum, c) => sum + (parseFloat(String(c.peajes)) || 0), 0)
 

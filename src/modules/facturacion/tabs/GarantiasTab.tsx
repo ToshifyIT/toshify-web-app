@@ -205,8 +205,10 @@ export function GarantiasTab() {
       .select('id, nombres, apellidos'))
       .order('apellidos')
 
-    const conductoresDisponibles = ((conductores || []) as ConductorBasico[]).filter((c) => 
-      !garantias.some(g => g.conductor_id === c.id)
+    // Set para O(1) lookup — evita .some() O(m) por cada uno de los n conductores
+    const conductoresConGarantia = new Set((garantias as any[]).map((g: any) => g.conductor_id))
+    const conductoresDisponibles = ((conductores || []) as ConductorBasico[]).filter((c) =>
+      !conductoresConGarantia.has(c.id)
     )
 
     if (conductoresDisponibles.length === 0) {
