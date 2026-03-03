@@ -759,6 +759,37 @@
   color: var(--text-secondary);
 }
 
+.zona-map-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+
+/* El Autocomplete de Google genera un div wrapper — forzar ancho completo */
+.zona-map-search > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.zona-map-search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.zona-map-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
 /* Filters */
 .zona-filters {
   background: var(--bg-primary);

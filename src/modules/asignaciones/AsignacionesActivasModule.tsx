@@ -311,9 +311,9 @@ export function AsignacionesActivasModule() {
       ? ((vehiculosOcupadosOperacionales / vehiculosOperacionalesCount) * 100).toFixed(1)
       : '0'
 
-    // % Operatividad = Vehículos operativos (PKG_ON + EN_USO) / Total Flota
+    // % Operatividad = Vehículos EN_USO / Total Flota
     const porcentajeOperatividad = totalVehiculosFlota > 0
-      ? ((vehiculosOperativos / totalVehiculosFlota) * 100).toFixed(1)
+      ? ((vehiculosEnUso / totalVehiculosFlota) * 100).toFixed(1)
       : '0'
 
     return {
@@ -794,16 +794,13 @@ export function AsignacionesActivasModule() {
               Swal.fire({
                 title: '% Operatividad',
                 html: `
-                  <div style="text-align: left; font-size: 14px; line-height: 1.8;">
-                    <p style="margin-bottom: 12px; color: #6B7280;">Porcentaje de vehículos operativos sobre el total de la flota:</p>
+                   <div style="text-align: left; font-size: 14px; line-height: 1.8;">
+                    <p style="margin-bottom: 12px; color: #6B7280;">Porcentaje de vehículos en uso sobre el total de la flota:</p>
                     <div style="background: #F3F4F6; padding: 16px; border-radius: 8px; font-family: monospace;">
-                      <p style="margin: 0;"><strong>PKG_ON_BASE:</strong> ${stats.pkgOnBase}</p>
-                      <p style="margin: 8px 0;"><strong>EN_USO:</strong> ${stats.enUso}</p>
-                      <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
-                      <p style="margin: 0;"><strong>Total Operativos:</strong> ${stats.pkgOnBase + stats.enUso}</p>
+                      <p style="margin: 0;"><strong>EN_USO:</strong> ${stats.enUso}</p>
                       <p style="margin: 8px 0;"><strong>Total Flota:</strong> ${stats.totalFlota}</p>
                       <hr style="border: none; border-top: 1px solid #D1D5DB; margin: 12px 0;">
-                      <p style="margin: 0; font-size: 16px; color: #059669;"><strong>= (${stats.pkgOnBase} + ${stats.enUso}) / ${stats.totalFlota} = ${stats.porcentajeOperatividad}%</strong></p>
+                      <p style="margin: 0; font-size: 16px; color: #059669;"><strong>= ${stats.enUso} / ${stats.totalFlota} = ${stats.porcentajeOperatividad}%</strong></p>
                     </div>
                   </div>
                 `,
