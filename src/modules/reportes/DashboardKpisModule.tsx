@@ -1,5 +1,4 @@
 import { useDashboardStats } from '../../hooks/useDashboardStats'
-import { Info } from 'lucide-react'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { PeriodComparison } from '../dashboard/components/PeriodComparison'
 import { FleetDonut } from '../dashboard/components/FleetDonut'
