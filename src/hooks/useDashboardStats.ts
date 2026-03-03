@@ -7,6 +7,7 @@ const ESTADOS_EXCLUIDOS = ['ROBO', 'DESTRUCCION_TOTAL', 'JUBILADO', 'DEVUELTO_PR
 interface DashboardCardValue {
   value: string
   subtitle: string
+  extra?: any
 }
 
 interface DashboardStats {
@@ -22,16 +23,10 @@ interface DashboardStats {
   diasSinSiniestro: DashboardCardValue
   diasSinRobo: DashboardCardValue
   totalSaldo: DashboardCardValue
+  vueltasMundo: DashboardCardValue
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(value)
-}
+
 
 function parseFechaSiniestro(fechaStr: string | undefined | null) {
   if (!fechaStr) return null
@@ -82,7 +77,7 @@ export function useDashboardStats() {
     const fetchData = async () => {
       setLoading(true)
       try {
-        const [asignacionesRes, vehiculosRes, siniestrosRes, garantiasRes, saldosRes, conductoresRes] = await Promise.all([
+        const [asignacionesRes, vehiculosRes, siniestrosRes, garantiasRes, saldosRes, conductoresRes, wialonRes] = await Promise.all([
           aplicarFiltroSede(
             supabase
               .from('asignaciones')
@@ -148,13 +143,16 @@ export function useDashboardStats() {
           aplicarFiltroSede(
             supabase
               .from('saldos_conductores')
-              .select('saldo_actual, monto_mora_acumulada')
+              .select('saldo_actual, monto_mora_acumulada, ultima_actualizacion')
           ),
           aplicarFiltroSede(
             supabase
               .from('conductores')
               .select('id, estado_id')
-          )
+          ),
+          supabase
+            .from('wialon_bitacora')
+            .select('kilometraje')
         ])
 
         if (asignacionesRes.error) throw asignacionesRes.error
@@ -163,6 +161,7 @@ export function useDashboardStats() {
         if (garantiasRes.error) throw garantiasRes.error
         if (saldosRes.error) throw saldosRes.error
         if (conductoresRes.error) throw conductoresRes.error
+        if (wialonRes.error) throw wialonRes.error
 
         const asignaciones = (asignacionesRes.data || []) as any[]
         const vehiculos = (vehiculosRes.data || []) as any[]
@@ -170,6 +169,19 @@ export function useDashboardStats() {
         const garantias = (garantiasRes.data || []) as any[]
         const saldos = (saldosRes.data || []) as any[]
         const conductores = (conductoresRes.data || []) as any[]
+        const wialon = (wialonRes.data || []) as any[]
+
+        // Calcular Vueltas al Mundo (930 millones de km)
+        const totalKmHistorico = wialon.reduce((sum: number, row: any) => {
+          const val = parseFloat(row.kilometraje)
+          return sum + (isNaN(val) ? 0 : val)
+        }, 0)
+        const vueltasMundoVal = totalKmHistorico / 40000
+
+        console.log('--- KPI Vueltas al Mundo ---')
+        console.log('Total Kilómetros Histórico:', totalKmHistorico)
+        console.log('Divisor (Vueltas Mundo):', 40000)
+        console.log('Resultado (Vueltas):', vueltasMundoVal)
 
         const vehiculosConAsignacion = new Set(asignaciones.map(a => a.vehiculo_id))
         let totalFlota = 0
@@ -310,6 +322,31 @@ export function useDashboardStats() {
         const totalMora = saldos.reduce((sum, item) => sum + (item.monto_mora_acumulada || 0), 0)
         const totalSaldoFinal = totalSaldoActual + totalMora
 
+        // Calcular Deuda Actual y Deuda Semana Pasada
+        const totalDeudaActual = saldos.reduce((sum: number, item: any) => {
+          const saldo = item.saldo_actual || 0
+          // Sumamos solo saldos negativos (deuda)
+          return sum + (saldo < 0 ? Math.abs(saldo) : 0)
+        }, 0)
+
+        const oneWeekAgo = new Date()
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
+
+        const deudaSemanaPasada = saldos.reduce((sum: number, item: any) => {
+          const saldo = item.saldo_actual || 0
+          const ultimaAct = item.ultima_actualizacion ? new Date(item.ultima_actualizacion) : null
+          
+          // Sumamos deuda actualizada en la última semana
+          if (saldo < 0 && ultimaAct && ultimaAct >= oneWeekAgo) {
+            return sum + Math.abs(saldo)
+          }
+          return sum
+        }, 0)
+
+        const porcentajeDeudaSemanaPasada = totalDeudaActual > 0 
+          ? ((deudaSemanaPasada / totalDeudaActual) * 100).toFixed(1)
+          : '0.0'
+
         setStats({
           totalFlota: {
             value: String(totalFlota),
@@ -344,8 +381,13 @@ export function useDashboardStats() {
             subtitle: `${garantiasEnDevolucion.length} en devolución`,
           },
           cobroPendiente: {
-            value: 'N/A',
-            subtitle: 'N/A',
+            value: formatCurrencyArs(totalDeudaActual),
+            subtitle: `${formatCurrencyArs(deudaSemanaPasada)} (${porcentajeDeudaSemanaPasada}%)`,
+            extra: {
+              deudaSemanaPasada: formatCurrencyArs(deudaSemanaPasada),
+              porcentaje: porcentajeDeudaSemanaPasada,
+              tooltip: 'Porcentaje de la deuda total que corresponde a saldos actualizados en los últimos 7 días'
+            }
           },
           diasSinSiniestro: {
             value: diasDesdeUltimoSiniestro !== null ? String(diasDesdeUltimoSiniestro) : '-',
@@ -356,8 +398,12 @@ export function useDashboardStats() {
             subtitle: `Último: ${formatDateEs(ultimoRobo)}`,
           },
           totalSaldo: {
-            value: formatCurrency(totalSaldoFinal),
+            value: formatCurrencyArs(totalSaldoFinal),
             subtitle: 'Saldo Actual + Mora'
+          },
+          vueltasMundo: {
+            value: vueltasMundoVal.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
+            subtitle: 'Histórico global'
           }
         })
       } catch (error) {

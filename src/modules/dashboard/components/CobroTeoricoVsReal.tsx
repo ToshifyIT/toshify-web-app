@@ -53,15 +53,48 @@ const formatCurrencyFull = (value: number) => {
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
+    // Cálculo de variación porcentual
+    const data = payload[0]?.payload || {};
+    const teorico = Number(data.teorico || 0);
+    const real = Number(data.real || 0);
+    
+    let variationElement = null;
+    if (teorico > 0) {
+      const diff = real - teorico;
+      const percentage = Math.abs((diff / teorico) * 100).toFixed(1);
+      const direction = diff >= 0 ? 'mayor' : 'menor';
+      
+      variationElement = (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e5e7eb', fontSize: '0.75rem', color: '#6b7280', lineHeight: 1.4 }}>
+          El INGRESO PERCIBIDO es un <span style={{ fontWeight: 600, color: diff >= 0 ? '#10b981' : '#ef4444' }}>{percentage}% {direction}</span> respecto a INGRESO ESPERADO
+        </div>
+      );
+    }
+
     return (
       <div className="cobro-teorico-tooltip">
         <span className="cobro-teorico-tooltip-label">{label}</span>
         {payload.map((entry: any, index: number) => (
-          <div key={index} className="cobro-teorico-tooltip-item" style={{ color: entry.color }}>
-            <span style={{ fontWeight: 600 }}>{entry.name}:</span>
-            <span>{formatCurrencyFull(entry.value)}</span>
+          <div key={index} style={{ marginBottom: 4 }}>
+            <div className="cobro-teorico-tooltip-item" style={{ color: entry.color }}>
+              <span style={{ fontWeight: 600 }}>{entry.name}:</span>
+              <span>{formatCurrencyFull(entry.value)}</span>
+            </div>
+            {entry.dataKey === 'teorico' && entry.payload && (
+               <div style={{ paddingLeft: 12, fontSize: '0.85em', color: '#6b7280', display: 'flex', flexDirection: 'column', gap: 1, marginTop: -2, marginBottom: 4 }}>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                   <span>• Garantía:</span>
+                   <span>{formatCurrencyFull(entry.payload.garantia || 0)}</span>
+                 </div>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                   <span>• Alquiler:</span>
+                   <span>{formatCurrencyFull(entry.payload.alquiler || 0)}</span>
+                 </div>
+               </div>
+            )}
           </div>
         ))}
+        {variationElement}
       </div>
     )
   }
@@ -127,8 +160,8 @@ export function CobroTeoricoVsReal() {
            endDate = endOfWeek(new Date(), { weekStartsOn: 1 })
         }
 
-        console.log(`[CobroTeorico] Analizando periodo: ${format(startDate, 'yyyy-MM-dd')} a ${format(endDate, 'yyyy-MM-dd')}`)
-        console.group('[CobroTeorico] CÁLCULO DETALLADO DE COBROS')
+        // console.log(`[CobroTeorico] Analizando periodo: ${format(startDate, 'yyyy-MM-dd')} a ${format(endDate, 'yyyy-MM-dd')}`)
+        // console.group('[CobroTeorico] CÁLCULO DETALLADO DE COBROS')
 
         // Inicializar estructura de datos diaria
         const diasMap = new Map<string, {
@@ -364,7 +397,7 @@ export function CobroTeoricoVsReal() {
             }
         })
         console.table(debugGarantias)
-        console.groupEnd()
+        // console.groupEnd()
 
         // A) GARANTÍA TEÓRICA (Green): Filtro estricto 50000 (Calculado)
         const conductoresConGarantia50k = conductoresActivos.filter(c => {
@@ -381,9 +414,9 @@ export function CobroTeoricoVsReal() {
           const monto = g.monto_cuota_semanal || 0
           
           // Debug específico para Sergio
-          if (c.nombres.toUpperCase().includes('SERGIO') && c.apellidos.toUpperCase().includes('FROENER')) {
-             console.log(`[Debug Garantía Sergio] ID: ${c.id}, Garantía encontrada:`, g, `Monto: ${monto}, Completada: ${completada}`)
-          }
+          // if (c.nombres.toUpperCase().includes('SERGIO') && c.apellidos.toUpperCase().includes('FROENER')) {
+          //    console.log(`[Debug Garantía Sergio] ID: ${c.id}, Garantía encontrada:`, g, `Monto: ${monto}, Completada: ${completada}`)
+          // }
 
           return monto === 50000
         })
@@ -391,15 +424,15 @@ export function CobroTeoricoVsReal() {
         const totalGarantiaTeoricaSemanal = 50000 * conductoresConGarantia50k.length
         const garantiaTeoricaDiaria = totalGarantiaTeoricaSemanal / 7 // Mantener base semanal de 50k / 7
 
-        console.log(`[Garantía TEÓRICA - Green] Conductores con 50k: ${conductoresConGarantia50k.length}`)
-        console.log(`[Garantía TEÓRICA - Green] Total Semanal: ${totalGarantiaTeoricaSemanal} / 7 = ${garantiaTeoricaDiaria.toFixed(2)} por día`)
+        // console.log(`[Garantía TEÓRICA - Green] Conductores con 50k: ${conductoresConGarantia50k.length}`)
+        // console.log(`[Garantía TEÓRICA - Green] Total Semanal: ${totalGarantiaTeoricaSemanal} / 7 = ${garantiaTeoricaDiaria.toFixed(2)} por día`)
 
-        console.group('[DETALLE ALQUILER POR DÍA] - Conductores con Garantía 50K')
+        // console.group('[DETALLE ALQUILER POR DÍA] - Conductores con Garantía 50K')
         const logsFiltrados = conductoresConGarantia50k
             .map(c => logsPorConductor.get(c.id))
             .filter(Boolean)
-        console.table(logsFiltrados)
-        console.groupEnd()
+        // console.table(logsFiltrados)
+        // console.groupEnd()
 
         // C) ALQUILER TEÓRICO (Green): Suma de alquileres SOLO de conductores 50k
         const alquilerTeoricoPorDia = new Map<string, number>()
@@ -438,12 +471,12 @@ export function CobroTeoricoVsReal() {
              })
         })
 
-        console.group('[DETALLE SUMA DIARIA - ALQUILER TEÓRICO]')
-        console.table(debugSumaDiaria.map(d => ({
-            ...d,
-            'Conductores que suman': d['Conductores que suman'].join(' | ')
-        })))
-        console.groupEnd()
+        // console.group('[DETALLE SUMA DIARIA - ALQUILER TEÓRICO]')
+        // console.table(debugSumaDiaria.map(d => ({
+        //    ...d,
+        //    'Conductores que suman': d['Conductores que suman'].join(' | ')
+        // })))
+        // console.groupEnd()
 
         // B) GARANTÍA REAL (Blue): Suma real de garantías configuradas
         // REEMPLAZADO POR NUEVA LÓGICA DE COBRO APP (SOLICITUD USUARIO)
@@ -592,7 +625,9 @@ export function CobroTeoricoVsReal() {
           return {
             ...d,
             teorico: totalTeorico,
-            real: totalReal
+            real: totalReal,
+            garantia: d.garantiaTeorica,
+            alquiler: alquilerTeorico
           }
         })
 
@@ -603,29 +638,33 @@ export function CobroTeoricoVsReal() {
              finalData = dailyData
         } else if (granularity === 'mes') {
             // Agrupar por Semana (Sem 01, Sem 02...)
-            const grouped = new Map<string, { label: string, teorico: number, real: number, count: number }>()
+            const grouped = new Map<string, { label: string, teorico: number, real: number, count: number, garantia: number, alquiler: number }>()
             
             dailyData.forEach(d => {
                 const weekNum = getWeek(d.fecha, { weekStartsOn: 1 })
                 const key = `Sem ${weekNum.toString().padStart(2, '0')}`
                 
                 if (!grouped.has(key)) {
-                    grouped.set(key, { label: key, teorico: 0, real: 0, count: 0 })
+                    grouped.set(key, { label: key, teorico: 0, real: 0, count: 0, garantia: 0, alquiler: 0 })
                 }
                 const g = grouped.get(key)!
                 g.teorico += d.teorico
                 g.real += d.real
+                g.garantia += (d as any).garantia
+                g.alquiler += (d as any).alquiler
                 g.count++
             })
             
             finalData = Array.from(grouped.values()).map(g => ({
                 dia: g.label, // Eje X
                 teorico: g.teorico,
-                real: g.real
+                real: g.real,
+                garantia: g.garantia,
+                alquiler: g.alquiler
             }))
         } else if (granularity === 'ano') {
             // Agrupar por Mes (Ene, Feb...)
-            const grouped = new Map<string, { label: string, order: number, teorico: number, real: number }>()
+            const grouped = new Map<string, { label: string, order: number, teorico: number, real: number, garantia: number, alquiler: number }>()
             
             dailyData.forEach(d => {
                 const monthName = format(d.fecha, 'MMM', { locale: es })
@@ -633,11 +672,13 @@ export function CobroTeoricoVsReal() {
                 const order = d.fecha.getMonth()
                 
                 if (!grouped.has(label)) {
-                    grouped.set(label, { label, order, teorico: 0, real: 0 })
+                    grouped.set(label, { label, order, teorico: 0, real: 0, garantia: 0, alquiler: 0 })
                 }
                 const g = grouped.get(label)!
                 g.teorico += d.teorico
                 g.real += d.real
+                g.garantia += (d as any).garantia
+                g.alquiler += (d as any).alquiler
             })
             
             finalData = Array.from(grouped.values())
@@ -645,7 +686,9 @@ export function CobroTeoricoVsReal() {
                 .map(g => ({
                     dia: g.label, // Eje X
                     teorico: g.teorico,
-                    real: g.real
+                    real: g.real,
+                    garantia: g.garantia,
+                    alquiler: g.alquiler
                 }))
         }
 

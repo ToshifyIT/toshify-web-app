@@ -711,11 +711,25 @@ export function GuiasModule() {
           ));
 
           // Nueva lógica: Consultar directamente cabify_historico
+          console.log('Logs de guias: Consultando cabify_historico', { 
+            startDate: startDate.toISOString(), 
+            endDate: endDate.toISOString() 
+          });
+
           const { data: cabifyDataRaw, error: cabifyError } = await supabase
             .from('cabify_historico')
             .select('dni, nombre, apellido, cobro_app, cobro_efectivo')
             .gte('fecha_inicio', startDate.toISOString())
             .lte('fecha_inicio', endDate.toISOString());
+
+           if (cabifyError) {
+             console.error('Logs de guias: Error en query cabify_historico', cabifyError);
+           } else {
+             console.log(`Logs de guias: Registros encontrados en Cabify: ${cabifyDataRaw?.length || 0}`);
+             if (cabifyDataRaw && cabifyDataRaw.length > 0) {
+               console.log('Logs de guias: Primer registro Cabify (ejemplo):', cabifyDataRaw[0]);
+             }
+           }
 
            if (!cabifyError && cabifyDataRaw && cabifyDataRaw.length > 0) {
              cabifyDataRaw.forEach(d => {
@@ -744,9 +758,11 @@ export function GuiasModule() {
                  entry.cobroEfectivo += cobroEfectivo;
                }
              });
+             console.log(`Logs de guias: Mapas construidos - Por DNI: ${cabifyDriversMapByDni.size}, Por Nombre: ${cabifyDriversMapByName.size}`);
           }
         }
-      } catch {
+      } catch (err) {
+        console.error('Logs de guias: Error general procesando datos Cabify', err);
         // Cabify data cross-reference failed silently
       }
 
@@ -1220,15 +1236,30 @@ export function GuiasModule() {
 
           // Solo buscamos datos frescos de Cabify si estamos en la semana actual
           if (isCurrentWeek) {
+            let matchFound = false;
+            let matchType = '';
+            
             if (dni && cabifyDriversMapByDni.has(dni)) {
               cabifyData = cabifyDriversMapByDni.get(dni);
               facturacionApp = parseCustomCurrency(cabifyData.cobroApp);
               facturacionEfectivo = parseCustomCurrency(cabifyData.cobroEfectivo);
+              matchFound = true;
+              matchType = 'DNI';
             } else if (cabifyDriversMapByName.has(nombreCompleto)) {
               cabifyData = cabifyDriversMapByName.get(nombreCompleto);
               facturacionApp = parseCustomCurrency(cabifyData.cobroApp);
               facturacionEfectivo = parseCustomCurrency(cabifyData.cobroEfectivo);
+              matchFound = true;
+              matchType = 'NOMBRE';
             }
+            
+            if (matchFound) {
+              console.log(`Logs de guias: MATCH EXITOSO (${matchType}) para ${nombreCompleto} (DNI: ${dni})`, cabifyData);
+            } else {
+              // Descomentar para ver fallos (puede ser ruidoso)
+              console.log(`Logs de guias: NO MATCH para ${nombreCompleto} (DNI: ${dni}) - Buscado en mapa DNI (${cabifyDriversMapByDni.has(dni || '')}) o Nombre (${cabifyDriversMapByName.has(nombreCompleto)})`);
+            }
+
             // Recalculamos total si estamos en semana actual
             facturacionTotal = Number((facturacionApp + facturacionEfectivo).toFixed(2));
           }

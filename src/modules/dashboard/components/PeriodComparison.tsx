@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { format, subDays, subWeeks, subMonths, subYears, getWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getMockPeriodData } from '../mockData'
@@ -7,6 +7,8 @@ import { useMultasStats } from '../../../hooks/useMultasStats'
 import { useTelepaseStats } from '../../../hooks/useTelepaseStats'
 import { useIncidenciasStats } from '../../../hooks/useIncidenciasStats'
 import { usePermanenciaStats } from '../../../hooks/usePermanenciaStats'
+import { useKilometrajeStats } from '../../../hooks/useKilometrajeStats'
+import { useVehiculosStats } from '../../../hooks/useVehiculosStats'
 import { useSede } from '../../../contexts/SedeContext'
 import { PeriodPicker } from './PeriodPicker'
 import './PeriodComparison.css'
@@ -19,7 +21,7 @@ interface MetricView {
   valueA: string | React.ReactNode
   valueB: string | React.ReactNode
   variationLabel: string
-  variationSign: 'positive' | 'negative'
+  variationSign: 'positive' | 'negative' | 'neutral'
 }
 
 export function PeriodComparison() {
@@ -43,6 +45,8 @@ export function PeriodComparison() {
   const telepaseStats = useTelepaseStats(granularity, periodA, periodB, sedeActual?.id)
   const incidenciasStats = useIncidenciasStats(granularity, periodA, periodB, sedeActual?.id)
   const permanenciaStats = usePermanenciaStats(granularity, periodA, periodB, sedeActual?.id)
+  const kilometrajeStats = useKilometrajeStats(granularity, periodA, periodB, sedeActual?.id)
+  const vehiculosStats = useVehiculosStats(granularity, periodA, periodB, sedeActual?.id)
 
   const currencyFormatter = useMemo(
     () => ({
@@ -62,6 +66,15 @@ export function PeriodComparison() {
     []
   )
 
+  const kmFormatter = useMemo(
+    () => ({
+      format: (value: number) => {
+        return `${value.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} km`
+      }
+    }),
+    []
+  )
+
   const periodDataA = useMemo(
     () => getMockPeriodData(`${granularity}-${periodA}`),
     [granularity, periodA]
@@ -75,22 +88,33 @@ export function PeriodComparison() {
   const metrics = useMemo<MetricView[]>(() => {
     const metricList: MetricView[] = []
 
+    const calculateVariation = (valA: number, valB: number): { label: string, sign: 'positive' | 'negative' | 'neutral' } => {
+      if (valB === 0) {
+        return { label: 'N/A', sign: 'neutral' }
+      }
+      const diff = valA - valB
+      const percentage = (diff / valB) * 100
+      const isPositive = percentage >= 0
+      return {
+        label: `${isPositive ? '+' : ''}${percentage.toFixed(0)}%`,
+        sign: isPositive ? 'positive' : 'negative'
+      }
+    }
+
     const addCurrencyMetric = (
       id: string,
       name: string,
       valueA: number,
       valueB: number
     ) => {
-      const diff = valueB - valueA
-      const base = valueA === 0 ? 0 : (diff / valueA) * 100
-      const isPositive = base >= 0
+      const variation = calculateVariation(valueA, valueB)
       metricList.push({
         id,
         name,
         valueA: currencyFormatter.format(valueA),
         valueB: currencyFormatter.format(valueB),
-        variationLabel: `${isPositive ? '+' : '-'}${Math.abs(base).toFixed(0)}%`,
-        variationSign: isPositive ? 'positive' : 'negative'
+        variationLabel: variation.label,
+        variationSign: variation.sign
       })
     }
 
@@ -100,60 +124,82 @@ export function PeriodComparison() {
       valueA: number,
       valueB: number
     ) => {
-      const diff = valueB - valueA
-      const base = valueA === 0 ? 0 : (diff / valueA) * 100
-      const isPositive = base >= 0
+      const variation = calculateVariation(valueA, valueB)
       metricList.push({
         id,
         name,
         valueA: telepaseFormatter.format(valueA),
         valueB: telepaseFormatter.format(valueB),
-        variationLabel: `${isPositive ? '+' : '-'}${Math.abs(base).toFixed(0)}%`,
-        variationSign: isPositive ? 'positive' : 'negative'
+        variationLabel: variation.label,
+        variationSign: variation.sign
       })
     }
 
-    const addDaysMetric = (
+    const addKmMetric = (
       id: string,
       name: string,
       valueA: number,
       valueB: number
     ) => {
-      const diff = valueB - valueA
-      const base = valueA === 0 ? 0 : (diff / valueA) * 100
-      const isPositive = base >= 0
-      
-      const formatWithDays = (val: number) => (
-        <>
-          {val.toFixed(0)}{' '}
-          <span style={{ 
-            fontSize: '0.65em', 
-            fontWeight: 400, 
-            color: '#64748b',
-            textTransform: 'uppercase',
-            marginLeft: '2px',
-            letterSpacing: '0.05em'
-          }}>
-            Días
-          </span>
-        </>
-      )
-
+      const variation = calculateVariation(valueA, valueB)
       metricList.push({
         id,
         name,
-        valueA: formatWithDays(valueA),
-        valueB: formatWithDays(valueB),
-        variationLabel: `${isPositive ? '+' : '-'}${Math.abs(base).toFixed(0)}%`,
-        variationSign: isPositive ? 'positive' : 'negative'
+        valueA: kmFormatter.format(valueA),
+        valueB: kmFormatter.format(valueB),
+        variationLabel: variation.label,
+        variationSign: variation.sign
       })
     }
 
-    addDaysMetric(
+    const addCountMetric = (
+      id: string,
+      name: string,
+      valueA: number,
+      valueB: number,
+      suffix?: string
+    ) => {
+      const variation = calculateVariation(valueA, valueB)
+      metricList.push({
+        id,
+        name,
+        valueA: suffix ? `${valueA.toLocaleString('es-AR')} ${suffix}` : valueA.toLocaleString('es-AR'),
+        valueB: suffix ? `${valueB.toLocaleString('es-AR')} ${suffix}` : valueB.toLocaleString('es-AR'),
+        variationLabel: variation.label,
+        variationSign: variation.sign
+      })
+    }
+
+    addCountMetric(
+      'metric-vehiculos-ingreso',
+      'INGRESO DE VEHÍCULOS',
+      vehiculosStats.totalA,
+      vehiculosStats.totalB
+    )
+
+    addCountMetric(
       'metric-permanencia',
       'PROM. PERMANENCIA',
-      permanenciaStats.avgDaysA,
-      permanenciaStats.avgDaysB
+      Math.round(permanenciaStats.avgDaysA),
+      Math.round(permanenciaStats.avgDaysB),
+      'días'
+    )
+
+    addKmMetric(
+      'metric-kilometraje',
+      'KILÓMETROS RECORRIDOS',
+      kilometrajeStats.totalA,
+      kilometrajeStats.totalB
+    )
+
+    const vueltasA = Math.floor(kilometrajeStats.totalA / 3700)
+    const vueltasB = Math.floor(kilometrajeStats.totalB / 3700)
+
+    addCountMetric(
+      'metric-vueltas-argentina',
+      'VUELTAS A ARGENTINA',
+      vueltasA,
+      vueltasB
     )
 
     addCurrencyMetric(
@@ -181,12 +227,15 @@ export function PeriodComparison() {
   }, [
     currencyFormatter,
     telepaseFormatter,
+    kmFormatter,
     periodDataA,
     periodDataB,
     multasStats,
     telepaseStats,
     incidenciasStats,
-    permanenciaStats
+    permanenciaStats,
+    vehiculosStats,
+    kilometrajeStats
   ])
 
   const handleGranularityChange = (value: Granularity) => {
@@ -308,10 +357,18 @@ export function PeriodComparison() {
       <div className="period-comparison-grid">
         {metrics.map(metric => {
           const isPositive = metric.variationSign === 'positive'
-          const Icon = isPositive ? ArrowUpRight : ArrowDownRight
-          const badgeClassName = isPositive
-            ? 'period-comparison-badge period-comparison-badge--positive'
-            : 'period-comparison-badge period-comparison-badge--negative'
+          const isNegative = metric.variationSign === 'negative'
+          
+          let Icon = Minus
+          let badgeClassName = 'period-comparison-badge period-comparison-badge--neutral'
+
+          if (isPositive) {
+            Icon = ArrowUpRight
+            badgeClassName = 'period-comparison-badge period-comparison-badge--positive'
+          } else if (isNegative) {
+            Icon = ArrowDownRight
+            badgeClassName = 'period-comparison-badge period-comparison-badge--negative'
+          }
 
           return (
             <div

@@ -182,7 +182,7 @@ export function PermanenciaChart() {
     <div className="permanencia-chart">
       <div className="permanencia-chart__header">
         <h3 className="permanencia-chart__title">
-          Permanencia Promedio
+          PERMANENCIA PROMEDIO DE CONDUCTORES
         </h3>
         <div className="permanencia-chart__picker">
           <PeriodPicker 

@@ -28,45 +28,38 @@ export function useIncidenciasStats(granularity: Granularity, periodA: string, p
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
-        let conductorIds: string[] | null = null
-
-        if (sedeId) {
-          const { data: conductores } = await supabase
-            .from('conductores')
-            .select('id')
-            .eq('sede_id', sedeId)
-          
-          if (conductores && conductores.length > 0) {
-            conductorIds = conductores.map(c => c.id)
-          } else {
-            if (isMounted) {
-              setStats({ totalA: 0, totalB: 0, loading: false })
-            }
-            return
-          }
-        }
-
         // Run queries in parallel
+        console.log(`[IncidenciasStats] Querying range A: ${rangeA.start.toISOString()} - ${rangeA.end.toISOString()}`)
+        console.log(`[IncidenciasStats] Querying range B: ${rangeB.start.toISOString()} - ${rangeB.end.toISOString()}`)
+
         let queryA = supabase
           .from('v_penalidades_completas')
           .select('monto')
           .eq('aplicado', true)
-          .gte('created_at', rangeA.start.toISOString())
-          .lte('created_at', rangeA.end.toISOString())
+          .gte('fecha', rangeA.start.toISOString())
+          .lte('fecha', rangeA.end.toISOString())
 
         let queryB = supabase
           .from('v_penalidades_completas')
           .select('monto')
           .eq('aplicado', true)
-          .gte('created_at', rangeB.start.toISOString())
-          .lte('created_at', rangeB.end.toISOString())
+          .gte('fecha', rangeB.start.toISOString())
+          .lte('fecha', rangeB.end.toISOString())
 
-        if (conductorIds) {
-          queryA = queryA.in('conductor_id', conductorIds)
-          queryB = queryB.in('conductor_id', conductorIds)
+        if (sedeId) {
+          // Optimización: Filtrar directamente por sede_id en la vista v_penalidades_completas
+          // Esto evita traer todos los conductores y previene el error 414 URI Too Long (CORS)
+          queryA = queryA.eq('sede_id', sedeId)
+          queryB = queryB.eq('sede_id', sedeId)
         }
 
         const [resA, resB] = await Promise.all([queryA, queryB])
+
+        if (resA.error) console.error('[IncidenciasStats] Error A:', resA.error)
+        if (resB.error) console.error('[IncidenciasStats] Error B:', resB.error)
+        
+        console.log(`[IncidenciasStats] Found A: ${resA.data?.length || 0} records`)
+        console.log(`[IncidenciasStats] Found B: ${resB.data?.length || 0} records`)
 
         if (isMounted) {
           const totalA = (resA.data || []).reduce((sum, item) => {

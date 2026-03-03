@@ -13,7 +13,7 @@ export function PermanenceChart() {
   return (
     <div className="dashboard-card">
       <h2 className="dashboard-section-title">
-        PERMANENCIA PROMEDIO
+        PERMANENCIA PROMEDIO DE CONDUCTORES
       </h2>
       <div className="dashboard-chart-container">
         <ResponsiveContainer

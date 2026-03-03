@@ -424,9 +424,10 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
       </button>
 
       {isOpen && (
-
-        <div className="absolute top-full left-0 mt-2 z-50 rounded-lg shadow-xl border p-4 animate-in fade-in zoom-in-95 duration-100 origin-top-left min-w-[280px]" style={{ background: 'var(--card-bg, #ffffff)', borderColor: 'var(--border-primary, #f3f4f6)' }}>
-
+        <div 
+          className={`absolute top-full mt-2 z-50 rounded-lg shadow-xl border p-4 animate-in fade-in zoom-in-95 duration-100 min-w-[280px] ${align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}`} 
+          style={{ background: 'var(--card-bg, #ffffff)', borderColor: 'var(--border-primary, #f3f4f6)' }}
+        >
           {renderHeader()}
           
           {(granularity === 'dia' || granularity === 'semana') && renderCalendar()}

@@ -1,4 +1,5 @@
 import { useDashboardStats } from '../../hooks/useDashboardStats'
+import { Info } from 'lucide-react'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { PeriodComparison } from '../dashboard/components/PeriodComparison'
 import { FleetDonut } from '../dashboard/components/FleetDonut'
@@ -17,6 +18,13 @@ export function DashboardKpisModule() {
       <div className="dkpis-stats">
         {stats && (
           <div className="dkpis-stats-grid">
+            <div className="stat-card">
+              <div className="stat-content">
+                <span className="stat-value">{stats.vueltasMundo.value}</span>
+                <span className="stat-label">VUELTAS AL MUNDO</span>
+                <span className="stat-subtitle">{stats.vueltasMundo.subtitle}</span>
+              </div>
+            </div>
             <div className="stat-card">
               <div className="stat-content">
                 <span className="stat-value">{stats.totalFlota.value}</span>
@@ -56,7 +64,19 @@ export function DashboardKpisModule() {
               <div className="stat-content">
                 <span className="stat-value">{stats.cobroPendiente.value}</span>
                 <span className="stat-label">COBRO PENDIENTE (ARRASTRE)</span>
-                <span className="stat-subtitle">{stats.cobroPendiente.subtitle}</span>
+                {stats.cobroPendiente.extra ? (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="stat-subtitle">{stats.cobroPendiente.extra.deudaSemanaPasada}</span>
+                    <span className="stat-subtitle" style={{ opacity: 0.8 }}>
+                      ({stats.cobroPendiente.extra.porcentaje}%)
+                    </span>
+                    <span title={stats.cobroPendiente.extra.tooltip} className="cursor-help flex items-center">
+                      <Info size={12} className="text-gray-400" strokeWidth={2} />
+                    </span>
+                  </div>
+                ) : (
+                  <span className="stat-subtitle">{stats.cobroPendiente.subtitle}</span>
+                )}
               </div>
             </div>
             <div className="stat-card">

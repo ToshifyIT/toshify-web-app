@@ -69,47 +69,36 @@ export function useTelepaseStats(granularity: Granularity, periodA: string, peri
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
-        let dnisFilter: string[] | null = null
+        console.log(`[TelepaseStats] Querying range A: ${rangeA.start.toISOString()} - ${rangeA.end.toISOString()}`)
+        console.log(`[TelepaseStats] Querying range B: ${rangeB.start.toISOString()} - ${rangeB.end.toISOString()}`)
 
-        if (sedeId) {
-          const { data: conductores } = await supabase
-            .from('conductores')
-            .select('numero_dni')
-            .eq('sede_id', sedeId)
-          
-          if (conductores && conductores.length > 0) {
-            dnisFilter = conductores.map(c => c.numero_dni)
-          } else {
-            // Sede seleccionada pero sin conductores
-            if (isMounted) {
-              setStats({ totalA: 0, totalB: 0, loading: false })
-            }
-            return
-          }
-        }
-
-        // Run queries in parallel
-        // Table: cabify_historico
-        // Field: fecha_guardado (timestamp with timezone)
-        // Value: peajes (float/numeric)
         let queryA = supabase
           .from('cabify_historico')
           .select('peajes')
-          .gte('fecha_guardado', rangeA.start.toISOString())
-          .lte('fecha_guardado', rangeA.end.toISOString())
+          .gte('fecha_inicio', rangeA.start.toISOString())
+          .lte('fecha_inicio', rangeA.end.toISOString())
 
         let queryB = supabase
           .from('cabify_historico')
           .select('peajes')
-          .gte('fecha_guardado', rangeB.start.toISOString())
-          .lte('fecha_guardado', rangeB.end.toISOString())
+          .gte('fecha_inicio', rangeB.start.toISOString())
+          .lte('fecha_inicio', rangeB.end.toISOString())
 
-        if (dnisFilter) {
-          queryA = queryA.in('dni', dnisFilter)
-          queryB = queryB.in('dni', dnisFilter)
+        if (sedeId) {
+          // Filtrar directamente por sede_id en la tabla cabify_historico
+          // Esto es mucho más eficiente y RESTful que traer todos los conductores primero
+          // y evita el problema de URL too long (CORS error) al pasar cientos de DNIs en la query string
+          queryA = queryA.eq('sede_id', sedeId)
+          queryB = queryB.eq('sede_id', sedeId)
         }
 
         const [resA, resB] = await Promise.all([queryA, queryB])
+
+        if (resA.error) console.error('[TelepaseStats] Error A:', resA.error)
+        if (resB.error) console.error('[TelepaseStats] Error B:', resB.error)
+
+        console.log(`[TelepaseStats] Found A: ${resA.data?.length || 0} records`)
+        console.log(`[TelepaseStats] Found B: ${resB.data?.length || 0} records`)
 
         if (isMounted) {
           const totalA = (resA.data || []).reduce((sum, item) => sum + parseImporte(item.peajes), 0)
