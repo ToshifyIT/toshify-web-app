@@ -296,31 +296,31 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
   }, [])
 
   const handleNext = () => {
-    if (step === 1) {
-      if (!formData.modalidad || !formData.horario) {
-        Swal.fire('Error', 'Debes seleccionar una modalidad y horario', 'error')
+    // Step 1: Validate modalidad
+    if (step === 1 && (!formData.modalidad || !formData.horario)) {
+      Swal.fire('Error', 'Debes seleccionar una modalidad y horario', 'error')
+      return
+    }
+
+    // Step 2: Validate vehículo
+    if (step === 2 && !formData.vehiculo_id) {
+      Swal.fire('Error', 'Debes seleccionar un vehículo', 'error')
+      return
+    }
+
+    // Step 3: Validate conductores según el modo
+    if (step === 3) {
+      if (formData.horario === 'CARGO' && formData.conductores_ids.length === 0) {
+        Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
         return
       }
-    } else if (step === 2) {
-      if (!formData.vehiculo_id) {
-        Swal.fire('Error', 'Debes seleccionar un vehículo', 'error')
+      // Modo TURNO - requiere al menos 1 conductor
+      if (formData.horario !== 'CARGO' && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
+        Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
         return
-      }
-    } else if (step === 3) {
-      // Validar conductores según el modo
-      if (formData.horario === 'CARGO') {
-        if (formData.conductores_ids.length === 0) {
-          Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
-          return
-        }
-      } else {
-        // Modo TURNO - requiere al menos 1 conductor
-        if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
-          Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
-          return
-        }
       }
     }
+
     setStep(step + 1)
   }
 
@@ -375,22 +375,137 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
     }
   }
 
+  const handleRemoveConductorCargo = () => {
+    setFormData({ ...formData, conductores_ids: [] })
+  }
+
+  // Shared drag handlers for drop zones
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.add('drag-over')
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.currentTarget.classList.remove('drag-over')
+  }
+
+  const handleDragStartConductor = (e: React.DragEvent<HTMLDivElement>, conductorId: string) => {
+    e.dataTransfer.setData('conductorId', conductorId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDropDiurno = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('drag-over')
+    const conductorId = e.dataTransfer.getData('conductorId')
+    if (!conductorId) return
+    const conductor = conductores.find(c => c.id === conductorId)
+    // Mostrar advertencia si tiene asignación pero PERMITIR continuar
+    if (conductor?.tieneAsignacionDiurna) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Conductor con asignación activa',
+        html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa en turno diurno.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
+        confirmButtonText: 'Entendido, continuar',
+        confirmButtonColor: '#3085d6'
+      })
+    }
+    handleSelectConductorDiurno(conductorId)
+  }
+
+  const handleDropNocturno = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('drag-over')
+    const conductorId = e.dataTransfer.getData('conductorId')
+    if (!conductorId) return
+    const conductor = conductores.find(c => c.id === conductorId)
+    // Mostrar advertencia si tiene asignación pero PERMITIR continuar
+    if (conductor?.tieneAsignacionNocturna) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Conductor con asignación activa',
+        html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa en turno nocturno.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
+        confirmButtonText: 'Entendido, continuar',
+        confirmButtonColor: '#3085d6'
+      })
+    }
+    handleSelectConductorNocturno(conductorId)
+  }
+
+  const handleDropCargo = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('drag-over')
+    const conductorId = e.dataTransfer.getData('conductorId')
+    if (!conductorId) return
+    const conductor = conductores.find(c => c.id === conductorId)
+    // Mostrar advertencia si tiene asignación pero PERMITIR continuar
+    if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Conductor con asignación activa',
+        html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
+        confirmButtonText: 'Entendido, continuar',
+        confirmButtonColor: '#3085d6'
+      })
+    }
+    handleSelectConductorCargo(conductorId)
+  }
+
+  // Step 4 form field change handlers
+  const handleFechaProgramadaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, fecha_programada: e.target.value })
+  }
+
+  const handleHoraProgramadaChange = (value: string) => {
+    setFormData({ ...formData, hora_programada: value })
+  }
+
+  const handleDistanciaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, distancia: e.target.value })
+  }
+
+  const handleDocumentoDiurnoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData({ ...formData, documento_diurno: e.target.value as any })
+  }
+
+  const handleUbicacionDiurnoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, ubicacion_diurno: e.target.value })
+  }
+
+  const handleDocumentoNocturnoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData({ ...formData, documento_nocturno: e.target.value as any })
+  }
+
+  const handleUbicacionNocturnoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, ubicacion_nocturno: e.target.value })
+  }
+
+  const handleDocumentoCargoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData({ ...formData, documento_cargo: e.target.value as any })
+  }
+
+  const handleUbicacionCargoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, ubicacion_cargo: e.target.value })
+  }
+
+  const handleNotasChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setFormData({ ...formData, notas: e.target.value })
+  }
+
   const handleSubmit = async () => {
     // Prevenir doble-submit
     if (loading) return
 
-    // Validaciones según modo
-    if (formData.horario === 'CARGO') {
-      if (formData.conductores_ids.length === 0) {
-        Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
-        return
-      }
-    } else {
-      // Modo Turno - requiere al menos 1 conductor
-      if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
-        Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
-        return
-      }
+    // Validaciones según modo - A CARGO
+    if (formData.horario === 'CARGO' && formData.conductores_ids.length === 0) {
+      Swal.fire('Error', 'Debes asignar un conductor para A Cargo', 'error')
+      return
+    }
+
+    // Validaciones según modo - TURNO requiere al menos 1 conductor
+    if (formData.horario !== 'CARGO' && !formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
+      Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
+      return
     }
 
     // Validar que los conductores seleccionados no tengan asignaciones activas
@@ -1793,10 +1908,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                               key={conductor.id}
                               className="conductor-item"
                               draggable={true}
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData('conductorId', conductor.id)
-                                e.dataTransfer.effectAllowed = 'move'
-                              }}
+                              onDragStart={(e) => handleDragStartConductor(e, conductor.id)}
                               style={{
                                 cursor: 'grab',
                                 // Fondo amarillo suave si tiene asignación activa (para indicar que cambiará de auto)
@@ -1870,32 +1982,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         </h4>
                         <div
                           className={`drop-zone ${conductorDiurno ? 'has-conductor' : ''}`}
-                          onDragOver={(e) => {
-                            e.preventDefault()
-                            e.currentTarget.classList.add('drag-over')
-                          }}
-                          onDragLeave={(e) => {
-                            e.currentTarget.classList.remove('drag-over')
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault()
-                            e.currentTarget.classList.remove('drag-over')
-                            const conductorId = e.dataTransfer.getData('conductorId')
-                            if (conductorId) {
-                              const conductor = conductores.find(c => c.id === conductorId)
-                              // Mostrar advertencia si tiene asignación pero PERMITIR continuar
-                              if (conductor?.tieneAsignacionDiurna) {
-                                Swal.fire({
-                                  icon: 'info',
-                                  title: 'Conductor con asignación activa',
-                                  html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa en turno diurno.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
-                                  confirmButtonText: 'Entendido, continuar',
-                                  confirmButtonColor: '#3085d6'
-                                })
-                              }
-                              handleSelectConductorDiurno(conductorId)
-                            }
-                          }}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDropDiurno}
                         >
                           {conductorDiurno ? (
                             <div className="assigned-conductor-card">
@@ -1943,32 +2032,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         </h4>
                         <div
                           className={`drop-zone ${conductorNocturno ? 'has-conductor' : ''}`}
-                          onDragOver={(e) => {
-                            e.preventDefault()
-                            e.currentTarget.classList.add('drag-over')
-                          }}
-                          onDragLeave={(e) => {
-                            e.currentTarget.classList.remove('drag-over')
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault()
-                            e.currentTarget.classList.remove('drag-over')
-                            const conductorId = e.dataTransfer.getData('conductorId')
-                            if (conductorId) {
-                              const conductor = conductores.find(c => c.id === conductorId)
-                              // Mostrar advertencia si tiene asignación pero PERMITIR continuar
-                              if (conductor?.tieneAsignacionNocturna) {
-                                Swal.fire({
-                                  icon: 'info',
-                                  title: 'Conductor con asignación activa',
-                                  html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa en turno nocturno.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
-                                  confirmButtonText: 'Entendido, continuar',
-                                  confirmButtonColor: '#3085d6'
-                                })
-                              }
-                              handleSelectConductorNocturno(conductorId)
-                            }
-                          }}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDropNocturno}
                         >
                           {conductorNocturno ? (
                             <div className="assigned-conductor-card">
@@ -2019,32 +2085,9 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       </h4>
                       <div
                         className={`drop-zone ${conductorCargo ? 'has-conductor' : ''}`}
-                        onDragOver={(e) => {
-                          e.preventDefault()
-                          e.currentTarget.classList.add('drag-over')
-                        }}
-                        onDragLeave={(e) => {
-                          e.currentTarget.classList.remove('drag-over')
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault()
-                          e.currentTarget.classList.remove('drag-over')
-                          const conductorId = e.dataTransfer.getData('conductorId')
-                          if (conductorId) {
-                            const conductor = conductores.find(c => c.id === conductorId)
-                            // Mostrar advertencia si tiene asignación pero PERMITIR continuar
-                            if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
-                              Swal.fire({
-                                icon: 'info',
-                                title: 'Conductor con asignación activa',
-                                html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignación activa.<br><br>Al <b>confirmar</b> esta nueva asignación, la asignación anterior se finalizará automáticamente.`,
-                                confirmButtonText: 'Entendido, continuar',
-                                confirmButtonColor: '#3085d6'
-                              })
-                            }
-                            handleSelectConductorCargo(conductorId)
-                          }
-                        }}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDropCargo}
                       >
                         {conductorCargo ? (
                           <div className="assigned-conductor-card">
@@ -2071,7 +2114,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                             </div>
                             <button
                               className="remove-btn"
-                              onClick={() => setFormData({ ...formData, conductores_ids: [] })}
+                              onClick={handleRemoveConductorCargo}
                               title="Remover"
                             >
                               <X size={18} />
@@ -2112,7 +2155,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       <input
                         type="date"
                         value={formData.fecha_programada}
-                        onChange={(e) => setFormData({ ...formData, fecha_programada: e.target.value })}
+                        onChange={handleFechaProgramadaChange}
                         style={{
                           width: '100%',
                           padding: '10px',
@@ -2135,7 +2178,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                       </label>
                       <TimeInput24h
                         value={formData.hora_programada}
-                        onChange={(value) => setFormData({ ...formData, hora_programada: value })}
+                        onChange={handleHoraProgramadaChange}
                       />
                     </div>
                   </div>
@@ -2157,7 +2200,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                     <input
                       type="number"
                       value={formData.distancia}
-                      onChange={(e) => setFormData({ ...formData, distancia: e.target.value })}
+                      onChange={handleDistanciaChange}
                       placeholder="Ingrese la distancia del recorrido"
                       style={{
                         width: '100%',
@@ -2190,7 +2233,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         </label>
                         <select
                           value={formData.documento_diurno}
-                          onChange={(e) => setFormData({ ...formData, documento_diurno: e.target.value as any })}
+                          onChange={handleDocumentoDiurnoChange}
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
@@ -2206,7 +2249,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         <input
                           type="text"
                           value={formData.ubicacion_diurno}
-                          onChange={(e) => setFormData({ ...formData, ubicacion_diurno: e.target.value })}
+                          onChange={handleUbicacionDiurnoChange}
                           placeholder="Ingrese la zona"
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
@@ -2232,7 +2275,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         </label>
                         <select
                           value={formData.documento_nocturno}
-                          onChange={(e) => setFormData({ ...formData, documento_nocturno: e.target.value as any })}
+                          onChange={handleDocumentoNocturnoChange}
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
@@ -2248,7 +2291,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         <input
                           type="text"
                           value={formData.ubicacion_nocturno}
-                          onChange={(e) => setFormData({ ...formData, ubicacion_nocturno: e.target.value })}
+                          onChange={handleUbicacionNocturnoChange}
                           placeholder="Ingrese la zona"
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
@@ -2274,7 +2317,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         </label>
                         <select
                           value={formData.documento_cargo}
-                          onChange={(e) => setFormData({ ...formData, documento_cargo: e.target.value as any })}
+                          onChange={handleDocumentoCargoChange}
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px', background: 'white' }}
                         >
                           <option value="">Seleccione un documento</option>
@@ -2290,7 +2333,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                         <input
                           type="text"
                           value={formData.ubicacion_cargo}
-                          onChange={(e) => setFormData({ ...formData, ubicacion_cargo: e.target.value })}
+                          onChange={handleUbicacionCargoChange}
                           placeholder="Ingrese la zona"
                           style={{ width: '100%', padding: '12px', border: '2px solid #E5E7EB', borderRadius: '8px', fontSize: '14px' }}
                         />
@@ -2310,7 +2353,7 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
                     </label>
                     <textarea
                       value={formData.notas}
-                      onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
+                      onChange={handleNotasChange}
                       rows={4}
                       placeholder="Agrega comentarios o detalles adicionales..."
                       style={{

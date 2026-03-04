@@ -521,7 +521,9 @@ export function ConductoresModule() {
       }
 
       // Procesar conductores con sus relaciones
-      if (conductoresRes.data && conductoresRes.data.length > 0) {
+      if (!conductoresRes.data || conductoresRes.data.length === 0) {
+        setConductores([]);
+      } else {
         const conductoresConRelaciones = conductoresRes.data.map((conductor: any) => {
           const relaciones: any = { ...conductor };
 
@@ -555,8 +557,6 @@ export function ConductoresModule() {
         });
 
         setConductores(conductoresConRelaciones);
-      } else {
-        setConductores([]);
       }
     } catch (err: any) {
       console.error("Error cargando datos:", err);
@@ -757,7 +757,9 @@ export function ConductoresModule() {
       }
 
       // Procesar conductores
-      if (conductoresRes.data && conductoresRes.data.length > 0) {
+      if (!conductoresRes.data || conductoresRes.data.length === 0) {
+        setConductores([]);
+      } else {
         const conductoresConRelaciones = conductoresRes.data.map((conductor: any) => {
           const relaciones: any = { ...conductor };
 
@@ -775,8 +777,6 @@ export function ConductoresModule() {
         });
 
         setConductores(conductoresConRelaciones);
-      } else {
-        setConductores([]);
       }
     } catch (err: any) {
       console.error("Error cargando conductores:", err);
@@ -881,11 +881,12 @@ export function ConductoresModule() {
 
       if (insertError) throw insertError;
 
+      const createdConductor = newConductor?.[0];
+
       // Guardar categorías de licencia en la tabla de relación
-      if (newConductor && newConductor.length > 0 && formData.licencia_categorias_ids.length > 0) {
-        const conductorId = newConductor[0].id;
+      if (createdConductor && formData.licencia_categorias_ids.length > 0) {
         const categoriasRelacion = formData.licencia_categorias_ids.map((categoriaId) => ({
-          conductor_id: conductorId,
+          conductor_id: createdConductor.id,
           licencia_categoria_id: categoriaId,
         }));
 
@@ -897,12 +898,11 @@ export function ConductoresModule() {
       }
 
       // Crear carpeta en Google Drive para el conductor y guardar URL
-      if (newConductor && newConductor.length > 0) {
-        const conductor = newConductor[0];
+      if (createdConductor) {
         const nombreCompleto = `${formData.nombres} ${formData.apellidos}`;
 
         createConductorDriveFolder(
-          conductor.id,
+          createdConductor.id,
           nombreCompleto,
           formData.numero_dni
         ).then(async (result) => {
@@ -910,7 +910,7 @@ export function ConductoresModule() {
             await (supabase as any)
               .from('conductores')
               .update({ drive_folder_url: result.folderUrl })
-              .eq('id', conductor.id);
+              .eq('id', createdConductor.id);
           }
         }).catch(() => { /* silencioso */ });
       }
@@ -918,10 +918,10 @@ export function ConductoresModule() {
       showSuccess("Conductor creado");
 
       // Registrar historial de creación del conductor
-      if (newConductor && newConductor.length > 0) {
+      if (createdConductor) {
         const estadoInicial = estadosConductor.find((e: any) => e.id === formData.estado_id);
         registrarHistorialConductor({
-          conductorId: newConductor[0].id,
+          conductorId: createdConductor.id,
           tipoEvento: 'cambio_estado',
           estadoNuevo: estadoInicial?.codigo || 'ACTIVO',
           detalles: { nombre: `${formData.nombres} ${formData.apellidos}`, accion: 'conductor_creado' },
@@ -1054,34 +1054,35 @@ export function ConductoresModule() {
       return [];
     }
 
+    const rows = data || [];
+    if (rows.length === 0) return [];
+
     // Una sola query para todos los otros conductores (evita N+1)
-    const asignacionIds = (data || []).map((ac: any) => ac.asignacion_id)
-    let allOtherConductors: any[] = []
-    if (asignacionIds.length > 0) {
-      const { data: othersData } = await (supabase as any)
-        .from('asignaciones_conductores')
-        .select('id, conductor_id, horario, estado, asignacion_id')
-        .in('asignacion_id', asignacionIds)
-        .neq('conductor_id', conductorId)
-        .in('estado', ['asignado', 'activo'])
-      allOtherConductors = othersData || []
-    }
+    const asignacionIds = rows.map((ac: any) => ac.asignacion_id);
+    const { data: othersData } = await (supabase as any)
+      .from('asignaciones_conductores')
+      .select('id, conductor_id, horario, estado, asignacion_id')
+      .in('asignacion_id', asignacionIds)
+      .neq('conductor_id', conductorId)
+      .in('estado', ['asignado', 'activo']);
 
     // Agrupar en memoria por asignacion_id
-    const othersByAsignacion = new Map<string, any[]>()
-    for (const oc of allOtherConductors) {
-      const arr = othersByAsignacion.get(oc.asignacion_id) || []
-      arr.push(oc)
-      othersByAsignacion.set(oc.asignacion_id, arr)
+    const othersByAsignacion = new Map<string, any[]>();
+    for (const oc of (othersData || [])) {
+      const arr = othersByAsignacion.get(oc.asignacion_id) || [];
+      arr.push(oc);
+      othersByAsignacion.set(oc.asignacion_id, arr);
     }
 
-    const assignmentsWithOthers = (data || []).map((ac: any) => ({
+    return rows.map((ac: any) => ({
       ...ac,
       otherConductors: othersByAsignacion.get(ac.asignacion_id) || []
-    }))
-
-    return assignmentsWithOthers;
+    }));
   };
+
+  // Helper para concatenar notas de asignación
+  const appendNota = (notasExistentes: string | null, nuevaNota: string) =>
+    notasExistentes ? `${notasExistentes}\n\n${nuevaNota}` : nuevaNota;
 
   // Función para procesar la cancelación de asignaciones por baja
   const processConductorBaja = async (_conductorId: string, conductorNombre: string, motivoUsuario: string) => {
@@ -1110,15 +1111,11 @@ export function ConductoresModule() {
     ahora: string
   ) => {
     // 1. Cancelar la asignación
-    const notasActualizadas = asignacion.notas
-      ? `${asignacion.notas}\n\n${motivoBaja}`
-      : motivoBaja;
-
     await (supabase as any)
       .from('asignaciones')
       .update({
         estado: 'cancelada',
-        notas: notasActualizadas,
+        notas: appendNota(asignacion.notas, motivoBaja),
         updated_at: ahora
       })
       .eq('id', asignacion.id);
@@ -1209,79 +1206,15 @@ export function ConductoresModule() {
     // 3. Verificar si hay otro conductor activo
     const otherConductors = asignacionConductor.otherConductors || [];
 
-    if (otherConductors.length === 0) {
-      // No hay otros conductores - cancelar asignación completa
-      const notasActualizadas = asignacion.notas
-        ? `${asignacion.notas}\n\n${motivoBaja}`
-        : motivoBaja;
-
-      await (supabase as any)
-        .from('asignaciones')
-        .update({
-          estado: 'cancelada',
-          notas: notasActualizadas,
-          updated_at: ahora
-        })
-        .eq('id', asignacion.id);
-
-      // Devolver vehículo a DISPONIBLE
-      const { data: estadoDisponible } = await (supabase as any)
-        .from('vehiculos_estados')
-        .select('id')
-        .eq('codigo', 'DISPONIBLE')
-        .single();
-
-      if (estadoDisponible && asignacion.vehiculo_id) {
-        await (supabase as any)
-          .from('vehiculos')
-          .update({ estado_id: estadoDisponible.id })
-          .eq('id', asignacion.vehiculo_id);
-      }
-
-      // Registrar historial para vehículo (vuelve a DISPONIBLE)
-      if (asignacion.vehiculo_id) {
-        registrarHistorialVehiculo({
-          vehiculoId: asignacion.vehiculo_id,
-          tipoEvento: 'asignacion_cancelada',
-          estadoNuevo: 'DISPONIBLE',
-          detalles: {
-            asignacion_id: asignacion.id,
-            asignacion_codigo: asignacion.codigo,
-            patente: asignacion.vehiculos?.patente,
-            motivo: motivoBaja,
-            modo: 'TURNO',
-            sin_otros_conductores: true,
-          },
-          modulo: 'conductores',
-        });
-      }
-
-      // Registrar historial para conductor (asignación cancelada)
-      registrarHistorialConductor({
-        conductorId: asignacionConductor.conductor_id,
-        tipoEvento: 'asignacion_cancelada',
-        detalles: {
-          asignacion_id: asignacion.id,
-          asignacion_codigo: asignacion.codigo,
-          patente: asignacion.vehiculos?.patente,
-          motivo: motivoBaja,
-          modo: 'TURNO',
-          horario: asignacionConductor.horario,
-        },
-        modulo: 'conductores',
-      });
-    } else {
+    if (otherConductors.length > 0) {
       // Hay otro conductor - solo agregar nota de vacante
       const turnoVacante = asignacionConductor.horario === 'diurno' ? 'Turno Diurno' : 'Turno Nocturno';
       const notaVacante = `[VACANTE] ${turnoVacante} - ${motivoBaja}`;
-      const notasActualizadas = asignacion.notas
-        ? `${asignacion.notas}\n\n${notaVacante}`
-        : notaVacante;
 
       await (supabase as any)
         .from('asignaciones')
         .update({
-          notas: notasActualizadas,
+          notas: appendNota(asignacion.notas, notaVacante),
           updated_at: ahora
         })
         .eq('id', asignacion.id);
@@ -1302,7 +1235,65 @@ export function ConductoresModule() {
         },
         modulo: 'conductores',
       });
+      return;
     }
+
+    // No hay otros conductores - cancelar asignación completa
+    await (supabase as any)
+      .from('asignaciones')
+      .update({
+        estado: 'cancelada',
+        notas: appendNota(asignacion.notas, motivoBaja),
+        updated_at: ahora
+      })
+      .eq('id', asignacion.id);
+
+    // Devolver vehículo a DISPONIBLE
+    const { data: estadoDisponible } = await (supabase as any)
+      .from('vehiculos_estados')
+      .select('id')
+      .eq('codigo', 'DISPONIBLE')
+      .single();
+
+    if (estadoDisponible && asignacion.vehiculo_id) {
+      await (supabase as any)
+        .from('vehiculos')
+        .update({ estado_id: estadoDisponible.id })
+        .eq('id', asignacion.vehiculo_id);
+    }
+
+    // Registrar historial para vehículo (vuelve a DISPONIBLE)
+    if (asignacion.vehiculo_id) {
+      registrarHistorialVehiculo({
+        vehiculoId: asignacion.vehiculo_id,
+        tipoEvento: 'asignacion_cancelada',
+        estadoNuevo: 'DISPONIBLE',
+        detalles: {
+          asignacion_id: asignacion.id,
+          asignacion_codigo: asignacion.codigo,
+          patente: asignacion.vehiculos?.patente,
+          motivo: motivoBaja,
+          modo: 'TURNO',
+          sin_otros_conductores: true,
+        },
+        modulo: 'conductores',
+      });
+    }
+
+    // Registrar historial para conductor (asignación cancelada)
+    registrarHistorialConductor({
+      conductorId: asignacionConductor.conductor_id,
+      tipoEvento: 'asignacion_cancelada',
+      detalles: {
+        asignacion_id: asignacion.id,
+        asignacion_codigo: asignacion.codigo,
+        patente: asignacion.vehiculos?.patente,
+        motivo: motivoBaja,
+        modo: 'TURNO',
+        horario: asignacionConductor.horario,
+      },
+      modulo: 'conductores',
+    });
   };
 
   // Función que ejecuta la actualización del conductor
@@ -1789,6 +1780,28 @@ export function ConductoresModule() {
     return Array.from(categorias.keys()).sort();
   }, [conductores]);
 
+  // Handler para abrir detalles de un conductor (usado en tabla y acciones)
+  const handleOpenDetails = async (conductorId: string) => {
+    const fullDetails = await loadConductorDetails(conductorId);
+    if (fullDetails) {
+      setSelectedConductor(fullDetails as any);
+      setShowDetailsModal(true);
+    }
+  };
+
+  // Handler para mostrar todas las categorías de licencia en popup
+  const handleShowAllCategorias = (categorias: any[]) => {
+    Swal.fire({
+      title: 'Categorías de Licencia',
+      html: `<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 10px;">
+        ${categorias.map((cat: any) => `<span style="background: rgba(59, 130, 246, 0.1); color: #3B82F6; padding: 6px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600;">${cat.codigo}</span>`).join('')}
+      </div>`,
+      showConfirmButton: false,
+      showCloseButton: true,
+      width: 350,
+    });
+  };
+
   // Definir columnas para TanStack Table
   const columns = useMemo<ColumnDef<ConductorWithRelations>[]>(
     () => [
@@ -1848,13 +1861,9 @@ export function ConductoresModule() {
         cell: ({ row }) => (
           <a
             href={`/conductores?id=${row.original.id}`}
-            onClick={async (e) => {
+            onClick={(e) => {
               e.preventDefault();
-              const fullDetails = await loadConductorDetails(row.original.id);
-              if (fullDetails) {
-                setSelectedConductor(fullDetails as any);
-                setShowDetailsModal(true);
-              }
+              handleOpenDetails(row.original.id);
             }}
             style={{ display: 'block', padding: '10px 12px', margin: '-10px -12px', textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none' }}
           >
@@ -2066,15 +2075,7 @@ export function ConductoresModule() {
                     className="dt-badge dt-badge-gray dt-badge-more"
                     onClick={(e) => {
                       e.stopPropagation();
-                      Swal.fire({
-                        title: 'Categorías de Licencia',
-                        html: `<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 10px;">
-                          ${categorias.map((cat: any) => `<span style="background: rgba(59, 130, 246, 0.1); color: #3B82F6; padding: 6px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600;">${cat.codigo}</span>`).join('')}
-                        </div>`,
-                        showConfirmButton: false,
-                        showCloseButton: true,
-                        width: 350,
-                      });
+                      handleShowAllCategorias(categorias);
                     }}
                     title={`Ver ${restantes} más: ${categorias.slice(maxVisible).map((c: any) => c.codigo).join(', ')}`}
                   >
@@ -2255,13 +2256,7 @@ export function ConductoresModule() {
                 {
                   icon: <Eye size={15} />,
                   label: 'Ver detalles',
-                  onClick: async () => {
-                    const fullDetails = await loadConductorDetails(row.original.id);
-                    if (fullDetails) {
-                      setSelectedConductor(fullDetails as any);
-                      setShowDetailsModal(true);
-                    }
-                  }
+                  onClick: () => handleOpenDetails(row.original.id)
                 },
                 {
                   icon: <Edit2 size={15} />,

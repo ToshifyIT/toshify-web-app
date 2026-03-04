@@ -742,12 +742,14 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
   }
 
   const handleNext = async () => {
-    if (step === 1) {
-      if (!formData.modalidad) {
-        Swal.fire('Error', 'Debes seleccionar una modalidad', 'error')
-        return
-      }
-    } else if (step === 2) {
+    // Step 1: Validate modalidad
+    if (step === 1 && !formData.modalidad) {
+      Swal.fire('Error', 'Debes seleccionar una modalidad', 'error')
+      return
+    }
+
+    // Step 2: Validate vehiculo & preload conductores
+    if (step === 2) {
       if (!formData.vehiculo_id) {
         Swal.fire('Error', 'Debes seleccionar un vehiculo', 'error')
         return
@@ -756,14 +758,15 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       setLoading(true)
       await loadConductoresDelVehiculo(formData.vehiculo_id)
       setLoading(false)
-    } else if (step === 3) {
-      // Validar conductores segun modalidad
-      if (formData.modalidad === 'CARGO') {
-        if (!formData.conductor_id) {
-          Swal.fire('Error', 'Debes asignar un conductor', 'error')
-          return
-        }
-      } else {
+    }
+
+    // Step 3: Validate conductores segun modalidad
+    if (step === 3) {
+      if (formData.modalidad === 'CARGO' && !formData.conductor_id) {
+        Swal.fire('Error', 'Debes asignar un conductor', 'error')
+        return
+      }
+      if (formData.modalidad !== 'CARGO') {
         // Modo TURNO - al menos 1 conductor
         if (!formData.conductor_diurno_id && !formData.conductor_nocturno_id) {
           Swal.fire('Error', 'Debes asignar al menos un conductor (Diurno o Nocturno)', 'error')
@@ -777,6 +780,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         }
       }
     }
+
     setStep(step + 1)
   }
 
@@ -1058,109 +1062,95 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     })
   }, [formData.conductor_diurno_id, formData.conductor_nocturno_id])
 
+  const validateSubmitFields = (): string | null => {
+    if (!formData.fecha_cita) return 'Debes seleccionar una fecha de cita'
+
+    if (formData.modalidad === 'CARGO') {
+      if (!formData.tipo_candidato_cargo) return 'Debes seleccionar el tipo de candidato'
+      if (!formData.documento_cargo) return 'Debes seleccionar el tipo de documento'
+      if (!formData.zona_cargo) return 'Debes ingresar la zona'
+      return null
+    }
+
+    // Modo TURNO - validar campos para conductores asignados
+    if (formData.conductor_diurno_id) {
+      if (!formData.tipo_candidato_diurno) return 'Debes seleccionar el tipo de candidato para el conductor diurno'
+      if (!formData.documento_diurno) return 'Debes seleccionar el documento para el conductor diurno'
+      if (!formData.zona_diurno) return 'Debes ingresar la zona para el conductor diurno'
+    }
+    if (formData.conductor_nocturno_id) {
+      if (!formData.tipo_candidato_nocturno) return 'Debes seleccionar el tipo de candidato para el conductor nocturno'
+      if (!formData.documento_nocturno) return 'Debes seleccionar el documento para el conductor nocturno'
+      if (!formData.zona_nocturno) return 'Debes ingresar la zona para el conductor nocturno'
+    }
+    return null
+  }
+
+  const checkDuplicateProgramacion = async (): Promise<boolean> => {
+    if (isEditMode) return false
+
+    try {
+      // Estados activos (no cancelados ni completados)
+      const estadosActivos = ['por_agendar', 'agendado', 'en_curso']
+
+      // Verificar si ya existe una programación con el mismo vehículo Y mismos conductores
+      const { data: progExistentes } = await aplicarFiltroSede(supabase
+        .from('programaciones_onboarding')
+        .select('id, vehiculo_entregar_patente, estado, conductor_id, conductor_diurno_id, conductor_nocturno_id, modalidad')
+        .eq('vehiculo_entregar_id', formData.vehiculo_id)
+        .in('estado', estadosActivos)) as { data: Array<any> | null }
+
+      if (!progExistentes || progExistentes.length === 0) return false
+
+      // Verificar si alguna programación existente tiene exactamente los mismos conductores
+      for (const prog of progExistentes) {
+        let mismosonductores = false
+
+        if (formData.modalidad === 'CARGO') {
+          mismosonductores = prog.conductor_id === formData.conductor_id
+        } else {
+          // TURNO: verificar diurno y nocturno
+          const mismoDiurno = (!formData.conductor_diurno_id && !prog.conductor_diurno_id) || 
+            prog.conductor_diurno_id === formData.conductor_diurno_id
+          const mismoNocturno = (!formData.conductor_nocturno_id && !prog.conductor_nocturno_id) ||
+            prog.conductor_nocturno_id === formData.conductor_nocturno_id
+          mismosonductores = mismoDiurno && mismoNocturno
+        }
+
+        if (mismosonductores) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Programación duplicada',
+            html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con los mismos conductores (${PROGRAMACION_ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
+            confirmButtonColor: '#FF0033'
+          })
+          return true
+        }
+      }
+    } catch (checkError: any) {
+      // Si es error de "no rows" es OK, significa que no hay duplicados
+      if (checkError.code !== 'PGRST116') {
+        console.error('Error verificando duplicados:', checkError)
+      }
+    }
+
+    return false
+  }
+
   const handleSubmit = async () => {
     if (loading || isSubmittingRef.current) return
     isSubmittingRef.current = true
 
     // Validaciones
-    if (!formData.fecha_cita) {
-      Swal.fire('Error', 'Debes seleccionar una fecha de cita', 'error')
+    const validationError = validateSubmitFields()
+    if (validationError) {
+      Swal.fire('Error', validationError, 'error')
       return
     }
 
-    // Validar campos segun modalidad
-    if (formData.modalidad === 'CARGO') {
-      if (!formData.tipo_candidato_cargo) {
-        Swal.fire('Error', 'Debes seleccionar el tipo de candidato', 'error')
-        return
-      }
-      if (!formData.documento_cargo) {
-        Swal.fire('Error', 'Debes seleccionar el tipo de documento', 'error')
-        return
-      }
-      if (!formData.zona_cargo) {
-        Swal.fire('Error', 'Debes ingresar la zona', 'error')
-        return
-      }
-    } else {
-      // Modo TURNO - validar campos para conductores asignados
-      if (formData.conductor_diurno_id) {
-        if (!formData.tipo_candidato_diurno) {
-          Swal.fire('Error', 'Debes seleccionar el tipo de candidato para el conductor diurno', 'error')
-          return
-        }
-        if (!formData.documento_diurno) {
-          Swal.fire('Error', 'Debes seleccionar el documento para el conductor diurno', 'error')
-          return
-        }
-        if (!formData.zona_diurno) {
-          Swal.fire('Error', 'Debes ingresar la zona para el conductor diurno', 'error')
-          return
-        }
-      }
-      if (formData.conductor_nocturno_id) {
-        if (!formData.tipo_candidato_nocturno) {
-          Swal.fire('Error', 'Debes seleccionar el tipo de candidato para el conductor nocturno', 'error')
-          return
-        }
-        if (!formData.documento_nocturno) {
-          Swal.fire('Error', 'Debes seleccionar el documento para el conductor nocturno', 'error')
-          return
-        }
-        if (!formData.zona_nocturno) {
-          Swal.fire('Error', 'Debes ingresar la zona para el conductor nocturno', 'error')
-          return
-        }
-      }
-    }
-
     // Validar duplicados solo al crear (no en edición)
-    if (!isEditMode) {
-      try {
-        // Estados activos (no cancelados ni completados)
-        const estadosActivos = ['por_agendar', 'agendado', 'en_curso']
-
-        // Verificar si ya existe una programación con el mismo vehículo Y mismos conductores
-        const { data: progExistentes } = await aplicarFiltroSede(supabase
-          .from('programaciones_onboarding')
-          .select('id, vehiculo_entregar_patente, estado, conductor_id, conductor_diurno_id, conductor_nocturno_id, modalidad')
-          .eq('vehiculo_entregar_id', formData.vehiculo_id)
-          .in('estado', estadosActivos)) as { data: Array<any> | null }
-
-        if (progExistentes && progExistentes.length > 0) {
-          // Verificar si alguna programación existente tiene exactamente los mismos conductores
-          for (const prog of progExistentes) {
-            let mismosonductores = false
-
-            if (formData.modalidad === 'CARGO') {
-              mismosonductores = prog.conductor_id === formData.conductor_id
-            } else {
-              // TURNO: verificar diurno y nocturno
-              const mismoDiurno = (!formData.conductor_diurno_id && !prog.conductor_diurno_id) || 
-                prog.conductor_diurno_id === formData.conductor_diurno_id
-              const mismoNocturno = (!formData.conductor_nocturno_id && !prog.conductor_nocturno_id) ||
-                prog.conductor_nocturno_id === formData.conductor_nocturno_id
-              mismosonductores = mismoDiurno && mismoNocturno
-            }
-
-            if (mismosonductores) {
-              Swal.fire({
-                icon: 'warning',
-                title: 'Programación duplicada',
-                html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con los mismos conductores (${PROGRAMACION_ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
-                confirmButtonColor: '#FF0033'
-              })
-              return
-            }
-          }
-        }
-      } catch (checkError: any) {
-        // Si es error de "no rows" es OK, significa que no hay duplicados
-        if (checkError.code !== 'PGRST116') {
-          console.error('Error verificando duplicados:', checkError)
-        }
-      }
-    }
+    const isDuplicate = await checkDuplicateProgramacion()
+    if (isDuplicate) return
 
     setLoading(true)
 
@@ -1348,6 +1338,96 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
   // Modo TURNO o CARGO
   const isTurnoMode = formData.modalidad === 'TURNO'
+
+  // --- Extracted drag & drop handlers ---
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.add('drag-over')
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.currentTarget.classList.remove('drag-over')
+  }
+
+  const handleDropDiurno = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('drag-over')
+    const conductorId = e.dataTransfer.getData('conductorId')
+    if (!conductorId) return
+    const conductor = conductores.find(c => c.id === conductorId)
+    if (conductor?.tieneAsignacionDiurna) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Conductor con asignacion activa',
+        html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno diurno.`,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#3085d6'
+      })
+    }
+    const pairTiempo = e.dataTransfer.getData('pairTiempo')
+    const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
+    handleSelectConductorDiurno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
+  }
+
+  const handleDropNocturno = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('drag-over')
+    const conductorId = e.dataTransfer.getData('conductorId')
+    if (!conductorId) return
+    const conductor = conductores.find(c => c.id === conductorId)
+    if (conductor?.tieneAsignacionNocturna) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Conductor con asignacion activa',
+        html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno nocturno.`,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#3085d6'
+      })
+    }
+    const pairTiempo = e.dataTransfer.getData('pairTiempo')
+    const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
+    handleSelectConductorNocturno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
+  }
+
+  const handleDropCargo = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.classList.remove('drag-over')
+    const conductorId = e.dataTransfer.getData('conductorId')
+    if (!conductorId) return
+    const conductor = conductores.find(c => c.id === conductorId)
+    if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Conductor con asignacion activa',
+        html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa.`,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#3085d6'
+      })
+    }
+    handleSelectConductorCargo(conductorId)
+  }
+
+  const handleConductorDragStart = (e: React.DragEvent<HTMLDivElement>, conductorId: string, pairPartnerId?: string, pairTiempo?: number) => {
+    e.dataTransfer.setData('conductorId', conductorId)
+    if (pairPartnerId) e.dataTransfer.setData('pairPartnerId', pairPartnerId)
+    if (pairTiempo) e.dataTransfer.setData('pairTiempo', String(pairTiempo))
+    e.currentTarget.classList.add('dragging')
+  }
+
+  const handleConductorDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    e.currentTarget.classList.remove('dragging')
+  }
+
+  const handleConfirmMapPair = (diurno: Conductor, nocturno: Conductor) => {
+    setShowMapModal(false)
+    handleSelectConductorDiurno(diurno.id, undefined, nocturno.id)
+    handleSelectConductorNocturno(nocturno.id, undefined, diurno.id)
+  }
+
+  const handleTipoAsignacionChange = (field: 'tipo_asignacion_cargo' | 'tipo_asignacion_diurno' | 'tipo_asignacion_nocturno', docField: 'documento_cargo' | 'documento_diurno' | 'documento_nocturno') => (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value as TipoAsignacion
+    setFormData({ ...formData, [field]: val, ...(val === 'devolucion_vehiculo' ? { [docField]: 'na' as TipoDocumento } : {}) })
+  }
 
   // Ray casting - verifica si un punto está dentro de un polígono
   const isPointInPolygon = (lat: number, lng: number, polygon: { lat: number; lng: number }[]): boolean => {
@@ -2781,15 +2861,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   <div
                                     className="conductor-item"
                                     draggable
-                                    onDragStart={(e) => {
-                                      e.dataTransfer.setData('conductorId', par.diurno.id)
-                                      e.dataTransfer.setData('pairPartnerId', par.nocturno.id)
-                                      if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
-                                      e.currentTarget.classList.add('dragging')
-                                    }}
-                                    onDragEnd={(e) => {
-                                      e.currentTarget.classList.remove('dragging')
-                                    }}
+                                    onDragStart={(e) => handleConductorDragStart(e, par.diurno.id, par.nocturno.id, par.tiempoMinutos)}
+                                    onDragEnd={handleConductorDragEnd}
                                     title={zonaDiurno ? `⚠ Zona peligrosa: ${zonaDiurno}` : undefined}
                                     style={{ marginBottom: '6px', background: zonaDiurno ? '#FFF1F2' : '#FFFBEB', borderColor: zonaDiurno ? '#FF0033' : '#FCD34D' }}
                                   >
@@ -2818,15 +2891,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                                   <div
                                     className="conductor-item"
                                     draggable
-                                    onDragStart={(e) => {
-                                      e.dataTransfer.setData('conductorId', par.nocturno.id)
-                                      e.dataTransfer.setData('pairPartnerId', par.diurno.id)
-                                      if (par.tiempoMinutos) e.dataTransfer.setData('pairTiempo', String(par.tiempoMinutos))
-                                      e.currentTarget.classList.add('dragging')
-                                    }}
-                                    onDragEnd={(e) => {
-                                      e.currentTarget.classList.remove('dragging')
-                                    }}
+                                    onDragStart={(e) => handleConductorDragStart(e, par.nocturno.id, par.diurno.id, par.tiempoMinutos)}
+                                    onDragEnd={handleConductorDragEnd}
                                     title={zonanocturno ? `⚠ Zona peligrosa: ${zonanocturno}` : undefined}
                                     style={{ background: zonanocturno ? '#FFF1F2' : '#EFF6FF', borderColor: zonanocturno ? '#FF0033' : '#93C5FD' }}
                                   >
@@ -2873,13 +2939,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                               key={conductor.id}
                               className="conductor-item"
                               draggable
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData('conductorId', conductor.id)
-                                e.currentTarget.classList.add('dragging')
-                              }}
-                              onDragEnd={(e) => {
-                                e.currentTarget.classList.remove('dragging')
-                              }}
+                              onDragStart={(e) => handleConductorDragStart(e, conductor.id)}
+                              onDragEnd={handleConductorDragEnd}
                               title={zonaPeligrosa ? `⚠ Zona peligrosa: ${zonaPeligrosa}` : undefined}
                               style={{
                                 background: zonaPeligrosa ? '#FFF1F2' : algunoOcupado ? '#FFFBEB' : undefined,
@@ -2952,33 +3013,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         </h4>
                         <div
                           className={`drop-zone ${conductorDiurno ? 'has-conductor' : ''}`}
-                          onDragOver={(e) => {
-                            e.preventDefault()
-                            e.currentTarget.classList.add('drag-over')
-                          }}
-                          onDragLeave={(e) => {
-                            e.currentTarget.classList.remove('drag-over')
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault()
-                            e.currentTarget.classList.remove('drag-over')
-                            const conductorId = e.dataTransfer.getData('conductorId')
-                            const pairTiempo = e.dataTransfer.getData('pairTiempo')
-                            const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
-                            if (conductorId) {
-                              const conductor = conductores.find(c => c.id === conductorId)
-                              if (conductor?.tieneAsignacionDiurna) {
-                                Swal.fire({
-                                  icon: 'info',
-                                  title: 'Conductor con asignacion activa',
-                                  html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno diurno.`,
-                                  confirmButtonText: 'Entendido',
-                                  confirmButtonColor: '#3085d6'
-                                })
-                              }
-                              handleSelectConductorDiurno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
-                            }
-                          }}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDropDiurno}
                         >
                           {conductorDiurno ? (
                             <div className="assigned-conductor-card">
@@ -3016,33 +3053,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                         </h4>
                         <div
                           className={`drop-zone ${conductorNocturno ? 'has-conductor' : ''}`}
-                          onDragOver={(e) => {
-                            e.preventDefault()
-                            e.currentTarget.classList.add('drag-over')
-                          }}
-                          onDragLeave={(e) => {
-                            e.currentTarget.classList.remove('drag-over')
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault()
-                            e.currentTarget.classList.remove('drag-over')
-                            const conductorId = e.dataTransfer.getData('conductorId')
-                            const pairTiempo = e.dataTransfer.getData('pairTiempo')
-                            const pairPartnerId = e.dataTransfer.getData('pairPartnerId')
-                            if (conductorId) {
-                              const conductor = conductores.find(c => c.id === conductorId)
-                              if (conductor?.tieneAsignacionNocturna) {
-                                Swal.fire({
-                                  icon: 'info',
-                                  title: 'Conductor con asignacion activa',
-                                  html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa en turno nocturno.`,
-                                  confirmButtonText: 'Entendido',
-                                  confirmButtonColor: '#3085d6'
-                                })
-                              }
-                              handleSelectConductorNocturno(conductorId, pairTiempo ? parseInt(pairTiempo) : undefined, pairPartnerId || undefined)
-                            }
-                          }}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDropNocturno}
                         >
                           {conductorNocturno ? (
                             <div className="assigned-conductor-card">
@@ -3083,31 +3096,9 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                       </h4>
                       <div
                         className={`drop-zone ${conductorCargo ? 'has-conductor' : ''}`}
-                        onDragOver={(e) => {
-                          e.preventDefault()
-                          e.currentTarget.classList.add('drag-over')
-                        }}
-                        onDragLeave={(e) => {
-                          e.currentTarget.classList.remove('drag-over')
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault()
-                          e.currentTarget.classList.remove('drag-over')
-                          const conductorId = e.dataTransfer.getData('conductorId')
-                          if (conductorId) {
-                            const conductor = conductores.find(c => c.id === conductorId)
-                            if (conductor?.tieneAsignacionDiurna || conductor?.tieneAsignacionNocturna) {
-                              Swal.fire({
-                                icon: 'info',
-                                title: 'Conductor con asignacion activa',
-                                html: `<b>${conductor.nombres} ${conductor.apellidos}</b> tiene una asignacion activa.`,
-                                confirmButtonText: 'Entendido',
-                                confirmButtonColor: '#3085d6'
-                              })
-                            }
-                            handleSelectConductorCargo(conductorId)
-                          }
-                        }}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDropCargo}
                       >
                         {conductorCargo ? (
                           <div className="assigned-conductor-card">
@@ -3161,11 +3152,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
               }>
                 <ConductoresMapModal
                   conductores={conductores}
-                  onConfirmPair={(diurno, nocturno) => {
-                    setShowMapModal(false)
-                    handleSelectConductorDiurno(diurno.id, undefined, nocturno.id)
-                    handleSelectConductorNocturno(nocturno.id, undefined, diurno.id)
-                  }}
+                  onConfirmPair={handleConfirmMapPair}
                   onClose={() => setShowMapModal(false)}
                   apiKey={GOOGLE_MAPS_API_KEY}
                 />
@@ -3221,10 +3208,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_cargo}
-                            onChange={(e) => {
-                              const val = e.target.value as TipoAsignacion
-                              setFormData({ ...formData, tipo_asignacion_cargo: val, ...(val === 'devolucion_vehiculo' ? { documento_cargo: 'na' as TipoDocumento } : {}) })
-                            }}
+                            onChange={handleTipoAsignacionChange('tipo_asignacion_cargo', 'documento_cargo')}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>
@@ -3294,10 +3278,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
                           <label>Tipo de Asignacion *</label>
                           <select
                             value={formData.tipo_asignacion_diurno}
-                            onChange={(e) => {
-                              const val = e.target.value as TipoAsignacion
-                              setFormData({ ...formData, tipo_asignacion_diurno: val, ...(val === 'devolucion_vehiculo' ? { documento_diurno: 'na' as TipoDocumento } : {}) })
-                            }}
+                            onChange={handleTipoAsignacionChange('tipo_asignacion_diurno', 'documento_diurno')}
                           >
                             <option value="">Seleccionar...</option>
                             <option value="entrega_auto">Entrega de auto</option>

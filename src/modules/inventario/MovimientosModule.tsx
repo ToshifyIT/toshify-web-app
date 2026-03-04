@@ -420,151 +420,64 @@ export function MovimientosModule() {
   }
 
   // =====================================================
-  // MANEJADOR PRINCIPAL
+  // VALIDACIONES
   // =====================================================
-  const handleMovimiento = async () => {
-    // Validar permisos
-    if (!canCreate) {
-      Swal.fire('Sin permisos', 'No tienes permisos para registrar movimientos', 'error')
-      return
+  const showIncompleteWarning = (text: string) => {
+    Swal.fire({ icon: 'warning', title: 'Datos incompletos', text })
+  }
+
+  /** Valida el lote de entrada. Retorna true si es válido. */
+  const validateLoteEntrada = (): boolean => {
+    if (!proveedorId) {
+      showIncompleteWarning('Debes seleccionar un proveedor')
+      return false
     }
-
-    // ===== MODO LOTE (ENTRADA) =====
-    if (modoLote && tipoMovimiento === 'entrada') {
-      if (!proveedorId) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un proveedor' })
-        return
-      }
-      if (productosLote.length === 0) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes agregar al menos un producto al lote' })
-        return
-      }
-
-      // Si es en tránsito, requiere número de pedido
-      if (estadoInicial === 'en_transito' && !numeroPedido.trim()) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes ingresar un número de pedido para productos en tránsito' })
-        return
-      }
-
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (estadoInicial === 'en_transito') {
-          // Crear pedido en tránsito
-          const items = productosLote.map(pl => ({
-            producto_id: pl.producto_id,
-            cantidad: pl.cantidad
-          }))
-
-          const { error: pedidoError } = await (supabase.rpc as any)('crear_pedido_inventario', {
-            p_numero_pedido: numeroPedido,
-            p_proveedor_id: proveedorId,
-            p_fecha_estimada: fechaEstimadaLlegada || null,
-            p_observaciones: observaciones || null,
-            p_usuario_id: user?.id,
-            p_items: JSON.stringify(items)
-          })
-
-          if (pedidoError) throw pedidoError
-
-          showSuccess('Pedido creado', `Pedido ${numeroPedido} creado con ${productosLote.length} productos en tránsito`)
-        } else {
-          // Entrada directa a stock (estado disponible)
-          for (const pl of productosLote) {
-            const { error } = await (supabase.rpc as any)('procesar_movimiento_inventario', {
-              p_producto_id: pl.producto_id,
-              p_tipo_movimiento: 'entrada',
-              p_cantidad: pl.cantidad,
-              p_proveedor_id: proveedorId,
-              p_usuario_id: user?.id,
-              p_observaciones: observaciones || `Entrada en lote`
-            })
-            if (error) throw error
-          }
-
-          showSuccess('Éxito', `Entrada de ${productosLote.length} productos registrada correctamente`)
-        }
-
-        resetForm()
-      } catch (error: any) {
-        console.error('Error procesando lote:', error)
-        Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote' })
-      }
-      return
+    if (productosLote.length === 0) {
+      showIncompleteWarning('Debes agregar al menos un producto al lote')
+      return false
     }
-
-    // ===== MODO LOTE (SALIDA) =====
-    if (modoLoteSalida && tipoMovimiento === 'salida') {
-      if (productosLoteSalida.length === 0) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes agregar al menos un producto al lote' })
-        return
-      }
-      if (!motivoSalida) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un motivo de salida' })
-        return
-      }
-      if (motivoSalida === 'consumo_servicio' && !categoriaServicio) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar una categoría de servicio' })
-        return
-      }
-
-      try {
-        const { data: userData } = await supabase.auth.getUser()
-
-        // Insertar cada item como un movimiento pendiente de aprobación
-        for (const item of productosLoteSalida) {
-          const movimientoData: any = {
-            producto_id: item.producto_id,
-            tipo_movimiento: 'salida',
-            cantidad: item.cantidad,
-            proveedor_id: null, // Se determinará al aprobar según stock disponible
-            vehiculo_destino_id: item.vehiculo_id || null,
-            usuario_id: userData.user?.id,
-            observaciones: observaciones || `Salida en lote - ${item.vehiculo?.patente || 'Sin vehículo'}`,
-            motivo_salida: motivoSalida,
-            estado_aprobacion: 'pendiente',
-            categoria_servicio: motivoSalida === 'consumo_servicio' ? categoriaServicio : null
-          }
-
-          const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
-          if (error) throw error
-        }
-
-        showSuccess('Lote enviado para aprobación', `${productosLoteSalida.length} salidas registradas. Pendientes de aprobación.`)
-
-        resetForm()
-        loadData()
-      } catch (error: any) {
-        console.error('Error procesando lote de salidas:', error)
-        Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote de salidas' })
-      }
-      return
+    if (estadoInicial === 'en_transito' && !numeroPedido.trim()) {
+      showIncompleteWarning('Debes ingresar un número de pedido para productos en tránsito')
+      return false
     }
+    return true
+  }
 
-    // ===== MODO SIMPLE =====
+  /** Valida el lote de salida. Retorna true si es válido. */
+  const validateLoteSalida = (): boolean => {
+    if (productosLoteSalida.length === 0) {
+      showIncompleteWarning('Debes agregar al menos un producto al lote')
+      return false
+    }
+    if (!motivoSalida) {
+      showIncompleteWarning('Debes seleccionar un motivo de salida')
+      return false
+    }
+    if (motivoSalida === 'consumo_servicio' && !categoriaServicio) {
+      showIncompleteWarning('Debes seleccionar una categoría de servicio')
+      return false
+    }
+    return true
+  }
+
+  /** Valida el movimiento simple. Retorna true si es válido. */
+  const validateMovimientoSimple = (): boolean => {
     if (!productoId || cantidad <= 0) {
-      Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Selecciona un producto y una cantidad válida' })
-      return
+      showIncompleteWarning('Selecciona un producto y una cantidad válida')
+      return false
     }
 
-    // Validaciones específicas por tipo
     if (tipoMovimiento === 'entrada' && !proveedorId) {
-      Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un proveedor para la entrada' })
-      return
+      showIncompleteWarning('Debes seleccionar un proveedor para la entrada')
+      return false
     }
 
     if (tipoMovimiento === 'salida') {
-      if (!proveedorId) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un proveedor' })
-        return
-      }
-      if (!motivoSalida) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un motivo de salida' })
-        return
-      }
+      if (!proveedorId) { showIncompleteWarning('Debes seleccionar un proveedor'); return false }
+      if (!motivoSalida) { showIncompleteWarning('Debes seleccionar un motivo de salida'); return false }
       if (motivoSalida === 'consumo_servicio' && !categoriaServicio) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar una categoría de servicio' })
-        return
+        showIncompleteWarning('Debes seleccionar una categoría de servicio')
+        return false
       }
     }
 
@@ -572,34 +485,19 @@ export function MovimientosModule() {
       const producto = productos.find(p => p.id === productoId)
       if (!producto?.es_retornable) {
         Swal.fire({ icon: 'error', title: 'Operación no permitida', text: 'Solo las herramientas pueden ser asignadas' })
-        return
+        return false
       }
-      if (!vehiculoId) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un vehículo' })
-        return
-      }
-      if (!categoriaServicio) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar una categoría de servicio' })
-        return
-      }
-      if (!proveedorId) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar un proveedor' })
-        return
-      }
+      if (!vehiculoId) { showIncompleteWarning('Debes seleccionar un vehículo'); return false }
+      if (!categoriaServicio) { showIncompleteWarning('Debes seleccionar una categoría de servicio'); return false }
+      if (!proveedorId) { showIncompleteWarning('Debes seleccionar un proveedor'); return false }
     }
 
     if (tipoMovimiento === 'devolucion') {
-      if (!vehiculoId) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes seleccionar el vehículo que devuelve' })
-        return
-      }
-      if (!estadoRetorno) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes indicar el estado de la herramienta' })
-        return
-      }
+      if (!vehiculoId) { showIncompleteWarning('Debes seleccionar el vehículo que devuelve'); return false }
+      if (!estadoRetorno) { showIncompleteWarning('Debes indicar el estado de la herramienta'); return false }
       if ((estadoRetorno === 'dañada' || estadoRetorno === 'perdida') && !observaciones.trim()) {
-        Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Debes agregar observaciones para herramientas dañadas o perdidas' })
-        return
+        showIncompleteWarning('Debes agregar observaciones para herramientas dañadas o perdidas')
+        return false
       }
     }
 
@@ -612,23 +510,111 @@ export function MovimientosModule() {
           title: 'Stock insuficiente',
           text: `No hay suficiente stock. Disponible: ${stockProveedor?.cantidad || 0}`
         })
-        return
+        return false
       }
     }
+
+    return true
+  }
+
+  // =====================================================
+  // MANEJADORES DE MOVIMIENTO
+  // =====================================================
+
+  /** Procesa entrada en modo lote */
+  const handleLoteEntrada = async () => {
+    if (!validateLoteEntrada()) return
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (estadoInicial === 'en_transito') {
+        const items = productosLote.map(pl => ({
+          producto_id: pl.producto_id,
+          cantidad: pl.cantidad
+        }))
+
+        const { error } = await (supabase.rpc as any)('crear_pedido_inventario', {
+          p_numero_pedido: numeroPedido,
+          p_proveedor_id: proveedorId,
+          p_fecha_estimada: fechaEstimadaLlegada || null,
+          p_observaciones: observaciones || null,
+          p_usuario_id: user?.id,
+          p_items: JSON.stringify(items)
+        })
+        if (error) throw error
+
+        showSuccess('Pedido creado', `Pedido ${numeroPedido} creado con ${productosLote.length} productos en tránsito`)
+      } else {
+        for (const pl of productosLote) {
+          const { error } = await (supabase.rpc as any)('procesar_movimiento_inventario', {
+            p_producto_id: pl.producto_id,
+            p_tipo_movimiento: 'entrada',
+            p_cantidad: pl.cantidad,
+            p_proveedor_id: proveedorId,
+            p_usuario_id: user?.id,
+            p_observaciones: observaciones || `Entrada en lote`
+          })
+          if (error) throw error
+        }
+
+        showSuccess('Éxito', `Entrada de ${productosLote.length} productos registrada correctamente`)
+      }
+
+      resetForm()
+    } catch (error: any) {
+      console.error('Error procesando lote:', error)
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote' })
+    }
+  }
+
+  /** Procesa salida en modo lote */
+  const handleLoteSalida = async () => {
+    if (!validateLoteSalida()) return
 
     try {
       const { data: userData } = await supabase.auth.getUser()
 
-      // Construir observaciones (ahora categoría se guarda aparte)
+      for (const item of productosLoteSalida) {
+        const movimientoData: any = {
+          producto_id: item.producto_id,
+          tipo_movimiento: 'salida',
+          cantidad: item.cantidad,
+          proveedor_id: null, // Se determinará al aprobar según stock disponible
+          vehiculo_destino_id: item.vehiculo_id || null,
+          usuario_id: userData.user?.id,
+          observaciones: observaciones || `Salida en lote - ${item.vehiculo?.patente || 'Sin vehículo'}`,
+          motivo_salida: motivoSalida,
+          estado_aprobacion: 'pendiente',
+          categoria_servicio: motivoSalida === 'consumo_servicio' ? categoriaServicio : null
+        }
+
+        const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
+        if (error) throw error
+      }
+
+      showSuccess('Lote enviado para aprobación', `${productosLoteSalida.length} salidas registradas. Pendientes de aprobación.`)
+      resetForm()
+      loadData()
+    } catch (error: any) {
+      console.error('Error procesando lote de salidas:', error)
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote de salidas' })
+    }
+  }
+
+  /** Procesa un movimiento simple (entrada, salida, asignación o devolución) */
+  const handleMovimientoSimple = async () => {
+    if (!validateMovimientoSimple()) return
+
+    try {
+      const { data: userData } = await supabase.auth.getUser()
       const observacionesFinal = observaciones || ''
 
-      // Obtener la categoría de servicio a guardar
       const categoriaServicioFinal = (tipoMovimiento === 'salida' || tipoMovimiento === 'asignacion')
         ? categoriaServicio
         : (tipoMovimiento === 'devolucion' ? categoriaServicioDevolucion : null)
 
       // Para ENTRADA: usar el RPC (va a tránsito)
-      // Para SALIDA/ASIGNACION/DEVOLUCION: insertar directamente con estado pendiente
       if (tipoMovimiento === 'entrada') {
         const { error } = await (supabase.rpc as any)('procesar_movimiento_inventario', {
           p_producto_id: productoId,
@@ -645,36 +631,35 @@ export function MovimientosModule() {
           p_estado_aprobacion: 'aprobado',
           p_estado_retorno: null
         })
-
         if (error) throw error
 
         showSuccess('Entrada registrada', 'El producto está en tránsito. Confirma recepción desde "Pedidos en Tránsito".')
-      } else {
-        // Para salida, asignación y devolución: insertar directamente con estado PENDIENTE
-        const movimientoData: any = {
-          producto_id: productoId,
-          tipo_movimiento: tipoMovimiento,
-          cantidad: cantidad,
-          proveedor_id: tipoMovimiento === 'devolucion' ? null : (proveedorId || null),
-          vehiculo_destino_id: (tipoMovimiento === 'asignacion' || tipoMovimiento === 'salida') ? (vehiculoId || null) : null,
-          vehiculo_origen_id: tipoMovimiento === 'devolucion' ? vehiculoId : null,
-          usuario_id: userData.user?.id,
-          observaciones: observacionesFinal || null,
-          motivo_salida: tipoMovimiento === 'salida' ? motivoSalida : null,
-          estado_aprobacion: 'pendiente',
-          estado_retorno: tipoMovimiento === 'devolucion' ? estadoRetorno : null,
-          categoria_servicio: categoriaServicioFinal || null
-        }
-
-        const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
-
-        if (error) throw error
-
-        showSuccess('Movimiento enviado para aprobación', `${getTipoLabel(tipoMovimiento)} registrada. Pendiente de aprobación.`)
+        resetForm()
+        loadData()
+        return
       }
 
+      // Para SALIDA/ASIGNACION/DEVOLUCION: insertar directamente con estado pendiente
+      const movimientoData: any = {
+        producto_id: productoId,
+        tipo_movimiento: tipoMovimiento,
+        cantidad: cantidad,
+        proveedor_id: tipoMovimiento === 'devolucion' ? null : (proveedorId || null),
+        vehiculo_destino_id: (tipoMovimiento === 'asignacion' || tipoMovimiento === 'salida') ? (vehiculoId || null) : null,
+        vehiculo_origen_id: tipoMovimiento === 'devolucion' ? vehiculoId : null,
+        usuario_id: userData.user?.id,
+        observaciones: observacionesFinal || null,
+        motivo_salida: tipoMovimiento === 'salida' ? motivoSalida : null,
+        estado_aprobacion: 'pendiente',
+        estado_retorno: tipoMovimiento === 'devolucion' ? estadoRetorno : null,
+        categoria_servicio: categoriaServicioFinal || null
+      }
+
+      const { error } = await (supabase.from('movimientos') as any).insert(movimientoData)
+      if (error) throw error
+
+      showSuccess('Movimiento enviado para aprobación', `${getTipoLabel(tipoMovimiento)} registrada. Pendiente de aprobación.`)
       resetForm()
-      // Recargar datos para actualizar el stock mostrado
       loadData()
     } catch (err: any) {
       console.error('Error procesando movimiento:', err)
@@ -683,8 +668,105 @@ export function MovimientosModule() {
   }
 
   // =====================================================
+  // MANEJADOR PRINCIPAL
+  // =====================================================
+  const handleMovimiento = async () => {
+    if (!canCreate) {
+      Swal.fire('Sin permisos', 'No tienes permisos para registrar movimientos', 'error')
+      return
+    }
+
+    if (modoLote && tipoMovimiento === 'entrada') return handleLoteEntrada()
+    if (modoLoteSalida && tipoMovimiento === 'salida') return handleLoteSalida()
+    return handleMovimientoSimple()
+  }
+
+  // =====================================================
   // HELPERS
   // =====================================================
+  // =====================================================
+  // INLINE HANDLER EXTRACTIONS
+  // =====================================================
+  const handleToggleModoLote = () => {
+    setModoLote(!modoLote)
+    setProductoId('')
+    setBusquedaProducto('')
+    setProductosLote([])
+    if (!modoLote) {
+      setEstadoInicial('en_transito') // Lote siempre en tránsito
+    }
+  }
+
+  const handleToggleModoLoteSalida = () => {
+    setModoLoteSalida(!modoLoteSalida)
+    setProductoId('')
+    setBusquedaProducto('')
+    setProductosLoteSalida([])
+    setVehiculoId('')
+  }
+
+  const handleAgregarProductoLoteEntrada = () => {
+    if (!productoId || cantidad <= 0) return
+    const prod = productos.find(p => p.id === productoId)
+    if (!prod) return
+
+    const existente = productosLote.find(pl => pl.producto_id === productoId)
+    if (existente) {
+      setProductosLote(productosLote.map(pl =>
+        pl.producto_id === productoId
+          ? { ...pl, cantidad: pl.cantidad + cantidad }
+          : pl
+      ))
+    } else {
+      setProductosLote([...productosLote, { producto_id: productoId, cantidad, producto: prod }])
+    }
+    setProductoId('')
+    setBusquedaProducto('')
+    setCantidad(1)
+  }
+
+  const handleAgregarProductoLoteSalida = () => {
+    if (!productoId || cantidad <= 0) return
+    const prod = productos.find(p => p.id === productoId)
+    if (!prod) return
+
+    if ((prod.stock_disponible || 0) < cantidad) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Stock insuficiente',
+        text: `Stock disponible: ${prod.stock_disponible || 0}`
+      })
+      return
+    }
+
+    const veh = vehiculos.find(v => v.id === vehiculoId)
+    const nuevoItem: ProductoLoteSalida = {
+      id: `${productoId}-${vehiculoId || 'sin'}-${Date.now()}`,
+      producto_id: productoId,
+      producto: prod,
+      vehiculo_id: vehiculoId,
+      vehiculo: veh,
+      cantidad: cantidad
+    }
+    setProductosLoteSalida([...productosLoteSalida, nuevoItem])
+    setProductoId('')
+    setBusquedaProducto('')
+    setVehiculoId('')
+    setCantidad(1)
+  }
+
+  const handleSelectProductoDropdown = (p: Producto) => {
+    setProductoId(p.id)
+    setBusquedaProducto(`${p.codigo} - ${p.nombre}`)
+    setMostrarDropdownProductos(false)
+  }
+
+  const handleTipoProductoFiltroChange = (tipo: 'TODOS' | 'REPUESTOS' | 'HERRAMIENTAS') => {
+    setTipoProductoFiltro(tipo)
+    setProductoId('')
+    setBusquedaProducto('')
+  }
+
   const getTipoLabel = (tipo: TipoMovimiento): string => {
     const labels: Record<TipoMovimiento, string> = {
       entrada: 'Entrada',
@@ -844,15 +926,7 @@ export function MovimientosModule() {
                   </div>
                 </div>
                 <button
-                  onClick={() => {
-                    setModoLote(!modoLote)
-                    setProductoId('')
-                    setBusquedaProducto('')
-                    setProductosLote([])
-                    if (!modoLote) {
-                      setEstadoInicial('en_transito') // Lote siempre en tránsito
-                    }
-                  }}
+                  onClick={handleToggleModoLote}
                   style={{
                     padding: '8px 16px',
                     background: modoLote ? 'var(--color-primary)' : 'var(--text-secondary)',
@@ -984,13 +1058,7 @@ export function MovimientosModule() {
                   </div>
                 </div>
                 <button
-                  onClick={() => {
-                    setModoLoteSalida(!modoLoteSalida)
-                    setProductoId('')
-                    setBusquedaProducto('')
-                    setProductosLoteSalida([])
-                    setVehiculoId('')
-                  }}
+                  onClick={handleToggleModoLoteSalida}
                   style={{
                     padding: '8px 16px',
                     background: modoLoteSalida ? 'var(--color-primary)' : 'var(--text-secondary)',
@@ -1143,14 +1211,10 @@ export function MovimientosModule() {
                           boxShadow: 'var(--shadow-md)',
                           zIndex: 1000
                         }}>
-                          {productosFiltrados.map((p) => (
+                           {productosFiltrados.map((p) => (
                             <div
                               key={p.id}
-                              onClick={() => {
-                                setProductoId(p.id)
-                                setBusquedaProducto(`${p.codigo} - ${p.nombre}`)
-                                setMostrarDropdownProductos(false)
-                              }}
+                              onClick={() => handleSelectProductoDropdown(p)}
                               style={{
                                 padding: '8px 12px',
                                 cursor: 'pointer',
@@ -1226,36 +1290,7 @@ export function MovimientosModule() {
 
                     {/* Botón agregar */}
                     <button
-                      onClick={() => {
-                        if (productoId && cantidad > 0) {
-                          const prod = productos.find(p => p.id === productoId)
-                          const veh = vehiculos.find(v => v.id === vehiculoId)
-                          if (prod) {
-                            // Verificar stock
-                            if ((prod.stock_disponible || 0) < cantidad) {
-                              Swal.fire({
-                                icon: 'warning',
-                                title: 'Stock insuficiente',
-                                text: `Stock disponible: ${prod.stock_disponible || 0}`
-                              })
-                              return
-                            }
-                            const nuevoItem: ProductoLoteSalida = {
-                              id: `${productoId}-${vehiculoId || 'sin'}-${Date.now()}`,
-                              producto_id: productoId,
-                              producto: prod,
-                              vehiculo_id: vehiculoId,
-                              vehiculo: veh,
-                              cantidad: cantidad
-                            }
-                            setProductosLoteSalida([...productosLoteSalida, nuevoItem])
-                            setProductoId('')
-                            setBusquedaProducto('')
-                            setVehiculoId('')
-                            setCantidad(1)
-                          }
-                        }
-                      }}
+                      onClick={handleAgregarProductoLoteSalida}
                       style={{
                         padding: '8px 16px',
                         background: 'var(--color-primary)',
@@ -1561,11 +1596,7 @@ export function MovimientosModule() {
                 {['TODOS', 'REPUESTOS', 'HERRAMIENTAS'].map((tipo) => (
                   <button
                     key={tipo}
-                    onClick={() => {
-                      setTipoProductoFiltro(tipo as any)
-                      setProductoId('')
-                      setBusquedaProducto('')
-                    }}
+                    onClick={() => handleTipoProductoFiltroChange(tipo as 'TODOS' | 'REPUESTOS' | 'HERRAMIENTAS')}
                     style={{
                       padding: '8px 16px',
                       background: tipoProductoFiltro === tipo ? 'var(--color-primary)' : 'var(--card-bg)',
@@ -1640,11 +1671,7 @@ export function MovimientosModule() {
                     {productosFiltrados.map((p) => (
                       <div
                         key={p.id}
-                        onClick={() => {
-                          setProductoId(p.id)
-                          setBusquedaProducto(`${p.codigo} - ${p.nombre}`)
-                          setMostrarDropdownProductos(false)
-                        }}
+                        onClick={() => handleSelectProductoDropdown(p)}
                         style={{
                           padding: '12px 16px',
                           cursor: 'pointer',
@@ -1745,14 +1772,10 @@ export function MovimientosModule() {
                       boxShadow: 'var(--shadow-md)',
                       zIndex: 1000
                     }}>
-                      {productosFiltrados.map((p) => (
+                       {productosFiltrados.map((p) => (
                         <div
                           key={p.id}
-                          onClick={() => {
-                            setProductoId(p.id)
-                            setBusquedaProducto(`${p.codigo} - ${p.nombre}`)
-                            setMostrarDropdownProductos(false)
-                          }}
+                          onClick={() => handleSelectProductoDropdown(p)}
                           style={{
                             padding: '8px 12px',
                             cursor: 'pointer',
@@ -1803,26 +1826,7 @@ export function MovimientosModule() {
                   }}
                 />
                 <button
-                  onClick={() => {
-                    if (productoId && cantidad > 0) {
-                      const prod = productos.find(p => p.id === productoId)
-                      if (prod) {
-                        const existente = productosLote.find(pl => pl.producto_id === productoId)
-                        if (existente) {
-                          setProductosLote(productosLote.map(pl =>
-                            pl.producto_id === productoId
-                              ? { ...pl, cantidad: pl.cantidad + cantidad }
-                              : pl
-                          ))
-                        } else {
-                          setProductosLote([...productosLote, { producto_id: productoId, cantidad, producto: prod }])
-                        }
-                        setProductoId('')
-                        setBusquedaProducto('')
-                        setCantidad(1)
-                      }
-                    }
-                  }}
+                  onClick={handleAgregarProductoLoteEntrada}
                   style={{
                     padding: '8px 16px',
                     background: 'var(--color-primary)',

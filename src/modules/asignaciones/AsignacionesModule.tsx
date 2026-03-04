@@ -970,75 +970,75 @@ export function AsignacionesModule() {
       cancelButtonText: 'Cancelar'
     })
 
-    if (result.isConfirmed) {
-      setIsSubmitting(true)
-      try {
-        const asignacion = asignaciones.find(a => a.id === id)
+    if (!result.isConfirmed) return
 
-        // 1. Limpiar referencia en programaciones_onboarding (si existe)
-        // Esto permite re-enviar la programacion despues de eliminar la asignacion
-        const { data: progUpdate, error: progError } = await (supabase as any)
-          .from('programaciones_onboarding')
-          .update({ asignacion_id: null, fecha_asignacion_creada: null })
-          .eq('asignacion_id', id)
-          .select('id')
+    setIsSubmitting(true)
+    try {
+      const asignacion = asignaciones.find(a => a.id === id)
 
-        if (progError) {
-          console.error('Error limpiando referencia en programaciones:', progError)
-        } else {
-          console.log('✅ Referencia limpiada en programaciones:', progUpdate?.length || 0, 'registros actualizados')
-        }
+      // 1. Limpiar referencia en programaciones_onboarding (si existe)
+      // Esto permite re-enviar la programacion despues de eliminar la asignacion
+      const { data: progUpdate, error: progError } = await (supabase as any)
+        .from('programaciones_onboarding')
+        .update({ asignacion_id: null, fecha_asignacion_creada: null })
+        .eq('asignacion_id', id)
+        .select('id')
 
-        // 2. Eliminar conductores asociados
-        const { error: conductoresError } = await (supabase as any)
-          .from('asignaciones_conductores')
-          .delete()
-          .eq('asignacion_id', id)
-
-        if (conductoresError) {
-          console.error('Error eliminando conductores:', conductoresError)
-        }
-
-        // 3. Eliminar la asignación
-        const { error: asignacionError } = await (supabase as any)
-          .from('asignaciones')
-          .delete()
-          .eq('id', id)
-        if (asignacionError) throw asignacionError
-
-        // 4. Cambiar estado del vehículo a DISPONIBLE
-        if (asignacion?.vehiculo_id) {
-          const { data: estadoDisponible } = await supabase
-            .from('vehiculos_estados')
-            .select('id')
-            .eq('codigo', 'DISPONIBLE')
-            .single() as { data: { id: string } | null }
-
-          if (estadoDisponible) {
-            await (supabase as any).from('vehiculos').update({ estado_id: estadoDisponible.id }).eq('id', asignacion.vehiculo_id)
-          }
-        }
-
-        showSuccess('Eliminado', 'La asignación ha sido eliminada. Puedes re-enviar desde Programaciones.')
-
-        // Historial: asignación eliminada
-        if (asignacion?.vehiculo_id) {
-          registrarHistorialVehiculo({
-            vehiculoId: asignacion.vehiculo_id,
-            tipoEvento: 'eliminacion_asignacion',
-            estadoNuevo: 'DISPONIBLE',
-            detalles: { patente: asignacion.vehiculos?.patente, codigo: asignacion.codigo },
-            modulo: 'asignaciones',
-            sedeId: sedeActualId,
-          })
-        }
-
-        loadAsignaciones()
-      } catch (err: any) {
-        Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
-      } finally {
-        setIsSubmitting(false)
+      if (progError) {
+        console.error('Error limpiando referencia en programaciones:', progError)
+      } else {
+        console.log('✅ Referencia limpiada en programaciones:', progUpdate?.length || 0, 'registros actualizados')
       }
+
+      // 2. Eliminar conductores asociados
+      const { error: conductoresError } = await (supabase as any)
+        .from('asignaciones_conductores')
+        .delete()
+        .eq('asignacion_id', id)
+
+      if (conductoresError) {
+        console.error('Error eliminando conductores:', conductoresError)
+      }
+
+      // 3. Eliminar la asignación
+      const { error: asignacionError } = await (supabase as any)
+        .from('asignaciones')
+        .delete()
+        .eq('id', id)
+      if (asignacionError) throw asignacionError
+
+      // 4. Cambiar estado del vehículo a DISPONIBLE
+      if (asignacion?.vehiculo_id) {
+        const { data: estadoDisponible } = await supabase
+          .from('vehiculos_estados')
+          .select('id')
+          .eq('codigo', 'DISPONIBLE')
+          .single() as { data: { id: string } | null }
+
+        if (estadoDisponible) {
+          await (supabase as any).from('vehiculos').update({ estado_id: estadoDisponible.id }).eq('id', asignacion.vehiculo_id)
+        }
+      }
+
+      showSuccess('Eliminado', 'La asignación ha sido eliminada. Puedes re-enviar desde Programaciones.')
+
+      // Historial: asignación eliminada
+      if (asignacion?.vehiculo_id) {
+        registrarHistorialVehiculo({
+          vehiculoId: asignacion.vehiculo_id,
+          tipoEvento: 'eliminacion_asignacion',
+          estadoNuevo: 'DISPONIBLE',
+          detalles: { patente: asignacion.vehiculos?.patente, codigo: asignacion.codigo },
+          modulo: 'asignaciones',
+          sedeId: sedeActualId,
+        })
+      }
+
+      loadAsignaciones()
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'Error al eliminar la asignación', 'error')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -1985,6 +1985,206 @@ export function AsignacionesModule() {
     }
   }
 
+  // Activar asignación directamente cuando todos los conductores ya confirmaron
+  const handleActivarAsignacionDirecta = async () => {
+    if (isSubmitting || !selectedAsignacion) return
+    setIsSubmitting(true)
+    try {
+      const ahora = new Date().toISOString()
+
+      // Cerrar asignaciones activas anteriores del mismo vehículo
+      const { data: asignacionesACerrar } = await (supabase as any)
+        .from('asignaciones')
+        .select(`id, codigo, notas,
+          asignaciones_conductores(conductor_id, estado, horario,
+            conductores(nombres, apellidos)
+          )
+        `)
+        .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
+        .in('estado', ['activa', 'activo'])
+        .neq('id', selectedAsignacion.id)
+
+      if (asignacionesACerrar && asignacionesACerrar.length > 0) {
+        for (const asigAnterior of asignacionesACerrar as any[]) {
+          // Capturar TODOS los conductores para trazabilidad (no solo activos)
+          const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
+            .map((ac: any) => {
+              const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
+              return `${nombre} (${ac.horario || 'sin turno'})`
+            })
+          const notasAnterior = asigAnterior.notas || ''
+          const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Nuevo turno activado para el mismo vehículo.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
+          await (supabase as any).from('asignaciones')
+            .update({ estado: 'finalizada', fecha_fin: ahora, notas: notasAnterior + traza })
+            .eq('id', asigAnterior.id)
+        }
+      }
+
+      // Cerrar asignaciones anteriores de los CONDUCTORES (cuando cambian de vehículo)
+      const conductoresIds = selectedAsignacion.asignaciones_conductores?.map((c: any) => c.conductor_id).filter(Boolean) || []
+      if (conductoresIds.length > 0) {
+        for (const conductorId of conductoresIds) {
+          // Cerrar asignaciones_conductores anteriores
+          await (supabase as any)
+            .from('asignaciones_conductores')
+            .update({ estado: 'finalizado', fecha_fin: ahora })
+            .eq('conductor_id', conductorId)
+            .eq('estado', 'asignado')
+            .neq('asignacion_id', selectedAsignacion.id)
+        }
+      }
+
+      // Activar la asignación
+      await (supabase as any)
+        .from('asignaciones')
+        .update({
+          estado: 'activa',
+          fecha_inicio: ahora,
+          notas: confirmComentarios || selectedAsignacion.notas,
+          updated_by: profile?.full_name || 'Sistema'
+        })
+        .eq('id', selectedAsignacion.id)
+
+      // Actualizar estado del vehículo a EN_USO
+      const { data: estadoEnUso } = await supabase
+        .from('vehiculos_estados')
+        .select('id')
+        .eq('codigo', 'EN_USO')
+        .single() as unknown as { data: { id: string } | null }
+
+      if (estadoEnUso && selectedAsignacion.vehiculo_id) {
+        await (supabase as any)
+          .from('vehiculos')
+          .update({ estado_id: estadoEnUso.id })
+          .eq('id', selectedAsignacion.vehiculo_id)
+      }
+
+      showSuccess('Activado', 'La asignación está ahora ACTIVA.')
+
+      // Historial: activación directa - vehículo EN_USO
+      if (selectedAsignacion.vehiculo_id) {
+        registrarHistorialVehiculo({
+          vehiculoId: selectedAsignacion.vehiculo_id,
+          tipoEvento: 'asignacion_activada',
+          estadoNuevo: 'EN_USO',
+          detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
+          modulo: 'asignaciones',
+          sedeId: sedeActualId,
+        })
+      }
+      // Historial: conductores activados
+      if (selectedAsignacion.asignaciones_conductores) {
+        for (const ac of selectedAsignacion.asignaciones_conductores) {
+          if (ac.conductor_id) {
+            registrarHistorialConductor({
+              conductorId: ac.conductor_id,
+              tipoEvento: 'asignacion_activada',
+              estadoNuevo: 'activo',
+              detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
+              modulo: 'asignaciones',
+              sedeId: sedeActualId,
+            })
+          }
+        }
+      }
+
+      setShowConfirmModal(false)
+      setConfirmComentarios('')
+      setSelectedAsignacion(null)
+      loadAsignaciones()
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'Error al activar', 'error')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Dismiss confirm modal and reset state
+  const handleDismissConfirmModal = () => {
+    setShowConfirmModal(false)
+    setConfirmComentarios('')
+    setConductoresToConfirm([])
+    setSelectedAsignacion(null)
+  }
+
+  // Dismiss cancel modal and reset state
+  const handleDismissCancelModal = () => {
+    setShowCancelModal(false)
+    setCancelMotivo('')
+    setSelectedAsignacion(null)
+  }
+
+  // Dismiss view modal and reset state
+  const handleDismissViewModal = () => {
+    setShowViewModal(false)
+    setViewAsignacion(null)
+  }
+
+  // Dismiss regularizar modal and reset state
+  const handleDismissRegularizarModal = () => {
+    setShowRegularizarModal(false)
+    setRegularizarAsignacion(null)
+  }
+
+  // Handle unconfirm conductor from view modal
+  const handleUnconfirmFromViewModal = (acId: string) => {
+    Swal.fire({
+      title: '¿Desconfirmar conductor?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ff0033',
+      confirmButtonText: 'Sí, desconfirmar'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        handleUnconfirmConductor(acId)
+        setShowViewModal(false)
+        setViewAsignacion(null)
+      }
+    })
+  }
+
+  // Handle cancel devolucion from actions menu
+  const handleCancelDevolucion = async (devolucionId: string) => {
+    const res = await Swal.fire({
+      title: '¿Cancelar devolución?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ff0033',
+      confirmButtonText: 'Sí, cancelar',
+      cancelButtonText: 'No'
+    })
+    if (!res.isConfirmed) return
+    await (supabase as any).from('devoluciones').update({ estado: 'cancelado' }).eq('id', devolucionId)
+    showSuccess('Cancelada', 'Devolución cancelada')
+    loadAsignaciones()
+  }
+
+  // Handle motivo detail click in table
+  const handleShowMotivoDetalle = (motivo: string, detalle: { observaciones?: string; programadoPor?: string }) => {
+    const labels: Record<string, string> = {
+      entrega_auto: 'Entrega de auto',
+      asignacion_companero: 'Asig. compañero',
+      cambio_auto: 'Cambio de auto',
+      asignacion_auto_cargo: 'Asig. auto a cargo',
+      entrega_auto_cargo: 'Entrega a cargo',
+      cambio_turno: 'Cambio de turno',
+      devolucion_vehiculo: 'Devolución',
+    }
+    Swal.fire({
+      title: labels[motivo] || motivo,
+      html: `
+        <div style="text-align: left; font-size: 14px;">
+          ${detalle.programadoPor ? `<p style="margin-bottom: 8px;"><strong>Programado por:</strong> ${detalle.programadoPor}</p>` : ''}
+          ${detalle.observaciones ? `<p style="margin-bottom: 0;"><strong>Observaciones:</strong><br/>${detalle.observaciones}</p>` : '<p style="color: #9CA3AF;">Sin observaciones</p>'}
+        </div>
+      `,
+      width: 400,
+      showConfirmButton: true,
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#6B7280',
+    })
+  }
+
   const getStatusBadgeClass = (status: string) => {
     const classes: Record<string, string> = {
       programado: 'dt-badge dt-badge-yellow',
@@ -2070,22 +2270,7 @@ export function AsignacionesModule() {
         return (
           <span
             style={{ fontSize: '12px', fontWeight: 500, cursor: tieneDetalle ? 'pointer' : 'default', textDecoration: tieneDetalle ? 'underline dotted' : 'none' }}
-            onClick={() => {
-              if (!tieneDetalle) return
-              Swal.fire({
-                title: labels[motivo] || motivo,
-                html: `
-                  <div style="text-align: left; font-size: 14px;">
-                    ${detalle.programadoPor ? `<p style="margin-bottom: 8px;"><strong>Programado por:</strong> ${detalle.programadoPor}</p>` : ''}
-                    ${detalle.observaciones ? `<p style="margin-bottom: 0;"><strong>Observaciones:</strong><br/>${detalle.observaciones}</p>` : '<p style="color: #9CA3AF;">Sin observaciones</p>'}
-                  </div>
-                `,
-                width: 400,
-                showConfirmButton: true,
-                confirmButtonText: 'Cerrar',
-                confirmButtonColor: '#6B7280',
-              })
-            }}
+            onClick={tieneDetalle ? () => handleShowMotivoDetalle(motivo, detalle!) : undefined}
           >
             {labels[motivo] || motivo}
           </span>
@@ -2286,21 +2471,7 @@ export function AsignacionesModule() {
             {
               icon: <Trash2 size={15} />,
               label: 'Cancelar',
-              onClick: async () => {
-                const res = await Swal.fire({
-                  title: '¿Cancelar devolución?',
-                  icon: 'warning',
-                  showCancelButton: true,
-                  confirmButtonColor: '#ff0033',
-                  confirmButtonText: 'Sí, cancelar',
-                  cancelButtonText: 'No'
-                })
-                if (res.isConfirmed) {
-                  await (supabase as any).from('devoluciones').update({ estado: 'cancelado' }).eq('id', row.original.devolucionId)
-                  showSuccess('Cancelada', 'Devolución cancelada')
-                  loadAsignaciones()
-                }
-              },
+              onClick: () => handleCancelDevolucion(row.original.devolucionId!),
               disabled: !canEdit,
               variant: 'danger' as const,
             },
@@ -2557,12 +2728,7 @@ export function AsignacionesModule() {
             <div className="asig-modal-actions">
               <button
                 className="btn-secondary"
-                onClick={() => {
-                  setShowConfirmModal(false)
-                  setConfirmComentarios('')
-                  setConductoresToConfirm([])
-                  setSelectedAsignacion(null)
-                }}
+                onClick={handleDismissConfirmModal}
               >
                 Cancelar
               </button>
@@ -2571,118 +2737,7 @@ export function AsignacionesModule() {
                selectedAsignacion.asignaciones_conductores?.every(ac => ac.confirmado) ? (
                 <button
                   className="btn-primary"
-                  onClick={async () => {
-                    if (isSubmitting) return
-                    setIsSubmitting(true)
-                    try {
-                      const ahora = new Date().toISOString()
-
-                      // Cerrar asignaciones activas anteriores del mismo vehículo
-                      const { data: asignacionesACerrar } = await (supabase as any)
-                        .from('asignaciones')
-                        .select(`id, codigo, notas,
-                          asignaciones_conductores(conductor_id, estado, horario,
-                            conductores(nombres, apellidos)
-                          )
-                        `)
-                        .eq('vehiculo_id', selectedAsignacion.vehiculo_id)
-                        .in('estado', ['activa', 'activo'])
-                        .neq('id', selectedAsignacion.id)
-
-                      if (asignacionesACerrar && asignacionesACerrar.length > 0) {
-                        for (const asigAnterior of asignacionesACerrar as any[]) {
-                          // Capturar TODOS los conductores para trazabilidad (no solo activos)
-                          const conductoresAnteriores = (asigAnterior.asignaciones_conductores || [])
-                            .map((ac: any) => {
-                              const nombre = ac.conductores ? `${ac.conductores.nombres || ''} ${ac.conductores.apellidos || ''}`.trim() : 'Desconocido'
-                              return `${nombre} (${ac.horario || 'sin turno'})`
-                            })
-                          const notasAnterior = asigAnterior.notas || ''
-                          const traza = `\n[AUTO-CERRADA ${new Date().toLocaleDateString('es-AR')}] Nuevo turno activado para el mismo vehículo.\nConductores al cierre: ${conductoresAnteriores.length > 0 ? conductoresAnteriores.join(', ') : 'ninguno'}`
-                          await (supabase as any).from('asignaciones')
-                            .update({ estado: 'finalizada', fecha_fin: ahora, notas: notasAnterior + traza })
-                            .eq('id', asigAnterior.id)
-                        }
-                      }
-
-                      // Cerrar asignaciones anteriores de los CONDUCTORES (cuando cambian de vehículo)
-                      const conductoresIds = selectedAsignacion.asignaciones_conductores?.map((c: any) => c.conductor_id).filter(Boolean) || []
-                      if (conductoresIds.length > 0) {
-                        for (const conductorId of conductoresIds) {
-                          // Cerrar asignaciones_conductores anteriores
-                          await (supabase as any)
-                            .from('asignaciones_conductores')
-                            .update({ estado: 'finalizado', fecha_fin: ahora })
-                            .eq('conductor_id', conductorId)
-                            .eq('estado', 'asignado')
-                            .neq('asignacion_id', selectedAsignacion.id)
-                        }
-                      }
-
-                      // Activar la asignación
-                      await (supabase as any)
-                        .from('asignaciones')
-                        .update({
-                          estado: 'activa',
-                          fecha_inicio: ahora,
-                          notas: confirmComentarios || selectedAsignacion.notas,
-                          updated_by: profile?.full_name || 'Sistema'
-                        })
-                        .eq('id', selectedAsignacion.id)
-
-                      // Actualizar estado del vehículo a EN_USO
-                      const { data: estadoEnUso } = await supabase
-                        .from('vehiculos_estados')
-                        .select('id')
-                        .eq('codigo', 'EN_USO')
-                        .single() as unknown as { data: { id: string } | null }
-
-                      if (estadoEnUso && selectedAsignacion.vehiculo_id) {
-                        await (supabase as any)
-                          .from('vehiculos')
-                          .update({ estado_id: estadoEnUso.id })
-                          .eq('id', selectedAsignacion.vehiculo_id)
-                      }
-
-                      showSuccess('Activado', 'La asignación está ahora ACTIVA.')
-
-                      // Historial: activación directa - vehículo EN_USO
-                      if (selectedAsignacion.vehiculo_id) {
-                        registrarHistorialVehiculo({
-                          vehiculoId: selectedAsignacion.vehiculo_id,
-                          tipoEvento: 'asignacion_activada',
-                          estadoNuevo: 'EN_USO',
-                          detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
-                          modulo: 'asignaciones',
-                          sedeId: sedeActualId,
-                        })
-                      }
-                      // Historial: conductores activados
-                      if (selectedAsignacion.asignaciones_conductores) {
-                        for (const ac of selectedAsignacion.asignaciones_conductores) {
-                          if (ac.conductor_id) {
-                            registrarHistorialConductor({
-                              conductorId: ac.conductor_id,
-                              tipoEvento: 'asignacion_activada',
-                              estadoNuevo: 'activo',
-                              detalles: { patente: selectedAsignacion.vehiculos?.patente, codigo: selectedAsignacion.codigo },
-                              modulo: 'asignaciones',
-                              sedeId: sedeActualId,
-                            })
-                          }
-                        }
-                      }
-
-                      setShowConfirmModal(false)
-                      setConfirmComentarios('')
-                      setSelectedAsignacion(null)
-                      loadAsignaciones()
-                    } catch (err: any) {
-                      Swal.fire('Error', err.message || 'Error al activar', 'error')
-                    } finally {
-                      setIsSubmitting(false)
-                    }
-                  }}
+                  onClick={handleActivarAsignacionDirecta}
                   disabled={isSubmitting}
                   style={{ background: !isSubmitting ? '#10B981' : '#D1D5DB' }}
                 >
@@ -2725,11 +2780,7 @@ export function AsignacionesModule() {
             <div className="asig-modal-actions">
               <button
                 className="btn-secondary"
-                onClick={() => {
-                  setShowCancelModal(false)
-                  setCancelMotivo('')
-                  setSelectedAsignacion(null)
-                }}
+                onClick={handleDismissCancelModal}
               >
                 Volver
               </button>
@@ -2806,21 +2857,7 @@ export function AsignacionesModule() {
                               {canEdit && viewAsignacion.estado === 'programado' && (
                                 <button
                                   className="asig-btn-unconfirm"
-                                  onClick={() => {
-                                    Swal.fire({
-                                      title: '¿Desconfirmar conductor?',
-                                      icon: 'warning',
-                                      showCancelButton: true,
-                                      confirmButtonColor: '#ff0033',
-                                      confirmButtonText: 'Sí, desconfirmar'
-                                    }).then((result) => {
-                                      if (result.isConfirmed) {
-                                        handleUnconfirmConductor(ac.id)
-                                        setShowViewModal(false)
-                                        setViewAsignacion(null)
-                                      }
-                                    })
-                                  }}
+                                  onClick={() => handleUnconfirmFromViewModal(ac.id)}
                                 >
                                   Desconfirmar
                                 </button>
@@ -2891,10 +2928,7 @@ export function AsignacionesModule() {
             <div className="asig-modal-actions">
               <button
                 className="btn-secondary"
-                onClick={() => {
-                  setShowViewModal(false)
-                  setViewAsignacion(null)
-                }}
+                onClick={handleDismissViewModal}
               >
                 Cerrar
               </button>
@@ -3186,10 +3220,7 @@ export function AsignacionesModule() {
             <div className="asig-modal-actions">
               <button
                 className="btn-secondary"
-                onClick={() => {
-                  setShowRegularizarModal(false)
-                  setRegularizarAsignacion(null)
-                }}
+                onClick={handleDismissRegularizarModal}
                 disabled={isSubmitting}
               >
                 Cancelar
