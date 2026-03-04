@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { format, subDays, subWeeks, subMonths, subYears, getWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -28,18 +28,27 @@ export function PeriodComparison() {
   const [granularity, setGranularity] = useState<Granularity>('semana')
   
   const [periodA, setPeriodA] = useState<string>(() => {
-    const now = new Date()
-    const week = getWeek(now, { weekStartsOn: 1 })
-    return `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
-  })
-  
-  const [periodB, setPeriodB] = useState<string>(() => {
     const prevWeekDate = subWeeks(new Date(), 1)
     const week = getWeek(prevWeekDate, { weekStartsOn: 1 })
     return `Sem ${week.toString().padStart(2, '0')} ${prevWeekDate.getFullYear()}`
   })
+  
+  const [periodB, setPeriodB] = useState<string>(() => {
+    const now = new Date()
+    const week = getWeek(now, { weekStartsOn: 1 })
+    return `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
+  })
 
   const { sedeActual } = useSede()
+
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   const multasStats = useMultasStats(granularity, periodA, periodB, sedeActual?.id)
   const telepaseStats = useTelepaseStats(granularity, periodA, periodB, sedeActual?.id)
@@ -48,22 +57,30 @@ export function PeriodComparison() {
   const kilometrajeStats = useKilometrajeStats(granularity, periodA, periodB, sedeActual?.id)
   const vehiculosStats = useVehiculosStats(granularity, periodA, periodB, sedeActual?.id)
 
+  const formatCurrency = (value: number) => {
+    if (isMobile) {
+      if (value >= 1000000) {
+        return `$ ${(value / 1000000).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}M`
+      }
+      if (value >= 1000) {
+        return `$ ${(value / 1000).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}K`
+      }
+    }
+    return `$ ${value.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
   const currencyFormatter = useMemo(
     () => ({
-      format: (value: number) => {
-        return `$ ${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`
-      }
+      format: (value: number) => formatCurrency(value)
     }),
-    []
+    [isMobile]
   )
 
   const telepaseFormatter = useMemo(
     () => ({
-      format: (value: number) => {
-        return `$ ${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`
-      }
+      format: (value: number) => formatCurrency(value)
     }),
-    []
+    [isMobile]
   )
 
   const kmFormatter = useMemo(
@@ -89,12 +106,17 @@ export function PeriodComparison() {
     const metricList: MetricView[] = []
 
     const calculateVariation = (valA: number, valB: number): { label: string, sign: 'positive' | 'negative' | 'neutral' } => {
-      if (valB === 0) {
+      // Si el Periodo A (base) es 0, no se puede calcular porcentaje de crecimiento matemáticamente
+      // Opción: Si B > 0, es un crecimiento infinito (New). Si B = 0, es 0%.
+      if (valA === 0) {
+        if (valB === 0) return { label: '0%', sign: 'neutral' }
         return { label: 'N/A', sign: 'neutral' }
       }
-      const diff = valA - valB
-      const percentage = (diff / valB) * 100
+      
+      const diff = valB - valA
+      const percentage = (diff / valA) * 100
       const isPositive = percentage >= 0
+      
       return {
         label: `${isPositive ? '+' : ''}${percentage.toFixed(0)}%`,
         sign: isPositive ? 'positive' : 'negative'
@@ -246,27 +268,27 @@ export function PeriodComparison() {
     let nextB = ''
 
     if (value === 'dia') {
-        nextA = format(now, 'dd/MM/yyyy')
-        nextB = format(subDays(now, 1), 'dd/MM/yyyy')
+        nextA = format(subDays(now, 1), 'dd/MM/yyyy')
+        nextB = format(now, 'dd/MM/yyyy')
     } else if (value === 'semana') {
-        const week = getWeek(now, { weekStartsOn: 1 })
-        nextA = `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
-        
         const prev = subWeeks(now, 1)
         const prevWeek = getWeek(prev, { weekStartsOn: 1 })
-        nextB = `Sem ${prevWeek.toString().padStart(2, '0')} ${prev.getFullYear()}`
-    } else if (value === 'mes') {
-        const monthName = format(now, 'MMM', { locale: es })
-        const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
-        nextA = `${capMonth} ${now.getFullYear()}`
+        nextA = `Sem ${prevWeek.toString().padStart(2, '0')} ${prev.getFullYear()}`
         
+        const week = getWeek(now, { weekStartsOn: 1 })
+        nextB = `Sem ${week.toString().padStart(2, '0')} ${now.getFullYear()}`
+    } else if (value === 'mes') {
         const prev = subMonths(now, 1)
         const prevMonthName = format(prev, 'MMM', { locale: es })
         const capPrev = prevMonthName.charAt(0).toUpperCase() + prevMonthName.slice(1)
-        nextB = `${capPrev} ${prev.getFullYear()}`
+        nextA = `${capPrev} ${prev.getFullYear()}`
+        
+        const monthName = format(now, 'MMM', { locale: es })
+        const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+        nextB = `${capMonth} ${now.getFullYear()}`
     } else if (value === 'ano') {
-        nextA = format(now, 'yyyy')
-        nextB = format(subYears(now, 1), 'yyyy')
+        nextA = format(subYears(now, 1), 'yyyy')
+        nextB = format(now, 'yyyy')
     }
 
     setPeriodA(nextA)

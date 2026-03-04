@@ -150,9 +150,13 @@ export function useDashboardStats() {
               .from('conductores')
               .select('id, estado_id')
           ),
-          supabase
-            .from('wialon_bitacora')
-            .select('kilometraje')
+          // CORRECCIÓN: Filtrar wialon_bitacora por sede a través de la relación con vehiculos
+          // Si wialon_bitacora no tiene sede_id directo, usamos !inner join con vehiculos
+          aplicarFiltroSede(
+             supabase
+              .from('wialon_bitacora')
+              .select('kilometraje, vehiculos!inner(id, sede_id)')
+          , 'vehiculos.sede_id')
         ])
 
         if (asignacionesRes.error) throw asignacionesRes.error
@@ -256,8 +260,11 @@ export function useDashboardStats() {
           totalidadTurnos > 0
             ? Number((((totalidadTurnos - turnosDisp) / totalidadTurnos) * 100).toFixed(1))
             : 0
+
+        // UNIFICACIÓN DE CRITERIO: % Operatividad debe coincidir con Dashboard Flota
+        // Solo contamos vehículos EN_USO (efectivamente trabajando), ignorando PKG_ON_BASE
         const porcentajeOperatividad =
-          totalFlota > 0 ? Number(((operativos / totalFlota) * 100).toFixed(1)) : 0
+          totalFlota > 0 ? Number(((enUso / totalFlota) * 100).toFixed(1)) : 0
 
         const today = new Date()
         const robosFechas = siniestros

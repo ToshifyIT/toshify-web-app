@@ -342,6 +342,18 @@
 
 @media (min-width: 1024px) {
   .period-comparison-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .period-comparison-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1536px) {
+  .period-comparison-grid {
     grid-template-columns: repeat(5, 1fr);
   }
 }
@@ -398,6 +410,7 @@
   color: #475569; /* Slate-600 */
 
   line-height: 1;
+  white-space: nowrap;
 }
 
 .period-comparison-value-secondary {
@@ -406,6 +419,7 @@
   color: #475569; /* Slate-600 */
 
   line-height: 1;
+  white-space: nowrap;
 }
 
 .period-comparison-badge {

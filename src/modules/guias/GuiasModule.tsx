@@ -496,7 +496,8 @@ export function GuiasModule() {
       
       if (str === '') return 0;
 
-      if (str.includes('.') && !str.includes(',') && /^\d+\.\d{1,2}$/.test(str)) {
+      // Misma heurística mejorada para aceptar floats con muchos decimales
+      if (str.includes('.') && !str.includes(',') && /^\d+\.\d+$/.test(str)) {
          return parseFloat(str);
       }
       const clean = str.replace(/\./g, '').replace(',', '.');
@@ -675,145 +676,29 @@ export function GuiasModule() {
         query = query.filter('conductores.asignaciones_conductores.asignaciones.estado', 'in', '("activo","activa")');
       }
 
+      // Aplicar filtro de sede si está seleccionada (Optimización: filtro en DB)
+      if (sedeActualId) {
+        query = query.eq('conductores.sede_id', sedeActualId);
+      }
+
       const { data: historialData, error: historialError } = await query.order("created_at", { ascending: false });
 
       if (historialError) throw historialError;
 
-      // Cargar datos de Cabify para cruce de facturación
-      const cabifyDriversMapByDni = new Map();
-      const cabifyDriversMapByName = new Map();
+      // --------------------------------------------------------------------------------
+      // OPTIMIZACIÓN 2: Ejecutar consultas secundarias EN PARALELO con Promise.all
+      // En lugar de esperar secuencialmente: Cabify -> Vehículos -> Asignaciones -> Historial
+      // --------------------------------------------------------------------------------
       
-      try {
-        const [yearStr, weekStr] = targetWeek.split('-W');
-        if (yearStr && weekStr) {
-          const year = parseInt(yearStr);
-          const week = parseInt(weekStr);
-          // 4 de enero siempre cae en la primera semana ISO o cerca
-          const baseDate = new Date(year, 0, 4);
-          const weekDate = setISOWeek(baseDate, week);
-          // Ajuste para coincidir con CabifyIntegrationService:
-          // Usar fechas UTC puras (00:00 UTC Lunes a 23:59:59 UTC Domingo)
-          const mondayLocal = startOfISOWeek(weekDate);
-          const sundayLocal = endOfISOWeek(weekDate);
-
-          const startDate = new Date(Date.UTC(
-            mondayLocal.getFullYear(),
-            mondayLocal.getMonth(),
-            mondayLocal.getDate(),
-            0, 0, 0, 0
-          ));
-
-          const endDate = new Date(Date.UTC(
-            sundayLocal.getFullYear(),
-            sundayLocal.getMonth(),
-            sundayLocal.getDate(),
-            23, 59, 59, 999
-          ));
-
-          // Nueva lógica: Consultar directamente cabify_historico
-          console.log('Logs de guias: Consultando cabify_historico', { 
-            startDate: startDate.toISOString(), 
-            endDate: endDate.toISOString() 
-          });
-
-          const { data: cabifyDataRaw, error: cabifyError } = await supabase
-            .from('cabify_historico')
-            .select('dni, nombre, apellido, cobro_app, cobro_efectivo')
-            .gte('fecha_inicio', startDate.toISOString())
-            .lte('fecha_inicio', endDate.toISOString());
-
-           if (cabifyError) {
-             console.error('Logs de guias: Error en query cabify_historico', cabifyError);
-           } else {
-             console.log(`Logs de guias: Registros encontrados en Cabify: ${cabifyDataRaw?.length || 0}`);
-             if (cabifyDataRaw && cabifyDataRaw.length > 0) {
-               console.log('Logs de guias: Primer registro Cabify (ejemplo):', cabifyDataRaw[0]);
-             }
-           }
-
-           if (!cabifyError && cabifyDataRaw && cabifyDataRaw.length > 0) {
-             cabifyDataRaw.forEach(d => {
-               const cobroApp = Number(d.cobro_app) || 0;
-               const cobroEfectivo = Number(d.cobro_efectivo) || 0;
-
-               // 1. Map by DNI
-               if (d.dni) {
-                 const dni = d.dni.replace(/\./g, '').trim();
-                 if (!cabifyDriversMapByDni.has(dni)) {
-                   cabifyDriversMapByDni.set(dni, { cobroApp: 0, cobroEfectivo: 0 });
-                 }
-                 const entry = cabifyDriversMapByDni.get(dni);
-                 entry.cobroApp += cobroApp;
-                 entry.cobroEfectivo += cobroEfectivo;
-               }
-
-               // 2. Map by Name (nombre + apellido)
-               const fullName = `${d.nombre || ''} ${d.apellido || ''}`.trim().toLowerCase();
-               if (fullName) {
-                 if (!cabifyDriversMapByName.has(fullName)) {
-                   cabifyDriversMapByName.set(fullName, { cobroApp: 0, cobroEfectivo: 0 });
-                 }
-                 const entry = cabifyDriversMapByName.get(fullName);
-                 entry.cobroApp += cobroApp;
-                 entry.cobroEfectivo += cobroEfectivo;
-               }
-             });
-             console.log(`Logs de guias: Mapas construidos - Por DNI: ${cabifyDriversMapByDni.size}, Por Nombre: ${cabifyDriversMapByName.size}`);
-          }
-        }
-      } catch (err) {
-        console.error('Logs de guias: Error general procesando datos Cabify', err);
-        // Cabify data cross-reference failed silently
-      }
-
-      const vehiculosHistorialCountMap = new Map<string, number>();
-      const prevWeekAssignmentsMap = new Map<string, { total: number; diurno: number; nocturno: number; cargo: number }>();
-      const prevWeekFinancialMap = new Map<string, { app: any; efectivo: any; total: any }>();
-      let prevWeekLabel: string | null = null;
-      try {
-        const conductorIds = Array.from(
-          new Set(
-            (historialData || [])
-              .map((h: any) => h.id_conductor)
-              .filter((id: string | null) => !!id)
-          )
-        );
-
-        if (conductorIds.length > 0) {
-          const { data: vehiculosHistorial } = await supabase
-            .from('asignaciones_conductores')
-            .select(`
-              conductor_id,
-              asignaciones (
-                vehiculos (id, patente, marca, modelo, anio)
-              )
-            `)
-            .in('conductor_id', conductorIds);
-
-          if (vehiculosHistorial) {
-            const tmpMap = new Map<string, Set<string>>();
-
-            vehiculosHistorial.forEach((ac: any) => {
-              const conductorId = ac.conductor_id as string | null;
-              const veh = ac.asignaciones?.vehiculos;
-              if (!conductorId || !veh) return;
-
-              const key = veh.id || veh.patente || `${veh.marca || ''}-${veh.modelo || ''}-${veh.anio || ''}`;
-              if (!key) return;
-
-              if (!tmpMap.has(conductorId)) {
-                tmpMap.set(conductorId, new Set<string>());
-              }
-              tmpMap.get(conductorId)!.add(key);
-            });
-
-            tmpMap.forEach((set, conductorId) => {
-              vehiculosHistorialCountMap.set(conductorId, set.size);
-            });
-          }
+      // Preparar promesas para ejecución paralela
+      const cabifyPromise = (async () => {
+        // OPTIMIZACIÓN: Si no es la semana actual, NO consultamos a Cabify
+        // porque los datos históricos ya deben estar consolidados en la tabla guias_historial_semanal.
+        if (!isCurrentWeek) {
+           return { dniMap: new Map(), nameMap: new Map() };
         }
 
-        if (conductorIds.length > 0) {
+        try {
           const [yearStr, weekStr] = targetWeek.split('-W');
           if (yearStr && weekStr) {
             const year = parseInt(yearStr);
@@ -823,273 +708,224 @@ export function GuiasModule() {
             const mondayLocal = startOfISOWeek(weekDate);
             const sundayLocal = endOfISOWeek(weekDate);
 
-            const prevMondayLocal = subWeeks(mondayLocal, 1);
-            const prevSundayLocal = subWeeks(sundayLocal, 1);
-            prevWeekLabel = format(prevMondayLocal, "R-'W'II");
-
-            const prevStartDate = new Date(Date.UTC(
-              prevMondayLocal.getFullYear(),
-              prevMondayLocal.getMonth(),
-              prevMondayLocal.getDate(),
+            const startDate = new Date(Date.UTC(
+              mondayLocal.getFullYear(),
+              mondayLocal.getMonth(),
+              mondayLocal.getDate(),
               0, 0, 0, 0
             ));
-
-            const prevEndDate = new Date(Date.UTC(
-              prevSundayLocal.getFullYear(),
-              prevSundayLocal.getMonth(),
-              prevSundayLocal.getDate(),
+            const endDate = new Date(Date.UTC(
+              sundayLocal.getFullYear(),
+              sundayLocal.getMonth(),
+              sundayLocal.getDate(),
               23, 59, 59, 999
             ));
 
-            const baseSelect = `
-              id,
-              conductor_id,
-              horario,
-              estado,
-              asignaciones!inner (
-                id,
-                codigo,
-                estado,
-                horario,
-                modalidad,
-                fecha_inicio,
-                fecha_fin,
-                sede_id
-              )
-            `;
-            // A: fecha_fin IS NULL y fecha_inicio <= finSemana
-            let qA: any = supabase
-              .from('asignaciones_conductores')
-              .select(baseSelect)
-              .in('conductor_id', conductorIds)
-              .lte('asignaciones.fecha_inicio', prevEndDate.toISOString())
-              .is('asignaciones.fecha_fin', null);
-            qA = aplicarFiltroSede(qA, 'asignaciones.sede_id');
+            const { data: cabifyDataRaw, error: cabifyError } = await supabase
+              .from('cabify_historico')
+              .select('dni, nombre, apellido, cobro_app, cobro_efectivo')
+              .gte('fecha_inicio', startDate.toISOString())
+              .lte('fecha_inicio', endDate.toISOString());
 
-            // B: fecha_fin >= inicioSemana y fecha_inicio <= finSemana
-            let qB: any = supabase
-              .from('asignaciones_conductores')
-              .select(baseSelect)
-              .in('conductor_id', conductorIds)
-              .lte('asignaciones.fecha_inicio', prevEndDate.toISOString())
-              .gte('asignaciones.fecha_fin', prevStartDate.toISOString());
-            qB = aplicarFiltroSede(qB, 'asignaciones.sede_id');
-
-            const [resA, resB] = await Promise.all([qA, qB]);
-            if (resA.error) {
-              console.error('GuiasModule: error consultando asignaciones (A - fin NULL)', {
-                message: (resA.error as any).message,
-                details: (resA.error as any).details,
-                hint: (resA.error as any).hint
-              });
-            }
-            if (resB.error) {
-              console.error('GuiasModule: error consultando asignaciones (B - fin >= inicioSemana)', {
-                message: (resB.error as any).message,
-                details: (resB.error as any).details,
-                hint: (resB.error as any).hint
-              });
-            }
-            const prevAssignmentsRaw = [...(resA.data || []), ...(resB.data || [])];
-            // De-duplicar por (asignacion_id + conductor_id) si es posible; si no, por (id + conductor_id)
-            const seen = new Set<string>();
-            const prevAssignments = prevAssignmentsRaw.filter((ac: any) => {
-              const key = `${ac.asignaciones?.id || ac.id}-${ac.conductor_id}`;
-              if (seen.has(key)) return false;
-              seen.add(key);
-              return true;
-            });
-
-            const prevWeekAssignmentsDetailMap = new Map<string, any[]>();
-            if (prevAssignments) {
-              prevAssignments.forEach((ac: any) => {
-                const conductorId = ac.conductor_id as string | null;
-                if (!conductorId) return;
-                const asignacion = ac.asignaciones;
-                if (!asignacion) return;
-
-                const currentStats = prevWeekAssignmentsMap.get(conductorId) || { total: 0, diurno: 0, nocturno: 0, cargo: 0 };
-                currentStats.total += 1;
-
-                const modalidadRaw = asignacion.horario || asignacion.modalidad || '';
-                const modalidad = modalidadRaw ? modalidadRaw.toString().toUpperCase() : '';
-
-                if (modalidad === 'TURNO') {
-                  const hRaw = ac.horario || '';
-                  const h = hRaw ? hRaw.toString().toLowerCase() : '';
-                  if (h === 'diurno' || h === 'd') {
-                    currentStats.diurno += 1;
-                  } else if (h === 'nocturno' || h === 'n') {
-                    currentStats.nocturno += 1;
-                  } else {
-                    currentStats.cargo += 1;
-                  }
-                } else {
-                  currentStats.cargo += 1;
+            if (!cabifyError && cabifyDataRaw && cabifyDataRaw.length > 0) {
+              const dniMap = new Map();
+              const nameMap = new Map();
+              cabifyDataRaw.forEach(d => {
+                const cobroApp = Number(d.cobro_app) || 0;
+                const cobroEfectivo = Number(d.cobro_efectivo) || 0;
+                if (d.dni) {
+                  const dni = d.dni.replace(/\./g, '').trim();
+                  if (!dniMap.has(dni)) dniMap.set(dni, { cobroApp: 0, cobroEfectivo: 0 });
+                  const entry = dniMap.get(dni);
+                  entry.cobroApp += cobroApp;
+                  entry.cobroEfectivo += cobroEfectivo;
                 }
-
-                prevWeekAssignmentsMap.set(conductorId, currentStats);
-                
-                const detail = {
-                  asignacion_id: asignacion.id,
-                  codigo: asignacion.codigo,
-                  modalidad: asignacion.horario || asignacion.modalidad || null,
-                  estado: asignacion.estado,
-                  fecha_inicio: asignacion.fecha_inicio,
-                  fecha_fin: asignacion.fecha_fin,
-                  turno_conductor: ac.horario
-                };
-                const arr = prevWeekAssignmentsDetailMap.get(conductorId) || [];
-                arr.push(detail);
-                prevWeekAssignmentsDetailMap.set(conductorId, arr);
-              });
-            }
-
-            // Consultar totales (app/efectivo/total) de la semana anterior por conductor
-            if (prevWeekLabel && conductorIds.length > 0) {
-              const altPrevWeekLabel = prevWeekLabel.replace('W', '');
-              const { data: prevHist, error: prevHistError } = await supabase
-                .from('guias_historial_semanal')
-                .select('id_conductor, app, efectivo, total')
-                .or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`)
-                .eq('id_guia', guiaId)
-                .in('id_conductor', conductorIds);
-              
-              if (prevHistError) {
-                console.error('GuiasModule: error consultando totales de semana anterior', {
-                  message: (prevHistError as any).message,
-                  details: (prevHistError as any).details,
-                  hint: (prevHistError as any).hint
-                });
-              } else if (prevHist && prevHist.length > 0) {
-                prevHist.forEach((row: any) => {
-                  if (row?.id_conductor) {
-                    prevWeekFinancialMap.set(row.id_conductor, {
-                      app: row.app,
-                      efectivo: row.efectivo,
-                      total: row.total
-                    });
-                  }
-                });
-              }
-              const missingConductorIds = conductorIds.filter(id => !prevWeekFinancialMap.has(id));
-              if (missingConductorIds.length > 0) {
-                const { data: prevHistAny } = await supabase
-                  .from('guias_historial_semanal')
-                  .select('id_conductor, app, efectivo, total, id_guia')
-                  .or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`)
-                  .in('id_conductor', missingConductorIds);
-                if (prevHistAny && prevHistAny.length > 0) {
-                  const parseAmt = (v: any) => {
-                    if (v === null || v === undefined) return 0;
-                    if (typeof v === 'number') return v;
-                    const s = String(v).trim();
-                    if (s.includes('.') && !s.includes(',') && /^\d+\.\d{1,2}$/.test(s)) return parseFloat(s);
-                    const clean = s.replace(/\./g, '').replace(',', '.');
-                    const n = parseFloat(clean);
-                    return isNaN(n) ? 0 : n;
-                  };
-                  const bestByConductor = new Map<string, { app: any; efectivo: any; total: any }>();
-                  prevHistAny.forEach((row: any) => {
-                    const idc = row?.id_conductor;
-                    if (!idc) return;
-                    const candidate = { app: row.app, efectivo: row.efectivo, total: row.total };
-                    const current = bestByConductor.get(idc);
-                    if (!current || parseAmt(candidate.total) >= parseAmt(current.total)) {
-                      bestByConductor.set(idc, candidate);
-                    }
-                  });
-                  bestByConductor.forEach((v, k) => {
-                    if (!prevWeekFinancialMap.has(k)) {
-                      prevWeekFinancialMap.set(k, v);
-                    }
-                  });
+                const fullName = `${d.nombre || ''} ${d.apellido || ''}`.trim().toLowerCase();
+                if (fullName) {
+                  if (!nameMap.has(fullName)) nameMap.set(fullName, { cobroApp: 0, cobroEfectivo: 0 });
+                  const entry = nameMap.get(fullName);
+                  entry.cobroApp += cobroApp;
+                  entry.cobroEfectivo += cobroEfectivo;
                 }
-              }
-            }
-
-            console.log('GuiasModule: resumen asignaciones semana anterior', {
-              guiaId,
-              semanaReferencia: targetWeek,
-              semanaBuscada: prevWeekLabel,
-              rangoSemanaBuscada: {
-                inicio: prevStartDate.toISOString(),
-                fin: prevEndDate.toISOString()
-              },
-              conductoresEvaluados: conductorIds.length,
-              asignacionesEncontradas: prevAssignments?.length || 0
-            });
-            
-            // Log de diagnóstico: top 5 asignaciones por primer conductor (si existen)
-            const firstConductorId = conductorIds[0];
-            if (firstConductorId) {
-              console.log('GuiasModule: muestra asignaciones solapadas (primer conductor)', {
-                conductorId: firstConductorId,
-                semanaBuscada: prevWeekLabel,
-                detalles: (prevWeekAssignmentsDetailMap.get(firstConductorId) || []).slice(0, 5)
               });
+              return { dniMap, nameMap };
             }
           }
+        } catch (err) {
+          console.error('Logs de guias: Error general procesando datos Cabify', err);
         }
-      } catch {
-      }
+        return { dniMap: new Map(), nameMap: new Map() };
+      })();
 
+      // Identificar IDs de conductores para consultas masivas
+      const conductorIds = Array.from(new Set((historialData || []).map((h: any) => h.id_conductor).filter((id: string | null) => !!id)));
+      
+      const vehiculosPromise = (async () => {
+        if (conductorIds.length === 0) return new Map<string, number>();
+        const { data: vehiculosHistorial } = await supabase
+          .from('asignaciones_conductores')
+          .select(`conductor_id, asignaciones (vehiculos (id, patente, marca, modelo, anio))`)
+          .in('conductor_id', conductorIds);
+          
+        const map = new Map<string, number>();
+        if (vehiculosHistorial) {
+          const tmpMap = new Map<string, Set<string>>();
+          vehiculosHistorial.forEach((ac: any) => {
+            const conductorId = ac.conductor_id;
+            const veh = ac.asignaciones?.vehiculos;
+            if (!conductorId || !veh) return;
+            const key = veh.id || veh.patente || `${veh.marca || ''}-${veh.modelo || ''}-${veh.anio || ''}`;
+            if (!key) return;
+            if (!tmpMap.has(conductorId)) tmpMap.set(conductorId, new Set());
+            tmpMap.get(conductorId)!.add(key);
+          });
+          tmpMap.forEach((set, cid) => map.set(cid, set.size));
+        }
+        return map;
+      })();
+
+      const prevWeekDataPromise = (async () => {
+        if (conductorIds.length === 0) return { 
+          assignmentsMap: new Map(), 
+          financialMap: new Map(), 
+          prevLabel: null,
+          detailMap: new Map() 
+        };
+
+        try {
+          const [yearStr, weekStr] = targetWeek.split('-W');
+          if (!yearStr || !weekStr) throw new Error("Invalid week format");
+          
+          const year = parseInt(yearStr);
+          const week = parseInt(weekStr);
+          const baseDate = new Date(year, 0, 4);
+          const weekDate = setISOWeek(baseDate, week);
+          const mondayLocal = startOfISOWeek(weekDate);
+          const sundayLocal = endOfISOWeek(weekDate);
+          const prevMondayLocal = subWeeks(mondayLocal, 1);
+          const prevSundayLocal = subWeeks(sundayLocal, 1);
+          const prevWeekLabel = format(prevMondayLocal, "R-'W'II");
+          
+          const prevStartDate = new Date(Date.UTC(prevMondayLocal.getFullYear(), prevMondayLocal.getMonth(), prevMondayLocal.getDate(), 0, 0, 0, 0));
+          const prevEndDate = new Date(Date.UTC(prevSundayLocal.getFullYear(), prevSundayLocal.getMonth(), prevSundayLocal.getDate(), 23, 59, 59, 999));
+
+          // Consultas de asignaciones anteriores
+          const baseSelect = `id, conductor_id, horario, estado, asignaciones!inner (id, codigo, estado, horario, modalidad, fecha_inicio, fecha_fin, sede_id)`;
+          
+          let qA: any = supabase.from('asignaciones_conductores').select(baseSelect).in('conductor_id', conductorIds).lte('asignaciones.fecha_inicio', prevEndDate.toISOString()).is('asignaciones.fecha_fin', null);
+          qA = aplicarFiltroSede(qA, 'asignaciones.sede_id');
+
+          let qB: any = supabase.from('asignaciones_conductores').select(baseSelect).in('conductor_id', conductorIds).lte('asignaciones.fecha_inicio', prevEndDate.toISOString()).gte('asignaciones.fecha_fin', prevStartDate.toISOString());
+          qB = aplicarFiltroSede(qB, 'asignaciones.sede_id');
+
+          // Consulta de historial financiero anterior
+          const altPrevWeekLabel = prevWeekLabel.replace('W', '');
+          const qHist = supabase.from('guias_historial_semanal').select('id_conductor, app, efectivo, total').or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`).eq('id_guia', guiaId).in('id_conductor', conductorIds);
+
+          const [resA, resB, resHist] = await Promise.all([qA, qB, qHist]);
+          
+          // Procesar Asignaciones
+          const prevAssignmentsRaw = [...(resA.data || []), ...(resB.data || [])];
+          const assignmentsMap = new Map<string, { total: number; diurno: number; nocturno: number; cargo: number }>();
+          const detailMap = new Map<string, any[]>();
+          const seen = new Set<string>();
+          
+          prevAssignmentsRaw.filter((ac: any) => {
+             const key = `${ac.asignaciones?.id || ac.id}-${ac.conductor_id}`;
+             if (seen.has(key)) return false;
+             seen.add(key);
+             return true;
+          }).forEach((ac: any) => {
+             const cid = ac.conductor_id;
+             const asig = ac.asignaciones;
+             if (!cid || !asig) return;
+             
+             const stats = assignmentsMap.get(cid) || { total: 0, diurno: 0, nocturno: 0, cargo: 0 };
+             stats.total++;
+             const mod = (asig.horario || asig.modalidad || '').toString().toUpperCase();
+             if (mod === 'TURNO') {
+                const h = (ac.horario || '').toString().toLowerCase();
+                if (h === 'diurno' || h === 'd') stats.diurno++;
+                else if (h === 'nocturno' || h === 'n') stats.nocturno++;
+                else stats.cargo++;
+             } else {
+                stats.cargo++;
+             }
+             assignmentsMap.set(cid, stats);
+             
+             const det = { asignacion_id: asig.id, codigo: asig.codigo, modalidad: asig.horario || asig.modalidad, estado: asig.estado, fecha_inicio: asig.fecha_inicio, fecha_fin: asig.fecha_fin, turno_conductor: ac.horario };
+             const arr = detailMap.get(cid) || [];
+             arr.push(det);
+             detailMap.set(cid, arr);
+          });
+
+          // Procesar Financiero
+          const financialMap = new Map<string, { app: any; efectivo: any; total: any }>();
+          if (resHist.data) {
+            resHist.data.forEach((row: any) => {
+              if (row.id_conductor) financialMap.set(row.id_conductor, { app: row.app, efectivo: row.efectivo, total: row.total });
+            });
+          }
+
+          return { assignmentsMap, financialMap, prevLabel: prevWeekLabel, detailMap };
+        } catch (e) {
+          return { assignmentsMap: new Map(), financialMap: new Map(), prevLabel: null, detailMap: new Map() };
+        }
+      })();
+
+      // Ejecutar todo en paralelo
+      const [cabifyResult, vehiculosMap, prevWeekData] = await Promise.all([cabifyPromise, vehiculosPromise, prevWeekDataPromise]);
+      
+      const cabifyDriversMapByDni = cabifyResult.dniMap;
+      const cabifyDriversMapByName = cabifyResult.nameMap;
+      const vehiculosHistorialCountMap = vehiculosMap;
+      const prevWeekAssignmentsMap = prevWeekData.assignmentsMap;
+      const prevWeekFinancialMap = prevWeekData.financialMap;
+      const prevWeekLabel = prevWeekData.prevLabel;
+      // --------------------------------------------------------------------------------
+
+      // Optimización N+1: Copiar fechas de llamadas de semana anterior si faltan en actual (Batch Update)
       if (isCurrentWeek && historialData && historialData.length > 0 && prevWeekLabel) {
         const conductoresSinFecha = historialData
           .filter((h: any) => !h.fecha_llamada && h.id_conductor)
           .map((h: any) => h.id_conductor as string);
-
         const uniqueIds = Array.from(new Set(conductoresSinFecha));
 
         if (uniqueIds.length > 0) {
-          const altPrevWeekLabel = prevWeekLabel.replace('W', '');
-
-          try {
-            const { data: prevCalls } = await supabase
+           const altPrevWeekLabel = prevWeekLabel.replace('W', '');
+           const { data: prevCalls } = await supabase
               .from('guias_historial_semanal')
               .select('id_conductor, fecha_llamada')
               .or(`semana.eq.${prevWeekLabel},semana.eq.${altPrevWeekLabel}`)
               .eq('id_guia', guiaId)
               .in('id_conductor', uniqueIds)
               .not('fecha_llamada', 'is', null)
-              .order('semana', { ascending: false })
-              .order('created_at', { ascending: false });
+              .order('semana', { ascending: false }) // Priorizar la más reciente
+              .limit(uniqueIds.length * 2); // Limit safety
 
-            if (prevCalls && prevCalls.length > 0) {
-              const bestFechaByConductor = new Map<string, string>();
+           if (prevCalls && prevCalls.length > 0) {
+             const bestFechaByConductor = new Map<string, string>();
+             prevCalls.forEach((row: any) => {
+               if (row.id_conductor && row.fecha_llamada && !bestFechaByConductor.has(row.id_conductor)) {
+                 bestFechaByConductor.set(row.id_conductor, row.fecha_llamada);
+               }
+             });
 
-              prevCalls.forEach((row: any) => {
-                const idConductor = row.id_conductor as string | null;
-                if (!idConductor || !row.fecha_llamada) return;
-                if (!bestFechaByConductor.has(idConductor)) {
-                  bestFechaByConductor.set(idConductor, row.fecha_llamada as string);
-                }
-              });
-
-              if (bestFechaByConductor.size > 0) {
-                const updatePromises = Array.from(bestFechaByConductor.entries()).map(
-                  ([idConductor, fecha]) =>
-                    supabase
-                      .from('guias_historial_semanal')
-                      .update({ fecha_llamada: fecha })
-                      .eq('semana', targetWeek)
-                      .eq('id_guia', guiaId)
-                      .eq('id_conductor', idConductor)
-                      .is('fecha_llamada', null),
-                );
-
-                await Promise.all(updatePromises);
-
-                historialData.forEach((h: any) => {
-                  const fecha = bestFechaByConductor.get(h.id_conductor as string);
-                  if (!h.fecha_llamada && fecha) {
-                    h.fecha_llamada = fecha;
-                  }
-                });
-              }
-            }
-          } catch {
-          }
+             if (bestFechaByConductor.size > 0) {
+               // Update local state first for immediate UI feedback
+               historialData.forEach((h: any) => {
+                  const f = bestFechaByConductor.get(h.id_conductor);
+                  if (!h.fecha_llamada && f) h.fecha_llamada = f;
+               });
+               
+               // Background update (fire and forget for UI speed)
+               const updates = Array.from(bestFechaByConductor.entries()).map(([cid, fecha]) => 
+                  supabase.from('guias_historial_semanal').update({ fecha_llamada: fecha })
+                  .eq('semana', targetWeek).eq('id_guia', guiaId).eq('id_conductor', cid).is('fecha_llamada', null)
+               );
+               Promise.all(updates).catch(e => console.error("Background date sync failed", e));
+             }
+           }
         }
       }
 
@@ -1223,10 +1059,10 @@ export function GuiasModule() {
             if (typeof val === 'number') return val;
             const str = String(val).trim();
             
-            // Heurística de seguridad: Si tiene punto pero no coma, y parece un float estándar (1 o 2 decimales)
-            // asumimos que es formato DB/JS estándar ("1234.56") para evitar multiplicar por 1000.
-            // Si tiene 3 decimales ("1.234"), asumimos que es miles según regla del usuario.
-            if (str.includes('.') && !str.includes(',') && /^\d+\.\d{1,2}$/.test(str)) {
+            // Heurística de seguridad MEJORADA: Si tiene punto pero no coma, y parece un float estándar (con cualquier cantidad de decimales)
+            // asumimos que es formato DB/JS estándar ("1234.56" o "1234.56789") para evitar multiplicar por 1000.
+            // Si tiene exactamente 3 decimales ("1.234") podría ser ambiguo, pero en este contexto DB priorizamos formato float.
+            if (str.includes('.') && !str.includes(',') && /^\d+\.\d+$/.test(str)) {
                return parseFloat(str);
             }
 
@@ -1253,14 +1089,16 @@ export function GuiasModule() {
             
             if (dni && cabifyDriversMapByDni.has(dni)) {
               cabifyData = cabifyDriversMapByDni.get(dni);
-              facturacionApp = parseCustomCurrency(cabifyData.cobroApp);
-              facturacionEfectivo = parseCustomCurrency(cabifyData.cobroEfectivo);
+              // Forzar 2 decimales para evitar errores de punto flotante antes de procesar/guardar
+              facturacionApp = Number(parseCustomCurrency(cabifyData.cobroApp).toFixed(2));
+              facturacionEfectivo = Number(parseCustomCurrency(cabifyData.cobroEfectivo).toFixed(2));
               matchFound = true;
               matchType = 'DNI';
             } else if (cabifyDriversMapByName.has(nombreCompleto)) {
               cabifyData = cabifyDriversMapByName.get(nombreCompleto);
-              facturacionApp = parseCustomCurrency(cabifyData.cobroApp);
-              facturacionEfectivo = parseCustomCurrency(cabifyData.cobroEfectivo);
+              // Forzar 2 decimales para evitar errores de punto flotante antes de procesar/guardar
+              facturacionApp = Number(parseCustomCurrency(cabifyData.cobroApp).toFixed(2));
+              facturacionEfectivo = Number(parseCustomCurrency(cabifyData.cobroEfectivo).toFixed(2));
               matchFound = true;
               matchType = 'NOMBRE';
             }
@@ -2487,7 +2325,10 @@ export function GuiasModule() {
           </div>
         ),
         cell: ({ row, getValue }) => {
-          const val = getValue() as number;
+          const rawVal = getValue() as number;
+          // Sanitizamos a 2 decimales para evitar problemas de visualización con números flotantes largos
+          const val = rawVal ? Number(Number(rawVal).toFixed(2)) : rawVal;
+          
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
           if (val && val > 0) {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
@@ -2557,7 +2398,10 @@ export function GuiasModule() {
           </div>
         ),
         cell: ({ row, getValue }) => {
-          const val = getValue() as number;
+          const rawVal = getValue() as number;
+          // Sanitizamos a 2 decimales para evitar problemas de visualización con números flotantes largos
+          const val = rawVal ? Number(Number(rawVal).toFixed(2)) : rawVal;
+          
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
           if (val && val > 0) {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
@@ -2626,7 +2470,10 @@ export function GuiasModule() {
           </div>
         ),
         cell: ({ row, getValue }) => {
-          const val = getValue() as number;
+          const rawVal = getValue() as number;
+          // Sanitizamos a 2 decimales para evitar problemas de visualización con números flotantes largos
+          const val = rawVal ? Number(Number(rawVal).toFixed(2)) : rawVal;
+          
           // Si el valor es mayor a 0, lo mostramos siempre (sea manual o automático)
           if (val && val > 0) {
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);

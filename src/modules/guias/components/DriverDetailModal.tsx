@@ -190,11 +190,16 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
       };
 
       // Si NO está conectado a Cabify, permitimos guardar los montos editados
-      if (!isCabifyConnected) {
-        updates.app = formData.facturacion_app;
-        updates.efectivo = formData.facturacion_efectivo;
-        updates.total = Number(formData.facturacion_app) + Number(formData.facturacion_efectivo);
-      }
+            if (!isCabifyConnected) {
+              // Validar y convertir a 2 decimales para evitar errores de punto flotante
+              const appVal = Number(Number(formData.facturacion_app).toFixed(2));
+              const efectivoVal = Number(Number(formData.facturacion_efectivo).toFixed(2));
+              const totalVal = Number((appVal + efectivoVal).toFixed(2));
+
+              updates.app = appVal;
+              updates.efectivo = efectivoVal;
+              updates.total = totalVal;
+            }
 
       // Si no tenemos id_guia en el driver (puede pasar si viene de un left join vacío), intentamos buscarlo
       if (!updates.id_guia) {
