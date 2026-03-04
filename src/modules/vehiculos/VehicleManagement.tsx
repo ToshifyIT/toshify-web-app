@@ -1221,7 +1221,7 @@ export function VehicleManagement() {
           
           return (
             <ActionsMenu
-              maxVisible={2}
+              maxVisible={3}
               actions={[
                 {
                   icon: <Eye size={15} />,
@@ -1929,7 +1929,28 @@ export function VehicleManagement() {
               </div>
             </div>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {(() => {
+                const autoUrl = (selectedVehiculo as any).drive_folder_url;
+                const manualUrl = (selectedVehiculo as any).url_documentacion;
+                const folderUrl = autoUrl || manualUrl;
+                const isCreating = creatingDriveFolder === selectedVehiculo.id;
+                return (
+                  <button
+                    className={folderUrl ? 'btn-success' : 'btn-secondary'}
+                    onClick={() => {
+                      if (autoUrl) handleOpenDriveFolder(selectedVehiculo);
+                      else if (manualUrl) window.open(manualUrl, '_blank');
+                      else handleCreateDriveFolder(selectedVehiculo);
+                    }}
+                    disabled={isCreating}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    {isCreating ? <Loader2 size={16} className="animate-spin" /> : folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
+                    {isCreating ? 'Creando...' : folderUrl ? 'Ver documentos' : 'Crear carpeta'}
+                  </button>
+                );
+              })()}
               <button
                 className="btn-secondary"
                 onClick={() => setShowDetailsModal(false)}
