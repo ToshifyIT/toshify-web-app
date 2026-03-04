@@ -41,8 +41,8 @@ export function ParametrosUssPage() {
 
       if (error) throw error
       setParametros((data || []) as ParametroUss[])
-    } catch (error) {
-      console.error('Error cargando parametros:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -112,8 +112,7 @@ export function ParametrosUssPage() {
       if (error) throw error
       showSuccess('Parametro creado')
       cargarParametros()
-    } catch (error) {
-      console.error('Error creando parametro:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo crear el parametro', 'error')
     }
   }
@@ -180,8 +179,7 @@ export function ParametrosUssPage() {
       if (error) throw error
       showSuccess('Parametro actualizado')
       cargarParametros()
-    } catch (error) {
-      console.error('Error actualizando parametro:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo actualizar el parametro', 'error')
     }
   }
@@ -208,8 +206,7 @@ export function ParametrosUssPage() {
       if (error) throw error
       showSuccess('Parametro eliminado')
       cargarParametros()
-    } catch (error) {
-      console.error('Error eliminando parametro:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo eliminar el parametro', 'error')
     }
   }

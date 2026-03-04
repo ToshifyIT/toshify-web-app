@@ -184,7 +184,6 @@ export function AsignacionesActivasModule() {
         setTodosVehiculosPkgOn(todosLosPkgOn)
       }
     } catch (err: any) {
-      console.error('Error cargando datos:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',

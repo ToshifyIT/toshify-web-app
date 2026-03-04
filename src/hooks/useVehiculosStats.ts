@@ -59,8 +59,7 @@ export function useVehiculosStats(granularity: Granularity, periodA: string, per
             loading: false 
           })
         }
-      } catch (error) {
-        console.error('Error fetching vehiculos stats:', error)
+      } catch {
         if (isMounted) {
           setStats(prev => ({ ...prev, loading: false }))
         }

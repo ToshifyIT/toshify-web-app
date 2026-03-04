@@ -90,8 +90,7 @@ export function getPeriodRange(granularity: Granularity, label: string): PeriodR
       default:
         return { start: startOfDay(now), end: endOfDay(now) }
     }
-  } catch (error) {
-    console.error('Error parsing period label:', label, error)
+  } catch {
     return { start: startOfDay(now), end: endOfDay(now) }
   }
 }

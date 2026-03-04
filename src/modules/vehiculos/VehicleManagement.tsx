@@ -206,7 +206,6 @@ export function VehicleManagement() {
         setVehiculos(sortedData as VehiculoWithRelations[])
       }
     } catch (err: any) {
-      console.error('Error cargando datos:', err)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -227,8 +226,8 @@ export function VehicleManagement() {
 
       setSelectedVehiculo(data as VehiculoWithRelations)
       setShowDetailsModal(true)
-    } catch (err: any) {
-      console.error('Error cargando detalles:', err)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -272,7 +271,6 @@ export function VehicleManagement() {
         setVehiculos(sortedData as VehiculoWithRelations[])
       }
     } catch (err: any) {
-      console.error('Error cargando vehículos:', err)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -362,7 +360,6 @@ export function VehicleManagement() {
       resetForm()
       await loadVehiculos(true)
     } catch (err: any) {
-      console.error('Error creando vehículo:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -559,7 +556,6 @@ export function VehicleManagement() {
       resetForm()
       await loadVehiculos(true)
     } catch (err: any) {
-      console.error('Error actualizando vehículo:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -599,7 +595,6 @@ export function VehicleManagement() {
       setSelectedVehiculo(null)
       await loadVehiculos(true)
     } catch (err: any) {
-      console.error('Error eliminando vehículo:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -652,8 +647,8 @@ export function VehicleManagement() {
         sede_id: (fullVehiculo as any).sede_id || ''
       })
       setShowEditModal(true)
-    } catch (err: any) {
-      console.error('Error cargando datos para edición:', err)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -767,7 +762,6 @@ export function VehicleManagement() {
         window.open(result.folderUrl, '_blank')
       }
     } catch (err: any) {
-      console.error('Error creando carpeta Drive:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -804,7 +798,6 @@ export function VehicleManagement() {
 
       setDriveFiles(result.files || [])
     } catch (err: any) {
-      console.error('Error listando archivos Drive:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',

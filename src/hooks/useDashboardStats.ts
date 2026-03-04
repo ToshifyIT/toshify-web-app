@@ -26,8 +26,6 @@ interface DashboardStats {
   vueltasMundo: DashboardCardValue
 }
 
-
-
 function parseFechaSiniestro(fechaStr: string | undefined | null) {
   if (!fechaStr) return null
   const raw = fechaStr.split('T')[0]
@@ -181,11 +179,6 @@ export function useDashboardStats() {
           return sum + (isNaN(val) ? 0 : val)
         }, 0)
         const vueltasMundoVal = totalKmHistorico / 40000
-
-        console.log('--- KPI Vueltas al Mundo ---')
-        console.log('Total Kilómetros Histórico:', totalKmHistorico)
-        console.log('Divisor (Vueltas Mundo):', 40000)
-        console.log('Resultado (Vueltas):', vueltasMundoVal)
 
         const vehiculosConAsignacion = new Set(asignaciones.map(a => a.vehiculo_id))
         let totalFlota = 0
@@ -413,8 +406,7 @@ export function useDashboardStats() {
             subtitle: 'Histórico global'
           }
         })
-      } catch (error) {
-        console.error('Error cargando estadísticas del dashboard:', error)
+      } catch {
         setStats(null)
       } finally {
         setLoading(false)

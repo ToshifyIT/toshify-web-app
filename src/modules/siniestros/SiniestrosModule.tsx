@@ -86,21 +86,12 @@ function parseFechaSiniestro(fechaStr: string | undefined | null) {
 
 export function SiniestrosModule() {
   const { user, profile } = useAuth()
-  const { canCreateInSubmenu, canEditInSubmenu, isAdmin } = usePermissions()
+  const { canEditInSubmenu, isAdmin } = usePermissions()
   const { sedeActualId, aplicarFiltroSede, sedeUsuario } = useSede()
 
   // Permisos específicos para el submenú de siniestros
   // Admin siempre tiene acceso completo
-  const canCreateSiniestros = canCreateInSubmenu('siniestros')
-  const canCreate = isAdmin() || canCreateSiniestros
   const canEdit = isAdmin() || canEditInSubmenu('siniestros')
-
-  // DEBUG: Ver permisos de siniestros
-  console.log('🚨 Permisos Siniestros:', {
-    isAdmin: isAdmin(),
-    canCreateInSubmenu_siniestros: canCreateSiniestros,
-    canCreate_final: canCreate
-  })
 
   const [loading, setLoading] = useState(true)
   const [siniestros, setSiniestros] = useState<SiniestroCompleto[]>([])
@@ -209,8 +200,7 @@ export function SiniestrosModule() {
           setFormData(prev => ({ ...prev, estado_id: estadoRegistrado.id }))
         }
       }
-    } catch (error) {
-      console.error('Error cargando datos:', error)
+    } catch (_error) {
       Swal.fire('Error', 'No se pudieron cargar los datos', 'error')
     } finally {
       setLoading(false)
@@ -973,8 +963,7 @@ export function SiniestrosModule() {
       showSuccess('Vehículo habilitado', `${siniestro.vehiculo_patente} ahora puede circular`)
 
       cargarDatos()
-    } catch (error) {
-      console.error('Error habilitando vehículo:', error)
+    } catch (_error) {
       Swal.fire('Error', 'No se pudo habilitar el vehículo', 'error')
     }
   }

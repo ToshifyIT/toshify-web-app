@@ -253,7 +253,6 @@ export function ProductosModule() {
       if (error) throw error
       setProductos(data || [])
     } catch (err: any) {
-      console.error('🔴 Error cargando productos:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -330,7 +329,6 @@ export function ProductosModule() {
       resetForm()
       loadProductos()
     } catch (err: any) {
-      console.error('Error creando producto:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -379,7 +377,6 @@ export function ProductosModule() {
       resetForm()
       loadProductos()
     } catch (err: any) {
-      console.error('Error actualizando producto:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -454,7 +451,6 @@ export function ProductosModule() {
 
         loadProductos()
       } catch (err: any) {
-        console.error('Error eliminando producto:', err)
         // Mensaje más amigable para errores de FK
         let errorMessage = err.message || 'No se pudo eliminar el producto'
         if (err.message?.includes('foreign key constraint')) {
@@ -545,8 +541,7 @@ export function ProductosModule() {
       }, [])
 
       setStockPorProveedor(stockAgrupado)
-    } catch (err) {
-      console.error('Error cargando stock por proveedor:', err)
+    } catch (_err) {
       setStockPorProveedor([])
     } finally {
       setLoadingStock(false)

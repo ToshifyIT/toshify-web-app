@@ -28,10 +28,6 @@ export function useIncidenciasStats(granularity: Granularity, periodA: string, p
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
-        // Run queries in parallel
-        console.log(`[IncidenciasStats] Querying range A: ${rangeA.start.toISOString()} - ${rangeA.end.toISOString()}`)
-        console.log(`[IncidenciasStats] Querying range B: ${rangeB.start.toISOString()} - ${rangeB.end.toISOString()}`)
-
         let queryA = supabase
           .from('v_penalidades_completas')
           .select('monto')
@@ -55,12 +51,6 @@ export function useIncidenciasStats(granularity: Granularity, periodA: string, p
 
         const [resA, resB] = await Promise.all([queryA, queryB])
 
-        if (resA.error) console.error('[IncidenciasStats] Error A:', resA.error)
-        if (resB.error) console.error('[IncidenciasStats] Error B:', resB.error)
-        
-        console.log(`[IncidenciasStats] Found A: ${resA.data?.length || 0} records`)
-        console.log(`[IncidenciasStats] Found B: ${resB.data?.length || 0} records`)
-
         if (isMounted) {
           const totalA = (resA.data || []).reduce((sum, item) => {
             const val = typeof item.monto === 'string' ? parseFloat(item.monto) : (item.monto || 0)
@@ -74,8 +64,7 @@ export function useIncidenciasStats(granularity: Granularity, periodA: string, p
 
           setStats({ totalA, totalB, loading: false })
         }
-      } catch (error) {
-        console.error('Error fetching incidencias stats:', error)
+      } catch {
         if (isMounted) {
           setStats(prev => ({ ...prev, loading: false }))
         }

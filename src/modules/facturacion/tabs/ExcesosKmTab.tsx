@@ -140,8 +140,8 @@ export function ExcesosKmTab() {
         .order('apellidos')
 
       setConductores(conductoresData || [])
-    } catch (error) {
-      console.error('Error cargando datos:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -398,7 +398,6 @@ export function ExcesosKmTab() {
 
       cargarDatos()
     } catch (error: any) {
-      console.error('Error creando exceso:', error)
       Swal.fire('Error', error.message || 'No se pudo registrar el exceso', 'error')
     }
   }

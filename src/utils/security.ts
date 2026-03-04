@@ -72,21 +72,9 @@ export function sanitizeObject<T extends Record<string, any>>(obj: T): T {
  * Logger condicional que solo funciona en desarrollo
  */
 export const devLog = {
-  info: (...args: any[]) => {
-    if (import.meta.env.MODE === 'development' || import.meta.env.DEV) {
-      console.log(...args)
-    }
-  },
-  error: (...args: any[]) => {
-    if (import.meta.env.MODE === 'development' || import.meta.env.DEV) {
-      console.error(...args)
-    }
-  },
-  warn: (...args: any[]) => {
-    if (import.meta.env.MODE === 'development' || import.meta.env.DEV) {
-      console.warn(...args)
-    }
-  }
+  info: (..._args: any[]) => {},
+  error: (..._args: any[]) => {},
+  warn: (..._args: any[]) => {},
 }
 
 // =====================================================

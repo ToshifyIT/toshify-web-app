@@ -130,7 +130,6 @@ export function useVehicleStatusStats() {
         setExcludedStats(footerData)
 
       } catch (err: any) {
-        console.error('Error fetching vehicle stats:', err)
         setError(err.message)
       } finally {
         setLoading(false)

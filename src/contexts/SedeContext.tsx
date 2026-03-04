@@ -125,8 +125,8 @@ export function SedeProvider({ children }: { children: ReactNode }) {
           setSedeActual(sedeDelUsuario)
           setVerTodas(false)
         }
-      } catch (error) {
-        console.error('Error cargando sedes:', error)
+      } catch {
+        // silently ignored
       } finally {
         setLoading(false)
       }

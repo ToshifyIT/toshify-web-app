@@ -280,8 +280,8 @@ export function GuiasModule() {
       setPrecalculatedSchoolReport(updatedData);
       setIsSchoolReportCalculated(true);
 
-    } catch (error) {
-      console.error("Error calculating school report metrics (background):", error);
+    } catch {
+      // silently ignored
     }
   };
 
@@ -385,8 +385,7 @@ export function GuiasModule() {
       setHistoryNotesDriverDni(driverDni ? String(driverDni) : '');
       setHistoryNotesModalOpen(true);
 
-    } catch (error) {
-      console.error('Error fetching history notes:', error);
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar las notas históricas', 'error');
     }
   };
@@ -415,7 +414,6 @@ export function GuiasModule() {
       }));
       
     } catch (error) {
-      console.error('Error saving annotations:', error);
       Swal.fire('Error', 'No se pudieron guardar las anotaciones', 'error');
       throw error;
     }
@@ -453,8 +451,7 @@ export function GuiasModule() {
       if (!selectedGuiaId) return;
       loadDrivers(selectedGuiaId);
       loadCurrentWeekMetrics(selectedGuiaId);
-    } catch (error) {
-      console.error('Error reassigning driver:', error);
+    } catch {
       Swal.fire('Error', 'No se pudo completar la reasignación', 'error');
     }
   };
@@ -535,8 +532,7 @@ export function GuiasModule() {
         };
       });
       setHistoryRows(rows);
-    } catch (err) {
-      console.error("Error loading history:", err);
+    } catch {
       Swal.fire('Error', 'No se pudo cargar el historial', 'error');
     }
   };
@@ -552,8 +548,8 @@ export function GuiasModule() {
       const { data, error } = await supabase.from('guias_acciones_implementadas').select('*').order('id', { ascending: true });
       if (error) throw error;
       if (data) setAccionesImplementadas(data);
-    } catch (err) {
-      console.error("Error loading acciones implementadas:", err);
+    } catch {
+      // silently ignored
     }
   };
 
@@ -565,8 +561,8 @@ export function GuiasModule() {
         .order('desde', { ascending: true });
       if (error) throw error;
       if (data) setSeguimientoRules(data);
-    } catch (err) {
-      console.error("Error loading seguimiento rules:", err);
+    } catch {
+      // silently ignored
     } finally {
       setSeguimientoLoaded(true);
     }
@@ -724,8 +720,8 @@ export function GuiasModule() {
               return { dniMap, nameMap };
             }
           }
-        } catch (err) {
-          console.error('Logs de guias: Error general procesando datos Cabify', err);
+        } catch {
+          // silently ignored
         }
         return { dniMap: new Map(), nameMap: new Map() };
       })();
@@ -896,7 +892,7 @@ export function GuiasModule() {
                   supabase.from('guias_historial_semanal').update({ fecha_llamada: fecha })
                   .eq('semana', targetWeek).eq('id_guia', guiaId).eq('id_conductor', cid).is('fecha_llamada', null)
                );
-               Promise.all(updates).catch(e => console.error("Background date sync failed", e));
+                Promise.all(updates).catch(() => {});
              }
            }
         }
@@ -1009,10 +1005,6 @@ export function GuiasModule() {
             ]
           }
 
-          const totalPrevWeek = typeof prevWeekStats.total === 'number'
-            ? prevWeekStats.total
-            : (prevWeekStats.diurno + prevWeekStats.nocturno + prevWeekStats.cargo);
-          
           const estadoCodigo = baseConductor.conductores_estados?.codigo?.toLowerCase();
           const tieneAsignacion = !!baseConductor.vehiculo_asignado;
           let searchMetadata = "";
@@ -1058,30 +1050,16 @@ export function GuiasModule() {
 
           // Solo buscamos datos frescos de Cabify si estamos en la semana actual
           if (isCurrentWeek) {
-            let matchFound = false;
-            let matchType = '';
-            
             if (dni && cabifyDriversMapByDni.has(dni)) {
               cabifyData = cabifyDriversMapByDni.get(dni);
               // Forzar 2 decimales para evitar errores de punto flotante antes de procesar/guardar
               facturacionApp = Number(parseCustomCurrency(cabifyData.cobroApp).toFixed(2));
               facturacionEfectivo = Number(parseCustomCurrency(cabifyData.cobroEfectivo).toFixed(2));
-              matchFound = true;
-              matchType = 'DNI';
             } else if (cabifyDriversMapByName.has(nombreCompleto)) {
               cabifyData = cabifyDriversMapByName.get(nombreCompleto);
               // Forzar 2 decimales para evitar errores de punto flotante antes de procesar/guardar
               facturacionApp = Number(parseCustomCurrency(cabifyData.cobroApp).toFixed(2));
               facturacionEfectivo = Number(parseCustomCurrency(cabifyData.cobroEfectivo).toFixed(2));
-              matchFound = true;
-              matchType = 'NOMBRE';
-            }
-            
-            if (matchFound) {
-              console.log(`Logs de guias: MATCH EXITOSO (${matchType}) para ${nombreCompleto} (DNI: ${dni})`, cabifyData);
-            } else {
-              // Descomentar para ver fallos (puede ser ruidoso)
-              console.log(`Logs de guias: NO MATCH para ${nombreCompleto} (DNI: ${dni}) - Buscado en mapa DNI (${cabifyDriversMapByDni.has(dni || '')}) o Nombre (${cabifyDriversMapByName.has(nombreCompleto)})`);
             }
 
             // Recalculamos total si estamos en semana actual
@@ -1134,12 +1112,8 @@ export function GuiasModule() {
             }
           }
           let prevAppParsed = 0;
-          let prevEfectivoParsed = 0;
-          let prevTotalParsed = 0;
           if (prevFinancialRow) {
             prevAppParsed = parseCustomCurrency(prevFinancialRow.app);
-            prevEfectivoParsed = parseCustomCurrency(prevFinancialRow.efectivo);
-            prevTotalParsed = parseCustomCurrency(prevFinancialRow.total);
           }
 
           let prevSeguimientoRule: any | null = null;
@@ -1198,30 +1172,6 @@ export function GuiasModule() {
           if (autoSeguimiento) {
             baseConductor.seguimiento = autoSeguimiento;
           }
-
-          console.log('GuiasModule: asignaciones semana anterior por conductor', {
-            guiaId,
-            semanaReferencia: targetWeek,
-            semanaBuscada: prevWeekLabel,
-            conductorId: conductor.id,
-            nombre: `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim(),
-            created_at_conductor: conductor.created_at,
-            stats: prevWeekStats,
-            totalSemanaAnterior: totalPrevWeek,
-            totalMonetarioSemanaAnterior: prevTotalParsed,
-            totalMonetarioSemanaAnteriorApp: prevAppParsed,
-            totalMonetarioSemanaAnteriorEfectivo: prevEfectivoParsed,
-            turnoDominante: dominantTurno,
-            reglasSubRangoCoincidentes: (matchingSeguimientoRules || []).map((r: any) => ({
-              id: r.id,
-              rango_nombre: r.rango_nombre,
-              sub_rango_nombre: r.sub_rango_nombre,
-              desde: r.desde,
-              hasta: r.hasta,
-              color: r.color
-            })),
-            reglaSeleccionadaPorTotalMonetario: prevSeguimientoRule
-          });
 
           // Lógica de actualización automática de las columnas 'app', 'efectivo' y 'total'
           // Solo si estamos en la semana actual
@@ -2688,8 +2638,6 @@ export function GuiasModule() {
       if (actualizandoData) return;
       setActualizandoData(true);
       const currentWeek = getCurrentWeek();
-      console.log("=== INICIO ACTUALIZACION DE DATA ===");
-      console.log("Semana actual:", currentWeek);
 
       // 1. Obtener datos de guias_historial_semanal (semanas anteriores)
       const { data: historialData, error: historialError } = await supabase
@@ -2698,11 +2646,8 @@ export function GuiasModule() {
         .neq('semana', currentWeek);
 
       if (historialError) {
-        console.error("Error al obtener historial semanal:", historialError);
         throw historialError;
       }
-
-      console.log(`Registros históricos encontrados (semanas != ${currentWeek}):`, historialData?.length);
 
       // 2. Obtener id_conductor únicos
       // Filtrar nulls/undefineds y obtener únicos
@@ -2711,14 +2656,9 @@ export function GuiasModule() {
           .map(d => d.id_conductor)
           .filter(id => id !== null && id !== undefined)
       )];
-      
-      console.log("IDs de conductores únicos encontrados:", uniqueDriverIds.length);
-      console.log("Lista de IDs:", uniqueDriverIds);
 
       // 3. Loop por conductores
       for (const driverId of uniqueDriverIds) {
-        console.log(`\n--- Procesando Conductor ID: ${driverId} ---`);
-
         // 3a. Buscar datos del conductor
         const { data: driverData, error: driverError } = await supabase
           .from('conductores')
@@ -2727,10 +2667,7 @@ export function GuiasModule() {
           .single();
 
         if (driverError) {
-          console.error(`Error obteniendo datos del conductor ${driverId}:`, driverError);
           // Continuamos con el siguiente conductor aunque falle la obtención de sus datos personales
-        } else {
-          console.log(`Conductor: ${driverData?.nombres} ${driverData?.apellidos} (DNI: ${driverData?.numero_dni})`);
         }
 
         // 3b. Buscar historial del conductor (semanas anteriores)
@@ -2742,21 +2679,16 @@ export function GuiasModule() {
           .neq('semana', currentWeek);
 
         if (driverHistoryError) {
-          console.error(`Error obteniendo historial específico para conductor ${driverId}:`, driverHistoryError);
           continue;
         }
 
         if (!driverHistory || driverHistory.length === 0) {
-          console.log("    Sin historial en semanas anteriores.");
           continue;
         }
 
-        console.log(`Historial encontrado para este conductor (semanas pasadas): ${driverHistory.length} registros.`);
-          
         // 4. Segundo loop por resultados del historial
         for (const historyRecord of driverHistory) {
           const weekStr = historyRecord.semana; // Format: "YYYY-Www"
-          console.log(`    [Procesando Registro] Semana: ${weekStr}, ID Registro: ${historyRecord.id}`);
 
           // 5. Calcular la última fecha de la semana
           const [yearStr, weekNumStr] = weekStr.split('-W');
@@ -2773,8 +2705,6 @@ export function GuiasModule() {
             sundayDate.getDate(),
             23, 59, 59, 999
           )).toISOString().replace('Z', '+00');
-          
-          console.log(`    [Fecha Fin Calculada] Semana ${weekStr} -> Domingo ${sundayDate.toLocaleDateString()} -> UTC String: ${endDateUTC}`);
 
           // 6. Filtro en cabify_historico por fecha_fin y conductor
           let cabifyRecord = null;
@@ -2783,17 +2713,15 @@ export function GuiasModule() {
 
           // Búsqueda por DNI
           if (dniClean) {
-            const { data: dataDni, error: errorDni } = await supabase
+            const { data: dataDni } = await supabase
               .from('cabify_historico')
               .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
               .eq('dni', dniClean)
               .eq('fecha_fin', endDateUTC)
               .maybeSingle();
             
-            if (errorDni) console.error("    Error buscando Cabify por DNI:", errorDni);
             if (dataDni) {
               cabifyRecord = dataDni;
-              console.log(`    [Cabify Match] Encontrado por DNI: ${dniClean}`);
             }
           }
 
@@ -2802,7 +2730,7 @@ export function GuiasModule() {
             const nombre = driverData.nombres.trim();
             const apellido = driverData.apellidos.trim();
             
-            const { data: dataName, error: errorName } = await supabase
+            const { data: dataName } = await supabase
               .from('cabify_historico')
               .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
               .ilike('nombre', `%${nombre}%`)
@@ -2810,42 +2738,30 @@ export function GuiasModule() {
               .eq('fecha_fin', endDateUTC)
               .maybeSingle();
 
-            if (errorName) console.error("    Error buscando Cabify por Nombre:", errorName);
             if (dataName) {
               cabifyRecord = dataName;
-              console.log(`    [Cabify Match] Encontrado por Nombre: ${nombre} ${apellido}`);
             }
           }
 
-          // 8. Obtener datos y log
+          // 8. Obtener datos
           if (!cabifyRecord) {
-            console.log(`    [Datos Cabify] No se encontraron registros para esta semana y conductor.`);
             continue;
           }
 
-          console.log(`    [Datos Cabify] APP: ${cabifyRecord.cobro_app}, EFECTIVO: ${cabifyRecord.cobro_efectivo}`);
-
           // 9. Actualizar datos en guias_historial_semanal
-          console.log(`    [Update] Intentando actualizar registro ${weekStr}...`);
-          
           const appValue = Number(cabifyRecord.cobro_app) || 0;
           const efectivoValue = Number(cabifyRecord.cobro_efectivo) || 0;
           const totalValue = appValue + efectivoValue;
 
-          const { error: updateError } = await supabase
+          await supabase
             .from('guias_historial_semanal')
             .update({ app: appValue, efectivo: efectivoValue, total: totalValue })
             .eq('id', historyRecord.id);
 
-          if (updateError) {
-            console.error(`    [Update Error] No se pudo actualizar el registro ${historyRecord.id}:`, updateError);
-          } else {
-            console.log(`    [Update Success] Registro actualizado. APP: ${appValue}, EFECTIVO: ${efectivoValue}, TOTAL: ${totalValue}`);
-          }
+          // Update error silently ignored
         }
       }
 
-      console.log("\n=== FIN ACTUALIZACION DE DATA ===");
       Swal.fire({
         title: 'Actualización Completada',
         text: 'Se ha procesado la data y generado los logs en la consola.',
@@ -2853,9 +2769,8 @@ export function GuiasModule() {
         confirmButtonColor: 'var(--color-primary)'
       });
 
-    } catch (error) {
-      console.error("Error general en actualizar data:", error);
-      Swal.fire('Error', 'Hubo un error al actualizar la data. Revise la consola para más detalles.', 'error');
+    } catch {
+      Swal.fire('Error', 'Hubo un error al actualizar la data.', 'error');
     } finally {
       setActualizandoData(false);
     }

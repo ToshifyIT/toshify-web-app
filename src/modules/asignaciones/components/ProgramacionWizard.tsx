@@ -128,8 +128,8 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
 
       setVehiculos(vehiculosRes.data || [])
       setConductores(conductoresRes.data || [])
-    } catch (error) {
-      console.error('Error cargando datos:', error)
+    } catch (_error) {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -245,7 +245,6 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
       onSuccess()
       onClose()
     } catch (error: any) {
-      console.error('Error guardando:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
     } finally {
       setSaving(false)

@@ -61,77 +61,21 @@ export function useKilometrajeStats(granularity: Granularity, periodA: string, p
           .gte('fecha_turno', rangeB.start.toISOString().split('T')[0])
           .lte('fecha_turno', rangeB.end.toISOString().split('T')[0])
 
-        // 3. Lógica de Diagnóstico y Logs (Centrado en Periodo B)
-        console.groupCollapsed('🔍 Diagnóstico KPI KILÓMETROS RECORRIDOS')
-        console.log(`📅 Período: ${rangeB.start.toISOString().split('T')[0]} al ${rangeB.end.toISOString().split('T')[0]}`)
-        console.log(`🏢 Sede Filtro: ${sedeId || 'Todas'}`)
-        console.log('ℹ️ Usando campo: wialon_bitacora.patente_normalizada')
-
-        const rawDataB = dataB || []
-        
-        // Agrupar por patente para mostrar totales por auto
-        const porPatente = rawDataB.reduce((acc, item) => {
-          const km = parseKilometraje(item.kilometraje)
-          // Usamos patente_normalizada
-          const key = item.patente_normalizada || 'SIN_PATENTE'
-          acc[key] = (acc[key] || 0) + km
-          return acc
-        }, {} as Record<string, number>)
-
-        const totalSinFiltro = Object.values(porPatente).reduce((a, b) => a + b, 0)
-
-        console.log('🚗 1. Autos encontrados en wialon_bitacora (TODOS):', Object.keys(porPatente).length)
-        console.table(Object.entries(porPatente)
-          .map(([patente, km]) => ({ patente, km }))
-          .sort((a, b) => b.km - a.km)
-        )
-        console.log(`💰 Total KM (Sin Filtro Sede): ${totalSinFiltro.toLocaleString()}`)
-
         let totalA = 0
         let totalB = 0
 
         if (sedeId && patentesSede) {
-          // Filtrar en memoria
-          const incluidos: Record<string, number> = {}
-          const excluidos: Record<string, number> = {}
-
-          Object.entries(porPatente).forEach(([patente, km]) => {
-            if (patentesSede!.has(patente)) {
-              incluidos[patente] = km
-            } else {
-              excluidos[patente] = km
-            }
-          })
-
-          console.log(`✅ 2. Autos de la Sede (${sedeId}) - INCLUIDOS:`, Object.keys(incluidos).length)
-          console.table(Object.entries(incluidos)
-            .map(([patente, km]) => ({ patente, km }))
-            .sort((a, b) => b.km - a.km)
-          )
-          
-          console.log(`🚫 3. Autos NO de la Sede (o sin sede asignada) - EXCLUIDOS:`, Object.keys(excluidos).length)
-          console.table(Object.entries(excluidos)
-            .map(([patente, km]) => ({ patente, km }))
-            .sort((a, b) => b.km - a.km)
-          )
-
-          // Calcular totales finales usando el filtro
           totalA = (dataA || []).reduce((sum, item) => patentesSede!.has(item.patente_normalizada || '') ? sum + parseKilometraje(item.kilometraje) : sum, 0)
           totalB = (dataB || []).reduce((sum, item) => patentesSede!.has(item.patente_normalizada || '') ? sum + parseKilometraje(item.kilometraje) : sum, 0)
-          
-          console.log(`📊 Total KM Final (Filtrado): ${totalB.toLocaleString()}`)
         } else {
-          console.log('ℹ️ No hay filtro de sede activo (o sede "Ver Todas"). Se muestran todos.')
           totalA = (dataA || []).reduce((sum, item) => sum + parseKilometraje(item.kilometraje), 0)
-          totalB = totalSinFiltro
+          totalB = (dataB || []).reduce((sum, item) => sum + parseKilometraje(item.kilometraje), 0)
         }
-        console.groupEnd()
 
         if (isMounted) {
           setStats({ totalA, totalB, loading: false })
         }
-      } catch (error) {
-        console.error('Error fetching kilometraje stats:', error)
+      } catch {
         if (isMounted) {
           setStats(prev => ({ ...prev, loading: false }))
         }

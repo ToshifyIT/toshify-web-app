@@ -42,13 +42,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { session: existingSession }, error } = await supabase.auth.getSession()
 
         if (error) {
-          console.error('❌ Error obteniendo sesión:', error.message)
           setLoading(false)
           return
         }
 
         if (existingSession) {
-          console.log('📍 Sesión encontrada, expira:', new Date(existingSession.expires_at! * 1000).toLocaleString())
           setSession(existingSession)
           setUser(existingSession.user)
           await loadProfile(existingSession.user.id)
@@ -57,7 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const now = Math.floor(Date.now() / 1000)
           const timeLeft = existingSession.expires_at! - now
           if (timeLeft < 300) {
-            console.log('🔄 Token por expirar, refrescando...')
             const { data: refreshed } = await supabase.auth.refreshSession()
             if (refreshed.session) {
               setSession(refreshed.session)
@@ -65,11 +62,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           }
         } else {
-          console.log('📍 No hay sesión activa')
           setLoading(false)
         }
-      } catch (err) {
-        console.error('❌ Error inicializando sesión:', err)
+      } catch {
         setLoading(false)
       }
     }
@@ -80,8 +75,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      console.log('🔐 Auth event:', event)
-
       switch (event) {
         case 'SIGNED_IN':
           if (newSession) {
@@ -93,7 +86,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         case 'TOKEN_REFRESHED':
           if (newSession) {
-            console.log('🔄 Token refrescado, nueva expiración:', new Date(newSession.expires_at! * 1000).toLocaleString())
             setSession(newSession)
             setUser(newSession.user)
           }
@@ -101,7 +93,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         case 'SIGNED_OUT':
           if (intentionalSignOut) {
-            console.log('👋 Logout intencional')
             intentionalSignOut = false
             setSession(null)
             setUser(null)
@@ -109,10 +100,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setLoading(false)
           } else {
             // SIGNED_OUT no intencional - verificar si hay sesión válida
-            console.log('⚠️ SIGNED_OUT inesperado, verificando...')
             const { data } = await supabase.auth.getSession()
             if (data.session) {
-              console.log('✅ Sesión recuperada, ignorando SIGNED_OUT')
               setSession(data.session)
               setUser(data.session.user)
             } else {
@@ -156,8 +145,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error
       setProfile(data as UserWithRole)
       setMustChangePassword((data as any).must_change_password === true)
-    } catch (error) {
-      console.error('Error cargando perfil:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -198,7 +187,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error: rpcError } = await (supabase.rpc as any)('mark_password_changed')
 
       if (rpcError) {
-        console.warn('RPC mark_password_changed falló, usando fallback directo:', rpcError)
         const { error: updateError } = await (supabase
           .from('user_profiles') as any)
           .update({ must_change_password: false })
@@ -209,7 +197,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setMustChangePassword(false)
     } catch (error) {
-      console.error('Error marcando contraseña como cambiada:', error)
       throw error
     }
   }

@@ -204,7 +204,7 @@ export function SaldosAbonosTab() {
 
       // Procesar abonos (usa nombres de conductores ya cargados)
       if (abonosRes.error) {
-        console.error('Error cargando abonos:', abonosRes.error)
+        // silently ignored
       }
       const conductorNombres = new Map(saldosConEstado.map((s: SaldoConductor) => [s.conductor_id, s.conductor_nombre]))
       const abonosConNombre = ((abonosRes.data || []) as AbonoRow[]).map((a) => ({
@@ -212,8 +212,8 @@ export function SaldosAbonosTab() {
         conductor_nombre: conductorNombres.get(a.conductor_id) || 'N/A'
       }))
       setTodosLosAbonos(abonosConNombre)
-    } catch (error) {
-      console.error('Error cargando saldos:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -1151,8 +1151,8 @@ export function SaldosAbonosTab() {
           htmlContainer: 'swal-html-compact'
         }
       })
-    } catch (error) {
-      console.error('Error cargando historial:', error)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -1261,8 +1261,7 @@ export function SaldosAbonosTab() {
 
       // Recargar datos
       cargarSaldos()
-    } catch (error) {
-      console.error('Error actualizando movimiento:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo actualizar el movimiento', 'error')
     }
   }

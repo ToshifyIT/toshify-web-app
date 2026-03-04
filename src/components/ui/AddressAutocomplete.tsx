@@ -124,7 +124,6 @@ export function AddressAutocomplete({
   }, [onChange])
 
   if (loadError) {
-    console.error('Google Maps load error:', loadError)
     return (
       <div className="address-autocomplete-error">
         <input

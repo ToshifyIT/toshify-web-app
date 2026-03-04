@@ -900,7 +900,6 @@ export function PeriodosTab() {
 
       cargarSemanas()
     } catch (error: any) {
-      console.error('Error generando facturación:', error)
       Swal.fire('Error', error.message || 'No se pudo generar la facturación', 'error')
     } finally {
       setGenerando(null)

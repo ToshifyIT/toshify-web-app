@@ -30,8 +30,8 @@ export function IncidentsSubRow({ driverId }: IncidentsSubRowProps) {
 
         if (error) throw error
         setIncidents(data || [])
-      } catch (error) {
-        console.error('Error loading incidents:', error)
+      } catch (_error) {
+        // silently ignored
       } finally {
         setLoading(false)
       }

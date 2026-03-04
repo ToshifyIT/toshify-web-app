@@ -59,8 +59,7 @@ export function useMultasStats(granularity: Granularity, periodA: string, period
 
           setStats({ totalA, totalB, loading: false })
         }
-      } catch (error) {
-        console.error('Error fetching multas stats:', error)
+      } catch {
         if (isMounted) {
           setStats(prev => ({ ...prev, loading: false }))
         }

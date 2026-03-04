@@ -398,7 +398,6 @@ export const wialonBitacoraService = {
       })
 
       if (error) {
-        console.error('Error invocando sync-wialon-bitacora:', error)
         return { success: false, error: error.message }
       }
 
@@ -406,9 +405,8 @@ export const wialonBitacoraService = {
         success: true,
         turnos: data?.turnosGenerados || 0,
       }
-    } catch (err) {
+    } catch {
       // Si la Edge Function no está disponible, solo limpiar caché
-      console.warn('Edge Function no disponible, solo se limpió el caché:', err)
       return { success: true }
     }
   },

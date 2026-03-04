@@ -83,7 +83,6 @@ export function AprobacionesPendientesModule() {
       if (error) throw error
       setMovimientos(data || [])
     } catch (error) {
-      console.error('Error cargando movimientos pendientes:', error)
       Swal.fire('Error', 'No se pudieron cargar los movimientos pendientes', 'error')
     } finally {
       setLoading(false)
@@ -139,7 +138,6 @@ export function AprobacionesPendientesModule() {
 
       setHistorico(historicoFormateado)
     } catch (error) {
-      console.error('Error cargando histórico:', error)
       Swal.fire('Error', 'No se pudo cargar el histórico de aprobaciones', 'error')
     } finally {
       setLoadingHistorico(false)
@@ -189,7 +187,6 @@ export function AprobacionesPendientesModule() {
 
       cargarMovimientosPendientes()
     } catch (error: any) {
-      console.error('Error aprobando movimiento:', error)
       Swal.fire('Error', error.message || 'No se pudo aprobar el movimiento', 'error')
     } finally {
       setProcessing(null)
@@ -255,7 +252,6 @@ export function AprobacionesPendientesModule() {
 
       cargarMovimientosPendientes()
     } catch (error: any) {
-      console.error('Error rechazando movimiento:', error)
       Swal.fire('Error', error.message || 'No se pudo rechazar el movimiento', 'error')
     } finally {
       setProcessing(null)

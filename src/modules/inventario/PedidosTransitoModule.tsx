@@ -99,8 +99,8 @@ export function PedidosTransitoModule() {
     try {
       setLoading(true)
       await Promise.all([loadEntradasSimples(), loadPedidos()])
-    } catch (err) {
-      console.error('Error cargando datos:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -115,8 +115,8 @@ export function PedidosTransitoModule() {
 
       if (error) throw error
       setEntradasSimples((data || []) as EntradaTransito[])
-    } catch (err) {
-      console.error('Error cargando entradas simples:', err)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -150,8 +150,8 @@ export function PedidosTransitoModule() {
 
       setPedidos(Array.from(pedidosMap.values()))
       setExpandedPedidos(new Set(pedidosMap.keys()))
-    } catch (err) {
-      console.error('Error cargando pedidos:', err)
+    } catch {
+      // silently ignored
     }
   }
 

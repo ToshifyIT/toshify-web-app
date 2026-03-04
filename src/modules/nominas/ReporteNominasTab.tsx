@@ -147,8 +147,8 @@ export function ReporteNominasTab() {
 
       if (error) throw error
       setConceptos(data || [])
-    } catch (error) {
-      console.error('Error cargando conceptos:', error)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -343,7 +343,6 @@ export function ReporteNominasTab() {
       setStats(statsCalc)
 
     } catch (error) {
-      console.error('Error cargando nóminas:', error)
       Swal.fire('Error', 'No se pudo cargar la facturación', 'error')
     } finally {
       setLoading(false)
@@ -514,7 +513,6 @@ export function ReporteNominasTab() {
 
       setNominaDetalle(detalle)
     } catch (error) {
-      console.error('Error cargando detalle:', error)
       Swal.fire('Error', 'No se pudo cargar el detalle de facturación', 'error')
       setShowDetalle(false)
     } finally {
@@ -762,7 +760,6 @@ export function ReporteNominasTab() {
 
       showSuccess('PDF Exportado', `Se descargó: ${nombreArchivo}`)
     } catch (error) {
-      console.error('Error exportando PDF:', error)
       Swal.fire('Error', 'No se pudo exportar el PDF', 'error')
     } finally {
       setExportingPdf(false)
@@ -1085,7 +1082,6 @@ export function ReporteNominasTab() {
 
       showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
     } catch (error) {
-      console.error('Error exportando Excel:', error)
       Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
     } finally {
       setExportingExcel(false)

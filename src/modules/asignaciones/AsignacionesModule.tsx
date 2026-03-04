@@ -447,7 +447,6 @@ export function AsignacionesModule() {
         })))
       }
     } catch (err: any) {
-      console.error('Error loading data:', err)
       setError(err.message || 'Error al cargar los datos')
     } finally {
       setLoading(false)
@@ -515,7 +514,6 @@ export function AsignacionesModule() {
 
       setAsignaciones([...asignacionesConMotivo, ...devolucionesVirtuales])
     } catch (err: any) {
-      console.error('Error loading asignaciones:', err)
       setError(err.message || 'Error al cargar las asignaciones')
     } finally {
       setLoading(false)
@@ -949,7 +947,6 @@ export function AsignacionesModule() {
 
       loadAsignaciones()
     } catch (err: any) {
-      console.error('Error confirmando devolución:', err)
       Swal.fire('Error', err.message || 'Error al confirmar devolución', 'error')
     } finally {
       setIsSubmitting(false)
@@ -978,16 +975,14 @@ export function AsignacionesModule() {
 
       // 1. Limpiar referencia en programaciones_onboarding (si existe)
       // Esto permite re-enviar la programacion despues de eliminar la asignacion
-      const { data: progUpdate, error: progError } = await (supabase as any)
+      const { error: progError } = await (supabase as any)
         .from('programaciones_onboarding')
         .update({ asignacion_id: null, fecha_asignacion_creada: null })
         .eq('asignacion_id', id)
         .select('id')
 
       if (progError) {
-        console.error('Error limpiando referencia en programaciones:', progError)
-      } else {
-        console.log('✅ Referencia limpiada en programaciones:', progUpdate?.length || 0, 'registros actualizados')
+        // silently ignored
       }
 
       // 2. Eliminar conductores asociados
@@ -997,7 +992,7 @@ export function AsignacionesModule() {
         .eq('asignacion_id', id)
 
       if (conductoresError) {
-        console.error('Error eliminando conductores:', conductoresError)
+        // silently ignored
       }
 
       // 3. Eliminar la asignación
@@ -1136,7 +1131,6 @@ export function AsignacionesModule() {
         setConductoresToConfirm([])
         loadAsignaciones()
       } catch (err: any) {
-        console.error('Error confirmando devolución:', err)
         Swal.fire('Error', err.message || 'Error al confirmar devolución', 'error')
       } finally {
         setIsSubmitting(false)
@@ -1163,7 +1157,6 @@ export function AsignacionesModule() {
         }
       })
       const tieneCompaneros = companeroIds.size > 0
-      console.log('🔍 Detectando companeros:', { notas, companeroMatches, companeroIds: Array.from(companeroIds), tieneCompaneros })
 
       await (supabase as any)
         .from('asignaciones_conductores')
@@ -1182,16 +1175,12 @@ export function AsignacionesModule() {
 
         // Si tiene companeros, lógica especial
         if (tieneCompaneros) {
-          console.log('⚡ Ejecutando lógica de asignacion_companero')
-
           // Identificar conductores nuevos (los que NO son companero)
           const conductoresNuevos = (allConductores as any)?.filter((c: any) => !companeroIds.has(c.conductor_id)) || []
-          console.log('👤 Conductores nuevos (no companero):', conductoresNuevos)
 
           // IMPORTANTE: Finalizar participaciones anteriores de los conductores NUEVOS
           // (igual que en la lógica normal, para que dejen vacante su turno anterior)
           for (const conductorNuevo of conductoresNuevos) {
-            console.log('🔄 Finalizando participaciones anteriores de conductor:', conductorNuevo.conductor_id)
             await (supabase as any)
               .from('asignaciones_conductores')
               .update({ estado: 'completado', fecha_fin: ahora })
@@ -1210,8 +1199,6 @@ export function AsignacionesModule() {
             .single()
 
           if (asignacionExistente) {
-            console.log('📋 Asignación existente encontrada:', asignacionExistente.id)
-
             // Obtener conductores actuales de la asignación existente
             const { data: conductoresExistentes } = await (supabase as any)
               .from('asignaciones_conductores')
@@ -1334,7 +1321,6 @@ export function AsignacionesModule() {
               // Usuario confirmó: finalizar a los conductores actuales que serán reemplazados
               const reemplazosTraza: string[] = []
               for (const conflicto of conflictos) {
-                console.log('🔄 Reemplazando conductor:', conflicto.conductorActual.nombre)
                 await (supabase as any)
                   .from('asignaciones_conductores')
                   .update({ estado: 'completado', fecha_fin: ahora })
@@ -1382,7 +1368,6 @@ export function AsignacionesModule() {
                 .single()
 
               if (!yaExiste) {
-                console.log('➕ Agregando conductor', conductorNuevo.conductor_id, 'a asignación existente', asignacionExistente.id)
                 await (supabase as any)
                   .from('asignaciones_conductores')
                   .insert({
@@ -1395,7 +1380,6 @@ export function AsignacionesModule() {
                     fecha_inicio: ahora
                   })
               } else {
-                console.log('⚠️ Conductor ya existe en asignación existente, actualizando estado')
                 await (supabase as any)
                   .from('asignaciones_conductores')
                   .update({ estado: 'activo', confirmado: true, fecha_confirmacion: ahora })

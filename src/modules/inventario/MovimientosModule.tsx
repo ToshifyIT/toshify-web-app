@@ -265,8 +265,7 @@ export function MovimientosModule() {
       }
       if (provRes.data) setProveedores(provRes.data)
       if (vehRes.data) setVehiculos(vehRes.data)
-    } catch (err: any) {
-      console.error('Error cargando datos:', err)
+    } catch {
       Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudieron cargar los datos necesarios' })
     } finally {
       setLoading(false)
@@ -300,8 +299,7 @@ export function MovimientosModule() {
       if (stockAgrupado.length > 0) {
         setProveedorId(stockAgrupado[0].proveedor_id)
       }
-    } catch (err) {
-      console.error('Error cargando stock:', err)
+    } catch {
       setStockPorProveedor([])
     }
   }
@@ -340,8 +338,7 @@ export function MovimientosModule() {
         }, [])
 
       setVehiculosConInventario(vehiculosUnicos)
-    } catch (err) {
-      console.error('Error cargando vehículos con inventario:', err)
+    } catch {
       setVehiculosConInventario([])
     }
   }
@@ -381,8 +378,7 @@ export function MovimientosModule() {
         }, [])
 
       setProductosAsignadosVehiculo(productosAgrupados)
-    } catch (err) {
-      console.error('Error cargando productos asignados:', err)
+    } catch {
       setProductosAsignadosVehiculo([])
     }
   }
@@ -563,7 +559,6 @@ export function MovimientosModule() {
 
       resetForm()
     } catch (error: any) {
-      console.error('Error procesando lote:', error)
       Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote' })
     }
   }
@@ -597,7 +592,6 @@ export function MovimientosModule() {
       resetForm()
       loadData()
     } catch (error: any) {
-      console.error('Error procesando lote de salidas:', error)
       Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo procesar el lote de salidas' })
     }
   }
@@ -662,7 +656,6 @@ export function MovimientosModule() {
       resetForm()
       loadData()
     } catch (err: any) {
-      console.error('Error procesando movimiento:', err)
       Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo procesar el movimiento' })
     }
   }

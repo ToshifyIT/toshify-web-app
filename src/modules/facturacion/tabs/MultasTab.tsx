@@ -126,8 +126,7 @@ export function MultasTab() {
       })
 
       setMultas(multasMapeadas)
-    } catch (error) {
-      console.error('Error cargando multas:', error)
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar las multas', 'error')
     } finally {
       setLoading(false)
@@ -249,7 +248,6 @@ export function MultasTab() {
 
       cargarDatos()
     } catch (error: any) {
-      console.error('Error creando multa:', error)
       Swal.fire('Error', error.message || 'No se pudo registrar la multa', 'error')
     }
   }

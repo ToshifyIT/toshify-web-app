@@ -84,8 +84,8 @@ export function PeriodPicker({ granularity, value, onChange, label, className = 
           const parsed = parse(value, 'yyyy', now)
           if (isValid(parsed)) return parsed
       }
-    } catch (e) {
-      console.error('Error parsing date for picker', e)
+    } catch (_e) {
+      // silently ignored
     }
     return now
   }

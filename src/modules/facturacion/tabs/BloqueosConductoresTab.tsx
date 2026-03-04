@@ -91,8 +91,8 @@ export function BloqueosConductoresTab() {
           if (p.clave === 'bloqueo_dias_mora') setDiasMoraLimite(parseFloat(p.valor))
         })
       }
-    } catch (error) {
-      console.error('Error cargando parámetros:', error)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -160,8 +160,8 @@ export function BloqueosConductoresTab() {
       })
 
       setConductores(conductoresMapeados)
-    } catch (error) {
-      console.error('Error cargando conductores:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }

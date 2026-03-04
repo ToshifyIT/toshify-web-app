@@ -186,8 +186,8 @@ export function PedidosUnificadoModule() {
     try {
       setLoadingPedidos(true)
       await Promise.all([loadEntradasSimples(), loadPedidos()])
-    } catch (err) {
-      console.error('Error cargando datos:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoadingPedidos(false)
     }
@@ -202,8 +202,8 @@ export function PedidosUnificadoModule() {
 
       if (error) throw error
       setEntradasSimples((data || []) as EntradaTransito[])
-    } catch (err) {
-      console.error('Error cargando entradas simples:', err)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -237,8 +237,8 @@ export function PedidosUnificadoModule() {
 
       setPedidos(Array.from(pedidosMap.values()))
       setExpandedPedidos(new Set(pedidosMap.keys()))
-    } catch (err) {
-      console.error('Error cargando pedidos:', err)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -393,7 +393,6 @@ export function PedidosUnificadoModule() {
       if (error) throw error
       setMovimientos(data || [])
     } catch (error) {
-      console.error('Error cargando movimientos pendientes:', error)
       Swal.fire('Error', 'No se pudieron cargar los movimientos pendientes', 'error')
     } finally {
       setLoadingAprobaciones(false)
@@ -448,7 +447,6 @@ export function PedidosUnificadoModule() {
 
       setHistorico(historicoFormateado)
     } catch (error) {
-      console.error('Error cargando histórico:', error)
       Swal.fire('Error', 'No se pudo cargar el histórico de aprobaciones', 'error')
     } finally {
       setLoadingHistorico(false)
@@ -504,7 +502,6 @@ export function PedidosUnificadoModule() {
 
       cargarMovimientosPendientes()
     } catch (error: any) {
-      console.error('Error aprobando movimiento:', error)
       Swal.fire('Error', error.message || 'No se pudo aprobar el movimiento', 'error')
     } finally {
       setProcessing(null)
@@ -576,7 +573,6 @@ export function PedidosUnificadoModule() {
 
       cargarMovimientosPendientes()
     } catch (error: any) {
-      console.error('Error rechazando movimiento:', error)
       Swal.fire('Error', error.message || 'No se pudo rechazar el movimiento', 'error')
     } finally {
       setProcessing(null)

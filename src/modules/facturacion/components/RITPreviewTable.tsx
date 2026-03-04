@@ -257,8 +257,7 @@ export function RITPreviewTable({
         setHasChanges(false)
         showSuccess('Sincronizado', 'Los cambios se guardaron correctamente')
       }
-    } catch (error) {
-      console.error('Error sincronizando:', error)
+    } catch {
       Swal.fire('Error', 'No se pudieron guardar los cambios', 'error')
     } finally {
       setSyncing(false)
@@ -458,8 +457,7 @@ export function RITPreviewTable({
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Exportación exitosa', `Se descargó: ${nombreArchivo}`)
-    } catch (error) {
-      console.error('Error exportando:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo exportar el archivo', 'error')
     } finally {
       setExporting(false)

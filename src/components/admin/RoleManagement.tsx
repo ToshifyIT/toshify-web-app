@@ -45,8 +45,8 @@ export function RoleManagement() {
 
       if (error) throw error
       setRoles(data)
-    } catch (err) {
-      console.error('Error cargando roles:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -84,7 +84,6 @@ export function RoleManagement() {
       setNewRole({ name: '', description: '', icon: '' })
       await loadRoles()
     } catch (err: any) {
-      console.error('Error creando rol:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -122,7 +121,6 @@ export function RoleManagement() {
       setSelectedRole(null)
       await loadRoles()
     } catch (err: any) {
-      console.error('Error actualizando rol:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -175,7 +173,6 @@ export function RoleManagement() {
       setSelectedRole(null)
       await loadRoles()
     } catch (err: any) {
-      console.error('Error eliminando rol:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',

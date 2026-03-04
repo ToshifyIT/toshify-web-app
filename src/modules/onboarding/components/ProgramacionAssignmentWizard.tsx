@@ -336,8 +336,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         })
 
         setVehicles(vehiculosFinales)
-      } catch (error) {
-        console.error('Error loading vehicles:', error)
+      } catch {
+        // silently ignored
       } finally {
         setLoadingVehicles(false)
       }
@@ -432,8 +432,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
         })
 
         setConductores(conductoresConEstado)
-      } catch (error) {
-        console.error('Error loading conductores:', error)
+      } catch {
+        // silently ignored
       } finally {
         setLoadingConductores(false)
       }
@@ -518,8 +518,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
             }
           }
         }
-      } catch (error) {
-        console.error(`Error geocodificando conductor ${conductor.id}:`, error)
+      } catch {
+        // silently ignored
       }
     }
 
@@ -572,8 +572,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
           }
         )
       })
-    } catch (error) {
-      console.error('Error obteniendo distancia en auto:', error)
+    } catch {
       return null
     }
   }
@@ -725,8 +724,8 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
 
       setParesCercanos(paresConTiempo)
       setMostrarParesCercanos(true)
-    } catch (error) {
-      console.error('Error calculando pares:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoadingPares(false)
     }
@@ -1130,7 +1129,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
     } catch (checkError: any) {
       // Si es error de "no rows" es OK, significa que no hay duplicados
       if (checkError.code !== 'PGRST116') {
-        console.error('Error verificando duplicados:', checkError)
+        // error handled silently
       }
     }
 
@@ -1261,7 +1260,6 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
       onSuccess()
       onClose()
     } catch (error: any) {
-      console.error('Error guardando programacion:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar la programacion', 'error')
     } finally {
       setLoading(false)

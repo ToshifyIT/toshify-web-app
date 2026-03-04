@@ -321,13 +321,6 @@ export function createDateComparator() {
  * Utility para medir performance de funciones
  * Solo usar en desarrollo
  */
-export function benchmark<T>(name: string, fn: () => T): T {
-  if (import.meta.env.DEV) {
-    const start = performance.now()
-    const result = fn()
-    const end = performance.now()
-    console.log(`⏱️ ${name}: ${(end - start).toFixed(2)}ms`)
-    return result
-  }
+export function benchmark<T>(_name: string, fn: () => T): T {
   return fn()
 }

@@ -90,8 +90,8 @@ export function InventarioDashboardModule() {
       })
 
       setStockProductos(dataConStock)
-    } catch (err: any) {
-      console.error('Error cargando stock:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }

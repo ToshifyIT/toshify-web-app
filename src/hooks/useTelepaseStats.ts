@@ -69,9 +69,6 @@ export function useTelepaseStats(granularity: Granularity, periodA: string, peri
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
-        console.log(`[TelepaseStats] Querying range A: ${rangeA.start.toISOString()} - ${rangeA.end.toISOString()}`)
-        console.log(`[TelepaseStats] Querying range B: ${rangeB.start.toISOString()} - ${rangeB.end.toISOString()}`)
-
         let queryA = supabase
           .from('cabify_historico')
           .select('peajes')
@@ -94,20 +91,13 @@ export function useTelepaseStats(granularity: Granularity, periodA: string, peri
 
         const [resA, resB] = await Promise.all([queryA, queryB])
 
-        if (resA.error) console.error('[TelepaseStats] Error A:', resA.error)
-        if (resB.error) console.error('[TelepaseStats] Error B:', resB.error)
-
-        console.log(`[TelepaseStats] Found A: ${resA.data?.length || 0} records`)
-        console.log(`[TelepaseStats] Found B: ${resB.data?.length || 0} records`)
-
         if (isMounted) {
           const totalA = (resA.data || []).reduce((sum, item) => sum + parseImporte(item.peajes), 0)
           const totalB = (resB.data || []).reduce((sum, item) => sum + parseImporte(item.peajes), 0)
 
           setStats({ totalA, totalB, loading: false })
         }
-      } catch (error) {
-        console.error('Error fetching telepase stats from cabify_historico:', error)
+      } catch {
         if (isMounted) {
           setStats(prev => ({ ...prev, loading: false }))
         }

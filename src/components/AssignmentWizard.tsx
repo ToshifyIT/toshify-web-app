@@ -195,8 +195,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         )
 
         setVehicles(vehiculosFinales)
-      } catch (error) {
-        console.error('Error loading vehicles:', error)
+      } catch {
+        // silently ignored
       }
     }
 
@@ -246,10 +246,10 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         ])
 
         if (asignacionesActivasRes.error) {
-          console.error('Error verificando asignaciones activas:', asignacionesActivasRes.error)
+          // silently ignored
         }
         if (asignacionesProgramadasRes.error) {
-          console.error('Error verificando asignaciones programadas:', asignacionesProgramadasRes.error)
+          // silently ignored
         }
 
         const asignacionesActivas = asignacionesActivasRes.data as { conductor_id: string; horario: string }[] | null
@@ -287,8 +287,8 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         })
 
         setConductores(conductoresConEstado)
-      } catch (error) {
-        console.error('Error loading conductores:', error)
+      } catch {
+        // silently ignored
       }
     }
 
@@ -635,7 +635,6 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
       onSuccess()
       onClose()
     } catch (error: any) {
-      console.error('Error creating assignment:', error)
       Swal.fire('Error', error.message || 'Error al crear la asignación', 'error')
     } finally {
       setLoading(false)

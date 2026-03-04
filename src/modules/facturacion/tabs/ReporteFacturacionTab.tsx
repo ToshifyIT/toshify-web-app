@@ -1012,8 +1012,7 @@ export function ReporteFacturacionTab() {
       setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
       setExcesos((excesosData || []) as ExcesoKm[])
 
-    } catch (error) {
-      console.error('Error cargando facturación:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo cargar la facturación', 'error')
     } finally {
       setLoading(false)
@@ -1836,8 +1835,7 @@ export function ReporteFacturacionTab() {
       setModoVistaPrevia(false)
       autoRecalcularRef.current = true
       // El useEffect de abajo detectará el cambio y llamará recalcularPeriodoAbierto()
-    } catch (error) {
-      console.error('Error generando período:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo crear el período de facturación', 'error')
       setGenerando(false)
     }
@@ -4377,8 +4375,7 @@ export function ReporteFacturacionTab() {
       pdf.save(nombreArchivo)
 
       showSuccess('PDF Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch (error) {
-      console.error('Error exportando PDF:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo exportar el PDF', 'error')
     } finally {
       setExportingPdf(false)
@@ -4478,8 +4475,7 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch (error) {
-      console.error('Error exportando Excel:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
     } finally {
       setExportingExcel(false)
@@ -5687,8 +5683,7 @@ export function ReporteFacturacionTab() {
       setRitPreviewData(previewData)
       setShowRITPreview(true)
 
-    } catch (error) {
-      console.error('Error preparando preview RIT:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo cargar los datos del preview', 'error')
     } finally {
       setLoadingRITPreview(false)
@@ -5716,7 +5711,6 @@ export function ReporteFacturacionTab() {
           .eq('id', row.id)
 
         if (error) {
-          console.error('Error actualizando facturación:', error)
           throw error
         }
 
@@ -6374,8 +6368,7 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch (error) {
-      console.error('Error exportando Excel:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
     } finally {
       setExportingExcel(false)

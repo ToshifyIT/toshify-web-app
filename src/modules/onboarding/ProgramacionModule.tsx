@@ -284,7 +284,6 @@ export function ProgramacionModule() {
       if (queryError) throw queryError
       setProgramaciones((data || []) as ProgramacionOnboardingCompleta[])
     } catch (err: any) {
-      console.error('Error loading programaciones:', err)
       setError(err.message || 'Error al cargar programaciones')
     } finally {
       setLoading(false)
@@ -304,8 +303,8 @@ export function ProgramacionModule() {
         id: u.id,
         nombre: u.full_name || 'Sin nombre'
       })))
-    } catch (err) {
-      console.error('Error cargando especialistas:', err)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -329,8 +328,8 @@ export function ProgramacionModule() {
 
       if (queryError) throw queryError
       setProgramacionesHistorico((data || []) as ProgramacionOnboardingCompleta[])
-    } catch (err: any) {
-      console.error('Error loading historico:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoadingHistorico(false)
     }
@@ -426,8 +425,8 @@ export function ProgramacionModule() {
         marca: v.marca,
         modelo: v.modelo
       })))
-    } catch (err) {
-      console.error('Error cargando vehiculos:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoadingVehiculos(false)
     }
@@ -447,8 +446,8 @@ export function ProgramacionModule() {
         nombre: `${c.nombres || ''} ${c.apellidos || ''}`.trim(),
         dni: c.numero_dni || ''
       })))
-    } catch (err) {
-      console.error('Error cargando conductores:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoadingConductores(false)
     }
@@ -531,7 +530,6 @@ export function ProgramacionModule() {
       setEditingProgramacion(null)
       showSuccess('Guardado', 'Programación actualizada correctamente')
     } catch (err: any) {
-      console.error('Error actualizando:', err)
       Swal.fire('Error', err.message || 'Error al guardar', 'error')
     } finally {
       setSavingQuickEdit(false)
@@ -598,9 +596,8 @@ export function ProgramacionModule() {
     try {
       await navigator.clipboard.writeText(mensaje)
       setShowMensajeModal(false)
-    } catch (err) {
+    } catch {
       // Si falla el clipboard, el usuario puede copiar manualmente del preview
-      console.error('Error copiando:', err)
     }
   }
 
@@ -619,7 +616,6 @@ export function ProgramacionModule() {
         p.id === id ? { ...p, [field]: value } : p
       ))
     } catch (err: any) {
-      console.error(`Error actualizando ${field}:`, err)
       Swal.fire('Error', err.message || 'Error al actualizar', 'error')
     }
   }
@@ -690,7 +686,6 @@ export function ProgramacionModule() {
       setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
       showSuccess('Devolución Creada', `${prog.vehiculo_entregar_patente}`)
     } catch (err: any) {
-      console.error('Error creando devolución:', err)
       Swal.fire('Error', err.message || 'Error al crear devolución', 'error')
     }
   }
@@ -1041,7 +1036,6 @@ export function ProgramacionModule() {
       showSuccess('Asignación Creada', `Código: ${asignacion.codigo}`)
 
     } catch (err: any) {
-      console.error('Error creando asignacion:', err)
       Swal.fire('Error', err.message || 'Error al crear asignacion', 'error')
     }
   }

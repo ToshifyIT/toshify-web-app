@@ -200,8 +200,8 @@ export function ZonesAssignmentsChart() {
            setData(chartData)
         }
 
-      } catch (error) {
-        console.error('Error fetching zones assignments:', error)
+      } catch (_error) {
+        // silently ignored
       } finally {
         setLoading(false)
       }

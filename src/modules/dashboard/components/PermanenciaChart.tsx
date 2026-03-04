@@ -52,8 +52,8 @@ export function PermanenciaChart() {
         let parsedDate = now
         try {
           parsedDate = parse(selectedMonth, 'MMM yyyy', now, { locale: es })
-        } catch (e) {
-          console.error('Error parsing selected month:', e)
+        } catch (_e) {
+          // silently ignored
         }
         
         const monthStart = startOfMonth(parsedDate)
@@ -145,8 +145,7 @@ export function PermanenciaChart() {
           setData(chartData)
           setLoading(false)
         }
-      } catch (err) {
-        console.error('Error fetching permanencia chart data:', err)
+      } catch (_err) {
         if (isMounted) setLoading(false)
       }
     }

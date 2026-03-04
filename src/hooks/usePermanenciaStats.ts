@@ -21,7 +21,7 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
     
     let isMounted = true
 
-    async function calculateAveragePermanencia(range: { start: Date; end: Date }, periodLabel: string) {
+    async function calculateAveragePermanencia(range: { start: Date; end: Date }, _periodLabel: string) {
       // 1. Buscar conductores dados de baja en el periodo
       let query = supabase
         .from('conductores')
@@ -36,11 +36,8 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
       const { data: conductores, error } = await query
 
       if (error) {
-        console.error(`Error fetching conductores for ${periodLabel}:`, error)
         return 0
       }
-
-      console.log(`[${periodLabel}] Conductores baja encontrados en periodo ${range.start.toISOString()} - ${range.end.toISOString()}: ${conductores?.length || 0} conductores`)
 
       if (!conductores || conductores.length === 0) {
         return 0
@@ -50,8 +47,6 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
 
       // 2. Procesar cada conductor
       for (const conductor of conductores) {
-        console.log(`[${periodLabel}] Procesando Conductor [${conductor.id}]: ${conductor.nombres} ${conductor.apellidos}`)
-        
         // 3. Obtener asignaciones históricas
         // Cruzamos con asignaciones para obtener fechas
         const { data: asignacionesData, error: asigError } = await supabase
@@ -66,7 +61,6 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
           .eq('conductor_id', conductor.id)
 
         if (asigError) {
-          console.error(`Error fetching asignaciones for conductor ${conductor.id}:`, asigError)
           continue
         }
 
@@ -91,19 +85,14 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
               const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) 
               
               conductorDays += days
-              
-              console.log(`  -> Asignación [${asig.id}]: Inicio [${asig.fecha_inicio}] Fin [${asig.fecha_fin || 'Activa'}] -> Dias: [${days}]`)
             }
           }
         }
 
-        console.log(`Total días conductor ${conductor.nombres}: ${conductorDays}`)
         totalDaysAll += conductorDays
       }
 
       const average = totalDaysAll / conductores.length
-      console.log(`[${periodLabel}] Promedio Final: ${totalDaysAll} / ${conductores.length} = ${average.toFixed(2)}`)
-      
       return average
     }
 
@@ -123,8 +112,7 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
         if (isMounted) {
           setStats({ avgDaysA: avgA, avgDaysB: avgB, loading: false })
         }
-      } catch (error) {
-        console.error('Error fetching permanencia stats:', error)
+      } catch {
         if (isMounted) {
           setStats(prev => ({ ...prev, loading: false }))
         }

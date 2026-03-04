@@ -156,7 +156,6 @@ export function VencimientosModule() {
 
       setItems(mapped)
     } catch (error) {
-      console.error('Error cargando vencimientos:', error)
       Swal.fire('Error', 'No se pudieron cargar los vencimientos', 'error')
     } finally {
       setLoading(false)
@@ -181,8 +180,8 @@ export function VencimientosModule() {
       }))
 
       setVehiculos(mapped)
-    } catch (error) {
-      console.error('Error cargando vehiculos para vencimientos:', error)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -309,7 +308,6 @@ export function VencimientosModule() {
       setItems(prev => prev.filter(x => x.id !== item.id))
       showSuccess('Registro eliminado correctamente')
     } catch (error) {
-      console.error('Error eliminando vencimiento:', error)
       Swal.fire('Error', 'No se pudo eliminar el registro', 'error')
     }
   }
@@ -329,7 +327,6 @@ export function VencimientosModule() {
       )
       showSuccess('Estado actualizado correctamente')
     } catch (error) {
-      console.error('Error actualizando solicitado:', error)
       Swal.fire('Error', 'No se pudo actualizar el estado', 'error')
     }
   }
@@ -419,7 +416,6 @@ export function VencimientosModule() {
       }
       setShowModal(false)
     } catch (error) {
-      console.error('Error guardando vencimiento:', error)
       Swal.fire('Error', 'No se pudo guardar el registro', 'error')
     } finally {
       setSaving(false)
@@ -576,7 +572,6 @@ export function VencimientosModule() {
       const fecha = new Date().toISOString().split('T')[0]
       XLSX.writeFile(wb, `Vencimientos_${fecha}.xlsx`)
     } catch (error) {
-      console.error('Error exportando a Excel:', error)
       Swal.fire('Error', 'No se pudo exportar a Excel', 'error')
     }
   }

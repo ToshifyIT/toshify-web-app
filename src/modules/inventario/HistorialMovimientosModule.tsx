@@ -149,7 +149,6 @@ export function HistorialMovimientosModule() {
 
       setMovimientos(transformed)
     } catch (err: any) {
-      console.error('Error cargando movimientos:', err)
       setError(err.message || 'Error al cargar movimientos')
     } finally {
       setLoading(false)

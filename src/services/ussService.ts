@@ -173,7 +173,6 @@ export const ussService = {
 
     if (error) {
       // Si la función RPC no existe, calculamos manualmente
-      console.warn('RPC no disponible, calculando stats manualmente')
       return this.calculateStatsManually(startDate, endDate)
     }
 

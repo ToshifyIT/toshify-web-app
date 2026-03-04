@@ -559,7 +559,6 @@ export function ConductoresModule() {
         setConductores(conductoresConRelaciones);
       }
     } catch (err: any) {
-      console.error("Error cargando datos:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -613,7 +612,6 @@ export function ConductoresModule() {
       window.open(result.folderUrl, '_blank');
 
     } catch (err: any) {
-      console.error('Error creando carpeta de Drive:', err);
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -654,7 +652,6 @@ export function ConductoresModule() {
 
       setDriveFiles(result.files || []);
     } catch (err: any) {
-      console.error('Error listando archivos Drive:', err);
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -695,8 +692,7 @@ export function ConductoresModule() {
       }
 
       return data;
-    } catch (err) {
-      console.error("Error cargando detalles del conductor:", err);
+    } catch {
       return null;
     }
   };
@@ -779,7 +775,6 @@ export function ConductoresModule() {
         setConductores(conductoresConRelaciones);
       }
     } catch (err: any) {
-      console.error("Error cargando conductores:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -934,7 +929,6 @@ export function ConductoresModule() {
       resetForm();
       await loadConductores(true);
     } catch (err: any) {
-      console.error("Error creando conductor:", err);
       Swal.fire({
         icon: "error",
         title: "Error",
@@ -1008,7 +1002,6 @@ export function ConductoresModule() {
       resetForm();
       await loadConductores(true);
     } catch (err: any) {
-      console.error("Error actualizando conductor:", err);
       Swal.fire({
         icon: "error",
         title: "Error",
@@ -1050,7 +1043,6 @@ export function ConductoresModule() {
       .in('asignaciones.estado', ['activa', 'programado']);
 
     if (error) {
-      console.error('Error fetching affected assignments:', error);
       return [];
     }
 
@@ -1458,7 +1450,6 @@ export function ConductoresModule() {
       setSelectedConductor(null);
       await loadConductores(true);
     } catch (err: any) {
-      console.error("Error eliminando conductor:", err);
       Swal.fire({
         icon: "error",
         title: "Error",
@@ -3455,8 +3446,8 @@ function ModalDetalles({
 
         if (error) throw error;
         setVehiculosAsignados(data || []);
-      } catch (err) {
-        console.error('Error cargando vehículos asignados:', err);
+      } catch {
+        // silently ignored
       } finally {
         setLoadingVehiculos(false);
       }

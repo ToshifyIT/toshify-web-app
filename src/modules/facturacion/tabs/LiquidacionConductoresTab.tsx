@@ -107,8 +107,8 @@ export function LiquidacionConductoresTab() {
 
       if (error) throw error
       setLiquidaciones(data || [])
-    } catch (error) {
-      console.error('Error cargando liquidaciones:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }

@@ -76,7 +76,6 @@ export function MenuHierarchyManager() {
       setMenus(menusData || [])
       setSubmenus(submenusData || [])
     } catch (err: any) {
-      console.error('Error cargando datos:', err)
       setError(err.message || 'Error al cargar datos')
     } finally {
       setLoading(false)

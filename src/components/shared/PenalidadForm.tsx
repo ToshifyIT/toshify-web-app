@@ -102,8 +102,8 @@ export function PenalidadForm({ formData, setFormData, tiposPenalidad, tiposCobr
         setConductoresAsignados(conductoresData)
         setShowConductorSelectModal(true)
       }
-    } catch (error) {
-      console.error('Error buscando conductores asignados:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoadingConductores(false)
     }

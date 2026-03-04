@@ -124,8 +124,8 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
 
       if (error) throw error
       setSeguimientos(data || [])
-    } catch (error) {
-      console.error('Error cargando seguimientos:', error)
+    } catch (_error) {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -197,8 +197,8 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
         }, ...conductoresFormatted]
       }
       setConductores(conductoresFormatted)
-    } catch (error) {
-      console.error('Error cargando datos para incidencia:', error)
+    } catch (_error) {
+      // silently ignored
     }
   }
 
@@ -368,7 +368,6 @@ export function SiniestroSeguimiento({ siniestro, onReload }: SiniestroSeguimien
       cargarSeguimientos()
       onReload()
     } catch (error: any) {
-      console.error('Error guardando incidencia:', error)
       Swal.fire('Error', error?.message || 'No se pudo guardar la incidencia', 'error')
     } finally {
       setSavingIncidencia(false)

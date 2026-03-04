@@ -37,21 +37,17 @@ export const fetchGuias = async (): Promise<Guia[]> => {
       role_name: item.role_name,
       role_description: item.role_description
     }))
-  } catch (error) {
-    console.error('Error loading guias:', error)
+  } catch (_error) {
     return []
   }
 }
 
 export const distributeDriversService = async (guias: Guia[]) => {
-  console.log('GuiasService: Starting distributeDrivers execution - STRICT MODE (Synced with GuiasModule)');
   try {
     if (guias.length === 0) {
-      console.log('GuiasService: No guias found, aborting distribution');
       return
     }
 
-    console.log('GuiasService: Fetching currently assigned drivers...');
     const { data: assignedDrivers, error: assignedError } = await supabase
       .from('conductores')
       .select('id, id_guia')
@@ -59,12 +55,9 @@ export const distributeDriversService = async (guias: Guia[]) => {
       .eq('guia_asignado', true)
 
     if (assignedError) {
-      console.error('Error fetching assigned drivers:', assignedError)
       return
     }
-    console.log('GuiasService: Assigned drivers found:', assignedDrivers?.length || 0);
 
-    console.log('GuiasService: Fetching unassigned drivers...');
     // Modificación estricta: Usamos !inner en todas las relaciones jerárquicas
     const { data: rawUnassignedDrivers, error: unassignedError } = await supabase
       .from('conductores')
@@ -88,11 +81,8 @@ export const distributeDriversService = async (guias: Guia[]) => {
       .in('asignaciones_conductores.asignaciones.estado', ['activo', 'activa']);
 
     if (unassignedError) {
-      console.error('Error fetching unassigned drivers:', unassignedError)
       return
     }
-    
-    console.log(`GuiasService: Total candidatos crudos recuperados de DB: ${rawUnassignedDrivers?.length || 0}`);
 
     // Filtrar en memoria para asegurar que tengan vehículo y eliminar duplicados
     const unassignedDriversMap = new Map();
@@ -124,10 +114,9 @@ export const distributeDriversService = async (guias: Guia[]) => {
     });
     
     const unassignedDrivers = Array.from(unassignedDriversMap.values());
-    console.log(`GuiasService: Unassigned drivers filtered found: ${unassignedDrivers.length}`);
 
     if (unassignedDrivers.length === 0) {
-      console.log('GuiasService: No unassigned drivers to distribute.');
+      // No unassigned drivers to distribute
     } else {
       const guideLoad = new Map<string, number>()
       guias.forEach(g => guideLoad.set(g.id, 0))
@@ -138,8 +127,6 @@ export const distributeDriversService = async (guias: Guia[]) => {
         }
       })
       
-      console.log('GuiasService: Current guide loads:', Object.fromEntries(guideLoad));
-
       const updates: any[] = []
       const guideIds = guias.map(g => g.id)
       
@@ -165,10 +152,7 @@ export const distributeDriversService = async (guias: Guia[]) => {
         })
       }
 
-      console.log('GuiasService: Updates prepared:', updates.length);
-
       if (updates.length > 0) {
-        console.log('GuiasService: Performing updates to conductores...');
         
         const updatePromises = updates.map(update => 
           supabase
@@ -184,14 +168,10 @@ export const distributeDriversService = async (guias: Guia[]) => {
         
         const errors = results.filter(r => r.error).map(r => r.error);
         if (errors.length > 0) {
-          console.error('Errores actualizando conductores:', errors);
           throw errors[0];
         }
 
-        console.log(`Asignados ${updates.length} conductores a guías.`);
-
         const currentWeek = getCurrentWeek()
-        console.log('GuiasService: Preparing history inserts for week:', currentWeek);
         
         // Verificar historial existente para esta semana para evitar duplicados
         const { data: existingHistory } = await supabase
@@ -214,18 +194,13 @@ export const distributeDriversService = async (guias: Guia[]) => {
         });
 
         if (historyInserts.length > 0) {
-          console.log('GuiasService: Performing bulk insert to guias_historial_semanal...');
           const { error: historyError } = await supabase
             .from('guias_historial_semanal')
             .insert(historyInserts)
 
           if (historyError) {
-            console.error('Error creando historial semanal:', historyError)
-          } else {
-            console.log(`Creados ${historyInserts.length} registros en historial semanal.`)
+            // silently ignored
           }
-        } else {
-           console.log('GuiasService: No new history records needed.');
         }
       }
     }
@@ -235,8 +210,7 @@ export const distributeDriversService = async (guias: Guia[]) => {
     // 1. Están Activos y tienen Vehículo.
     // 2. YA tienen guía asignado (id_guia NOT NULL).
     // 3. NO tienen registro en guias_historial_semanal para la semana actual.
-    
-    console.log('GuiasService: Executing Safety Net Sync...');
+
     const currentWeek = getCurrentWeek();
 
     // A. Obtener IDs que ya están en el historial de esta semana
@@ -246,7 +220,7 @@ export const distributeDriversService = async (guias: Guia[]) => {
       .eq('semana', currentWeek);
 
     if (historyError) {
-      console.error('GuiasService: Error fetching current history for safety net:', historyError);
+      // silently ignored
     } else {
       const existingHistoryIds = new Set(currentHistory?.map((h: any) => h.id_conductor));
       
@@ -272,7 +246,7 @@ export const distributeDriversService = async (guias: Guia[]) => {
         .in('asignaciones_conductores.asignaciones.estado', ['activo', 'activa']);
 
       if (rescueError) {
-         console.error('GuiasService: Error fetching rescue candidates:', rescueError);
+         // silently ignored
       } else {
          // C. Filtrar candidatos válidos (con vehículo activo real) y que NO estén en historial
          const rescueInserts: any[] = [];
@@ -302,25 +276,19 @@ export const distributeDriversService = async (guias: Guia[]) => {
          });
 
          if (rescueInserts.length > 0) {
-            console.log(`GuiasService: SAFETY NET ACTIVATED. Rescuing ${rescueInserts.length} drivers...`);
             const { error: insertRescueError } = await supabase
               .from('guias_historial_semanal')
               .insert(rescueInserts);
               
             if (insertRescueError) {
-               console.error('GuiasService: Error inserting rescue records:', insertRescueError);
-            } else {
-               console.log(`GuiasService: Successfully rescued ${rescueInserts.length} drivers into current week.`);
+               // silently ignored
             }
-         } else {
-            console.log('GuiasService: Safety net found no missing drivers.');
          }
       }
     }
 
     return true; // Always return true to indicate process completed
-  } catch (error) {
-    console.error('Error distribuyendo conductores:', error)
+  } catch (_error) {
     return false;
   }
 }

@@ -146,8 +146,8 @@ export function ZonasManagement() {
     setLoading(true)
     try {
       await Promise.all([loadZonas(), loadTipos()])
-    } catch (err) {
-      console.error('Error cargando datos:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -258,7 +258,6 @@ export function ZonasManagement() {
       setFormData(initialFormData)
       await loadZonas()
     } catch (err: any) {
-      console.error('Error creando zona:', err)
       Swal.fire({ icon: 'error', title: 'Error', text: err.message })
     } finally {
       setCreating(false)
@@ -309,7 +308,6 @@ export function ZonasManagement() {
       setFormData(initialFormData)
       await loadZonas()
     } catch (err: any) {
-      console.error('Error actualizando zona:', err)
       Swal.fire({ icon: 'error', title: 'Error', text: err.message })
     } finally {
       setCreating(false)
@@ -333,7 +331,6 @@ export function ZonasManagement() {
       setSelectedZona(null)
       await loadZonas()
     } catch (err: any) {
-      console.error('Error eliminando zona:', err)
       Swal.fire({ icon: 'error', title: 'Error', text: err.message })
     } finally {
       setCreating(false)
@@ -358,7 +355,6 @@ export function ZonasManagement() {
       )
       await loadZonas()
     } catch (err: any) {
-      console.error('Error cambiando estado:', err)
       Swal.fire({ icon: 'error', title: 'Error', text: err.message })
     }
   }

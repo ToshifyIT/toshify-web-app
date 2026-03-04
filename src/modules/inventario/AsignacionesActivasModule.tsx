@@ -119,7 +119,6 @@ export function AsignacionesActivasModule() {
       setAsignaciones(transformed)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      console.error('Error cargando asignaciones:', err)
       setError(err.message || 'Error al cargar asignaciones')
     } finally {
       setLoading(false)

@@ -75,8 +75,8 @@ export function ReasignacionModal({
     try {
       await onConfirm(selectedGuideId);
       onClose();
-    } catch (error) {
-      console.error(error);
+    } catch (_error) {
+      // silently ignored
     } finally {
       setIsSubmitting(false);
     }

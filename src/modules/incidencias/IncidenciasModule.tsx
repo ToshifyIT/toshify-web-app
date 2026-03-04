@@ -313,8 +313,7 @@ export function IncidenciasModule() {
         // Limpiar localStorage y URL
         localStorage.removeItem('incidencia_preload')
         window.history.replaceState({}, '', window.location.pathname)
-      } catch (error) {
-        console.error('Error parseando datos precargados:', error)
+      } catch {
         localStorage.removeItem('incidencia_preload')
       }
     }
@@ -477,8 +476,7 @@ export function IncidenciasModule() {
           setIncidenciaForm(prev => ({ ...prev, estado_id: estadoPendiente.id }))
         }
       }
-    } catch (error) {
-      console.error('Error cargando datos:', error)
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar los datos', 'error')
     } finally {
       setLoading(false)
@@ -977,8 +975,7 @@ export function IncidenciasModule() {
           if (error) throw error
         }
         enviados++
-      } catch (error) {
-        console.error('Error enviando incidencia:', incidencia.id, error)
+      } catch {
         errores++
       }
     }
@@ -1832,7 +1829,6 @@ export function IncidenciasModule() {
       cargarDatos(true)
       
     } catch (error: any) {
-      console.error('Error creando penalidad:', error)
       Swal.fire('Error', error.message || 'No se pudo enviar a facturación', 'error')
     }
   }
@@ -1968,7 +1964,6 @@ export function IncidenciasModule() {
       showSuccess('Eliminado', 'La incidencia fue eliminada correctamente')
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error eliminando:', error)
       Swal.fire('Error', error.message || 'No se pudo eliminar la incidencia', 'error')
     }
   }
@@ -2005,7 +2000,6 @@ export function IncidenciasModule() {
       showSuccess('Eliminado', 'La penalidad fue eliminada correctamente')
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error eliminando:', error)
       Swal.fire('Error', error.message || 'No se pudo eliminar la penalidad', 'error')
     }
   }
@@ -2054,7 +2048,6 @@ export function IncidenciasModule() {
       setMotivoRechazo('')
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error rechazando:', error)
       Swal.fire('Error', error.message || 'No se pudo rechazar', 'error')
     } finally {
       setRechazando(false)
@@ -2184,7 +2177,7 @@ export function IncidenciasModule() {
           const vehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
           const conductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
           
-          const { error: penError } = await (supabase.from('penalidades' as any) as any)
+          await (supabase.from('penalidades' as any) as any)
             .insert({
               incidencia_id: incidenciaCreada.id,
               vehiculo_id: incidenciaForm.vehiculo_id || null,
@@ -2204,10 +2197,7 @@ export function IncidenciasModule() {
               created_by_name: profile?.full_name || 'Sistema',
               sede_id: sedeActualId || sedeUsuario?.id,
             })
-          if (penError) {
-            console.error('Error creando penalidad:', penError)
-            // No fallar, la incidencia ya se creó
-          }
+          // penError silently ignored - la incidencia ya se creó
         }
         
         showSuccess('Guardado', esCobro 
@@ -2218,7 +2208,6 @@ export function IncidenciasModule() {
       setShowModal(false)
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error guardando:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
     } finally {
       setSaving(false)
@@ -2282,7 +2271,6 @@ export function IncidenciasModule() {
       setShowModal(false)
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error guardando:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
     } finally {
       setSaving(false)
@@ -2432,7 +2420,6 @@ export function IncidenciasModule() {
       setShowAplicarModal(false)
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error aplicando cobro:', error)
       Swal.fire('Error', error.message || 'No se pudo aplicar el cobro', 'error')
     } finally {
       setAplicandoCobro(false)
@@ -2486,7 +2473,6 @@ export function IncidenciasModule() {
       showSuccess('Desaplicado', 'El cobro/descuento volvió a estado pendiente')
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error desaplicando:', error)
       Swal.fire('Error', error.message || 'No se pudo desaplicar', 'error')
     }
   }
@@ -2623,7 +2609,6 @@ export function IncidenciasModule() {
       
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error reasignando semana:', error)
       Swal.fire('Error', error.message || 'No se pudo reasignar la semana', 'error')
     } finally {
       setReasignando(false)

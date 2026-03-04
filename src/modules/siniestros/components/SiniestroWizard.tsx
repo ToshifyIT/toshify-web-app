@@ -356,8 +356,8 @@ function Step1Evento({ formData, setFormData, vehiculos, conductores, onVehiculo
         setShowConductorSelectModal(true)
       }
       // Si no hay conductores asignados, no hacer nada (permite búsqueda manual)
-    } catch (error) {
-      console.error('Error buscando conductores asignados:', error)
+    } catch (_error) {
+      // silently ignored
     } finally {
       setLoadingConductores(false)
     }
@@ -859,8 +859,7 @@ function Step5Gestion({ formData, setFormData, vehiculosEstados }: Step5Props) {
       } else {
         setAsignacionActiva(null)
       }
-    } catch (error) {
-      console.error('Error cargando asignacion:', error)
+    } catch (_error) {
       setAsignacionActiva(null)
     } finally {
       setLoadingAsignacion(false)

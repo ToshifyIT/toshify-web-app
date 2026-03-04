@@ -340,8 +340,6 @@ export function CobroTeoricoVsReal() {
         })
 
         const conductoresActivos = Array.from(conductorInfoMap.values())
-        console.log(`[Paso 1] Conductores obtenidos en la semana: ${conductoresActivos.length}`)
-        console.table(conductoresActivos.map(c => ({ ID: c.id, Nombre: `${c.nombres} ${c.apellidos}`, DNI: c.dni })))
 
         // ---------------------------------------------------------
         // 2. CÁLCULO DE GARANTÍA
@@ -355,49 +353,6 @@ export function CobroTeoricoVsReal() {
 
         const garantiaMap = new Map<string, any>()
         garantiasData?.forEach((g: any) => garantiaMap.set(g.conductor_id, g))
-
-        // [LOG REVISIÓN] Mostrar listado de garantías para validar montos (50000, 0, vacío)
-        // Incluye rango de fechas de la semana seleccionada para verificación
-        const semanaLog = `${format(startDate, 'dd/MM/yyyy')} al ${format(endDate, 'dd/MM/yyyy')}`
-        console.group(`[REVISIÓN SEMANA ${semanaLog}] - LISTADO DE CONDUCTORES Y GARANTÍAS`)
-        
-        const debugGarantias = conductoresActivos.map(c => {
-            const g = garantiaMap.get(c.id)
-            
-            // Lógica replicada de ReporteFacturacionTab:
-            // 1. Si no existe registro -> Se asume 50000 (Default)
-            // 2. Si existe -> Verificar estado y cuotas
-            let montoCalculado = 0
-            let estadoLog = ''
-
-            if (!g) {
-                montoCalculado = 50000
-                estadoLog = 'No registro (Default 50k)'
-            } else {
-                const completada = g.estado === 'completada' || g.estado === 'cancelada' || (g.cuotas_pagadas >= g.cuotas_totales && g.cuotas_totales > 0)
-                if (completada) {
-                    montoCalculado = 0
-                    estadoLog = `Excluido (${g.estado} - ${g.cuotas_pagadas}/${g.cuotas_totales})`
-                } else {
-                    montoCalculado = g.monto_cuota_semanal || 50000
-                    estadoLog = `Activo (${g.estado})`
-                }
-            }
-
-            return {
-                ID: c.id,
-                Conductor: `${c.nombres} ${c.apellidos}`,
-                'Monto DB': g?.monto_cuota_semanal || 'N/A',
-                'Monto Final': montoCalculado,
-                'Estado Lógica': estadoLog,
-                'Inicio Asignación': c.debug_inicio_asignacion,
-                'Fin Asignación': c.debug_fin_asignacion,
-                'Días Trabajados': diasTrabajadosPorConductor.get(c.id)?.size || 0,
-                'Alquiler': alquilerPorConductor.get(c.id) || 0
-            }
-        })
-        console.table(debugGarantias)
-        // console.groupEnd()
 
         // A) GARANTÍA TEÓRICA (Green): Filtro estricto 50000 (Calculado)
         const conductoresConGarantia50k = conductoresActivos.filter(c => {
@@ -491,8 +446,6 @@ export function CobroTeoricoVsReal() {
         })
         const garantiaRealDiaria = totalGarantiaRealSemanal / 7
 
-        console.log(`[Garantía REAL - Blue] Total Semanal (Suma Real): ${totalGarantiaRealSemanal} / 7 = ${garantiaRealDiaria.toFixed(2)} por día`)
-        
         // Aplicar a cada día
         diasMap.forEach(d => {
           d.garantiaTeorica += garantiaTeoricaDiaria
@@ -503,8 +456,6 @@ export function CobroTeoricoVsReal() {
         // ---------------------------------------------------------
         // NUEVA LÓGICA BLUE LINE: COBRO APP DE CONDUCTORES 50K
         // ---------------------------------------------------------
-        console.group('[COBRO REAL - Blue] Análisis Cabify Historico (Conductores 50k)')
-        
         const dnis50k = conductoresConGarantia50k.map(c => c.dni).filter(Boolean)
         const cobroRealPorDia = new Map<string, number>()
         
@@ -524,10 +475,8 @@ export function CobroTeoricoVsReal() {
                 .lte('fecha_inicio', format(endDate, 'yyyy-MM-dd') + 'T23:59:59')
 
             if (historicoError) {
-                console.error('Error consultando cabify_historico:', historicoError)
+                // silently ignored
             } else {
-                console.log(`Registros encontrados en cabify_historico: ${historicoData?.length || 0}`)
-
                 // 1. Eliminar duplicados (Lógica de cabifyHistoricalService)
                 const uniqueRecordsMap = new Map<string, any>()
                 
@@ -552,7 +501,6 @@ export function CobroTeoricoVsReal() {
                 })
 
                 const uniqueRecords = Array.from(uniqueRecordsMap.values())
-                console.log(`Registros únicos procesados: ${uniqueRecords.length}`)
 
                 // 2. Agrupar por conductor para logs y sumar al total diario
                 const cobroAppPorConductor = new Map<string, any>()
@@ -595,13 +543,8 @@ export function CobroTeoricoVsReal() {
                     }
                 })
 
-                // Mostrar Log Tabla
-                console.table(Array.from(cobroAppPorConductor.values()))
             }
-        } else {
-            console.log('No hay conductores con garantía 50k para buscar en histórico.')
         }
-        console.groupEnd()
 
         // Aplicar a cada día (Blue Line = Cobro App Real)
         diasMap.forEach(d => {
@@ -694,11 +637,10 @@ export function CobroTeoricoVsReal() {
                 }))
         }
 
-        console.log(`[CobroTeorico] Datos finales generados (${granularity}): ${finalData.length} puntos`)
         setChartData(finalData)
 
-      } catch (error) {
-        console.error('Error calculando cobro teórico vs real:', error)
+      } catch (_error) {
+        // silently ignored
       } finally {
         setLoading(false)
       }

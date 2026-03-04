@@ -79,8 +79,8 @@ export function TicketsFavorTab() {
 
       if (error) throw error
       setTickets(data || [])
-    } catch (error) {
-      console.error('Error cargando tickets:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
