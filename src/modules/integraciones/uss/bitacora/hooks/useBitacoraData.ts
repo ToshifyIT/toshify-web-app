@@ -183,25 +183,26 @@ export function useBitacoraData() {
         wialonBitacoraService.getStats(dateRange.startDate, dateRange.endDate),
       ])
 
-      // Cruzar con asignaciones - buscar conductor y su turno
+      // Enriquecer registros: usar valores de DB como primario, fallback a asignaciones
       const registrosEnriquecidos = bitacoraResult.data.map((r) => {
+        // Si ya tiene tipo_turno/turno_indicador del DB (nuevo sync), usarlos
+        if (r.tipo_turno || r.turno_indicador) {
+          return r
+        }
+
+        // Fallback: cruzar con asignaciones para registros antiguos sin las columnas
         const asignacion = asignaciones.get(r.patente_normalizada)
         if (asignacion) {
           const conductorWialon = r.conductor_wialon?.toLowerCase() || ''
 
-          // Buscar conductor que coincida por nombre
           let conductorMatch = asignacion.conductores.find(c =>
             conductorWialon && conductorWialon.includes(c.conductor_nombre.toLowerCase())
           )
 
-          // Si no hay match por nombre pero hay conductores asignados, usar fallback
-          // Esto aplica tanto para CARGO como para TURNO
           if (!conductorMatch && asignacion.conductores.length > 0) {
-            // Usar el primer conductor disponible como fallback
             conductorMatch = asignacion.conductores[0]
           }
 
-          // Determinar el turno del conductor
           let turnoIndicador: string | null = null
           if (asignacion.modalidad === 'TURNO' && conductorMatch?.turno) {
             if (conductorMatch.turno === 'diurno') turnoIndicador = 'Diurno'
@@ -215,7 +216,7 @@ export function useBitacoraData() {
             turno_indicador: turnoIndicador,
           }
         }
-        return { ...r, tipo_turno: null, turno_indicador: null }
+        return r
       })
 
       setRegistros(registrosEnriquecidos)

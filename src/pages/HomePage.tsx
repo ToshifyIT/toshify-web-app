@@ -62,6 +62,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'seguimiento-conductores': Compass,
   'escuela-conductores': GraduationCap,
   'rango-seguimiento-guias': Target,
+  'parametros-sistema': Settings,
   'gestion-vehiculos': Car,
   'registro-vencimientos': FileWarning,
 }
@@ -192,6 +193,7 @@ const TelepaseHistoricoPage = lazy(() => import('./multas-telepase/TelepaseHisto
 const MultasPage = lazy(() => import('./multas-telepase/MultasPage').then(m => ({ default: m.MultasPage })))
 const ConceptosFacturacionPage = lazy(() => import('./parametros/ConceptosFacturacionPage').then(m => ({ default: m.ConceptosFacturacionPage })))
 const RangoSeguimientoPage = lazy(() => import('./parametros/RangoSeguimientoPage').then(m => ({ default: m.RangoSeguimientoPage })))
+const ParametrosUssPage = lazy(() => import('./parametros/ParametrosUssPage').then(m => ({ default: m.ParametrosUssPage })))
 const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
 const EscuelaPage = lazy(() => import('./EscuelaPage').then(m => ({ default: m.EscuelaPage })))
 import { fetchGuias, distributeDriversService, type Guia } from '../modules/guias/guiasService'
@@ -1953,6 +1955,11 @@ export function HomePage() {
               <Route path="/rango-seguimiento-guias" element={
                 <ProtectedRoute submenuName="rango-seguimiento-guias" action="view">
                   <LazyPage><RangoSeguimientoPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+              <Route path="/parametros-sistema" element={
+                <ProtectedRoute submenuName="parametros-sistema" action="view">
+                  <LazyPage><ParametrosUssPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
