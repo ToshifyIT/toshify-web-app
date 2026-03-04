@@ -1885,7 +1885,7 @@ export function ConductoresModule() {
                 setShowDetailsModal(true);
               }
             }}
-            style={{ display: 'block', textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none' }}
+            style={{ display: 'block', padding: '10px 12px', margin: '-10px -12px', textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none' }}
           >
             {`${row.original.nombres} ${row.original.apellidos}`}
           </a>
