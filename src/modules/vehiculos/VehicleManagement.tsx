@@ -116,6 +116,7 @@ export function VehicleManagement() {
     tipo_combustible: '',
     tipo_gps: '',
     gps_uss: false,
+    gnc: false,
     numero_motor: '',
     numero_chasis: '',
     provisoria: '',
@@ -650,6 +651,7 @@ export function VehicleManagement() {
           tipo_combustible: (fullVehiculo as any).tipo_combustible || '',
           tipo_gps: (fullVehiculo as any).tipo_gps || '',
           gps_uss: (fullVehiculo as any).gps_uss || false,
+          gnc: (fullVehiculo as any).gnc || false,
           numero_motor: fullVehiculo.numero_motor || '',
           numero_chasis: fullVehiculo.numero_chasis || '',
           provisoria: fullVehiculo.provisoria || '',
@@ -688,6 +690,7 @@ export function VehicleManagement() {
       tipo_combustible: '',
       tipo_gps: '',
       gps_uss: false,
+      gnc: false,
       numero_motor: '',
       numero_chasis: '',
       provisoria: '',
@@ -1539,6 +1542,22 @@ export function VehicleManagement() {
                   </span>
                 </label>
               </div>
+
+              <div className="form-group">
+                <label className="form-label">GNC</label>
+                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.gnc}
+                    onChange={(e) => setFormData({ ...formData, gnc: e.target.checked })}
+                    disabled={saving}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ color: formData.gnc ? '#10B981' : 'var(--text-primary)' }}>
+                    GNC
+                  </span>
+                </label>
+              </div>
             </div>
 
             <div className="section-title">Datos Técnicos</div>
@@ -1810,6 +1829,12 @@ export function VehicleManagement() {
                 <label className="detail-label">GPS 2 - USS (WIALON)</label>
                 <div className="detail-value" style={{ color: (selectedVehiculo as any).gps_uss ? '#10B981' : 'inherit' }}>
                   {(selectedVehiculo as any).gps_uss ? 'Sí' : 'No'}
+                </div>
+              </div>
+              <div>
+                <label className="detail-label">GNC</label>
+                <div className="detail-value" style={{ color: (selectedVehiculo as any).gnc ? '#10B981' : 'inherit' }}>
+                  {(selectedVehiculo as any).gnc ? 'Sí' : 'No'}
                 </div>
               </div>
             </div>

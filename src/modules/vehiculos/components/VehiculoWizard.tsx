@@ -13,6 +13,7 @@ interface VehiculoFormData {
   tipo_combustible: string
   tipo_gps: string
   gps_uss: boolean
+  gnc: boolean
   numero_motor: string
   numero_chasis: string
   provisoria: string
@@ -255,6 +256,22 @@ export function VehiculoWizard({
                   />
                   <span style={{ color: formData.gps_uss ? '#10B981' : 'var(--text-primary)' }}>
                     USS (Wialon)
+                  </span>
+                </label>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">GNC</label>
+                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.gnc}
+                    onChange={(e) => setFormData({ ...formData, gnc: e.target.checked })}
+                    disabled={saving}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ color: formData.gnc ? '#10B981' : 'var(--text-primary)' }}>
+                    GNC
                   </span>
                 </label>
               </div>

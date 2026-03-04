@@ -218,7 +218,6 @@ export function ParametrosUssPage() {
     {
       accessorKey: 'modulo',
       header: 'MODULO',
-      size: 120,
       cell: ({ row }) => (
         <span className="dt-badge dt-badge-solid-blue" style={{ textTransform: 'uppercase' }}>
           {row.original.modulo}
@@ -228,7 +227,7 @@ export function ParametrosUssPage() {
     {
       accessorKey: 'descripcion',
       header: 'DESCRIPCION',
-      size: 300,
+      minSize: 400,
       cell: ({ row }) => (
         <div>
           <div style={{ fontWeight: 600, fontSize: '13px' }}>{row.original.descripcion || row.original.clave}</div>
@@ -239,7 +238,6 @@ export function ParametrosUssPage() {
     {
       accessorKey: 'valor',
       header: 'VALOR',
-      size: 150,
       cell: ({ row }) => (
         <span style={{ fontWeight: 600, fontSize: '14px' }}>{row.original.valor}</span>
       ),
@@ -247,7 +245,6 @@ export function ParametrosUssPage() {
     {
       accessorKey: 'tipo',
       header: 'TIPO',
-      size: 100,
       cell: ({ row }) => {
         const label = TIPO_OPTIONS.find(t => t.value === row.original.tipo)?.label || row.original.tipo
         return <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{label}</span>
@@ -256,7 +253,7 @@ export function ParametrosUssPage() {
     {
       id: 'acciones',
       header: 'ACCIONES',
-      size: 100,
+      size: 80,
       cell: ({ row }) => (
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
@@ -280,33 +277,33 @@ export function ParametrosUssPage() {
 
   return (
     <DataTable
-      columns={columns}
-      data={parametros}
-      loading={loading}
-      searchPlaceholder="Buscar parametro..."
-      headerAction={
-        <button
-          onClick={crearParametro}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 20px',
-            background: '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '10px',
-            fontSize: '14px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <Plus size={18} />
-          Nuevo Parametro
-        </button>
-      }
-    />
+        columns={columns}
+        data={parametros}
+        loading={loading}
+        searchPlaceholder="Buscar parametro..."
+        headerAction={
+          <button
+            onClick={crearParametro}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <Plus size={18} />
+            Nuevo Parametro
+          </button>
+        }
+      />
   )
 }

@@ -196,6 +196,22 @@ export function ConductoresModule() {
     loadAllData();
   }, [sedeActualId]);
 
+  // Abrir detalle si viene ?id=xxx en la URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const idParam = params.get('id');
+    if (idParam && !loading) {
+      loadConductorDetails(idParam).then((fullDetails) => {
+        if (fullDetails) {
+          setSelectedConductor(fullDetails as any);
+          setShowDetailsModal(true);
+          // Limpiar el param de la URL sin recargar
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      });
+    }
+  }, [loading]);
+
   // Cargar sedes para selector en wizard
   useEffect(() => {
     supabase.from('sedes').select('id, nombre').order('nombre')
@@ -1859,7 +1875,20 @@ export function ConductoresModule() {
           </div>
         ),
         cell: ({ row }) => (
-          <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
+          <a
+            href={`/conductores?id=${row.original.id}`}
+            onClick={async (e) => {
+              e.preventDefault();
+              const fullDetails = await loadConductorDetails(row.original.id);
+              if (fullDetails) {
+                setSelectedConductor(fullDetails as any);
+                setShowDetailsModal(true);
+              }
+            }}
+            style={{ textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none' }}
+          >
+            {`${row.original.nombres} ${row.original.apellidos}`}
+          </a>
         ),
         enableSorting: true,
       },
