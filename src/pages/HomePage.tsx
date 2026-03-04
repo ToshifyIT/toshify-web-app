@@ -85,22 +85,42 @@ const PageLoader = () => (
 )
 
 // Error Boundary para manejar errores de carga de chunks
+// Detecta chunk loading failures (post-deploy) y auto-recarga una vez
 interface LazyErrorBoundaryState {
   hasError: boolean
+  isChunkError: boolean
 }
+
+const isChunkLoadError = (error: Error): boolean =>
+  error.message.includes('Failed to fetch dynamically imported module') ||
+  error.message.includes('Loading chunk') ||
+  error.message.includes('Loading CSS chunk') ||
+  error.message.includes('Importing a module script failed') ||
+  error.name === 'ChunkLoadError';
 
 class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoundaryState> {
   constructor(props: { children: ReactNode }) {
     super(props)
-    this.state = { hasError: false }
+    this.state = { hasError: false, isChunkError: false }
   }
 
-  static getDerivedStateFromError(): LazyErrorBoundaryState {
-    return { hasError: true }
+  static getDerivedStateFromError(error: Error): LazyErrorBoundaryState {
+    return { hasError: true, isChunkError: isChunkLoadError(error) }
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Error cargando página:', error, errorInfo)
+    console.error('Error cargando pagina:', error, errorInfo)
+    // Si es error de chunk (deploy nuevo) y no hemos recargado ya, recargar automaticamente
+    if (isChunkLoadError(error)) {
+      const lastReload = sessionStorage.getItem('chunk-reload')
+      const now = Date.now()
+      // Solo auto-recargar si no lo hicimos en los ultimos 10 segundos (evita loop infinito)
+      if (!lastReload || now - Number(lastReload) > 10000) {
+        sessionStorage.setItem('chunk-reload', String(now))
+        window.location.reload()
+        return
+      }
+    }
   }
 
   render() {
@@ -118,8 +138,12 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoun
           padding: '20px'
         }}>
           <AlertCircle size={48} style={{ color: 'var(--color-error, #ff0033)' }} />
-          <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Error al cargar la página</h3>
-          <p style={{ margin: 0 }}>Hubo un problema de conexión. Intentá de nuevo.</p>
+          <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Error al cargar la pagina</h3>
+          <p style={{ margin: 0 }}>
+            {this.state.isChunkError
+              ? 'Se actualizo la aplicacion. Recargando...'
+              : 'Hubo un problema de conexion. Intenta de nuevo.'}
+          </p>
           <button
             onClick={() => window.location.reload()}
             style={{
