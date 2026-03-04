@@ -119,6 +119,13 @@ export function CabifyPreviewTable({
     )
   }, [data, searchTerm])
 
+  // Map O(1) para lookup de índice real en data (evita .findIndex() O(n) por cada fila en render)
+  const dataIndexMap = useMemo(() => {
+    const m = new Map<string, number>()
+    data.forEach((d, i) => m.set(d.conductorId, i))
+    return m
+  }, [data])
+
   // Totales
   const totales = useMemo(() => {
     return filteredData.reduce((acc, row) => ({
@@ -676,8 +683,8 @@ export function CabifyPreviewTable({
           </thead>
           <tbody>
             {filteredData.map((row, idx) => {
-              // Encontrar índice real en data (no filteredData)
-              const realIdx = data.findIndex(d => d.conductorId === row.conductorId)
+              // O(1) lookup del índice real en data
+              const realIdx = dataIndexMap.get(row.conductorId) ?? -1
               return (
                 <tr key={row.conductorId || idx} className={row.isModified ? 'row-modified' : ''}>
                   <td className="col-center col-detalle">

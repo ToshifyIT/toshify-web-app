@@ -821,13 +821,15 @@ export function ProductosModule() {
     [canView, canEdit, canDelete, codigoFilter, nombreFilter, tipoFilter, openColumnFilter]
   )
 
-  // Calcular estadísticas
+  // Calcular estadísticas en una sola pasada O(n) en vez de O(3n)
   const statsData = useMemo(() => {
-    const total = productos.length
-    const herramientas = productos.filter(p => p.tipo === 'HERRAMIENTAS').length
-    const repuestos = productos.filter(p => p.tipo === 'REPUESTOS').length
-    const retornables = productos.filter(p => p.es_retornable).length
-    return { total, herramientas, repuestos, retornables }
+    let herramientas = 0, repuestos = 0, retornables = 0
+    for (const p of productos) {
+      if (p.tipo === 'HERRAMIENTAS') herramientas++
+      if (p.tipo === 'REPUESTOS') repuestos++
+      if (p.es_retornable) retornables++
+    }
+    return { total: productos.length, herramientas, repuestos, retornables }
   }, [productos])
 
   return (

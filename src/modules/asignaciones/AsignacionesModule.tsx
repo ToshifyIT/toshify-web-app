@@ -134,6 +134,26 @@ export function AsignacionesModule() {
   const [showDropdownNocturno, setShowDropdownNocturno] = useState(false)
   const [showDropdownCargo, setShowDropdownCargo] = useState(false)
   
+  // Maps O(1) para lookup de conductores/vehículos por id (evita .find() O(n) en JSX)
+  const conductoresMap = useMemo(() => {
+    const m = new Map<string, any>()
+    for (const c of conductoresDisponibles) m.set(c.id, c)
+    return m
+  }, [conductoresDisponibles])
+  const vehiculosMap = useMemo(() => {
+    const m = new Map<string, any>()
+    for (const v of vehiculosDisponibles) m.set(v.id, v)
+    return m
+  }, [vehiculosDisponibles])
+  const getConductorDisplay = (id: string) => {
+    const c = conductoresMap.get(id)
+    return c ? `${c.apellidos}, ${c.nombres}` : ''
+  }
+  const getVehiculoDisplay = (id: string) => {
+    const v = vehiculosMap.get(id)
+    return v ? `${v.patente} - ${v.marca} ${v.modelo}` : ''
+  }
+
   // Datos base para cálculo de stats (cargados en paralelo)
   const [vehiculosData, setVehiculosData] = useState<Array<{ id: string; estado_id: string; estadoCodigo?: string }>>([])
   const [conductoresData, setConductoresData] = useState<Array<{ id: string; estadoCodigo?: string }>>([])
@@ -1803,10 +1823,9 @@ export function AsignacionesModule() {
         cambios.push(`Estado: ${regularizarAsignacion.estado} → ${regularizarData.estado}`)
       }
 
-      // Detectar cambios de conductores usando datos ya en memoria
+      // Detectar cambios de conductores usando Map O(1)
       const getNombreConductor = (id: string) => {
-        const c = conductoresDisponibles.find((cd: any) => cd.id === id)
-        return c ? `${c.apellidos}, ${c.nombres}` : 'Desconocido'
+        return getConductorDisplay(id) || 'Desconocido'
       }
       const getAnterior = (horarioFiltro: string[]) => {
         const c = conductoresAsig.find((ac: any) => horarioFiltro.includes(ac.horario) && esActivoCond(ac))
@@ -2904,11 +2923,11 @@ export function AsignacionesModule() {
                     <input
                       type="text"
                       className="asig-autocomplete-input"
-                      value={showDropdownVehiculo ? searchVehiculo : (regularizarData.vehiculo_id ? (() => { const v = vehiculosDisponibles.find((ve: any) => ve.id === regularizarData.vehiculo_id); return v ? `${v.patente} - ${v.marca} ${v.modelo}` : '' })() : '')}
+                      value={showDropdownVehiculo ? searchVehiculo : (regularizarData.vehiculo_id ? getVehiculoDisplay(regularizarData.vehiculo_id) : '')}
                       onChange={(e) => { setSearchVehiculo(e.target.value); setShowDropdownVehiculo(true) }}
                       onFocus={() => { setShowDropdownVehiculo(true); setSearchVehiculo('') }}
                       onBlur={() => setTimeout(() => setShowDropdownVehiculo(false), 200)}
-                      placeholder={regularizarData.vehiculo_id ? `Actual: ${vehiculosDisponibles.find((v: any) => v.id === regularizarData.vehiculo_id)?.patente || ''}` : 'Buscar vehículo...'}
+                      placeholder={regularizarData.vehiculo_id ? `Actual: ${vehiculosMap.get(regularizarData.vehiculo_id)?.patente || ''}` : 'Buscar vehículo...'}
                     />
                     {showDropdownVehiculo && (
                       <div className="asig-autocomplete-dropdown">
@@ -2983,11 +3002,11 @@ export function AsignacionesModule() {
                         <div className="asig-conductor-input-wrapper">
                           <input
                             type="text"
-                            value={showDropdownDiurno ? searchDiurno : (regularizarData.conductor_diurno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.nombres) : '')}
+                            value={showDropdownDiurno ? searchDiurno : (regularizarData.conductor_diurno_id ? getConductorDisplay(regularizarData.conductor_diurno_id) : '')}
                             onChange={(e) => { setSearchDiurno(e.target.value); setShowDropdownDiurno(true) }}
                             onFocus={() => { setShowDropdownDiurno(true); setSearchDiurno('') }}
                             onBlur={() => setTimeout(() => setShowDropdownDiurno(false), 200)}
-                            placeholder={regularizarData.conductor_diurno_id ? `Actual: ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.apellidos || ''}, ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_diurno_id)?.nombres || ''}` : 'Buscar conductor...'}
+                            placeholder={regularizarData.conductor_diurno_id ? `Actual: ${getConductorDisplay(regularizarData.conductor_diurno_id)}` : 'Buscar conductor...'}
                           />
                           {showDropdownDiurno && (
                             <div className="asig-autocomplete-dropdown">
@@ -3033,11 +3052,11 @@ export function AsignacionesModule() {
                         <div className="asig-conductor-input-wrapper">
                           <input
                             type="text"
-                            value={showDropdownNocturno ? searchNocturno : (regularizarData.conductor_nocturno_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.nombres) : '')}
+                            value={showDropdownNocturno ? searchNocturno : (regularizarData.conductor_nocturno_id ? getConductorDisplay(regularizarData.conductor_nocturno_id) : '')}
                             onChange={(e) => { setSearchNocturno(e.target.value); setShowDropdownNocturno(true) }}
                             onFocus={() => { setShowDropdownNocturno(true); setSearchNocturno('') }}
                             onBlur={() => setTimeout(() => setShowDropdownNocturno(false), 200)}
-                            placeholder={regularizarData.conductor_nocturno_id ? `Actual: ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.apellidos || ''}, ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_nocturno_id)?.nombres || ''}` : 'Buscar conductor...'}
+                            placeholder={regularizarData.conductor_nocturno_id ? `Actual: ${getConductorDisplay(regularizarData.conductor_nocturno_id)}` : 'Buscar conductor...'}
                           />
                           {showDropdownNocturno && (
                             <div className="asig-autocomplete-dropdown">
@@ -3084,11 +3103,11 @@ export function AsignacionesModule() {
                       <div className="asig-conductor-input-wrapper">
                         <input
                           type="text"
-                          value={showDropdownCargo ? searchCargo : (regularizarData.conductor_cargo_id ? (conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.apellidos + ', ' + conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.nombres) : '')}
+                          value={showDropdownCargo ? searchCargo : (regularizarData.conductor_cargo_id ? getConductorDisplay(regularizarData.conductor_cargo_id) : '')}
                           onChange={(e) => { setSearchCargo(e.target.value); setShowDropdownCargo(true) }}
                           onFocus={() => { setShowDropdownCargo(true); setSearchCargo('') }}
                           onBlur={() => setTimeout(() => setShowDropdownCargo(false), 200)}
-                          placeholder={regularizarData.conductor_cargo_id ? `Actual: ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.apellidos || ''}, ${conductoresDisponibles.find(c => c.id === regularizarData.conductor_cargo_id)?.nombres || ''}` : 'Buscar conductor...'}
+                          placeholder={regularizarData.conductor_cargo_id ? `Actual: ${getConductorDisplay(regularizarData.conductor_cargo_id)}` : 'Buscar conductor...'}
                         />
                         {showDropdownCargo && (
                           <div className="asig-autocomplete-dropdown">

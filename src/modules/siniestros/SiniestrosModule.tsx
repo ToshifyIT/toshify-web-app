@@ -254,21 +254,30 @@ export function SiniestrosModule() {
     const diasDesdeUltimoSiniestro = fechasSiniestros.length >= 1 ? diffDias(today, fechasSiniestros[0]) : null
     const diasEntreUltimosSiniestros = fechasSiniestros.length >= 2 ? diffDias(fechasSiniestros[0], fechasSiniestros[1]) : null
 
+    // Conteo en una sola pasada O(n) en vez de O(n*k) con múltiples .filter()
+    const conteoEstado = new Map<string, number>()
+    const conteoCategoria = new Map<string, number>()
+    const conteoResponsable = new Map<string, number>()
+    for (const s of data) {
+      conteoEstado.set(s.estado_id, (conteoEstado.get(s.estado_id) || 0) + 1)
+      conteoCategoria.set(s.categoria_id, (conteoCategoria.get(s.categoria_id) || 0) + 1)
+      if (s.responsable) conteoResponsable.set(s.responsable, (conteoResponsable.get(s.responsable) || 0) + 1)
+    }
     const porEstado = estadosData.map(e => ({
       estado: e.nombre,
       color: e.color,
-      cantidad: data.filter(s => s.estado_id === e.id).length
+      cantidad: conteoEstado.get(e.id) || 0
     })).filter(e => e.cantidad > 0)
 
     const porCategoria = categoriasData.map(c => ({
       categoria: c.nombre,
-      cantidad: data.filter(s => s.categoria_id === c.id).length
+      cantidad: conteoCategoria.get(c.id) || 0
     })).filter(c => c.cantidad > 0)
 
     const porResponsable = [
-      { responsable: 'Tercero', cantidad: data.filter(s => s.responsable === 'tercero').length },
-      { responsable: 'Conductor', cantidad: data.filter(s => s.responsable === 'conductor').length },
-      { responsable: 'Compartida', cantidad: data.filter(s => s.responsable === 'compartida').length }
+      { responsable: 'Tercero', cantidad: conteoResponsable.get('tercero') || 0 },
+      { responsable: 'Conductor', cantidad: conteoResponsable.get('conductor') || 0 },
+      { responsable: 'Compartida', cantidad: conteoResponsable.get('compartida') || 0 }
     ].filter(r => r.cantidad > 0)
 
     // Buscar estado PROCESANDO_COBRO para métricas

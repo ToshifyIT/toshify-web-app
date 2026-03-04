@@ -189,6 +189,13 @@ export function FacturacionPreviewTable({
     })
   }, [data, searchTerm, filtroProducto, filtroTipoFactura])
 
+  // Map O(1) para lookup de índice real en data (evita .findIndex() O(n) por fila en render)
+  const dataIndexMap = useMemo(() => {
+    const m = new Map<string, number>()
+    data.forEach((d, i) => m.set(`${d.numero}|${d.conductorId}|${d.codigoProducto}`, i))
+    return m
+  }, [data])
+
   // Totales
   const totales = useMemo(() => {
     return filteredData.reduce((acc, row) => ({
@@ -1063,7 +1070,8 @@ export function FacturacionPreviewTable({
           </thead>
           <tbody>
             {filteredData.filter(r => !r.isDeleted).map((row, idx) => {
-              const realIdx = data.findIndex(d => d.numero === row.numero && d.conductorId === row.conductorId && d.codigoProducto === row.codigoProducto)
+              // O(1) lookup del índice real en data
+              const realIdx = dataIndexMap.get(`${row.numero}|${row.conductorId}|${row.codigoProducto}`) ?? -1
               const rowClasses = [
                 row.tieneError ? 'row-error' : '',
                 row.tieneSaldosPendientes ? 'row-saldos-pendientes' : '',

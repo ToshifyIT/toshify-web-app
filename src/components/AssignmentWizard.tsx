@@ -313,14 +313,22 @@ export function AssignmentWizard({ onClose, onSuccess }: Props) {
         const asignacionesActivas = asignacionesActivasRes.data as { conductor_id: string; horario: string }[] | null
         const asignacionesProgramadas = asignacionesProgramadasRes.data as { conductor_id: string; horario: string }[] | null
 
-        // Combinar asignaciones activas y programadas para verificar turnos ocupados
+        // Pre-indexar asignaciones por conductor_id en Maps -- O(n) en vez de O(n*m)
         const todasAsignaciones = [...(asignacionesActivas || []), ...(asignacionesProgramadas || [])]
+        const asignacionesPorConductor = new Map<string, { horario: string }[]>()
+        for (const a of todasAsignaciones) {
+          const arr = asignacionesPorConductor.get(a.conductor_id) || []
+          arr.push(a)
+          asignacionesPorConductor.set(a.conductor_id, arr)
+        }
+        const conductoresActivosSet = new Set((asignacionesActivas || []).map(a => a.conductor_id))
+        const conductoresProgramadosSet = new Set((asignacionesProgramadas || []).map(a => a.conductor_id))
 
-        // Marcar conductores con asignación activa o programada, incluyendo turno específico
+        // Marcar conductores con asignación activa o programada -- O(1) lookup por conductor
         const conductoresConEstado = conductoresActivos.map(conductor => {
-          const asignacionesConductor = todasAsignaciones.filter(a => a.conductor_id === conductor.id)
-          const tieneAsignacionActiva = asignacionesActivas?.some((a: any) => a.conductor_id === conductor.id) || false
-          const tieneAsignacionProgramada = asignacionesProgramadas?.some((a: any) => a.conductor_id === conductor.id) || false
+          const asignacionesConductor = asignacionesPorConductor.get(conductor.id) || []
+          const tieneAsignacionActiva = conductoresActivosSet.has(conductor.id)
+          const tieneAsignacionProgramada = conductoresProgramadosSet.has(conductor.id)
           const tieneAsignacionDiurna = asignacionesConductor.some(a => a.horario === 'diurno')
           const tieneAsignacionNocturna = asignacionesConductor.some(a => a.horario === 'nocturno')
           // Para A CARGO: horario puede ser 'todo_dia' o cualquier otro valor

@@ -627,6 +627,11 @@ export function IncidenciasModule() {
     )
   }, [incidenciasCobro, penalidadesPorIncidencia])
 
+  // Set O(1) para lookup en cell render (evita .some() O(n) por cada fila visible)
+  const incidenciasEnviablesIds = useMemo(() =>
+    new Set(incidenciasEnviables.map(i => i.id)),
+  [incidenciasEnviables])
+
   // Handlers para selección masiva
   const handleToggleSeleccion = (id: string) => {
     setIncidenciasSeleccionadas(prev => {
@@ -652,6 +657,11 @@ export function IncidenciasModule() {
   const penalidadesPorAplicar = useMemo(() => {
     return penalidades.filter(p => !p.aplicado && !p.rechazado && (p.conductor_id || p.conductor_nombre))
   }, [penalidades])
+
+  // Set O(1) para lookup en cell render (evita .some() O(n) por cada fila visible)
+  const penalidadesPorAplicarIds = useMemo(() =>
+    new Set(penalidadesPorAplicar.map(p => p.id)),
+  [penalidadesPorAplicar])
 
   const handleToggleSeleccionPenalidad = (id: string) => {
     setPenalidadesSeleccionadas(prev => {
@@ -1214,7 +1224,7 @@ export function IncidenciasModule() {
         header: '',
         size: 40,
         cell: ({ row }) => {
-          const puedeEnviar = incidenciasEnviables.some(i => i.id === row.original.id)
+          const puedeEnviar = incidenciasEnviablesIds.has(row.original.id)
           if (!puedeEnviar) return <span style={{ opacity: 0.3 }}><Square size={16} /></span>
           
           const seleccionada = incidenciasSeleccionadas.has(row.original.id)
@@ -1449,7 +1459,7 @@ export function IncidenciasModule() {
         },
         size: 36,
         cell: ({ row }) => {
-          const puedeSeleccionar = penalidadesPorAplicar.some(p => p.id === row.original.id)
+          const puedeSeleccionar = penalidadesPorAplicarIds.has(row.original.id)
           if (!puedeSeleccionar) return null
 
           const seleccionada = penalidadesSeleccionadas.has(row.original.id)

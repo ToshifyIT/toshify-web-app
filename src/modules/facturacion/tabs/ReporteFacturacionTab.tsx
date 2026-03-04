@@ -1266,15 +1266,24 @@ export function ReporteFacturacionTab() {
         preciosBaseVP.set(c.codigo, c.precio_final ?? c.precio_base ?? 0)
       })
       
+      // Pre-indexar historial de precios por código -- O(1) lookup por código, O(k) por rango
+      const historialPorCodigo = new Map<string, any[]>()
+      for (const h of (historialPreciosVP || [])) {
+        const arr = historialPorCodigo.get(h.codigo) || []
+        arr.push(h)
+        historialPorCodigo.set(h.codigo, arr)
+      }
       // Función helper para obtener precio FINAL en una fecha específica (precio real ingresado)
       const getPrecioEnFechaVP = (codigo: string, fecha: Date): number => {
         const fechaStr = fecha.toISOString().split('T')[0]
-        const historial = (historialPreciosVP || []).find((h: any) => 
-          h.codigo === codigo && 
-          h.fecha_vigencia_desde <= fechaStr && 
-          h.fecha_vigencia_hasta >= fechaStr
-        )
-        if (historial) return historial.precio_final ?? historial.precio_base
+        const registros = historialPorCodigo.get(codigo)
+        if (registros) {
+          for (const h of registros) {
+            if (h.fecha_vigencia_desde <= fechaStr && h.fecha_vigencia_hasta >= fechaStr) {
+              return h.precio_final ?? h.precio_base
+            }
+          }
+        }
         return preciosBaseVP.get(codigo) || 0
       }
       
@@ -1514,6 +1523,11 @@ export function ReporteFacturacionTab() {
         }
       })
       
+      // Pre-indexar penalidades padre por id -- O(1) lookup en vez de .find() O(n) por cuota
+      const penalidadesPadreMap = new Map<string, any>()
+      for (const p of (penalidadesPadre || [])) {
+        penalidadesPadreMap.set(p.id, p)
+      }
       // Sumar cuotas fraccionadas (solo de penalidades con fraccionado=true)
       ;(cuotasFiltradas || []).forEach((c: any) => {
         const conductorId = penalidadConductorMap.get(c.penalidad_id)
@@ -1522,7 +1536,7 @@ export function ReporteFacturacionTab() {
           penalidadesMap.set(conductorId, actual + (c.monto_cuota || 0))
           
           // Guardar detalle de cuota
-          const penPadre = penalidadesPadre.find((p: any) => p.id === c.penalidad_id)
+          const penPadre = penalidadesPadreMap.get(c.penalidad_id)
           const detalles = detalleMap.get(conductorId) || []
           detalles.push({
             monto: c.monto_cuota || 0,
@@ -2177,11 +2191,15 @@ export function ReporteFacturacionTab() {
       const { data: conceptos } = await supabase.from('conceptos_nomina').select('*').eq('activo', true)
       
       // Precios DIARIOS (precio_final con IVA = precio real ingresado)
+      const conceptosPorCodigo = new Map<string, any>()
+      for (const c of ((conceptos || []) as any[])) {
+        if (c.codigo) conceptosPorCodigo.set(c.codigo, c)
+      }
       const preciosActuales: Record<string, number> = {
-        'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 42714,
-        'P002': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 75429,
-        'P003': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 7143,
-        'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_final || 32714
+        'P001': conceptosPorCodigo.get('P001')?.precio_final || 42714,
+        'P002': conceptosPorCodigo.get('P002')?.precio_final || 75429,
+        'P003': conceptosPorCodigo.get('P003')?.precio_final || 7143,
+        'P013': conceptosPorCodigo.get('P013')?.precio_final || 32714
       }
       
       // Precios diarios para alquiler

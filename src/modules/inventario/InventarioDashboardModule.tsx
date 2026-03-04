@@ -103,13 +103,17 @@ export function InventarioDashboardModule() {
   // Solo productos con stock para conteos y tabla
   const productosConStock = stockProductos.filter(tieneStock)
 
-  // Contar por categoría (solo productos con stock)
-  const conteosPorCategoria = {
-    maquinaria: productosConStock.filter(p => p.categoria_codigo === 'maquinaria').length,
-    herramientas: productosConStock.filter(p => p.categoria_codigo === 'herramientas' || p.es_retornable).length,
-    repuestos: productosConStock.filter(p => p.categoria_codigo === 'repuestos' || (!p.es_retornable && p.categoria_codigo !== 'insumos' && p.categoria_codigo !== 'maquinaria')).length,
-    insumos: productosConStock.filter(p => p.categoria_codigo === 'insumos').length,
-  }
+  // Contar por categoría en una sola pasada O(n) en vez de O(4n)
+  const conteosPorCategoria = useMemo(() => {
+    let maquinaria = 0, herramientas = 0, repuestos = 0, insumos = 0
+    for (const p of productosConStock) {
+      if (p.categoria_codigo === 'maquinaria') maquinaria++
+      if (p.categoria_codigo === 'herramientas' || p.es_retornable) herramientas++
+      if (p.categoria_codigo === 'repuestos' || (!p.es_retornable && p.categoria_codigo !== 'insumos' && p.categoria_codigo !== 'maquinaria')) repuestos++
+      if (p.categoria_codigo === 'insumos') insumos++
+    }
+    return { maquinaria, herramientas, repuestos, insumos }
+  }, [productosConStock])
 
   // Mostrar siempre todos los productos (las tarjetas de categoría solo muestran conteo, no filtran)
   const categoryFilteredData = productosConStock
