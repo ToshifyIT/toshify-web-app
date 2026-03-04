@@ -196,6 +196,22 @@ export function ConductoresModule() {
     loadAllData();
   }, [sedeActualId]);
 
+  // Abrir detalle si viene ?id=xxx en la URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const idParam = params.get('id');
+    if (idParam && !loading) {
+      loadConductorDetails(idParam).then((fullDetails) => {
+        if (fullDetails) {
+          setSelectedConductor(fullDetails as any);
+          setShowDetailsModal(true);
+          // Limpiar el param de la URL sin recargar
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      });
+    }
+  }, [loading]);
+
   // Cargar sedes para selector en wizard
   useEffect(() => {
     supabase.from('sedes').select('id, nombre').order('nombre')
@@ -397,7 +413,7 @@ export function ConductoresModule() {
     if (cbuFilter.length > 0) {
       filters.push({
         id: 'cuil',
-        label: `CUIL: ${cbuFilter.length === 1 ? cbuFilter[0] : `${cbuFilter.length} seleccionados`}`,
+        label: `CUIT: ${cbuFilter.length === 1 ? cbuFilter[0] : `${cbuFilter.length} seleccionados`}`,
         onClear: () => setCbuFilter([])
       });
     }
@@ -972,7 +988,7 @@ export function ConductoresModule() {
 
     if (!selectedConductor) return;
 
-    // Validar CUIL obligatorio
+    // Validar CUIT obligatorio
     const newErrors: Record<string, string> = {};
     if (!formData.numero_cuit?.trim()) {
       newErrors.numero_cuit = 'Requerido para facturación';
@@ -982,8 +998,8 @@ export function ConductoresModule() {
       setEditErrors(newErrors);
       Swal.fire({
         icon: "warning",
-        title: "CUIL requerido",
-        text: "El CUIL es obligatorio para la facturación mensual",
+        title: "CUIT requerido",
+        text: "El CUIT es obligatorio para la facturación mensual",
         confirmButtonColor: "#ff0033",
       });
       return;
@@ -1859,7 +1875,20 @@ export function ConductoresModule() {
           </div>
         ),
         cell: ({ row }) => (
-          <strong style={{ textTransform: 'uppercase' }}>{`${row.original.nombres} ${row.original.apellidos}`}</strong>
+          <a
+            href={`/conductores?id=${row.original.id}`}
+            onClick={async (e) => {
+              e.preventDefault();
+              const fullDetails = await loadConductorDetails(row.original.id);
+              if (fullDetails) {
+                setSelectedConductor(fullDetails as any);
+                setShowDetailsModal(true);
+              }
+            }}
+            style={{ display: 'block', padding: '10px 12px', margin: '-10px -12px', textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none' }}
+          >
+            {`${row.original.nombres} ${row.original.apellidos}`}
+          </a>
         ),
         enableSorting: true,
       },
@@ -1923,14 +1952,14 @@ export function ConductoresModule() {
         accessorKey: "numero_cuit",
         header: () => (
           <div className="dt-column-filter">
-            <span>CUIL {cbuFilter.length > 0 && `(${cbuFilter.length})`}</span>
+            <span>CUIT {cbuFilter.length > 0 && `(${cbuFilter.length})`}</span>
             <button
               className={`dt-column-filter-btn ${cbuFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'cbu' ? null : 'cbu');
               }}
-              title="Filtrar por CUIL"
+              title="Filtrar por CUIT"
             >
               <Filter size={12} />
             </button>
@@ -2684,7 +2713,7 @@ function ModalEditar({
             />
           </div>
           <div className="form-group">
-            <label className="form-label">CUIL *</label>
+            <label className="form-label">CUIT *</label>
             <input
               type="text"
               className={`form-input ${editErrors.numero_cuit ? 'input-error' : ''}`}
@@ -3522,7 +3551,7 @@ function ModalDetalles({
             </div>
           </div>
           <div>
-            <label className="detail-label">CUIL</label>
+            <label className="detail-label">CUIT</label>
             <div className="detail-value">
               {selectedConductor.numero_cuit || "N/A"}
             </div>

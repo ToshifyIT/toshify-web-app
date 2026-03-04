@@ -49,6 +49,8 @@ interface WialonBitacoraRow {
   gnc_cargado: boolean
   lavado_realizado: boolean
   nafta_cargada: boolean
+  horario: string | null // 'diurno' | 'nocturno' | 'todo_dia'
+  vehiculo_modalidad: string | null // 'TURNO' | 'A_CARGO'
   created_at: string
 }
 
@@ -179,24 +181,40 @@ export const wialonBitacoraService = {
     }
 
     // Transformar a registros
-    const registros: BitacoraRegistroTransformado[] = ((data || []) as WialonBitacoraRow[]).map((row) => ({
-      id: row.id,
-      patente: row.patente,
-      patente_normalizada: row.patente_normalizada,
-      conductor_wialon: row.conductor_wialon,
-      conductor_id: row.conductor_id,
-      ibutton: row.ibutton,
-      fecha_turno: row.fecha_turno,
-      hora_inicio: formatearHora(row.hora_inicio),
-      hora_cierre: formatearHora(row.hora_cierre),
-      duracion_minutos: row.duracion_minutos,
-      kilometraje: Number(row.kilometraje) || 0,
-      observaciones: row.observaciones,
-      estado: row.estado,
-      gnc_cargado: row.gnc_cargado,
-      lavado_realizado: row.lavado_realizado,
-      nafta_cargada: row.nafta_cargada,
-    }))
+    const registros: BitacoraRegistroTransformado[] = ((data || []) as WialonBitacoraRow[]).map((row) => {
+      // Map DB columns to display fields
+      let tipoTurno: string | null = null
+      let turnoIndicador: string | null = null
+
+      if (row.vehiculo_modalidad) {
+        // Normalize A_CARGO -> CARGO for display consistency
+        tipoTurno = row.vehiculo_modalidad === 'A_CARGO' ? 'CARGO' : row.vehiculo_modalidad
+      }
+      if (row.horario && row.horario !== 'todo_dia') {
+        turnoIndicador = row.horario === 'diurno' ? 'Diurno' : row.horario === 'nocturno' ? 'Nocturno' : null
+      }
+
+      return {
+        id: row.id,
+        patente: row.patente,
+        patente_normalizada: row.patente_normalizada,
+        conductor_wialon: row.conductor_wialon,
+        conductor_id: row.conductor_id,
+        ibutton: row.ibutton,
+        fecha_turno: row.fecha_turno,
+        hora_inicio: formatearHora(row.hora_inicio),
+        hora_cierre: formatearHora(row.hora_cierre),
+        duracion_minutos: row.duracion_minutos,
+        kilometraje: Number(row.kilometraje) || 0,
+        observaciones: row.observaciones,
+        estado: row.estado,
+        gnc_cargado: row.gnc_cargado,
+        lavado_realizado: row.lavado_realizado,
+        nafta_cargada: row.nafta_cargada,
+        tipo_turno: tipoTurno,
+        turno_indicador: turnoIndicador,
+      }
+    })
 
     bitacoraCache.set(cacheKey, registros)
     return { data: registros, count: count || registros.length }

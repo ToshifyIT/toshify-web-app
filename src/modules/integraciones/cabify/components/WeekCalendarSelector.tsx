@@ -1,7 +1,7 @@
 // src/modules/integraciones/cabify/components/WeekCalendarSelector.tsx
 /**
  * Selector de semanas tipo calendario (estilo Cabify)
- * Semanas van de Domingo a Sábado
+ * Semanas van de Lunes a Domingo
  */
 
 import { useState, useRef, useEffect, useMemo } from 'react'
@@ -50,6 +50,8 @@ export function WeekCalendarSelector({
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('week')
   const [selectedDay, setSelectedDay] = useState<{ year: number; month: number; day: number } | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null)
 
   // Pre-calcular rango de la semana seleccionada
   const selectedRange = useMemo(() => {
@@ -167,8 +169,9 @@ export function WeekCalendarSelector({
       // Modo día: seleccionar ese día exacto (cabify_historico almacena registros DIARIOS)
       setSelectedDay({ year: dayInfo.year, month: dayInfo.month, day: dayInfo.day })
 
-      const dayStart = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day, 0, 0, 0, 0))
-      const dayEnd = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day, 23, 59, 59, 999))
+      // Argentina es UTC-3: medianoche ARG = 03:00 UTC, fin de dia ARG = 02:59:59 UTC del dia siguiente
+      const dayStart = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day, 3, 0, 0, 0))
+      const dayEnd = new Date(Date.UTC(dayInfo.year, dayInfo.month, dayInfo.day + 1, 2, 59, 59, 999))
 
       const customDay: WeekOption = {
         weeksAgo: -1,
@@ -237,9 +240,16 @@ export function WeekCalendarSelector({
   return (
     <div className="week-calendar-selector" ref={dropdownRef}>
       <button
+        ref={btnRef}
         type="button"
         className="week-calendar-btn"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isOpen && btnRef.current) {
+            const rect = btnRef.current.getBoundingClientRect();
+            setDropdownPos({ top: rect.bottom + 6, left: rect.left });
+          }
+          setIsOpen(!isOpen);
+        }}
         disabled={isDisabled}
       >
         <Calendar size={16} />
@@ -247,8 +257,8 @@ export function WeekCalendarSelector({
         <ChevronDown size={14} className={isOpen ? 'rotate' : ''} />
       </button>
 
-      {isOpen && (
-        <div className="week-calendar-dropdown">
+      {isOpen && dropdownPos && (
+        <div className="week-calendar-dropdown" style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left }}>
           {/* Pestañas Día/Semana */}
           <div className="week-calendar-tabs">
             <button

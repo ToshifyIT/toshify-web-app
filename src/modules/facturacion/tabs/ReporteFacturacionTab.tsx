@@ -6976,7 +6976,7 @@ export function ReporteFacturacionTab() {
       cell: ({ row }) => {
         const garantia = row.original.subtotal_garantia
         const cuotaNum = row.original.cuota_garantia_numero || ''
-        const isCompletada = cuotaNum === 'NA'
+        const isCompletada = cuotaNum === 'NA' || garantia === 0
         const cobroApp = row.original.ganancia_cabify || 0
         const alquiler = row.original.subtotal_alquiler
         
@@ -7001,10 +7001,6 @@ export function ReporteFacturacionTab() {
               </span>
             </div>
           )
-        }
-
-        if (garantia === 0) {
-          return <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>-</span>
         }
 
         return (

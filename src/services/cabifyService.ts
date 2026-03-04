@@ -1510,19 +1510,20 @@ class CabifyService {
       sundayEnd.setDate(sundayEnd.getDate() + 6)
     }
 
-    // PASO 4: Convertir a UTC (00:00 UTC para inicio, 23:59:59 UTC para fin)
+    // PASO 4: Convertir a UTC alineado a Argentina (UTC-3)
+    // Medianoche ARG = 03:00 UTC, fin de dia ARG = 02:59:59 UTC del dia siguiente
     const startUTC = new Date(Date.UTC(
       mondayStart.getFullYear(),
       mondayStart.getMonth(),
       mondayStart.getDate(),
-      0, 0, 0, 0
+      3, 0, 0, 0
     ))
 
     const endUTC = new Date(Date.UTC(
       sundayEnd.getFullYear(),
       sundayEnd.getMonth(),
-      sundayEnd.getDate(),
-      23, 59, 59, 999
+      sundayEnd.getDate() + 1,
+      2, 59, 59, 999
     ))
 
     // Calcular número de semana ISO (basado en el lunes)

@@ -62,6 +62,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'seguimiento-conductores': Compass,
   'escuela-conductores': GraduationCap,
   'rango-seguimiento-guias': Target,
+  'parametros-sistema': Settings,
   'gestion-vehiculos': Car,
   'registro-vencimientos': FileWarning,
 }
@@ -192,6 +193,7 @@ const TelepaseHistoricoPage = lazy(() => import('./multas-telepase/TelepaseHisto
 const MultasPage = lazy(() => import('./multas-telepase/MultasPage').then(m => ({ default: m.MultasPage })))
 const ConceptosFacturacionPage = lazy(() => import('./parametros/ConceptosFacturacionPage').then(m => ({ default: m.ConceptosFacturacionPage })))
 const RangoSeguimientoPage = lazy(() => import('./parametros/RangoSeguimientoPage').then(m => ({ default: m.RangoSeguimientoPage })))
+const ParametrosUssPage = lazy(() => import('./parametros/ParametrosUssPage').then(m => ({ default: m.ParametrosUssPage })))
 const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
 const EscuelaPage = lazy(() => import('./EscuelaPage').then(m => ({ default: m.EscuelaPage })))
 import { fetchGuias, distributeDriversService, type Guia } from '../modules/guias/guiasService'
@@ -257,7 +259,7 @@ export function HomePage() {
             missingGuias.map((g: Guia, idx: number) => ({
               name: `guia-${g.id}`,
               label: g.full_name,
-              route: `/guias/${g.id}`,
+              route: `/seguimiento-conductores/guias/${g.id}`,
               menu_id: menusData.id,
               parent_id: null,
               level: 1,
@@ -1392,7 +1394,7 @@ export function HomePage() {
                       submenu_id: `guia-injected-${g.id}`,
                       submenu_name: `guia-${g.id}`,
                       submenu_label: g.full_name,
-                      submenu_route: `/guias/${g.id}`,
+                      submenu_route: `/seguimiento-conductores/guias/${g.id}`,
                       menu_id: menu.menu_id,
                       parent_id: null,
                       level: 1,
@@ -1758,6 +1760,11 @@ export function HomePage() {
                   <LazyPage><VehiculosPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              <Route path="/vehiculos/vencimientos" element={
+                <ProtectedRoute submenuName="registro-vencimientos" action="view">
+                  <LazyPage><VencimientosPage /></LazyPage>
+                </ProtectedRoute>
+              } />
               
               <Route path="/conductores" element={
                 <ProtectedRoute menuName="conductores" action="view">
@@ -1766,41 +1773,40 @@ export function HomePage() {
                   </LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/productos" element={
+              {/* Logística */}
+              <Route path="/logistica/productos" element={
                 <ProtectedRoute submenuName="productos" action="view">
                   <LazyPage><ProductosPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/proveedores" element={
+              <Route path="/logistica/proveedores" element={
                 <ProtectedRoute submenuName="proveedores" action="view">
                   <LazyPage><ProveedoresPage /></LazyPage>
                 </ProtectedRoute>
               } />
-
-              {/* Inventario */}
-              <Route path="/inventario/dashboard" element={
+              <Route path="/logistica/inventario/dashboard" element={
                 <ProtectedRoute submenuName="inventario-dashboard" action="view">
                   <LazyPage><InventarioDashboardPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/inventario/movimientos" element={
+              <Route path="/logistica/inventario/movimientos" element={
                 <ProtectedRoute submenuName="inventario-movimientos" action="view">
                   <LazyPage>
                     <MovimientosPage />
                   </LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/inventario/asignaciones-activas" element={
+              <Route path="/logistica/inventario/asignaciones-activas" element={
                 <ProtectedRoute submenuName="inventario-asignaciones" action="view">
                   <LazyPage><AsignacionesActivasInventarioPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/inventario/historial" element={
+              <Route path="/logistica/inventario/historial" element={
                 <ProtectedRoute submenuName="inventario-historial" action="view">
                   <LazyPage><HistorialMovimientosPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/inventario/pedidos" element={
+              <Route path="/logistica/inventario/pedidos" element={
                 <ProtectedRoute submenuName="inventario-pedidos" action="view">
                   <LazyPage><PedidosPage /></LazyPage>
                 </ProtectedRoute>
@@ -1811,11 +1817,7 @@ export function HomePage() {
                   <LazyPage><SiniestrosPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/vencimientos" element={
-                <ProtectedRoute submenuName="registro-vencimientos" action="view">
-                  <LazyPage><VencimientosPage /></LazyPage>
-                </ProtectedRoute>
-              } />
+              {/* vencimientos moved to /vehiculos/vencimientos */}
               <Route path="/incidencias" element={
                 <ProtectedRoute menuName="incidencias" action="view">
                   <LazyPage>
@@ -1828,22 +1830,15 @@ export function HomePage() {
                   <LazyPage><InformesPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/programacion" element={
-                <ProtectedRoute submenuName="programacion" action="view">
-                  <LazyPage>
-                    <AsignacionesPage />
-                  </LazyPage>
-                </ProtectedRoute>
-              } />
               <Route path="/estado-de-flota" element={<LazyPage><AsignacionesActivasPage /></LazyPage>} />
-              <Route path="/asignaciones" element={
+              {/* Onboarding */}
+              <Route path="/onboarding/asignaciones" element={
                 <ProtectedRoute submenuName="asignaciones" action="view">
                   <LazyPage>
                     <AsignacionesPage />
                   </LazyPage>
                 </ProtectedRoute>
               } />
-              {/* Onboarding - Programacion de Entregas */}
               <Route path="/onboarding/programacion" element={
                 <ProtectedRoute submenuName="programacion-entregas" action="view">
                   <LazyPage>
@@ -1851,19 +1846,24 @@ export function HomePage() {
                   </LazyPage>
                 </ProtectedRoute>
               } />
+              <Route path="/onboarding/zonas" element={
+                <ProtectedRoute submenuName="zonas-peligrosas" action="view">
+                  <LazyPage><ZonasPage /></LazyPage>
+                </ProtectedRoute>
+              } />
 
               {/* Integraciones */}
-              <Route path="/uss" element={
+              <Route path="/integraciones/uss" element={
                 <ProtectedRoute submenuName="ctrl-exceso-vel" action="view">
                   <LazyPage><USSPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/uss/bitacora" element={
+              <Route path="/integraciones/uss/bitacora" element={
                 <ProtectedRoute submenuName="bitacora-uss" action="view">
                   <LazyPage><BitacoraPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/cabify" element={
+              <Route path="/integraciones/cabify" element={
                 <ProtectedRoute submenuName="cabify" action="view">
                   <LazyPage><CabifyPage /></LazyPage>
                 </ProtectedRoute>
@@ -1881,8 +1881,7 @@ export function HomePage() {
                 </ProtectedRoute>
               } />
 
-              {/* Facturación */}
-              <Route path="/facturacion" element={
+              <Route path="/reportes/facturacion" element={
                 <ProtectedRoute submenuName="facturacion" action="view">
                   <LazyPage>
                     <FacturacionPage />
@@ -1891,17 +1890,17 @@ export function HomePage() {
               } />
 
               {/* Administración */}
-              <Route path="/gestion-usuarios" element={
+              <Route path="/administracion/gestion-usuarios" element={
                 <ProtectedRoute submenuName="gestion-usuarios" action="view">
                   <LazyPage><GestionUsuariosPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/roles" element={
+              <Route path="/administracion/roles" element={
                 <ProtectedRoute submenuName="roles" action="view">
                   <LazyPage><RolesPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/menu-por-rol" element={
+              <Route path="/administracion/menu-por-rol" element={
                 <ProtectedRoute submenuName="menu-por-rol" action="view">
                   <LazyPage><MenuPorRolPage /></LazyPage>
                 </ProtectedRoute>
@@ -1911,19 +1910,14 @@ export function HomePage() {
                   <LazyPage><MenuPorUsuarioPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/gestor-menus" element={
+              <Route path="/administracion/gestor-menus" element={
                 <ProtectedRoute submenuName="gestor-menus" action="view">
                   <LazyPage><GestorMenusPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/auditoria" element={
+              <Route path="/administracion/auditoria" element={
                 <ProtectedRoute submenuName="auditoria" action="view">
                   <LazyPage><AuditoriaPage /></LazyPage>
-                </ProtectedRoute>
-              } />
-              <Route path="/administracion/zonas" element={
-                <ProtectedRoute submenuName="zonas-peligrosas" action="view">
-                  <LazyPage><ZonasPage /></LazyPage>
                 </ProtectedRoute>
               } />
               <Route path="/administracion/sedes" element={
@@ -1933,43 +1927,46 @@ export function HomePage() {
               } />
 
               {/* Multas/Telepase */}
-              <Route path="/telepase-historico" element={
+              <Route path="/multas-telepase/telepase-historico" element={
                 <ProtectedRoute submenuName="telepase-historico" action="view">
                   <LazyPage><TelepaseHistoricoPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/multas" element={
+              <Route path="/multas-telepase/multas" element={
                 <ProtectedRoute submenuName="multas" action="view">
                   <LazyPage><MultasPage /></LazyPage>
                 </ProtectedRoute>
               } />
 
               {/* Parámetros */}
-              <Route path="/conceptos-facturacion" element={
+              <Route path="/parametros/conceptos-facturacion" element={
                 <ProtectedRoute submenuName="conceptos-facturacion" action="view">
                   <LazyPage><ConceptosFacturacionPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/rango-seguimiento-guias" element={
+              <Route path="/parametros/rango-seguimiento-guias" element={
                 <ProtectedRoute submenuName="rango-seguimiento-guias" action="view">
                   <LazyPage><RangoSeguimientoPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              <Route path="/parametros/configuracion-uss" element={
+                <ProtectedRoute submenuName="parametros-sistema" action="view">
+                  <LazyPage><ParametrosUssPage /></LazyPage>
+                </ProtectedRoute>
+              } />
 
-              {/* Guias */}
-              <Route path="/guias" element={
+              {/* Seguimiento de Conductores */}
+              <Route path="/seguimiento-conductores/guias" element={
                 <ProtectedRoute>
                   <LazyPage><GuiasPage /></LazyPage>
                 </ProtectedRoute>
               } />
-              <Route path="/guias/:id" element={
+              <Route path="/seguimiento-conductores/guias/:id" element={
                 <ProtectedRoute>
                   <LazyPage><GuiasPage /></LazyPage>
                 </ProtectedRoute>
               } />
-
-              {/* Escuela Conductores (submenú de Seguimiento de Conductores) */}
-              <Route path="/escuela-conductores" element={
+              <Route path="/seguimiento-conductores/escuela" element={
                 <ProtectedRoute menuName="seguimiento-conductores" submenuName="escuela-conductores" action="view">
                   <LazyPage><EscuelaPage /></LazyPage>
                 </ProtectedRoute>

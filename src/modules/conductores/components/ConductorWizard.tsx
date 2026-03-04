@@ -192,7 +192,7 @@ export function ConductorWizard({
                 {errors.numero_dni && <span className="error-message">{errors.numero_dni}</span>}
               </div>
               <div className="form-group">
-                <label className="form-label">CUIL *</label>
+                <label className="form-label">CUIT *</label>
                 <input
                   type="text"
                   className={`form-input ${errors.numero_cuit ? 'input-error' : ''}`}

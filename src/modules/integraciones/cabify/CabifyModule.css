@@ -242,15 +242,13 @@
 }
 
 .week-calendar-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  position: fixed;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   padding: 16px;
-  z-index: 1000;
+  z-index: 9999;
   min-width: 280px;
 }
 

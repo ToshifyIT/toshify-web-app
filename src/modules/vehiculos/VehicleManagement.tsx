@@ -116,6 +116,7 @@ export function VehicleManagement() {
     tipo_combustible: '',
     tipo_gps: '',
     gps_uss: false,
+    gnc: false,
     numero_motor: '',
     numero_chasis: '',
     provisoria: '',
@@ -199,7 +200,7 @@ export function VehicleManagement() {
           .from('vehiculos')
           .select(`
             id, patente, marca, modelo, anio, color, kilometraje_actual, estado_id, created_at,
-            drive_folder_id, drive_folder_url,
+            drive_folder_id, drive_folder_url, url_documentacion,
             vehiculos_estados (id, codigo, descripcion)
           `)
           .is('deleted_at', null))
@@ -348,6 +349,8 @@ export function VehicleManagement() {
           seguro_vigencia: formData.seguro_vigencia || null,
           titular: formData.titular || null,
           notas: formData.notas || null,
+          gnc: formData.gnc || false,
+          url_documentacion: formData.url_documentacion || null,
           created_by: user?.id,
           created_by_name: profile?.full_name || 'Sistema',
           sede_id: formData.sede_id,
@@ -517,6 +520,8 @@ export function VehicleManagement() {
           seguro_vigencia: formData.seguro_vigencia || null,
           titular: formData.titular || null,
           notas: formData.notas || null,
+          gnc: formData.gnc || false,
+          url_documentacion: formData.url_documentacion || null,
           sede_id: formData.sede_id || null,
           updated_at: new Date().toISOString(),
           updated_by: profile?.full_name || 'Sistema'
@@ -650,6 +655,7 @@ export function VehicleManagement() {
           tipo_combustible: (fullVehiculo as any).tipo_combustible || '',
           tipo_gps: (fullVehiculo as any).tipo_gps || '',
           gps_uss: (fullVehiculo as any).gps_uss || false,
+          gnc: (fullVehiculo as any).gnc || false,
           numero_motor: fullVehiculo.numero_motor || '',
           numero_chasis: fullVehiculo.numero_chasis || '',
           provisoria: fullVehiculo.provisoria || '',
@@ -688,6 +694,7 @@ export function VehicleManagement() {
       tipo_combustible: '',
       tipo_gps: '',
       gps_uss: false,
+      gnc: false,
       numero_motor: '',
       numero_chasis: '',
       provisoria: '',
@@ -1201,12 +1208,20 @@ export function VehicleManagement() {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => {
-          const driveUrl = (row.original as any).drive_folder_url
+          const autoUrl = (row.original as any).drive_folder_url
+          const manualUrl = (row.original as any).url_documentacion
+          const folderUrl = autoUrl || manualUrl
           const isCreatingFolder = creatingDriveFolder === row.original.id
+
+          const handleFolderClick = () => {
+            if (autoUrl) handleOpenDriveFolder(row.original)
+            else if (manualUrl) window.open(manualUrl, '_blank')
+            else handleCreateDriveFolder(row.original)
+          }
           
           return (
             <ActionsMenu
-              maxVisible={2}
+              maxVisible={3}
               actions={[
                 {
                   icon: <Eye size={15} />,
@@ -1221,11 +1236,11 @@ export function VehicleManagement() {
                   variant: 'info'
                 },
                 {
-                  icon: driveUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
-                  label: driveUrl ? 'Ver documentos' : 'Crear carpeta',
-                  onClick: () => driveUrl ? handleOpenDriveFolder(row.original) : handleCreateDriveFolder(row.original),
+                  icon: folderUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
+                  label: folderUrl ? 'Ver documentos' : 'Crear carpeta',
+                  onClick: handleFolderClick,
                   disabled: isCreatingFolder,
-                  variant: driveUrl ? 'success' : 'default'
+                  variant: folderUrl ? 'success' : 'default'
                 },
                 {
                   icon: <History size={15} />,
@@ -1497,16 +1512,34 @@ export function VehicleManagement() {
 
             <div className="section-title">Combustible y GPS</div>
 
-            <div className="form-group">
-              <label className="form-label">Tipo Combustible</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.tipo_combustible}
-                onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
-                disabled={saving}
-                placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
-              />
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Tipo Combustible</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.tipo_combustible}
+                  onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
+                  disabled={saving}
+                  placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">GNC</label>
+                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.gnc}
+                    onChange={(e) => setFormData({ ...formData, gnc: e.target.checked })}
+                    disabled={saving}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ color: formData.gnc ? '#10B981' : 'var(--text-primary)' }}>
+                    GNC
+                  </span>
+                </label>
+              </div>
             </div>
 
             <div className="form-row">
@@ -1812,6 +1845,12 @@ export function VehicleManagement() {
                   {(selectedVehiculo as any).gps_uss ? 'Sí' : 'No'}
                 </div>
               </div>
+              <div>
+                <label className="detail-label">GNC</label>
+                <div className="detail-value" style={{ color: (selectedVehiculo as any).gnc ? '#10B981' : 'inherit' }}>
+                  {(selectedVehiculo as any).gnc ? 'Sí' : 'No'}
+                </div>
+              </div>
             </div>
 
             {/* Datos Técnicos */}
@@ -1890,7 +1929,28 @@ export function VehicleManagement() {
               </div>
             </div>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {(() => {
+                const autoUrl = (selectedVehiculo as any).drive_folder_url;
+                const manualUrl = (selectedVehiculo as any).url_documentacion;
+                const folderUrl = autoUrl || manualUrl;
+                const isCreating = creatingDriveFolder === selectedVehiculo.id;
+                return (
+                  <button
+                    className={folderUrl ? 'btn-success' : 'btn-secondary'}
+                    onClick={() => {
+                      if (autoUrl) handleOpenDriveFolder(selectedVehiculo);
+                      else if (manualUrl) window.open(manualUrl, '_blank');
+                      else handleCreateDriveFolder(selectedVehiculo);
+                    }}
+                    disabled={isCreating}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    {isCreating ? <Loader2 size={16} className="animate-spin" /> : folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
+                    {isCreating ? 'Creando...' : folderUrl ? 'Ver documentos' : 'Crear carpeta'}
+                  </button>
+                );
+              })()}
               <button
                 className="btn-secondary"
                 onClick={() => setShowDetailsModal(false)}
