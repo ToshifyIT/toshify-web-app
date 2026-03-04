@@ -659,7 +659,7 @@ export function ProgramacionModule() {
           observaciones: prog.observaciones || null,
           created_by: user?.id || null,
           created_by_name: profile?.full_name || 'Sistema',
-          sede_id: sedeActualId || sedeUsuario?.id,
+          sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id,
         })
 
       if (devError) throw devError
@@ -921,7 +921,7 @@ export function ProgramacionModule() {
                   horario: ac.horario,
                 },
                 modulo: 'programacion',
-                sedeId: sedeActualId || sedeUsuario?.id,
+                sedeId: prog.sede_id || sedeActualId || sedeUsuario?.id,
               })
             }
           }
@@ -937,7 +937,7 @@ export function ProgramacionModule() {
               conductores_al_cierre: conductoresAnteriores,
             },
             modulo: 'programacion',
-            sedeId: sedeActualId || sedeUsuario?.id,
+            sedeId: prog.sede_id || sedeActualId || sedeUsuario?.id,
           })
         }
       }
@@ -954,7 +954,7 @@ export function ProgramacionModule() {
           notas: notasBase,
           created_by: user?.id || null,
           created_by_name: profile?.full_name || 'Sistema',
-          sede_id: sedeActualId || sedeUsuario?.id,
+          sede_id: prog.sede_id || sedeActualId || sedeUsuario?.id,
         })
         .select()
         .single()

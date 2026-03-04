@@ -113,6 +113,9 @@ export interface ProgramacionOnboarding {
   asignacion_id?: string
   fecha_asignacion_creada?: string
   
+  // Sede
+  sede_id?: string
+  
   // Auditoría
   created_by?: string
   created_by_name?: string
