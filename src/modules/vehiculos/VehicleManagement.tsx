@@ -1500,16 +1500,34 @@ export function VehicleManagement() {
 
             <div className="section-title">Combustible y GPS</div>
 
-            <div className="form-group">
-              <label className="form-label">Tipo Combustible</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.tipo_combustible}
-                onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
-                disabled={saving}
-                placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
-              />
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Tipo Combustible</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.tipo_combustible}
+                  onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
+                  disabled={saving}
+                  placeholder="Ej: Nafta, Gasoil, GNC, Eléctrico..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">GNC</label>
+                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.gnc}
+                    onChange={(e) => setFormData({ ...formData, gnc: e.target.checked })}
+                    disabled={saving}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ color: formData.gnc ? '#10B981' : 'var(--text-primary)' }}>
+                    GNC
+                  </span>
+                </label>
+              </div>
             </div>
 
             <div className="form-row">
@@ -1539,22 +1557,6 @@ export function VehicleManagement() {
                   />
                   <span style={{ color: formData.gps_uss ? '#10B981' : 'var(--text-primary)' }}>
                     USS (Wialon)
-                  </span>
-                </label>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">GNC</label>
-                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    checked={formData.gnc}
-                    onChange={(e) => setFormData({ ...formData, gnc: e.target.checked })}
-                    disabled={saving}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <span style={{ color: formData.gnc ? '#10B981' : 'var(--text-primary)' }}>
-                    GNC
                   </span>
                 </label>
               </div>

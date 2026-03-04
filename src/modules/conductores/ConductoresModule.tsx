@@ -413,7 +413,7 @@ export function ConductoresModule() {
     if (cbuFilter.length > 0) {
       filters.push({
         id: 'cuil',
-        label: `CUIL: ${cbuFilter.length === 1 ? cbuFilter[0] : `${cbuFilter.length} seleccionados`}`,
+        label: `CUIT: ${cbuFilter.length === 1 ? cbuFilter[0] : `${cbuFilter.length} seleccionados`}`,
         onClear: () => setCbuFilter([])
       });
     }
@@ -988,7 +988,7 @@ export function ConductoresModule() {
 
     if (!selectedConductor) return;
 
-    // Validar CUIL obligatorio
+    // Validar CUIT obligatorio
     const newErrors: Record<string, string> = {};
     if (!formData.numero_cuit?.trim()) {
       newErrors.numero_cuit = 'Requerido para facturación';
@@ -998,8 +998,8 @@ export function ConductoresModule() {
       setEditErrors(newErrors);
       Swal.fire({
         icon: "warning",
-        title: "CUIL requerido",
-        text: "El CUIL es obligatorio para la facturación mensual",
+        title: "CUIT requerido",
+        text: "El CUIT es obligatorio para la facturación mensual",
         confirmButtonColor: "#ff0033",
       });
       return;
@@ -1885,7 +1885,7 @@ export function ConductoresModule() {
                 setShowDetailsModal(true);
               }
             }}
-            style={{ textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none' }}
+            style={{ display: 'block', textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none' }}
           >
             {`${row.original.nombres} ${row.original.apellidos}`}
           </a>
@@ -1952,14 +1952,14 @@ export function ConductoresModule() {
         accessorKey: "numero_cuit",
         header: () => (
           <div className="dt-column-filter">
-            <span>CUIL {cbuFilter.length > 0 && `(${cbuFilter.length})`}</span>
+            <span>CUIT {cbuFilter.length > 0 && `(${cbuFilter.length})`}</span>
             <button
               className={`dt-column-filter-btn ${cbuFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenColumnFilter(openColumnFilter === 'cbu' ? null : 'cbu');
               }}
-              title="Filtrar por CUIL"
+              title="Filtrar por CUIT"
             >
               <Filter size={12} />
             </button>
@@ -2713,7 +2713,7 @@ function ModalEditar({
             />
           </div>
           <div className="form-group">
-            <label className="form-label">CUIL *</label>
+            <label className="form-label">CUIT *</label>
             <input
               type="text"
               className={`form-input ${editErrors.numero_cuit ? 'input-error' : ''}`}
@@ -3551,7 +3551,7 @@ function ModalDetalles({
             </div>
           </div>
           <div>
-            <label className="detail-label">CUIL</label>
+            <label className="detail-label">CUIT</label>
             <div className="detail-value">
               {selectedConductor.numero_cuit || "N/A"}
             </div>

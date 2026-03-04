@@ -217,16 +217,34 @@ export function VehiculoWizard({
               Define el tipo de combustible y configuración GPS del vehículo.
             </p>
 
-            <div className="form-group">
-              <label className="form-label">Tipo Combustible</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.tipo_combustible}
-                onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
-                placeholder="Nafta, Gasoil, GNC..."
-                disabled={saving}
-              />
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Tipo Combustible</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.tipo_combustible}
+                  onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
+                  placeholder="Nafta, Gasoil, GNC..."
+                  disabled={saving}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">GNC</label>
+                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.gnc}
+                    onChange={(e) => setFormData({ ...formData, gnc: e.target.checked })}
+                    disabled={saving}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ color: formData.gnc ? '#10B981' : 'var(--text-primary)' }}>
+                    GNC
+                  </span>
+                </label>
+              </div>
             </div>
 
             <div className="form-row">
@@ -256,22 +274,6 @@ export function VehiculoWizard({
                   />
                   <span style={{ color: formData.gps_uss ? '#10B981' : 'var(--text-primary)' }}>
                     USS (Wialon)
-                  </span>
-                </label>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">GNC</label>
-                <label style={{ display: 'flex', alignItems: 'center', height: '42px', cursor: 'pointer', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    checked={formData.gnc}
-                    onChange={(e) => setFormData({ ...formData, gnc: e.target.checked })}
-                    disabled={saving}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <span style={{ color: formData.gnc ? '#10B981' : 'var(--text-primary)' }}>
-                    GNC
                   </span>
                 </label>
               </div>
