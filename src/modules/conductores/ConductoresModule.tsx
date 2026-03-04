@@ -32,41 +32,12 @@ import { cabifyService } from "../../services/cabifyService";
 import { createConductorDriveFolder } from "../../services/driveService";
 import { AddressAutocomplete } from "../../components/ui/AddressAutocomplete";
 import { registrarHistorialConductor, registrarHistorialVehiculo } from "../../services/historialService";
+import { getEstadoConductorDisplay, getEstadoConductorBadgeStyle } from "../../utils/conductorUtils";
 
 // Umbral configurable: días para considerar una licencia "por vencer"
 const DIAS_LICENCIA_POR_VENCER = 10;
 
-// Helper para normalizar la visualización de estados de conductor
-// Mantiene consistencia en el frontend independientemente de cómo se guarde en BD
-const getEstadoConductorDisplay = (estado: { codigo?: string; descripcion?: string | null } | null | undefined): string => {
-  if (!estado) return "N/A";
-  const codigo = estado.codigo?.toLowerCase();
-  // Mapeo consistente para el frontend
-  const displayMap: Record<string, string> = {
-    'activo': 'Activo',
-    'baja': 'Baja',
-    'suspendido': 'Suspendido',
-    'vacaciones': 'Vacaciones',
-    'licencia': 'Licencia',
-    'inactivo': 'Inactivo',
-  };
-  return displayMap[codigo || ''] || estado.codigo || estado.descripcion || "N/A";
-};
 
-// Helper para obtener el estilo del badge de estado
-const getEstadoConductorBadgeStyle = (estado: { codigo?: string } | null | undefined): { bg: string; color: string } => {
-  if (!estado?.codigo) return { bg: '#3B82F6', color: 'white' };
-  const codigo = estado.codigo.toLowerCase();
-  const styles: Record<string, { bg: string; color: string }> = {
-    'activo': { bg: '#22C55E', color: 'white' },
-    'baja': { bg: '#6B7280', color: 'white' },
-    'suspendido': { bg: '#F59E0B', color: 'white' },
-    'vacaciones': { bg: '#8B5CF6', color: 'white' },
-    'licencia': { bg: '#3B82F6', color: 'white' },
-    'inactivo': { bg: '#6B7280', color: 'white' },
-  };
-  return styles[codigo] || { bg: '#3B82F6', color: 'white' };
-};
 
 
 

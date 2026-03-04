@@ -2,16 +2,11 @@ import { useState, useEffect } from 'react';
 import { X, Car, Search, Check } from 'lucide-react';
 import Swal from 'sweetalert2';
 import './ReasignacionModal.css';
+import type { VehicleBasic } from '../../../types/vehiculo.types';
 
 interface Guide {
   id: string;
   full_name: string;
-}
-
-interface Vehicle {
-  patente: string;
-  marca: string;
-  modelo: string;
 }
 
 interface ConductorData {
@@ -19,7 +14,7 @@ interface ConductorData {
   nombres: string;
   apellidos: string;
   numero_dni: string;
-  vehiculo_asignado?: Vehicle;
+  vehiculo_asignado?: VehicleBasic;
   id_guia: string;
   historial_id?: string;
 }

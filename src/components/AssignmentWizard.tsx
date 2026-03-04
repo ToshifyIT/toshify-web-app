@@ -8,67 +8,9 @@ import { useSede } from '../contexts/SedeContext'
 import { TimeInput24h } from './ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../utils/toast'
-
-interface Vehicle {
-  id: string
-  patente: string
-  marca: string
-  modelo: string
-  anio: number
-  estado_id: string
-  vehiculos_estados?: {
-    codigo: string
-    descripcion: string
-  }
-  // Información de disponibilidad
-  asignacionActiva?: {
-    id: string
-    horario: 'TURNO' | 'CARGO'
-    turnoDiurnoOcupado: boolean
-    turnoNocturnoOcupado: boolean
-  }
-  disponibilidad: 'disponible' | 'turno_diurno_libre' | 'turno_nocturno_libre' | 'ocupado'
-}
-
-interface Conductor {
-  id: string
-  numero_licencia: string
-  numero_dni: string
-  nombres: string
-  apellidos: string
-  licencia_vencimiento: string
-  estado_id: string
-  preferencia_turno?: string
-  conductores_estados?: {
-    codigo: string
-    descripcion: string
-  }
-  tieneAsignacionActiva?: boolean
-  tieneAsignacionProgramada?: boolean
-  tieneAsignacionDiurna?: boolean
-  tieneAsignacionNocturna?: boolean
-}
-
-// Helper para formatear preferencia de turno
-const formatPreferencia = (preferencia?: string): string => {
-  switch (preferencia) {
-    case 'DIURNO': return 'Diurno'
-    case 'NOCTURNO': return 'Nocturno'
-    case 'A_CARGO': return 'A Cargo'
-    case 'SIN_PREFERENCIA': return 'Ambos'
-    default: return 'Ambos'
-  }
-}
-
-// Helper para obtener color de badge según preferencia
-const getPreferenciaBadge = (preferencia?: string): { bg: string; color: string } => {
-  switch (preferencia) {
-    case 'DIURNO': return { bg: '#FEF3C7', color: '#92400E' }
-    case 'NOCTURNO': return { bg: '#DBEAFE', color: '#1E40AF' }
-    case 'A_CARGO': return { bg: '#D1FAE5', color: '#065F46' }
-    default: return { bg: '#F3F4F6', color: '#6B7280' }
-  }
-}
+import type { Vehicle } from '../types/vehiculo.types'
+import type { Conductor } from '../types/conductor.types'
+import { formatPreferencia, getPreferenciaBadge } from '../utils/conductorUtils'
 
 interface AssignmentData {
   modalidad: 'dia_completo' | 'medio_dia' | 'por_horas' | 'semanal' | 'mensual' | ''

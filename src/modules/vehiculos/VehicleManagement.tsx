@@ -23,29 +23,8 @@ import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { VehiculoWizard } from './components/VehiculoWizard'
 import { formatDateTimeAR } from '../../utils/dateUtils'
+import { VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import './VehicleManagement.css'
-
-// Mapping de códigos de estado a etiquetas para mostrar en filtros y celdas
-const ESTADO_LABELS: Record<string, string> = {
-  'DISPONIBLE': 'Disponible',
-  'EN_USO': 'En Uso',
-  'CORPORATIVO': 'Corporativo',
-  'PKG_ON_BASE': 'PKG ON',
-  'PKG_OFF_BASE': 'PKG OFF',
-  'PKG_OFF_FRANCIA': 'PKG Francia',
-  'TALLER_AXIS': 'Taller Axis',
-  'TALLER_CHAPA_PINTURA': 'Chapa&Pintura',
-  'TALLER_ALLIANCE': 'Taller Alliance',
-  'TALLER_KALZALO': 'Taller Kalzalo',
-  'TALLER_BASE_VALIENTE': 'Base Valiente',
-  'INSTALACION_GNC': 'Inst. GNC',
-  'RETENIDO_COMISARIA': 'Retenido',
-  'ROBO': 'Robo',
-  'DESTRUCCION_TOTAL': 'Destrucción',
-  'JUBILADO': 'Jubilado',
-  'PROGRAMADO': 'Programado',
-  'DEVUELTO_PROVEEDOR': 'Dev. Proveedor'
-}
 
 
 export function VehicleManagement() {
@@ -441,7 +420,7 @@ export function VehicleManagement() {
             icon: 'warning',
             title: 'Vehículo con asignación activa',
             html: `Este vehículo tiene <b>${asignacionesActivas.length}</b> asignación(es) activa(s).<br><br>
-                   Al cambiar el estado a <b>${ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}</b>, se finalizarán automáticamente.<br><br>
+                   Al cambiar el estado a <b>${VEHICULO_ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}</b>, se finalizarán automáticamente.<br><br>
                    <b>Ingrese el motivo de finalización:</b>`,
             input: 'textarea',
             inputPlaceholder: 'Ej: Vehículo ingresa a taller por revisión mecánica...',
@@ -489,7 +468,7 @@ export function VehicleManagement() {
             .update({ 
               estado: 'finalizada', 
               fecha_fin: ahora,
-              notas: `[FINALIZADA] Cambio de estado a ${ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivo}`,
+              notas: `[FINALIZADA] Cambio de estado a ${VEHICULO_ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivo}`,
               updated_by: profile?.full_name || 'Sistema'
             })
             .in('id', asignacionesActivas.map((a: any) => a.id))
@@ -553,7 +532,7 @@ export function VehicleManagement() {
           .select('id, vehiculo_id, asignaciones_conductores(conductor_id)')
           .eq('vehiculo_id', selectedVehiculo.id)
           .eq('estado', 'finalizada')
-          .eq('notas', `[FINALIZADA] Cambio de estado a ${ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivoFinalizacion}`)
+          .eq('notas', `[FINALIZADA] Cambio de estado a ${VEHICULO_ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivoFinalizacion}`)
         if (asignacionesFinalizadas) {
           for (const asig of asignacionesFinalizadas) {
             for (const ac of (asig.asignaciones_conductores || [])) {
@@ -956,7 +935,7 @@ export function VehicleManagement() {
     const labels = new Set<string>()
     vehiculos.forEach(v => {
       const codigo = v.vehiculos_estados?.codigo
-      if (codigo) labels.add(ESTADO_LABELS[codigo] || codigo)
+      if (codigo) labels.add(VEHICULO_ESTADO_LABELS[codigo] || codigo)
     })
     return Array.from(labels).sort()
   }, [vehiculos])
@@ -987,7 +966,7 @@ export function VehicleManagement() {
     if (estadoFilter.length > 0) {
       result = result.filter(v => {
         const estadoCodigo = v.vehiculos_estados?.codigo || ''
-        const estadoLabel = ESTADO_LABELS[estadoCodigo] || estadoCodigo
+        const estadoLabel = VEHICULO_ESTADO_LABELS[estadoCodigo] || estadoCodigo
         return estadoFilter.includes(estadoLabel) || estadoFilter.includes(estadoCodigo)
       })
     }
@@ -996,7 +975,7 @@ export function VehicleManagement() {
     if (statCardEstadoFilter.length > 0) {
       result = result.filter(v => {
         const estadoCodigo = v.vehiculos_estados?.codigo || ''
-        const estadoLabel = ESTADO_LABELS[estadoCodigo] || estadoCodigo
+        const estadoLabel = VEHICULO_ESTADO_LABELS[estadoCodigo] || estadoCodigo
         const matches = statCardEstadoFilter.includes(estadoLabel) || statCardEstadoFilter.includes(estadoCodigo)
         // En modo exclusión (Total Flota): mostrar los que NO están en la lista
         return statCardExcludeMode ? !matches : matches

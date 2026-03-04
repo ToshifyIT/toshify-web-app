@@ -22,14 +22,7 @@ import type { ProgramacionOnboardingCompleta } from '../../types/onboarding.type
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import './ProgramacionModule.css'
-
-// Labels para mostrar
-const ESTADO_LABELS: Record<string, string> = {
-  por_agendar: 'Por Agendar',
-  agendado: 'Agendado',
-  en_curso: 'En Curso',
-  completado: 'Completado'
-}
+import { PROGRAMACION_ESTADO_LABELS } from '../../utils/conductorUtils'
 
 const TIPO_ASIGNACION_LABELS: Record<string, string> = {
   entrega_auto: 'Entrega de auto',
@@ -2427,7 +2420,7 @@ export function ProgramacionModule() {
               <div className="prog-modal-section">
                 <h3>Estado</h3>
                 <span className={`prog-estado-badge ${previewProgramacion.estado}`}>
-                  {ESTADO_LABELS[previewProgramacion.estado] || previewProgramacion.estado}
+                  {PROGRAMACION_ESTADO_LABELS[previewProgramacion.estado] || previewProgramacion.estado}
                 </span>
                 {previewProgramacion.asignacion_id && (
                   <p className="prog-asignacion-info">

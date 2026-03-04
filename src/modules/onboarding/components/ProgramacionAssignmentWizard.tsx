@@ -17,84 +17,12 @@ import { TimeInput24h } from '../../../components/ui/TimeInput24h'
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../../utils/toast'
 import type { TipoCandidato, TipoDocumento, TipoAsignacion } from '../../../types/onboarding.types'
+import type { Vehicle } from '../../../types/vehiculo.types'
+import type { Conductor } from '../../../types/conductor.types'
+import { formatPreferencia, getPreferenciaBadge, PROGRAMACION_ESTADO_LABELS } from '../../../utils/conductorUtils'
 
 // Google Maps API Key
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCCiqk9jWZghUq5rBtSyo6ZjLuMORblY-w'
-
-// Labels para estados
-const ESTADO_LABELS: Record<string, string> = {
-  por_agendar: 'Por Agendar',
-  agendado: 'Agendado',
-  en_curso: 'En Curso',
-  completado: 'Completado'
-}
-
-interface Vehicle {
-  id: string
-  patente: string
-  marca: string
-  modelo: string
-  anio: number
-  color?: string
-  estado_id: string
-  vehiculos_estados?: {
-    codigo: string
-    descripcion: string
-  }
-  asignacionActiva?: {
-    id: string
-    horario: 'TURNO' | 'CARGO'
-    turnoDiurnoOcupado: boolean
-    turnoNocturnoOcupado: boolean
-  }
-  disponibilidad: 'disponible' | 'turno_diurno_libre' | 'turno_nocturno_libre' | 'ocupado' | 'programado'
-}
-
-interface Conductor {
-  id: string
-  numero_licencia: string
-  numero_dni: string
-  nombres: string
-  apellidos: string
-  licencia_vencimiento: string
-  estado_id: string
-  preferencia_turno?: string
-  zona?: string | null
-  direccion?: string | null
-  direccion_lat?: number | null
-  direccion_lng?: number | null
-  conductores_estados?: {
-    codigo: string
-    descripcion: string
-  }
-  tieneAsignacionActiva?: boolean
-  tieneAsignacionProgramada?: boolean
-  tieneAsignacionDiurna?: boolean
-  tieneAsignacionNocturna?: boolean
-  // Campos calculados para emparejamiento
-  distanciaCalculada?: number | null  // en minutos
-}
-
-// Helper para formatear preferencia de turno
-const formatPreferencia = (preferencia?: string): string => {
-  switch (preferencia) {
-    case 'DIURNO': return 'Diurno'
-    case 'NOCTURNO': return 'Nocturno'
-    case 'A_CARGO': return 'A Cargo'
-    case 'SIN_PREFERENCIA': return 'Ambos'
-    default: return 'Ambos'
-  }
-}
-
-// Helper para obtener color de badge segun preferencia
-const getPreferenciaBadge = (preferencia?: string): { bg: string; color: string } => {
-  switch (preferencia) {
-    case 'DIURNO': return { bg: '#FEF3C7', color: '#92400E' }
-    case 'NOCTURNO': return { bg: '#DBEAFE', color: '#1E40AF' }
-    case 'A_CARGO': return { bg: '#D1FAE5', color: '#065F46' }
-    default: return { bg: '#F3F4F6', color: '#6B7280' }
-  }
-}
 
 interface ProgramacionData {
   sede_id: string
@@ -1219,7 +1147,7 @@ export function ProgramacionAssignmentWizard({ onClose, onSuccess, editData }: P
               Swal.fire({
                 icon: 'warning',
                 title: 'Programación duplicada',
-                html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con los mismos conductores (${ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
+                html: `Ya existe una programación activa para el vehículo <strong>${formData.vehiculo_patente}</strong> con los mismos conductores (${PROGRAMACION_ESTADO_LABELS[prog.estado] || prog.estado}).<br><br>No se puede crear una programación con los mismos datos.`,
                 confirmButtonColor: '#FF0033'
               })
               return

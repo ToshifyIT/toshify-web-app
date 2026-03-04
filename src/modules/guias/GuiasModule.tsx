@@ -43,21 +43,7 @@ import { useSede } from '../../contexts/SedeContext'
 import './GuiasModule.css'
 import './GuiasToolbar.css'
 import iconNotas from './Iconos/notas.png'
-
-// Helpers copiados de ConductoresModule para consistencia visual
-const getEstadoConductorDisplay = (estado: { codigo?: string; descripcion?: string | null } | null | undefined): string => {
-  if (!estado) return "N/A";
-  const codigo = estado.codigo?.toLowerCase();
-  const displayMap: Record<string, string> = {
-    'activo': 'Activo',
-    'baja': 'Baja',
-    'suspendido': 'Suspendido',
-    'vacaciones': 'Vacaciones',
-    'licencia': 'Licencia',
-    'inactivo': 'Inactivo',
-  };
-  return displayMap[codigo || ''] || estado.codigo || estado.descripcion || "N/A";
-};
+import { getEstadoConductorDisplay } from '../../utils/conductorUtils'
 
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");

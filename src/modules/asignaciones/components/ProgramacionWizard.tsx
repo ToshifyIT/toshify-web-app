@@ -18,6 +18,7 @@ import type {
   ZonaOnboarding,
   TipoDocumento
 } from '../../../types/onboarding.types'
+import type { ConductorBasic } from '../../../types/conductor.types'
 
 interface Vehiculo {
   id: string
@@ -25,13 +26,6 @@ interface Vehiculo {
   marca: string
   modelo: string
   color?: string
-}
-
-interface Conductor {
-  id: string
-  nombres: string
-  apellidos: string
-  numero_dni: string
 }
 
 interface Props {
@@ -51,7 +45,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
 
   // Datos para selects
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
-  const [conductores, setConductores] = useState<Conductor[]>([])
+  const [conductores, setConductores] = useState<ConductorBasic[]>([])
 
   // Busquedas
   const [vehiculoEntregarSearch, setVehiculoEntregarSearch] = useState('')
@@ -182,7 +176,7 @@ export function ProgramacionWizard({ onClose, onSuccess, initialData, editingDat
   }
 
   // Seleccionar conductor
-  function selectConductor(c: Conductor) {
+  function selectConductor(c: ConductorBasic) {
     setFormData(prev => ({
       ...prev,
       conductor_id: c.id,

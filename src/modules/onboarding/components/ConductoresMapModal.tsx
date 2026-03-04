@@ -3,33 +3,12 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF, PolylineF } from '@react-google-maps/api'
 import { X, Sun, Moon, Check, Loader2, Map as MapIcon } from 'lucide-react'
+import type { Conductor } from '../../../types/conductor.types'
+import { formatPreferencia } from '../../../utils/conductorUtils'
 
 const LIBRARIES: ('places')[] = ['places']
 const MAP_CENTER = { lat: -34.6037, lng: -58.3816 }
 
-interface Conductor {
-  id: string
-  numero_licencia: string
-  numero_dni: string
-  nombres: string
-  apellidos: string
-  licencia_vencimiento: string
-  estado_id: string
-  preferencia_turno?: string
-  zona?: string | null
-  direccion?: string | null
-  direccion_lat?: number | null
-  direccion_lng?: number | null
-  conductores_estados?: {
-    codigo: string
-    descripcion: string
-  }
-  tieneAsignacionActiva?: boolean
-  tieneAsignacionProgramada?: boolean
-  tieneAsignacionDiurna?: boolean
-  tieneAsignacionNocturna?: boolean
-  distanciaCalculada?: number | null
-}
 
 interface Props {
   conductores: Conductor[]
@@ -46,15 +25,6 @@ const getMarkerColor = (c: Conductor): string => {
   }
 }
 
-const formatPreferencia = (preferencia?: string): string => {
-  switch (preferencia) {
-    case 'DIURNO': return 'Diurno'
-    case 'NOCTURNO': return 'Nocturno'
-    case 'A_CARGO': return 'A Cargo'
-    case 'SIN_PREFERENCIA': return 'Ambos'
-    default: return 'Ambos'
-  }
-}
 
 export default function ConductoresMapModal({ conductores, onConfirmPair, onClose, apiKey }: Props) {
   const { isLoaded, loadError } = useJsApiLoader({ googleMapsApiKey: apiKey, libraries: LIBRARIES })
