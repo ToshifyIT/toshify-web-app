@@ -1,7 +1,7 @@
 // src/modules/integraciones/cabify/components/WeekCalendarSelector.tsx
 /**
  * Selector de semanas tipo calendario (estilo Cabify)
- * Semanas van de Domingo a Sábado
+ * Semanas van de Lunes a Domingo
  */
 
 import { useState, useRef, useEffect, useMemo } from 'react'
