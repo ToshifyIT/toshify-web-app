@@ -1,5 +1,5 @@
 // src/App.tsx
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
@@ -8,11 +8,13 @@ import { LoginPage } from './pages/LoginPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { HomePage } from './pages/HomePage'
 import { UnauthorizedPage } from './pages/UnauthorizedPage'
-import PermissionsDebugPage from './pages/PermissionsDebugPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { PortalPage } from './modules/portal/PortalPage'
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal'
 import { useDeviceType } from './hooks/useDeviceType'
+
+// Lazy load de páginas que arrastran dependencias pesadas (jsPDF, recharts)
+const PortalPage = lazy(() => import('./modules/portal/PortalPage').then(m => ({ default: m.PortalPage })))
+const PermissionsDebugPage = lazy(() => import('./pages/PermissionsDebugPage'))
 
 // Componente para detectar flujo de recovery y redirigir
 function RecoveryRedirect({ children }: { children: React.ReactNode }) {
@@ -66,8 +68,8 @@ function App() {
     <BrowserRouter>
       <DeviceTypeInitializer>
         <Routes>
-          {/* Portal público - fuera de auth providers */}
-          <Route path="/mi-facturacion" element={<PortalPage />} />
+          {/* Portal público - fuera de auth providers (lazy: arrastra jsPDF + recharts) */}
+          <Route path="/mi-facturacion" element={<Suspense fallback={<div />}><PortalPage /></Suspense>} />
 
           {/* App principal - con auth */}
           <Route path="/*" element={
@@ -86,7 +88,7 @@ function App() {
                       path="/debug/permisos"
                       element={
                         <ProtectedRoute>
-                          <PermissionsDebugPage />
+                          <Suspense fallback={<div />}><PermissionsDebugPage /></Suspense>
                         </ProtectedRoute>
                       }
                     />            

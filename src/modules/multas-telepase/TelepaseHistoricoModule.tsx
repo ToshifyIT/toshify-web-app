@@ -634,6 +634,7 @@ export default function TelepaseHistoricoModule() {
         searchPlaceholder="Buscar por patente, conductor..."
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
+        disableAutoFilters
         headerAction={
           <button className="btn-secondary" onClick={handleExportar}>
             <Download size={16} />

@@ -312,6 +312,7 @@ export function AsignacionesActivasModule() {
         pageSizeOptions={[10, 20, 50, 100]}
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}
+        disableAutoFilters
       />
     </div>
   )

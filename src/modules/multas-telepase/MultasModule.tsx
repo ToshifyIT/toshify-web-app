@@ -870,6 +870,7 @@ export default function MultasModule() {
         searchPlaceholder="Buscar por patente, conductor, lugar..."
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
+        disableAutoFilters
         headerAction={
           <div style={{ display: 'flex', gap: '8px' }}>
             <button className="btn-secondary" onClick={handleExportar}>

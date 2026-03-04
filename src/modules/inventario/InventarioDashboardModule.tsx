@@ -482,6 +482,7 @@ export function InventarioDashboardModule() {
 pageSize={100}
         pageSizeOptions={[10, 20, 50, 100]}
         externalFilters={externalFilters}
+        disableAutoFilters
         onClearAllFilters={() => {
           // Limpiar filtros de columna
           setCodigoFilter([])

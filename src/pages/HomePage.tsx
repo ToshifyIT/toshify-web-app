@@ -196,7 +196,7 @@ const RangoSeguimientoPage = lazy(() => import('./parametros/RangoSeguimientoPag
 const ParametrosUssPage = lazy(() => import('./parametros/ParametrosUssPage').then(m => ({ default: m.ParametrosUssPage })))
 const GuiasPage = lazy(() => import('./GuiasPage').then(m => ({ default: m.GuiasPage })))
 const EscuelaPage = lazy(() => import('./EscuelaPage').then(m => ({ default: m.EscuelaPage })))
-import { fetchGuias, distributeDriversService, type Guia } from '../modules/guias/guiasService'
+import type { Guia } from '../modules/guias/guiasService'
 
 // Tipo para submenús con jerarquía
 interface SubmenuWithHierarchy {
@@ -229,6 +229,7 @@ export function HomePage() {
 
   useEffect(() => {
     const initGuias = async () => {
+      const { fetchGuias } = await import('../modules/guias/guiasService')
       const guiasData = await fetchGuias()
       setGuias(guiasData)
       
@@ -311,6 +312,7 @@ export function HomePage() {
 
   const distributeDrivers = async () => {
     if (guias.length > 0) {
+      const { distributeDriversService } = await import('../modules/guias/guiasService')
       await distributeDriversService(guias)
     }
   }
