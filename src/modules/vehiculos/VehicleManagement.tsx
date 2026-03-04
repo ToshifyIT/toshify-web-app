@@ -200,7 +200,7 @@ export function VehicleManagement() {
           .from('vehiculos')
           .select(`
             id, patente, marca, modelo, anio, color, kilometraje_actual, estado_id, created_at,
-            drive_folder_id, drive_folder_url,
+            drive_folder_id, drive_folder_url, url_documentacion,
             vehiculos_estados (id, codigo, descripcion)
           `)
           .is('deleted_at', null))
@@ -349,6 +349,8 @@ export function VehicleManagement() {
           seguro_vigencia: formData.seguro_vigencia || null,
           titular: formData.titular || null,
           notas: formData.notas || null,
+          gnc: formData.gnc || false,
+          url_documentacion: formData.url_documentacion || null,
           created_by: user?.id,
           created_by_name: profile?.full_name || 'Sistema',
           sede_id: formData.sede_id,
@@ -518,6 +520,8 @@ export function VehicleManagement() {
           seguro_vigencia: formData.seguro_vigencia || null,
           titular: formData.titular || null,
           notas: formData.notas || null,
+          gnc: formData.gnc || false,
+          url_documentacion: formData.url_documentacion || null,
           sede_id: formData.sede_id || null,
           updated_at: new Date().toISOString(),
           updated_by: profile?.full_name || 'Sistema'
@@ -1204,8 +1208,16 @@ export function VehicleManagement() {
         id: 'acciones',
         header: 'Acciones',
         cell: ({ row }) => {
-          const driveUrl = (row.original as any).drive_folder_url
+          const autoUrl = (row.original as any).drive_folder_url
+          const manualUrl = (row.original as any).url_documentacion
+          const folderUrl = autoUrl || manualUrl
           const isCreatingFolder = creatingDriveFolder === row.original.id
+
+          const handleFolderClick = () => {
+            if (autoUrl) handleOpenDriveFolder(row.original)
+            else if (manualUrl) window.open(manualUrl, '_blank')
+            else handleCreateDriveFolder(row.original)
+          }
           
           return (
             <ActionsMenu
@@ -1224,11 +1236,11 @@ export function VehicleManagement() {
                   variant: 'info'
                 },
                 {
-                  icon: driveUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
-                  label: driveUrl ? 'Ver documentos' : 'Crear carpeta',
-                  onClick: () => driveUrl ? handleOpenDriveFolder(row.original) : handleCreateDriveFolder(row.original),
+                  icon: folderUrl ? <FolderOpen size={15} /> : (isCreatingFolder ? <Loader2 size={15} className="animate-spin" /> : <FolderPlus size={15} />),
+                  label: folderUrl ? 'Ver documentos' : 'Crear carpeta',
+                  onClick: handleFolderClick,
                   disabled: isCreatingFolder,
-                  variant: driveUrl ? 'success' : 'default'
+                  variant: folderUrl ? 'success' : 'default'
                 },
                 {
                   icon: <History size={15} />,
