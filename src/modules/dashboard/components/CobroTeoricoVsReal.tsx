@@ -186,26 +186,14 @@ export function CobroTeoricoVsReal() {
         })
 
         // ---------------------------------------------------------
-        // 1. OBTENER CONDUCTORES Y ASIGNACIONES (Lógica Reporte)
+        // 1. OBTENER CONCEPTOS + ASIGNACIONES EN PARALELO
         // ---------------------------------------------------------
         
-        // 1.1 Obtener conceptos de facturación para cálculo de alquiler
-        const { data: conceptos } = await supabase
-            .from('conceptos_nomina')
-            .select('codigo, precio_base, precio_final')
-            .in('codigo', ['P001', 'P002', 'P013'])
-            .eq('activo', true)
-        
-        const preciosMap = new Map<string, number>()
-        conceptos?.forEach((c: any) => {
-            preciosMap.set(c.codigo, c.precio_final || c.precio_base || 0)
-        })
-
         let qAsignaciones = supabase
           .from('asignaciones_conductores')
           .select(`
             conductor_id, horario, fecha_inicio, fecha_fin, estado,
-            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id, vehiculos(patente)),
+            asignaciones!inner(horario, estado, fecha_fin, vehiculo_id),
             conductores!inner(id, nombres, apellidos, numero_dni, sede_id)
           `)
           .in('estado', ['asignado', 'activo', 'activa', 'finalizado', 'finalizada', 'completado', 'cancelado', 'cancelada'])
@@ -214,7 +202,19 @@ export function CobroTeoricoVsReal() {
            qAsignaciones = qAsignaciones.eq('conductores.sede_id', sedeActualId)
         }
 
-        const { data: asignacionesSemana } = await qAsignaciones
+        const [{ data: conceptos }, { data: asignacionesSemana }] = await Promise.all([
+          supabase
+            .from('conceptos_nomina')
+            .select('codigo, precio_base, precio_final')
+            .in('codigo', ['P001', 'P002', 'P013'])
+            .eq('activo', true),
+          qAsignaciones
+        ])
+
+        const preciosMap = new Map<string, number>()
+        conceptos?.forEach((c: any) => {
+            preciosMap.set(c.codigo, c.precio_final || c.precio_base || 0)
+        })
         
         // Mapa de días trabajados por conductor
         // Map<conductor_id, Set<fecha_str>>

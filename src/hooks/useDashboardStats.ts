@@ -81,42 +81,14 @@ export function useDashboardStats() {
               .from('asignaciones')
               .select(`
                 id,
-                codigo,
                 vehiculo_id,
-                fecha_programada,
-                fecha_inicio,
-                modalidad,
                 horario,
                 estado,
                 created_at,
-                vehiculos (
-                  patente,
-                  marca,
-                  modelo,
-                  anio,
-                  estado_id,
-                  vehiculos_tipos (
-                    descripcion
-                  ),
-                  vehiculos_estados (
-                    codigo,
-                    descripcion
-                  )
-                ),
                 asignaciones_conductores (
-                  id,
                   conductor_id,
                   estado,
-                  horario,
-                  confirmado,
-                  fecha_confirmacion,
-                  conductores (
-                    id,
-                    nombres,
-                    apellidos,
-                    numero_licencia,
-                    telefono_contacto
-                  )
+                  horario
                 )
               `)
           )
@@ -131,13 +103,13 @@ export function useDashboardStats() {
               .is('deleted_at', null)
           ),
           aplicarFiltroSede(
-            supabase.from('v_siniestros_completos' as any).select('*')
+            supabase.from('v_siniestros_completos' as any).select('fecha_siniestro, categoria_nombre')
           ).order('fecha_siniestro', { ascending: false }),
           aplicarFiltroSede(
             supabase
               .from('garantias_conductores')
-              .select('*')
-          ).order('conductor_nombre'),
+              .select('conductor_id, monto_pagado, monto_devuelto, estado, monto_cuota_semanal, cuotas_pagadas, cuotas_totales')
+          ),
           aplicarFiltroSede(
             supabase
               .from('saldos_conductores')
@@ -148,13 +120,9 @@ export function useDashboardStats() {
               .from('conductores')
               .select('id, estado_id')
           ),
-          // CORRECCIÓN: Filtrar wialon_bitacora por sede a través de la relación con vehiculos
-          // Si wialon_bitacora no tiene sede_id directo, usamos !inner join con vehiculos
-          aplicarFiltroSede(
-             supabase
-              .from('wialon_bitacora')
-              .select('kilometraje, vehiculos!inner(id, sede_id)')
-          , 'vehiculos.sede_id')
+          supabase.rpc('sum_kilometraje_total', {
+            p_sede_id: sedeActualId || null
+          })
         ])
 
         if (asignacionesRes.error) throw asignacionesRes.error
@@ -171,13 +139,8 @@ export function useDashboardStats() {
         const garantias = (garantiasRes.data || []) as any[]
         const saldos = (saldosRes.data || []) as any[]
         const conductores = (conductoresRes.data || []) as any[]
-        const wialon = (wialonRes.data || []) as any[]
-
-        // Calcular Vueltas al Mundo (930 millones de km)
-        const totalKmHistorico = wialon.reduce((sum: number, row: any) => {
-          const val = parseFloat(row.kilometraje)
-          return sum + (isNaN(val) ? 0 : val)
-        }, 0)
+        // RPC returns a single number directly
+        const totalKmHistorico = Number(wialonRes.data) || 0
         const vueltasMundoVal = totalKmHistorico / 40000
 
         const vehiculosConAsignacion = new Set(asignaciones.map(a => a.vehiculo_id))

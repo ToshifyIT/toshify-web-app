@@ -2,12 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPeriodRange, type Granularity } from '../utils/periodUtils'
 
-function parseImporte(importe: string | number | null | undefined): number {
-  if (!importe) return 0
-  const num = typeof importe === 'string' ? parseFloat(importe.replace(/[^0-9.-]/g, '')) : importe
-  return isNaN(num) ? 0 : num
-}
-
 export function useMultasStats(granularity: Granularity, periodA: string, periodB: string, sedeId?: string) {
   const [stats, setStats] = useState({
     totalA: 0,
@@ -34,30 +28,26 @@ export function useMultasStats(granularity: Granularity, periodA: string, period
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
-        let queryA = supabase
-          .from('multas_historico')
-          .select('importe')
-          .gte('fecha_infraccion', rangeA.start.toISOString())
-          .lte('fecha_infraccion', rangeA.end.toISOString())
-
-        let queryB = supabase
-          .from('multas_historico')
-          .select('importe')
-          .gte('fecha_infraccion', rangeB.start.toISOString())
-          .lte('fecha_infraccion', rangeB.end.toISOString())
-
-        if (sedeId) {
-          queryA = queryA.eq('sede_id', sedeId)
-          queryB = queryB.eq('sede_id', sedeId)
-        }
-
-        const [resA, resB] = await Promise.all([queryA, queryB])
+        // Use server-side RPC for SUM — no row transfer
+        const [resA, resB] = await Promise.all([
+          supabase.rpc('sum_multas_range', {
+            p_start: rangeA.start.toISOString(),
+            p_end: rangeA.end.toISOString(),
+            p_sede_id: sedeId || null
+          }),
+          supabase.rpc('sum_multas_range', {
+            p_start: rangeB.start.toISOString(),
+            p_end: rangeB.end.toISOString(),
+            p_sede_id: sedeId || null
+          })
+        ])
 
         if (isMounted) {
-          const totalA = (resA.data || []).reduce((sum, item) => sum + parseImporte(item.importe), 0)
-          const totalB = (resB.data || []).reduce((sum, item) => sum + parseImporte(item.importe), 0)
-
-          setStats({ totalA, totalB, loading: false })
+          setStats({
+            totalA: Number(resA.data) || 0,
+            totalB: Number(resB.data) || 0,
+            loading: false
+          })
         }
       } catch {
         if (isMounted) {

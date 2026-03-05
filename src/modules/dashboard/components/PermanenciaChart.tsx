@@ -66,23 +66,52 @@ export function PermanenciaChart() {
           end: intervalEnd
         }, { weekStartsOn: 1 })
 
-        const weekPromises = weeks.map(async (weekStart) => {
+        // 1. Fetch ALL terminated conductors for the full interval in ONE query
+        let query = supabase
+          .from('conductores')
+          .select('id, fecha_terminacion')
+          .gte('fecha_terminacion', intervalStart.toISOString())
+          .lte('fecha_terminacion', intervalEnd.toISOString())
+        
+        if (sedeActual?.id) {
+          query = query.eq('sede_id', sedeActual.id)
+        }
+
+        const { data: allConductors } = await query
+
+        // 2. If we have conductors, fetch ALL their assignments in ONE batched query
+        const allIds = allConductors?.map(c => c.id) || []
+        let assignmentsByDriver = new Map<string, number>()
+
+        if (allIds.length > 0) {
+          const { data: allAssignments } = await supabase
+            .from('asignaciones_conductores')
+            .select('conductor_id, asignaciones(fecha_inicio, fecha_fin)')
+            .in('conductor_id', allIds)
+
+          if (allAssignments) {
+            for (const item of allAssignments) {
+              const asig = item.asignaciones as any
+              if (!asig?.fecha_inicio) continue
+              const inicio = new Date(asig.fecha_inicio)
+              const fin = asig.fecha_fin ? new Date(asig.fecha_fin) : new Date()
+              const days = Math.ceil(Math.abs(fin.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24))
+              assignmentsByDriver.set(item.conductor_id, (assignmentsByDriver.get(item.conductor_id) || 0) + days)
+            }
+          }
+        }
+
+        // 3. Group conductors by week and compute averages (pure in-memory, no queries)
+        const chartData = weeks.map((weekStart) => {
           const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
           const weekNumber = getWeek(weekStart, { weekStartsOn: 1 })
-          
-          let query = supabase
-            .from('conductores')
-            .select('id, nombres, apellidos, fecha_terminacion')
-            .gte('fecha_terminacion', weekStart.toISOString())
-            .lte('fecha_terminacion', weekEnd.toISOString())
-          
-          if (sedeActual?.id) {
-            query = query.eq('sede_id', sedeActual.id)
-          }
 
-          const { data: weeklyConductors, error: conductorError } = await query
-            
-          if (conductorError || !weeklyConductors || weeklyConductors.length === 0) {
+          const weekConductors = (allConductors || []).filter(c => {
+            const ft = new Date(c.fecha_terminacion)
+            return ft >= weekStart && ft <= weekEnd
+          })
+
+          if (weekConductors.length === 0) {
             return {
               name: `Sem ${String(weekNumber).padStart(2, '0')}`,
               value: 0,
@@ -90,56 +119,17 @@ export function PermanenciaChart() {
             }
           }
 
-          const conductorIds = weeklyConductors.map(c => c.id)
-          const chunkSize = 20
-          const chunks = []
-          for (let i = 0; i < conductorIds.length; i += chunkSize) {
-            chunks.push(conductorIds.slice(i, i + chunkSize))
+          let totalTenure = 0
+          for (const c of weekConductors) {
+            totalTenure += assignmentsByDriver.get(c.id) || 0
           }
 
-          const tenureByDriver: Record<string, number> = {}
-          
-          await Promise.all(chunks.map(async (chunk) => {
-            const { data: assignments } = await supabase
-              .from('asignaciones_conductores')
-              .select('conductor_id, asignaciones(id, fecha_inicio, fecha_fin)')
-              .in('conductor_id', chunk)
-              
-            if (assignments) {
-              assignments.forEach((item: any) => {
-                const asig = item.asignaciones
-                if (asig && asig.fecha_inicio) {
-                  const inicio = new Date(asig.fecha_inicio)
-                  const fin = asig.fecha_fin ? new Date(asig.fecha_fin) : new Date()
-                  const diffTime = Math.abs(fin.getTime() - inicio.getTime())
-                  const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-                  
-                  if (!tenureByDriver[item.conductor_id]) {
-                    tenureByDriver[item.conductor_id] = 0
-                  }
-                  tenureByDriver[item.conductor_id] += days
-                }
-              })
-            }
-          }))
-
-          let totalTenureForWeek = 0
-          weeklyConductors.forEach(c => {
-            totalTenureForWeek += (tenureByDriver[c.id] || 0)
-          })
-
-          const avgDays = weeklyConductors.length > 0 
-            ? totalTenureForWeek / weeklyConductors.length 
-            : 0
-          
           return {
             name: `Sem ${String(weekNumber).padStart(2, '0')}`,
-            value: Math.round(avgDays),
+            value: Math.round(totalTenure / weekConductors.length),
             fullDate: format(weekStart, 'd MMM', { locale: es })
           }
         })
-
-        const chartData = await Promise.all(weekPromises)
 
         if (isMounted) {
           setData(chartData)
