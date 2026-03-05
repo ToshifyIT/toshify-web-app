@@ -140,39 +140,22 @@ export function RoleMenuPermissionsManager() {
 
     setLoading(true)
     try {
-      // Cargar roles
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('roles')
-        .select('*')
-        .order('name')
+      // Cargar roles, menús, submenús y tabs en paralelo
+      const [
+        { data: rolesData, error: rolesError },
+        { data: menusData, error: menusError },
+        { data: submenusData, error: submenusError },
+        { data: tabsData, error: tabsError },
+      ] = await Promise.all([
+        supabase.from('roles').select('*').order('name'),
+        supabase.from('menus').select('*').eq('is_active', true).order('order_index'),
+        supabase.from('submenus').select('*, menus(name)').eq('is_active', true).order('order_index'),
+        supabase.from('tabs').select('id, name, label, menu_id, submenu_id, order_index').eq('is_active', true).order('order_index'),
+      ])
 
       if (rolesError) throw rolesError
-
-      // Cargar menús
-      const { data: menusData, error: menusError } = await supabase
-        .from('menus')
-        .select('*')
-        .eq('is_active', true)
-        .order('order_index')
-
       if (menusError) throw menusError
-
-      // Cargar submenús
-      const { data: submenusData, error: submenusError } = await supabase
-        .from('submenus')
-        .select('*, menus(name)')
-        .eq('is_active', true)
-        .order('order_index')
-
       if (submenusError) throw submenusError
-
-      // Cargar tabs
-      const { data: tabsData, error: tabsError } = await supabase
-        .from('tabs')
-        .select('id, name, label, menu_id, submenu_id, order_index')
-        .eq('is_active', true)
-        .order('order_index')
-
       if (tabsError) throw tabsError
 
       // =====================================================

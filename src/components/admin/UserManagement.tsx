@@ -35,21 +35,16 @@ export function UserManagement() {
     setError(null)
 
     try {
-      const { data: usersData, error: usersError } = await supabase
-        .from('user_profiles')
-        .select(`
-          *,
-          roles (*)
-        `)
-        .order('created_at', { ascending: false })
+      // Cargar usuarios y roles en paralelo
+      const [
+        { data: usersData, error: usersError },
+        { data: rolesData, error: rolesError },
+      ] = await Promise.all([
+        supabase.from('user_profiles').select('*, roles(*)').order('created_at', { ascending: false }),
+        supabase.from('roles').select('*').order('name'),
+      ])
 
       if (usersError) throw usersError
-
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('roles')
-        .select('*')
-        .order('name')
-
       if (rolesError) throw rolesError
 
       setUsers(usersData as UserWithRole[])

@@ -201,6 +201,7 @@ export function ProveedoresModule() {
         .select('*')
         .order('activo', { ascending: false }) // Activos primero
         .order('created_at', { ascending: false })
+        .limit(1000)
 
       if (error) throw error
       setProveedores(data || [])

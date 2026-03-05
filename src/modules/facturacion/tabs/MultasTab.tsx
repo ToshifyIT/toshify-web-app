@@ -102,6 +102,7 @@ export function MultasTab() {
         .from('multas_historico') as any)
         .select('*'))
         .order('fecha_infraccion', { ascending: false })
+        .limit(5000)
 
       if (multasError) throw multasError
 

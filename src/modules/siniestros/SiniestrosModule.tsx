@@ -155,7 +155,7 @@ export function SiniestrosModule() {
         supabase.from('seguros' as any).select('id, nombre').eq('is_active', true).order('nombre'),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo')).order('patente'),
         supabase.from('conductores_estados').select('id, codigo') as unknown as Promise<{ data: { id: string; codigo: string }[] | null; error: any }>,
-        aplicarFiltroSede(supabase.from('v_siniestros_completos' as any).select('*')).order('fecha_siniestro', { ascending: false }),
+        aplicarFiltroSede(supabase.from('v_siniestros_completos' as any).select('*')).order('fecha_siniestro', { ascending: false }).limit(2000),
         supabase.from('vehiculos_estados').select('id, codigo, descripcion').eq('activo', true).order('descripcion')
       ])
 

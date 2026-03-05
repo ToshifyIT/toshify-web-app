@@ -173,6 +173,7 @@ export function VencimientosModule() {
         .from('vencimientos' as any)
         .select('*')
         .order('fecha_vencimiento', { ascending: true })
+        .limit(3000)
 
       if (error) throw error
 

@@ -1,27 +1,30 @@
 // src/pages/AdminPage.tsx
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Crown } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
 import { useTheme } from '../contexts/ThemeContext'
 import logoToshify from '../assets/logo-toshify.png'
 import { useNavigate } from 'react-router-dom'
-import { UserManagement } from '../components/admin/UserManagement'
-import { RoleManagement } from '../components/admin/RoleManagement'
-import { PermissionMatrix } from '../components/admin/PermissionMatrix'
-import { VehicleManagement } from '../modules/vehiculos/VehicleManagement'
-import { UserMenuPermissionsManager } from '../components/admin/UserMenuPermissionsManager'
-import { RoleMenuPermissionsManager } from '../components/admin/RoleMenuPermissionsManager'
-import { MenuHierarchyManager } from '../components/admin/MenuHierarchyManager'
-import { UsuariosModule } from '../modules/usuarios/UsuariosModule'
-import { ConductoresModule } from '../modules/conductores/ConductoresModule'
-import { SiniestrosModule } from '../modules/siniestros/SiniestrosModule'
-import { IncidenciasModule } from '../modules/incidencias/IncidenciasModule'
-import { InformesModule } from '../modules/informes/InformesModule'
-import { AsignacionesModule } from '../modules/asignaciones/AsignacionesModule'
-import { USSModule } from '../modules/integraciones/uss/USSModule'
-import { CabifyModule } from '../modules/integraciones/cabify/CabifyModule'
-import { ReportesModule } from '../modules/reportes/ReportesModule'
+import { Spinner } from '../components/ui/LoadingOverlay'
+
+// Lazy-load ALL module components - only loaded when their tab is active
+const UserManagement = lazy(() => import('../components/admin/UserManagement').then(m => ({ default: m.UserManagement })))
+const RoleManagement = lazy(() => import('../components/admin/RoleManagement').then(m => ({ default: m.RoleManagement })))
+const PermissionMatrix = lazy(() => import('../components/admin/PermissionMatrix').then(m => ({ default: m.PermissionMatrix })))
+const VehicleManagement = lazy(() => import('../modules/vehiculos/VehicleManagement').then(m => ({ default: m.VehicleManagement })))
+const UserMenuPermissionsManager = lazy(() => import('../components/admin/UserMenuPermissionsManager').then(m => ({ default: m.UserMenuPermissionsManager })))
+const RoleMenuPermissionsManager = lazy(() => import('../components/admin/RoleMenuPermissionsManager').then(m => ({ default: m.RoleMenuPermissionsManager })))
+const MenuHierarchyManager = lazy(() => import('../components/admin/MenuHierarchyManager').then(m => ({ default: m.MenuHierarchyManager })))
+const UsuariosModule = lazy(() => import('../modules/usuarios/UsuariosModule').then(m => ({ default: m.UsuariosModule })))
+const ConductoresModule = lazy(() => import('../modules/conductores/ConductoresModule').then(m => ({ default: m.ConductoresModule })))
+const SiniestrosModule = lazy(() => import('../modules/siniestros/SiniestrosModule').then(m => ({ default: m.SiniestrosModule })))
+const IncidenciasModule = lazy(() => import('../modules/incidencias/IncidenciasModule').then(m => ({ default: m.IncidenciasModule })))
+const InformesModule = lazy(() => import('../modules/informes/InformesModule').then(m => ({ default: m.InformesModule })))
+const AsignacionesModule = lazy(() => import('../modules/asignaciones/AsignacionesModule').then(m => ({ default: m.AsignacionesModule })))
+const USSModule = lazy(() => import('../modules/integraciones/uss/USSModule').then(m => ({ default: m.USSModule })))
+const CabifyModule = lazy(() => import('../modules/integraciones/cabify/CabifyModule').then(m => ({ default: m.CabifyModule })))
+const ReportesModule = lazy(() => import('../modules/reportes/ReportesModule').then(m => ({ default: m.ReportesModule })))
 
 type TabType =
   | 'usuarios' | 'vehiculos' | 'conductores' | 'siniestros' | 'incidencias'
@@ -637,29 +640,31 @@ export function AdminPage() {
 
           <div className="content-area">
             <div className="content-card">
-              {/* Módulos principales */}
-              {activeTab === 'usuarios' && <UsuariosModule />}
-              {activeTab === 'vehiculos' && <VehicleManagement />}
-              {activeTab === 'conductores' && <ConductoresModule />}
-              {activeTab === 'siniestros' && <SiniestrosModule />}
-              {activeTab === 'incidencias' && <IncidenciasModule />}
-              {activeTab === 'informes' && <InformesModule />}
-              {activeTab === 'asignaciones' && <AsignacionesModule />}
+              <Suspense fallback={<Spinner size="lg" />}>
+                {/* Módulos principales */}
+                {activeTab === 'usuarios' && <UsuariosModule />}
+                {activeTab === 'vehiculos' && <VehicleManagement />}
+                {activeTab === 'conductores' && <ConductoresModule />}
+                {activeTab === 'siniestros' && <SiniestrosModule />}
+                {activeTab === 'incidencias' && <IncidenciasModule />}
+                {activeTab === 'informes' && <InformesModule />}
+                {activeTab === 'asignaciones' && <AsignacionesModule />}
 
-              {/* Integraciones */}
-              {activeTab === 'uss' && <USSModule />}
-              {activeTab === 'cabify' && <CabifyModule />}
+                {/* Integraciones */}
+                {activeTab === 'uss' && <USSModule />}
+                {activeTab === 'cabify' && <CabifyModule />}
 
-              {/* Reportes */}
-              {activeTab === 'reportes' && <ReportesModule />}
+                {/* Reportes */}
+                {activeTab === 'reportes' && <ReportesModule />}
 
-              {/* Administración */}
-              {activeTab === 'users' && <UserManagement />}
-              {activeTab === 'roles' && <RoleManagement />}
-              {activeTab === 'permissions' && <PermissionMatrix />}
-              {activeTab === 'role-menu-permissions' && <RoleMenuPermissionsManager />}
-              {activeTab === 'menu-permissions' && <UserMenuPermissionsManager />}
-              {activeTab === 'menu-manager' && <MenuHierarchyManager />}
+                {/* Administración */}
+                {activeTab === 'users' && <UserManagement />}
+                {activeTab === 'roles' && <RoleManagement />}
+                {activeTab === 'permissions' && <PermissionMatrix />}
+                {activeTab === 'role-menu-permissions' && <RoleMenuPermissionsManager />}
+                {activeTab === 'menu-permissions' && <UserMenuPermissionsManager />}
+                {activeTab === 'menu-manager' && <MenuHierarchyManager />}
+              </Suspense>
             </div>
           </div>
         </main>
