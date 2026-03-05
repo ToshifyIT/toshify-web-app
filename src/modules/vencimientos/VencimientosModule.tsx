@@ -965,7 +965,7 @@ export function VencimientosModule() {
                         disabled={modalMode === 'view' || saving}
                       />
                       <span className="slider round">
-                        <span className="on-text">YES</span>
+                        <span className="on-text">Si</span>
                         <span className="off-text">NO</span>
                       </span>
                     </label>
