@@ -108,7 +108,7 @@ interface PermissionsContextType {
 const PermissionsContext = createContext<PermissionsContextType | undefined>(undefined)
 
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
-  const { user, loading: authLoading } = useAuth()
+  const { user, profile, loading: authLoading } = useAuth()
   const [userPermissions, setUserPermissions] = useState<UserPermissionsResponse | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -121,9 +121,12 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       return
     }
 
+    // Esperar a que profile esté disponible (cargado por AuthContext)
+    if (!profile) return
+
     loadPermissions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading])
+  }, [user, profile, authLoading])
 
   const loadPermissions = async () => {
     if (!user) {
@@ -170,42 +173,39 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   // Fallback cuando el edge function no está disponible
   const loadPermissionsFallback = async () => {
     try {
-      // Cargar perfil del usuario
-      const { data: profileData, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*, roles(*)')
-        .eq('id', user!.id)
-        .single()
-
-      if (profileError) throw profileError
-      if (!profileData) throw new Error('No profile data')
+      // Usar perfil ya cargado por AuthContext (evita query duplicado a user_profiles)
+      if (!profile) throw new Error('No profile data')
 
       // Verificar si es admin
-      const isUserAdmin = (profileData as any).roles?.name === 'admin'
+      const isUserAdmin = profile.roles?.name === 'admin'
 
       let menusData: MenuPermission[] = []
       let submenusData: SubmenuPermission[] = []
       let tabsData: TabPermission[] = []
 
       if (isUserAdmin) {
-        // Si es admin, cargar TODOS los menús de la base de datos
-        const { data: allMenus } = await supabase
-          .from('menus')
-          .select('*')
-          .eq('is_active', true)
-          .order('order_index')
+        // Si es admin, cargar TODOS los menús de la base de datos en paralelo
+        const [menusResult, submenusResult, tabsResult] = await Promise.all([
+          supabase
+            .from('menus')
+            .select('id, name, label, route, order_index')
+            .eq('is_active', true)
+            .order('order_index'),
+          supabase
+            .from('submenus')
+            .select('id, name, label, route, order_index, menu_id, parent_id, level')
+            .eq('is_active', true)
+            .order('order_index'),
+          supabase
+            .from('tabs')
+            .select('id, name, label, order_index, menu_id, submenu_id')
+            .eq('is_active', true)
+            .order('order_index'),
+        ])
 
-        const { data: allSubmenus } = await supabase
-          .from('submenus')
-          .select('*, parent_id, level')
-          .eq('is_active', true)
-          .order('order_index')
-
-        const { data: allTabs } = await supabase
-          .from('tabs')
-          .select('*')
-          .eq('is_active', true)
-          .order('order_index')
+        const allMenus = menusResult.data
+        const allSubmenus = submenusResult.data
+        const allTabs = tabsResult.data
 
         // Convertir a formato de permisos con acceso completo
         menusData = (allMenus || []).map((menu: any) => ({
@@ -337,9 +337,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         user_id: user!.id,
         email: user!.email || '',
         role: {
-          id: (profileData as any).role_id || '',
-          name: (profileData as any).roles?.name || 'sin_rol',
-          description: (profileData as any).roles?.description || 'Sin descripción'
+          id: profile.role_id || '',
+          name: profile.roles?.name || 'sin_rol',
+          description: profile.roles?.description || 'Sin descripción'
         },
         menus: menusData,
         submenus: submenusData,
@@ -545,7 +545,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     return globalPermissions.canDelete
   }, [globalPermissions.canDelete])
 
-  const value = {
+  const value = useMemo(() => ({
     userPermissions,
     loading,
     canViewMenu,
@@ -569,7 +569,31 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     canCreate,
     canUpdate,
     canDelete,
-  }
+  }), [
+    userPermissions,
+    loading,
+    canViewMenu,
+    canCreateInMenu,
+    canEditInMenu,
+    canDeleteInMenu,
+    canViewSubmenu,
+    canCreateInSubmenu,
+    canEditInSubmenu,
+    canDeleteInSubmenu,
+    canViewTab,
+    canCreateInTab,
+    canEditInTab,
+    canDeleteInTab,
+    getVisibleTabs,
+    canAccess,
+    isAdmin,
+    isAdministrativo,
+    getVisibleMenus,
+    getVisibleSubmenus,
+    canCreate,
+    canUpdate,
+    canDelete,
+  ])
 
   return (
     <PermissionsContext.Provider value={value}>

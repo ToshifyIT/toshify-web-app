@@ -28,6 +28,8 @@ class AsignacionesService {
 
     try {
       // Consulta optimizada: obtener asignaciones con vehículo y conductores
+      // Fetch only assignments that have conductors matching requested DNIs
+      // Filter via inner join on conductores.numero_dni
       const { data, error } = await supabase
         .from('asignaciones')
         .select(`
@@ -38,9 +40,9 @@ class AsignacionesService {
           vehiculos (
             patente
           ),
-          asignaciones_conductores (
+          asignaciones_conductores!inner (
             horario,
-            conductores (
+            conductores!inner (
               numero_dni,
               nombres,
               apellidos
@@ -48,6 +50,7 @@ class AsignacionesService {
           )
         `)
         .in('estado', ['activa', 'programado'])
+        .in('asignaciones_conductores.conductores.numero_dni', dnis)
 
       if (error) {
         return new Map()

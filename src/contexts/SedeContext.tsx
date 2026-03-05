@@ -13,6 +13,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   type ReactNode,
 } from 'react'
 import { supabase } from '../lib/supabase'
@@ -83,7 +84,7 @@ export function SedeProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await (supabase
           .from('sedes') as any)
-          .select('*')
+          .select('id, nombre, es_principal, activa')
           .eq('activa', true)
           .order('es_principal', { ascending: false })
           .order('nombre')
@@ -162,18 +163,20 @@ export function SedeProvider({ children }: { children: ReactNode }) {
     return (query as any).eq(campo, sedeActual.id)
   }, [verTodas, sedeActual])
 
+  const value = useMemo(() => ({
+    sedes,
+    sedeActual,
+    sedeActualId,
+    verTodas,
+    sedeUsuario,
+    loading,
+    cambiarSede,
+    puedeVerTodasSedes,
+    aplicarFiltroSede,
+  }), [sedes, sedeActual, sedeActualId, verTodas, sedeUsuario, loading, cambiarSede, puedeVerTodasSedes, aplicarFiltroSede])
+
   return (
-    <SedeContext.Provider value={{
-      sedes,
-      sedeActual,
-      sedeActualId,
-      verTodas,
-      sedeUsuario,
-      loading,
-      cambiarSede,
-      puedeVerTodasSedes,
-      aplicarFiltroSede,
-    }}>
+    <SedeContext.Provider value={value}>
       {children}
     </SedeContext.Provider>
   )

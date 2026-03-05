@@ -24,7 +24,7 @@ import type {
 export async function fetchCategorias(): Promise<VisitaCategoria[]> {
   const { data, error } = await supabase
     .from('visitas_categorias')
-    .select('*')
+    .select('id, nombre, color, duracion_default, requiere_patente, orden, activo, created_at')
     .eq('activo', true)
     .order('orden');
   if (error) throw error;
@@ -34,7 +34,7 @@ export async function fetchCategorias(): Promise<VisitaCategoria[]> {
 export async function fetchMotivos(): Promise<VisitaMotivo[]> {
   const { data, error } = await supabase
     .from('visitas_motivos')
-    .select('*')
+    .select('id, categoria_id, nombre, activo, created_at')
     .eq('activo', true)
     .order('nombre');
   if (error) throw error;
@@ -44,7 +44,7 @@ export async function fetchMotivos(): Promise<VisitaMotivo[]> {
 export async function fetchAreas(sedeId: string | null): Promise<VisitaArea[]> {
   let query = supabase
     .from('visitas_areas')
-    .select('*')
+    .select('id, nombre, sede_id, orden, activo, created_at')
     .eq('activo', true)
     .order('orden');
   if (sedeId) query = query.eq('sede_id', sedeId);
@@ -72,7 +72,7 @@ export async function fetchHorarios(atendedorIds: string[]): Promise<VisitaHorar
   if (atendedorIds.length === 0) return [];
   const { data, error } = await supabase
     .from('visitas_horarios')
-    .select('*')
+    .select('id, atendedor_id, dia_semana, hora_inicio, hora_fin, activo')
     .in('atendedor_id', atendedorIds)
     .eq('activo', true);
   if (error) throw error;
@@ -235,7 +235,7 @@ export function getMotivosByCategoria(
 export async function fetchAllCategorias(): Promise<VisitaCategoria[]> {
   const { data, error } = await supabase
     .from('visitas_categorias')
-    .select('*')
+    .select('id, nombre, color, duracion_default, requiere_patente, orden, activo, created_at')
     .order('orden');
   if (error) throw error;
   return data ?? [];
@@ -300,7 +300,7 @@ export async function deleteMotivo(id: string): Promise<void> {
 export async function fetchAllAreas(sedeId: string | null): Promise<VisitaArea[]> {
   let query = supabase
     .from('visitas_areas')
-    .select('*')
+    .select('id, nombre, sede_id, orden, activo, created_at')
     .order('orden');
   if (sedeId) query = query.eq('sede_id', sedeId);
   const { data, error } = await query;
@@ -369,7 +369,7 @@ export async function deleteAtendedor(id: string): Promise<void> {
 export async function fetchHorariosByAtendedor(atendedorId: string): Promise<VisitaHorario[]> {
   const { data, error } = await supabase
     .from('visitas_horarios')
-    .select('*')
+    .select('id, atendedor_id, dia_semana, hora_inicio, hora_fin, activo')
     .eq('atendedor_id', atendedorId)
     .order('dia_semana');
   if (error) throw error;

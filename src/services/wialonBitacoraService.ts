@@ -235,6 +235,7 @@ export const wialonBitacoraService = {
       .select('patente_normalizada, conductor_wialon, kilometraje, estado, gnc_cargado, lavado_realizado, nafta_cargada')
       .gte('fecha_turno', startDate)
       .lte('fecha_turno', endDate)
+      .limit(5000)
 
     // Cast a tipo conocido
     const data = (rawData || []) as WialonBitacoraStatsRow[]

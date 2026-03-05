@@ -235,12 +235,15 @@ interface SubmenuWithHierarchy {
   order_index: number
 }
 
+// Module-level flag: sync guía menus only once per session (admin only)
+let guiaSyncDone = false
+
 export function HomePage() {
   const { profile, signOut } = useAuth()
   const { sedes, sedeActual, verTodas, cambiarSede, puedeVerTodasSedes, sedeActualId } = useSede()
   const navigate = useNavigate()
   const location = useLocation()
-  const { getVisibleMenus, getVisibleSubmenusForMenu, loading } = useEffectivePermissions()
+  const { getVisibleMenus, getVisibleSubmenusForMenu, loading, isAdmin } = useEffectivePermissions()
   useTheme() // Para mantener el contexto del tema activo
   const [sedeDropdownOpen, setSedeDropdownOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -258,7 +261,10 @@ export function HomePage() {
       const guiasData = await fetchGuias()
       setGuias(guiasData)
       
-      // Auto-sync guías como submenús en la tabla submenus
+      // Auto-sync guías como submenús: only for admin, once per session
+      if (!isAdmin() || guiaSyncDone) return
+      guiaSyncDone = true
+
       const { data: menusData } = await supabase
         .from('menus')
         .select('id, name')
@@ -333,6 +339,7 @@ export function HomePage() {
       }
     }
     initGuias()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const distributeDrivers = async () => {
