@@ -1473,7 +1473,7 @@ export function ReporteFacturacionTab() {
       // a) Penalidades aplicadas completas en esta semana
       const { data: penalidadesCompletas } = await (supabase
         .from('penalidades') as any)
-        .select('id, conductor_id, monto, detalle, observaciones, tipos_cobro_descuento(categoria, es_a_favor, nombre)')
+        .select('id, conductor_id, monto, detalle, observaciones, incidencia_id, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)')
         .eq('aplicado', true)
         .eq('fraccionado', false)
         .neq('rechazado', true)
@@ -1561,11 +1561,15 @@ export function ReporteFacturacionTab() {
             penalidadesMap.set(p.conductor_id, actual + (p.monto || 0))
           }
           
-          // Guardar detalle
+          // Guardar detalle (incluir descripción de incidencia si existe)
           const detalles = detalleMap.get(p.conductor_id) || []
+          const incDesc = (p as any).incidencias?.descripcion
+          const tipoNombre = p.tipos_cobro_descuento?.nombre || ''
+          let detalleTexto = tipoNombre || p.detalle || p.observaciones || 'Cobro por incidencia'
+          if (incDesc) detalleTexto += ` - ${incDesc}`
           detalles.push({
             monto: p.monto || 0,
-            detalle: p.detalle || p.observaciones || 'Cobro por incidencia',
+            detalle: detalleTexto,
             tipo: 'completa'
           })
           detalleMap.set(p.conductor_id, detalles)
@@ -2266,7 +2270,7 @@ export function ReporteFacturacionTab() {
       // NOTA: multas_historico DESACTIVADO temporalmente — reactivar cuando se defina el flujo
       const MULTAS_HABILITADAS = false
       const [penalidadesRes, ticketsRes, saldosRes, excesosRes, cabifyRes, garantiasRes, cobrosRes, multasRes] = await Promise.all([
-        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
+        (supabase.from('penalidades') as any).select('*, tipos_cobro_descuento(categoria, es_a_favor, nombre), incidencias(descripcion)').in('conductor_id', conductorIds).gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('aplicado', false).eq('fraccionado', false).neq('rechazado', true),
         (supabase.from('tickets_favor') as any).select('*').in('conductor_id', conductorIds).eq('estado', 'aprobado'),
         (supabase.from('saldos_conductores') as any).select('conductor_id, saldo_actual').in('conductor_id', conductorIds),
         (supabase.from('excesos_kilometraje') as any).select('*').in('conductor_id', conductorIds).eq('aplicado', false),
@@ -2594,7 +2598,7 @@ export function ReporteFacturacionTab() {
         await (supabase.from('facturacion_detalle') as any).insert({
           facturacion_id: facturacionId,
           concepto_codigo: 'P003', concepto_descripcion: descripcionGarantia,
-          cantidad: conductor.total_dias, precio_unitario: cuotaGarantiaProporcional / 7,
+          cantidad: 1, precio_unitario: cuotaGarantiaProporcional,
           subtotal: cuotaGarantiaProporcional, total: cuotaGarantiaProporcional, es_descuento: false
         })
 
@@ -2608,11 +2612,13 @@ export function ReporteFacturacionTab() {
         for (const grupo of gruposPenalidades) {
           for (const pen of grupo.pens) {
             const tipoNombre = (pen as any).tipos_cobro_descuento?.nombre || 'Sin detalle'
+            const incDescSave = (pen as any).incidencias?.descripcion
+            const detalleCompleto = incDescSave ? `${tipoNombre} - ${incDescSave}` : tipoNombre
             const descripcion = grupo.codigo === 'P004'
-              ? `Ticket: ${tipoNombre}`
+              ? `Ticket: ${detalleCompleto}`
               : grupo.codigo === 'P006'
-                ? `Exceso KM: ${tipoNombre}`
-                : `Penalidad: ${tipoNombre}`
+                ? `Exceso KM: ${detalleCompleto}`
+                : `Penalidad: ${detalleCompleto}`
             await (supabase.from('facturacion_detalle') as any).insert({
               facturacion_id: facturacionId,
               concepto_codigo: grupo.codigo,
@@ -4956,38 +4962,38 @@ export function ReporteFacturacionTab() {
     try {
       const wb = XLSX.utils.book_new()
 
-      // Headers exactos de SiFactura
+      // Headers SiFactura (sin descripciones)
       const headers = [
         'N°',
-        'FECHA EMISION. Debe ser con formato dd/mm/aaaa',
-        'FECHA VENCIMIENTO. Debe ser con formato dd/mm/aaaa',
+        'FECHA EMISION',
+        'FECHA VENCIMIENTO',
         'PUNTO DE VENTA',
-        "TIPO FACTURA. Ver valores permiido en la solapa 'Tablas de ayuda'",
-        "TIPO DOCUMENTO. Ver valores permiido en la solapa 'Tablas de ayuda'",
-        'NUMERO CUIL ',
-        'NUMERO DNI ',
-        'TOTAL. Importe total de su comprobante',
-        'COBRADO. Importe total cobrado para este comprobante, valor entre 0 y TOTAL, en caso de ser mayor el sistema lo seteará en el valor igual al TOTAL',
-        "CONDICION IVA. Ver valores permitido en la solapa 'Tablas de ayuda'",
-        "CONDICION DE VENTA. Ver valores permiido en la solapa 'Tablas de ayuda'",
-        'RAZON SOCIAL. Indicar la razón social del receptor del comprobante, si éste existe detro de Sifactura,  se tomará dicha razón social para el comprobante generado, sino el software creará un nuevo cliente con el tipo de documento, número y razón social aquí indicada.',
+        'TIPO FACTURA',
+        'TIPO DOCUMENTO',
+        'NUMERO CUIL',
+        'NUMERO DNI',
+        'TOTAL',
+        'COBRADO',
+        'CONDICION IVA',
+        'CONDICION DE VENTA',
+        'RAZON SOCIAL',
         'DOMICILIO',
-        "CODIGO PRODUCTO. Este código debe existir en la sección de Base de datos->Producto (el tipo de sección del producto debe ser VENTAS)",
-        'DESCRIPCION ADICIONAL. Esta descripción se concatenará al final de la descripción del producto previamente creado dentro de Sifactura',
-        'EMAIL. Correo electrónico al que se enviará el comprobante de venta',
-        'NOTA. Puede o no existir, si este campo s completa, se imprimirá al pie del comprobante y se verá en la impresión',
+        'CODIGO PRODUCTO',
+        'DESCRIPCION ADICIONAL',
+        'EMAIL',
+        'NOTA',
         'MONEDA',
-        'TIPO DE CAMBIO. Debe ser igual a 1 para la moneda PES',
-        'NETO GRAVADO. Si el tipo decomprobante enviado es RECIBO y/o FACTURA C este valor debe ser cero',
-        'Imp IVA al 21%',
-        'EXENTO. Si el tipo decomprobante enviado es RECIBO y/o FACTURA C este valor debe ser cero',
+        'TIPO DE CAMBIO',
+        'NETO GRAVADO',
+        'IMP IVA 21%',
+        'EXENTO',
         'TOTAL ',
-        'IVA PORCENTAJE. Debe utilizar el valor IVA_EXENTO si el tipo de factura es RECIBO_C, RECIBO_X y/o FACTURA_X',
-        "Generar asiento contable. Ver valores permiido en la solapa 'Tablas de ayuda'",
-        'Contabilidad. ID del plan de cuenta de la cuenta debito (de la sección Contabilidad->Plan de Cuenta) sin puntos, solo números',
-        'Contabilidad. ID del plan de cuenta de la cuenta crédito (de la sección Contabilidad->Plan de Cuenta) sin puntos, solo números',
-        'REFERENCIA. En caso de ND o NC puede indicar el comprobante referenciado',
-        'CHECK '
+        'IVA PORCENTAJE',
+        'GENERAR ASIENTO',
+        'CTA DEBITO',
+        'CTA CREDITO',
+        'REFERENCIA',
+        'CHECK'
       ]
 
       // Convertir preview data a formato array para Excel
@@ -5101,7 +5107,7 @@ export function ReporteFacturacionTab() {
       // Penalidades se filtran por el campo 'semana' (número de semana del período)
       const { data: todasPenalidadesData } = await (supabase
         .from('penalidades') as any)
-        .select('*, tipos_cobro_descuento(nombre, categoria, es_a_favor), conductor:conductores(nombres, apellidos)')
+        .select('*, tipos_cobro_descuento(nombre, categoria, es_a_favor), conductor:conductores(nombres, apellidos), incidencias(descripcion)')
         .eq('aplicado', false)
         .eq('rechazado', false)
         .eq('fraccionado', false) // Solo NO fraccionadas (las fraccionadas van por penalidades_cuotas)
@@ -5484,11 +5490,13 @@ export function ReporteFacturacionTab() {
             continue
           }
           const tipoNombre = penalidad.tipos_cobro_descuento?.nombre || penalidad.detalle || 'Sin detalle'
+          const incDescVP = penalidad.incidencias?.descripcion
+          const detalleConcat = incDescVP ? `${tipoNombre} - ${incDescVP}` : tipoNombre
           const descripcion = categoria === 'P004'
-            ? `Ticket: ${tipoNombre}`
+            ? `Ticket: ${detalleConcat}`
             : categoria === 'P006'
-              ? `Exceso KM: ${tipoNombre}`
-              : `Penalidad: ${tipoNombre}`
+              ? `Exceso KM: ${detalleConcat}`
+              : `Penalidad: ${detalleConcat}`
           
           filasPreview.push(crearFilaPreview(
             numeroFactura++,
