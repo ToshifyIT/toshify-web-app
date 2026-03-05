@@ -178,6 +178,11 @@ export function DiscrepancyReportModal({ onClose }: DiscrepancyReportModalProps)
           </button>
         </div>
 
+        {/* Descripción */}
+        <div style={{ padding: '10px 20px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, borderBottom: '1px solid var(--border-secondary)' }}>
+          Compara el DNI y patente guardados en Conductores contra los datos que llegan de Cabify. Si un mismo dato está escrito diferente (ej: con cero adelante, con guión, etc.), aparece acá para que se corrija en el sistema que corresponda.
+        </div>
+
         {/* Summary badges */}
         {!loading && discrepancies.length > 0 && (
           <div style={{ padding: '8px 20px', display: 'flex', gap: 12, borderBottom: '1px solid var(--border-secondary)' }}>
