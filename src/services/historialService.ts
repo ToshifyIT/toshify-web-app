@@ -48,9 +48,14 @@ interface HistorialConductorParams {
 }
 
 /**
- * Obtiene el usuario actual (id y nombre) desde la sesión de Supabase
+ * Obtiene el usuario actual (id y nombre) desde la sesión de Supabase.
+ * Caches the result in memory so subsequent calls avoid extra queries.
  */
+let cachedUsuario: { id: string | null; nombre: string | null } | null = null;
+
 async function getUsuarioActual(): Promise<{ id: string | null; nombre: string | null }> {
+  if (cachedUsuario) return cachedUsuario;
+
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { id: null, nombre: null };
@@ -61,10 +66,11 @@ async function getUsuarioActual(): Promise<{ id: string | null; nombre: string |
       .eq('id', user.id)
       .single();
 
-    return {
+    cachedUsuario = {
       id: user.id,
       nombre: profile?.full_name || user.email || null,
     };
+    return cachedUsuario;
   } catch {
     return { id: null, nombre: null };
   }

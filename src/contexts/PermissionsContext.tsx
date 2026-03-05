@@ -108,7 +108,7 @@ interface PermissionsContextType {
 const PermissionsContext = createContext<PermissionsContextType | undefined>(undefined)
 
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
-  const { user, profile, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [userPermissions, setUserPermissions] = useState<UserPermissionsResponse | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -121,12 +121,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       return
     }
 
-    // Esperar a que profile esté disponible (cargado por AuthContext)
-    if (!profile) return
-
     loadPermissions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, profile, authLoading])
+  }, [user, authLoading])
 
   const loadPermissions = async () => {
     if (!user) {
@@ -173,11 +170,18 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   // Fallback cuando el edge function no está disponible
   const loadPermissionsFallback = async () => {
     try {
-      // Usar perfil ya cargado por AuthContext (evita query duplicado a user_profiles)
-      if (!profile) throw new Error('No profile data')
+      // Cargar perfil del usuario con su rol
+      const { data: profileData, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*, roles(*)')
+        .eq('id', user!.id)
+        .single()
+
+      if (profileError) throw profileError
+      if (!profileData) throw new Error('No profile data')
 
       // Verificar si es admin
-      const isUserAdmin = profile.roles?.name === 'admin'
+      const isUserAdmin = (profileData as any).roles?.name === 'admin'
 
       let menusData: MenuPermission[] = []
       let submenusData: SubmenuPermission[] = []
@@ -337,9 +341,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         user_id: user!.id,
         email: user!.email || '',
         role: {
-          id: profile.role_id || '',
-          name: profile.roles?.name || 'sin_rol',
-          description: profile.roles?.description || 'Sin descripción'
+          id: (profileData as any).role_id || '',
+          name: (profileData as any).roles?.name || 'sin_rol',
+          description: (profileData as any).roles?.description || 'Sin descripción'
         },
         menus: menusData,
         submenus: submenusData,

@@ -76,9 +76,7 @@ export function ConductoresModule() {
   const [nombreFilter, setNombreFilter] = useState<string[]>([]);
   const [nombreSearch, setNombreSearch] = useState('');
   const [dniFilter, setDniFilter] = useState<string[]>([]);
-  const [dniSearch, setDniSearch] = useState('');
   const [cbuFilter, setCbuFilter] = useState<string[]>([]);
-  const [cbuSearch, setCbuSearch] = useState('');
   const [estadoFilter, setEstadoFilter] = useState<string[]>([]);
   const [turnoFilter, setTurnoFilter] = useState<string[]>([]);
   const [categoriaFilter, setCategoriaFilter] = useState<string[]>([]);
@@ -1587,15 +1585,7 @@ export function ConductoresModule() {
     return [...new Set(nombres)].sort();
   }, [conductores]);
 
-  const dnisUnicos = useMemo(() => {
-    const dnis = conductores.map(c => c.numero_dni).filter(Boolean) as string[];
-    return [...new Set(dnis)].sort();
-  }, [conductores]);
 
-  const cuilsUnicos = useMemo(() => {
-    const cuils = conductores.map(c => c.numero_cuit).filter(Boolean) as string[];
-    return [...new Set(cuils)].sort();
-  }, [conductores]);
 
   const turnosUnicos = ['DIURNO', 'NOCTURNO', 'SIN_PREFERENCIA', 'A_CARGO'];
   const turnoLabels: Record<string, string> = {
@@ -1611,32 +1601,10 @@ export function ConductoresModule() {
     return nombresUnicos.filter(n => n.toLowerCase().includes(nombreSearch.toLowerCase()));
   }, [nombresUnicos, nombreSearch]);
 
-  const dnisFiltrados = useMemo(() => {
-    if (!dniSearch) return dnisUnicos;
-    return dnisUnicos.filter(d => d.toLowerCase().includes(dniSearch.toLowerCase()));
-  }, [dnisUnicos, dniSearch]);
-
-  const cuilsFiltrados = useMemo(() => {
-    if (!cbuSearch) return cuilsUnicos;
-    return cuilsUnicos.filter(c => c.toLowerCase().includes(cbuSearch.toLowerCase()));
-  }, [cuilsUnicos, cbuSearch]);
-
   // Toggle functions para multiselect
   const toggleNombreFilter = (nombre: string) => {
     setNombreFilter(prev =>
       prev.includes(nombre) ? prev.filter(n => n !== nombre) : [...prev, nombre]
-    );
-  };
-
-  const toggleDniFilter = (dni: string) => {
-    setDniFilter(prev =>
-      prev.includes(dni) ? prev.filter(d => d !== dni) : [...prev, dni]
-    );
-  };
-
-  const toggleCbuFilter = (cbu: string) => {
-    setCbuFilter(prev =>
-      prev.includes(cbu) ? prev.filter(c => c !== cbu) : [...prev, cbu]
     );
   };
 
@@ -1800,7 +1768,7 @@ export function ConductoresModule() {
         accessorKey: "nombres",
         header: () => (
           <div className="dt-column-filter">
-            <span>Nombre {nombreFilter.length > 0 && `(${nombreFilter.length})`}</span>
+            <span>Conductor {nombreFilter.length > 0 && `(${nombreFilter.length})`}</span>
             <button
               className={`dt-column-filter-btn ${nombreFilter.length > 0 ? 'active' : ''}`}
               onClick={(e) => {
@@ -1850,129 +1818,22 @@ export function ConductoresModule() {
           </div>
         ),
         cell: ({ row }) => (
-          <a
-            href={`/conductores?id=${row.original.id}`}
-            onClick={(e) => {
-              e.preventDefault();
-              handleOpenDetails(row.original.id);
-            }}
-            style={{ display: 'block', padding: '10px 12px', margin: '-10px -12px', textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none' }}
-          >
-            {`${row.original.nombres} ${row.original.apellidos}`}
-          </a>
-        ),
-        enableSorting: true,
-      },
-      {
-        accessorKey: "numero_dni",
-        header: () => (
-          <div className="dt-column-filter">
-            <span>DNI {dniFilter.length > 0 && `(${dniFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${dniFilter.length > 0 ? 'active' : ''}`}
+          <div style={{ textAlign: 'left' }}>
+            <a
+              href={`/conductores?id=${row.original.id}`}
               onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'dni' ? null : 'dni');
+                e.preventDefault();
+                handleOpenDetails(row.original.id);
               }}
-              title="Filtrar por DNI"
+              style={{ textTransform: 'uppercase', fontWeight: 700, color: 'inherit', textDecoration: 'none', display: 'block' }}
             >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'dni' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={dniSearch}
-                  onChange={(e) => setDniSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {dnisFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    dnisFiltrados.slice(0, 50).map(dni => (
-                      <label key={dni} className={`dt-column-filter-checkbox ${dniFilter.includes(dni) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={dniFilter.includes(dni)}
-                          onChange={() => toggleDniFilter(dni)}
-                        />
-                        <span>{dni}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {dniFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setDniFilter([]); setDniSearch(''); }}
-                  >
-                    Limpiar ({dniFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
+              {`${row.original.nombres} ${row.original.apellidos}`}
+            </a>
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+              {row.original.numero_dni || '-'} · {row.original.numero_cuit || '-'}
+            </span>
           </div>
         ),
-        cell: ({ getValue }) => (getValue() as string) || "-",
-        enableSorting: true,
-      },
-      {
-        accessorKey: "numero_cuit",
-        header: () => (
-          <div className="dt-column-filter">
-            <span>CUIT {cbuFilter.length > 0 && `(${cbuFilter.length})`}</span>
-            <button
-              className={`dt-column-filter-btn ${cbuFilter.length > 0 ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenColumnFilter(openColumnFilter === 'cbu' ? null : 'cbu');
-              }}
-              title="Filtrar por CUIT"
-            >
-              <Filter size={12} />
-            </button>
-            {openColumnFilter === 'cbu' && (
-              <div className="dt-column-filter-dropdown dt-excel-filter" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={cbuSearch}
-                  onChange={(e) => setCbuSearch(e.target.value)}
-                  className="dt-column-filter-input"
-                  autoFocus
-                />
-                <div className="dt-excel-filter-list">
-                  {cuilsFiltrados.length === 0 ? (
-                    <div className="dt-excel-filter-empty">Sin resultados</div>
-                  ) : (
-                    cuilsFiltrados.slice(0, 50).map(cuil => (
-                      <label key={cuil} className={`dt-column-filter-checkbox ${cbuFilter.includes(cuil) ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={cbuFilter.includes(cuil)}
-                          onChange={() => toggleCbuFilter(cuil)}
-                        />
-                        <span>{cuil}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {cbuFilter.length > 0 && (
-                  <button
-                    className="dt-column-filter-clear"
-                    onClick={() => { setCbuFilter([]); setCbuSearch(''); }}
-                  >
-                    Limpiar ({cbuFilter.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ),
-        cell: ({ row }) => row.original.numero_cuit || "-",
         enableSorting: true,
       },
       {
@@ -2283,7 +2144,7 @@ export function ConductoresModule() {
         enableSorting: false,
       },
     ],
-    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, dniSearch, dnisFiltrados, cbuFilter, cbuSearch, cuilsFiltrados, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, openColumnFilter, uniqueEstados, creatingDriveFolder, activeStatCard],
+    [canUpdate, canDelete, nombreFilter, nombreSearch, nombresFiltrados, dniFilter, cbuFilter, estadoFilter, turnoFilter, categoriaFilter, uniqueCategorias, asignacionFilter, openColumnFilter, uniqueEstados, creatingDriveFolder, activeStatCard],
   );
 
   return (

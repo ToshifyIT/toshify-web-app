@@ -153,7 +153,10 @@ export const distributeDriversService = async (guias: Guia[]) => {
       }
 
       if (updates.length > 0) {
-        
+        // N+1 NOTE: Each driver gets a different id_guia value, so we can't batch
+        // with .in('id', [...]) since the payload differs per row. Supabase JS client
+        // doesn't support multi-row upsert with different values per row without RPC.
+        // Promise.all parallelism is acceptable here for write operations (~20 concurrent).
         const updatePromises = updates.map(update => 
           supabase
             .from('conductores')

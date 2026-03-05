@@ -372,13 +372,13 @@ export function IncidenciasModule() {
         rechazosRes,
         conceptosRes
       ] = await Promise.all([
-        (supabase.from('incidencias_estados' as any) as any).select('*').eq('is_active', true).order('orden'),
-        (supabase.from('tipos_penalidad' as any) as any).select('*').eq('is_active', true).order('orden'),
-        (supabase.from('tipos_cobro_descuento' as any) as any).select('*').eq('is_active', true).order('orden'),
+        (supabase.from('incidencias_estados' as any) as any).select('id, codigo, nombre, color, orden').eq('is_active', true).order('orden'),
+        (supabase.from('tipos_penalidad' as any) as any).select('id, codigo, nombre, descripcion, orden').eq('is_active', true).order('orden'),
+        (supabase.from('tipos_cobro_descuento' as any) as any).select('id, codigo, nombre, descripcion, categoria, es_a_favor, orden').eq('is_active', true).order('orden'),
         aplicarFiltroSede(supabase.from('vehiculos').select('id, patente, marca, modelo').is('deleted_at', null)).order('patente'),
         aplicarFiltroSede(supabase.from('conductores').select('id, nombres, apellidos')).order('apellidos'),
-        aplicarFiltroSede((supabase.from('v_incidencias_completas' as any) as any).select('*')).order('fecha', { ascending: false }),
-        aplicarFiltroSede((supabase.from('v_penalidades_completas' as any) as any).select('*')).order('fecha', { ascending: false }),
+        aplicarFiltroSede((supabase.from('v_incidencias_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
+        aplicarFiltroSede((supabase.from('v_penalidades_completas' as any) as any).select('*')).order('fecha', { ascending: false }).limit(2000),
         // Obtener campos adicionales de la tabla incidencias (tipo, monto)
         (supabase.from('incidencias' as any) as any).select('id, tipo, tipo_cobro_descuento_id, monto'),
         // Obtener campos frescos de la tabla penalidades (aplicado, rechazado, incidencia_id)
@@ -1809,7 +1809,7 @@ export function IncidenciasModule() {
       
       const { data: insertedData, error: insertError } = await (supabase.from('penalidades' as any) as any)
         .insert(penalidadData)
-        .select('*')
+        .select('id, aplicado')
         .single()
       
       if (insertError) throw insertError

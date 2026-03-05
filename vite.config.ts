@@ -25,6 +25,8 @@ export default defineConfig({
           'vendor-swal': ['sweetalert2'],
           // TanStack Table — se usa en DataTable
           'vendor-table': ['@tanstack/react-table'],
+          // Lucide icons — SVGs cacheables por separado
+          'vendor-icons': ['lucide-react'],
           // Date utilities
           'vendor-date': ['date-fns'],
           // Calendar — solo módulo visitas
