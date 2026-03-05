@@ -506,8 +506,9 @@ export function ReporteFacturacionTab() {
       const semanaInicio = parseISO(fechaInicio)
       const semanaFin = parseISO(fechaFin)
 
-      // Facturación cobra semana completa - usar fin de semana como límite siempre
-      const limiteConteo = semanaFin
+      // Solo contar días hasta hoy (no proyectar días futuros)
+      const hoyDesglose = parseISO(toArgDate(new Date().toISOString()))
+      const limiteConteo = hoyDesglose < semanaFin ? hoyDesglose : semanaFin
 
       const [{ data: asignacionesCond }, { data: conductorDesglose }] = await Promise.all([
         (supabase
@@ -599,7 +600,7 @@ export function ReporteFacturacionTab() {
       }
 
       // Generar los 7 días de la semana con su estado
-      // Facturación cobra semana completa - días futuros se asumen trabajados si tienen asignación
+      // Solo días hasta hoy se marcan como trabajados, futuros quedan como pendientes
       const diasSemana: { fecha: string; diaSemana: string; horario: string; trabajado: boolean }[] = []
       const cursor = new Date(semanaInicio)
       while (cursor <= semanaFin) {
@@ -1193,8 +1194,9 @@ export function ReporteFacturacionTab() {
 
       // Calcular días por modalidad/horario para cada conductor
       const fechaInicioSemana = semanaActual.inicio
-      // Facturación siempre usa semana completa (deducciones vía incidencias)
-      const fechaFinSemana = semanaActual.fin
+      // Solo contar días hasta hoy (no proyectar días futuros)
+      const hoyVP = parseISO(toArgDate(new Date().toISOString()))
+      const fechaFinSemana = hoyVP < semanaActual.fin ? hoyVP : semanaActual.fin
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTermMapVP = new Map<string, Date>()
@@ -2157,7 +2159,10 @@ export function ReporteFacturacionTab() {
       conductorIdsTemp.forEach((id: string) => diasContadosRecalc.set(id, new Set()))
 
       const fechaInicioSemanaRecalc = parseISO(fechaInicio)
-      const fechaFinSemanaRecalc = parseISO(fechaFin)
+      // Solo contar días hasta hoy (no proyectar días futuros)
+      const hoyRecalc = parseISO(toArgDate(new Date().toISOString()))
+      const finSemanaRecalcReal = parseISO(fechaFin)
+      const fechaFinSemanaRecalc = hoyRecalc < finSemanaRecalcReal ? hoyRecalc : finSemanaRecalcReal
 
       // Map de conductor_id → fecha_terminacion (tope de días para conductores de baja)
       const fechaTerminacionMap = new Map<string, Date>()
