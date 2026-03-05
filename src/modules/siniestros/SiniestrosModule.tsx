@@ -574,7 +574,6 @@ export function SiniestrosModule() {
         
         return (
           <ActionsMenu
-            maxVisible={2}
             actions={[
               {
                 icon: <Eye size={15} />,

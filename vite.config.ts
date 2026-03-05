@@ -27,6 +27,8 @@ export default defineConfig({
           'vendor-table': ['@tanstack/react-table'],
           // Date utilities
           'vendor-date': ['date-fns'],
+          // Calendar — solo módulo visitas
+          'vendor-calendar': ['react-big-calendar'],
         },
       },
     },

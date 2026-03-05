@@ -401,6 +401,18 @@
   table-layout: auto;
 }
 
+/* Column sizing: shrink to content, expand fills remaining space */
+.dt-table th.dt-col-shrink,
+.dt-table td.dt-col-shrink {
+  white-space: nowrap;
+}
+
+.dt-table th.dt-col-expand,
+.dt-table td.dt-col-expand {
+  width: 100%;
+  white-space: nowrap;
+}
+
 /* Sticky column for actions (right) */
 .dt-sticky-col {
   position: sticky;
@@ -465,7 +477,7 @@
 .dt-table th {
   background: var(--table-header-bg);
   padding: 10px 12px;
-  text-align: left;
+  text-align: center;
   font-size: 10px;
   font-weight: 700;
   color: var(--text-tertiary);
@@ -490,12 +502,13 @@
 }
 
 .dt-table th:last-child {
-  text-align: right;
+  text-align: center;
 }
 
 .dt-header-content {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 
@@ -515,10 +528,17 @@
   color: var(--text-primary);
   font-size: 13px;
   vertical-align: middle;
+  text-align: center;
 }
 
 .dt-table td:last-child {
-  text-align: right;
+  text-align: center;
+}
+
+/* Center block/flex children inside cells (text-align only works for inline content) */
+.dt-table td > div {
+  margin-inline: auto;
+  width: fit-content;
 }
 
 .dt-table tbody tr {

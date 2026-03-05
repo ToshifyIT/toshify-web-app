@@ -693,10 +693,19 @@ export function DataTable<T>({
     }
   }, [table, onTableReady]);
 
-  // Detectar si alguna columna tiene meta.expand explícito
-  const hasAnyExpandColumn = finalColumns.some(
-    col => !!(col.meta as Record<string, unknown>)?.expand
-  );
+  // Map de columnas con size REAL (definido por el usuario, no el default 150 de TanStack)
+  const userColumnSizes = useMemo(() => {
+    const map = new Map<string, number>();
+    columns.forEach(col => {
+      const def = col as { accessorKey?: string; id?: string; size?: number };
+      const colId = def.accessorKey || def.id || '';
+      if (colId && def.size !== undefined) {
+        map.set(colId, def.size);
+      }
+    });
+    return map;
+  }, [columns]);
+  const columnsWithUserSize = userColumnSizes;
 
   // Get active filters info for display
   const activeFiltersInfo = useMemo(() => {
@@ -1076,12 +1085,10 @@ export function DataTable<T>({
                     {headerGroup.headers.map((header, headerIndex) => {
                       const isActionsColumn = alwaysVisibleColumns.includes(header.id);
                       const isFirstColumn = stickyFirstColumn && headerIndex === 0;
-                      const hasExplicitSize = !!header.column.columnDef.size;
+                      const hasExplicitSize = columnsWithUserSize.has(header.id);
                       const isExpandColumn = !!(header.column.columnDef.meta as Record<string, unknown>)?.expand;
-                      // Si nadie tiene meta.expand, la columna de acciones absorbe el espacio
-                      const autoExpand = !hasAnyExpandColumn && isActionsColumn;
-                      const shouldShrink = !hasExplicitSize && !isExpandColumn && !autoExpand;
-                      const shouldExpand = isExpandColumn || autoExpand;
+                      const shouldShrink = !hasExplicitSize && !isExpandColumn;
+                      const shouldExpand = isExpandColumn;
                       return (
                         <th
                           key={header.id}
@@ -1093,7 +1100,7 @@ export function DataTable<T>({
                             ${shouldShrink ? "dt-col-shrink" : ""}
                             ${shouldExpand ? "dt-col-expand" : ""}
                           `}
-                          style={hasExplicitSize ? { width: `${header.column.columnDef.size}px`, maxWidth: `${header.column.columnDef.size}px` } : undefined}
+                          style={hasExplicitSize ? { width: `${userColumnSizes.get(header.id)}px`, maxWidth: `${userColumnSizes.get(header.id)}px` } : undefined}
                         >
                           <div
                             className={`dt-header-content ${
@@ -1132,16 +1139,15 @@ export function DataTable<T>({
                       {row.getVisibleCells().map((cell, cellIndex) => {
                         const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
                         const isFirstColumn = stickyFirstColumn && cellIndex === 0;
-                        const hasExplicitSize = !!cell.column.columnDef.size;
+                        const hasExplicitSize = columnsWithUserSize.has(cell.column.id);
                         const isExpandColumn = !!(cell.column.columnDef.meta as Record<string, unknown>)?.expand;
-                        const autoExpand = !hasAnyExpandColumn && isActionsColumn;
-                        const shouldShrink = !hasExplicitSize && !isExpandColumn && !autoExpand;
-                        const shouldExpand = isExpandColumn || autoExpand;
+                        const shouldShrink = !hasExplicitSize && !isExpandColumn;
+                        const shouldExpand = isExpandColumn;
                         return (
                           <td
                             key={cell.id}
                             className={`${isActionsColumn ? "dt-sticky-col" : ""} ${isFirstColumn ? "dt-sticky-col-left" : ""} ${shouldShrink ? "dt-col-shrink" : ""} ${shouldExpand ? "dt-col-expand" : ""}`}
-                            style={hasExplicitSize ? { width: `${cell.column.columnDef.size}px`, maxWidth: `${cell.column.columnDef.size}px` } : undefined}
+                            style={hasExplicitSize ? { width: `${userColumnSizes.get(cell.column.id)}px`, maxWidth: `${userColumnSizes.get(cell.column.id)}px` } : undefined}
                           >
                             {flexRender(
                               cell.column.columnDef.cell,

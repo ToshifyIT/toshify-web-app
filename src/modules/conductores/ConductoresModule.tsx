@@ -2242,7 +2242,6 @@ export function ConductoresModule() {
           
           return (
             <ActionsMenu
-              maxVisible={2}
               actions={[
                 {
                   icon: <Eye size={15} />,

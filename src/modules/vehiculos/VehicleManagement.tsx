@@ -1095,11 +1095,11 @@ export function VehicleManagement() {
           const color = getValue() as string
           if (!color) return <span style={{ color: 'var(--text-tertiary)' }}>-</span>
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
               <span
                 style={{
-                  width: '12px',
-                  height: '12px',
+                  width: '16px',
+                  height: '16px',
                   borderRadius: '50%',
                   background: color.toLowerCase() === 'blanco' ? '#f5f5f5' :
                               color.toLowerCase() === 'negro' ? '#1a1a1a' :
@@ -1113,11 +1113,12 @@ export function VehicleManagement() {
                               color.toLowerCase() === 'marron' || color.toLowerCase() === 'marrón' ? '#78350f' :
                               color.toLowerCase() === 'beige' ? '#d4c4a8' :
                               '#9ca3af',
-                  border: '1px solid var(--border-primary)',
-                  flexShrink: 0
+                  border: '2px solid var(--border-secondary)',
+                  boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.1)',
+                  flexShrink: 0,
                 }}
               />
-              <span>{color}</span>
+              <span style={{ fontWeight: 500 }}>{color}</span>
             </div>
           )
         },
@@ -1228,7 +1229,6 @@ export function VehicleManagement() {
           
           return (
             <ActionsMenu
-              maxVisible={3}
               actions={[
                 {
                   icon: <Eye size={15} />,

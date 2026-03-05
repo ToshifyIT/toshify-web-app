@@ -1,0 +1,924 @@
+/* =====================================================
+   MÓDULO VISITAS / AGENDAMIENTO
+   Usa variables del design system: theme.css + modules.css
+   ===================================================== */
+
+.visitas-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: calc(100vh - 170px);
+}
+
+.visitas-tab-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* =====================================================
+   HEADER
+   ===================================================== */
+
+.visitas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.visitas-view-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-secondary);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.visitas-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.visitas-view-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.visitas-view-btn.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+.visitas-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* =====================================================
+   CALENDARIO WRAPPER (card style)
+   ===================================================== */
+
+.visitas-calendario-wrapper {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* =====================================================
+   REACT-BIG-CALENDAR: OVERRIDE COMPLETO
+   ===================================================== */
+
+.visitas-calendario-wrapper .rbc-calendar {
+  font-family: inherit;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  color: var(--text-primary);
+}
+
+/* --- Toolbar --- */
+.visitas-calendario-wrapper .rbc-toolbar {
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.visitas-calendario-wrapper .rbc-toolbar button {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.4;
+}
+
+.visitas-calendario-wrapper .rbc-toolbar button:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--color-gray-300);
+}
+
+.visitas-calendario-wrapper .rbc-toolbar button:focus {
+  outline: none;
+  box-shadow: var(--input-focus-shadow);
+  border-color: var(--border-focus);
+}
+
+.visitas-calendario-wrapper .rbc-toolbar button.rbc-active {
+  background: var(--color-primary);
+  color: var(--text-inverse);
+  border-color: var(--color-primary);
+  font-weight: 600;
+  box-shadow: 0 2px 4px var(--color-primary-shadow);
+}
+
+.visitas-calendario-wrapper .rbc-toolbar button.rbc-active:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.visitas-calendario-wrapper .rbc-btn-group {
+  display: flex;
+  gap: 2px;
+}
+
+.visitas-calendario-wrapper .rbc-btn-group button + button {
+  margin-left: 0;
+}
+
+.visitas-calendario-wrapper .rbc-toolbar .rbc-toolbar-label {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+/* --- Header (day names) --- */
+.visitas-calendario-wrapper .rbc-header {
+  padding: 10px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--table-header-bg);
+  border-bottom: 1px solid var(--border-primary);
+  text-transform: capitalize;
+}
+
+.visitas-calendario-wrapper .rbc-header + .rbc-header {
+  border-left: 1px solid var(--border-secondary);
+}
+
+/* --- Time gutter (left column) --- */
+.visitas-calendario-wrapper .rbc-time-gutter .rbc-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  padding: 0 8px;
+}
+
+.visitas-calendario-wrapper .rbc-time-header-gutter {
+  background: var(--table-header-bg);
+}
+
+/* --- Time slots --- */
+.visitas-calendario-wrapper .rbc-time-slot {
+  border-top: 1px solid var(--border-secondary);
+}
+
+.visitas-calendario-wrapper .rbc-timeslot-group {
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.visitas-calendario-wrapper .rbc-time-content {
+  border-top: 1px solid var(--border-primary);
+}
+
+.visitas-calendario-wrapper .rbc-time-content > * + * > * {
+  border-left: 1px solid var(--border-secondary);
+}
+
+.visitas-calendario-wrapper .rbc-day-slot .rbc-time-slot {
+  border-top: 1px solid var(--border-secondary);
+}
+
+/* --- Today highlight --- */
+.visitas-calendario-wrapper .rbc-today {
+  background: var(--color-primary-light);
+}
+
+/* --- Month view --- */
+.visitas-calendario-wrapper .rbc-month-view {
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.visitas-calendario-wrapper .rbc-month-row {
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.visitas-calendario-wrapper .rbc-month-row + .rbc-month-row {
+  border-top: none;
+}
+
+.visitas-calendario-wrapper .rbc-day-bg + .rbc-day-bg {
+  border-left: 1px solid var(--border-secondary);
+}
+
+.visitas-calendario-wrapper .rbc-off-range-bg {
+  background: var(--bg-secondary);
+}
+
+.visitas-calendario-wrapper .rbc-off-range {
+  color: var(--text-tertiary);
+}
+
+.visitas-calendario-wrapper .rbc-date-cell {
+  padding: 4px 8px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.visitas-calendario-wrapper .rbc-date-cell.rbc-now {
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+/* --- Week/Day time view --- */
+.visitas-calendario-wrapper .rbc-time-view {
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.visitas-calendario-wrapper .rbc-time-header {
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.visitas-calendario-wrapper .rbc-time-header-content {
+  border-left: 1px solid var(--border-secondary);
+}
+
+.visitas-calendario-wrapper .rbc-allday-cell {
+  display: none;
+}
+
+/* --- Events --- */
+.visitas-calendario-wrapper .rbc-event {
+  border: none !important;
+  outline: none !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.visitas-calendario-wrapper .rbc-event:focus {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 1px;
+}
+
+.visitas-calendario-wrapper .rbc-event-label {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.visitas-calendario-wrapper .rbc-event-content {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.visitas-calendario-wrapper .rbc-show-more {
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 4px;
+}
+
+/* --- Resource header (day view with columns) --- */
+.visitas-calendario-wrapper .rbc-row-resource {
+  border-bottom: 2px solid var(--border-primary);
+}
+
+.visitas-calendario-wrapper .rbc-row-resource .rbc-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 10px 8px;
+}
+
+/* --- Selected slot --- */
+.visitas-calendario-wrapper .rbc-slot-selection {
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary);
+  border-radius: 4px;
+}
+
+/* --- Current time indicator --- */
+.visitas-calendario-wrapper .rbc-current-time-indicator {
+  background-color: var(--color-primary);
+  height: 2px;
+}
+
+/* --- Agenda view --- */
+.visitas-calendario-wrapper .rbc-agenda-view {
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.visitas-calendario-wrapper .rbc-agenda-view table {
+  border: none;
+}
+
+.visitas-calendario-wrapper .rbc-agenda-view th {
+  background: var(--table-header-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.visitas-calendario-wrapper .rbc-agenda-view td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-secondary);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* =====================================================
+   FORM MODAL
+   ===================================================== */
+
+.visitas-form-modal {
+  max-width: 560px;
+  width: 95vw;
+}
+
+.visitas-form-modal .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.visitas-form-modal .form-row:has(> :nth-child(3)) {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* =====================================================
+   DETALLE MODAL
+   ===================================================== */
+
+.visita-detalle-modal {
+  max-width: 480px;
+  width: 95vw;
+}
+
+.visita-detalle-header-info {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.visita-estado-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.visita-categoria-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.visita-detalle-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.visita-detalle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.visita-detalle-row svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+}
+
+.visita-detalle-fecha {
+  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.visita-detalle-sub {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.visita-detalle-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  padding-top: 10px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.visita-detalle-estados {
+  padding-top: 10px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.visita-detalle-estados label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.visita-estados-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-estado {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-estado:hover {
+  opacity: 0.85;
+  box-shadow: var(--shadow-sm);
+}
+
+/* =====================================================
+   BOTÓN ICONO (tabla)
+   ===================================================== */
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-icon:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* =====================================================
+   MAIN TABS (Calendario | Parámetros)
+   ===================================================== */
+
+.visitas-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-primary);
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.visitas-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.visitas-tab:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.visitas-tab.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.visitas-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   PARAMETROS SUB-TABS
+   ===================================================== */
+
+.visitas-params {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.visitas-subtabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-secondary);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.visitas-subtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.visitas-subtab:hover {
+  color: var(--text-primary);
+  background: var(--bg-primary);
+}
+
+.visitas-subtab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+.visitas-subtab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* =====================================================
+   PARAMETROS: MODAL / FORM
+   ===================================================== */
+
+.visitas-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.visitas-modal-content {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.visitas-modal-content.visitas-modal-wide {
+  max-width: 600px;
+}
+
+.visitas-modal-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px 20px 0;
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  border-radius: 12px 12px 0 0;
+  position: relative;
+}
+
+.visitas-modal-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  text-align: center;
+}
+
+.visitas-modal-close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.visitas-modal-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.visitas-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.visitas-modal-footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  border-radius: 0 0 12px 12px;
+}
+
+/* Form sections */
+.visitas-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.visitas-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.visitas-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.visitas-form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.visitas-form-group label .required {
+  color: var(--color-primary);
+}
+
+.visitas-form-group input,
+.visitas-form-group select,
+.visitas-form-group textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  transition: all 0.15s;
+}
+
+.visitas-form-group input:focus,
+.visitas-form-group select:focus,
+.visitas-form-group textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.visitas-form-group input:disabled,
+.visitas-form-group select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Checkbox inline */
+.visitas-checkbox-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  height: 42px;
+}
+
+.visitas-checkbox-inline input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+.visitas-checkbox-inline span {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Buttons */
+.visitas-btn-secondary,
+.visitas-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid;
+}
+
+.visitas-btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-primary);
+}
+
+.visitas-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+
+.visitas-btn-primary {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+}
+
+.visitas-btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.visitas-btn-secondary:disabled,
+.visitas-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =====================================================
+   HORARIOS GRID (Atendedores sub-tab)
+   ===================================================== */
+
+.visitas-horarios-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.visitas-horario-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.visitas-horario-row.active {
+  background: var(--bg-primary);
+  border-color: var(--border-primary);
+}
+
+.visitas-horario-dia {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 140px;
+}
+
+.visitas-horario-dia input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+.visitas-horario-dia span {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.visitas-horario-times {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.visitas-horario-times input[type="time"] {
+  padding: 6px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  transition: all 0.15s;
+}
+
+.visitas-horario-times input[type="time"]:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.visitas-horario-times input[type="time"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.visitas-horario-sep {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* =====================================================
+   RESPONSIVE: PARAMETROS
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .visitas-tabs {
+    flex-wrap: wrap;
+  }
+
+  .visitas-subtabs {
+    flex-wrap: wrap;
+  }
+
+  .visitas-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .visitas-modal-content {
+    max-width: 100%;
+    margin: 10px;
+  }
+
+  .visitas-horario-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .visitas-horario-dia {
+    min-width: auto;
+  }
+}

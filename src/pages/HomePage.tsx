@@ -6,7 +6,7 @@ import {
   Menu, AlertCircle, RefreshCw, PanelLeftClose, PanelLeft,
   Car, Users, AlertTriangle, FileWarning, BarChart3, Receipt,
   Truck, Link2, Settings, CreditCard, Activity, Package,
-  Calendar, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target
+  Calendar, CalendarCheck, MapPin, Gauge, FileText, Shield, UserCog, List, ClipboardList, History, Compass, GraduationCap, Building2, ChevronRight, Check, Globe, Target
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -65,6 +65,7 @@ const menuIcons: Record<string, LucideIcon> = {
   'parametros-sistema': Settings,
   'gestion-vehiculos': Car,
   'registro-vencimientos': FileWarning,
+  'visitas': CalendarCheck,
 }
 
 // Función para obtener icono de un menú
@@ -189,6 +190,7 @@ const AsignacionesPage = lazy(() => import('./asignaciones/AsignacionesPage').th
 const UsuariosPage = lazy(() => import('./usuarios/UsuariosPage').then(m => ({ default: m.UsuariosPage })))
 const VehiculosPage = lazy(() => import('./vehiculos/VehiculosPage').then(m => ({ default: m.VehiculosPage })))
 const SiniestrosPage = lazy(() => import('./siniestros/SiniestrosPage').then(m => ({ default: m.SiniestrosPage })))
+const VisitasPage = lazy(() => import('./visitas/VisitasPage').then(m => ({ default: m.VisitasPage })))
 const VencimientosPage = lazy(() => import('./vencimientos/VencimientosPage').then(m => ({ default: m.VencimientosPage })))
 const InformesPage = lazy(() => import('./informes/InformesPage').then(m => ({ default: m.InformesPage })))
 const AsignacionesActivasPage = lazy(() => import('./asignaciones/AsignacionesActivasPage').then(m => ({ default: m.AsignacionesActivasPage })))
@@ -1842,6 +1844,12 @@ export function HomePage() {
                   <LazyPage><SiniestrosPage /></LazyPage>
                 </ProtectedRoute>
               } />
+              <Route path="/visitas" element={
+                <ProtectedRoute menuName="visitas" action="view">
+                  <LazyPage><VisitasPage /></LazyPage>
+                </ProtectedRoute>
+              } />
+
               {/* vencimientos moved to /vehiculos/vencimientos */}
               <Route path="/incidencias" element={
                 <ProtectedRoute menuName="incidencias" action="view">

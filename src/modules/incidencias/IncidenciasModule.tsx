@@ -1225,7 +1225,6 @@ export function IncidenciasModule() {
       header: 'Acciones',
       cell: ({ row }) => (
         <ActionsMenu
-          maxVisible={2}
           actions={[
             {
               icon: <Eye size={15} />,
@@ -1434,7 +1433,6 @@ export function IncidenciasModule() {
         
         return (
           <ActionsMenu
-            maxVisible={2}
             actions={[
               {
                 icon: <Eye size={15} />,
@@ -1664,7 +1662,7 @@ export function IncidenciasModule() {
           { icon: <Trash2 size={14} />, label: 'Eliminar', onClick: () => handleEliminarPenalidad(row.original), variant: 'danger' as const, hidden: esRechazado || !canDelete },
         ]
 
-        return <ActionsMenu actions={actions} maxVisible={2} />
+        return <ActionsMenu actions={actions} />
       }
     })
 

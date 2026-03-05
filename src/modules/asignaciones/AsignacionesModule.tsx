@@ -2460,7 +2460,7 @@ export function AsignacionesModule() {
               variant: 'danger' as const,
             },
           ]
-          return <ActionsMenu actions={devActions} maxVisible={2} />
+          return <ActionsMenu actions={devActions} />
         }
 
         const actions = [
@@ -2512,7 +2512,7 @@ export function AsignacionesModule() {
             variant: 'danger' as const,
           },
         ]
-        return <ActionsMenu actions={actions} maxVisible={2} />
+        return <ActionsMenu actions={actions} />
       }
     }
   ], [canEdit, canDelete, canCreateManualAssignment])
