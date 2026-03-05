@@ -74,12 +74,6 @@ function normalizeToday(): Date {
   return today
 }
 
-function addDays(base: Date, days: number): Date {
-  const copy = new Date(base)
-  copy.setDate(copy.getDate() + days)
-  return copy
-}
-
 function calculatePriority(fechaVencimiento: string | null | undefined, documento: string | null | undefined): 'ALTO' | 'MEDIO' | 'BAJO' | 'N/A' | 'VENCIDO' {
   const d = parseDate(fechaVencimiento)
   if (!d) return 'BAJO' // Default fallback
@@ -271,21 +265,6 @@ export function VencimientosModule() {
 
   const totalVencidos = useMemo(
     () => items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'VENCIDO').length,
-    [items]
-  )
-
-  const totalNA = useMemo(
-    () => items.filter(i => calculatePriority(i.fecha_vencimiento, i.documento) === 'N/A').length,
-    [items]
-  )
-
-  const totalSolicitadosSi = useMemo(
-    () => items.filter(item => item.solicitado).length,
-    [items]
-  )
-
-  const totalSolicitadosNo = useMemo(
-    () => items.filter(item => !item.solicitado).length,
     [items]
   )
 
