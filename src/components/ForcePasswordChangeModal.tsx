@@ -67,7 +67,6 @@ export function ForcePasswordChangeModal({ onSuccess }: Props) {
 
       onSuccess()
     } catch (error: any) {
-      console.error('Error cambiando contraseña:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',

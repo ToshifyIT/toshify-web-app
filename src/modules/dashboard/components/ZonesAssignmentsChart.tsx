@@ -32,66 +32,47 @@ export function ZonesAssignmentsChart() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    function normalizeZona(raw: string): string {
+      let zona = raw.trim()
+      if (zona.toUpperCase() === 'CABA') return 'CABA'
+      if (zona === 'GBA Norte') return 'Norte'
+      if (zona === 'GBA Oeste') return 'Oeste'
+      if (zona === 'GBA Sur') return 'Sur'
+      zona = zona.toLowerCase().replace(/(^\w|\s\w)/g, (m: string) => m.toUpperCase())
+      if (zona.toUpperCase() === 'CABA') return 'CABA'
+      return zona
+    }
+
     async function fetchData() {
       setLoading(true)
       try {
-        // 1. Obtener todas las zonas existentes en la tabla conductores para usar como base
-        const { data: allConductores, error: zonesError } = await supabase
-          .from('conductores')
-          .select('zona')
-          .not('zona', 'is', null)
-
-        if (zonesError) throw zonesError
-
-        // Extraer zonas únicas y normalizarlas
-        const uniqueZones = new Set<string>()
-        allConductores?.forEach((c: any) => {
-          if (c.zona && c.zona.trim() !== '') {
-            // Normalizar: Capitalize first letter (CABA -> Caba, SUR -> Sur, etc.)
-            // O mantener formato original si es CABA
-            let zona = c.zona.trim()
-            // Capitalizar primera letra de cada palabra
-            zona = zona.toLowerCase().replace(/(^\w|\s\w)/g, (m: string) => m.toUpperCase())
-            
-            // Excepción común para CABA
-            if (zona.toUpperCase() === 'CABA') zona = 'CABA'
-            
-            uniqueZones.add(zona)
-          }
-        })
-
-        // Crear mapa inicial con todas las zonas en 0
-        const zoneCounts = new Map<string, number>()
-        Array.from(uniqueZones).sort().forEach(zona => {
-          zoneCounts.set(zona, 0)
-        })
-
-        // 2. Obtener historial y procesar asignaciones de la semana seleccionada
-        
         // Parsear la semana seleccionada (Sem XX YYYY)
         let weekStart: Date, weekEnd: Date
         const match = selectedWeek.match(/Sem (\d+) (\d{4})/)
         if (match) {
             const week = parseInt(match[1], 10)
             const year = parseInt(match[2], 10)
-            // Crear fecha base (4 de Enero siempre cae en semana 1 ISO)
             const baseDate = new Date(year, 0, 4)
             const targetDate = setWeek(baseDate, week, { weekStartsOn: 1 })
             weekStart = startOfWeek(targetDate, { weekStartsOn: 1 })
             weekEnd = endOfWeek(targetDate, { weekStartsOn: 1 })
         } else {
-            // Fallback a semana actual
             const now = new Date()
             weekStart = startOfWeek(now, { weekStartsOn: 1 })
             weekEnd = endOfWeek(now, { weekStartsOn: 1 })
         }
 
-        // Determinar si es la semana actual
         const now = new Date()
         const currentWeekStart = startOfWeek(now, { weekStartsOn: 1 })
         const isCurrentWeek = weekStart.getTime() === currentWeekStart.getTime()
 
-        let query = supabase
+        // 1+2 in PARALLEL: zonas base + asignaciones filtered by date range
+        let zonesQuery = supabase
+          .from('conductores')
+          .select('zona')
+          .not('zona', 'is', null)
+
+        let assignQuery = supabase
           .from('asignaciones_conductores')
           .select(`
             conductor_id,
@@ -102,14 +83,36 @@ export function ZonesAssignmentsChart() {
               sede_id
             )
           `)
+          .gte('asignaciones.fecha_inicio', weekStart.toISOString())
+          .lte('asignaciones.fecha_inicio', weekEnd.toISOString())
 
         if (sedeActualId) {
-          query = query.eq('asignaciones.sede_id', sedeActualId)
+          zonesQuery = zonesQuery.eq('sede_id', sedeActualId)
+          assignQuery = assignQuery.eq('asignaciones.sede_id', sedeActualId)
         }
 
-        const { data: historyData, error: historyError } = await query
+        const [{ data: allConductores, error: zonesError }, { data: historyData, error: historyError }] = await Promise.all([
+          zonesQuery,
+          assignQuery
+        ])
+
+        if (zonesError) throw zonesError
         if (historyError) throw historyError
 
+        // Build zone baseline
+        const uniqueZones = new Set<string>()
+        allConductores?.forEach((c: any) => {
+          if (c.zona && c.zona.trim() !== '') {
+            uniqueZones.add(normalizeZona(c.zona))
+          }
+        })
+
+        const zoneCounts = new Map<string, number>()
+        Array.from(uniqueZones).sort().forEach(zona => {
+          zoneCounts.set(zona, 0)
+        })
+
+        // Group assignments by conductor
         const conductorHistory = new Map<string, any[]>()
         historyData?.forEach((item: any) => {
           const current = conductorHistory.get(item.conductor_id) || []
@@ -119,44 +122,28 @@ export function ZonesAssignmentsChart() {
 
         const validConductorIds: string[] = []
         for (const [conductorId, assignments] of conductorHistory.entries()) {
-          // Ordenar asignaciones para tener la primera histórica
           assignments.sort((a: any, b: any) => new Date(a.asignaciones.fecha_inicio).getTime() - new Date(b.asignaciones.fecha_inicio).getTime())
           const firstAssignment = assignments[0].asignaciones
           
           if (!firstAssignment.fecha_inicio) continue
-
-          // Filtrar por sede si aplica
           if (sedeActualId && firstAssignment.sede_id !== sedeActualId) continue
 
           const fechaInicio = parseISO(firstAssignment.fecha_inicio)
           const inRange = isWithinInterval(fechaInicio, { start: weekStart, end: weekEnd })
 
-          // Lógica Híbrida:
-          // 1. Semana Actual: Strict Mode (Solo 1 asignación histórica) -> "Nuevos Puros"
-          // 2. Semanas Pasadas: Cohort Mode (Primera asignación histórica en esa semana) -> "Ingresos Históricos"
-          
           if (isCurrentWeek) {
-            // Lógica original estricta para semana en curso
             if (assignments.length !== 1) continue
-            
             const hasActiveAssignment = assignments.some(a => 
                 a.asignaciones.estado === 'activo' || a.asignaciones.estado === 'activa'
             )
             if (!hasActiveAssignment) continue
-
-            if (inRange) {
-                validConductorIds.push(conductorId)
-            }
+            if (inRange) validConductorIds.push(conductorId)
           } else {
-            // Lógica de cohorte para semanas pasadas
-            // Solo nos importa si su PRIMERA asignación cayó en esta semana
-            if (inRange) {
-                validConductorIds.push(conductorId)
-            }
+            if (inRange) validConductorIds.push(conductorId)
           }
         }
 
-        // 3. Si hay conductores válidos, sumar sus zonas
+        // 3. Fetch conductor zones (only for valid IDs)
         if (validConductorIds.length > 0) {
           const { data: conductoresData, error: conductoresError } = await supabase
             .from('conductores')
@@ -167,41 +154,21 @@ export function ZonesAssignmentsChart() {
 
           conductoresData?.forEach((conductor: any) => {
             if (conductor.zona) {
-                // Normalizar nombre de zona
-                let zona = conductor.zona.trim() || 'Sin Zona'
-                if (zona === 'CABA') zona = 'CABA' // Mantener CABA tal cual
-                else if (zona === 'GBA Norte') zona = 'Norte'
-                else if (zona === 'GBA Oeste') zona = 'Oeste'
-                else if (zona === 'GBA Sur') zona = 'Sur'
-                else {
-                    // Normalización estándar para otros casos
-                    zona = zona.toLowerCase().replace(/(^\w|\s\w)/g, (m: string) => m.toUpperCase())
-                    if (zona.toUpperCase() === 'CABA') zona = 'CABA'
-                }
-
+                const zona = normalizeZona(conductor.zona)
                 const currentCount = zoneCounts.get(zona) || 0
                 zoneCounts.set(zona, currentCount + 1)
             }
           })
         }
 
-        // 4. Convertir a array final
-        // Filtramos zonas que tengan 0 si queremos mostrar solo las activas, 
-        // o mostramos todas las disponibles en la BD aunque estén en 0.
-        // Según requerimiento anterior: "igual quiero que me aparezca la gráfica" -> mostramos todas las zonas posibles
         const chartData = Array.from(zoneCounts.entries())
           .map(([name, value]) => ({ name, value }))
-          .sort((a, b) => b.value - a.value) // Mayor a menor
+          .sort((a, b) => b.value - a.value)
 
-        // Si no hay ninguna zona en la BD siquiera, usar fallback
-        if (chartData.length === 0) {
-           setData([]) 
-        } else {
-           setData(chartData)
-        }
+        setData(chartData.length > 0 ? chartData : [])
 
-      } catch (error) {
-        console.error('Error fetching zones assignments:', error)
+      } catch (_error) {
+        // silently ignored
       } finally {
         setLoading(false)
       }

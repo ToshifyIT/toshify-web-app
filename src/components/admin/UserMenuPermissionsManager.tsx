@@ -646,50 +646,54 @@ export function UserMenuPermissionsManager() {
     }
   }, [selectedUser, submenuPermissions, submenus, menus, user, roleSubmenuPermissions])
 
-  // Obtener permiso con herencia del rol
+  // Maps O(1) para lookup de permisos (evita .find() O(n) por cada fila × 4 campos × 2 fuentes)
+  const userMenuPermMap = useMemo(() => {
+    const m = new Map<string, MenuPermission>()
+    for (const p of menuPermissions) m.set(p.menu_id, p)
+    return m
+  }, [menuPermissions])
+  const roleMenuPermMap = useMemo(() => {
+    const m = new Map<string, any>()
+    for (const p of roleMenuPermissions) m.set(p.menu_id, p)
+    return m
+  }, [roleMenuPermissions])
+  const userSubmenuPermMap = useMemo(() => {
+    const m = new Map<string, SubmenuPermission>()
+    for (const p of submenuPermissions) m.set(p.submenu_id, p)
+    return m
+  }, [submenuPermissions])
+  const roleSubmenuPermMap = useMemo(() => {
+    const m = new Map<string, any>()
+    for (const p of roleSubmenuPermissions) m.set(p.submenu_id, p)
+    return m
+  }, [roleSubmenuPermissions])
+
+  // Obtener permiso con herencia del rol -- O(1) con Maps
   const getMenuPermission = (menuId: string, field: keyof MenuPermission) => {
-    // Prioridad: permisos del usuario > permisos del rol
-    const userPerm = menuPermissions.find(p => p.menu_id === menuId)
-    if (userPerm) {
-      return userPerm[field]
-    }
-
-    // Si no hay permiso del usuario, heredar del rol
-    const rolePerm = roleMenuPermissions.find(p => p.menu_id === menuId)
+    const userPerm = userMenuPermMap.get(menuId)
+    if (userPerm) return userPerm[field]
+    const rolePerm = roleMenuPermMap.get(menuId)
     return rolePerm ? rolePerm[field] : false
   }
 
-  // Obtener permiso con herencia del rol
+  // Obtener permiso con herencia del rol -- O(1) con Maps
   const getSubmenuPermission = (submenuId: string, field: keyof SubmenuPermission) => {
-    // Prioridad: permisos del usuario > permisos del rol
-    const userPerm = submenuPermissions.find(p => p.submenu_id === submenuId)
-    if (userPerm) {
-      return userPerm[field]
-    }
-
-    // Si no hay permiso del usuario, heredar del rol
-    const rolePerm = roleSubmenuPermissions.find(p => p.submenu_id === submenuId)
+    const userPerm = userSubmenuPermMap.get(submenuId)
+    if (userPerm) return userPerm[field]
+    const rolePerm = roleSubmenuPermMap.get(submenuId)
     return rolePerm ? rolePerm[field] : false
   }
 
-  // Verificar si un permiso es heredado del rol (no tiene override del usuario)
+  // Verificar si un permiso es heredado del rol (no tiene override del usuario) -- O(1)
   const isMenuPermissionInherited = (menuId: string): boolean => {
-    return !menuPermissions.some(p => p.menu_id === menuId)
+    return !userMenuPermMap.has(menuId)
   }
 
   const isSubmenuPermissionInherited = (submenuId: string): boolean => {
-    return !submenuPermissions.some(p => p.submenu_id === submenuId)
+    return !userSubmenuPermMap.has(submenuId)
   }
 
-  // Función para calcular el nivel de profundidad de un submenú
-  const getSubmenuLevel = (submenuId: string, allSubmenus: any[]): number => {
-    const submenu = allSubmenus.find(s => s.id === submenuId)
-    if (!submenu || !submenu.parent_id) {
-      return 1 // Nivel 1: submenú directo del menú
-    }
-    // Si tiene parent_id, es un sub-submenú (nivel 2+)
-    return 1 + getSubmenuLevel(submenu.parent_id, allSubmenus)
-  }
+  // Nota: getSubmenuLevel removida (no se usa en este componente)
 
   // Función recursiva para agregar submenús en orden jerárquico
   const addSubmenusHierarchically = (

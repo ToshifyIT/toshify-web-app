@@ -276,7 +276,6 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
       });
 
     } catch (error: any) {
-      console.error("Error guardando:", error);
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error');
     } finally {
       setIsSaving(false);
@@ -302,7 +301,6 @@ export function DriverDetailModal({ driver, onClose, onDriverUpdate, accionesImp
       setEditingNoteIndex(null); // Reset editing index
       
     } catch (error) {
-      console.error('Error saving annotations:', error);
       Swal.fire('Error', 'No se pudieron guardar las anotaciones', 'error');
       throw error;
     }

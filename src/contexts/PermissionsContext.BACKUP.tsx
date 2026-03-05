@@ -114,7 +114,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       )
 
       if (!response.ok) {
-        console.warn('⚠️ Edge function no disponible, usando fallback')
         // Fallback: cargar usuario y rol básico
         await loadPermissionsFallback()
         return
@@ -122,9 +121,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
       const data: UserPermissionsResponse = await response.json()
       setUserPermissions(data)
-    } catch (error) {
-      console.error('Error cargando permisos:', error)
-      console.warn('⚠️ Usando modo fallback')
+    } catch {
       // Fallback en caso de error
       await loadPermissionsFallback()
     } finally {
@@ -208,11 +205,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         submenus: submenusData
       })
 
-      console.log('✅ Modo fallback activado - Rol:', (profileData as any).roles?.name)
-      console.log('📋 Menús cargados:', menusData.length)
-      console.log('📋 Submenús cargados:', submenusData.length)
-    } catch (error) {
-      console.error('Error en fallback:', error)
+    } catch {
       setUserPermissions(null)
     }
   }

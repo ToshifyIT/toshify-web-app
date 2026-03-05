@@ -196,8 +196,8 @@ export function EscuelaModule() {
 
       setConductores(processedData);
 
-    } catch (err) {
-      console.error('Error loading escuela data:', err);
+    } catch (_err) {
+      // silently ignored
     } finally {
       setLoading(false);
     }

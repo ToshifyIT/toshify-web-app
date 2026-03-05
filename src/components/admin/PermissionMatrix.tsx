@@ -28,8 +28,8 @@ export function PermissionMatrix() {
 
       if (error) throw error
       setPermissions(data as PermissionWithRole[])
-    } catch (err) {
-      console.error('Error cargando permisos:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -54,7 +54,6 @@ export function PermissionMatrix() {
         p.id === permissionId ? { ...p, [field]: !currentValue } : p
       ))
     } catch (err: any) {
-      console.error('Error actualizando permiso:', err)
       alert('Error al actualizar permiso: ' + err.message)
     } finally {
       setUpdating(null)

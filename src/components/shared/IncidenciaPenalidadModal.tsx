@@ -133,8 +133,8 @@ export function IncidenciaPenalidadModal({
         apellidos: c.apellidos,
         nombre_completo: `${c.nombres} ${c.apellidos}`
       })))
-    } catch (error) {
-      console.error('Error cargando datos:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -268,7 +268,6 @@ export function IncidenciaPenalidadModal({
       onSuccess(incidenciaId, penalidadId)
       onClose()
     } catch (error: any) {
-      console.error('Error guardando:', error)
       Swal.fire('Error', error?.message || 'No se pudo guardar', 'error')
     } finally {
       setSaving(false)

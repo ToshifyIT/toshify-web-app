@@ -137,8 +137,8 @@ export default function TelepaseHistoricoModule() {
         setConductoresStatus(statusMap)
         setConductoresOptions([...new Set(options)].sort())
       }
-    } catch (error) {
-      console.error('Error cargando conductores:', error)
+    } catch (_error) {
+      // silently ignored
     }
   }
 
@@ -161,8 +161,8 @@ export default function TelepaseHistoricoModule() {
       })
       
       setRegistros(filteredData)
-    } catch (error) {
-      console.error('Error cargando datos:', error)
+    } catch (_error) {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -634,6 +634,7 @@ export default function TelepaseHistoricoModule() {
         searchPlaceholder="Buscar por patente, conductor..."
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
+        disableAutoFilters
         headerAction={
           <button className="btn-secondary" onClick={handleExportar}>
             <Download size={16} />

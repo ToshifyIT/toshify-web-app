@@ -63,7 +63,6 @@ class CabifyService {
       return this.accessToken
 
     } catch (error) {
-      console.error('❌ Error de autenticación:', error)
       throw new Error(`No se pudo autenticar con Cabify: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
@@ -108,8 +107,7 @@ class CabifyService {
       const companyIds = data.data.metafleetCompanies?.companyIds || []
       return companyIds
 
-    } catch (error) {
-      console.error('❌ Error obteniendo compañías:', error)
+    } catch {
       return []
     }
   }
@@ -187,7 +185,6 @@ class CabifyService {
       return allDrivers
 
     } catch (error) {
-      console.error('❌ Error obteniendo conductores sin filtro:', error)
       throw error
     }
   }
@@ -267,7 +264,6 @@ class CabifyService {
       return allDrivers
 
     } catch (error) {
-      console.error(`❌ Error obteniendo conductores de compañía ${companyId}:`, error)
       throw error
     }
   }
@@ -281,7 +277,6 @@ class CabifyService {
       const companyIds = await this.getMetafleetCompanies()
 
       if (companyIds.length === 0) {
-        console.warn('⚠️ No se encontraron compañías, intentando sin filtro...')
         const allDrivers = await this.getAllDriversWithoutCompanyFilter()
         return allDrivers.map(driver => ({
           ...driver,
@@ -307,8 +302,7 @@ class CabifyService {
           }))
 
           allDrivers.push(...driversWithCompany)
-        } catch (error) {
-          console.error(`    ❌ Error obteniendo conductores de ${companyId}:`, error)
+        } catch {
           // Continuar con la siguiente compañía
         }
       }
@@ -316,7 +310,6 @@ class CabifyService {
       return allDrivers
 
     } catch (error) {
-      console.error('❌ Error obteniendo conductores:', error)
       throw new Error(`No se pudieron obtener los conductores: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
@@ -395,7 +388,6 @@ class CabifyService {
       return allJourneys
 
     } catch (error) {
-      console.error(`❌ Error obteniendo viajes del conductor ${driverId}:`, error)
       throw error
     }
   }
@@ -473,7 +465,6 @@ class CabifyService {
       return data.data.driver
 
     } catch (error) {
-      console.error(`❌ Error obteniendo stats del conductor ${driverId}:`, error)
       throw error
     }
   }
@@ -527,15 +518,12 @@ class CabifyService {
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`❌ Error obteniendo asset ${assetId}: ${errorText}`)
         return null
       }
 
       const data = await response.json()
 
       if (data.errors) {
-        console.error(`❌ GraphQL errors obteniendo asset ${assetId}:`, data.errors)
         return null
       }
 
@@ -548,8 +536,7 @@ class CabifyService {
 
       return asset
 
-    } catch (error) {
-      console.error(`❌ Error obteniendo asset ${assetId}:`, error)
+    } catch {
       return null
     }
   }
@@ -610,15 +597,12 @@ class CabifyService {
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`❌ Error en getAssetsBatch: ${errorText}`)
         return results
       }
 
       const data = await response.json()
 
       if (data.errors) {
-        console.error(`❌ GraphQL errors en getAssetsBatch:`, data.errors)
         return results
       }
 
@@ -636,8 +620,7 @@ class CabifyService {
 
       return results
 
-    } catch (error) {
-      console.error('❌ Error en getAssetsBatch:', error)
+    } catch {
       return results
     }
   }
@@ -744,9 +727,7 @@ class CabifyService {
               })
             }
           }
-        } catch (error) {
-          console.warn(`⚠️ Error en query optimizado de tolls:`, error)
-
+        } catch {
           // FALLBACK: Si falla la query optimizada, usar método secuencial
           for (const balance of balancesToProcess) {
             try {
@@ -807,8 +788,8 @@ class CabifyService {
                   }
                 }
               }
-            } catch (balanceError) {
-              console.warn(`⚠️ Error obteniendo movimientos del balance ${balance.id}:`, balanceError)
+            } catch {
+              // silently ignored
             }
           }
         }
@@ -817,8 +798,7 @@ class CabifyService {
       // Convertir de centavos a pesos antes de retornar
       return totalTolls / 100
 
-    } catch (error) {
-      console.error(`❌ Error obteniendo peajes del conductor ${driverId}:`, error)
+    } catch {
       return 0
     }
   }
@@ -928,10 +908,6 @@ class CabifyService {
       ])
 
       if (!driverResponse.ok || !journeysResponse.ok) {
-        const driverText = await driverResponse.text()
-        const journeysText = await journeysResponse.text()
-        console.error(`  ❌ Driver error: ${driverText}`)
-        console.error(`  ❌ Journeys error: ${journeysText}`)
         throw new Error(`Error en GraphQL: Driver ${driverResponse.status}, Journeys ${journeysResponse.status}`)
       }
 
@@ -941,11 +917,9 @@ class CabifyService {
       ])
 
       if (driverData.errors) {
-        console.error(`  ❌ Errores en driver query:`, JSON.stringify(driverData.errors, null, 2))
         throw new Error(`Driver query failed: ${JSON.stringify(driverData.errors)}`)
       }
       if (journeysData.errors) {
-        console.error(`  ❌ Errores en journeys query:`, JSON.stringify(journeysData.errors, null, 2))
         throw new Error(`Journeys query failed: ${JSON.stringify(journeysData.errors)}`)
       }
 
@@ -987,8 +961,7 @@ class CabifyService {
         journeys: allJourneys,
       }
 
-    } catch (error) {
-      console.error(`❌ Error obteniendo datos del conductor ${driverId}:`, error)
+    } catch {
       return null
     }
   }
@@ -1020,7 +993,6 @@ class CabifyService {
       const companyIds = await this.getMetafleetCompanies()
 
       if (companyIds.length === 0) {
-        console.warn('⚠️ No se encontraron compañías')
         return []
       }
 
@@ -1049,7 +1021,6 @@ class CabifyService {
                 ])
 
                 if (!completeData || !completeData.driver) {
-                  console.warn(`      ⚠️ No se obtuvieron datos para ${driver.name}`)
                   return null
                 }
 
@@ -1130,8 +1101,7 @@ class CabifyService {
                   missed,
                   companyId
                 }
-              } catch (error) {
-                console.warn(`      ⚠️ Error procesando conductor ${driver.name} ${driver.surname}:`, error)
+              } catch {
                 return null
               }
             })
@@ -1241,8 +1211,7 @@ class CabifyService {
 
           return companyDriversData
 
-        } catch (error) {
-          console.error(`    ❌ Error en compañía ${companyId}:`, error)
+        } catch {
           return []
         }
       })
@@ -1254,7 +1223,6 @@ class CabifyService {
       return allDriversData
 
     } catch (error) {
-      console.error('❌ Error general:', error)
       throw error
     }
   }
@@ -1333,8 +1301,7 @@ class CabifyService {
             permisoEfectivo
           })
 
-        } catch (error) {
-          console.warn(`⚠️  Error procesando conductor ${driver.name} ${driver.surname}:`, error)
+        } catch {
           // Continuar con el siguiente conductor
         }
       }
@@ -1342,7 +1309,6 @@ class CabifyService {
       return driversData
 
     } catch (error) {
-      console.error('❌ Error obteniendo datos de Cabify:', error)
       throw new Error(`No se pudieron obtener los datos de Cabify: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }

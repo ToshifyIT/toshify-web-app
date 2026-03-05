@@ -137,7 +137,6 @@ export function ConceptosTab() {
       setConceptos(data || [])
       calcularStats(data || [])
     } catch (error) {
-      console.error('Error cargando conceptos:', error)
       Swal.fire('Error', 'No se pudieron cargar los conceptos', 'error')
     } finally {
       setLoading(false)

@@ -70,7 +70,7 @@ export function AnotacionesEditorModal({
       await onSave(nuevasAnotaciones);
       onClose();
     } catch (error) {
-      console.error("Error al guardar nota:", error);
+      // silently ignored
     } finally {
       setIsSaving(false);
     }

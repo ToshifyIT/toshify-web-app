@@ -51,7 +51,6 @@ export function useCabifyRankings(props?: UseCabifyRankingsProps): UseCabifyRank
       setTopMejores(sortedMejores)
       setTopPeores(sortedPeores)
     } catch (err) {
-      console.error('❌ Error fetching rankings:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
     } finally {
       setIsLoading(false)

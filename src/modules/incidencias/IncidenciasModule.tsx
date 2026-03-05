@@ -313,8 +313,7 @@ export function IncidenciasModule() {
         // Limpiar localStorage y URL
         localStorage.removeItem('incidencia_preload')
         window.history.replaceState({}, '', window.location.pathname)
-      } catch (error) {
-        console.error('Error parseando datos precargados:', error)
+      } catch {
         localStorage.removeItem('incidencia_preload')
       }
     }
@@ -477,8 +476,7 @@ export function IncidenciasModule() {
           setIncidenciaForm(prev => ({ ...prev, estado_id: estadoPendiente.id }))
         }
       }
-    } catch (error) {
-      console.error('Error cargando datos:', error)
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar los datos', 'error')
     } finally {
       setLoading(false)
@@ -627,6 +625,11 @@ export function IncidenciasModule() {
     )
   }, [incidenciasCobro, penalidadesPorIncidencia])
 
+  // Set O(1) para lookup en cell render (evita .some() O(n) por cada fila visible)
+  const incidenciasEnviablesIds = useMemo(() =>
+    new Set(incidenciasEnviables.map(i => i.id)),
+  [incidenciasEnviables])
+
   // Handlers para selección masiva
   const handleToggleSeleccion = (id: string) => {
     setIncidenciasSeleccionadas(prev => {
@@ -653,6 +656,11 @@ export function IncidenciasModule() {
     return penalidades.filter(p => !p.aplicado && !p.rechazado && (p.conductor_id || p.conductor_nombre))
   }, [penalidades])
 
+  // Set O(1) para lookup en cell render (evita .some() O(n) por cada fila visible)
+  const penalidadesPorAplicarIds = useMemo(() =>
+    new Set(penalidadesPorAplicar.map(p => p.id)),
+  [penalidadesPorAplicar])
+
   const handleToggleSeleccionPenalidad = (id: string) => {
     setPenalidadesSeleccionadas(prev => {
       const newSet = new Set(prev)
@@ -667,6 +675,47 @@ export function IncidenciasModule() {
 
   const handleDeseleccionarTodasPenalidades = () => {
     setPenalidadesSeleccionadas(new Set())
+  }
+
+  // Abrir modal de rechazo para una penalidad individual
+  function handleAbrirRechazo(penalidad: PenalidadCompleta) {
+    setPenalidadRechazar(penalidad)
+    setMotivoRechazo('')
+    setShowRechazoModal(true)
+  }
+
+  // Toggle del filtro "Pendientes de Facturación"
+  function handleTogglePendientesEnviar() {
+    setSoloPendientesEnviar(prev => {
+      if (!prev) {
+        // Al activar, desactivar modo selección masiva
+        setModoSeleccionMasiva(false)
+        setIncidenciasSeleccionadas(new Set())
+      }
+      return !prev
+    })
+  }
+
+  // Cancelar modo selección masiva de incidencias
+  function handleCancelarSeleccionMasiva() {
+    setModoSeleccionMasiva(false)
+    setIncidenciasSeleccionadas(new Set())
+  }
+
+  // Toggle seleccionar/deseleccionar todas las incidencias enviables
+  function handleToggleSeleccionarTodas() {
+    if (incidenciasSeleccionadas.size === incidenciasEnviables.length) {
+      handleDeseleccionarTodas()
+    } else {
+      handleSeleccionarTodas()
+    }
+  }
+
+  // Limpiar chip de "Pendiente Facturación"
+  function handleLimpiarPendienteEnviar() {
+    setSoloPendientesEnviar(false)
+    setModoSeleccionMasiva(false)
+    setIncidenciasSeleccionadas(new Set())
   }
 
   // Aplicar masivo - aplica todas las seleccionadas en la semana elegida (sin fraccionamiento)
@@ -926,8 +975,7 @@ export function IncidenciasModule() {
           if (error) throw error
         }
         enviados++
-      } catch (error) {
-        console.error('Error enviando incidencia:', incidencia.id, error)
+      } catch {
         errores++
       }
     }
@@ -1214,7 +1262,7 @@ export function IncidenciasModule() {
         header: '',
         size: 40,
         cell: ({ row }) => {
-          const puedeEnviar = incidenciasEnviables.some(i => i.id === row.original.id)
+          const puedeEnviar = incidenciasEnviablesIds.has(row.original.id)
           if (!puedeEnviar) return <span style={{ opacity: 0.3 }}><Square size={16} /></span>
           
           const seleccionada = incidenciasSeleccionadas.has(row.original.id)
@@ -1449,7 +1497,7 @@ export function IncidenciasModule() {
         },
         size: 36,
         cell: ({ row }) => {
-          const puedeSeleccionar = penalidadesPorAplicar.some(p => p.id === row.original.id)
+          const puedeSeleccionar = penalidadesPorAplicarIds.has(row.original.id)
           if (!puedeSeleccionar) return null
 
           const seleccionada = penalidadesSeleccionadas.has(row.original.id)
@@ -1603,7 +1651,7 @@ export function IncidenciasModule() {
           // Aplicar - solo en Por Aplicar
           { icon: <CheckCircle size={14} />, label: 'Aplicar', onClick: () => handleMarcarAplicado(row.original), variant: 'success' as const, hidden: esAplicado || esRechazado || !canEdit },
           // Rechazar - solo en Por Aplicar
-          { icon: <Ban size={14} />, label: 'Rechazar', onClick: () => { setPenalidadRechazar(row.original); setMotivoRechazo(''); setShowRechazoModal(true) }, variant: 'danger' as const, hidden: esAplicado || esRechazado || !canEdit },
+          { icon: <Ban size={14} />, label: 'Rechazar', onClick: () => handleAbrirRechazo(row.original), variant: 'danger' as const, hidden: esAplicado || esRechazado || !canEdit },
           // Reasignar - solo en Aplicadas
           { icon: <Calendar size={14} />, label: 'Reasignar semana', onClick: () => handleReasignarSemana(row.original), variant: 'info' as const, hidden: !esAplicado || esRechazado || !canEdit },
           // Desaplicar - solo en Aplicadas
@@ -1781,7 +1829,6 @@ export function IncidenciasModule() {
       cargarDatos(true)
       
     } catch (error: any) {
-      console.error('Error creando penalidad:', error)
       Swal.fire('Error', error.message || 'No se pudo enviar a facturación', 'error')
     }
   }
@@ -1897,28 +1944,27 @@ export function IncidenciasModule() {
       cancelButtonText: 'Cancelar'
     })
 
-    if (result.isConfirmed) {
-      try {
-        // Primero eliminar penalidades asociadas (si las hay)
-        if (incidencia.total_penalidades > 0) {
-          const { error: penError } = await (supabase.from('penalidades' as any) as any)
-            .delete()
-            .eq('incidencia_id', incidencia.id)
-          if (penError) throw penError
-        }
+    if (!result.isConfirmed) return
 
-        // Luego eliminar la incidencia
-        const { error } = await (supabase.from('incidencias' as any) as any)
+    try {
+      // Primero eliminar penalidades asociadas (si las hay)
+      if (incidencia.total_penalidades > 0) {
+        const { error: penError } = await (supabase.from('penalidades' as any) as any)
           .delete()
-          .eq('id', incidencia.id)
-        if (error) throw error
-
-        showSuccess('Eliminado', 'La incidencia fue eliminada correctamente')
-        cargarDatos(true)
-      } catch (error: any) {
-        console.error('Error eliminando:', error)
-        Swal.fire('Error', error.message || 'No se pudo eliminar la incidencia', 'error')
+          .eq('incidencia_id', incidencia.id)
+        if (penError) throw penError
       }
+
+      // Luego eliminar la incidencia
+      const { error } = await (supabase.from('incidencias' as any) as any)
+        .delete()
+        .eq('id', incidencia.id)
+      if (error) throw error
+
+      showSuccess('Eliminado', 'La incidencia fue eliminada correctamente')
+      cargarDatos(true)
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo eliminar la incidencia', 'error')
     }
   }
 
@@ -1943,19 +1989,18 @@ export function IncidenciasModule() {
       cancelButtonText: 'Cancelar'
     })
 
-    if (result.isConfirmed) {
-      try {
-        const { error } = await (supabase.from('penalidades' as any) as any)
-          .delete()
-          .eq('id', penalidad.id)
-        if (error) throw error
+    if (!result.isConfirmed) return
 
-        showSuccess('Eliminado', 'La penalidad fue eliminada correctamente')
-        cargarDatos(true)
-      } catch (error: any) {
-        console.error('Error eliminando:', error)
-        Swal.fire('Error', error.message || 'No se pudo eliminar la penalidad', 'error')
-      }
+    try {
+      const { error } = await (supabase.from('penalidades' as any) as any)
+        .delete()
+        .eq('id', penalidad.id)
+      if (error) throw error
+
+      showSuccess('Eliminado', 'La penalidad fue eliminada correctamente')
+      cargarDatos(true)
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo eliminar la penalidad', 'error')
     }
   }
 
@@ -2003,7 +2048,6 @@ export function IncidenciasModule() {
       setMotivoRechazo('')
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error rechazando:', error)
       Swal.fire('Error', error.message || 'No se pudo rechazar', 'error')
     } finally {
       setRechazando(false)
@@ -2133,7 +2177,7 @@ export function IncidenciasModule() {
           const vehiculo = vehiculos.find(v => v.id === incidenciaForm.vehiculo_id)
           const conductor = conductores.find(c => c.id === incidenciaForm.conductor_id)
           
-          const { error: penError } = await (supabase.from('penalidades' as any) as any)
+          await (supabase.from('penalidades' as any) as any)
             .insert({
               incidencia_id: incidenciaCreada.id,
               vehiculo_id: incidenciaForm.vehiculo_id || null,
@@ -2153,10 +2197,7 @@ export function IncidenciasModule() {
               created_by_name: profile?.full_name || 'Sistema',
               sede_id: sedeActualId || sedeUsuario?.id,
             })
-          if (penError) {
-            console.error('Error creando penalidad:', penError)
-            // No fallar, la incidencia ya se creó
-          }
+          // penError silently ignored - la incidencia ya se creó
         }
         
         showSuccess('Guardado', esCobro 
@@ -2167,7 +2208,6 @@ export function IncidenciasModule() {
       setShowModal(false)
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error guardando:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
     } finally {
       setSaving(false)
@@ -2231,7 +2271,6 @@ export function IncidenciasModule() {
       setShowModal(false)
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error guardando:', error)
       Swal.fire('Error', error.message || 'No se pudo guardar', 'error')
     } finally {
       setSaving(false)
@@ -2381,7 +2420,6 @@ export function IncidenciasModule() {
       setShowAplicarModal(false)
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error aplicando cobro:', error)
       Swal.fire('Error', error.message || 'No se pudo aplicar el cobro', 'error')
     } finally {
       setAplicandoCobro(false)
@@ -2406,41 +2444,36 @@ export function IncidenciasModule() {
       cancelButtonText: 'Cancelar'
     })
 
-    if (result.isConfirmed) {
-      try {
-        // Si está fraccionado, eliminar las cuotas primero
-        if (penalidad.fraccionado) {
-          const { error: cuotasError } = await (supabase.from('penalidades_cuotas' as any) as any)
-            .delete()
-            .eq('penalidad_id', penalidad.id)
-          
-          if (cuotasError) {
-            console.error('Error eliminando cuotas:', cuotasError)
-          }
-        }
+    if (!result.isConfirmed) return
 
-        // Revertir la penalidad a estado pendiente
-        const { error } = await (supabase.from('penalidades' as any) as any)
-          .update({
-            aplicado: false,
-            fraccionado: false,
-            cantidad_cuotas: null,
-            semana_aplicacion: null,
-            anio_aplicacion: null,
-            fecha_aplicacion: null,
-            updated_by: profile?.full_name || 'Sistema'
-          })
-          .eq('id', penalidad.id)
-
-        if (error) throw error
-
-        showSuccess('Desaplicado', 'El cobro/descuento volvió a estado pendiente')
-        
-        cargarDatos(true)
-      } catch (error: any) {
-        console.error('Error desaplicando:', error)
-        Swal.fire('Error', error.message || 'No se pudo desaplicar', 'error')
+    try {
+      // Si está fraccionado, eliminar las cuotas primero
+      if (penalidad.fraccionado) {
+        const { error: cuotasError } = await (supabase.from('penalidades_cuotas' as any) as any)
+          .delete()
+          .eq('penalidad_id', penalidad.id)
+        if (cuotasError) throw cuotasError
       }
+
+      // Revertir la penalidad a estado pendiente
+      const { error } = await (supabase.from('penalidades' as any) as any)
+        .update({
+          aplicado: false,
+          fraccionado: false,
+          cantidad_cuotas: null,
+          semana_aplicacion: null,
+          anio_aplicacion: null,
+          fecha_aplicacion: null,
+          updated_by: profile?.full_name || 'Sistema'
+        })
+        .eq('id', penalidad.id)
+
+      if (error) throw error
+
+      showSuccess('Desaplicado', 'El cobro/descuento volvió a estado pendiente')
+      cargarDatos(true)
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo desaplicar', 'error')
     }
   }
 
@@ -2576,7 +2609,6 @@ export function IncidenciasModule() {
       
       cargarDatos(true)
     } catch (error: any) {
-      console.error('Error reasignando semana:', error)
       Swal.fire('Error', error.message || 'No se pudo reasignar la semana', 'error')
     } finally {
       setReasignando(false)
@@ -2960,13 +2992,7 @@ export function IncidenciasModule() {
           <div className="incidencias-bulk-bar">
             <button
               className={`btn-filter ${soloPendientesEnviar ? 'active' : ''}`}
-              onClick={() => {
-                setSoloPendientesEnviar(!soloPendientesEnviar)
-                if (!soloPendientesEnviar) {
-                  setModoSeleccionMasiva(false)
-                  setIncidenciasSeleccionadas(new Set())
-                }
-              }}
+              onClick={handleTogglePendientesEnviar}
             >
               <Clock size={16} />
               Pend. Facturación
@@ -2985,10 +3011,7 @@ export function IncidenciasModule() {
             {modoSeleccionMasiva && (
               <button
                 className="btn-secondary"
-                onClick={() => {
-                  setModoSeleccionMasiva(false)
-                  setIncidenciasSeleccionadas(new Set())
-                }}
+                onClick={handleCancelarSeleccionMasiva}
               >
                 <X size={16} />
                 Cancelar
@@ -3074,11 +3097,7 @@ export function IncidenciasModule() {
                     <span className="dt-chip-label" style={{ color: '#f59e0b' }}>Pendiente Facturación</span>
                     <button
                       className="dt-chip-remove"
-                      onClick={() => {
-                        setSoloPendientesEnviar(false)
-                        setModoSeleccionMasiva(false)
-                        setIncidenciasSeleccionadas(new Set())
-                      }}
+                      onClick={handleLimpiarPendienteEnviar}
                       title="Quitar filtro"
                     >
                       <X size={12} />
@@ -3097,13 +3116,7 @@ export function IncidenciasModule() {
             <div className="incidencias-selection-bar">
               <button
                 className="btn-select-all"
-                onClick={() => {
-                  if (incidenciasSeleccionadas.size === incidenciasEnviables.length) {
-                    handleDeseleccionarTodas()
-                  } else {
-                    handleSeleccionarTodas()
-                  }
-                }}
+                onClick={handleToggleSeleccionarTodas}
               >
                 {incidenciasSeleccionadas.size === incidenciasEnviables.length && incidenciasEnviables.length > 0 ? (
                   <><CheckSquare size={16} color="#10b981" /> Deseleccionar todas</>
@@ -3165,9 +3178,7 @@ export function IncidenciasModule() {
             {canEdit && penalidadesSeleccionadas.size > 0 && (
               <button
                 className="btn-secondary"
-                onClick={() => {
-                  setPenalidadesSeleccionadas(new Set())
-                }}
+                onClick={handleDeseleccionarTodasPenalidades}
                 style={{ fontSize: 12 }}
               >
                 <X size={14} />

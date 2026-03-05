@@ -43,21 +43,7 @@ import { useSede } from '../../contexts/SedeContext'
 import './GuiasModule.css'
 import './GuiasToolbar.css'
 import iconNotas from './Iconos/notas.png'
-
-// Helpers copiados de ConductoresModule para consistencia visual
-const getEstadoConductorDisplay = (estado: { codigo?: string; descripcion?: string | null } | null | undefined): string => {
-  if (!estado) return "N/A";
-  const codigo = estado.codigo?.toLowerCase();
-  const displayMap: Record<string, string> = {
-    'activo': 'Activo',
-    'baja': 'Baja',
-    'suspendido': 'Suspendido',
-    'vacaciones': 'Vacaciones',
-    'licencia': 'Licencia',
-    'inactivo': 'Inactivo',
-  };
-  return displayMap[codigo || ''] || estado.codigo || estado.descripcion || "N/A";
-};
+import { getEstadoConductorDisplay } from '../../utils/conductorUtils'
 
 const getCurrentWeek = () => {
   return format(new Date(), "R-'W'II");
@@ -166,20 +152,22 @@ export function GuiasModule() {
     }
 
     try {
+      const emptyMetrics = { promGan: 0, horas: '0', porcOcup: '0%', acept: '-' };
+
       const updatedData = await Promise.all(conductoresEscuela.map(async (d) => {
         const baseData = {
             id: d.id,
             nombre: `${d.nombres} ${d.apellidos}`,
             fechaCap: d.fecha_escuela ? format(addHours(new Date(d.fecha_escuela), 12), 'dd/MM/yyyy') : '-',
-            semanas2: { promGan: 0, horas: '0', porcOcup: '0%', acept: '-' },
-            semanas4: { promGan: 0, horas: '0', porcOcup: '0%', acept: '-' }
+            semanas2: { ...emptyMetrics },
+            semanas4: { ...emptyMetrics }
         };
 
         if (!d.fecha_escuela || !d.numero_dni) {
              return {
                  ...baseData,
-                 previo: { promGan: 0, horas: '0', porcOcup: '0%', acept: '-' },
-                 semanas2: { promGan: 0, horas: '0', porcOcup: '0%', acept: '-' }
+                 previo: { ...emptyMetrics },
+                 semanas2: { ...emptyMetrics }
              };
         }
 
@@ -292,8 +280,8 @@ export function GuiasModule() {
       setPrecalculatedSchoolReport(updatedData);
       setIsSchoolReportCalculated(true);
 
-    } catch (error) {
-      console.error("Error calculating school report metrics (background):", error);
+    } catch {
+      // silently ignored
     }
   };
 
@@ -376,24 +364,20 @@ export function GuiasModule() {
 
       if (error) throw error;
 
-      let allNotes: Anotacion[] = [];
+      const allNotes: Anotacion[] = [];
       
-      if (data) {
-        data.forEach((record: any) => {
-          if (Array.isArray(record.anotaciones_extra)) {
-            // Mapear notas y asegurar que tengan ID (si no tienen, generar uno temporal)
-            const notesFromWeek = record.anotaciones_extra.map((nota: any, index: number) => ({
-              id: nota.id || `${record.semana}-${index}`,
-              texto: nota.texto,
-              fecha: nota.fecha, // Asumimos formato string guardado
-              usuario: nota.usuario,
-              avatarColor: nota.avatarColor || '#3b82f6', // Color por defecto si no existe
-              semana: record.semana // Agregamos el campo semana
-            }));
-            allNotes = [...allNotes, ...notesFromWeek];
-          }
-        });
-      }
+      (data ?? []).forEach((record: any) => {
+        if (!Array.isArray(record.anotaciones_extra)) return;
+        const notesFromWeek = record.anotaciones_extra.map((nota: any, index: number) => ({
+          id: nota.id || `${record.semana}-${index}`,
+          texto: nota.texto,
+          fecha: nota.fecha,
+          usuario: nota.usuario,
+          avatarColor: nota.avatarColor || '#3b82f6',
+          semana: record.semana
+        }));
+        allNotes.push(...notesFromWeek);
+      });
 
       setHistoryNotesData(allNotes);
       setHistoryNotesTotal(allNotes.length);
@@ -401,8 +385,7 @@ export function GuiasModule() {
       setHistoryNotesDriverDni(driverDni ? String(driverDni) : '');
       setHistoryNotesModalOpen(true);
 
-    } catch (error) {
-      console.error('Error fetching history notes:', error);
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar las notas históricas', 'error');
     }
   };
@@ -431,7 +414,6 @@ export function GuiasModule() {
       }));
       
     } catch (error) {
-      console.error('Error saving annotations:', error);
       Swal.fire('Error', 'No se pudieron guardar las anotaciones', 'error');
       throw error;
     }
@@ -446,7 +428,6 @@ export function GuiasModule() {
         .from('conductores')
         .update({ id_guia: newGuideId } as any)
         .eq('id', selectedConductorForReassign.id);
-
       if (errorConductor) throw errorConductor;
 
       // 2. Actualizar registro específico en guias_historial_semanal
@@ -455,7 +436,6 @@ export function GuiasModule() {
           .from('guias_historial_semanal')
           .update({ id_guia: newGuideId } as any)
           .eq('id', selectedConductorForReassign.historial_id);
-
         if (errorHistorial) throw errorHistorial;
       }
 
@@ -468,13 +448,10 @@ export function GuiasModule() {
       });
 
       // Recargar conductores del guía actual para reflejar que se fue
-      if (selectedGuiaId) {
-        loadDrivers(selectedGuiaId);
-        loadCurrentWeekMetrics(selectedGuiaId);
-      }
-
-    } catch (error) {
-      console.error('Error reassigning driver:', error);
+      if (!selectedGuiaId) return;
+      loadDrivers(selectedGuiaId);
+      loadCurrentWeekMetrics(selectedGuiaId);
+    } catch {
       Swal.fire('Error', 'No se pudo completar la reasignación', 'error');
     }
   };
@@ -515,51 +492,47 @@ export function GuiasModule() {
 
       if (historyError) throw historyError;
 
-      if (historyData) {
-        const rows = historyData.map(d => {
-          const dbApp = parseCustomCurrency(d.app);
-          const dbEfectivo = parseCustomCurrency(d.efectivo);
-          const dbTotal = parseCustomCurrency(d.total);
-          const app = dbApp;
-          const efectivo = dbEfectivo;
-          const total = dbTotal > 0 ? dbTotal : (app + efectivo);
-          const seguimientoBase = app;
+      if (!historyData) return;
 
-           let seguimientoLabel = 'SEMANAL';
-           const rawSeguimiento = (d as any).seguimiento;
-           if (rawSeguimiento && typeof rawSeguimiento === 'string' && rawSeguimiento.trim() !== '') {
-             seguimientoLabel = rawSeguimiento.trim().toUpperCase();
-           } else if (seguimientoRules && seguimientoRules.length > 0) {
-             for (const rule of seguimientoRules) {
-               const desde = Number(rule.desde || 0);
-               const hasta = rule.hasta !== null && rule.hasta !== undefined ? Number(rule.hasta) : Infinity;
-               if (seguimientoBase >= desde && seguimientoBase <= hasta) {
-                 seguimientoLabel = (rule.rango_nombre || 'SEMANAL').toString().toUpperCase();
-                 break;
-               }
-             }
-           }
+      const rows = historyData.map(d => {
+        const app = parseCustomCurrency(d.app);
+        const efectivo = parseCustomCurrency(d.efectivo);
+        const dbTotal = parseCustomCurrency(d.total);
+        const total = dbTotal > 0 ? dbTotal : (app + efectivo);
 
-           // Accion nombre
-           const accionObj = accionesImplementadas.find(a => a.id === d.id_accion_imp);
-           const accionNombre = accionObj ? accionObj.nombre : (d.id_accion_imp === 1 ? 'CAPACITACION CABIFY' : '-');
+        let seguimientoLabel = 'SEMANAL';
+        const rawSeguimiento = (d as any).seguimiento;
+        if (rawSeguimiento && typeof rawSeguimiento === 'string' && rawSeguimiento.trim() !== '') {
+          seguimientoLabel = rawSeguimiento.trim().toUpperCase();
+        } else if (seguimientoRules && seguimientoRules.length > 0) {
+          for (const rule of seguimientoRules) {
+            const desde = Number(rule.desde || 0);
+            const hasta = rule.hasta !== null && rule.hasta !== undefined ? Number(rule.hasta) : Infinity;
+            if (app >= desde && app <= hasta) {
+              seguimientoLabel = (rule.rango_nombre || 'SEMANAL').toString().toUpperCase();
+              break;
+            }
+          }
+        }
 
-           return {
-             semana: d.semana,
-             efectivo: efectivo,
-             app: app,
-             total: total,
-             llamada: d.fecha_llamada ? 'Realizada' : 'Pendiente',
-             fechaLlamada: d.fecha_llamada ? format(new Date(d.fecha_llamada), 'dd/MM/yyyy') : null,
-             accionImp: accionNombre,
-             seguimiento: seguimientoLabel,
-             notas: d.anotaciones_extra || []
-           };
-        });
-        setHistoryRows(rows);
-      }
-    } catch (err) {
-      console.error("Error loading history:", err);
+        // Accion nombre
+        const accionObj = accionesImplementadas.find(a => a.id === d.id_accion_imp);
+        const accionNombre = accionObj ? accionObj.nombre : (d.id_accion_imp === 1 ? 'CAPACITACION CABIFY' : '-');
+
+        return {
+          semana: d.semana,
+          efectivo,
+          app,
+          total,
+          llamada: d.fecha_llamada ? 'Realizada' : 'Pendiente',
+          fechaLlamada: d.fecha_llamada ? format(new Date(d.fecha_llamada), 'dd/MM/yyyy') : null,
+          accionImp: accionNombre,
+          seguimiento: seguimientoLabel,
+          notas: d.anotaciones_extra || []
+        };
+      });
+      setHistoryRows(rows);
+    } catch {
       Swal.fire('Error', 'No se pudo cargar el historial', 'error');
     }
   };
@@ -574,11 +547,9 @@ export function GuiasModule() {
     try {
       const { data, error } = await supabase.from('guias_acciones_implementadas').select('*').order('id', { ascending: true });
       if (error) throw error;
-      if (data) {
-        setAccionesImplementadas(data);
-      }
-    } catch (err) {
-      console.error("Error loading acciones implementadas:", err);
+      if (data) setAccionesImplementadas(data);
+    } catch {
+      // silently ignored
     }
   };
 
@@ -589,11 +560,9 @@ export function GuiasModule() {
         .select('*')
         .order('desde', { ascending: true });
       if (error) throw error;
-      if (data) {
-        setSeguimientoRules(data);
-      }
-    } catch (err) {
-      console.error("Error loading seguimiento rules:", err);
+      if (data) setSeguimientoRules(data);
+    } catch {
+      // silently ignored
     } finally {
       setSeguimientoLoaded(true);
     }
@@ -751,8 +720,8 @@ export function GuiasModule() {
               return { dniMap, nameMap };
             }
           }
-        } catch (err) {
-          console.error('Logs de guias: Error general procesando datos Cabify', err);
+        } catch {
+          // silently ignored
         }
         return { dniMap: new Map(), nameMap: new Map() };
       })();
@@ -923,15 +892,16 @@ export function GuiasModule() {
                   supabase.from('guias_historial_semanal').update({ fecha_llamada: fecha })
                   .eq('semana', targetWeek).eq('id_guia', guiaId).eq('id_conductor', cid).is('fecha_llamada', null)
                );
-               Promise.all(updates).catch(e => console.error("Background date sync failed", e));
+                Promise.all(updates).catch(() => {});
              }
            }
         }
       }
 
       // Procesar conductores desde el historial
-      if (historialData && historialData.length > 0) {
-        const processedDrivers: any[] = [];
+      if (!historialData || historialData.length === 0) return [];
+
+      const processedDrivers: any[] = [];
         const updatesToPerform: any[] = [];
         
         // Pre-agrupar seguimientoRules por turno dominante — O(1) por conductor en vez de O(rules) c/u
@@ -1035,10 +1005,6 @@ export function GuiasModule() {
             ]
           }
 
-          const totalPrevWeek = typeof prevWeekStats.total === 'number'
-            ? prevWeekStats.total
-            : (prevWeekStats.diurno + prevWeekStats.nocturno + prevWeekStats.cargo);
-          
           const estadoCodigo = baseConductor.conductores_estados?.codigo?.toLowerCase();
           const tieneAsignacion = !!baseConductor.vehiculo_asignado;
           let searchMetadata = "";
@@ -1084,30 +1050,16 @@ export function GuiasModule() {
 
           // Solo buscamos datos frescos de Cabify si estamos en la semana actual
           if (isCurrentWeek) {
-            let matchFound = false;
-            let matchType = '';
-            
             if (dni && cabifyDriversMapByDni.has(dni)) {
               cabifyData = cabifyDriversMapByDni.get(dni);
               // Forzar 2 decimales para evitar errores de punto flotante antes de procesar/guardar
               facturacionApp = Number(parseCustomCurrency(cabifyData.cobroApp).toFixed(2));
               facturacionEfectivo = Number(parseCustomCurrency(cabifyData.cobroEfectivo).toFixed(2));
-              matchFound = true;
-              matchType = 'DNI';
             } else if (cabifyDriversMapByName.has(nombreCompleto)) {
               cabifyData = cabifyDriversMapByName.get(nombreCompleto);
               // Forzar 2 decimales para evitar errores de punto flotante antes de procesar/guardar
               facturacionApp = Number(parseCustomCurrency(cabifyData.cobroApp).toFixed(2));
               facturacionEfectivo = Number(parseCustomCurrency(cabifyData.cobroEfectivo).toFixed(2));
-              matchFound = true;
-              matchType = 'NOMBRE';
-            }
-            
-            if (matchFound) {
-              console.log(`Logs de guias: MATCH EXITOSO (${matchType}) para ${nombreCompleto} (DNI: ${dni})`, cabifyData);
-            } else {
-              // Descomentar para ver fallos (puede ser ruidoso)
-              console.log(`Logs de guias: NO MATCH para ${nombreCompleto} (DNI: ${dni}) - Buscado en mapa DNI (${cabifyDriversMapByDni.has(dni || '')}) o Nombre (${cabifyDriversMapByName.has(nombreCompleto)})`);
             }
 
             // Recalculamos total si estamos en semana actual
@@ -1160,12 +1112,8 @@ export function GuiasModule() {
             }
           }
           let prevAppParsed = 0;
-          let prevEfectivoParsed = 0;
-          let prevTotalParsed = 0;
           if (prevFinancialRow) {
             prevAppParsed = parseCustomCurrency(prevFinancialRow.app);
-            prevEfectivoParsed = parseCustomCurrency(prevFinancialRow.efectivo);
-            prevTotalParsed = parseCustomCurrency(prevFinancialRow.total);
           }
 
           let prevSeguimientoRule: any | null = null;
@@ -1225,30 +1173,6 @@ export function GuiasModule() {
             baseConductor.seguimiento = autoSeguimiento;
           }
 
-          console.log('GuiasModule: asignaciones semana anterior por conductor', {
-            guiaId,
-            semanaReferencia: targetWeek,
-            semanaBuscada: prevWeekLabel,
-            conductorId: conductor.id,
-            nombre: `${conductor.nombres || ''} ${conductor.apellidos || ''}`.trim(),
-            created_at_conductor: conductor.created_at,
-            stats: prevWeekStats,
-            totalSemanaAnterior: totalPrevWeek,
-            totalMonetarioSemanaAnterior: prevTotalParsed,
-            totalMonetarioSemanaAnteriorApp: prevAppParsed,
-            totalMonetarioSemanaAnteriorEfectivo: prevEfectivoParsed,
-            turnoDominante: dominantTurno,
-            reglasSubRangoCoincidentes: (matchingSeguimientoRules || []).map((r: any) => ({
-              id: r.id,
-              rango_nombre: r.rango_nombre,
-              sub_rango_nombre: r.sub_rango_nombre,
-              desde: r.desde,
-              hasta: r.hasta,
-              color: r.color
-            })),
-            reglaSeleccionadaPorTotalMonetario: prevSeguimientoRule
-          });
-
           // Lógica de actualización automática de las columnas 'app', 'efectivo' y 'total'
           // Solo si estamos en la semana actual
           if (isCurrentWeek) {
@@ -1300,9 +1224,6 @@ export function GuiasModule() {
       }
 
       return processedDrivers;
-      } else {
-        return [];
-      }
     } catch {
       return [];
     }
@@ -1362,18 +1283,16 @@ export function GuiasModule() {
 
   const distributeDrivers = async () => {
     try {
-      if (guias.length === 0) {
-        return
-      }
+      if (guias.length === 0) return;
+
       const { data: assignedDrivers, error: assignedError } = await aplicarFiltroSede(supabase
         .from('conductores')
         .select('id, id_guia')
         .eq('estado_id', '57e9de5f-e6fc-4ff7-8d14-cf8e13e9dbe2')
         .eq('guia_asignado', true))
 
-      if (assignedError) {
-        return
-      }
+      if (assignedError) return;
+
       // Modificación estricta: Usamos !inner en todas las relaciones jerárquicas para forzar
       // que existan los registros hijos. Si no hay vehiculo, no trae el conductor.
       const { data: rawUnassignedDrivers, error: unassignedError } = await aplicarFiltroSede(supabase
@@ -1397,9 +1316,7 @@ export function GuiasModule() {
         .or('guia_asignado.is.null,guia_asignado.eq.false')
         .in('asignaciones_conductores.asignaciones.estado', ['activo', 'activa']));
 
-      if (unassignedError) {
-        return
-      }
+      if (unassignedError) return;
 
       // Filtrar en memoria para asegurar que tengan vehículo y eliminar duplicados
       const unassignedDriversMap = new Map();
@@ -1427,9 +1344,7 @@ export function GuiasModule() {
       });
       const unassignedDrivers = Array.from(unassignedDriversMap.values());
 
-      if (unassignedDrivers.length === 0) {
-        return
-      }
+      if (unassignedDrivers.length === 0) return;
 
       const guideLoad = new Map<string, number>()
       guias.forEach(g => guideLoad.set(g.id, 0))
@@ -1465,102 +1380,100 @@ export function GuiasModule() {
         })
       }
 
-      if (updates.length > 0) {
-        // Usamos Promise.all con update individual para evitar problemas de constraints (not-null)
-        // con upsert si faltan campos obligatorios en el objeto parcial.
-        const updatePromises = updates.map(update => 
-          supabase
-            .from('conductores')
-            .update({ 
-              guia_asignado: update.guia_asignado, 
-              id_guia: update.id_guia 
-            })
-            .eq('id', update.id)
-            .select()
-        );
+      if (updates.length === 0) return;
 
-        const results = await Promise.all(updatePromises);
+      // Usamos Promise.all con update individual para evitar problemas de constraints (not-null)
+      // con upsert si faltan campos obligatorios en el objeto parcial.
+      const updatePromises = updates.map(update => 
+        supabase
+          .from('conductores')
+          .update({ 
+            guia_asignado: update.guia_asignado, 
+            id_guia: update.id_guia 
+          })
+          .eq('id', update.id)
+          .select()
+      );
+
+      const results = await Promise.all(updatePromises);
+      
+      // Verificar errores en las actualizaciones individuales
+      const errors = results.filter(r => r.error).map(r => r.error);
+      if (errors.length > 0) throw errors[0];
+
+      // Insertar en historial semanal
+      const currentWeek = getCurrentWeek()
+      
+      // Verificar historial existente para esta semana para evitar duplicados
+      // Esto asegura que solo se creen registros para NUEVAS asignaciones
+      const { data: existingHistory } = await supabase
+        .from('guias_historial_semanal')
+        .select('id_conductor')
+        .eq('semana', currentWeek);
         
-        // Verificar errores en las actualizaciones individuales
-        const errors = results.filter(r => r.error).map(r => r.error);
-        if (errors.length > 0) {
-          throw errors[0];
-        }
+      const existingHistoryIds = new Set(existingHistory?.map((h: any) => h.id_conductor));
+      const historyInserts: any[] = [];
 
-        // Insertar en historial semanal
-        const currentWeek = getCurrentWeek()
-        
-        // Verificar historial existente para esta semana para evitar duplicados
-        // Esto asegura que solo se creen registros para NUEVAS asignaciones
-        const { data: existingHistory } = await supabase
-          .from('guias_historial_semanal')
-          .select('id_conductor')
-          .eq('semana', currentWeek);
-          
-        const existingHistoryIds = new Set(existingHistory?.map((h: any) => h.id_conductor));
-        const historyInserts: any[] = [];
+      // 1. Identify drivers needing history
+      const driversToInsert = updates.filter(u => !existingHistoryIds.has(u.id));
+      
+      if (driversToInsert.length > 0) {
+        // 2. Fetch latest history for these drivers to preserve fecha_llamada and id_accion_imp
+         const driverIds = driversToInsert.map(u => u.id);
+         const lastHistoryMap = new Map();
 
-        // 1. Identify drivers needing history
-        const driversToInsert = updates.filter(u => !existingHistoryIds.has(u.id));
-        
-        if (driversToInsert.length > 0) {
-          // 2. Fetch latest history for these drivers to preserve fecha_llamada and id_accion_imp
-           const driverIds = driversToInsert.map(u => u.id);
-           const lastHistoryMap = new Map();
+         try {
+           const { data: latestHistory } = await supabase
+             .from('guias_historial_semanal')
+             .select('id_conductor, fecha_llamada, id_accion_imp, semana')
+             .in('id_conductor', driverIds)
+             .or('fecha_llamada.not.is.null,id_accion_imp.not.is.null') 
+             .order('semana', { ascending: false });
 
-           try {
-             const { data: latestHistory } = await supabase
-               .from('guias_historial_semanal')
-               .select('id_conductor, fecha_llamada, id_accion_imp, semana')
-               .in('id_conductor', driverIds)
-               .or('fecha_llamada.not.is.null,id_accion_imp.not.is.null') 
-               .order('semana', { ascending: false });
-
-             // Map: id_conductor -> { fecha_llamada, id_accion_imp }
-             if (latestHistory) {
-               latestHistory.forEach((h: any) => {
-                 if (!lastHistoryMap.has(h.id_conductor)) {
-                   lastHistoryMap.set(h.id_conductor, {
-                     fecha_llamada: h.fecha_llamada,
-                     id_accion_imp: h.id_accion_imp
-                   });
-                 }
-               });
-             }
-            } catch {
-              // Proceed without previous history
-            }
-
-           // 3. Prepare inserts
-           driversToInsert.forEach(u => {
-              const preservedData = lastHistoryMap.get(u.id);
-              
-              historyInserts.push({
-               id_conductor: u.id,
-               id_guia: u.id_guia,
-               semana: currentWeek,
-               id_accion_imp: preservedData?.id_accion_imp || 1, // Default action: "CAPACITACION CABIFY"
-               fecha_llamada: preservedData?.fecha_llamada || null
+           // Map: id_conductor -> { fecha_llamada, id_accion_imp }
+           if (latestHistory) {
+             latestHistory.forEach((h: any) => {
+               if (!lastHistoryMap.has(h.id_conductor)) {
+                 lastHistoryMap.set(h.id_conductor, {
+                   fecha_llamada: h.fecha_llamada,
+                   id_accion_imp: h.id_accion_imp
+                 });
+               }
              });
-             // Add to set just in case
-             existingHistoryIds.add(u.id);
-           });
-        }
-
-        if (historyInserts.length > 0) {
-          const { error: historyError } = await supabase
-            .from('guias_historial_semanal')
-            .insert(historyInserts)
-
-          if (historyError) {
-            // History insert failed
+           }
+          } catch {
+            // Proceed without previous history
           }
+
+         // 3. Prepare inserts
+         driversToInsert.forEach(u => {
+            const preservedData = lastHistoryMap.get(u.id);
+            
+            historyInserts.push({
+             id_conductor: u.id,
+             id_guia: u.id_guia,
+             semana: currentWeek,
+             id_accion_imp: preservedData?.id_accion_imp || 1, // Default action: "CAPACITACION CABIFY"
+             fecha_llamada: preservedData?.fecha_llamada || null
+           });
+           // Add to set just in case
+           existingHistoryIds.add(u.id);
+         });
+      }
+
+      if (historyInserts.length > 0) {
+        const { error: historyError } = await supabase
+          .from('guias_historial_semanal')
+          .insert(historyInserts)
+
+        if (historyError) {
+          // History insert failed
         }
-        
-        // Recargar datos para reflejar cambios
-        if (selectedGuiaId) {
-             loadDrivers(selectedGuiaId);
-        }
+      }
+      
+      // Recargar datos para reflejar cambios
+      if (selectedGuiaId) {
+           loadDrivers(selectedGuiaId);
       }
 
     } catch {
@@ -1577,12 +1490,7 @@ export function GuiasModule() {
       // Seleccionar la guía del URL o la primera disponible
       if (urlGuiaId) {
         const matchedGuia = formattedGuias.find(g => g.id === urlGuiaId)
-        if (matchedGuia) {
-          setSelectedGuiaId(matchedGuia.id)
-        } else if (formattedGuias.length > 0) {
-          // URL no coincide con ninguna guía, usar la primera
-          setSelectedGuiaId(formattedGuias[0].id)
-        }
+        setSelectedGuiaId(matchedGuia?.id ?? formattedGuias[0]?.id ?? null)
       } else if (formattedGuias.length > 0) {
         setSelectedGuiaId(formattedGuias[0].id)
       }
@@ -2730,8 +2638,6 @@ export function GuiasModule() {
       if (actualizandoData) return;
       setActualizandoData(true);
       const currentWeek = getCurrentWeek();
-      console.log("=== INICIO ACTUALIZACION DE DATA ===");
-      console.log("Semana actual:", currentWeek);
 
       // 1. Obtener datos de guias_historial_semanal (semanas anteriores)
       const { data: historialData, error: historialError } = await supabase
@@ -2740,11 +2646,8 @@ export function GuiasModule() {
         .neq('semana', currentWeek);
 
       if (historialError) {
-        console.error("Error al obtener historial semanal:", historialError);
         throw historialError;
       }
-
-      console.log(`Registros históricos encontrados (semanas != ${currentWeek}):`, historialData?.length);
 
       // 2. Obtener id_conductor únicos
       // Filtrar nulls/undefineds y obtener únicos
@@ -2753,14 +2656,9 @@ export function GuiasModule() {
           .map(d => d.id_conductor)
           .filter(id => id !== null && id !== undefined)
       )];
-      
-      console.log("IDs de conductores únicos encontrados:", uniqueDriverIds.length);
-      console.log("Lista de IDs:", uniqueDriverIds);
 
       // 3. Loop por conductores
       for (const driverId of uniqueDriverIds) {
-        console.log(`\n--- Procesando Conductor ID: ${driverId} ---`);
-
         // 3a. Buscar datos del conductor
         const { data: driverData, error: driverError } = await supabase
           .from('conductores')
@@ -2769,10 +2667,7 @@ export function GuiasModule() {
           .single();
 
         if (driverError) {
-          console.error(`Error obteniendo datos del conductor ${driverId}:`, driverError);
           // Continuamos con el siguiente conductor aunque falle la obtención de sus datos personales
-        } else {
-          console.log(`Conductor: ${driverData?.nombres} ${driverData?.apellidos} (DNI: ${driverData?.numero_dni})`);
         }
 
         // 3b. Buscar historial del conductor (semanas anteriores)
@@ -2784,127 +2679,89 @@ export function GuiasModule() {
           .neq('semana', currentWeek);
 
         if (driverHistoryError) {
-          console.error(`Error obteniendo historial específico para conductor ${driverId}:`, driverHistoryError);
-        } else {
-          console.log(`Historial encontrado para este conductor (semanas pasadas): ${driverHistory?.length} registros.`);
+          continue;
+        }
+
+        if (!driverHistory || driverHistory.length === 0) {
+          continue;
+        }
+
+        // 4. Segundo loop por resultados del historial
+        for (const historyRecord of driverHistory) {
+          const weekStr = historyRecord.semana; // Format: "YYYY-Www"
+
+          // 5. Calcular la última fecha de la semana
+          const [yearStr, weekNumStr] = weekStr.split('-W');
+          const year = parseInt(yearStr);
+          const week = parseInt(weekNumStr);
+
+          const baseDate = new Date(year, 0, 4);
+          const weekDate = setISOWeek(baseDate, week);
+          const sundayDate = endOfISOWeek(weekDate);
           
-          // 4. Segundo loop por resultados del historial
-          if (driverHistory && driverHistory.length > 0) {
-            for (const historyRecord of driverHistory) {
-              const weekStr = historyRecord.semana; // Format: "YYYY-Www"
-              console.log(`    [Procesando Registro] Semana: ${weekStr}, ID Registro: ${historyRecord.id}`);
+          const endDateUTC = new Date(Date.UTC(
+            sundayDate.getFullYear(),
+            sundayDate.getMonth(),
+            sundayDate.getDate(),
+            23, 59, 59, 999
+          )).toISOString().replace('Z', '+00');
 
-              // 5. Calcular la última fecha de la semana
-              // Parseamos "YYYY-Www"
-              const [yearStr, weekNumStr] = weekStr.split('-W');
-              const year = parseInt(yearStr);
-              const week = parseInt(weekNumStr);
+          // 6. Filtro en cabify_historico por fecha_fin y conductor
+          let cabifyRecord = null;
+          const dniOriginal = driverData?.numero_dni ? String(driverData.numero_dni).trim() : '';
+          const dniClean = dniOriginal.replace(/\./g, '');
 
-              // Usamos date-fns para obtener el fin de la semana ISO
-              // 4 de enero siempre cae en la primera semana ISO o cerca
-              const baseDate = new Date(year, 0, 4);
-              const weekDate = setISOWeek(baseDate, week);
-              // endOfISOWeek nos da el domingo a las 23:59:59.999
-              const sundayDate = endOfISOWeek(weekDate);
-              
-              // Ajustamos a UTC para coincidir con el formato de la DB
-              // El formato de la DB es "2025-11-22 23:59:59.999+00" (UTC).
-              const endDateUTC = new Date(Date.UTC(
-                sundayDate.getFullYear(),
-                sundayDate.getMonth(),
-                sundayDate.getDate(),
-                23, 59, 59, 999
-              )).toISOString().replace('Z', '+00');
-              
-              console.log(`    [Fecha Fin Calculada] Semana ${weekStr} -> Domingo ${sundayDate.toLocaleDateString()} -> UTC String: ${endDateUTC}`);
-
-              // 6. Filtro en cabify_historico por fecha_fin y conductor
-              // Intentamos primero por DNI
-              let cabifyRecord = null;
-              const dniOriginal = driverData?.numero_dni ? String(driverData.numero_dni).trim() : '';
-              const dniClean = dniOriginal.replace(/\./g, '');
-
-              // Búsqueda por DNI
-              if (dniClean) {
-                  const { data: dataDni, error: errorDni } = await supabase
-                      .from('cabify_historico')
-                      .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
-                      .eq('dni', dniClean)
-                      .eq('fecha_fin', endDateUTC) // Usamos el string con formato +00
-                      .maybeSingle();
-                  
-                  if (errorDni) {
-                      console.error("    Error buscando Cabify por DNI:", errorDni);
-                  }
-                  if (dataDni) {
-                      cabifyRecord = dataDni;
-                      console.log(`    [Cabify Match] Encontrado por DNI: ${dniClean}`);
-                  }
-              }
-
-              // 7. Si no encuentra, buscar por Nombre
-              if (!cabifyRecord && driverData?.nombres && driverData?.apellidos) {
-                  const nombre = driverData.nombres.trim();
-                  const apellido = driverData.apellidos.trim();
-                  
-                  // Intentamos ilike
-                  const { data: dataName, error: errorName } = await supabase
-                      .from('cabify_historico')
-                      .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
-                      .ilike('nombre', `%${nombre}%`)
-                      .ilike('apellido', `%${apellido}%`)
-                      .eq('fecha_fin', endDateUTC)
-                      .maybeSingle();
-
-                  if (errorName) {
-                      console.error("    Error buscando Cabify por Nombre:", errorName);
-                  }
-                  if (dataName) {
-                      cabifyRecord = dataName;
-                      console.log(`    [Cabify Match] Encontrado por Nombre: ${nombre} ${apellido}`);
-                  }
-              }
-
-              // 8. Obtener datos y log
-              if (cabifyRecord) {
-                  console.log(`    [Datos Cabify] APP: ${cabifyRecord.cobro_app}, EFECTIVO: ${cabifyRecord.cobro_efectivo}`);
-
-                  // 9. Actualizar datos en guias_historial_semanal
-                  // Ya no filtramos por semana 8, aplicamos a todas las semanas históricas encontradas
-                  console.log(`    [Update] Intentando actualizar registro ${weekStr}...`);
-                  
-                  const appValue = Number(cabifyRecord.cobro_app) || 0;
-                  const efectivoValue = Number(cabifyRecord.cobro_efectivo) || 0;
-                  const totalValue = appValue + efectivoValue;
-
-                  const updateData = {
-                      app: appValue,
-                      efectivo: efectivoValue,
-                      total: totalValue
-                  };
-
-                  const { error: updateError } = await supabase
-                      .from('guias_historial_semanal')
-                      .update(updateData)
-                      .eq('id', historyRecord.id);
-
-                  if (updateError) {
-                      console.error(`    [Update Error] No se pudo actualizar el registro ${historyRecord.id}:`, updateError);
-                  } else {
-                      console.log(`    [Update Success] Registro actualizado. APP: ${appValue}, EFECTIVO: ${efectivoValue}, TOTAL: ${totalValue}`);
-                  }
-
-              } else {
-                  console.log(`    [Datos Cabify] No se encontraron registros para esta semana y conductor.`);
-              }
+          // Búsqueda por DNI
+          if (dniClean) {
+            const { data: dataDni } = await supabase
+              .from('cabify_historico')
+              .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
+              .eq('dni', dniClean)
+              .eq('fecha_fin', endDateUTC)
+              .maybeSingle();
+            
+            if (dataDni) {
+              cabifyRecord = dataDni;
             }
-          } else {
-            console.log("    Sin historial en semanas anteriores.");
           }
+
+          // 7. Si no encuentra, buscar por Nombre
+          if (!cabifyRecord && driverData?.nombres && driverData?.apellidos) {
+            const nombre = driverData.nombres.trim();
+            const apellido = driverData.apellidos.trim();
+            
+            const { data: dataName } = await supabase
+              .from('cabify_historico')
+              .select('ganancia_total, cobro_app, cobro_efectivo, fecha_fin')
+              .ilike('nombre', `%${nombre}%`)
+              .ilike('apellido', `%${apellido}%`)
+              .eq('fecha_fin', endDateUTC)
+              .maybeSingle();
+
+            if (dataName) {
+              cabifyRecord = dataName;
+            }
+          }
+
+          // 8. Obtener datos
+          if (!cabifyRecord) {
+            continue;
+          }
+
+          // 9. Actualizar datos en guias_historial_semanal
+          const appValue = Number(cabifyRecord.cobro_app) || 0;
+          const efectivoValue = Number(cabifyRecord.cobro_efectivo) || 0;
+          const totalValue = appValue + efectivoValue;
+
+          await supabase
+            .from('guias_historial_semanal')
+            .update({ app: appValue, efectivo: efectivoValue, total: totalValue })
+            .eq('id', historyRecord.id);
+
+          // Update error silently ignored
         }
       }
 
-      console.log("\n=== FIN ACTUALIZACION DE DATA ===");
       Swal.fire({
         title: 'Actualización Completada',
         text: 'Se ha procesado la data y generado los logs en la consola.',
@@ -2912,12 +2769,34 @@ export function GuiasModule() {
         confirmButtonColor: 'var(--color-primary)'
       });
 
-    } catch (error) {
-      console.error("Error general en actualizar data:", error);
-      Swal.fire('Error', 'Hubo un error al actualizar la data. Revise la consola para más detalles.', 'error');
+    } catch {
+      Swal.fire('Error', 'Hubo un error al actualizar la data.', 'error');
     } finally {
       setActualizandoData(false);
     }
+  };
+
+  const handleClearAllFilters = () => {
+    setNombreFilter([]);
+    setEstadoFilter([]);
+    setTurnoFilter([]);
+    setAsignacionFilter([]);
+    setEfectivoFilter([]);
+    setAppFilter([]);
+    setTotalFilter([]);
+    setActiveStatFilter(null);
+    setGlobalSearch('');
+  };
+
+  const handleToggleStatFilter = (filterName: string) => {
+    if (selectedWeek !== getCurrentWeek()) return;
+    setActiveStatFilter(prev => prev === filterName ? null : filterName);
+  };
+
+  const handleDriverUpdate = () => {
+    if (!selectedGuiaId) return;
+    loadDrivers(selectedGuiaId);
+    loadCurrentWeekMetrics(selectedGuiaId);
   };
 
   return (
@@ -2940,6 +2819,8 @@ export function GuiasModule() {
                 
                 {(() => {
                   // Cálculo de métricas USANDO SIEMPRE currentWeekDrivers
+                  const isCurrentWeek = selectedWeek === getCurrentWeek();
+                  const statCardClass = `stat-card ${isCurrentWeek ? 'cursor-pointer hover:opacity-80' : ''}`;
                   const totalConductores = currentWeekDrivers.length;
                   
                   const totalFacturado = currentWeekDrivers.reduce((acc, d) => acc + (Number(d.facturacion_total) || 0), 0);
@@ -3017,8 +2898,8 @@ export function GuiasModule() {
                     <div className="guias-stats-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                       {/* Fila 1 */}
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'totalConductores' ? null : 'totalConductores')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('totalConductores')}
                       >
                         <Users className="stat-icon" size={18} />
                         <div className="stat-content">
@@ -3027,8 +2908,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'totalFacturado' ? null : 'totalFacturado')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('totalFacturado')}
                       >
                         <DollarSign className="stat-icon" size={18} />
                         <div className="stat-content">
@@ -3037,8 +2918,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'totalEfectivo' ? null : 'totalEfectivo')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('totalEfectivo')}
                       >
                         <DollarSign className="stat-icon text-green-600" size={18} />
                         <div className="stat-content">
@@ -3047,8 +2928,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'totalApp' ? null : 'totalApp')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('totalApp')}
                       >
                         <DollarSign className="stat-icon text-blue-600" size={18} />
                         <div className="stat-content">
@@ -3057,8 +2938,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'conductoresEscuela' ? null : 'conductoresEscuela')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('conductoresEscuela')}
                       >
                         <GraduationCap className="stat-icon text-purple-600" size={18} />
                         <div className="stat-content">
@@ -3069,8 +2950,8 @@ export function GuiasModule() {
 
                       {/* Fila 2 */}
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'llamadasRealizadas' ? null : 'llamadasRealizadas')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('llamadasRealizadas')}
                       >
                         <Phone className="stat-icon text-green-500" size={18} />
                         <div className="stat-content">
@@ -3079,8 +2960,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'llamadasPendientes' ? null : 'llamadasPendientes')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('llamadasPendientes')}
                       >
                         <PhoneCall className="stat-icon text-orange-500" size={18} />
                         <div className="stat-content">
@@ -3089,8 +2970,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoDiario' ? null : 'seguimientoDiario')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('seguimientoDiario')}
                       >
                         <AlertTriangle className="stat-icon text-red-500" size={18} />
                         <div className="stat-content">
@@ -3099,8 +2980,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoCercano' ? null : 'seguimientoCercano')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('seguimientoCercano')}
                       >
                         <AlertTriangle className="stat-icon text-yellow-500" size={18} />
                         <div className="stat-content">
@@ -3109,8 +2990,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoSemanal' ? null : 'seguimientoSemanal')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('seguimientoSemanal')}
                       >
                         <CheckCircle className="stat-icon text-green-500" size={18} />
                         <div className="stat-content">
@@ -3121,8 +3002,8 @@ export function GuiasModule() {
 
                       {/* Fila 3 - Nuevas Métricas */}
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'capacitacionCabify' ? null : 'capacitacionCabify')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('capacitacionCabify')}
                       >
                         <Book className="stat-icon text-blue-500" size={18} />
                         <div className="stat-content">
@@ -3131,8 +3012,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'capacitacionToshify' ? null : 'capacitacionToshify')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('capacitacionToshify')}
                       >
                         <Book className="stat-icon text-indigo-500" size={18} />
                         <div className="stat-content">
@@ -3141,8 +3022,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'seguimientoControl' ? null : 'seguimientoControl')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('seguimientoControl')}
                       >
                         <Target className="stat-icon text-red-500" size={18} />
                         <div className="stat-content">
@@ -3151,8 +3032,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'motivacional' ? null : 'motivacional')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('motivacional')}
                       >
                         <Star className="stat-icon text-yellow-500" size={18} />
                         <div className="stat-content">
@@ -3161,8 +3042,8 @@ export function GuiasModule() {
                         </div>
                       </div>
                       <div 
-                        className={`stat-card ${selectedWeek === getCurrentWeek() ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        onClick={() => selectedWeek === getCurrentWeek() && setActiveStatFilter(activeStatFilter === 'fidelizacion' ? null : 'fidelizacion')}
+                        className={statCardClass}
+                        onClick={() => handleToggleStatFilter('fidelizacion')}
                       >
                         <Heart className="stat-icon text-pink-500" size={18} />
                         <div className="stat-content">
@@ -3337,17 +3218,7 @@ export function GuiasModule() {
                     )}
 
                     <button 
-                      onClick={() => {
-                        setNombreFilter([]);
-                        setEstadoFilter([]);
-                        setTurnoFilter([]);
-                        setAsignacionFilter([]);
-                        setEfectivoFilter([]);
-                        setAppFilter([]);
-                        setTotalFilter([]);
-                        setActiveStatFilter(null);
-                        setGlobalSearch('');
-                      }}
+                      onClick={handleClearAllFilters}
                       className="active-filters-clear"
                     >
                       Limpiar todos
@@ -3384,12 +3255,7 @@ export function GuiasModule() {
         <DriverDetailModal
           driver={selectedConductor}
           onClose={() => setShowDetailsModal(false)}
-          onDriverUpdate={() => {
-            if (selectedGuiaId) {
-              loadDrivers(selectedGuiaId);
-              loadCurrentWeekMetrics(selectedGuiaId);
-            }
-          }}
+          onDriverUpdate={handleDriverUpdate}
           accionesImplementadas={accionesImplementadas}
           currentProfile={profile}
           readOnly={selectedWeek !== getCurrentWeek()}

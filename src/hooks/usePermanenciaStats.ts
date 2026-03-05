@@ -21,11 +21,11 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
     
     let isMounted = true
 
-    async function calculateAveragePermanencia(range: { start: Date; end: Date }, periodLabel: string) {
+    async function calculateAveragePermanencia(range: { start: Date; end: Date }) {
       // 1. Buscar conductores dados de baja en el periodo
       let query = supabase
         .from('conductores')
-        .select('id, nombres, apellidos, fecha_terminacion')
+        .select('id')
         .gte('fecha_terminacion', range.start.toISOString())
         .lte('fecha_terminacion', range.end.toISOString())
       
@@ -35,76 +35,41 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
 
       const { data: conductores, error } = await query
 
-      if (error) {
-        console.error(`Error fetching conductores for ${periodLabel}:`, error)
+      if (error || !conductores || conductores.length === 0) {
         return 0
       }
 
-      console.log(`[${periodLabel}] Conductores baja encontrados en periodo ${range.start.toISOString()} - ${range.end.toISOString()}: ${conductores?.length || 0} conductores`)
+      // 2. Obtener TODAS las asignaciones de todos los conductores en UNA sola query
+      const conductorIds = conductores.map(c => c.id)
+      const { data: asignacionesData, error: asigError } = await supabase
+        .from('asignaciones_conductores')
+        .select('conductor_id, asignaciones(fecha_inicio, fecha_fin)')
+        .in('conductor_id', conductorIds)
 
-      if (!conductores || conductores.length === 0) {
+      if (asigError || !asignacionesData) {
         return 0
       }
 
-      let totalDaysAll = 0
+      // 3. Agrupar días por conductor
+      const daysByDriver = new Map<string, number>()
+      for (const item of asignacionesData) {
+        const asig = item.asignaciones as any
+        if (!asig?.fecha_inicio) continue
 
-      // 2. Procesar cada conductor
-      for (const conductor of conductores) {
-        console.log(`[${periodLabel}] Procesando Conductor [${conductor.id}]: ${conductor.nombres} ${conductor.apellidos}`)
-        
-        // 3. Obtener asignaciones históricas
-        // Cruzamos con asignaciones para obtener fechas
-        const { data: asignacionesData, error: asigError } = await supabase
-          .from('asignaciones_conductores')
-          .select(`
-            asignaciones (
-              id,
-              fecha_inicio,
-              fecha_fin
-            )
-          `)
-          .eq('conductor_id', conductor.id)
+        const inicio = new Date(asig.fecha_inicio)
+        const fin = asig.fecha_fin ? new Date(asig.fecha_fin) : new Date()
+        const days = Math.ceil(Math.abs(fin.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24))
 
-        if (asigError) {
-          console.error(`Error fetching asignaciones for conductor ${conductor.id}:`, asigError)
-          continue
-        }
-
-        let conductorDays = 0
-
-        if (asignacionesData) {
-          for (const item of asignacionesData) {
-            // item.asignaciones puede ser un array o un objeto dependiendo de la relación, 
-            // pero con asignaciones_conductores -> asignaciones (one-to-one per link record) suele ser objeto.
-            // Supabase devuelve array si es one-to-many, objeto si es many-to-one.
-            // asignaciones_conductores.asignacion_id -> asignaciones.id es many-to-one.
-            const asig = item.asignaciones as any // Type assertion for simplicity
-
-            if (asig && asig.fecha_inicio) {
-              const inicio = new Date(asig.fecha_inicio)
-              // Si no tiene fecha_fin, usamos la fecha actual como fallback o fecha_terminacion del conductor?
-              // El requerimiento dice "se saca el numero de dias que hay entre el campo fecha_inicio y fecha_fin"
-              // Asumimos que si está de baja, la asignación debería tener fin. Si no, usamos fecha actual.
-              const fin = asig.fecha_fin ? new Date(asig.fecha_fin) : new Date()
-              
-              const diffTime = Math.abs(fin.getTime() - inicio.getTime())
-              const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) 
-              
-              conductorDays += days
-              
-              console.log(`  -> Asignación [${asig.id}]: Inicio [${asig.fecha_inicio}] Fin [${asig.fecha_fin || 'Activa'}] -> Dias: [${days}]`)
-            }
-          }
-        }
-
-        console.log(`Total días conductor ${conductor.nombres}: ${conductorDays}`)
-        totalDaysAll += conductorDays
+        daysByDriver.set(item.conductor_id, (daysByDriver.get(item.conductor_id) || 0) + days)
       }
 
-      const average = totalDaysAll / conductores.length
-      console.log(`[${periodLabel}] Promedio Final: ${totalDaysAll} / ${conductores.length} = ${average.toFixed(2)}`)
-      
-      return average
+      // 4. Calcular promedio
+      let totalDays = 0
+      for (const id of conductorIds) {
+        totalDays += daysByDriver.get(id) || 0
+      }
+
+      return totalDays / conductores.length
     }
 
     async function fetchStats() {
@@ -114,17 +79,15 @@ export function usePermanenciaStats(granularity: Granularity, periodA: string, p
         const rangeA = getPeriodRange(granularity, periodA)
         const rangeB = getPeriodRange(granularity, periodB)
 
-        // Ejecutar en paralelo
         const [avgA, avgB] = await Promise.all([
-          calculateAveragePermanencia(rangeA, 'Periodo A'),
-          calculateAveragePermanencia(rangeB, 'Periodo B')
+          calculateAveragePermanencia(rangeA),
+          calculateAveragePermanencia(rangeB)
         ])
 
         if (isMounted) {
           setStats({ avgDaysA: avgA, avgDaysB: avgB, loading: false })
         }
-      } catch (error) {
-        console.error('Error fetching permanencia stats:', error)
+      } catch {
         if (isMounted) {
           setStats(prev => ({ ...prev, loading: false }))
         }

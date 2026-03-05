@@ -253,7 +253,6 @@ export function ProductosModule() {
       if (error) throw error
       setProductos(data || [])
     } catch (err: any) {
-      console.error('🔴 Error cargando productos:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -330,7 +329,6 @@ export function ProductosModule() {
       resetForm()
       loadProductos()
     } catch (err: any) {
-      console.error('Error creando producto:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -379,7 +377,6 @@ export function ProductosModule() {
       resetForm()
       loadProductos()
     } catch (err: any) {
-      console.error('Error actualizando producto:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -454,7 +451,6 @@ export function ProductosModule() {
 
         loadProductos()
       } catch (err: any) {
-        console.error('Error eliminando producto:', err)
         // Mensaje más amigable para errores de FK
         let errorMessage = err.message || 'No se pudo eliminar el producto'
         if (err.message?.includes('foreign key constraint')) {
@@ -545,8 +541,7 @@ export function ProductosModule() {
       }, [])
 
       setStockPorProveedor(stockAgrupado)
-    } catch (err) {
-      console.error('Error cargando stock por proveedor:', err)
+    } catch (_err) {
       setStockPorProveedor([])
     } finally {
       setLoadingStock(false)
@@ -821,13 +816,15 @@ export function ProductosModule() {
     [canView, canEdit, canDelete, codigoFilter, nombreFilter, tipoFilter, openColumnFilter]
   )
 
-  // Calcular estadísticas
+  // Calcular estadísticas en una sola pasada O(n) en vez de O(3n)
   const statsData = useMemo(() => {
-    const total = productos.length
-    const herramientas = productos.filter(p => p.tipo === 'HERRAMIENTAS').length
-    const repuestos = productos.filter(p => p.tipo === 'REPUESTOS').length
-    const retornables = productos.filter(p => p.es_retornable).length
-    return { total, herramientas, repuestos, retornables }
+    let herramientas = 0, repuestos = 0, retornables = 0
+    for (const p of productos) {
+      if (p.tipo === 'HERRAMIENTAS') herramientas++
+      if (p.tipo === 'REPUESTOS') repuestos++
+      if (p.es_retornable) retornables++
+    }
+    return { total: productos.length, herramientas, repuestos, retornables }
   }, [productos])
 
   return (
@@ -896,6 +893,7 @@ export function ProductosModule() {
           ) : undefined
         }
         externalFilters={externalFilters}
+        disableAutoFilters
         onClearAllFilters={() => {
           // Limpiar filtros de columna
           setCodigoFilter([])

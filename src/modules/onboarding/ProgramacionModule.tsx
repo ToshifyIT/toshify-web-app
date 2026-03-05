@@ -22,14 +22,7 @@ import type { ProgramacionOnboardingCompleta } from '../../types/onboarding.type
 import Swal from 'sweetalert2'
 import { showSuccess } from '../../utils/toast'
 import './ProgramacionModule.css'
-
-// Labels para mostrar
-const ESTADO_LABELS: Record<string, string> = {
-  por_agendar: 'Por Agendar',
-  agendado: 'Agendado',
-  en_curso: 'En Curso',
-  completado: 'Completado'
-}
+import { PROGRAMACION_ESTADO_LABELS } from '../../utils/conductorUtils'
 
 const TIPO_ASIGNACION_LABELS: Record<string, string> = {
   entrega_auto: 'Entrega de auto',
@@ -252,6 +245,31 @@ export function ProgramacionModule() {
   const [showMensajeModal, setShowMensajeModal] = useState(false)
   const [mensajeModalProg, setMensajeModalProg] = useState<ProgramacionOnboardingCompleta | null>(null)
 
+  // Handlers para cerrar modales
+  const handleCloseQuickEdit = () => {
+    setShowQuickEdit(false)
+    setEditingProgramacion(null)
+  }
+
+  const handleClosePreview = () => {
+    setPreviewProgramacion(null)
+  }
+
+  const handleCloseMensaje = () => {
+    setShowMensajeModal(false)
+  }
+
+  const handlePreviewEdit = () => {
+    if (!previewProgramacion) return
+    handleClosePreview()
+    handleEdit(previewProgramacion)
+  }
+
+  const handlePreviewEnviar = () => {
+    if (!previewProgramacion) return
+    handleEnviarAEntrega(previewProgramacion)
+  }
+
   // Cargar programaciones
   const loadProgramaciones = async () => {
     setLoading(true)
@@ -266,7 +284,6 @@ export function ProgramacionModule() {
       if (queryError) throw queryError
       setProgramaciones((data || []) as ProgramacionOnboardingCompleta[])
     } catch (err: any) {
-      console.error('Error loading programaciones:', err)
       setError(err.message || 'Error al cargar programaciones')
     } finally {
       setLoading(false)
@@ -286,8 +303,8 @@ export function ProgramacionModule() {
         id: u.id,
         nombre: u.full_name || 'Sin nombre'
       })))
-    } catch (err) {
-      console.error('Error cargando especialistas:', err)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -311,8 +328,8 @@ export function ProgramacionModule() {
 
       if (queryError) throw queryError
       setProgramacionesHistorico((data || []) as ProgramacionOnboardingCompleta[])
-    } catch (err: any) {
-      console.error('Error loading historico:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoadingHistorico(false)
     }
@@ -408,8 +425,8 @@ export function ProgramacionModule() {
         marca: v.marca,
         modelo: v.modelo
       })))
-    } catch (err) {
-      console.error('Error cargando vehiculos:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoadingVehiculos(false)
     }
@@ -422,17 +439,15 @@ export function ProgramacionModule() {
         .order('apellidos')
         .limit(1000)
 
-      if (conductoresError) {
-        console.error('Error en query conductores:', conductoresError)
-      }
+      if (conductoresError) throw conductoresError
 
       setConductoresDisponibles((conductoresData || []).map((c: any) => ({
         id: c.id,
         nombre: `${c.nombres || ''} ${c.apellidos || ''}`.trim(),
         dni: c.numero_dni || ''
       })))
-    } catch (err) {
-      console.error('Error cargando conductores:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoadingConductores(false)
     }
@@ -468,8 +483,7 @@ export function ProgramacionModule() {
         // Validar que no sean el mismo conductor en ambos turnos
         if (quickEditData.conductor_diurno_id && quickEditData.conductor_nocturno_id &&
             quickEditData.conductor_diurno_id === quickEditData.conductor_nocturno_id) {
-          Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
-          setSavingQuickEdit(false)
+          await Swal.fire('Error', 'No se puede asignar el mismo conductor en ambos turnos', 'error')
           return
         }
 
@@ -516,7 +530,6 @@ export function ProgramacionModule() {
       setEditingProgramacion(null)
       showSuccess('Guardado', 'Programación actualizada correctamente')
     } catch (err: any) {
-      console.error('Error actualizando:', err)
       Swal.fire('Error', err.message || 'Error al guardar', 'error')
     } finally {
       setSavingQuickEdit(false)
@@ -547,25 +560,25 @@ export function ProgramacionModule() {
       }
     })
 
-    if (result.isConfirmed && result.value) {
-      try {
-        // Eliminación lógica
-        const { error } = await (supabase
-          .from('programaciones_onboarding') as any)
-          .update({
-            eliminado: true,
-            motivo_eliminacion: result.value.trim(),
-            eliminado_at: new Date().toISOString(),
-            eliminado_by: user?.id || null
-          })
-          .eq('id', id)
+    if (!result.isConfirmed || !result.value) return
 
-        if (error) throw error
-        setProgramaciones(prev => prev.filter(p => p.id !== id))
-        showSuccess('Eliminado', 'La programacion fue eliminada')
-      } catch (err: any) {
-        Swal.fire('Error', err.message || 'Error al eliminar', 'error')
-      }
+    try {
+      // Eliminación lógica
+      const { error } = await (supabase
+        .from('programaciones_onboarding') as any)
+        .update({
+          eliminado: true,
+          motivo_eliminacion: result.value.trim(),
+          eliminado_at: new Date().toISOString(),
+          eliminado_by: user?.id || null
+        })
+        .eq('id', id)
+
+      if (error) throw error
+      setProgramaciones(prev => prev.filter(p => p.id !== id))
+      showSuccess('Eliminado', 'La programacion fue eliminada')
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'Error al eliminar', 'error')
     }
   }
 
@@ -583,9 +596,8 @@ export function ProgramacionModule() {
     try {
       await navigator.clipboard.writeText(mensaje)
       setShowMensajeModal(false)
-    } catch (err) {
+    } catch {
       // Si falla el clipboard, el usuario puede copiar manualmente del preview
-      console.error('Error copiando:', err)
     }
   }
 
@@ -604,7 +616,6 @@ export function ProgramacionModule() {
         p.id === id ? { ...p, [field]: value } : p
       ))
     } catch (err: any) {
-      console.error(`Error actualizando ${field}:`, err)
       Swal.fire('Error', err.message || 'Error al actualizar', 'error')
     }
   }
@@ -675,7 +686,6 @@ export function ProgramacionModule() {
       setProgramaciones(prev => prev.filter(p => p.id !== prog.id))
       showSuccess('Devolución Creada', `${prog.vehiculo_entregar_patente}`)
     } catch (err: any) {
-      console.error('Error creando devolución:', err)
       Swal.fire('Error', err.message || 'Error al crear devolución', 'error')
     }
   }
@@ -738,9 +748,8 @@ export function ProgramacionModule() {
           cancelButtonText: 'Cancelar'
         })
         if (!result.isConfirmed) return
-      }
-      // Si solo uno confirmó, preguntar qué hacer
-      else if (diurnoConfirmo !== nocturnoConfirmo) {
+      } else if (diurnoConfirmo !== nocturnoConfirmo) {
+        // Si solo uno confirmó, preguntar qué hacer
         const quienConfirmo = diurnoConfirmo ? 'DIURNO' : 'NOCTURNO'
         const quienNo = diurnoConfirmo ? 'NOCTURNO' : 'DIURNO'
         const nombreConfirmo = diurnoConfirmo ? prog.conductor_diurno_nombre : prog.conductor_nocturno_nombre
@@ -977,9 +986,7 @@ export function ProgramacionModule() {
             estado: 'asignado',
             documento: mapDocumento(prog.documento_diurno)
           })
-        if (diurnoError) {
-          throw diurnoError
-        }
+        if (diurnoError) throw diurnoError
         conductoresInsertados++
       }
 
@@ -994,9 +1001,7 @@ export function ProgramacionModule() {
             estado: 'asignado',
             documento: mapDocumento(prog.documento_nocturno)
           })
-        if (nocturnoError) {
-          throw nocturnoError
-        }
+        if (nocturnoError) throw nocturnoError
         conductoresInsertados++
       }
 
@@ -1012,10 +1017,7 @@ export function ProgramacionModule() {
             estado: 'asignado',
             documento: mapDocumento(prog.tipo_documento)
           })
-        if (conductorError) {
-          console.error('❌ Error insertando conductor legacy:', conductorError)
-          throw conductorError
-        }
+        if (conductorError) throw conductorError
         conductoresInsertados++
       }
 
@@ -1034,8 +1036,15 @@ export function ProgramacionModule() {
       showSuccess('Asignación Creada', `Código: ${asignacion.codigo}`)
 
     } catch (err: any) {
-      console.error('Error creando asignacion:', err)
       Swal.fire('Error', err.message || 'Error al crear asignacion', 'error')
+    }
+  }
+
+  // Handler para cambiar tipo de asignación (auto-setea documento a 'na' para devolucion)
+  const handleTipoAsignacionChange = (progId: string, tipoField: string, docField: string, value: string) => {
+    handleUpdateField(progId, tipoField, value || null)
+    if (value === 'devolucion_vehiculo') {
+      handleUpdateField(progId, docField, 'na')
     }
   }
 
@@ -1135,12 +1144,7 @@ export function ProgramacionModule() {
                 <select
                   className={`prog-inline-select-mini tipo-asignacion ${tipoD}`}
                   value={tipoD}
-                  onChange={(e) => {
-                    handleUpdateField(prog.id, 'tipo_asignacion_diurno', e.target.value || null)
-                    if (e.target.value === 'devolucion_vehiculo') {
-                      handleUpdateField(prog.id, 'documento_diurno', 'na')
-                    }
-                  }}
+                  onChange={(e) => handleTipoAsignacionChange(prog.id, 'tipo_asignacion_diurno', 'documento_diurno', e.target.value)}
                   title="Tipo asignación conductor diurno"
                 >
                   <option value="">-</option>
@@ -1156,12 +1160,7 @@ export function ProgramacionModule() {
                 <select
                   className={`prog-inline-select-mini tipo-asignacion ${tipoN}`}
                   value={tipoN}
-                  onChange={(e) => {
-                    handleUpdateField(prog.id, 'tipo_asignacion_nocturno', e.target.value || null)
-                    if (e.target.value === 'devolucion_vehiculo') {
-                      handleUpdateField(prog.id, 'documento_nocturno', 'na')
-                    }
-                  }}
+                  onChange={(e) => handleTipoAsignacionChange(prog.id, 'tipo_asignacion_nocturno', 'documento_nocturno', e.target.value)}
                   title="Tipo asignación conductor nocturno"
                 >
                   <option value="">-</option>
@@ -1181,12 +1180,7 @@ export function ProgramacionModule() {
           <select
             className={`prog-inline-select tipo-asignacion ${prog.tipo_asignacion || ''}`}
             value={prog.tipo_asignacion || ''}
-            onChange={(e) => {
-              handleUpdateField(prog.id, 'tipo_asignacion', e.target.value || null)
-              if (e.target.value === 'devolucion_vehiculo') {
-                handleUpdateField(prog.id, 'tipo_documento', 'na')
-              }
-            }}
+            onChange={(e) => handleTipoAsignacionChange(prog.id, 'tipo_asignacion', 'tipo_documento', e.target.value)}
             title="Tipo de asignación"
           >
             <option value="">Sin definir</option>
@@ -1892,11 +1886,11 @@ export function ProgramacionModule() {
 
       {/* Modal Edicion Rapida */}
       {showQuickEdit && editingProgramacion && (
-        <div className="prog-modal-overlay" onClick={() => { setShowQuickEdit(false); setEditingProgramacion(null) }}>
+        <div className="prog-modal-overlay" onClick={handleCloseQuickEdit}>
           <div className="prog-modal prog-modal-wide" onClick={e => e.stopPropagation()}>
             <div className="prog-modal-header">
               <h2>Editar Programacion</h2>
-              <button onClick={() => { setShowQuickEdit(false); setEditingProgramacion(null) }}>
+              <button onClick={handleCloseQuickEdit}>
                 <XCircle size={20} />
               </button>
             </div>
@@ -2322,7 +2316,7 @@ export function ProgramacionModule() {
             <div className="prog-modal-footer">
               <button
                 className="prog-btn prog-btn-secondary"
-                onClick={() => { setShowQuickEdit(false); setEditingProgramacion(null) }}
+                onClick={handleCloseQuickEdit}
               >
                 Cancelar
               </button>
@@ -2340,11 +2334,11 @@ export function ProgramacionModule() {
 
       {/* Preview Modal */}
       {previewProgramacion && (
-        <div className="prog-modal-overlay" onClick={() => setPreviewProgramacion(null)}>
+        <div className="prog-modal-overlay" onClick={handleClosePreview}>
           <div className="prog-modal" onClick={e => e.stopPropagation()}>
             <div className="prog-modal-header">
               <h2>Detalle de Programacion</h2>
-              <button onClick={() => setPreviewProgramacion(null)}>
+              <button onClick={handleClosePreview}>
                 <XCircle size={20} />
               </button>
             </div>
@@ -2427,7 +2421,7 @@ export function ProgramacionModule() {
               <div className="prog-modal-section">
                 <h3>Estado</h3>
                 <span className={`prog-estado-badge ${previewProgramacion.estado}`}>
-                  {ESTADO_LABELS[previewProgramacion.estado] || previewProgramacion.estado}
+                  {PROGRAMACION_ESTADO_LABELS[previewProgramacion.estado] || previewProgramacion.estado}
                 </span>
                 {previewProgramacion.asignacion_id && (
                   <p className="prog-asignacion-info">
@@ -2446,26 +2440,21 @@ export function ProgramacionModule() {
               )}
             </div>
             <div className="prog-modal-footer">
-              <button className="btn-secondary" onClick={() => setPreviewProgramacion(null)}>
+              <button className="btn-secondary" onClick={handleClosePreview}>
                 Cerrar
               </button>
               {!previewProgramacion.asignacion_id && canEdit && (
                 <>
                   <button 
                     className="btn-secondary"
-                    onClick={() => {
-                      setPreviewProgramacion(null)
-                      handleEdit(previewProgramacion)
-                    }}
+                    onClick={handlePreviewEdit}
                   >
                     <Pencil size={16} />
                     Editar
                   </button>
                   <button
                     className="btn-primary"
-                    onClick={() => {
-                      handleEnviarAEntrega(previewProgramacion)
-                    }}
+                    onClick={handlePreviewEnviar}
                     disabled={!!previewProgramacion.asignacion_id}
                     title={previewProgramacion.asignacion_id ? 'Ya enviado' : 'Enviar a Entrega'}
                   >
@@ -2481,11 +2470,11 @@ export function ProgramacionModule() {
 
       {/* Modal Copiar Mensaje */}
       {showMensajeModal && mensajeModalProg && (
-        <div className="prog-modal-overlay" onClick={() => setShowMensajeModal(false)}>
+        <div className="prog-modal-overlay" onClick={handleCloseMensaje}>
           <div className="prog-modal" onClick={e => e.stopPropagation()}>
             <div className="prog-modal-header">
               <h2>Mensaje de Agenda</h2>
-              <button onClick={() => setShowMensajeModal(false)}>
+              <button onClick={handleCloseMensaje}>
                 <XCircle size={20} />
               </button>
             </div>
@@ -2506,7 +2495,7 @@ export function ProgramacionModule() {
               </div>
             </div>
             <div className="prog-modal-footer">
-              <button className="btn-secondary" onClick={() => setShowMensajeModal(false)}>
+              <button className="btn-secondary" onClick={handleCloseMensaje}>
                 Cerrar
               </button>
               <button className="btn-primary" onClick={handleCopiarAlPortapapeles}>

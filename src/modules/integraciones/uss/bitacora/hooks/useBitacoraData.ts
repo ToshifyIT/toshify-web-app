@@ -152,8 +152,7 @@ export function useBitacoraData() {
         }
       }
       setAsignaciones(map)
-    } catch (error) {
-      console.error('[Bitacora] Error cargando asignaciones:', error)
+    } catch {
       setAsignaciones(new Map())
     }
   }, [])
@@ -365,7 +364,6 @@ export function useBitacoraData() {
           prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
         )
       } catch (error) {
-        console.error('Error actualizando checklist:', error)
         throw error
       }
     },
@@ -378,7 +376,6 @@ export function useBitacoraData() {
       await wialonBitacoraService.updateEstado(id, estado)
       setRegistros((prev) => prev.map((r) => (r.id === id ? { ...r, estado } : r)))
     } catch (error) {
-      console.error('Error actualizando estado:', error)
       throw error
     }
   }, [])

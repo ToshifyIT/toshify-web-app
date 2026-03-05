@@ -179,9 +179,8 @@ export function useCabifyData(): UseCabifyDataReturn {
 
     try {
       await executeDataLoad(selectedWeek, false)
-    } catch (error) {
-      // En modo silencioso, no mostrar popup de error
-      console.error('Error en actualización silenciosa:', error)
+    } catch {
+      // silently ignored
     }
   }, [selectedWeek, executeDataLoad])
 
@@ -228,8 +227,6 @@ export function useCabifyData(): UseCabifyDataReturn {
               // Evitar múltiples recargas simultáneas
               if (!isReloadingRef.current) {
                 isReloadingRef.current = true
-                console.log('📡 Realtime: Cambio detectado, actualizando datos silenciosamente...')
-
                 // Pequeño delay para agrupar múltiples cambios
                 setTimeout(() => {
                   loadDataSilent().finally(() => {
@@ -241,15 +238,10 @@ export function useCabifyData(): UseCabifyDataReturn {
           }
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('📡 Realtime: Suscripción activa a cabify_historico')
-        }
-      })
+      .subscribe()
 
     // Cleanup: desuscribirse al desmontar o cambiar semana
     return () => {
-      console.log('📡 Realtime: Desuscribiendo...')
       supabase.removeChannel(channel)
     }
   }, [selectedWeek, loadDataSilent])
@@ -264,7 +256,6 @@ export function useCabifyData(): UseCabifyDataReturn {
 
     const intervalId = setInterval(() => {
       if (!isReloadingRef.current) {
-        console.log('⏰ Auto-refresh: Actualizando datos de Cabify...')
         loadDataSilent()
       }
     }, AUTO_REFRESH_INTERVAL)
@@ -278,8 +269,6 @@ export function useCabifyData(): UseCabifyDataReturn {
 
   const handleLoadError = (error: unknown): void => {
     const errorMessage = extractErrorMessage(error)
-
-    console.error('Error cargando conductores:', error)
 
     setQueryState((prev) => ({
       ...prev,

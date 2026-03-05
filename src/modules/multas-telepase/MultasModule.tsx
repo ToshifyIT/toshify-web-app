@@ -153,8 +153,8 @@ export default function MultasModule() {
         setConductoresStatus(statusMap)
         setConductoresOptions([...new Set(options)].sort())
       }
-    } catch (error) {
-      console.error('Error cargando conductores:', error)
+    } catch (_error) {
+      // silently ignored
     }
   }
 
@@ -169,8 +169,7 @@ export default function MultasModule() {
       if (multasRes.error) throw multasRes.error
       setMultas((multasRes.data || []) as Multa[])
       setVehiculos((vehiculosRes.data || []) as Vehiculo[])
-    } catch (error) {
-      console.error('Error cargando datos:', error)
+    } catch (_error) {
       Swal.fire('Error', 'No se pudieron cargar las multas', 'error')
     } finally {
       setLoading(false)
@@ -870,6 +869,7 @@ export default function MultasModule() {
         searchPlaceholder="Buscar por patente, conductor, lugar..."
         externalFilters={activeFilters}
         onClearAllFilters={clearAllFilters}
+        disableAutoFilters
         headerAction={
           <div style={{ display: 'flex', gap: '8px' }}>
             <button className="btn-secondary" onClick={handleExportar}>

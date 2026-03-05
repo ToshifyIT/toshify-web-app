@@ -84,7 +84,6 @@ export function SedesModule() {
       if (error) throw error
       setSedes(data || [])
     } catch (error) {
-      console.error('Error cargando sedes:', error)
       Swal.fire('Error', 'No se pudieron cargar las sedes', 'error')
     } finally {
       setLoading(false)
@@ -128,7 +127,6 @@ export function SedesModule() {
       if (error?.code === '23505') {
         Swal.fire('Error', 'Ya existe una sede con ese código', 'error')
       } else {
-        console.error('Error creando sede:', error)
         Swal.fire('Error', 'No se pudo crear la sede', 'error')
       }
     } finally {
@@ -181,7 +179,6 @@ export function SedesModule() {
       if (error?.code === '23505') {
         Swal.fire('Error', 'Ya existe una sede con ese código', 'error')
       } else {
-        console.error('Error actualizando sede:', error)
         Swal.fire('Error', 'No se pudo actualizar la sede', 'error')
       }
     } finally {
@@ -226,7 +223,6 @@ export function SedesModule() {
       showSuccess('Sede desactivada')
       cargarSedes()
     } catch (error) {
-      console.error('Error desactivando sede:', error)
       Swal.fire('Error', 'No se pudo desactivar la sede', 'error')
     }
   }
@@ -243,7 +239,6 @@ export function SedesModule() {
       showSuccess('Sede reactivada')
       cargarSedes()
     } catch (error) {
-      console.error('Error reactivando sede:', error)
       Swal.fire('Error', 'No se pudo reactivar la sede', 'error')
     }
   }

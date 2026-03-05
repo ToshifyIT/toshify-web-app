@@ -44,8 +44,8 @@ export function RangoSeguimientoPage() {
 
       if (error) throw error
       setRangos(data || [])
-    } catch (error) {
-      console.error('Error cargando rangos:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -134,8 +134,7 @@ export function RangoSeguimientoPage() {
       if (error) throw error
       showSuccess('Rango creado correctamente')
       cargarRangos()
-    } catch (error) {
-      console.error('Error creando rango:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo crear el rango', 'error')
     }
   }
@@ -224,8 +223,7 @@ export function RangoSeguimientoPage() {
       if (error) throw error
       showSuccess('Rango actualizado correctamente')
       cargarRangos()
-    } catch (error) {
-      console.error('Error actualizando rango:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo actualizar el rango', 'error')
     }
   }
@@ -252,8 +250,7 @@ export function RangoSeguimientoPage() {
       if (error) throw error
       showSuccess('Rango eliminado')
       cargarRangos()
-    } catch (error) {
-      console.error('Error eliminando rango:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo eliminar el rango', 'error')
     }
   }

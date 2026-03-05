@@ -64,7 +64,6 @@ class CabifyIntegrationService {
         .eq('estado', 'activa')
 
       if (error) {
-        console.error('❌ Error cargando asignaciones:', error)
         throw error
       }
 
@@ -133,7 +132,6 @@ class CabifyIntegrationService {
       return enrichedDrivers
 
     } catch (error) {
-      console.error('❌ Error en integración:', error)
       throw new Error(`Error integrando datos de Cabify: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
@@ -220,7 +218,6 @@ class CabifyIntegrationService {
     }) as { data: RankingRow[] | null; error: Error | null }
 
     if (error) {
-      console.error('❌ Error obteniendo top mejores:', error)
       // Fallback a la vista si la función falla
       return this.getTopMejoresFallback()
     }
@@ -244,7 +241,6 @@ class CabifyIntegrationService {
     }) as { data: RankingRow[] | null; error: Error | null }
 
     if (error) {
-      console.error('❌ Error obteniendo top peores:', error)
       // Fallback a la vista si la función falla
       return this.getTopPeoresFallback()
     }
@@ -287,7 +283,6 @@ class CabifyIntegrationService {
       .select('*')
 
     if (error) {
-      console.error('❌ Error en fallback top mejores:', error)
       return []
     }
 
@@ -303,7 +298,6 @@ class CabifyIntegrationService {
       .select('*')
 
     if (error) {
-      console.error('❌ Error en fallback top peores:', error)
       return []
     }
 

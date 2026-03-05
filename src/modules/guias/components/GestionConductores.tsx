@@ -130,8 +130,8 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
         if (guiasData) {
           guiasData.forEach((g: any) => guidesMap[g.id] = g.full_name);
         }
-      } catch (e) {
-        console.warn('Could not fetch guides list', e);
+      } catch (_e) {
+        // silently ignored
       }
 
       // Fetch Drivers with Guide
@@ -175,8 +175,8 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
       });
 
       setAllDrivers(formattedDrivers);
-    } catch (err) {
-      console.error("Error loading drivers:", err);
+    } catch (_err) {
+      // silently ignored
     }
   };
 
@@ -237,8 +237,7 @@ const GestionConductores = ({ isOpen, onClose, onRefresh }: Props) => {
 
       setHistoryData(rows);
 
-    } catch (err) {
-      console.error("Error loading history:", err);
+    } catch (_err) {
       Swal.fire('Error', 'No se pudo cargar el historial del conductor', 'error');
     }
   };

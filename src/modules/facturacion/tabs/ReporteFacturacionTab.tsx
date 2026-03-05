@@ -206,6 +206,45 @@ function getSemanaArgentina(date: Date) {
   return { inicio, fin }
 }
 
+// Helper: upsert saldo en saldos_conductores (evita duplicar lógica insert/update)
+async function upsertSaldoConductor(params: {
+  conductorId: string
+  conductorNombre: string
+  conductorDni: string
+  conductorCuit: string | null
+  nuevoSaldo: number
+  timestamp: string
+}) {
+  const { conductorId, conductorNombre, conductorDni, conductorCuit, nuevoSaldo, timestamp } = params
+  const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
+    .select('id, saldo_actual')
+    .eq('conductor_id', conductorId)
+    .maybeSingle()
+
+  if (saldoExistente) {
+    const { error } = await (supabase.from('saldos_conductores') as any)
+      .update({
+        saldo_actual: nuevoSaldo,
+        dias_mora: 0,
+        ultima_actualizacion: timestamp
+      })
+      .eq('id', saldoExistente.id)
+    if (error) throw error
+  } else {
+    const { error } = await (supabase.from('saldos_conductores') as any)
+      .insert({
+        conductor_id: conductorId,
+        conductor_nombre: conductorNombre,
+        conductor_dni: conductorDni,
+        conductor_cuit: conductorCuit,
+        saldo_actual: nuevoSaldo,
+        dias_mora: 0,
+        ultima_actualizacion: timestamp
+      })
+    if (error) throw error
+  }
+}
+
 
 
 export function ReporteFacturacionTab() {
@@ -973,8 +1012,7 @@ export function ReporteFacturacionTab() {
       setFacturaciones(facturacionesTransformadas as FacturacionConductor[])
       setExcesos((excesosData || []) as ExcesoKm[])
 
-    } catch (error) {
-      console.error('Error cargando facturación:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo cargar la facturación', 'error')
     } finally {
       setLoading(false)
@@ -1266,15 +1304,24 @@ export function ReporteFacturacionTab() {
         preciosBaseVP.set(c.codigo, c.precio_final ?? c.precio_base ?? 0)
       })
       
+      // Pre-indexar historial de precios por código -- O(1) lookup por código, O(k) por rango
+      const historialPorCodigo = new Map<string, any[]>()
+      for (const h of (historialPreciosVP || [])) {
+        const arr = historialPorCodigo.get(h.codigo) || []
+        arr.push(h)
+        historialPorCodigo.set(h.codigo, arr)
+      }
       // Función helper para obtener precio FINAL en una fecha específica (precio real ingresado)
       const getPrecioEnFechaVP = (codigo: string, fecha: Date): number => {
         const fechaStr = fecha.toISOString().split('T')[0]
-        const historial = (historialPreciosVP || []).find((h: any) => 
-          h.codigo === codigo && 
-          h.fecha_vigencia_desde <= fechaStr && 
-          h.fecha_vigencia_hasta >= fechaStr
-        )
-        if (historial) return historial.precio_final ?? historial.precio_base
+        const registros = historialPorCodigo.get(codigo)
+        if (registros) {
+          for (const h of registros) {
+            if (h.fecha_vigencia_desde <= fechaStr && h.fecha_vigencia_hasta >= fechaStr) {
+              return h.precio_final ?? h.precio_base
+            }
+          }
+        }
         return preciosBaseVP.get(codigo) || 0
       }
       
@@ -1514,6 +1561,11 @@ export function ReporteFacturacionTab() {
         }
       })
       
+      // Pre-indexar penalidades padre por id -- O(1) lookup en vez de .find() O(n) por cuota
+      const penalidadesPadreMap = new Map<string, any>()
+      for (const p of (penalidadesPadre || [])) {
+        penalidadesPadreMap.set(p.id, p)
+      }
       // Sumar cuotas fraccionadas (solo de penalidades con fraccionado=true)
       ;(cuotasFiltradas || []).forEach((c: any) => {
         const conductorId = penalidadConductorMap.get(c.penalidad_id)
@@ -1522,7 +1574,7 @@ export function ReporteFacturacionTab() {
           penalidadesMap.set(conductorId, actual + (c.monto_cuota || 0))
           
           // Guardar detalle de cuota
-          const penPadre = penalidadesPadre.find((p: any) => p.id === c.penalidad_id)
+          const penPadre = penalidadesPadreMap.get(c.penalidad_id)
           const detalles = detalleMap.get(conductorId) || []
           detalles.push({
             monto: c.monto_cuota || 0,
@@ -1783,8 +1835,7 @@ export function ReporteFacturacionTab() {
       setModoVistaPrevia(false)
       autoRecalcularRef.current = true
       // El useEffect de abajo detectará el cambio y llamará recalcularPeriodoAbierto()
-    } catch (error) {
-      console.error('Error generando período:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo crear el período de facturación', 'error')
       setGenerando(false)
     }
@@ -2177,11 +2228,15 @@ export function ReporteFacturacionTab() {
       const { data: conceptos } = await supabase.from('conceptos_nomina').select('*').eq('activo', true)
       
       // Precios DIARIOS (precio_final con IVA = precio real ingresado)
+      const conceptosPorCodigo = new Map<string, any>()
+      for (const c of ((conceptos || []) as any[])) {
+        if (c.codigo) conceptosPorCodigo.set(c.codigo, c)
+      }
       const preciosActuales: Record<string, number> = {
-        'P001': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P001')?.precio_final || 42714,
-        'P002': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P002')?.precio_final || 75429,
-        'P003': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P003')?.precio_final || 7143,
-        'P013': ((conceptos || []) as any[]).find((c: any) => c.codigo === 'P013')?.precio_final || 32714
+        'P001': conceptosPorCodigo.get('P001')?.precio_final || 42714,
+        'P002': conceptosPorCodigo.get('P002')?.precio_final || 75429,
+        'P003': conceptosPorCodigo.get('P003')?.precio_final || 7143,
+        'P013': conceptosPorCodigo.get('P013')?.precio_final || 32714
       }
       
       // Precios diarios para alquiler
@@ -3757,33 +3812,14 @@ export function ReporteFacturacionTab() {
       const pendienteAntesPago = totalAbsoluto - yaCobrado
       const nuevoSaldo = -(pendienteAntesPago - formValues.monto)
 
-      const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
-        .select('id, saldo_actual')
-        .eq('conductor_id', facturacion.conductor_id)
-        .maybeSingle()
-
-      if (saldoExistente) {
-        const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
-          .update({
-            saldo_actual: nuevoSaldo,
-            dias_mora: 0,
-            ultima_actualizacion: new Date().toISOString()
-          })
-          .eq('id', saldoExistente.id)
-        if (errorSaldo) throw errorSaldo
-      } else {
-        const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
-          .insert({
-            conductor_id: facturacion.conductor_id,
-            conductor_nombre: facturacion.conductor_nombre,
-            conductor_dni: facturacion.conductor_dni,
-            conductor_cuit: facturacion.conductor_cuit || null,
-            saldo_actual: nuevoSaldo,
-            dias_mora: 0,
-            ultima_actualizacion: new Date().toISOString()
-          })
-        if (errorSaldo) throw errorSaldo
-      }
+      await upsertSaldoConductor({
+        conductorId: facturacion.conductor_id,
+        conductorNombre: facturacion.conductor_nombre,
+        conductorDni: facturacion.conductor_dni,
+        conductorCuit: facturacion.conductor_cuit || null,
+        nuevoSaldo,
+        timestamp: new Date().toISOString(),
+      })
 
       // 3. Registrar en abonos_conductores como audit trail
       await (supabase.from('abonos_conductores') as any).insert({
@@ -3908,7 +3944,6 @@ export function ReporteFacturacionTab() {
 
       if (excelData.length === 0) {
         Swal.fire('Sin datos', 'No se encontraron conductores con importes a descontar en el Excel', 'warning')
-        setLoadingCabifyPagos(false)
         return
       }
 
@@ -3955,7 +3990,6 @@ export function ReporteFacturacionTab() {
 
       if (matched.length === 0) {
         Swal.fire('Sin coincidencias', 'Ningún conductor del Excel coincide con las facturaciones del período actual', 'warning')
-        setLoadingCabifyPagos(false)
         return
       }
 
@@ -4039,33 +4073,14 @@ export function ReporteFacturacionTab() {
         const pendienteCabify = pago.total_a_pagar - yaCobrado
         const nuevoSaldoCabify = -(pendienteCabify - monto)
 
-        const { data: saldoExistente } = await (supabase.from('saldos_conductores') as any)
-          .select('id, saldo_actual')
-          .eq('conductor_id', pago.conductor_id)
-          .maybeSingle()
-
-        if (saldoExistente) {
-          const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
-            .update({
-              saldo_actual: nuevoSaldoCabify,
-              dias_mora: 0,
-              ultima_actualizacion: hoy.toISOString()
-            })
-            .eq('id', saldoExistente.id)
-          if (errorSaldo) throw errorSaldo
-        } else {
-          const { error: errorSaldo } = await (supabase.from('saldos_conductores') as any)
-            .insert({
-              conductor_id: pago.conductor_id,
-              conductor_nombre: pago.conductor_nombre,
-              conductor_dni: pago.conductor_dni,
-              conductor_cuit: pago.conductor_cuit || null,
-              saldo_actual: nuevoSaldoCabify,
-              dias_mora: 0,
-              ultima_actualizacion: hoy.toISOString()
-            })
-          if (errorSaldo) throw errorSaldo
-        }
+        await upsertSaldoConductor({
+          conductorId: pago.conductor_id,
+          conductorNombre: pago.conductor_nombre,
+          conductorDni: pago.conductor_dni,
+          conductorCuit: pago.conductor_cuit || null,
+          nuevoSaldo: nuevoSaldoCabify,
+          timestamp: hoy.toISOString(),
+        })
 
         // 3. Registrar en abonos_conductores como audit trail
         await (supabase.from('abonos_conductores') as any).insert({
@@ -4182,6 +4197,17 @@ export function ReporteFacturacionTab() {
   // function irASemanaActual() {
   //   setSemanaActual(getSemanaArgentina(new Date()))
   // }
+
+  function salirVistaPrevia() {
+    setModoVistaPrevia(false)
+    setVistaPreviaData([])
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function cerrarDetalle() {
+    setShowDetalle(false)
+    setDetallePagos([])
+  }
 
   // Exportar a PDF
   async function exportarPDF() {
@@ -4349,8 +4375,7 @@ export function ReporteFacturacionTab() {
       pdf.save(nombreArchivo)
 
       showSuccess('PDF Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch (error) {
-      console.error('Error exportando PDF:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo exportar el PDF', 'error')
     } finally {
       setExportingPdf(false)
@@ -4382,7 +4407,6 @@ export function ReporteFacturacionTab() {
 
       if (dataToExport.length === 0) {
         Swal.fire('Sin datos', 'No hay datos para exportar', 'warning')
-        setExportingExcel(false)
         return
       }
 
@@ -4451,8 +4475,7 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch (error) {
-      console.error('Error exportando Excel:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
     } finally {
       setExportingExcel(false)
@@ -5660,8 +5683,7 @@ export function ReporteFacturacionTab() {
       setRitPreviewData(previewData)
       setShowRITPreview(true)
 
-    } catch (error) {
-      console.error('Error preparando preview RIT:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo cargar los datos del preview', 'error')
     } finally {
       setLoadingRITPreview(false)
@@ -5689,7 +5711,6 @@ export function ReporteFacturacionTab() {
           .eq('id', row.id)
 
         if (error) {
-          console.error('Error actualizando facturación:', error)
           throw error
         }
 
@@ -6347,8 +6368,7 @@ export function ReporteFacturacionTab() {
       XLSX.writeFile(wb, nombreArchivo)
 
       showSuccess('Reporte Exportado', `Se descargó: ${nombreArchivo}`)
-    } catch (error) {
-      console.error('Error exportando Excel:', error)
+    } catch {
       Swal.fire('Error', 'No se pudo exportar el reporte', 'error')
     } finally {
       setExportingExcel(false)
@@ -7146,33 +7166,35 @@ export function ReporteFacturacionTab() {
 
         const count = penalidades.length || (montoPen > 0 ? 1 : 0)
 
+        const handleClick = (e: React.MouseEvent) => {
+          e.stopPropagation()
+          const html = penalidades.length > 0
+            ? `<table style="width:100%;text-align:left;font-size:13px;border-collapse:collapse;">
+                <thead><tr style="border-bottom:2px solid var(--border-primary);">
+                  <th style="padding:8px;">Detalle</th>
+                  <th style="padding:8px;text-align:right;">Monto</th>
+                </tr></thead>
+                <tbody>${penalidades.map((p: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${p.detalle}</td><td style="padding:8px;text-align:right;font-weight:600;">${formatCurrency(p.monto)}</td></tr>`).join('')}</tbody>
+                <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
+                  <td style="padding:8px;">Total</td>
+                  <td style="padding:8px;text-align:right;">${formatCurrency(montoPen)}</td>
+                </tr></tfoot>
+              </table>`
+            : `<p>Total penalidades: <strong>${formatCurrency(montoPen)}</strong></p>`
+
+          Swal.fire({
+            title: `Incidencias - ${row.original.conductor_nombre}`,
+            html,
+            width: 500,
+            confirmButtonText: 'Cerrar',
+            confirmButtonColor: '#6B7280',
+            customClass: { popup: 'fact-modal' }
+          })
+        }
+
         return (
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              const html = penalidades.length > 0
-                ? `<table style="width:100%;text-align:left;font-size:13px;border-collapse:collapse;">
-                    <thead><tr style="border-bottom:2px solid var(--border-primary);">
-                      <th style="padding:8px;">Detalle</th>
-                      <th style="padding:8px;text-align:right;">Monto</th>
-                    </tr></thead>
-                    <tbody>${penalidades.map((p: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${p.detalle}</td><td style="padding:8px;text-align:right;font-weight:600;">${formatCurrency(p.monto)}</td></tr>`).join('')}</tbody>
-                    <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
-                      <td style="padding:8px;">Total</td>
-                      <td style="padding:8px;text-align:right;">${formatCurrency(montoPen)}</td>
-                    </tr></tfoot>
-                  </table>`
-                : `<p>Total penalidades: <strong>${formatCurrency(montoPen)}</strong></p>`
-
-              Swal.fire({
-                title: `Incidencias - ${row.original.conductor_nombre}`,
-                html,
-                width: 500,
-                confirmButtonText: 'Cerrar',
-                confirmButtonColor: '#6B7280',
-                customClass: { popup: 'fact-modal' }
-              })
-            }}
+            onClick={handleClick}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -7212,33 +7234,35 @@ export function ReporteFacturacionTab() {
 
         const count = tickets.length || (montoTickets > 0 ? 1 : 0)
 
+        const handleClick = (e: React.MouseEvent) => {
+          e.stopPropagation()
+          const html = tickets.length > 0
+            ? `<table style="width:100%;text-align:left;font-size:13px;border-collapse:collapse;">
+                <thead><tr style="border-bottom:2px solid var(--border-primary);">
+                  <th style="padding:8px;">Detalle</th>
+                  <th style="padding:8px;text-align:right;">Monto</th>
+                </tr></thead>
+                <tbody>${tickets.map((t: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${t.detalle}</td><td style="padding:8px;text-align:right;font-weight:600;color:#059669;">${formatCurrency(t.monto)}</td></tr>`).join('')}</tbody>
+                <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
+                  <td style="padding:8px;">Total</td>
+                  <td style="padding:8px;text-align:right;color:#059669;">${formatCurrency(montoTickets)}</td>
+                </tr></tfoot>
+              </table>`
+            : `<p>Total tickets: <strong>${formatCurrency(montoTickets)}</strong></p>`
+
+          Swal.fire({
+            title: `Tickets a Favor - ${row.original.conductor_nombre}`,
+            html,
+            width: 500,
+            confirmButtonText: 'Cerrar',
+            confirmButtonColor: '#6B7280',
+            customClass: { popup: 'fact-modal' }
+          })
+        }
+
         return (
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              const html = tickets.length > 0
-                ? `<table style="width:100%;text-align:left;font-size:13px;border-collapse:collapse;">
-                    <thead><tr style="border-bottom:2px solid var(--border-primary);">
-                      <th style="padding:8px;">Detalle</th>
-                      <th style="padding:8px;text-align:right;">Monto</th>
-                    </tr></thead>
-                    <tbody>${tickets.map((t: any) => `<tr style="border-bottom:1px solid var(--border-secondary);"><td style="padding:8px;">${t.detalle}</td><td style="padding:8px;text-align:right;font-weight:600;color:#059669;">${formatCurrency(t.monto)}</td></tr>`).join('')}</tbody>
-                    <tfoot><tr style="border-top:2px solid var(--border-primary);font-weight:700;">
-                      <td style="padding:8px;">Total</td>
-                      <td style="padding:8px;text-align:right;color:#059669;">${formatCurrency(montoTickets)}</td>
-                    </tr></tfoot>
-                  </table>`
-                : `<p>Total tickets: <strong>${formatCurrency(montoTickets)}</strong></p>`
-
-              Swal.fire({
-                title: `Tickets a Favor - ${row.original.conductor_nombre}`,
-                html,
-                width: 500,
-                confirmButtonText: 'Cerrar',
-                confirmButtonColor: '#6B7280',
-                customClass: { popup: 'fact-modal' }
-              })
-            }}
+            onClick={handleClick}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -7767,10 +7791,7 @@ export function ReporteFacturacionTab() {
                 Recalcular
               </button>
               <button
-                onClick={() => {
-                  setModoVistaPrevia(false)
-                  setVistaPreviaData([])
-                }}
+                onClick={salirVistaPrevia}
                 style={{
                   padding: '8px 12px',
                   background: 'var(--bg-primary)',
@@ -8794,7 +8815,7 @@ export function ReporteFacturacionTab() {
             </div>
 
             <div className="fact-modal-footer">
-              <button className="fact-btn-secondary" onClick={() => { setShowDetalle(false); setDetallePagos([]) }}>
+              <button className="fact-btn-secondary" onClick={cerrarDetalle}>
                 Cerrar
               </button>
               {/* Botón Registrar Pago oculto — pagos se cargan desde semana cerrada */}

@@ -38,7 +38,6 @@ export async function createConductorDriveFolder(
     const data = await response.json()
 
     if (!response.ok) {
-      console.error('Error creating folder:', data)
       return {
         success: false,
         error: data.error || 'Error al crear carpeta en Drive'
@@ -53,7 +52,6 @@ export async function createConductorDriveFolder(
     }
 
   } catch (error: any) {
-    console.error('Error creating Drive folder:', error)
     return {
       success: false,
       error: error.message || 'Error desconocido al crear carpeta'

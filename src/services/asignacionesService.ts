@@ -50,7 +50,6 @@ class AsignacionesService {
         .in('estado', ['activa', 'programado'])
 
       if (error) {
-        console.error('❌ Error consultando asignaciones:', error)
         return new Map()
       }
 
@@ -85,8 +84,7 @@ class AsignacionesService {
 
       return asignacionesMap
 
-    } catch (error) {
-      console.error('❌ Error en getAsignacionesByDNIs:', error)
+    } catch {
       return new Map()
     }
   }

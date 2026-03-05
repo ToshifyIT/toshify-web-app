@@ -268,8 +268,7 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
 
       // Combinar ambos tipos de cobros
       setCobros([...cobrosConCuotas, ...cobrosDesdesSaldos])
-    } catch (error) {
-      console.error('Error cargando cobros:', error)
+    } catch {
       Swal.fire('Error', 'No se pudieron cargar los cobros fraccionados', 'error')
     } finally {
       setLoading(false)
@@ -445,7 +444,6 @@ export function CobrosFraccionadosTab({ periodoActual }: CobrosFraccionadosTabPr
       showSuccess('Pago Registrado', `Cuota #${cuota.numero_cuota} - ${formatCurrency(formValues.monto)}`)
       cargarCobrosFraccionados()
     } catch (error: any) {
-      console.error('Error registrando pago:', error)
       Swal.fire('Error', error.message || 'No se pudo registrar el pago', 'error')
     }
   }

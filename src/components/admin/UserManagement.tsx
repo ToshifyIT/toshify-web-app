@@ -56,7 +56,6 @@ export function UserManagement() {
       setRoles(rolesData)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
-      console.error('Error cargando datos:', err)
       setError(message)
     } finally {
       setLoading(false)
@@ -165,7 +164,6 @@ export function UserManagement() {
       showSuccess('Rol Actualizado', 'El rol se ha actualizado correctamente')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
-      console.error('Error al actualizar rol:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',

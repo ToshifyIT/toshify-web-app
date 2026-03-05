@@ -64,8 +64,8 @@ export function ConceptosFacturacionTab() {
 
       if (error) throw error
       setConceptos(data || [])
-    } catch (error) {
-      console.error('Error cargando conceptos:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }

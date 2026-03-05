@@ -153,7 +153,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       )
 
       if (!response.ok) {
-        console.warn('⚠️ Edge function no disponible, usando fallback')
         await loadPermissionsFallback()
         return
       }
@@ -161,9 +160,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       const data: UserPermissionsResponse = await response.json()
       setUserPermissions(data)
       */
-    } catch (error) {
-      console.error('Error cargando permisos:', error)
-      console.warn('⚠️ Usando modo fallback')
+    } catch {
       await loadPermissionsFallback()
     } finally {
       setLoading(false)
@@ -348,8 +345,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         submenus: submenusData,
         tabs: tabsData
       })
-    } catch (error) {
-      console.error('Error en fallback:', error)
+    } catch {
       setUserPermissions(null)
     }
   }

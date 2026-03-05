@@ -157,13 +157,11 @@ class CabifyHistoricalService {
         .limit(1)
 
       if (error) {
-        console.warn('⚠️ Error verificando sync reciente:', error.message)
         return false
       }
 
       return data && data.length > 0
-    } catch (error) {
-      console.warn('⚠️ Error en checkRecentSync:', error)
+    } catch {
       return false
     }
   }
@@ -254,7 +252,6 @@ class CabifyHistoricalService {
       .order('ganancia_total', { ascending: false })
 
     if (error) {
-      console.error('❌ Error consultando histórico:', error)
       return []
     }
 
@@ -484,7 +481,6 @@ class CabifyHistoricalService {
       .rpc('get_historical_coverage_stats')
 
     if (error) {
-      console.error('❌ Error obteniendo estadísticas:', error)
       return []
     }
 

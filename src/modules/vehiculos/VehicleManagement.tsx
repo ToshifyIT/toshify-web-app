@@ -23,29 +23,8 @@ import { DataTable } from '../../components/ui/DataTable'
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay'
 import { VehiculoWizard } from './components/VehiculoWizard'
 import { formatDateTimeAR } from '../../utils/dateUtils'
+import { VEHICULO_ESTADO_LABELS } from '../../types/vehiculo.types'
 import './VehicleManagement.css'
-
-// Mapping de códigos de estado a etiquetas para mostrar en filtros y celdas
-const ESTADO_LABELS: Record<string, string> = {
-  'DISPONIBLE': 'Disponible',
-  'EN_USO': 'En Uso',
-  'CORPORATIVO': 'Corporativo',
-  'PKG_ON_BASE': 'PKG ON',
-  'PKG_OFF_BASE': 'PKG OFF',
-  'PKG_OFF_FRANCIA': 'PKG Francia',
-  'TALLER_AXIS': 'Taller Axis',
-  'TALLER_CHAPA_PINTURA': 'Chapa&Pintura',
-  'TALLER_ALLIANCE': 'Taller Alliance',
-  'TALLER_KALZALO': 'Taller Kalzalo',
-  'TALLER_BASE_VALIENTE': 'Base Valiente',
-  'INSTALACION_GNC': 'Inst. GNC',
-  'RETENIDO_COMISARIA': 'Retenido',
-  'ROBO': 'Robo',
-  'DESTRUCCION_TOTAL': 'Destrucción',
-  'JUBILADO': 'Jubilado',
-  'PROGRAMADO': 'Programado',
-  'DEVUELTO_PROVEEDOR': 'Dev. Proveedor'
-}
 
 
 export function VehicleManagement() {
@@ -213,7 +192,9 @@ export function VehicleManagement() {
       if (estadosRes.data) setVehiculosEstados(estadosRes.data)
       if (sedesRes.data) setSedes(sedesRes.data)
 
-      if (vehiculosRes.data && vehiculosRes.data.length > 0) {
+      if (!vehiculosRes.data || vehiculosRes.data.length === 0) {
+        setVehiculos([])
+      } else {
         // Ordenar: DISPONIBLE primero
         const sortedData = [...vehiculosRes.data].sort((a, b) => {
           const estadoA = (a as any).vehiculos_estados?.codigo || ''
@@ -223,11 +204,8 @@ export function VehicleManagement() {
           return estadoA.localeCompare(estadoB)
         })
         setVehiculos(sortedData as VehiculoWithRelations[])
-      } else {
-        setVehiculos([])
       }
     } catch (err: any) {
-      console.error('Error cargando datos:', err)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -244,12 +222,12 @@ export function VehicleManagement() {
         .single()
 
       if (error) throw error
-      if (data) {
-        setSelectedVehiculo(data as VehiculoWithRelations)
-        setShowDetailsModal(true)
-      }
-    } catch (err: any) {
-      console.error('Error cargando detalles:', err)
+      if (!data) return
+
+      setSelectedVehiculo(data as VehiculoWithRelations)
+      setShowDetailsModal(true)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -275,7 +253,9 @@ export function VehicleManagement() {
       if (fetchError) throw fetchError
 
       // Los datos ya vienen con las relaciones, no necesitamos hacer más queries
-      if (data && data.length > 0) {
+      if (!data || data.length === 0) {
+        setVehiculos([])
+      } else {
         // Ordenar: DISPONIBLE primero, luego el resto
         const sortedData = [...data].sort((a, b) => {
           const estadoA = (a as any).vehiculos_estados?.codigo || ''
@@ -289,11 +269,8 @@ export function VehicleManagement() {
           return estadoA.localeCompare(estadoB)
         })
         setVehiculos(sortedData as VehiculoWithRelations[])
-      } else {
-        setVehiculos([])
       }
     } catch (err: any) {
-      console.error('Error cargando vehículos:', err)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -366,6 +343,7 @@ export function VehicleManagement() {
         .select('id')
         .eq('patente', formData.patente.toUpperCase())
         .single()
+
       if (vehiculoCreado) {
         registrarHistorialVehiculo({
           vehiculoId: vehiculoCreado.id,
@@ -382,7 +360,6 @@ export function VehicleManagement() {
       resetForm()
       await loadVehiculos(true)
     } catch (err: any) {
-      console.error('Error creando vehículo:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -441,7 +418,7 @@ export function VehicleManagement() {
             icon: 'warning',
             title: 'Vehículo con asignación activa',
             html: `Este vehículo tiene <b>${asignacionesActivas.length}</b> asignación(es) activa(s).<br><br>
-                   Al cambiar el estado a <b>${ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}</b>, se finalizarán automáticamente.<br><br>
+                   Al cambiar el estado a <b>${VEHICULO_ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}</b>, se finalizarán automáticamente.<br><br>
                    <b>Ingrese el motivo de finalización:</b>`,
             input: 'textarea',
             inputPlaceholder: 'Ej: Vehículo ingresa a taller por revisión mecánica...',
@@ -466,18 +443,17 @@ export function VehicleManagement() {
           }
 
           motivoFinalizacion = result.value || 'Sin motivo especificado'
-          const motivo = motivoFinalizacion
 
           // Finalizar asignaciones activas
           const ahora = new Date().toISOString()
-          
+
           // 1. Finalizar conductores de las asignaciones
           for (const asig of asignacionesActivas) {
             await (supabase as any)
               .from('asignaciones_conductores')
-              .update({ 
-                estado: 'completado', 
-                fecha_fin: ahora 
+              .update({
+                estado: 'completado',
+                fecha_fin: ahora
               })
               .eq('asignacion_id', asig.id)
               .in('estado', ['asignado', 'activo'])
@@ -486,10 +462,10 @@ export function VehicleManagement() {
           // 2. Finalizar las asignaciones
           await (supabase as any)
             .from('asignaciones')
-            .update({ 
-              estado: 'finalizada', 
+            .update({
+              estado: 'finalizada',
               fecha_fin: ahora,
-              notas: `[FINALIZADA] Cambio de estado a ${ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivo}`,
+              notas: `[FINALIZADA] Cambio de estado a ${VEHICULO_ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivoFinalizacion}`,
               updated_by: profile?.full_name || 'Sistema'
             })
             .in('id', asignacionesActivas.map((a: any) => a.id))
@@ -553,7 +529,7 @@ export function VehicleManagement() {
           .select('id, vehiculo_id, asignaciones_conductores(conductor_id)')
           .eq('vehiculo_id', selectedVehiculo.id)
           .eq('estado', 'finalizada')
-          .eq('notas', `[FINALIZADA] Cambio de estado a ${ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivoFinalizacion}`)
+          .eq('notas', `[FINALIZADA] Cambio de estado a ${VEHICULO_ESTADO_LABELS[nuevoEstadoCodigo] || nuevoEstadoCodigo}. Motivo: ${motivoFinalizacion}`)
         if (asignacionesFinalizadas) {
           for (const asig of asignacionesFinalizadas) {
             for (const ac of (asig.asignaciones_conductores || [])) {
@@ -580,7 +556,6 @@ export function VehicleManagement() {
       resetForm()
       await loadVehiculos(true)
     } catch (err: any) {
-      console.error('Error actualizando vehículo:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -620,7 +595,6 @@ export function VehicleManagement() {
       setSelectedVehiculo(null)
       await loadVehiculos(true)
     } catch (err: any) {
-      console.error('Error eliminando vehículo:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -642,39 +616,39 @@ export function VehicleManagement() {
         .single()
 
       if (error) throw error
-      if (data) {
-        const fullVehiculo = data as VehiculoWithRelations
-        setSelectedVehiculo(fullVehiculo)
-        setFormData({
-          patente: fullVehiculo.patente,
-          marca: fullVehiculo.marca || '',
-          modelo: fullVehiculo.modelo || '',
-          anio: fullVehiculo.anio || new Date().getFullYear(),
-          color: fullVehiculo.color || '',
-          tipo_vehiculo: (fullVehiculo as any).tipo_vehiculo || '',
-          tipo_combustible: (fullVehiculo as any).tipo_combustible || '',
-          tipo_gps: (fullVehiculo as any).tipo_gps || '',
-          gps_uss: (fullVehiculo as any).gps_uss || false,
-          gnc: (fullVehiculo as any).gnc || false,
-          numero_motor: fullVehiculo.numero_motor || '',
-          numero_chasis: fullVehiculo.numero_chasis || '',
-          provisoria: fullVehiculo.provisoria || '',
-          estado_id: fullVehiculo.estado_id || '',
-          kilometraje_actual: fullVehiculo.kilometraje_actual,
-          fecha_adquisicion: fullVehiculo.fecha_adquisicion || '',
-          fecha_ulti_inspeccion: fullVehiculo.fecha_ulti_inspeccion || '',
-          fecha_prox_inspeccion: fullVehiculo.fecha_prox_inspeccion || '',
-          seguro_numero: fullVehiculo.seguro_numero || '',
-          seguro_vigencia: fullVehiculo.seguro_vigencia || '',
-          titular: fullVehiculo.titular || '',
-          notas: fullVehiculo.notas || '',
-          url_documentacion: (fullVehiculo as any).url_documentacion || (fullVehiculo as any).documentos_urls || '',
-          sede_id: (fullVehiculo as any).sede_id || ''
-        })
-        setShowEditModal(true)
-      }
-    } catch (err: any) {
-      console.error('Error cargando datos para edición:', err)
+      if (!data) return
+
+      const fullVehiculo = data as VehiculoWithRelations
+      setSelectedVehiculo(fullVehiculo)
+      setFormData({
+        patente: fullVehiculo.patente,
+        marca: fullVehiculo.marca || '',
+        modelo: fullVehiculo.modelo || '',
+        anio: fullVehiculo.anio || new Date().getFullYear(),
+        color: fullVehiculo.color || '',
+        tipo_vehiculo: (fullVehiculo as any).tipo_vehiculo || '',
+        tipo_combustible: (fullVehiculo as any).tipo_combustible || '',
+        tipo_gps: (fullVehiculo as any).tipo_gps || '',
+        gps_uss: (fullVehiculo as any).gps_uss || false,
+        gnc: (fullVehiculo as any).gnc || false,
+        numero_motor: fullVehiculo.numero_motor || '',
+        numero_chasis: fullVehiculo.numero_chasis || '',
+        provisoria: fullVehiculo.provisoria || '',
+        estado_id: fullVehiculo.estado_id || '',
+        kilometraje_actual: fullVehiculo.kilometraje_actual,
+        fecha_adquisicion: fullVehiculo.fecha_adquisicion || '',
+        fecha_ulti_inspeccion: fullVehiculo.fecha_ulti_inspeccion || '',
+        fecha_prox_inspeccion: fullVehiculo.fecha_prox_inspeccion || '',
+        seguro_numero: fullVehiculo.seguro_numero || '',
+        seguro_vigencia: fullVehiculo.seguro_vigencia || '',
+        titular: fullVehiculo.titular || '',
+        notas: fullVehiculo.notas || '',
+        url_documentacion: (fullVehiculo as any).url_documentacion || (fullVehiculo as any).documentos_urls || '',
+        sede_id: (fullVehiculo as any).sede_id || ''
+      })
+      setShowEditModal(true)
+    } catch {
+      // silently ignored
     }
   }
 
@@ -712,6 +686,47 @@ export function VehicleManagement() {
     })
   }
 
+  const handleOpenCreateModal = () => {
+    resetForm()
+    setShowCreateModal(true)
+  }
+
+  const handleCloseCreateModal = () => {
+    if (!saving) setShowCreateModal(false)
+  }
+
+  const handleCancelCreateWizard = () => {
+    setShowCreateModal(false)
+    resetForm()
+  }
+
+  const handleCloseEditModal = () => {
+    if (!saving) setShowEditModal(false)
+  }
+
+  const handleCancelEdit = () => {
+    setShowEditModal(false)
+    setSelectedVehiculo(null)
+    resetForm()
+  }
+
+  const handleCloseDeleteModal = () => {
+    if (!saving) setShowDeleteModal(false)
+  }
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false)
+    setSelectedVehiculo(null)
+  }
+
+  const handleDriveFolderAction = (vehiculo: VehiculoWithRelations) => {
+    const autoUrl = (vehiculo as any).drive_folder_url
+    const manualUrl = (vehiculo as any).url_documentacion
+    if (autoUrl) handleOpenDriveFolder(vehiculo)
+    else if (manualUrl) window.open(manualUrl, '_blank')
+    else handleCreateDriveFolder(vehiculo)
+  }
+
   // Crear carpeta en Google Drive para vehículo
   const handleCreateDriveFolder = async (vehiculo: VehiculoWithRelations) => {
     setCreatingDriveFolder(vehiculo.id)
@@ -729,10 +744,7 @@ export function VehicleManagement() {
       })
 
       const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al crear carpeta')
-      }
+      if (!response.ok) throw new Error(result.error || 'Error al crear carpeta')
 
       // Guardar URL en la base de datos
       await (supabase as any)
@@ -750,7 +762,6 @@ export function VehicleManagement() {
         window.open(result.folderUrl, '_blank')
       }
     } catch (err: any) {
-      console.error('Error creando carpeta Drive:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -783,14 +794,10 @@ export function VehicleManagement() {
       })
 
       const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al listar archivos')
-      }
+      if (!response.ok) throw new Error(result.error || 'Error al listar archivos')
 
       setDriveFiles(result.files || [])
     } catch (err: any) {
-      console.error('Error listando archivos Drive:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -956,7 +963,7 @@ export function VehicleManagement() {
     const labels = new Set<string>()
     vehiculos.forEach(v => {
       const codigo = v.vehiculos_estados?.codigo
-      if (codigo) labels.add(ESTADO_LABELS[codigo] || codigo)
+      if (codigo) labels.add(VEHICULO_ESTADO_LABELS[codigo] || codigo)
     })
     return Array.from(labels).sort()
   }, [vehiculos])
@@ -987,7 +994,7 @@ export function VehicleManagement() {
     if (estadoFilter.length > 0) {
       result = result.filter(v => {
         const estadoCodigo = v.vehiculos_estados?.codigo || ''
-        const estadoLabel = ESTADO_LABELS[estadoCodigo] || estadoCodigo
+        const estadoLabel = VEHICULO_ESTADO_LABELS[estadoCodigo] || estadoCodigo
         return estadoFilter.includes(estadoLabel) || estadoFilter.includes(estadoCodigo)
       })
     }
@@ -996,7 +1003,7 @@ export function VehicleManagement() {
     if (statCardEstadoFilter.length > 0) {
       result = result.filter(v => {
         const estadoCodigo = v.vehiculos_estados?.codigo || ''
-        const estadoLabel = ESTADO_LABELS[estadoCodigo] || estadoCodigo
+        const estadoLabel = VEHICULO_ESTADO_LABELS[estadoCodigo] || estadoCodigo
         const matches = statCardEstadoFilter.includes(estadoLabel) || statCardEstadoFilter.includes(estadoCodigo)
         // En modo exclusión (Total Flota): mostrar los que NO están en la lista
         return statCardExcludeMode ? !matches : matches
@@ -1378,10 +1385,7 @@ export function VehicleManagement() {
             <VerLogsButton tablas={['vehiculos', 'vehiculo_control']} label="Veh\u00edculos" />
             <button
               className="btn-primary"
-              onClick={() => {
-                resetForm()
-                setShowCreateModal(true)
-              }}
+              onClick={handleOpenCreateModal}
               disabled={!canCreate}
               title={!canCreate ? 'No tienes permisos para crear vehiculos' : ''}
             >
@@ -1391,18 +1395,19 @@ export function VehicleManagement() {
         }
         externalFilters={externalFilters}
         onClearAllFilters={handleClearAllFilters}
+        disableAutoFilters
       />
 
       {/* MODALS */}
       {/* Modal Crear - Wizard */}
       {showCreateModal && (
-        <div className="modal-overlay" onClick={() => !saving && setShowCreateModal(false)}>
+        <div className="modal-overlay" onClick={handleCloseCreateModal}>
           <div className="modal-content modal-wizard" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Crear Nuevo Vehículo</h2>
               <button
                 className="modal-close"
-                onClick={() => !saving && setShowCreateModal(false)}
+                onClick={handleCloseCreateModal}
                 type="button"
               >
                 ×
@@ -1416,10 +1421,7 @@ export function VehicleManagement() {
               marcasExistentes={marcasExistentes}
               modelosExistentes={modelosExistentes}
               sedes={sedes}
-              onCancel={() => {
-                setShowCreateModal(false)
-                resetForm()
-              }}
+              onCancel={handleCancelCreateWizard}
               onSubmit={handleCreate}
               saving={saving}
             />
@@ -1430,13 +1432,13 @@ export function VehicleManagement() {
 
       {/* Modal Editar - Formulario completo */}
       {showEditModal && selectedVehiculo && (
-        <div className="modal-overlay" onClick={() => !saving && setShowEditModal(false)}>
+        <div className="modal-overlay" onClick={handleCloseEditModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>
             <div className="modal-header">
               <h2>Editar Vehículo</h2>
               <button
                 className="modal-close"
-                onClick={() => !saving && setShowEditModal(false)}
+                onClick={handleCloseEditModal}
                 type="button"
               >
                 ×
@@ -1637,7 +1639,7 @@ export function VehicleManagement() {
                   disabled={saving}
                 >
                   <option value="">Seleccionar...</option>
-                  {vehiculosEstados.map((estado: any) => (
+                  {vehiculosEstados.map((estado: VehiculoEstado) => (
                     <option key={estado.id} value={estado.id}>{estado.descripcion}</option>
                   ))}
                 </select>
@@ -1763,11 +1765,7 @@ export function VehicleManagement() {
             <div className="modal-footer">
               <button
                 className="btn-secondary"
-                onClick={() => {
-                  setShowEditModal(false)
-                  setSelectedVehiculo(null)
-                  resetForm()
-                }}
+                onClick={handleCancelEdit}
                 disabled={saving}
               >
                 Cancelar
@@ -1929,48 +1927,42 @@ export function VehicleManagement() {
               </div>
             </div>
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              {(() => {
-                const autoUrl = (selectedVehiculo as any).drive_folder_url;
-                const manualUrl = (selectedVehiculo as any).url_documentacion;
-                const folderUrl = autoUrl || manualUrl;
-                const isCreating = creatingDriveFolder === selectedVehiculo.id;
-                return (
+            {(() => {
+              const folderUrl = (selectedVehiculo as any).drive_folder_url || (selectedVehiculo as any).url_documentacion
+              const isCreating = creatingDriveFolder === selectedVehiculo.id
+              return (
+                <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <button
                     className={folderUrl ? 'btn-success' : 'btn-secondary'}
-                    onClick={() => {
-                      if (autoUrl) handleOpenDriveFolder(selectedVehiculo);
-                      else if (manualUrl) window.open(manualUrl, '_blank');
-                      else handleCreateDriveFolder(selectedVehiculo);
-                    }}
+                    onClick={() => handleDriveFolderAction(selectedVehiculo)}
                     disabled={isCreating}
                     style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
                     {isCreating ? <Loader2 size={16} className="animate-spin" /> : folderUrl ? <FolderOpen size={16} /> : <FolderPlus size={16} />}
                     {isCreating ? 'Creando...' : folderUrl ? 'Ver documentos' : 'Crear carpeta'}
                   </button>
-                );
-              })()}
-              <button
-                className="btn-secondary"
-                onClick={() => setShowDetailsModal(false)}
-              >
-                Cerrar
-              </button>
-            </div>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setShowDetailsModal(false)}
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
 
       {/* Modal Eliminar */}
       {showDeleteModal && selectedVehiculo && (
-        <div className="modal-overlay" onClick={() => !saving && setShowDeleteModal(false)}>
+        <div className="modal-overlay" onClick={handleCloseDeleteModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 style={{ color: '#ff0033' }}>Eliminar Vehículo</h2>
               <button
                 className="modal-close"
-                onClick={() => !saving && setShowDeleteModal(false)}
+                onClick={handleCloseDeleteModal}
                 type="button"
               >
                 ×
@@ -1994,10 +1986,7 @@ export function VehicleManagement() {
             <div className="modal-footer">
               <button
                 className="btn-secondary"
-                onClick={() => {
-                  setShowDeleteModal(false)
-                  setSelectedVehiculo(null)
-                }}
+                onClick={handleCancelDelete}
                 disabled={saving}
               >
                 Cancelar

@@ -67,8 +67,8 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
 
       if (error) throw error
       setTipos(data || [])
-    } catch (err) {
-      console.error('Error cargando tipos:', err)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -112,7 +112,6 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
       await loadTipos()
       onUpdate()
     } catch (err: any) {
-      console.error('Error creando tipo:', err)
       Swal.fire({ icon: 'error', title: 'Error', text: err.message })
     } finally {
       setSaving(false)
@@ -153,7 +152,6 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
       await loadTipos()
       onUpdate()
     } catch (err: any) {
-      console.error('Error actualizando tipo:', err)
       Swal.fire({ icon: 'error', title: 'Error', text: err.message })
     } finally {
       setSaving(false)
@@ -199,7 +197,6 @@ export function ZonaTiposManager({ onClose, onUpdate }: Props) {
       await loadTipos()
       onUpdate()
     } catch (err: any) {
-      console.error('Error eliminando tipo:', err)
       Swal.fire({ icon: 'error', title: 'Error', text: err.message })
     } finally {
       setSaving(false)

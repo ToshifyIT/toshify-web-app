@@ -635,18 +635,35 @@ export function RoleMenuPermissionsManager() {
     }
   }
 
+  // Maps O(1) para lookup de permisos por id (evita .find() O(n) por cada fila × 4 campos)
+  const menuPermMap = useMemo(() => {
+    const m = new Map<string, RoleMenuPermission>()
+    for (const p of menuPermissions) m.set(p.menu_id, p)
+    return m
+  }, [menuPermissions])
+  const submenuPermMap = useMemo(() => {
+    const m = new Map<string, RoleSubmenuPermission>()
+    for (const p of submenuPermissions) m.set(p.submenu_id, p)
+    return m
+  }, [submenuPermissions])
+  const tabPermMap = useMemo(() => {
+    const m = new Map<string, RoleTabPermission>()
+    for (const p of tabPermissions) m.set(p.tab_id, p)
+    return m
+  }, [tabPermissions])
+
   const getMenuPermission = (menuId: string, field: keyof RoleMenuPermission) => {
-    const perm = menuPermissions.find(p => p.menu_id === menuId)
+    const perm = menuPermMap.get(menuId)
     return perm ? perm[field] : false
   }
 
   const getSubmenuPermission = (submenuId: string, field: keyof RoleSubmenuPermission) => {
-    const perm = submenuPermissions.find(p => p.submenu_id === submenuId)
+    const perm = submenuPermMap.get(submenuId)
     return perm ? perm[field] : false
   }
 
   const getTabPermission = (tabId: string, field: keyof RoleTabPermission) => {
-    const perm = tabPermissions.find(p => p.tab_id === tabId)
+    const perm = tabPermMap.get(tabId)
     return perm ? perm[field] : false
   }
 

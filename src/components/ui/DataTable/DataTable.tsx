@@ -354,15 +354,13 @@ export function DataTable<T>({
     // Apply column filters except the excluded column - case-insensitive matching
     Object.entries(columnFilters).forEach(([colId, selectedValues]) => {
       if (colId !== excludeColId && selectedValues.length > 0) {
-        // Normalize selected values for comparison
-        const normalizedSelected = selectedValues.map(v => v.toUpperCase().trim().replace(/\s+/g, ' '));
+        const normalizedSelected = new Set(selectedValues.map(v => v.toUpperCase().trim().replace(/\s+/g, ' ')));
         result = result.filter((row) => {
           const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
-          // Normalize: trim, collapse multiple spaces, uppercase for comparison
           const strValue = value !== null && value !== undefined
             ? String(value).trim().replace(/\s+/g, ' ').toUpperCase()
             : '';
-          return normalizedSelected.includes(strValue);
+          return normalizedSelected.has(strValue);
         });
       }
     });
@@ -434,15 +432,14 @@ export function DataTable<T>({
     // Apply column filters (text/select) - case-insensitive matching
     Object.entries(columnFilters).forEach(([colId, selectedValues]) => {
       if (selectedValues.length > 0) {
-        // Normalize selected values for comparison
-        const normalizedSelected = selectedValues.map(v => v.toUpperCase().trim().replace(/\s+/g, ' '));
+        // Normalize selected values UNA vez en un Set para O(1) lookup
+        const normalizedSelected = new Set(selectedValues.map(v => v.toUpperCase().trim().replace(/\s+/g, ' ')));
         result = result.filter((row) => {
           const value = getNestedValueForFilter(row as Record<string, unknown>, colId);
-          // Normalize: trim, collapse multiple spaces, uppercase for comparison
           const strValue = value !== null && value !== undefined
             ? String(value).trim().replace(/\s+/g, ' ').toUpperCase()
             : '';
-          return normalizedSelected.includes(strValue);
+          return normalizedSelected.has(strValue);
         });
       }
     });
@@ -606,7 +603,7 @@ export function DataTable<T>({
             isOpen={isOpen}
             hasFilter={hasFilter}
             isDate={isDate}
-            uniqueValues={isDate ? [] : getUniqueValues(colId)}
+            uniqueValues={isDate ? [] : (isOpen ? getUniqueValues(colId) : [])}
             selectedValues={columnFilters[colId] || []}
             dateFilter={dateFilters[colId]}
             onToggle={handleFilterToggle}
@@ -627,18 +624,11 @@ export function DataTable<T>({
     ];
   }, [columnsWithFilters, actionsColumn]);
 
-  // Función de filtro global que busca en TODOS los valores string del objeto
-  // Optimizada: concatena todo en un string y busca
-  const defaultGlobalFilterFn = useCallback((row: { original: T }, _columnId: string, filterValue: unknown) => {
-    // Si no hay valor de filtro, mostrar todas las filas
-    if (!filterValue || typeof filterValue !== 'string' || filterValue.trim() === '') return true
-    
-    const searchLower = filterValue.toLowerCase().trim()
-    const original = row.original as Record<string, unknown>
-
-    // Recolectar todos los valores string en un solo texto (rápido, sin recursión profunda)
+  // Pre-computar índice de búsqueda: extrae todos los strings de cada fila UNA sola vez
+  // cuando cambian los datos, en vez de recorrer recursivamente por cada keystroke
+  const searchIndex = useMemo(() => {
     const collectStrings = (obj: unknown, depth = 0): string => {
-      if (depth > 3) return '' // Limitar profundidad para performance
+      if (depth > 3) return ''
       if (obj === null || obj === undefined) return ''
       if (typeof obj === 'string') return obj + ' '
       if (typeof obj === 'number') return String(obj) + ' '
@@ -651,19 +641,29 @@ export function DataTable<T>({
       return ''
     }
 
-    const allText = collectStrings(original).toLowerCase()
+    const index = new WeakMap<object, string>()
+    for (const row of filteredData) {
+      index.set(row as object, collectStrings(row).toLowerCase())
+    }
+    return index
+  }, [filteredData])
 
-    // Buscar el término completo O todas las palabras individuales
+  // Función de filtro global - usa el índice pre-computado (O(1) lookup por fila)
+  const defaultGlobalFilterFn = useCallback((row: { original: T }, _columnId: string, filterValue: unknown) => {
+    if (!filterValue || typeof filterValue !== 'string' || filterValue.trim() === '') return true
+    
+    const searchLower = filterValue.toLowerCase().trim()
+    const allText = searchIndex.get(row.original as object) || ''
+
     if (allText.includes(searchLower)) return true
 
-    // Si no encuentra el término completo, buscar cada palabra
     const words = searchLower.split(/\s+/).filter(w => w.length > 0)
     if (words.length > 1) {
       return words.every(word => allText.includes(word))
     }
 
     return false
-  }, [])
+  }, [searchIndex])
 
   const table = useReactTable({
     data: filteredData,
@@ -692,6 +692,11 @@ export function DataTable<T>({
       onTableReady(table);
     }
   }, [table, onTableReady]);
+
+  // Detectar si alguna columna tiene meta.expand explícito
+  const hasAnyExpandColumn = finalColumns.some(
+    col => !!(col.meta as Record<string, unknown>)?.expand
+  );
 
   // Get active filters info for display
   const activeFiltersInfo = useMemo(() => {
@@ -1071,6 +1076,12 @@ export function DataTable<T>({
                     {headerGroup.headers.map((header, headerIndex) => {
                       const isActionsColumn = alwaysVisibleColumns.includes(header.id);
                       const isFirstColumn = stickyFirstColumn && headerIndex === 0;
+                      const hasExplicitSize = !!header.column.columnDef.size;
+                      const isExpandColumn = !!(header.column.columnDef.meta as Record<string, unknown>)?.expand;
+                      // Si nadie tiene meta.expand, la columna de acciones absorbe el espacio
+                      const autoExpand = !hasAnyExpandColumn && isActionsColumn;
+                      const shouldShrink = !hasExplicitSize && !isExpandColumn && !autoExpand;
+                      const shouldExpand = isExpandColumn || autoExpand;
                       return (
                         <th
                           key={header.id}
@@ -1079,8 +1090,10 @@ export function DataTable<T>({
                             ${header.column.getCanSort() ? "dt-sortable" : ""}
                             ${isActionsColumn ? "dt-sticky-col" : ""}
                             ${isFirstColumn ? "dt-sticky-col-left" : ""}
+                            ${shouldShrink ? "dt-col-shrink" : ""}
+                            ${shouldExpand ? "dt-col-expand" : ""}
                           `}
-                          style={header.column.columnDef.size ? { width: `${header.column.columnDef.size}px`, maxWidth: `${header.column.columnDef.size}px` } : undefined}
+                          style={hasExplicitSize ? { width: `${header.column.columnDef.size}px`, maxWidth: `${header.column.columnDef.size}px` } : undefined}
                         >
                           <div
                             className={`dt-header-content ${
@@ -1119,11 +1132,16 @@ export function DataTable<T>({
                       {row.getVisibleCells().map((cell, cellIndex) => {
                         const isActionsColumn = alwaysVisibleColumns.includes(cell.column.id);
                         const isFirstColumn = stickyFirstColumn && cellIndex === 0;
+                        const hasExplicitSize = !!cell.column.columnDef.size;
+                        const isExpandColumn = !!(cell.column.columnDef.meta as Record<string, unknown>)?.expand;
+                        const autoExpand = !hasAnyExpandColumn && isActionsColumn;
+                        const shouldShrink = !hasExplicitSize && !isExpandColumn && !autoExpand;
+                        const shouldExpand = isExpandColumn || autoExpand;
                         return (
                           <td
                             key={cell.id}
-                            className={`${isActionsColumn ? "dt-sticky-col" : ""} ${isFirstColumn ? "dt-sticky-col-left" : ""}`}
-                            style={cell.column.columnDef.size ? { width: `${cell.column.columnDef.size}px`, maxWidth: `${cell.column.columnDef.size}px` } : undefined}
+                            className={`${isActionsColumn ? "dt-sticky-col" : ""} ${isFirstColumn ? "dt-sticky-col-left" : ""} ${shouldShrink ? "dt-col-shrink" : ""} ${shouldExpand ? "dt-col-expand" : ""}`}
+                            style={hasExplicitSize ? { width: `${cell.column.columnDef.size}px`, maxWidth: `${cell.column.columnDef.size}px` } : undefined}
                           >
                             {flexRender(
                               cell.column.columnDef.cell,

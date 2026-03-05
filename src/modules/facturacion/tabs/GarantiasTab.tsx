@@ -178,7 +178,7 @@ export function GarantiasTab() {
         .limit(500)
 
       if (errorPagos) {
-        console.error('Error cargando pagos:', errorPagos)
+        // silently ignored
       }
 
       // Obtener nombres de conductores desde garantías ya cargadas
@@ -189,8 +189,8 @@ export function GarantiasTab() {
         conductor_nombre: conductorNombres.get(p.conductor_id) || 'N/A'
       }))
       setTodosLosPagos(pagosConNombre)
-    } catch (error) {
-      console.error('Error cargando garantías:', error)
+    } catch {
+      // silently ignored
     } finally {
       setLoading(false)
     }
@@ -793,8 +793,8 @@ export function GarantiasTab() {
         confirmButtonText: 'Cerrar',
         confirmButtonColor: '#6B7280'
       })
-    } catch (error) {
-      console.error('Error cargando historial:', error)
+    } catch {
+      // silently ignored
     }
   }
 

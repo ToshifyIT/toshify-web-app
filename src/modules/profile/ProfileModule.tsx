@@ -100,7 +100,6 @@ export function ProfileModule() {
 
       showSuccess('Perfil actualizado', 'Los cambios han sido guardados correctamente')
     } catch (error: any) {
-      console.error('Error actualizando perfil:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -195,7 +194,6 @@ export function ProfileModule() {
 
       showSuccess('Contraseña actualizada', 'Tu contraseña ha sido cambiada correctamente')
     } catch (error: any) {
-      console.error('Error cambiando contraseña:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',

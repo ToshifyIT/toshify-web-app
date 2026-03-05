@@ -205,7 +205,6 @@ export function ProveedoresModule() {
       if (error) throw error
       setProveedores(data || [])
     } catch (err: any) {
-      console.error('Error cargando proveedores:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -252,7 +251,6 @@ export function ProveedoresModule() {
       resetForm()
       loadProveedores()
     } catch (err: any) {
-      console.error('Error creando proveedor:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -298,7 +296,6 @@ export function ProveedoresModule() {
       resetForm()
       loadProveedores()
     } catch (err: any) {
-      console.error('Error actualizando proveedor:', err)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -346,7 +343,6 @@ export function ProveedoresModule() {
 
         loadProveedores()
       } catch (err: any) {
-        console.error('Error desactivando proveedor:', err)
         Swal.fire({
           icon: 'error',
           title: 'Error',
@@ -393,7 +389,6 @@ export function ProveedoresModule() {
 
         loadProveedores()
       } catch (err: any) {
-        console.error('Error reactivando proveedor:', err)
         Swal.fire({
           icon: 'error',
           title: 'Error',
@@ -780,6 +775,7 @@ export function ProveedoresModule() {
           setActiveStatCard(null)
           setStatCardEstadoFilter([])
         }}
+        disableAutoFilters
       />
 
       {/* Create Modal */}
