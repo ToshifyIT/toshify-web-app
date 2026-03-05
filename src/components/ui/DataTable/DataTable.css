@@ -477,7 +477,7 @@
 .dt-table th {
   background: var(--table-header-bg);
   padding: 10px 12px;
-  text-align: left;
+  text-align: center;
   font-size: 10px;
   font-weight: 700;
   color: var(--text-tertiary);
@@ -508,6 +508,7 @@
 .dt-header-content {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 
