@@ -245,6 +245,14 @@ export interface DataTableProps<T> {
   globalFilter?: string;
   /** Callback al cambiar el filtro global (modo controlado) */
   onGlobalFilterChange?: (value: string) => void;
+  /** Habilita paginación del lado del servidor */
+  manualPagination?: boolean;
+  /** Total de registros en el servidor (requerido si manualPagination=true) */
+  rowCount?: number;
+  /** Índice de página actual controlado (para paginación servidor) */
+  pageIndex?: number;
+  /** Callback al cambiar de página o tamaño (para paginación servidor) */
+  onPaginationChange?: (pageIndex: number, pageSize: number) => void;
 }
 
 export function DataTable<T>({
@@ -271,6 +279,10 @@ export function DataTable<T>({
   globalFilterFn: customGlobalFilterFn,
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
+  manualPagination = false,
+  rowCount,
+  pageIndex: controlledPageIndex,
+  onPaginationChange,
 }: DataTableProps<T>) {
   const [internalGlobalFilter, setInternalGlobalFilter] = useState("");
   const isControlled = controlledGlobalFilter !== undefined;
@@ -665,12 +677,18 @@ export function DataTable<T>({
     return false
   }, [searchIndex])
 
+  // Server-side pagination state
+  const [internalPageIndex, setInternalPageIndex] = useState(0);
+  const [internalPageSize, setInternalPageSize] = useState(pageSize);
+  const currentPageIndex = manualPagination && controlledPageIndex !== undefined ? controlledPageIndex : internalPageIndex;
+
   const table = useReactTable({
     data: filteredData,
     columns: finalColumns,
     state: {
       sorting,
       globalFilter: debouncedSearch,
+      ...(manualPagination ? { pagination: { pageIndex: currentPageIndex, pageSize: internalPageSize } } : {}),
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setDebouncedSearch,
@@ -679,6 +697,17 @@ export function DataTable<T>({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    ...(manualPagination ? {
+      manualPagination: true,
+      rowCount: rowCount ?? 0,
+      onPaginationChange: (updater) => {
+        const prev = { pageIndex: currentPageIndex, pageSize: internalPageSize };
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        setInternalPageIndex(next.pageIndex);
+        setInternalPageSize(next.pageSize);
+        onPaginationChange?.(next.pageIndex, next.pageSize);
+      },
+    } : {}),
     initialState: {
       pagination: {
         pageSize,
@@ -1176,9 +1205,9 @@ export function DataTable<T>({
               {Math.min(
                 (table.getState().pagination.pageIndex + 1) *
                   table.getState().pagination.pageSize,
-                table.getFilteredRowModel().rows.length
+                manualPagination ? (rowCount ?? 0) : table.getFilteredRowModel().rows.length
               )}{" "}
-              de {table.getFilteredRowModel().rows.length} registros
+              de {manualPagination ? (rowCount ?? 0) : table.getFilteredRowModel().rows.length} registros
             </div>
             <div className="dt-pagination-controls">
               <button
