@@ -693,11 +693,6 @@ export function DataTable<T>({
     }
   }, [table, onTableReady]);
 
-  // Detectar si alguna columna tiene meta.expand explícito
-  const hasAnyExpandColumn = finalColumns.some(
-    col => !!(col.meta as Record<string, unknown>)?.expand
-  );
-
   // Map de columnas con size REAL (definido por el usuario, no el default 150 de TanStack)
   const userColumnSizes = useMemo(() => {
     const map = new Map<string, number>();
@@ -1092,10 +1087,8 @@ export function DataTable<T>({
                       const isFirstColumn = stickyFirstColumn && headerIndex === 0;
                       const hasExplicitSize = columnsWithUserSize.has(header.id);
                       const isExpandColumn = !!(header.column.columnDef.meta as Record<string, unknown>)?.expand;
-                      // Si nadie tiene meta.expand, la columna de acciones absorbe el espacio
-                      const autoExpand = !hasAnyExpandColumn && isActionsColumn;
-                      const shouldShrink = !hasExplicitSize && !isExpandColumn && !autoExpand;
-                      const shouldExpand = isExpandColumn || autoExpand;
+                      const shouldShrink = !hasExplicitSize && !isExpandColumn;
+                      const shouldExpand = isExpandColumn;
                       return (
                         <th
                           key={header.id}
@@ -1148,9 +1141,8 @@ export function DataTable<T>({
                         const isFirstColumn = stickyFirstColumn && cellIndex === 0;
                         const hasExplicitSize = columnsWithUserSize.has(cell.column.id);
                         const isExpandColumn = !!(cell.column.columnDef.meta as Record<string, unknown>)?.expand;
-                        const autoExpand = !hasAnyExpandColumn && isActionsColumn;
-                        const shouldShrink = !hasExplicitSize && !isExpandColumn && !autoExpand;
-                        const shouldExpand = isExpandColumn || autoExpand;
+                        const shouldShrink = !hasExplicitSize && !isExpandColumn;
+                        const shouldExpand = isExpandColumn;
                         return (
                           <td
                             key={cell.id}

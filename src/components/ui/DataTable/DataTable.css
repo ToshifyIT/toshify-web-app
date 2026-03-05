@@ -395,6 +395,7 @@
 
 /* Table */
 .dt-table {
+  width: 100%;
   border-collapse: collapse;
   overflow: visible; /* Permite que los dropdowns de filtros se muestren */
   table-layout: auto;
@@ -403,12 +404,12 @@
 /* Column sizing: shrink to content, expand fills remaining space */
 .dt-table th.dt-col-shrink,
 .dt-table td.dt-col-shrink {
-  width: 1px;
   white-space: nowrap;
 }
 
 .dt-table th.dt-col-expand,
 .dt-table td.dt-col-expand {
+  width: 100%;
   white-space: nowrap;
 }
 
