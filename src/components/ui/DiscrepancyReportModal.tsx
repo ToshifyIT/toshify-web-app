@@ -228,10 +228,8 @@ export function DiscrepancyReportModal({ onClose }: DiscrepancyReportModalProps)
                 <tr style={{ borderBottom: '2px solid var(--border-primary)' }}>
                   <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 }}>Tipo</th>
                   <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 }}>Conductor/Vehiculo</th>
-                  <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 }}>Fuente A</th>
-                  <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 }}>Valor A</th>
-                  <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 }}>Fuente B</th>
-                  <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 }}>Valor B</th>
+                  <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 }}>Conductores</th>
+                  <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 }}>Cabify</th>
                   <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--text-secondary)', fontWeight: 600 }}>Normalizado</th>
                 </tr>
               </thead>
@@ -244,9 +242,7 @@ export function DiscrepancyReportModal({ onClose }: DiscrepancyReportModalProps)
                       </span>
                     </td>
                     <td style={{ padding: '6px', fontWeight: 500 }}>{d.conductor}</td>
-                    <td style={{ padding: '6px', color: 'var(--text-secondary)' }}>{d.sourceA}</td>
                     <td style={{ padding: '6px', fontFamily: 'monospace', color: 'var(--color-info-dark)' }}>{d.rawA}</td>
-                    <td style={{ padding: '6px', color: 'var(--text-secondary)' }}>{d.sourceB}</td>
                     <td style={{ padding: '6px', fontFamily: 'monospace', color: 'var(--color-warning-dark)' }}>{d.rawB}</td>
                     <td style={{ padding: '6px', fontFamily: 'monospace', fontWeight: 600 }}>{d.normalized}</td>
                   </tr>
