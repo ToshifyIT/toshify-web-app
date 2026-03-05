@@ -502,7 +502,7 @@
 }
 
 .dt-table th:last-child {
-  text-align: right;
+  text-align: center;
 }
 
 .dt-header-content {
@@ -532,7 +532,13 @@
 }
 
 .dt-table td:last-child {
-  text-align: right;
+  text-align: center;
+}
+
+/* Center block/flex children inside cells (text-align only works for inline content) */
+.dt-table td > div {
+  margin-inline: auto;
+  width: fit-content;
 }
 
 .dt-table tbody tr {
