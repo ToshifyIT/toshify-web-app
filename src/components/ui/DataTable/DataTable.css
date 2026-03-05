@@ -395,7 +395,6 @@
 
 /* Table */
 .dt-table {
-  width: 100%;
   border-collapse: collapse;
   overflow: visible; /* Permite que los dropdowns de filtros se muestren */
   table-layout: auto;
@@ -410,7 +409,7 @@
 
 .dt-table th.dt-col-expand,
 .dt-table td.dt-col-expand {
-  /* Takes all remaining horizontal space */
+  white-space: nowrap;
 }
 
 /* Sticky column for actions (right) */
